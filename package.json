@@ -1,0 +1,58 @@
+{
+  "name": "opendirectory",
+  "version": "1.0.0",
+  "description": "Modern Open-Source Active Directory Alternative",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "frontend/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "make dev-full",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "format": "turbo run format",
+    "clean": "turbo run clean",
+    "prepare": "husky install",
+    "commit": "cz"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.0.0",
+    "@commitlint/config-conventional": "^18.0.0",
+    "commitizen": "^4.3.0",
+    "cz-conventional-changelog": "^3.3.0",
+    "husky": "^8.0.0",
+    "lerna": "^7.0.0",
+    "prettier": "^3.0.0",
+    "turbo": "^1.10.0",
+    "typescript": "^5.0.0"
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourdomain/opendirectory"
+  },
+  "keywords": [
+    "active-directory",
+    "identity-management",
+    "ldap",
+    "sso",
+    "authentication",
+    "authorization",
+    "microservices",
+    "ddd",
+    "kubernetes"
+  ],
+  "author": "OpenDirectory Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

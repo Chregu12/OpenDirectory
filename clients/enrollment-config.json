@@ -1,0 +1,110 @@
+{
+  "enrollment": {
+    "server_url": "https://mdm.opendirectory.local",
+    "api_version": "v1",
+    "supported_platforms": ["windows", "macos", "linux"],
+    "enrollment_methods": {
+      "manual": {
+        "description": "Manual enrollment with token",
+        "requires_token": true,
+        "auto_approve": false
+      },
+      "autopilot": {
+        "description": "Windows Autopilot zero-touch",
+        "requires_token": false,
+        "auto_approve": true,
+        "platforms": ["windows"]
+      },
+      "dep": {
+        "description": "Apple Device Enrollment Program",
+        "requires_token": false,
+        "auto_approve": true,
+        "platforms": ["macos", "ios"]
+      },
+      "zero_touch": {
+        "description": "Android Zero Touch Enrollment",
+        "requires_token": false,
+        "auto_approve": true,
+        "platforms": ["android"]
+      }
+    }
+  },
+  "agents": {
+    "fleet": {
+      "description": "osquery fleet agent for monitoring",
+      "platforms": ["windows", "macos", "linux"],
+      "download_urls": {
+        "windows": "/api/fleet/download/windows",
+        "macos": "/api/fleet/download/macos", 
+        "linux": "/api/fleet/download/linux"
+      },
+      "config": {
+        "enroll_secret_required": true,
+        "update_interval": 3600,
+        "config_refresh": 600
+      }
+    },
+    "munki": {
+      "description": "macOS package management",
+      "platforms": ["macos"],
+      "repository_url": "/munki",
+      "config": {
+        "check_interval": 3600,
+        "auto_install": true,
+        "suppress_auto_install": false
+      }
+    }
+  },
+  "features": {
+    "compliance_monitoring": {
+      "enabled": true,
+      "check_interval": 3600,
+      "auto_remediate": false
+    },
+    "patch_management": {
+      "enabled": true,
+      "auto_install_security": true,
+      "maintenance_window": "02:00-04:00"
+    },
+    "application_deployment": {
+      "enabled": true,
+      "allow_user_installs": true,
+      "require_approval": false
+    },
+    "device_encryption": {
+      "required": true,
+      "platforms": {
+        "windows": "bitlocker",
+        "macos": "filevault",
+        "linux": "luks"
+      }
+    }
+  },
+  "policies": {
+    "password": {
+      "min_length": 12,
+      "require_complexity": true,
+      "max_age_days": 90,
+      "history": 12
+    },
+    "firewall": {
+      "required": true,
+      "default_deny": true
+    },
+    "antivirus": {
+      "required": true,
+      "real_time_protection": true
+    },
+    "updates": {
+      "auto_install": true,
+      "reboot_if_required": false,
+      "maintenance_window": true
+    }
+  },
+  "certificates": {
+    "ca_cert": "/api/pki/ca.crt",
+    "enrollment_cert": "/api/pki/enrollment.crt",
+    "auto_renew": true,
+    "validity_days": 365
+  }
+}

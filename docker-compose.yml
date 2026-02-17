@@ -1,0 +1,413 @@
+version: '3.9'
+
+services:
+  # ===================
+  # Infrastructure
+  # ===================
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: od-postgres
+    environment:
+      POSTGRES_USER: opendirectory
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_MULTIPLE_DATABASES: identity,auth,policy,audit
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - opendirectory
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opendirectory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: od-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - opendirectory
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:6
+    container_name: od-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: opendirectory
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-changeme}
+      MONGO_INITDB_DATABASE: devices
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - opendirectory
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: od-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: opendirectory
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - opendirectory
+
+  # ===================
+  # LDAP Service
+  # ===================
+  
+  lldap:
+    image: nitnelave/lldap:stable
+    container_name: od-lldap
+    environment:
+      - LLDAP_JWT_SECRET=${LLDAP_JWT_SECRET:-super_secret_random_string}
+      - LLDAP_LDAP_BASE_DN=dc=opendirectory,dc=local
+      - LLDAP_LDAP_USER_DN=admin
+      - LLDAP_LDAP_USER_PASS=${LLDAP_ADMIN_PASSWORD:-changeme}
+      - LLDAP_DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/identity
+    volumes:
+      - lldap-data:/data
+    ports:
+      - "3890:3890" # LDAP
+      - "30170:17170" # Web UI (mapped to external port 30170)
+    networks:
+      - opendirectory
+    depends_on:
+      - postgres
+
+  # ===================
+  # Core Services
+  # ===================
+  
+  identity-service:
+    build:
+      context: ./services/identity-service
+      dockerfile: Dockerfile
+    container_name: od-identity-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3001
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/identity
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+    ports:
+      - "3001:3001"
+    networks:
+      - opendirectory
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    volumes:
+      - ./services/identity-service:/app
+      - /app/node_modules
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: od-auth-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3002
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/auth
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      - JWT_SECRET=${JWT_SECRET:-changeme}
+      - LDAP_URL=ldap://lldap:3890
+    ports:
+      - "3002:3002"
+    networks:
+      - opendirectory
+    depends_on:
+      - postgres
+      - redis
+      - lldap
+
+  device-service:
+    build:
+      context: ./services/device-service
+      dockerfile: Dockerfile
+    container_name: od-device-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3003
+      - MONGODB_URL=mongodb://opendirectory:${MONGO_PASSWORD:-changeme}@mongodb:27017/devices
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+    ports:
+      - "3003:3003"
+    networks:
+      - opendirectory
+    depends_on:
+      - mongodb
+      - redis
+      - rabbitmq
+
+  policy-service:
+    build:
+      context: ./services/policy-service
+      dockerfile: Dockerfile
+    container_name: od-policy-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3004
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/policy
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+    ports:
+      - "3004:3004"
+    networks:
+      - opendirectory
+    depends_on:
+      - postgres
+      - redis
+
+  # ===================
+  # API Gateway
+  # ===================
+  
+  gateway:
+    image: traefik:v3.0
+    container_name: od-gateway
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080" # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - opendirectory
+    labels:
+      - "traefik.enable=true"
+
+  # ===================
+  # Frontend
+  # ===================
+  
+  web-app:
+    build:
+      context: ./frontend/web-app
+      dockerfile: Dockerfile
+    container_name: od-web-app
+    environment:
+      - NEXT_PUBLIC_API_URL=${API_URL:-http://localhost}
+      - NEXT_PUBLIC_AUTH_URL=${AUTH_URL:-http://localhost:3002}
+    ports:
+      - "3000:3000"
+    networks:
+      - opendirectory
+    volumes:
+      - ./frontend/web-app:/app
+      - /app/node_modules
+      - /app/.next
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webapp.rule=Host(`localhost`)"
+      - "traefik.http.routers.webapp.entrypoints=web"
+
+  # ===================
+  # Identity Providers
+  # ===================
+  
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: od-keycloak
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-changeme}
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres:5432/auth
+      - KC_DB_USERNAME=opendirectory
+      - KC_DB_PASSWORD=${DB_PASSWORD:-changeme}
+    command:
+      - start-dev
+    ports:
+      - "8180:8080"
+    networks:
+      - opendirectory
+    depends_on:
+      - postgres
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:latest
+    container_name: od-authentik-worker
+    command: worker
+    environment:
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD:-changeme}
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__NAME: identity
+      AUTHENTIK_POSTGRESQL__USER: opendirectory
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${DB_PASSWORD:-changeme}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-changeme}
+    volumes:
+      - authentik-media:/media
+      - authentik-templates:/templates
+    networks:
+      - opendirectory
+    depends_on:
+      - postgres
+      - redis
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:latest
+    container_name: od-authentik-server
+    command: server
+    environment:
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD:-changeme}
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__NAME: identity
+      AUTHENTIK_POSTGRESQL__USER: opendirectory
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${DB_PASSWORD:-changeme}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-changeme}
+    volumes:
+      - authentik-media:/media
+      - authentik-templates:/templates
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    networks:
+      - opendirectory
+    depends_on:
+      - postgres
+      - redis
+
+  # ===================
+  # Monitoring
+  # ===================
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: od-prometheus
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "30909:9090" # Mapped to external port 30909
+    networks:
+      - opendirectory
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: od-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-changeme}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infrastructure/monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./infrastructure/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    ports:
+      - "30300:3000" # Mapped to external port 30300
+    networks:
+      - opendirectory
+    depends_on:
+      - prometheus
+
+  # ===================
+  # HashiCorp Vault
+  # ===================
+  
+  vault:
+    image: hashicorp/vault:latest
+    container_name: od-vault
+    cap_add:
+      - IPC_LOCK
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=${VAULT_ROOT_TOKEN:-changeme}
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+      - VAULT_ADDR=http://0.0.0.0:8200
+    volumes:
+      - vault-data:/vault/data
+    ports:
+      - "30820:8200" # Mapped to external port 30820
+    networks:
+      - opendirectory
+    command: ["vault", "server", "-dev"]
+
+  # ===================
+  # Integration Service
+  # ===================
+  
+  integration-service:
+    build:
+      context: ./services/integration-service
+      dockerfile: Dockerfile
+    container_name: od-integration-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3005
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LLDAP_URL=http://lldap:17170
+      - LLDAP_ADMIN_USER=admin
+      - LLDAP_ADMIN_PASSWORD=${LLDAP_ADMIN_PASSWORD:-changeme}
+      - GRAFANA_URL=http://grafana:3000
+      - GRAFANA_ADMIN_USER=admin
+      - GRAFANA_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-changeme}
+      - PROMETHEUS_URL=http://prometheus:9090
+      - VAULT_URL=http://vault:8200
+      - VAULT_TOKEN=${VAULT_ROOT_TOKEN:-changeme}
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:80
+    ports:
+      - "3005:3005"
+    networks:
+      - opendirectory
+    depends_on:
+      - lldap
+      - grafana
+      - prometheus
+      - vault
+    volumes:
+      - ./services/integration-service:/app
+      - /app/node_modules
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  opendirectory:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  mongo-data:
+  rabbitmq-data:
+  lldap-data:
+  authentik-media:
+  authentik-templates:
+  prometheus-data:
+  grafana-data:
+  vault-data:

@@ -1,0 +1,1810 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: working-console
+  namespace: opendirectory
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>OpenDirectory MDM</title>
+        <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; }
+            
+            .sidebar { 
+                position: fixed; left: 0; top: 0; height: 100vh; width: 250px; 
+                background: #1e293b; color: white; padding: 1rem; z-index: 100;
+                transition: transform 0.3s ease;
+            }
+            
+            .main-content { margin-left: 250px; min-height: 100vh; }
+            
+            .header { 
+                background: white; padding: 1rem 2rem; border-bottom: 1px solid #e2e8f0; 
+                display: flex; justify-content: space-between; align-items: center;
+            }
+            
+            .container { padding: 2rem; }
+            
+            .nav-item { 
+                display: flex; align-items: center; padding: 0.75rem; margin: 0.5rem 0; 
+                border-radius: 6px; cursor: pointer; transition: background 0.2s;
+            }
+            .nav-item:hover { background: rgba(255,255,255,0.1); }
+            .nav-item.active { background: #3b82f6; }
+            .nav-item i { margin-right: 0.75rem; width: 20px; }
+            
+            .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+            .card { 
+                background: white; border-radius: 12px; padding: 1.5rem; 
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e2e8f0;
+            }
+            
+            .stat-card { text-align: center; }
+            .stat-number { font-size: 2.5rem; font-weight: bold; color: #3b82f6; margin-bottom: 0.5rem; }
+            .stat-label { color: #64748b; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; }
+            
+            .btn { 
+                padding: 0.75rem 1.5rem; border-radius: 6px; border: none; font-weight: 500; 
+                cursor: pointer; transition: all 0.2s; text-decoration: none; display: inline-block;
+            }
+            .btn-primary { background: #3b82f6; color: white; }
+            .btn-primary:hover { background: #2563eb; }
+            .btn-success { background: #10b981; color: white; }
+            .btn-warning { background: #f59e0b; color: white; }
+            .btn-danger { background: #ef4444; color: white; }
+            .btn-secondary { background: #6b7280; color: white; }
+            
+            .status-badge { 
+                padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; 
+                font-weight: 500; text-transform: uppercase;
+            }
+            .status-online { background: #dcfce7; color: #166534; }
+            .status-offline { background: #fee2e2; color: #991b1b; }
+            .status-warning { background: #fef3c7; color: #92400e; }
+            
+            .table { width: 100%; border-collapse: collapse; }
+            .table th, .table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0; }
+            .table th { background: #f8fafc; font-weight: 600; color: #374151; }
+            
+            .form-group { margin-bottom: 1rem; }
+            .form-label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+            .form-input, .form-select { 
+                width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; 
+                border-radius: 6px; font-size: 1rem;
+            }
+            
+            .modal { 
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
+                background: rgba(0,0,0,0.5); z-index: 1000; 
+                display: flex; align-items: center; justify-content: center;
+            }
+            .modal-content { 
+                background: white; padding: 2rem; border-radius: 12px; 
+                max-width: 800px; width: 90%; max-height: 80vh; overflow-y: auto;
+            }
+
+            .notification {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                padding: 1rem 1.5rem;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                transform: translateX(400px);
+                transition: all 0.3s ease;
+                z-index: 2000;
+                max-width: 350px;
+            }
+            .notification.show {
+                transform: translateX(0);
+            }
+            .notification.success {
+                border-left: 4px solid #10b981;
+            }
+            .notification.error {
+                border-left: 4px solid #ef4444;
+            }
+
+            .device-card {
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                padding: 1.5rem;
+                margin-bottom: 1rem;
+                background: white;
+                transition: all 0.2s ease;
+            }
+            .device-card:hover {
+                border-color: #3b82f6;
+                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+            }
+            .device-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 1rem;
+            }
+            .device-info {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 1rem;
+                margin-top: 1rem;
+            }
+
+            .device-group {
+                border: 2px solid #e2e8f0;
+                border-radius: 12px;
+                margin-bottom: 2rem;
+                overflow: hidden;
+            }
+            .group-header {
+                background: #f8fafc;
+                padding: 1rem 1.5rem;
+                border-bottom: 1px solid #e2e8f0;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .group-content {
+                padding: 1rem;
+            }
+
+            .device-checkbox {
+                margin-right: 1rem;
+                transform: scale(1.2);
+            }
+
+            .app-card {
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                padding: 1.5rem;
+                background: white;
+                transition: all 0.2s ease;
+                margin-bottom: 1rem;
+            }
+            .app-card:hover {
+                border-color: #3b82f6;
+                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+            }
+
+            .policy-card {
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                padding: 1.5rem;
+                margin-bottom: 1rem;
+                background: white;
+            }
+
+            .group-badge {
+                padding: 0.25rem 0.75rem;
+                border-radius: 12px;
+                font-size: 0.75rem;
+                font-weight: 500;
+                text-transform: uppercase;
+                margin-left: 0.5rem;
+            }
+            .group-servers { background: #dbeafe; color: #1e40af; }
+            .group-workstations { background: #dcfce7; color: #166534; }
+            .group-printers { background: #fef3c7; color: #92400e; }
+            .group-mobile { background: #f3e8ff; color: #7c3aed; }
+            .group-iot { background: #fee2e2; color: #991b1b; }
+
+            .app-badge {
+                padding: 0.25rem 0.75rem;
+                border-radius: 12px;
+                font-size: 0.75rem;
+                font-weight: 500;
+                margin-right: 0.5rem;
+                margin-bottom: 0.5rem;
+                display: inline-block;
+            }
+            .app-installed { background: #dcfce7; color: #166534; }
+            .app-available { background: #f3f4f6; color: #374151; }
+
+            .tabs {
+                display: flex;
+                border-bottom: 1px solid #e2e8f0;
+                margin-bottom: 1rem;
+            }
+            .tab {
+                padding: 0.75rem 1rem;
+                cursor: pointer;
+                border-bottom: 2px solid transparent;
+                transition: all 0.2s ease;
+            }
+            .tab.active {
+                border-bottom-color: #3b82f6;
+                color: #3b82f6;
+                font-weight: 600;
+            }
+            .tab:hover {
+                background: #f8fafc;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="app">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div style="margin-bottom: 2rem;">
+                    <h2><i class="fas fa-shield-alt"></i> OpenDirectory</h2>
+                    <p style="color: #94a3b8; font-size: 0.875rem;">Enterprise MDM</p>
+                </div>
+                
+                <nav>
+                    <div class="nav-item" :class="{active: currentView === 'dashboard'}" @click="setView('dashboard')">
+                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                    </div>
+                    <div class="nav-item" :class="{active: currentView === 'devices'}" @click="setView('devices')">
+                        <i class="fas fa-mobile-alt"></i> Devices
+                    </div>
+                    <div class="nav-item" :class="{active: currentView === 'users'}" @click="setView('users')">
+                        <i class="fas fa-users"></i> Users
+                    </div>
+                    <div class="nav-item" :class="{active: currentView === 'apps'}" @click="setView('apps')">
+                        <i class="fas fa-cube"></i> Applications
+                    </div>
+                    <div class="nav-item" :class="{active: currentView === 'policies'}" @click="setView('policies')">
+                        <i class="fas fa-clipboard-list"></i> Policies
+                    </div>
+                    <div class="nav-item" :class="{active: currentView === 'compliance'}" @click="setView('compliance')">
+                        <i class="fas fa-check-circle"></i> Compliance
+                    </div>
+                    <div class="nav-item" :class="{active: currentView === 'monitoring'}" @click="setView('monitoring')">
+                        <i class="fas fa-chart-line"></i> Monitoring
+                    </div>
+                    <div class="nav-item" :class="{active: currentView === 'settings'}" @click="setView('settings')">
+                        <i class="fas fa-cog"></i> Settings
+                    </div>
+                </nav>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="main-content">
+                <div class="header">
+                    <h1>{{getViewTitle()}}</h1>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <span class="status-badge status-online">System Healthy</span>
+                        <i class="fas fa-user-circle" style="font-size: 1.5rem; color: #64748b;"></i>
+                    </div>
+                </div>
+                
+                <div class="container">
+                    <!-- Dashboard -->
+                    <div v-if="currentView === 'dashboard'">
+                        <div class="grid">
+                            <div class="card stat-card">
+                                <div class="stat-number">{{getDevicesByGroup('all').length}}</div>
+                                <div class="stat-label">Total Devices</div>
+                            </div>
+                            <div class="card stat-card">
+                                <div class="stat-number">{{deviceGroups.length}}</div>
+                                <div class="stat-label">Device Groups</div>
+                            </div>
+                            <div class="card stat-card">
+                                <div class="stat-number">{{getTotalInstalledApps()}}</div>
+                                <div class="stat-label">Installed Apps</div>
+                            </div>
+                            <div class="card stat-card">
+                                <div class="stat-number">{{users.length}}</div>
+                                <div class="stat-label">LDAP Users</div>
+                            </div>
+                        </div>
+                        
+                        <div class="card" style="margin-top: 2rem;">
+                            <h3><i class="fas fa-server"></i> Recently Connected Device</h3>
+                            <div style="margin-top: 1rem;">
+                                <div class="device-card">
+                                    <div class="device-header">
+                                        <div>
+                                            <h4><i class="fab fa-ubuntu"></i> Ubuntu-CT2001</h4>
+                                            <p style="color: #64748b;">Proxmox LXC Container - {{getGroupName('servers')}}</p>
+                                        </div>
+                                        <span class="status-badge status-online">ONLINE</span>
+                                    </div>
+                                    <div class="device-info">
+                                        <div class="info-item">
+                                            <div class="info-label">IP Address</div>
+                                            <div class="info-value">192.168.1.51</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">Installed Apps</div>
+                                            <div class="info-value">{{getDeviceInstalledApps('CT2001').length}} apps</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">Compliance</div>
+                                            <div class="info-value">85%</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">Last Checkin</div>
+                                            <div class="info-value">{{formatTime(new Date())}}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Devices -->
+                    <div v-if="currentView === 'devices'">
+                        <div style="margin-bottom: 2rem; display: flex; gap: 1rem;">
+                            <button class="btn btn-primary" @click="showAddDevice = true">
+                                <i class="fas fa-plus"></i> Add Device
+                            </button>
+                            <button class="btn btn-success" @click="refreshDevices()">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
+                            <select class="form-select" style="width: auto;" v-model="selectedGroupFilter" @change="filterDevices">
+                                <option value="all">All Groups</option>
+                                <option v-for="group in deviceGroups" :key="group.id" :value="group.id">
+                                    {{group.name}}
+                                </option>
+                            </select>
+                        </div>
+                        
+                        <div v-for="group in deviceGroups" :key="group.id" class="device-group" v-show="selectedGroupFilter === 'all' || selectedGroupFilter === group.id">
+                            <div class="group-header">
+                                <div>
+                                    <h3>
+                                        <i :class="group.icon"></i>
+                                        {{group.name}}
+                                        <span :class="'group-badge group-' + group.id">{{getDevicesByGroup(group.id).length}}</span>
+                                    </h3>
+                                    <p style="color: #64748b;">{{group.description}}</p>
+                                </div>
+                                <button class="btn btn-primary" @click="addDeviceToGroup(group.id)">
+                                    <i class="fas fa-plus"></i> Add to Group
+                                </button>
+                            </div>
+                            <div class="group-content">
+                                <div v-for="device in getDevicesByGroup(group.id)" :key="device.id" class="device-card">
+                                    <div class="device-header">
+                                        <div>
+                                            <h4>
+                                                <i :class="getPlatformIcon(device.platform)"></i>
+                                                {{device.name}}
+                                            </h4>
+                                            <p style="color: #64748b; margin: 0.25rem 0;">{{device.id}}</p>
+                                            <p style="color: #64748b; font-size: 0.875rem;">{{device.description}}</p>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <span class="status-badge" :class="getStatusClass(device.status)">
+                                                {{device.status.toUpperCase()}}
+                                            </span>
+                                            <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+                                                <button class="btn btn-primary" style="padding: 0.5rem;" @click="showDeviceManagement(device)">
+                                                    <i class="fas fa-cog"></i>
+                                                </button>
+                                                <button class="btn btn-warning" style="padding: 0.5rem;" @click="showMoveDevice(device)">
+                                                    <i class="fas fa-exchange-alt"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="device-info">
+                                        <div class="info-item">
+                                            <div class="info-label">Platform</div>
+                                            <div class="info-value">{{device.platform}}</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">IP Address</div>
+                                            <div class="info-value">{{device.ip_address}}</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">Installed Apps</div>
+                                            <div class="info-value">{{getDeviceInstalledApps(device.id).length}} apps</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">Compliance</div>
+                                            <div class="info-value">{{device.compliance}}%</div>
+                                        </div>
+                                    </div>
+                                    <div style="margin-top: 1rem;">
+                                        <div class="info-label">Installed Applications:</div>
+                                        <div style="margin-top: 0.5rem;">
+                                            <span v-for="app in getDeviceInstalledApps(device.id)" :key="app.app || app" class="app-badge app-installed">
+                                                {{app.name || getAppName(app)}}
+                                            </span>
+                                            <span v-if="getDeviceInstalledApps(device.id).length === 0" class="app-badge app-available">
+                                                No apps installed
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="getDevicesByGroup(group.id).length === 0" style="text-align: center; padding: 2rem; color: #64748b;">
+                                    <i :class="group.icon" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;"></i>
+                                    <p>No devices in this group</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Users -->
+                    <div v-if="currentView === 'users'">
+                        <div style="margin-bottom: 2rem;">
+                            <button class="btn btn-primary" @click="loadUsers()">
+                                <i class="fas fa-sync"></i> Refresh Users
+                            </button>
+                        </div>
+                        
+                        <div class="card" v-if="users.length > 0">
+                            <h3><i class="fas fa-users"></i> LLDAP Users ({{users.length}})</h3>
+                            <table class="table" style="margin-top: 1rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Groups</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="user in users" :key="user.id">
+                                        <td><strong>{{user.name}}</strong></td>
+                                        <td>{{user.email}}</td>
+                                        <td>
+                                            <span v-for="group in user.groups" class="status-badge status-online" style="margin-right: 0.5rem;">
+                                                {{group}}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-primary" style="padding: 0.5rem;" @click="manageUser(user)">
+                                                <i class="fas fa-cog"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Applications -->
+                    <div v-if="currentView === 'apps'">
+                        <div style="margin-bottom: 2rem; display: flex; gap: 1rem;">
+                            <button class="btn btn-primary">
+                                <i class="fas fa-upload"></i> Upload App
+                            </button>
+                            <button class="btn btn-success" @click="showBulkDeploy = true">
+                                <i class="fas fa-rocket"></i> Bulk Deploy
+                            </button>
+                        </div>
+                        
+                        <div class="grid">
+                            <div class="app-card" v-for="app in apps" :key="app.id">
+                                <h4>{{app.name}}</h4>
+                                <p style="margin: 1rem 0;">{{app.description}}</p>
+                                <div style="margin: 1rem 0;">
+                                    <div class="info-label">Installed on:</div>
+                                    <div v-if="getAppInstallations(app.id).length > 0">
+                                        <span v-for="deviceId in getAppInstallations(app.id)" :key="deviceId" class="app-badge app-installed">
+                                            {{getDeviceName(deviceId)}}
+                                        </span>
+                                    </div>
+                                    <span v-else class="app-badge app-available">Not installed on any device</span>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button class="btn btn-primary" @click="showTargetedDeploy(app)">
+                                        <i class="fas fa-crosshairs"></i> Targeted Deploy
+                                    </button>
+                                    <button class="btn btn-success" @click="quickDeploy(app)">
+                                        <i class="fas fa-rocket"></i> Quick Deploy
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Policies -->
+                    <div v-if="currentView === 'policies'">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                            <h2><i class="fas fa-clipboard-list"></i> Policy Management</h2>
+                            <button class="btn btn-primary" @click="showCreatePolicy = true">
+                                <i class="fas fa-plus"></i> Create Policy
+                            </button>
+                        </div>
+                        
+                        <!-- Policy Stats -->
+                        <div class="grid" style="margin-bottom: 2rem;">
+                            <div class="stat-card">
+                                <div class="stat-number">{{policies.length}}</div>
+                                <div class="stat-label">Total Policies</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">{{policies.filter(p => p.active).length}}</div>
+                                <div class="stat-label">Active Policies</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">{{policies.filter(p => p.type === 'version').length}}</div>
+                                <div class="stat-label">Version Policies</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">{{getScheduledPolicies().length}}</div>
+                                <div class="stat-label">Scheduled Updates</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Policy Filters -->
+                        <div style="display: flex; gap: 1rem; margin-bottom: 2rem; align-items: center;">
+                            <div>
+                                <label class="form-label" style="margin-bottom: 0.25rem;">Filter by Type:</label>
+                                <select v-model="policyFilter" class="form-select" style="width: auto;">
+                                    <option value="all">All Policies</option>
+                                    <option value="version">Version Management</option>
+                                    <option value="security">Security Updates</option>
+                                    <option value="maintenance">Maintenance</option>
+                                    <option value="deployment">Deployment</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label" style="margin-bottom: 0.25rem;">Status:</label>
+                                <select v-model="policyStatusFilter" class="form-select" style="width: auto;">
+                                    <option value="all">All Status</option>
+                                    <option value="active">Active Only</option>
+                                    <option value="inactive">Inactive Only</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Policy List -->
+                        <div class="grid" style="grid-template-columns: 1fr;">
+                            <div v-for="policy in filteredPolicies" :key="policy.id" class="card" style="margin-bottom: 1rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                    <div style="flex: 1;">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                            <h4 style="margin: 0;">{{policy.name}}</h4>
+                                            <span class="status-badge" :class="policy.active ? 'status-online' : 'status-offline'">
+                                                {{policy.active ? 'Active' : 'Inactive'}}
+                                            </span>
+                                            <span style="background: #e2e8f0; color: #374151; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; text-transform: uppercase;">
+                                                {{policy.type}}
+                                            </span>
+                                        </div>
+                                        <p style="color: #64748b; margin: 0;">{{policy.description}}</p>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button class="btn btn-primary" style="padding: 0.5rem;" @click="editPolicy(policy)" title="Edit Policy">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-success" style="padding: 0.5rem;" @click="applyPolicy(policy)" title="Apply Now" :disabled="!policy.active">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                        <button class="btn btn-warning" style="padding: 0.5rem;" @click="schedulePolicy(policy)" title="Schedule" :disabled="!policy.active">
+                                            <i class="fas fa-clock"></i>
+                                        </button>
+                                        <button class="btn" style="padding: 0.5rem;" :class="policy.active ? 'btn-secondary' : 'btn-success'" @click="togglePolicy(policy)" :title="policy.active ? 'Disable' : 'Enable'">
+                                            <i class="fas" :class="policy.active ? 'fa-pause' : 'fa-play'"></i>
+                                        </button>
+                                        <button class="btn btn-danger" style="padding: 0.5rem;" @click="deletePolicy(policy)" title="Delete Policy">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem; padding: 1rem; background: #f8fafc; border-radius: 6px;">
+                                    <div>
+                                        <strong style="color: #374151;">Target Groups:</strong><br>
+                                        <div v-if="policy.targetGroups.length > 0" style="margin-top: 0.5rem;">
+                                            <span v-for="groupId in policy.targetGroups" :key="groupId" :class="'group-badge group-' + groupId" style="margin-right: 0.5rem;">
+                                                {{getGroupName(groupId)}}
+                                            </span>
+                                        </div>
+                                        <span v-else style="color: #64748b; font-size: 0.875rem;">All devices</span>
+                                    </div>
+                                    <div>
+                                        <strong style="color: #374151;">Applications:</strong><br>
+                                        <div v-if="policy.applications && policy.applications.length > 0" style="margin-top: 0.5rem;">
+                                            <span v-for="appId in policy.applications" :key="appId" class="app-badge app-installed" style="margin-right: 0.25rem;">
+                                                {{getAppName(appId)}}
+                                            </span>
+                                        </div>
+                                        <span v-else style="color: #64748b; font-size: 0.875rem;">All applications</span>
+                                    </div>
+                                    <div>
+                                        <strong style="color: #374151;">Schedule:</strong><br>
+                                        <div style="margin-top: 0.5rem; color: #64748b; font-size: 0.875rem;">
+                                            <div v-if="policy.autoUpdate"><i class="fas fa-check-circle" style="color: #10b981;"></i> Auto-update enabled</div>
+                                            <div v-if="policy.schedule">Next: {{formatSchedule(policy.schedule)}}</div>
+                                            <div v-if="policy.maintenanceWindow">Window: {{policy.maintenanceWindow}}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div v-if="policy.lastExecution" style="display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 0.875rem;">
+                                    <div>
+                                        <strong>Last Execution:</strong> {{formatTime(policy.lastExecution.date)}}
+                                        <span :class="'status-badge ' + (policy.lastExecution.status === 'success' ? 'status-online' : 'status-offline')" style="margin-left: 0.5rem;">
+                                            {{policy.lastExecution.status}}
+                                        </span>
+                                    </div>
+                                    <div v-if="policy.lastExecution.affectedDevices">
+                                        Affected: {{policy.lastExecution.affectedDevices}} device(s)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div v-if="filteredPolicies.length === 0" style="text-align: center; padding: 3rem; color: #64748b;">
+                            <i class="fas fa-clipboard-list" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;"></i>
+                            <p>No policies match the current filters</p>
+                        </div>
+                    </div>
+
+                    <!-- Compliance -->
+                    <div v-if="currentView === 'compliance'">
+                        <div class="card">
+                            <h3><i class="fas fa-shield-alt"></i> Compliance Overview</h3>
+                            <div class="grid" style="margin-top: 1rem;">
+                                <div v-for="group in deviceGroups" :key="group.id" class="card">
+                                    <h4>{{group.name}}</h4>
+                                    <div style="font-size: 2rem; font-weight: bold; color: #3b82f6; text-align: center;">
+                                        {{getGroupCompliance(group.id)}}%
+                                    </div>
+                                    <p style="text-align: center; color: #64748b;">Average Compliance</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Monitoring -->
+                    <div v-if="currentView === 'monitoring'">
+                        <div class="card">
+                            <h3><i class="fas fa-chart-line"></i> System Monitoring</h3>
+                            <div style="margin-top: 1rem;">
+                                <button class="btn btn-primary" @click="openGrafana()">
+                                    <i class="fas fa-chart-bar"></i> Open Grafana
+                                </button>
+                                <button class="btn btn-primary" @click="openPrometheus()">
+                                    <i class="fas fa-server"></i> Open Prometheus  
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Settings -->
+                    <div v-if="currentView === 'settings'">
+                        <div class="card">
+                            <h3><i class="fas fa-cog"></i> External Services</h3>
+                            <div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                <a href="http://192.168.1.223:30170" target="_blank" class="btn btn-primary">
+                                    <i class="fas fa-folder"></i> LLDAP Directory
+                                </a>
+                                <a href="http://192.168.1.223:30300" target="_blank" class="btn btn-primary">
+                                    <i class="fas fa-chart-bar"></i> Grafana
+                                </a>
+                                <a href="http://192.168.1.223:30909" target="_blank" class="btn btn-primary">
+                                    <i class="fas fa-server"></i> Prometheus
+                                </a>
+                                <a href="http://192.168.1.223:30820" target="_blank" class="btn btn-primary">
+                                    <i class="fas fa-key"></i> Vault
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Device Management Modal -->
+            <div v-if="showDeviceModal" class="modal" @click.self="showDeviceModal = false">
+                <div class="modal-content">
+                    <h3>Device Management: {{selectedDevice?.name}}</h3>
+                    
+                    <div class="tabs">
+                        <div class="tab" :class="{active: activeTab === 'info'}" @click="activeTab = 'info'">
+                            <i class="fas fa-info-circle"></i> Device Info
+                        </div>
+                        <div class="tab" :class="{active: activeTab === 'apps'}" @click="activeTab = 'apps'">
+                            <i class="fas fa-cube"></i> Applications
+                        </div>
+                        <div class="tab" :class="{active: activeTab === 'settings'}" @click="activeTab = 'settings'">
+                            <i class="fas fa-cog"></i> Settings
+                        </div>
+                    </div>
+
+                    <!-- Device Info Tab -->
+                    <div v-if="activeTab === 'info'">
+                        <div class="grid" style="margin: 1rem 0;">
+                            <div class="form-group">
+                                <label class="form-label">Device Name</label>
+                                <input class="form-input" v-model="selectedDevice.name" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">IP Address</label>
+                                <input class="form-input" v-model="selectedDevice.ip_address" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Platform</label>
+                                <input class="form-input" v-model="selectedDevice.platform" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Current Group</label>
+                                <select class="form-select" v-model="selectedDevice.group">
+                                    <option v-for="group in deviceGroups" :key="group.id" :value="group.id">
+                                        {{group.name}}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Compliance</label>
+                                <input class="form-input" :value="selectedDevice.compliance + '%'" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Last Checkin</label>
+                                <input class="form-input" :value="formatTime(selectedDevice.last_checkin)" readonly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Applications Tab -->
+                    <div v-if="activeTab === 'apps'">
+                        <h4 style="margin-bottom: 1rem;">Installed Applications</h4>
+                        <div style="margin-bottom: 2rem;">
+                            <div v-if="getDeviceInstalledApps(selectedDevice?.id).length > 0">
+                                <div v-for="app in getDeviceInstalledApps(selectedDevice?.id)" :key="app.app || app" 
+                                     style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1rem;">
+                                    <div style="flex: 1;">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                            <strong>{{app.name || getAppName(app)}}</strong>
+                                            <span v-if="app.version" style="background: #e2e8f0; color: #374151; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 500;">v{{app.version}}</span>
+                                            <span v-if="app.availableVersions && app.availableVersions[0] !== app.version" style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 500;">Update available</span>
+                                        </div>
+                                        <div v-if="app.policy" style="color: #64748b; font-size: 0.875rem; margin-bottom: 0.5rem;">Policy: {{app.policy}} • Updated: {{app.lastUpdate}}</div>
+                                        <div v-if="app.availableVersions" style="margin-top: 0.5rem;">
+                                            <label style="font-size: 0.875rem; color: #374151; margin-right: 0.5rem;">Version:</label>
+                                            <select :id="'version-' + (app.app || app)" style="padding: 0.25rem 0.5rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.875rem;">
+                                                <option v-for="version in app.availableVersions" :key="version" :value="version" :selected="version === app.version">v{{version}}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button v-if="app.availableVersions" class="btn btn-primary" style="padding: 0.5rem 1rem;" @click="updateToSelectedVersion(selectedDevice.id, app.app)" :disabled="!hasUpdateAvailable(app)">
+                                            <i class="fas fa-sync"></i> Update
+                                        </button>
+                                        <button class="btn btn-danger" style="padding: 0.5rem 1rem;" @click="uninstallApp(app.app || app)">
+                                            <i class="fas fa-trash"></i> Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else style="text-align: center; padding: 2rem; color: #64748b;">
+                                <i class="fas fa-cube" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;"></i>
+                                <p>No applications installed</p>
+                            </div>
+                        </div>
+                        
+                        <h4 style="margin-bottom: 1rem;">Available Applications</h4>
+                        <div>
+                            <div v-for="app in getAvailableApps(selectedDevice?.id)" :key="app.id" 
+                                 style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 0.5rem;">
+                                <div>
+                                    <strong>{{app.name}}</strong>
+                                    <div style="color: #64748b; font-size: 0.875rem;">{{app.description}}</div>
+                                </div>
+                                <button class="btn btn-primary" style="padding: 0.5rem 1rem;" @click="installApp(app.id)">
+                                    <i class="fas fa-download"></i> Install
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Settings Tab -->
+                    <div v-if="activeTab === 'settings'">
+                        <div class="form-group">
+                            <label class="form-label">Device Description</label>
+                            <input class="form-input" v-model="selectedDevice.description">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">LDAP Integration</label>
+                            <select class="form-select" v-model="selectedDevice.ldap_enabled">
+                                <option :value="true">Enabled</option>
+                                <option :value="false">Disabled</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; margin-top: 2rem; justify-content: flex-end;">
+                        <button class="btn btn-primary" @click="saveDeviceChanges()">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <button class="btn btn-secondary" @click="showDeviceModal = false">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Move Device Modal -->
+            <div v-if="showMoveModal" class="modal" @click.self="showMoveModal = false">
+                <div class="modal-content">
+                    <h3>Move Device: {{selectedDevice?.name}}</h3>
+                    
+                    <div style="margin: 1rem 0;">
+                        <p style="margin-bottom: 1rem;">Current Group: <strong>{{getGroupName(selectedDevice?.group)}}</strong></p>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Move to Group:</label>
+                            <select class="form-select" v-model="newDeviceGroup">
+                                <option v-for="group in deviceGroups" :key="group.id" :value="group.id" :disabled="group.id === selectedDevice?.group">
+                                    {{group.name}} ({{getDevicesByGroup(group.id).length}} devices)
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button class="btn btn-primary" @click="moveDeviceToGroup()" :disabled="newDeviceGroup === selectedDevice?.group">
+                            <i class="fas fa-exchange-alt"></i> Move Device
+                        </button>
+                        <button class="btn btn-secondary" @click="showMoveModal = false">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Other Modals (shortened for space, same as before) -->
+            <div v-if="showAddDevice" class="modal" @click.self="showAddDevice = false">
+                <div class="modal-content">
+                    <h3>Add New Device</h3>
+                    <div class="form-group">
+                        <label class="form-label">Device Name</label>
+                        <input class="form-input" v-model="newDevice.name">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Device Group</label>
+                        <select class="form-select" v-model="newDevice.group">
+                            <option v-for="group in deviceGroups" :key="group.id" :value="group.id">
+                                {{group.name}}
+                            </option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 1rem;">
+                        <button class="btn btn-primary" @click="addDevice()">Add Device</button>
+                        <button class="btn btn-secondary" @click="showAddDevice = false">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Create/Edit Policy Modal -->
+            <div v-if="showCreatePolicy" class="modal" @click.self="showCreatePolicy = false">
+                <div class="modal-content" style="max-width: 800px;">
+                    <h3>{{editingPolicy ? 'Edit Policy' : 'Create New Policy'}}</h3>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">Policy Name</label>
+                            <input class="form-input" v-model="policyForm.name" placeholder="Enter policy name">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Policy Type</label>
+                            <select class="form-select" v-model="policyForm.type">
+                                <option value="version">Version Management</option>
+                                <option value="security">Security Updates</option>
+                                <option value="maintenance">Maintenance</option>
+                                <option value="deployment">Deployment</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-input" v-model="policyForm.description" rows="3" placeholder="Describe what this policy does"></textarea>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">Target Groups</label>
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+                                <label v-for="group in deviceGroups" :key="group.id" style="display: flex; align-items: center; gap: 0.25rem; margin-right: 1rem;">
+                                    <input type="checkbox" :value="group.id" v-model="policyForm.targetGroups">
+                                    {{group.name}}
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Target Applications</label>
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+                                <label v-for="app in apps" :key="app.id" style="display: flex; align-items: center; gap: 0.25rem; margin-right: 1rem;">
+                                    <input type="checkbox" :value="app.id" v-model="policyForm.applications">
+                                    {{app.name}}
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" v-model="policyForm.autoUpdate">
+                                <span class="form-label" style="margin: 0;">Auto-update</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Version Strategy</label>
+                            <select class="form-select" v-model="policyForm.versionStrategy">
+                                <option value="latest">Always Latest</option>
+                                <option value="stable">Stable Only</option>
+                                <option value="security">Security Patches</option>
+                                <option value="manual">Manual Approval</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Maintenance Window</label>
+                            <select class="form-select" v-model="policyForm.maintenanceWindow">
+                                <option value="immediate">Immediate</option>
+                                <option value="business-hours">Business Hours (9-17)</option>
+                                <option value="after-hours">After Hours (18-8)</option>
+                                <option value="weekend">Weekend Only</option>
+                                <option value="custom">Custom Schedule</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div v-if="policyForm.maintenanceWindow === 'custom'" class="form-group">
+                        <label class="form-label">Custom Schedule (Cron Format)</label>
+                        <input class="form-input" v-model="policyForm.customSchedule" placeholder="0 2 * * 0 (Every Sunday at 2 AM)">
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button class="btn btn-primary" @click="savePolicy()">
+                            <i class="fas fa-save"></i> {{editingPolicy ? 'Update Policy' : 'Create Policy'}}
+                        </button>
+                        <button class="btn btn-secondary" @click="cancelPolicyEdit()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Schedule Policy Modal -->
+            <div v-if="showScheduleModal" class="modal" @click.self="showScheduleModal = false">
+                <div class="modal-content">
+                    <h3>Schedule Policy: {{schedulingPolicy?.name}}</h3>
+                    
+                    <div style="margin: 1rem 0;">
+                        <div class="form-group">
+                            <label class="form-label">Schedule Type</label>
+                            <select class="form-select" v-model="scheduleForm.type">
+                                <option value="once">Run Once</option>
+                                <option value="recurring">Recurring</option>
+                            </select>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Date</label>
+                                <input type="date" class="form-input" v-model="scheduleForm.date">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Time</label>
+                                <input type="time" class="form-input" v-model="scheduleForm.time">
+                            </div>
+                        </div>
+                        
+                        <div v-if="scheduleForm.type === 'recurring'" class="form-group">
+                            <label class="form-label">Recurrence</label>
+                            <select class="form-select" v-model="scheduleForm.recurrence">
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="custom">Custom (Cron)</option>
+                            </select>
+                        </div>
+                        
+                        <div v-if="scheduleForm.type === 'recurring' && scheduleForm.recurrence === 'custom'" class="form-group">
+                            <label class="form-label">Cron Expression</label>
+                            <input class="form-input" v-model="scheduleForm.cronExpression" placeholder="0 2 * * 0">
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button class="btn btn-primary" @click="savePolicySchedule()">
+                            <i class="fas fa-calendar-plus"></i> Schedule Policy
+                        </button>
+                        <button class="btn btn-secondary" @click="showScheduleModal = false">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Targeted Deploy Modal -->
+            <div v-if="showDeployModal" class="modal" @click.self="showDeployModal = false">
+                <div class="modal-content">
+                    <h3>Deploy {{selectedApp ? selectedApp.name : ''}} - Target Selection</h3>
+                    
+                    <div style="margin: 1rem 0;">
+                        <h4>Select Target Groups:</h4>
+                        <div v-for="group in deviceGroups" :key="group.id" style="margin: 0.5rem 0;">
+                            <label style="display: flex; align-items: center;">
+                                <input type="checkbox" class="device-checkbox" v-model="deployTargets.groups" :value="group.id">
+                                <i :class="group.icon"></i>
+                                {{group.name}} ({{getDevicesByGroup(group.id).length}} devices)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="margin: 1rem 0;">
+                        <h4>Or Select Individual Devices:</h4>
+                        <div v-for="device in devices" :key="device.id" style="margin: 0.5rem 0;">
+                            <label style="display: flex; align-items: center;">
+                                <input type="checkbox" class="device-checkbox" v-model="deployTargets.devices" :value="device.id">
+                                <i :class="getPlatformIcon(device.platform)"></i>
+                                {{device.name}} ({{device.ip_address}}) - {{getGroupName(device.group)}}
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="border-top: 1px solid #e2e8f0; padding-top: 1rem; margin-top: 1rem;">
+                        <h4>Deployment Summary:</h4>
+                        <p><strong>App:</strong> {{selectedApp ? selectedApp.name : ''}}</p>
+                        <p><strong>Total Targets:</strong> {{getTotalDeployTargets()}} devices</p>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button class="btn btn-primary" @click="executeDeployment()" :disabled="getTotalDeployTargets() === 0">
+                            <i class="fas fa-rocket"></i> Deploy to {{getTotalDeployTargets()}} Device(s)
+                        </button>
+                        <button class="btn btn-secondary" @click="showDeployModal = false">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notification -->
+            <div ref="notification" class="notification">
+                <div ref="notificationText"></div>
+            </div>
+        </div>
+        
+        <script>
+            const { createApp } = Vue;
+            
+            createApp({
+                data() {
+                    return {
+                        currentView: 'dashboard',
+                        activeTab: 'info',
+                        showAddDevice: false,
+                        showDeployModal: false,
+                        showCreatePolicy: false,
+                        showScheduleModal: false,
+                        editingPolicy: null,
+                        schedulingPolicy: null,
+                        policyFilter: 'all',
+                        policyStatusFilter: 'all',
+                        policyForm: {
+                            name: '',
+                            type: 'version',
+                            description: '',
+                            targetGroups: [],
+                            applications: [],
+                            autoUpdate: false,
+                            versionStrategy: 'stable',
+                            maintenanceWindow: 'immediate',
+                            customSchedule: ''
+                        },
+                        scheduleForm: {
+                            type: 'once',
+                            date: '',
+                            time: '',
+                            recurrence: 'daily',
+                            cronExpression: ''
+                        },
+                        showDeviceModal: false,
+                        showMoveModal: false,
+                        selectedGroupFilter: 'all',
+                        selectedApp: null,
+                        selectedDevice: null,
+                        newDeviceGroup: null,
+                        deployTargets: {
+                            groups: [],
+                            devices: []
+                        },
+                        newDevice: { name: '', group: 'servers' },
+                        newPolicy: { name: '', description: '', targetGroups: [] },
+                        
+                        // Device installations tracking
+                        deviceInstallations: {
+                            'CT2001': [
+                                {
+                                    app: 'docker',
+                                    name: 'Docker',
+                                    version: '27.4.1',
+                                    availableVersions: ['27.4.1', '27.3.2', '27.2.1', '26.1.4'],
+                                    policy: 'stable',
+                                    lastUpdate: '2025-02-15'
+                                }
+                            ] // CT2001 has Docker installed with version tracking
+                        },
+                        
+                        deviceGroups: [
+                            {
+                                id: 'servers',
+                                name: 'Servers',
+                                description: 'Production servers and infrastructure',
+                                icon: 'fas fa-server'
+                            },
+                            {
+                                id: 'workstations',
+                                name: 'Workstations',
+                                description: 'Employee desktops and laptops',
+                                icon: 'fas fa-desktop'
+                            },
+                            {
+                                id: 'printers',
+                                name: 'Printers',
+                                description: 'Network printers and scanners',
+                                icon: 'fas fa-print'
+                            },
+                            {
+                                id: 'mobile',
+                                name: 'Mobile Devices',
+                                description: 'Smartphones and tablets',
+                                icon: 'fas fa-mobile-alt'
+                            },
+                            {
+                                id: 'iot',
+                                name: 'IoT Devices',
+                                description: 'Internet of Things devices',
+                                icon: 'fas fa-wifi'
+                            }
+                        ],
+
+                        users: [
+                            { id: 1, name: 'admin', email: 'admin@opendirectory.local', groups: ['admins'] },
+                            { id: 2, name: 'user1', email: 'user1@opendirectory.local', groups: ['users'] },
+                            { id: 3, name: 'user2', email: 'user2@opendirectory.local', groups: ['users'] }
+                        ],
+                        
+                        devices: [
+                            {
+                                id: 'CT2001',
+                                name: 'Ubuntu-CT2001',
+                                hostname: 'CT2001',
+                                ip_address: '192.168.1.51',
+                                platform: 'Ubuntu 25.10',
+                                os_version: 'Ubuntu 25.10 (GNU/Linux 6.17.2-1-pve x86_64)',
+                                device_type: 'linux_container',
+                                container_type: 'proxmox_lxc',
+                                status: 'online',
+                                compliance: 85,
+                                ldap_enabled: true,
+                                last_checkin: new Date(),
+                                description: 'Proxmox LXC Container with LDAP integration',
+                                management_agent: 'opendirectory-ldap-agent',
+                                group: 'servers'
+                            }
+                        ],
+                        
+                        apps: [
+                            { 
+                                id: 'chrome', 
+                                name: 'Google Chrome', 
+                                description: 'Web browser - Compatible with Servers, Workstations',
+                                compatibleGroups: ['servers', 'workstations']
+                            },
+                            { 
+                                id: 'vscode', 
+                                name: 'VS Code', 
+                                description: 'Code editor - Best for Servers, Workstations',
+                                compatibleGroups: ['servers', 'workstations']
+                            },
+                            { 
+                                id: 'docker', 
+                                name: 'Docker', 
+                                description: 'Container runtime - Servers only',
+                                compatibleGroups: ['servers']
+                            },
+                            {
+                                id: 'office',
+                                name: 'LibreOffice',
+                                description: 'Office suite - Workstations only',
+                                compatibleGroups: ['workstations']
+                            }
+                        ],
+
+                        policies: [
+                            {
+                                id: 1,
+                                name: 'Docker Auto-Update Policy',
+                                type: 'version',
+                                description: 'Keep Docker up to date on all server devices with stable releases',
+                                targetGroups: ['servers'],
+                                applications: ['docker'],
+                                active: true,
+                                autoUpdate: true,
+                                versionStrategy: 'stable',
+                                maintenanceWindow: 'after-hours',
+                                schedule: '0 2 * * 0', // Every Sunday at 2 AM
+                                lastExecution: {
+                                    date: new Date('2025-02-10T02:00:00'),
+                                    status: 'success',
+                                    affectedDevices: 1
+                                }
+                            },
+                            {
+                                id: 2,
+                                name: 'Workstation Security Updates',
+                                type: 'security',
+                                description: 'Immediate security patches for all workstation devices',
+                                targetGroups: ['workstations'],
+                                applications: [],
+                                active: true,
+                                autoUpdate: true,
+                                versionStrategy: 'security',
+                                maintenanceWindow: 'immediate',
+                                lastExecution: {
+                                    date: new Date('2025-02-16T14:30:00'),
+                                    status: 'success',
+                                    affectedDevices: 0
+                                }
+                            },
+                            {
+                                id: 3,
+                                name: 'Monthly Maintenance Window',
+                                type: 'maintenance',
+                                description: 'General system maintenance and updates for all devices',
+                                targetGroups: ['servers', 'workstations'],
+                                applications: ['docker', 'chrome', 'vscode'],
+                                active: false,
+                                autoUpdate: false,
+                                versionStrategy: 'manual',
+                                maintenanceWindow: 'custom',
+                                customSchedule: '0 1 1 * *', // First day of every month at 1 AM
+                                lastExecution: {
+                                    date: new Date('2025-01-01T01:00:00'),
+                                    status: 'success',
+                                    affectedDevices: 1
+                                }
+                            },
+                            {
+                                id: 4,
+                                name: 'Chrome Latest Policy',
+                                type: 'deployment',
+                                description: 'Deploy latest Chrome version to workstations immediately',
+                                targetGroups: ['workstations'],
+                                applications: ['chrome'],
+                                active: true,
+                                autoUpdate: true,
+                                versionStrategy: 'latest',
+                                maintenanceWindow: 'business-hours'
+                            }
+                        ]
+                    }
+                },
+                computed: {
+                    filteredPolicies() {
+                        let filtered = this.policies;
+                        
+                        if (this.policyFilter !== 'all') {
+                            filtered = filtered.filter(p => p.type === this.policyFilter);
+                        }
+                        
+                        if (this.policyStatusFilter !== 'all') {
+                            const isActive = this.policyStatusFilter === 'active';
+                            filtered = filtered.filter(p => p.active === isActive);
+                        }
+                        
+                        return filtered;
+                    }
+                },
+                mounted() {
+                    this.showNotification('OpenDirectory MDM with enhanced device management loaded', 'success');
+                },
+                methods: {
+                    setView(view) { 
+                        this.currentView = view;
+                    },
+                    getViewTitle() {
+                        const titles = { 
+                            dashboard: 'Dashboard', 
+                            devices: 'Device Management', 
+                            users: 'User Directory (LLDAP)',
+                            apps: 'Application Store', 
+                            policies: 'Policy Management',
+                            compliance: 'Compliance Center', 
+                            monitoring: 'System Monitoring',
+                            settings: 'System Settings' 
+                        };
+                        return titles[this.currentView] || 'Dashboard';
+                    },
+                    getPlatformIcon(platform) {
+                        if (platform.toLowerCase().includes('ubuntu') || platform.toLowerCase().includes('linux')) return 'fab fa-ubuntu';
+                        if (platform.toLowerCase().includes('windows')) return 'fab fa-windows';
+                        if (platform.toLowerCase().includes('mac')) return 'fab fa-apple';  
+                        return 'fas fa-server';
+                    },
+                    getStatusClass(status) {
+                        return status === 'online' ? 'status-online' : 'status-offline';
+                    },
+                    getDevicesByGroup(groupId) {
+                        if (groupId === 'all') return this.devices;
+                        return this.devices.filter(device => device.group === groupId);
+                    },
+                    getGroupName(groupId) {
+                        const group = this.deviceGroups.find(g => g.id === groupId);
+                        return group ? group.name : 'Unknown';
+                    },
+                    getGroupCompliance(groupId) {
+                        const devices = this.getDevicesByGroup(groupId);
+                        if (devices.length === 0) return 0;
+                        const total = devices.reduce((sum, device) => sum + device.compliance, 0);
+                        return Math.round(total / devices.length);
+                    },
+                    getDeviceInstalledApps(deviceId) {
+                        return this.deviceInstallations[deviceId] || [];
+                    },
+                    getAppInstallations(appId) {
+                        const installations = [];
+                        for (const [deviceId, apps] of Object.entries(this.deviceInstallations)) {
+                            const hasApp = apps.find(app => (app.app || app) === appId);
+                            if (hasApp) {
+                                installations.push(deviceId);
+                            }
+                        }
+                        return installations;
+                    },
+                    getDeviceName(deviceId) {
+                        const device = this.devices.find(d => d.id === deviceId);
+                        return device ? device.name : deviceId;
+                    },
+                    getAppName(appId) {
+                        const app = this.apps.find(a => a.id === appId);
+                        return app ? app.name : appId;
+                    },
+                    getTotalInstalledApps() {
+                        let total = 0;
+                        for (const apps of Object.values(this.deviceInstallations)) {
+                            total += Array.isArray(apps) ? apps.length : 0;
+                        }
+                        return total;
+                    },
+                    getAvailableApps(deviceId) {
+                        const installed = this.getDeviceInstalledApps(deviceId);
+                        const installedIds = installed.map(app => app.app || app);
+                        return this.apps.filter(app => !installedIds.includes(app.id));
+                    },
+                    formatTime(date) {
+                        if (!(date instanceof Date)) date = new Date(date);
+                        return date.toLocaleString('de-DE', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                    },
+                    showNotification(text, type = 'success') {
+                        const notification = this.$refs.notification;
+                        const notificationText = this.$refs.notificationText;
+                        
+                        notification.className = `notification ${type}`;
+                        notificationText.textContent = text;
+                        notification.classList.add('show');
+                        
+                        setTimeout(() => {
+                            notification.classList.remove('show');
+                        }, 4000);
+                    },
+                    showDeviceManagement(device) {
+                        this.selectedDevice = {...device};
+                        this.activeTab = 'info';
+                        this.showDeviceModal = true;
+                    },
+                    showMoveDevice(device) {
+                        this.selectedDevice = {...device};
+                        this.newDeviceGroup = device.group;
+                        this.showMoveModal = true;
+                    },
+                    moveDeviceToGroup() {
+                        if (this.newDeviceGroup && this.newDeviceGroup !== this.selectedDevice.group) {
+                            // Find the device in the main devices array
+                            const deviceIndex = this.devices.findIndex(d => d.id === this.selectedDevice.id);
+                            if (deviceIndex > -1) {
+                                const oldGroup = this.getGroupName(this.devices[deviceIndex].group);
+                                const newGroup = this.getGroupName(this.newDeviceGroup);
+                                
+                                // Update the device group
+                                this.devices[deviceIndex].group = this.newDeviceGroup;
+                                
+                                this.showNotification(`${this.selectedDevice.name} moved from ${oldGroup} to ${newGroup}`, 'success');
+                                this.showMoveModal = false;
+                            }
+                        }
+                    },
+                    saveDeviceChanges() {
+                        // Find the device in the main devices array and update it
+                        const deviceIndex = this.devices.findIndex(d => d.id === this.selectedDevice.id);
+                        if (deviceIndex > -1) {
+                            this.devices[deviceIndex] = {...this.selectedDevice};
+                            this.showNotification(`Changes saved for ${this.selectedDevice.name}`, 'success');
+                            this.showDeviceModal = false;
+                        }
+                    },
+                    installApp(appId) {
+                        if (!this.deviceInstallations[this.selectedDevice.id]) {
+                            this.deviceInstallations[this.selectedDevice.id] = [];
+                        }
+                        const installedIds = this.deviceInstallations[this.selectedDevice.id].map(app => app.app || app);
+                        if (!installedIds.includes(appId)) {
+                            const appInfo = this.apps.find(a => a.id === appId);
+                            this.deviceInstallations[this.selectedDevice.id].push({
+                                app: appId,
+                                name: appInfo ? appInfo.name : appId,
+                                version: '1.0.0',
+                                availableVersions: ['1.0.0'],
+                                policy: 'stable',
+                                lastUpdate: new Date().toISOString().split('T')[0]
+                            });
+                            this.showNotification(`Installing ${this.getAppName(appId)} on ${this.selectedDevice.name}...`, 'success');
+                        }
+                    },
+                    uninstallApp(appId) {
+                        if (confirm('Are you sure you want to uninstall this application?')) {
+                            const deviceApps = this.deviceInstallations[this.selectedDevice.id];
+                            if (deviceApps) {
+                                const index = deviceApps.findIndex(app => (app.app || app) === appId);
+                                if (index > -1) {
+                                    const appName = deviceApps[index].name || this.getAppName(appId);
+                                    deviceApps.splice(index, 1);
+                                    this.showNotification(`${appName} uninstalled successfully`, 'success');
+                                }
+                            }
+                        }
+                    },
+                    updateToSelectedVersion(deviceId, appId) {
+                        const versionSelect = document.getElementById(`version-${appId}`);
+                        if (versionSelect) {
+                            const selectedVersion = versionSelect.value.replace('v', '');
+                            this.updateApplication(deviceId, appId, selectedVersion);
+                        }
+                    },
+                    updateApplication(deviceId, appId, newVersion) {
+                        const deviceApps = this.deviceInstallations[deviceId];
+                        if (deviceApps) {
+                            const appIndex = deviceApps.findIndex(app => app.app === appId);
+                            if (appIndex > -1) {
+                                const oldVersion = deviceApps[appIndex].version;
+                                if (oldVersion === newVersion) {
+                                    this.showNotification(`${deviceApps[appIndex].name} is already at version ${newVersion}`, 'error');
+                                    return;
+                                }
+                                deviceApps[appIndex].version = newVersion;
+                                deviceApps[appIndex].lastUpdate = new Date().toISOString().split('T')[0];
+                                this.showNotification(`${deviceApps[appIndex].name} updated from v${oldVersion} to v${newVersion}`, 'success');
+                            }
+                        }
+                    },
+                    hasUpdateAvailable(app) {
+                        return app.availableVersions && app.availableVersions[0] !== app.version;
+                    },
+                    
+                    // Policy Management Functions
+                    getScheduledPolicies() {
+                        return this.policies.filter(p => p.schedule || p.customSchedule);
+                    },
+                    formatSchedule(schedule) {
+                        if (!schedule) return 'Not scheduled';
+                        // Simple cron format display - could be enhanced with a proper cron parser
+                        const cronParts = schedule.split(' ');
+                        if (cronParts.length === 5) {
+                            if (schedule === '0 2 * * 0') return 'Every Sunday at 2:00 AM';
+                            if (schedule === '0 1 1 * *') return 'Monthly on 1st at 1:00 AM';
+                            return schedule;
+                        }
+                        return schedule;
+                    },
+                    editPolicy(policy) {
+                        this.editingPolicy = policy;
+                        this.policyForm = {
+                            name: policy.name,
+                            type: policy.type,
+                            description: policy.description,
+                            targetGroups: [...policy.targetGroups],
+                            applications: [...(policy.applications || [])],
+                            autoUpdate: policy.autoUpdate,
+                            versionStrategy: policy.versionStrategy || 'stable',
+                            maintenanceWindow: policy.maintenanceWindow || 'immediate',
+                            customSchedule: policy.customSchedule || ''
+                        };
+                        this.showCreatePolicy = true;
+                    },
+                    savePolicy() {
+                        if (!this.policyForm.name.trim()) {
+                            this.showNotification('Policy name is required', 'error');
+                            return;
+                        }
+                        
+                        if (this.editingPolicy) {
+                            // Update existing policy
+                            const policyIndex = this.policies.findIndex(p => p.id === this.editingPolicy.id);
+                            if (policyIndex > -1) {
+                                this.policies[policyIndex] = {
+                                    ...this.policies[policyIndex],
+                                    ...this.policyForm,
+                                    id: this.editingPolicy.id,
+                                    lastModified: new Date()
+                                };
+                                this.showNotification(`Policy "${this.policyForm.name}" updated successfully`, 'success');
+                            }
+                        } else {
+                            // Create new policy
+                            const newPolicy = {
+                                ...this.policyForm,
+                                id: Date.now(),
+                                active: true,
+                                created: new Date()
+                            };
+                            this.policies.push(newPolicy);
+                            this.showNotification(`Policy "${this.policyForm.name}" created successfully`, 'success');
+                        }
+                        
+                        this.cancelPolicyEdit();
+                    },
+                    cancelPolicyEdit() {
+                        this.showCreatePolicy = false;
+                        this.editingPolicy = null;
+                        this.policyForm = {
+                            name: '',
+                            type: 'version',
+                            description: '',
+                            targetGroups: [],
+                            applications: [],
+                            autoUpdate: false,
+                            versionStrategy: 'stable',
+                            maintenanceWindow: 'immediate',
+                            customSchedule: ''
+                        };
+                    },
+                    togglePolicy(policy) {
+                        policy.active = !policy.active;
+                        const status = policy.active ? 'activated' : 'deactivated';
+                        this.showNotification(`Policy "${policy.name}" ${status}`, 'success');
+                    },
+                    deletePolicy(policy) {
+                        if (confirm(`Are you sure you want to delete the policy "${policy.name}"?`)) {
+                            const policyIndex = this.policies.findIndex(p => p.id === policy.id);
+                            if (policyIndex > -1) {
+                                this.policies.splice(policyIndex, 1);
+                                this.showNotification(`Policy "${policy.name}" deleted`, 'success');
+                            }
+                        }
+                    },
+                    applyPolicy(policy) {
+                        if (!policy.active) {
+                            this.showNotification('Cannot apply inactive policy', 'error');
+                            return;
+                        }
+                        
+                        let affectedDevices = 0;
+                        
+                        // Get target devices
+                        const targetDevices = policy.targetGroups.length > 0 
+                            ? this.devices.filter(d => policy.targetGroups.includes(d.group))
+                            : this.devices;
+                        
+                        // Apply policy based on type
+                        if (policy.type === 'version' && policy.applications.length > 0) {
+                            targetDevices.forEach(device => {
+                                const deviceApps = this.deviceInstallations[device.id] || [];
+                                policy.applications.forEach(appId => {
+                                    const installedApp = deviceApps.find(app => (app.app || app) === appId);
+                                    if (installedApp && installedApp.availableVersions) {
+                                        let targetVersion = installedApp.version;
+                                        
+                                        switch (policy.versionStrategy) {
+                                            case 'latest':
+                                                targetVersion = installedApp.availableVersions[0];
+                                                break;
+                                            case 'stable':
+                                                // For demo, assume second latest is stable
+                                                targetVersion = installedApp.availableVersions[1] || installedApp.availableVersions[0];
+                                                break;
+                                        }
+                                        
+                                        if (targetVersion !== installedApp.version) {
+                                            installedApp.version = targetVersion;
+                                            installedApp.lastUpdate = new Date().toISOString().split('T')[0];
+                                            affectedDevices++;
+                                        }
+                                    }
+                                });
+                            });
+                        }
+                        
+                        // Update policy execution record
+                        policy.lastExecution = {
+                            date: new Date(),
+                            status: 'success',
+                            affectedDevices: affectedDevices
+                        };
+                        
+                        this.showNotification(`Policy "${policy.name}" applied to ${affectedDevices} device(s)`, 'success');
+                    },
+                    schedulePolicy(policy) {
+                        if (!policy.active) {
+                            this.showNotification('Cannot schedule inactive policy', 'error');
+                            return;
+                        }
+                        
+                        this.schedulingPolicy = policy;
+                        
+                        // Set default values
+                        const tomorrow = new Date();
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        this.scheduleForm = {
+                            type: 'once',
+                            date: tomorrow.toISOString().split('T')[0],
+                            time: '02:00',
+                            recurrence: 'daily',
+                            cronExpression: ''
+                        };
+                        
+                        this.showScheduleModal = true;
+                    },
+                    savePolicySchedule() {
+                        if (!this.scheduleForm.date || !this.scheduleForm.time) {
+                            this.showNotification('Date and time are required', 'error');
+                            return;
+                        }
+                        
+                        let cronExpression = '';
+                        
+                        if (this.scheduleForm.type === 'once') {
+                            // Convert to cron for one-time execution
+                            const [hours, minutes] = this.scheduleForm.time.split(':');
+                            const scheduleDate = new Date(this.scheduleForm.date);
+                            cronExpression = `${minutes} ${hours} ${scheduleDate.getDate()} ${scheduleDate.getMonth() + 1} *`;
+                        } else {
+                            // Recurring schedule
+                            const [hours, minutes] = this.scheduleForm.time.split(':');
+                            switch (this.scheduleForm.recurrence) {
+                                case 'daily':
+                                    cronExpression = `${minutes} ${hours} * * *`;
+                                    break;
+                                case 'weekly':
+                                    cronExpression = `${minutes} ${hours} * * 0`; // Sunday
+                                    break;
+                                case 'monthly':
+                                    cronExpression = `${minutes} ${hours} 1 * *`; // 1st of month
+                                    break;
+                                case 'custom':
+                                    cronExpression = this.scheduleForm.cronExpression;
+                                    break;
+                            }
+                        }
+                        
+                        // Update policy with schedule
+                        if (this.schedulingPolicy) {
+                            this.schedulingPolicy.schedule = cronExpression;
+                            this.schedulingPolicy.nextExecution = new Date(`${this.scheduleForm.date}T${this.scheduleForm.time}:00`);
+                            
+                            this.showNotification(`Policy "${this.schedulingPolicy.name}" scheduled successfully`, 'success');
+                        }
+                        
+                        this.showScheduleModal = false;
+                        this.schedulingPolicy = null;
+                    },
+                    refreshDevices() {
+                        this.devices.forEach(device => {
+                            device.last_checkin = new Date();
+                            if (device.name === 'Ubuntu-CT2001') {
+                                device.status = 'online';
+                            }
+                        });
+                        this.showNotification('Device status refreshed', 'success');
+                    },
+                    loadUsers() {
+                        this.showNotification(`Loaded ${this.users.length} users from LLDAP`, 'success');
+                    },
+                    showTargetedDeploy(app) {
+                        this.selectedApp = app;
+                        this.deployTargets = { groups: [], devices: [] };
+                        this.showDeployModal = true;
+                    },
+                    quickDeploy(app) {
+                        const ct2001 = this.devices.find(d => d.name === 'Ubuntu-CT2001');
+                        if (ct2001) {
+                            this.installApp(app.id);
+                            this.showNotification(`Quick deploying ${app.name} to ${ct2001.name}`);
+                        }
+                    },
+                    getTotalDeployTargets() {
+                        let total = 0;
+                        // Count devices in selected groups
+                        this.deployTargets.groups.forEach(groupId => {
+                            total += this.getDevicesByGroup(groupId).length;
+                        });
+                        // Add individually selected devices (avoiding duplicates)
+                        const groupDeviceIds = new Set();
+                        this.deployTargets.groups.forEach(groupId => {
+                            this.getDevicesByGroup(groupId).forEach(device => {
+                                groupDeviceIds.add(device.id);
+                            });
+                        });
+                        this.deployTargets.devices.forEach(deviceId => {
+                            if (!groupDeviceIds.has(deviceId)) {
+                                total += 1;
+                            }
+                        });
+                        return total;
+                    },
+                    executeDeployment() {
+                        const targetCount = this.getTotalDeployTargets();
+                        const appName = this.selectedApp.name;
+                        
+                        // Add app to selected devices
+                        const targetDevices = new Set();
+                        
+                        // Add devices from selected groups
+                        this.deployTargets.groups.forEach(groupId => {
+                            this.getDevicesByGroup(groupId).forEach(device => {
+                                targetDevices.add(device.id);
+                            });
+                        });
+                        
+                        // Add individually selected devices
+                        this.deployTargets.devices.forEach(deviceId => {
+                            targetDevices.add(deviceId);
+                        });
+                        
+                        // Install app on all target devices
+                        targetDevices.forEach(deviceId => {
+                            if (!this.deviceInstallations[deviceId]) {
+                                this.deviceInstallations[deviceId] = [];
+                            }
+                            const installedIds = this.deviceInstallations[deviceId].map(app => app.app || app);
+                            if (!installedIds.includes(this.selectedApp.id)) {
+                                this.deviceInstallations[deviceId].push({
+                                    app: this.selectedApp.id,
+                                    name: this.selectedApp.name,
+                                    version: '1.0.0',
+                                    availableVersions: ['1.0.0'],
+                                    policy: 'stable',
+                                    lastUpdate: new Date().toISOString().split('T')[0]
+                                });
+                            }
+                        });
+                        
+                        this.showNotification(`Deploying ${appName} to ${targetCount} device(s)`, 'success');
+                        this.showDeployModal = false;
+                    },
+                    addDevice() {
+                        const deviceId = 'DEV-' + Date.now();
+                        const newDevice = {
+                            id: deviceId,
+                            name: this.newDevice.name,
+                            platform: 'Unknown',
+                            status: 'pending',
+                            compliance: 0,
+                            ldap_enabled: false,
+                            last_checkin: new Date(),
+                            ip_address: '192.168.1.xxx',
+                            group: this.newDevice.group,
+                            description: `New device in ${this.getGroupName(this.newDevice.group)}`
+                        };
+                        this.devices.push(newDevice);
+                        this.showAddDevice = false;
+                        const deviceName = this.newDevice.name;
+                        this.newDevice = { name: '', group: 'servers' };
+                        this.showNotification(`Device ${deviceName} added to ${this.getGroupName(newDevice.group)}`);
+                    },
+                    addDeviceToGroup(groupId) {
+                        this.newDevice.group = groupId;
+                        this.showAddDevice = true;
+                    },
+                    manageUser(user) {
+                        this.showNotification(`Managing LDAP user: ${user.name}`);
+                    },
+                    openGrafana() {
+                        window.open('http://192.168.1.223:30300', '_blank');
+                    },
+                    openPrometheus() {
+                        window.open('http://192.168.1.223:30909', '_blank');
+                    }
+                }
+            }).mount('#app');
+        </script>
+    </body>
+    </html>

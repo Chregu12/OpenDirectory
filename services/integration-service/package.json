@@ -1,0 +1,56 @@
+{
+  "name": "@opendirectory/integration-service",
+  "version": "1.0.0",
+  "description": "Service integration proxy for OpenDirectory",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.0.0",
+    "express-rate-limit": "^6.8.0",
+    "axios": "^1.4.0",
+    "jsonwebtoken": "^9.0.0",
+    "bcryptjs": "^2.4.3",
+    "pino": "^8.14.0",
+    "pino-http": "^8.3.0",
+    "node-vault": "^0.10.2",
+    "ldapjs": "^3.0.3",
+    "prom-client": "^14.2.0",
+    "express-prometheus-middleware": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/express": "^4.17.17",
+    "@types/cors": "^2.8.13",
+    "@types/bcryptjs": "^2.4.2",
+    "@types/jsonwebtoken": "^9.0.2",
+    "@types/ldapjs": "^2.2.5",
+    "tsx": "^3.12.7",
+    "typescript": "^5.0.0",
+    "jest": "^29.5.0",
+    "@types/jest": "^29.5.0",
+    "eslint": "^8.42.0",
+    "@typescript-eslint/eslint-plugin": "^5.59.9",
+    "@typescript-eslint/parser": "^5.59.9",
+    "prettier": "^3.0.0"
+  },
+  "keywords": [
+    "opendirectory",
+    "integration",
+    "proxy",
+    "lldap",
+    "grafana",
+    "prometheus",
+    "vault"
+  ],
+  "author": "OpenDirectory Team",
+  "license": "MIT"
+}

@@ -1,0 +1,70 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files: []
+
+scrape_configs:
+  # OpenDirectory Core Services
+  - job_name: 'identity-service'
+    static_configs:
+      - targets: ['identity-service:3001']
+    metrics_path: '/health/metrics'
+    scrape_interval: 30s
+
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:3002']
+    metrics_path: '/health/metrics'
+    scrape_interval: 30s
+
+  - job_name: 'device-service'
+    static_configs:
+      - targets: ['device-service:3003']
+    metrics_path: '/health/metrics'
+    scrape_interval: 30s
+
+  - job_name: 'policy-service'
+    static_configs:
+      - targets: ['policy-service:3004']
+    metrics_path: '/health/metrics'
+    scrape_interval: 30s
+
+  - job_name: 'integration-service'
+    static_configs:
+      - targets: ['integration-service:3005']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Infrastructure Components
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    scrape_interval: 60s
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 60s
+
+  - job_name: 'lldap'
+    static_configs:
+      - targets: ['lldap:17170']
+    scrape_interval: 60s
+
+  # External service health checks
+  - job_name: 'vault'
+    static_configs:
+      - targets: ['localhost:30820']
+    metrics_path: '/v1/sys/health'
+    scrape_interval: 60s
+
+  # Self monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    scrape_interval: 60s
