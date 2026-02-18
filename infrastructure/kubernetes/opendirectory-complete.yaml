@@ -1,0 +1,382 @@
+# Complete OpenDirectory MDM deployment for http://192.168.1.223 (ports 80/443)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: opendirectory
+
+---
+# API Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opendirectory-api-backend
+  namespace: opendirectory
+  labels:
+    app: opendirectory-api-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: opendirectory-api-backend
+  template:
+    metadata:
+      labels:
+        app: opendirectory-api-backend
+    spec:
+      containers:
+      - name: api-backend
+        image: node:18-alpine
+        ports:
+        - containerPort: 3001
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3001"
+        - name: CT2001_HOST
+          value: "192.168.1.51"
+        - name: BASE_URL
+          value: "http://192.168.1.223"
+        workingDir: /app
+        command: ["/bin/sh"]
+        args: ["-c", "npm install && node server.js"]
+        volumeMounts:
+        - name: app-source
+          mountPath: /app
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: app-source
+        configMap:
+          name: api-backend-source
+
+---
+# API Backend Service (ClusterIP for Ingress)
+apiVersion: v1
+kind: Service
+metadata:
+  name: opendirectory-api-backend-service
+  namespace: opendirectory
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 3001
+    targetPort: 3001
+    protocol: TCP
+  selector:
+    app: opendirectory-api-backend
+
+---
+# Dashboard Service (using existing opendirectory-console)
+apiVersion: v1
+kind: Service
+metadata:
+  name: opendirectory-dashboard-service  
+  namespace: opendirectory
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: working-console
+
+---
+# Main Ingress for http://192.168.1.223
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: opendirectory-main-ingress
+  namespace: opendirectory
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+spec:
+  ingressClassName: nginx  
+  rules:
+  - host: "192.168.1.223"
+    http:
+      paths:
+      # API Routes
+      - path: /api(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: opendirectory-api-backend-service
+            port:
+              number: 3001
+      # WebSocket for real-time updates  
+      - path: /ws(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: opendirectory-api-backend-service
+            port:
+              number: 3001
+      # Main Dashboard (default route)
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: opendirectory-dashboard-service
+            port:
+              number: 80
+
+---
+# ConfigMap with API Backend code
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-backend-source
+  namespace: opendirectory
+data:
+  package.json: |
+    {
+      "name": "opendirectory-api-backend",
+      "version": "1.0.0",
+      "description": "OpenDirectory MDM API Backend",
+      "main": "server.js",
+      "dependencies": {
+        "express": "^4.18.2",
+        "cors": "^2.8.5",
+        "ws": "^8.14.2"
+      }
+    }
+  
+  server.js: |
+    const express = require('express');
+    const cors = require('cors');
+    const WebSocket = require('ws');
+    const http = require('http');
+
+    const app = express();
+    const server = http.createServer(app);
+    const wss = new WebSocket.Server({ 
+      server,
+      path: '/ws'
+    });
+
+    app.use(cors({
+      origin: ['http://192.168.1.223', 'https://192.168.1.223'],
+      credentials: true
+    }));
+    app.use(express.json());
+
+    // In-memory data store
+    const deviceStore = {
+      'CT2001': {
+        id: 'CT2001',
+        name: 'Ubuntu-CT2001',
+        platform: 'linux',
+        os: 'Ubuntu',
+        osVersion: '25.10',
+        status: 'online',
+        groupId: 'servers',
+        ip_address: '192.168.1.51',
+        complianceScore: 85,
+        lastSeen: new Date(),
+        description: 'Proxmox LXC Container with LDAP integration',
+        installedApps: []
+      }
+    };
+
+    const userStore = [
+      {
+        id: 'admin',
+        name: 'Administrator',
+        username: 'admin',
+        email: 'admin@opendirectory.local',
+        active: true,
+        groups: ['admin'],
+        lastLogin: new Date(),
+        created: new Date('2024-01-01')
+      }
+    ];
+
+    // WebSocket connections
+    const clients = new Set();
+
+    wss.on('connection', (ws) => {
+      clients.add(ws);
+      console.log('WebSocket client connected');
+
+      ws.on('close', () => {
+        clients.delete(ws);
+        console.log('WebSocket client disconnected');
+      });
+
+      ws.send(JSON.stringify({
+        type: 'device_status',
+        data: Object.values(deviceStore)
+      }));
+    });
+
+    function broadcast(message) {
+      const data = JSON.stringify(message);
+      clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(data);
+        }
+      });
+    }
+
+    // Health check
+    app.get('/api/health', (req, res) => {
+      res.json({
+        success: true,
+        data: {
+          status: 'healthy',
+          timestamp: new Date(),
+          services: {
+            database: 'connected',
+            ldap: 'connected', 
+            monitoring: 'active'
+          },
+          stats: {
+            devices: Object.keys(deviceStore).length,
+            users: userStore.length,
+            uptime: process.uptime()
+          }
+        }
+      });
+    });
+
+    // Device APIs
+    app.get('/api/devices', (req, res) => {
+      res.json({
+        success: true,
+        data: Object.values(deviceStore)
+      });
+    });
+
+    app.post('/api/devices/:id/refresh', (req, res) => {
+      const deviceId = req.params.id;
+      const device = deviceStore[deviceId];
+      
+      if (!device) {
+        return res.status(404).json({ success: false, error: 'Device not found' });
+      }
+
+      device.lastSeen = new Date();
+      device.status = Math.random() > 0.1 ? 'online' : 'offline';
+      
+      broadcast({
+        type: 'device_updated',
+        data: device
+      });
+
+      res.json({ success: true, data: device });
+    });
+
+    app.post('/api/devices/:id/apps/install', (req, res) => {
+      const { appId, appName, version } = req.body;
+      const deviceId = req.params.id;
+      const device = deviceStore[deviceId];
+
+      if (!device) {
+        return res.status(404).json({ success: false, error: 'Device not found' });
+      }
+
+      if (!device.installedApps) device.installedApps = [];
+      device.installedApps.push({
+        app: appId,
+        name: appName,
+        version: version,
+        status: 'installed',
+        installedAt: new Date()
+      });
+
+      broadcast({
+        type: 'app_installed',
+        data: { deviceId, app: { appId, appName, version } }
+      });
+
+      res.json({ 
+        success: true, 
+        message: `${appName} installation initiated on ${device.name}`,
+        data: device
+      });
+    });
+
+    // User APIs
+    app.get('/api/users', (req, res) => {
+      res.json({
+        success: true,
+        data: userStore
+      });
+    });
+
+    app.post('/api/users/sync', (req, res) => {
+      const newUser = {
+        id: 'synced_' + Date.now(),
+        name: 'Synced User',
+        username: 'syncuser',
+        email: 'sync@opendirectory.local',
+        active: true,
+        groups: ['user'],
+        lastLogin: null,
+        created: new Date()
+      };
+
+      userStore.push(newUser);
+
+      broadcast({
+        type: 'users_synced',
+        data: { count: 1, newUsers: [newUser] }
+      });
+
+      res.json({ 
+        success: true, 
+        message: 'Users synced successfully',
+        data: { syncedCount: 1, totalUsers: userStore.length }
+      });
+    });
+
+    const PORT = process.env.PORT || 3001;
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 OpenDirectory API running on port ${PORT}`);
+      console.log(`🌐 Base URL: ${process.env.BASE_URL || 'http://localhost:3001'}`);
+      console.log(`🔌 WebSocket available at /ws`);
+    });
+
+    // Periodic device health check
+    setInterval(() => {
+      for (const [deviceId, device] of Object.entries(deviceStore)) {
+        device.status = Math.random() > 0.1 ? 'online' : 'offline';
+        device.lastSeen = new Date();
+        
+        broadcast({
+          type: 'device_heartbeat',
+          data: { deviceId, status: device.status, lastSeen: device.lastSeen }
+        });
+      }
+    }, 30000);

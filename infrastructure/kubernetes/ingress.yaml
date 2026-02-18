@@ -1,0 +1,89 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: opendirectory-ingress
+  namespace: opendirectory
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/proxy-set-headers: |
+      Upgrade $http_upgrade
+      Connection $connection_upgrade
+      Host $host
+      X-Real-IP $remote_addr
+      X-Forwarded-For $proxy_add_x_forwarded_for
+      X-Forwarded-Proto $scheme
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: 192.168.1.223
+    http:
+      paths:
+      # Main Dashboard
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: working-console-service
+            port:
+              number: 80
+      # API Backend
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: opendirectory-api-backend-service
+            port:
+              number: 3001
+      # WebSocket for real-time updates
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: opendirectory-api-backend-service
+            port:
+              number: 3001
+  # Optional HTTPS support
+  # tls:
+  # - hosts:
+  #   - 192.168.1.223
+  #   secretName: opendirectory-tls
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: working-console-service
+  namespace: opendirectory
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: working-console
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opendirectory-api-backend-service
+  namespace: opendirectory
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 3001
+    targetPort: 3001
+    protocol: TCP
+  selector:
+    app: opendirectory-api-backend

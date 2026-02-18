@@ -1449,7 +1449,7 @@ data:
                     async refreshDevices() {
                         this.showNotification('Refreshing device status...', 'success');
                         try {
-                            const response = await fetch('http://localhost:3001/api/devices');
+                            const response = await fetch('http://192.168.1.223/api/devices');
                             const result = await response.json();
                             if (result.success) {
                                 this.devices = result.data;
@@ -1489,7 +1489,7 @@ data:
                     async syncUsers() {
                         this.showNotification('Syncing users with LDAP...', 'success');
                         try {
-                            const response = await fetch('http://localhost:3001/api/users/sync', {
+                            const response = await fetch('http://192.168.1.223/api/users/sync', {
                                 method: 'POST'
                             });
                             const result = await response.json();
@@ -1522,7 +1522,7 @@ data:
                     // API Integration Methods
                     async loadUsers() {
                         try {
-                            const response = await fetch('http://localhost:3001/api/users');
+                            const response = await fetch('http://192.168.1.223/api/users');
                             const result = await response.json();
                             if (result.success) {
                                 this.users = result.data;
@@ -1534,7 +1534,7 @@ data:
                     
                     async deployToDevices() {
                         try {
-                            const response = await fetch(`http://localhost:3001/api/devices/CT2001/apps/install`, {
+                            const response = await fetch(`http://192.168.1.223/api/devices/CT2001/apps/install`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -1561,7 +1561,7 @@ data:
                     connectWebSocket() {
                         if (this.ws) return;
                         
-                        this.ws = new WebSocket('ws://localhost:3001');
+                        this.ws = new WebSocket('ws://192.168.1.223');
                         
                         this.ws.onopen = () => {
                             console.log('WebSocket connected');

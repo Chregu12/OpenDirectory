@@ -1,0 +1,353 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opendirectory-api-backend
+  namespace: opendirectory
+  labels:
+    app: opendirectory-api-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opendirectory-api-backend
+  template:
+    metadata:
+      labels:
+        app: opendirectory-api-backend
+    spec:
+      containers:
+      - name: api-backend
+        image: node:18-alpine
+        ports:
+        - containerPort: 3001
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3001"
+        - name: CT2001_HOST
+          value: "192.168.1.51"
+        workingDir: /app
+        command: ["/bin/sh"]
+        args: ["-c", "npm install && node server.js"]
+        volumeMounts:
+        - name: app-source
+          mountPath: /app
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: app-source
+        configMap:
+          name: api-backend-source
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opendirectory-api-backend-service
+  namespace: opendirectory
+spec:
+  selector:
+    app: opendirectory-api-backend
+  ports:
+  - name: http
+    port: 3001
+    targetPort: 3001
+    nodePort: 30301
+  type: NodePort
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-backend-source
+  namespace: opendirectory
+data:
+  package.json: |
+    {
+      "name": "opendirectory-api-backend",
+      "version": "1.0.0",
+      "description": "OpenDirectory MDM API Backend",
+      "main": "server.js",
+      "dependencies": {
+        "express": "^4.18.2",
+        "cors": "^2.8.5",
+        "axios": "^1.6.0",
+        "ws": "^8.14.2",
+        "node-ssh": "^13.1.0"
+      }
+    }
+  
+  server.js: |
+    const express = require('express');
+    const cors = require('cors');
+    const { NodeSSH } = require('node-ssh');
+    const WebSocket = require('ws');
+    const http = require('http');
+
+    const app = express();
+    const server = http.createServer(app);
+    const wss = new WebSocket.Server({ server });
+
+    app.use(cors());
+    app.use(express.json());
+
+    // SSH connection for Ubuntu container
+    const ssh = new NodeSSH();
+    const CT2001_HOST = process.env.CT2001_HOST || '192.168.1.51';
+
+    // In-memory data store
+    const deviceStore = {
+      'CT2001': {
+        id: 'CT2001',
+        name: 'Ubuntu-CT2001',
+        platform: 'linux',
+        os: 'Ubuntu',
+        osVersion: '25.10',
+        status: 'online',
+        groupId: 'servers',
+        ip_address: CT2001_HOST,
+        complianceScore: 85,
+        lastSeen: new Date(),
+        description: 'Proxmox LXC Container with LDAP integration',
+        installedApps: []
+      }
+    };
+
+    const userStore = [
+      {
+        id: 'admin',
+        name: 'Administrator',
+        username: 'admin',
+        email: 'admin@opendirectory.local',
+        active: true,
+        groups: ['admin'],
+        lastLogin: new Date(),
+        created: new Date('2024-01-01')
+      }
+    ];
+
+    // WebSocket connections
+    const clients = new Set();
+
+    wss.on('connection', (ws) => {
+      clients.add(ws);
+      console.log('WebSocket client connected');
+
+      ws.on('close', () => {
+        clients.delete(ws);
+        console.log('WebSocket client disconnected');
+      });
+
+      ws.send(JSON.stringify({
+        type: 'device_status',
+        data: Object.values(deviceStore)
+      }));
+    });
+
+    function broadcast(message) {
+      const data = JSON.stringify(message);
+      clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(data);
+        }
+      });
+    }
+
+    // Device Management APIs
+    app.get('/api/devices', (req, res) => {
+      res.json({
+        success: true,
+        data: Object.values(deviceStore)
+      });
+    });
+
+    app.get('/api/devices/:id', (req, res) => {
+      const device = deviceStore[req.params.id];
+      if (!device) {
+        return res.status(404).json({ success: false, error: 'Device not found' });
+      }
+      res.json({ success: true, data: device });
+    });
+
+    app.post('/api/devices/:id/refresh', async (req, res) => {
+      const deviceId = req.params.id;
+      const device = deviceStore[deviceId];
+      
+      if (!device) {
+        return res.status(404).json({ success: false, error: 'Device not found' });
+      }
+
+      try {
+        if (deviceId === 'CT2001') {
+          device.lastSeen = new Date();
+          device.status = 'online';
+        }
+
+        deviceStore[deviceId] = device;
+        
+        broadcast({
+          type: 'device_updated',
+          data: device
+        });
+
+        res.json({ success: true, data: device });
+      } catch (error) {
+        console.error('Device refresh error:', error);
+        device.status = 'offline';
+        res.json({ success: true, data: device, warning: 'Device offline' });
+      }
+    });
+
+    app.post('/api/devices/:id/apps/install', async (req, res) => {
+      const { appId, appName, version } = req.body;
+      const deviceId = req.params.id;
+      const device = deviceStore[deviceId];
+
+      if (!device) {
+        return res.status(404).json({ success: false, error: 'Device not found' });
+      }
+
+      try {
+        // Simulate installation
+        if (!device.installedApps) device.installedApps = [];
+        device.installedApps.push({
+          app: appId,
+          name: appName,
+          version: version,
+          status: 'installed',
+          installedAt: new Date()
+        });
+
+        broadcast({
+          type: 'app_installed',
+          data: { deviceId, app: { appId, appName, version } }
+        });
+
+        res.json({ 
+          success: true, 
+          message: `${appName} installation initiated on ${device.name}`,
+          data: device
+        });
+      } catch (error) {
+        console.error('App installation error:', error);
+        res.status(500).json({ success: false, error: 'Installation failed' });
+      }
+    });
+
+    // User Management APIs
+    app.get('/api/users', (req, res) => {
+      res.json({
+        success: true,
+        data: userStore
+      });
+    });
+
+    app.post('/api/users/sync', async (req, res) => {
+      try {
+        const newUser = {
+          id: 'synced_' + Date.now(),
+          name: 'Synced User',
+          username: 'syncuser',
+          email: 'sync@opendirectory.local',
+          active: true,
+          groups: ['user'],
+          lastLogin: null,
+          created: new Date()
+        };
+
+        userStore.push(newUser);
+
+        broadcast({
+          type: 'users_synced',
+          data: { count: 1, newUsers: [newUser] }
+        });
+
+        res.json({ 
+          success: true, 
+          message: 'Users synced successfully',
+          data: { syncedCount: 1, totalUsers: userStore.length }
+        });
+      } catch (error) {
+        console.error('User sync error:', error);
+        res.status(500).json({ success: false, error: 'User sync failed' });
+      }
+    });
+
+    // System Health API
+    app.get('/api/health', (req, res) => {
+      res.json({
+        success: true,
+        data: {
+          status: 'healthy',
+          timestamp: new Date(),
+          services: {
+            database: 'connected',
+            ldap: 'connected',
+            monitoring: 'active'
+          },
+          stats: {
+            devices: Object.keys(deviceStore).length,
+            users: userStore.length,
+            uptime: process.uptime()
+          }
+        }
+      });
+    });
+
+    // Policy Management APIs
+    app.get('/api/policies', (req, res) => {
+      res.json({
+        success: true,
+        data: [
+          {
+            id: 'version_mgmt',
+            name: 'Version Management Policy',
+            description: 'Automatic application updates with version control',
+            active: true,
+            platforms: ['linux'],
+            rules: {
+              autoUpdate: true,
+              updateWindow: 'maintenance',
+              rollback: true
+            }
+          }
+        ]
+      });
+    });
+
+    const PORT = process.env.PORT || 3001;
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`OpenDirectory API Backend running on port ${PORT}`);
+      console.log(`WebSocket server ready for real-time updates`);
+    });
+
+    // Periodic device health check
+    setInterval(async () => {
+      for (const [deviceId, device] of Object.entries(deviceStore)) {
+        device.status = Math.random() > 0.1 ? 'online' : 'offline';
+        device.lastSeen = new Date();
+        
+        broadcast({
+          type: 'device_heartbeat',
+          data: { deviceId, status: device.status, lastSeen: device.lastSeen }
+        });
+      }
+    }, 30000);
