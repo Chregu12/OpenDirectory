@@ -391,13 +391,13 @@ data:
                     <div class="nav-item" :class="{active: currentView === 'compliance'}" @click="setView('compliance')">
                         <i class="fas fa-check-circle"></i> Compliance
                     </div>
-                    <div class="nav-item" @click="window.open('http://192.168.1.223:30300', '_blank')">
+                    <div class="nav-item" @click="window.open('http://192.168.1.200:30300', '_blank')">
                         <i class="fas fa-chart-line"></i> Monitoring
                     </div>
-                    <div class="nav-item" @click="window.open('http://192.168.1.223:30170', '_blank')">
+                    <div class="nav-item" @click="window.open('http://192.168.1.200:30170', '_blank')">
                         <i class="fas fa-directory"></i> Directory
                     </div>
-                    <div class="nav-item" @click="window.open('http://192.168.1.223:30820', '_blank')">
+                    <div class="nav-item" @click="window.open('http://192.168.1.200:30820', '_blank')">
                         <i class="fas fa-key"></i> Vault
                     </div>
                 </nav>
@@ -572,7 +572,7 @@ data:
                                 <p style="color: #64748b; margin-top: 0.5rem;">Central directory service with LDAP integration</p>
                             </div>
                             <div style="display: flex; gap: 1rem;">
-                                <button class="btn btn-primary" onclick="window.open('http://192.168.1.223:30170', '_blank')">
+                                <button class="btn btn-primary" onclick="window.open('http://192.168.1.200:30170', '_blank')">
                                     <i class="fas fa-external-link-alt"></i> Open LLDAP
                                 </button>
                                 <button class="btn btn-success" @click="syncUsers">
@@ -1449,7 +1449,7 @@ data:
                     async refreshDevices() {
                         this.showNotification('Refreshing device status...', 'success');
                         try {
-                            const response = await fetch('http://192.168.1.223/api/devices');
+                            const response = await fetch('http://192.168.1.200/api/devices');
                             const result = await response.json();
                             if (result.success) {
                                 this.devices = result.data;
@@ -1489,7 +1489,7 @@ data:
                     async syncUsers() {
                         this.showNotification('Syncing users with LDAP...', 'success');
                         try {
-                            const response = await fetch('http://192.168.1.223/api/users/sync', {
+                            const response = await fetch('http://192.168.1.200/api/users/sync', {
                                 method: 'POST'
                             });
                             const result = await response.json();
@@ -1522,7 +1522,7 @@ data:
                     // API Integration Methods
                     async loadUsers() {
                         try {
-                            const response = await fetch('http://192.168.1.223/api/users');
+                            const response = await fetch('http://192.168.1.200/api/users');
                             const result = await response.json();
                             if (result.success) {
                                 this.users = result.data;
@@ -1534,7 +1534,7 @@ data:
                     
                     async deployToDevices() {
                         try {
-                            const response = await fetch(`http://192.168.1.223/api/devices/CT2001/apps/install`, {
+                            const response = await fetch(`http://192.168.1.200/api/devices/CT2001/apps/install`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -1561,7 +1561,7 @@ data:
                     connectWebSocket() {
                         if (this.ws) return;
                         
-                        this.ws = new WebSocket('ws://192.168.1.223');
+                        this.ws = new WebSocket('ws://192.168.1.200');
                         
                         this.ws.onopen = () => {
                             console.log('WebSocket connected');
