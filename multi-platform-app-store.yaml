@@ -955,6 +955,7 @@ data:
                         selectedApp: null,
                         deploymentMethod: 'targeted',
                         notifications: [],
+                        ws: null, // WebSocket connection
 
                         // Device Management
                         devices: [
@@ -1236,6 +1237,11 @@ data:
                         }
                     }
                 },
+                mounted() {
+                    this.connectWebSocket();
+                    this.loadUsers();
+                    this.refreshDevices();
+                },
                 computed: {
                     filteredCategories() {
                         return this.categories.filter(category => {
@@ -1385,20 +1391,8 @@ data:
                         this.showNotification(deploymentSummary, 'success');
                         this.showDeployModal = false;
                         
-                        // Simulate successful deployment
-                        setTimeout(() => {
-                            if (!this.deviceInstallations['CT2001']) {
-                                this.deviceInstallations['CT2001'] = [];
-                            }
-                            if (!this.deviceInstallations['CT2001'].find(inst => inst.app === this.selectedApp.id)) {
-                                this.deviceInstallations['CT2001'].push({
-                                    app: this.selectedApp.id,
-                                    platform: 'linux',
-                                    version: this.selectedApp.version
-                                });
-                            }
-                            this.showNotification(`${this.selectedApp.name} deployed successfully!`, 'success');
-                        }, 2000);
+                        // Deploy to real devices
+                        this.deployToDevices();
                     },
                     showAppDetails(app) {
                         this.showNotification(`Showing details for ${app.name}`, 'success');
@@ -1452,8 +1446,19 @@ data:
                     getStatusClass(status) {
                         return status === 'online' ? 'status-online' : 'status-offline';
                     },
-                    refreshDevices() {
+                    async refreshDevices() {
                         this.showNotification('Refreshing device status...', 'success');
+                        try {
+                            const response = await fetch('http://localhost:3001/api/devices');
+                            const result = await response.json();
+                            if (result.success) {
+                                this.devices = result.data;
+                                this.showNotification('Devices refreshed successfully!', 'success');
+                            }
+                        } catch (error) {
+                            console.error('Failed to refresh devices:', error);
+                            this.showNotification('Failed to refresh devices', 'error');
+                        }
                     },
                     filterDevices() {
                         // This would filter devices based on selectedGroupFilter
@@ -1481,8 +1486,21 @@ data:
                         if (!name) return 'U';
                         return name.split(' ').map(n => n[0]).join('').toUpperCase().substr(0, 2);
                     },
-                    syncUsers() {
+                    async syncUsers() {
                         this.showNotification('Syncing users with LDAP...', 'success');
+                        try {
+                            const response = await fetch('http://localhost:3001/api/users/sync', {
+                                method: 'POST'
+                            });
+                            const result = await response.json();
+                            if (result.success) {
+                                this.showNotification(`Synced ${result.data.syncedCount} users from LDAP`, 'success');
+                                this.loadUsers();
+                            }
+                        } catch (error) {
+                            console.error('Failed to sync users:', error);
+                            this.showNotification('Failed to sync users', 'error');
+                        }
                     },
                     addUserToGroup(groupId) {
                         this.showNotification(`Adding user to ${groupId}`, 'success');
@@ -1499,6 +1517,89 @@ data:
                         const loginDate = new Date(date);
                         const diffDays = (now - loginDate) / (1000 * 60 * 60 * 24);
                         return diffDays <= 7; // Within last 7 days
+                    },
+                    
+                    // API Integration Methods
+                    async loadUsers() {
+                        try {
+                            const response = await fetch('http://localhost:3001/api/users');
+                            const result = await response.json();
+                            if (result.success) {
+                                this.users = result.data;
+                            }
+                        } catch (error) {
+                            console.error('Failed to load users:', error);
+                        }
+                    },
+                    
+                    async deployToDevices() {
+                        try {
+                            const response = await fetch(`http://localhost:3001/api/devices/CT2001/apps/install`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    appId: this.selectedApp.id,
+                                    appName: this.selectedApp.name,
+                                    version: this.selectedApp.version
+                                })
+                            });
+                            
+                            const result = await response.json();
+                            if (result.success) {
+                                this.showNotification(result.message, 'success');
+                                this.refreshDevices();
+                            } else {
+                                this.showNotification(result.error, 'error');
+                            }
+                        } catch (error) {
+                            console.error('Deployment failed:', error);
+                            this.showNotification('Deployment failed', 'error');
+                        }
+                    },
+                    
+                    // WebSocket Connection
+                    connectWebSocket() {
+                        if (this.ws) return;
+                        
+                        this.ws = new WebSocket('ws://localhost:3001');
+                        
+                        this.ws.onopen = () => {
+                            console.log('WebSocket connected');
+                        };
+                        
+                        this.ws.onmessage = (event) => {
+                            const message = JSON.parse(event.data);
+                            this.handleWebSocketMessage(message);
+                        };
+                        
+                        this.ws.onclose = () => {
+                            console.log('WebSocket disconnected');
+                            setTimeout(() => this.connectWebSocket(), 5000);
+                        };
+                    },
+                    
+                    handleWebSocketMessage(message) {
+                        switch(message.type) {
+                            case 'device_status':
+                                this.devices = message.data;
+                                break;
+                            case 'device_updated':
+                                const deviceIndex = this.devices.findIndex(d => d.id === message.data.id);
+                                if (deviceIndex >= 0) {
+                                    this.devices[deviceIndex] = message.data;
+                                }
+                                break;
+                            case 'app_installed':
+                                this.showNotification(`App installed on ${message.data.deviceId}`, 'success');
+                                break;
+                            case 'device_heartbeat':
+                                const device = this.devices.find(d => d.id === message.data.deviceId);
+                                if (device) {
+                                    device.status = message.data.status;
+                                    device.lastSeen = message.data.lastSeen;
+                                }
+                                break;
+                        }
                     },
 
                     // Utility Functions
