@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add advanced-analytics/ next-gen-security/)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd advanced analytics and next-gen security modules\n\n- Advanced analytics: carbon footprint tracking, cost management, predictive maintenance, and productivity analytics\n- Next-gen security: AI security copilot, biometric authentication, blockchain audit trail, and quantum-safe cryptography\n\n🤖 Generated with [Claude Code](https://claude.ai/code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push origin main)",
+      "Bash(git pull origin main)",
+      "Bash(git add README.md)",
+      "Bash(git commit -m \"Resolve merge conflict in README.md\")",
+      "Bash(git config http.postBuffer 524288000)",
+      "Bash(git push origin main --force-with-lease)",
+      "Bash(git reset --soft HEAD~2)",
+      "Bash(git rm -r --cached node_modules)",
+      "Bash(git rm -r --cached \"*/node_modules\")",
+      "Bash(git add .)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd advanced analytics, next-gen security modules and fix repository structure\n\n- Added advanced analytics modules for carbon footprint, cost management, predictive maintenance, and productivity analytics\n- Added next-gen security features including AI security copilot, biometric authentication, blockchain audit trail, and quantum-safe cryptography\n- Removed node_modules from tracking and added proper .gitignore\n- Fixed README merge conflicts and updated repository URLs\n\n🤖 Generated with [Claude Code](https://claude.ai/code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git pull --rebase origin main)",
+      "Bash(git rebase --abort)",
+      "Bash(git reset --hard origin/main)",
+      "Bash(git add advanced-analytics/ next-gen-security/ .gitignore)",
+      "Bash(git remote set-url origin https://github.com/Chregu12/OpenDirectory.git)",
+      "Bash(git add -A)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
