@@ -47,6 +47,15 @@ graph TB
     All --> Audit
 ```
 
+### Service Organization
+
+All services are now consolidated under `/services` directory:
+- **Core Services** (`/services/core`) - Essential platform services
+- **Enterprise Services** (`/services/enterprise`) - Advanced enterprise features
+- **Domain Services** (`/services/domains`) - DDD bounded contexts
+- **API Services** (`/services/api-backend`) - REST API backend
+- **Integration Services** (`/services/integration-service`) - External integrations
+
 ### Ubiquitous Language
 
 - **Principal**: Any entity that can be authenticated (User, Service, Device)

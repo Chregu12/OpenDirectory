@@ -22,7 +22,15 @@
       "Bash(git add -A)",
       "Bash(git commit -m \"Add complete OpenDirectory enterprise UEM platform\n\n- Enterprise services with Active Directory replacement\n- Universal MDM for all platforms\n- Group Policy management\n- Bulk operations and import tools\n- Complete web interfaces\n- Docker and Kubernetes deployment configurations\n- Multi-platform deployment agents\n- Comprehensive documentation\")",
       "WebFetch(domain:github.com)",
-      "Bash(git ls-tree --name-only HEAD)"
+      "Bash(git ls-tree --name-only HEAD)",
+      "Bash(git commit -m \"Add .gitignore for sensitive data protection and update Claude settings\n\n- Comprehensive .gitignore to exclude sensitive files, credentials, and build artifacts\n- Updated Claude local settings\n- Ensures no private data is accidentally committed to repository\")",
+      "Bash(if [ -d \"enterprise-services\" ])",
+      "Bash(then cp -r enterprise-services/. services/enterprise/)",
+      "Bash(else echo \"❌ Directory not found\")",
+      "Bash(fi)",
+      "Bash(grep -r \"enterprise-services\\|domains/\" docker-compose.yml multi-platform-app-store.yaml)",
+      "Bash(chmod +x services/service-manager.sh)",
+      "Bash(./services/service-manager.sh count)"
     ],
     "deny": [],
     "ask": []
