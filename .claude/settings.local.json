@@ -19,7 +19,10 @@
       "Bash(git reset --hard origin/main)",
       "Bash(git add advanced-analytics/ next-gen-security/ .gitignore)",
       "Bash(git remote set-url origin https://github.com/Chregu12/OpenDirectory.git)",
-      "Bash(git add -A)"
+      "Bash(git add -A)",
+      "Bash(git commit -m \"Add complete OpenDirectory enterprise UEM platform\n\n- Enterprise services with Active Directory replacement\n- Universal MDM for all platforms\n- Group Policy management\n- Bulk operations and import tools\n- Complete web interfaces\n- Docker and Kubernetes deployment configurations\n- Multi-platform deployment agents\n- Comprehensive documentation\")",
+      "WebFetch(domain:github.com)",
+      "Bash(git ls-tree --name-only HEAD)"
     ],
     "deny": [],
     "ask": []
