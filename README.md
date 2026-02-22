@@ -99,37 +99,7 @@ OpenDirectory supports automatic device registration via:
 - **Architecture**: Modern container-based vs. Traditional server
 - **API**: Modern REST APIs vs. Legacy APIs
 
-## 📈 Roadmap
-
-See `opendirectory-enhancement-plan.md` for detailed implementation plan:
-
-### Phase 1: Enhanced User & Group Management (6 weeks)
-- CSV import/export
-- User templates and roles
-- Advanced search and filtering
-
-### Phase 2: Organization Units & Advanced Policies (5 weeks)
-- Hierarchical OU structure
-- Conditional policies
-- Policy inheritance
-
-### Phase 3: Audit, Compliance & Reporting (4 weeks)
-- Advanced audit logging
-- Compliance reports
-- Security analytics
-
-### Phase 4: Multi-Site & High Availability (6 weeks)
-- Multi-site directory replication
-- Failover mechanisms
-- Load balancing
-
 ## 🧪 Testing Environment
-
-### Connected Devices
-- **CT2001**: Ubuntu 25.10 LXC container (192.168.1.51)
-  - LDAP authentication enabled
-  - Real application deployment testing
-  - Policy enforcement validation
 
 ### Services
 - **LLDAP**: Port 30170 - User directory management
