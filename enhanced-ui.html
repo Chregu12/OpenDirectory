@@ -1,0 +1,1913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenDirectory MDM - Enterprise Management Console</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success-color: #059669;
+            --warning-color: #d97706;
+            --danger-color: #dc2626;
+            --secondary-color: #64748b;
+            --dark-bg: #0f172a;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --hover-bg: #f8fafc;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f8fafc;
+            color: var(--text-primary);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar Styles */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100vh;
+            width: 280px;
+            background: var(--dark-bg);
+            color: white;
+            padding: 0;
+            z-index: 100;
+            transition: transform 0.3s ease;
+            border-right: 1px solid #1e293b;
+        }
+
+        .sidebar-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #1e293b;
+            background: linear-gradient(135deg, #1e293b, #334155);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary-color), #3b82f6);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .sidebar-nav {
+            padding: 1rem 0;
+        }
+
+        .nav-section {
+            margin-bottom: 2rem;
+        }
+
+        .nav-section-title {
+            padding: 0 1.5rem 0.5rem;
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 1.5rem;
+            color: #cbd5e1;
+            text-decoration: none;
+            transition: all 0.2s;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .nav-item:hover {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+        }
+
+        .nav-item.active {
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), transparent);
+            color: #3b82f6;
+            border-right: 3px solid var(--primary-color);
+        }
+
+        .nav-item i {
+            width: 20px;
+            margin-right: 12px;
+            text-align: center;
+        }
+
+        .nav-badge {
+            margin-left: auto;
+            background: var(--primary-color);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: 280px;
+            flex: 1;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: white;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 90;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .search-box {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-input {
+            width: 300px;
+            padding: 10px 40px 10px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: #f8fafc;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 12px;
+            color: var(--text-secondary);
+        }
+
+        .notification-badge {
+            position: relative;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .notification-badge:hover {
+            background: var(--hover-bg);
+        }
+
+        .badge-dot {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 8px;
+            height: 8px;
+            background: var(--danger-color);
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .user-menu:hover {
+            background: var(--hover-bg);
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color), #3b82f6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        /* Container */
+        .container {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #047857;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
+        }
+
+        .btn-warning {
+            background: var(--warning-color);
+            color: white;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background: #b45309;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(217, 119, 6, 0.4);
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #b91c1c;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f1f5f9;
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #e2e8f0;
+            transform: translateY(-1px);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn-lg {
+            padding: 14px 28px;
+            font-size: 16px;
+        }
+
+        /* Loading Animation */
+        .loading {
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top: 2px solid currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Grid System */
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .grid-cols-1 { grid-template-columns: 1fr; }
+        .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+        @media (max-width: 1024px) {
+            .grid-cols-4 { grid-template-columns: repeat(2, 1fr); }
+            .grid-cols-3 { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 768px) {
+            .grid-cols-4,
+            .grid-cols-3,
+            .grid-cols-2 { grid-template-columns: 1fr; }
+        }
+
+        /* Stats Cards */
+        .stat-card {
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), #3b82f6);
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--primary-color), #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-trend {
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            font-size: 12px;
+        }
+
+        .trend-up { color: var(--success-color); }
+        .trend-down { color: var(--danger-color); }
+
+        /* Device Cards */
+        .device-card {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            background: white;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .device-card:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 8px 25px rgba(37, 99, 235, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .device-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-online { background: var(--success-color); }
+        .status-offline { background: var(--secondary-color); }
+        .status-warning { background: var(--warning-color); }
+        .status-error { background: var(--danger-color); }
+
+        .device-info {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .info-value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* Platform Badges */
+        .platform-badge {
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .platform-windows {
+            background: #0078d4;
+            color: white;
+        }
+
+        .platform-macos {
+            background: #000000;
+            color: white;
+        }
+
+        .platform-linux {
+            background: #ff6600;
+            color: white;
+        }
+
+        .platform-android {
+            background: #3ddc84;
+            color: black;
+        }
+
+        .platform-ios {
+            background: #007aff;
+            color: white;
+        }
+
+        /* Modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 16px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .close-btn:hover {
+            background: var(--hover-bg);
+            color: var(--text-primary);
+        }
+
+        /* Tables */
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th,
+        .table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .table tbody tr:hover {
+            background: var(--hover-bg);
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            font-size: 14px;
+        }
+
+        .form-input,
+        .form-select,
+        .form-textarea {
+            width: 100%;
+            padding: 10px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+            background: white;
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .alert-success {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+        }
+
+        .alert-warning {
+            background: #fffbeb;
+            border: 1px solid #fed7aa;
+            color: #92400e;
+        }
+
+        .alert-error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+
+        .alert-info {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .sidebar.mobile-open {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .header {
+                padding: 1rem;
+            }
+
+            .search-input {
+                width: 200px;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+
+            .device-info {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Progress Bars */
+        .progress {
+            background: #f1f5f9;
+            border-radius: 8px;
+            overflow: hidden;
+            height: 8px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), #3b82f6);
+            transition: width 0.3s ease;
+        }
+
+        /* Tooltips */
+        .tooltip {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .tooltip::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--dark-bg);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 1001;
+        }
+
+        .tooltip:hover::after {
+            opacity: 1;
+        }
+
+        /* Animation Classes */
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide-up {
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="app-container">
+            <!-- Sidebar -->
+            <nav class="sidebar" :class="{ 'mobile-open': sidebarOpen }">
+                <div class="sidebar-header">
+                    <div class="logo">
+                        <div class="logo-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <span>OpenDirectory</span>
+                    </div>
+                </div>
+                
+                <div class="sidebar-nav">
+                    <div class="nav-section">
+                        <div class="nav-section-title">Overview</div>
+                        <a class="nav-item" :class="{ active: currentPage === 'dashboard' }" @click="setPage('dashboard')">
+                            <i class="fas fa-tachometer-alt"></i>
+                            Dashboard
+                        </a>
+                        <a class="nav-item" :class="{ active: currentPage === 'analytics' }" @click="setPage('analytics')">
+                            <i class="fas fa-chart-line"></i>
+                            Analytics
+                            <span class="nav-badge">New</span>
+                        </a>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <div class="nav-section-title">Device Management</div>
+                        <a class="nav-item" :class="{ active: currentPage === 'devices' }" @click="setPage('devices')">
+                            <i class="fas fa-laptop"></i>
+                            Devices
+                            <span class="nav-badge">{{ devices.length }}</span>
+                        </a>
+                        <a class="nav-item" :class="{ active: currentPage === 'groups' }" @click="setPage('groups')">
+                            <i class="fas fa-layer-group"></i>
+                            Device Groups
+                        </a>
+                        <a class="nav-item" :class="{ active: currentPage === 'enrollment' }" @click="setPage('enrollment')">
+                            <i class="fas fa-plus-circle"></i>
+                            Enrollment
+                        </a>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <div class="nav-section-title">Applications</div>
+                        <a class="nav-item" :class="{ active: currentPage === 'apps' }" @click="setPage('apps')">
+                            <i class="fas fa-th-large"></i>
+                            App Store
+                            <span class="nav-badge">{{ apps.length }}</span>
+                        </a>
+                        <a class="nav-item" :class="{ active: currentPage === 'deployments' }" @click="setPage('deployments')">
+                            <i class="fas fa-rocket"></i>
+                            Deployments
+                        </a>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <div class="nav-section-title">Policy & Security</div>
+                        <a class="nav-item" :class="{ active: currentPage === 'policies' }" @click="setPage('policies')">
+                            <i class="fas fa-shield-virus"></i>
+                            Policies
+                        </a>
+                        <a class="nav-item" :class="{ active: currentPage === 'compliance' }" @click="setPage('compliance')">
+                            <i class="fas fa-check-circle"></i>
+                            Compliance
+                        </a>
+                        <a class="nav-item" :class="{ active: currentPage === 'security' }" @click="setPage('security')">
+                            <i class="fas fa-lock"></i>
+                            Security Center
+                        </a>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <div class="nav-section-title">Administration</div>
+                        <a class="nav-item" :class="{ active: currentPage === 'users' }" @click="setPage('users')">
+                            <i class="fas fa-users"></i>
+                            Users & Groups
+                        </a>
+                        <a class="nav-item" :class="{ active: currentPage === 'settings' }" @click="setPage('settings')">
+                            <i class="fas fa-cog"></i>
+                            Settings
+                        </a>
+                        <a class="nav-item" :class="{ active: currentPage === 'logs' }" @click="setPage('logs')">
+                            <i class="fas fa-file-alt"></i>
+                            Audit Logs
+                        </a>
+                    </div>
+                </div>
+            </nav>
+            
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Header -->
+                <header class="header">
+                    <div class="header-left">
+                        <button class="btn btn-secondary" @click="sidebarOpen = !sidebarOpen" style="display: none;" id="mobile-menu">
+                            <i class="fas fa-bars"></i>
+                        </button>
+                        <div>
+                            <h1 class="page-title">{{ pageTitle }}</h1>
+                            <div class="breadcrumb">
+                                <i class="fas fa-home"></i>
+                                <span>OpenDirectory</span>
+                                <i class="fas fa-chevron-right"></i>
+                                <span>{{ pageTitle }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="header-actions">
+                        <div class="search-box">
+                            <input type="text" class="search-input" placeholder="Search devices, apps, users..." v-model="searchQuery">
+                            <i class="fas fa-search search-icon"></i>
+                        </div>
+                        
+                        <div class="notification-badge tooltip" data-tooltip="Notifications">
+                            <i class="fas fa-bell"></i>
+                            <div class="badge-dot" v-if="notifications.length > 0"></div>
+                        </div>
+                        
+                        <div class="user-menu" @click="showUserMenu = !showUserMenu">
+                            <div class="user-avatar">
+                                {{ currentUser.initials }}
+                            </div>
+                            <span style="font-weight: 600;">{{ currentUser.name }}</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                </header>
+                
+                <!-- Page Content -->
+                <div class="container">
+                    <!-- Dashboard Page -->
+                    <div v-if="currentPage === 'dashboard'" class="fade-in">
+                        <!-- Stats Overview -->
+                        <div class="grid grid-cols-4" style="margin-bottom: 2rem;">
+                            <div class="card stat-card">
+                                <div class="stat-number">{{ stats.totalDevices }}</div>
+                                <div class="stat-label">Total Devices</div>
+                                <div class="stat-trend trend-up">
+                                    <i class="fas fa-arrow-up"></i>
+                                    +12% this month
+                                </div>
+                            </div>
+                            <div class="card stat-card">
+                                <div class="stat-number">{{ stats.onlineDevices }}</div>
+                                <div class="stat-label">Online Now</div>
+                                <div class="stat-trend trend-up">
+                                    <i class="fas fa-arrow-up"></i>
+                                    98.5% uptime
+                                </div>
+                            </div>
+                            <div class="card stat-card">
+                                <div class="stat-number">{{ stats.totalApps }}</div>
+                                <div class="stat-label">Deployed Apps</div>
+                                <div class="stat-trend trend-up">
+                                    <i class="fas fa-arrow-up"></i>
+                                    +5 new apps
+                                </div>
+                            </div>
+                            <div class="card stat-card">
+                                <div class="stat-number">{{ stats.complianceRate }}%</div>
+                                <div class="stat-label">Compliance Rate</div>
+                                <div class="stat-trend trend-up">
+                                    <i class="fas fa-arrow-up"></i>
+                                    +2.3% improved
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Quick Actions -->
+                        <div class="card" style="margin-bottom: 2rem;">
+                            <div class="card-header">
+                                <h3 class="card-title">Quick Actions</h3>
+                            </div>
+                            <div class="grid grid-cols-4">
+                                <button class="btn btn-primary btn-lg" @click="showEnrollDevice = true">
+                                    <i class="fas fa-plus"></i>
+                                    Enroll Device
+                                </button>
+                                <button class="btn btn-success btn-lg" @click="deployApp()">
+                                    <i class="fas fa-rocket"></i>
+                                    Deploy App
+                                </button>
+                                <button class="btn btn-warning btn-lg" @click="runCompliance()">
+                                    <i class="fas fa-shield-alt"></i>
+                                    Run Compliance
+                                </button>
+                                <button class="btn btn-secondary btn-lg" @click="generateReport()">
+                                    <i class="fas fa-chart-bar"></i>
+                                    Generate Report
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Recent Devices -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Recently Enrolled Devices</h3>
+                                <button class="btn btn-secondary btn-sm" @click="setPage('devices')">
+                                    View All
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-3">
+                                <div v-for="device in recentDevices" :key="device.id" class="device-card">
+                                    <div class="device-header">
+                                        <div class="device-status">
+                                            <div class="status-dot" :class="'status-' + device.status"></div>
+                                            <span>{{ device.name }}</span>
+                                        </div>
+                                        <span class="platform-badge" :class="'platform-' + device.platform.toLowerCase()">
+                                            {{ device.platform }}
+                                        </span>
+                                    </div>
+                                    <div class="device-info">
+                                        <div class="info-item">
+                                            <div class="info-label">User</div>
+                                            <div class="info-value">{{ device.user }}</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">Last Seen</div>
+                                            <div class="info-value">{{ device.lastSeen }}</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">Version</div>
+                                            <div class="info-value">{{ device.osVersion }}</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">Compliance</div>
+                                            <div class="info-value" :style="{ color: device.compliant ? '#059669' : '#dc2626' }">
+                                                {{ device.compliant ? 'Compliant' : 'Non-compliant' }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Devices Page -->
+                    <div v-if="currentPage === 'devices'" class="fade-in">
+                        <div class="card" style="margin-bottom: 2rem;">
+                            <div class="card-header">
+                                <h3 class="card-title">Device Management</h3>
+                                <div class="card-actions">
+                                    <button class="btn btn-secondary" @click="refreshDevices()">
+                                        <i class="fas fa-sync-alt" :class="{ 'loading': isRefreshing }"></i>
+                                        Refresh
+                                    </button>
+                                    <button class="btn btn-primary" @click="showEnrollDevice = true">
+                                        <i class="fas fa-plus"></i>
+                                        Enroll Device
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Filters -->
+                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                                <div>
+                                    <label class="form-label" style="margin-bottom: 0.25rem;">Platform</label>
+                                    <select class="form-select" v-model="deviceFilter.platform" style="width: auto;">
+                                        <option value="">All Platforms</option>
+                                        <option value="Windows">Windows</option>
+                                        <option value="macOS">macOS</option>
+                                        <option value="Linux">Linux</option>
+                                        <option value="iOS">iOS</option>
+                                        <option value="Android">Android</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label" style="margin-bottom: 0.25rem;">Status</label>
+                                    <select class="form-select" v-model="deviceFilter.status" style="width: auto;">
+                                        <option value="">All Status</option>
+                                        <option value="online">Online</option>
+                                        <option value="offline">Offline</option>
+                                        <option value="warning">Warning</option>
+                                        <option value="error">Error</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label" style="margin-bottom: 0.25rem;">Compliance</label>
+                                    <select class="form-select" v-model="deviceFilter.compliance" style="width: auto;">
+                                        <option value="">All</option>
+                                        <option value="compliant">Compliant</option>
+                                        <option value="non-compliant">Non-compliant</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Device List -->
+                        <div class="grid grid-cols-3">
+                            <div v-for="device in filteredDevices" :key="device.id" class="device-card slide-up">
+                                <div class="device-header">
+                                    <div class="device-status">
+                                        <div class="status-dot" :class="'status-' + device.status"></div>
+                                        <span style="font-weight: 600;">{{ device.name }}</span>
+                                    </div>
+                                    <span class="platform-badge" :class="'platform-' + device.platform.toLowerCase()">
+                                        {{ device.platform }}
+                                    </span>
+                                </div>
+                                
+                                <div class="device-info">
+                                    <div class="info-item">
+                                        <div class="info-label">User</div>
+                                        <div class="info-value">{{ device.user }}</div>
+                                    </div>
+                                    <div class="info-item">
+                                        <div class="info-label">IP Address</div>
+                                        <div class="info-value">{{ device.ipAddress }}</div>
+                                    </div>
+                                    <div class="info-item">
+                                        <div class="info-label">OS Version</div>
+                                        <div class="info-value">{{ device.osVersion }}</div>
+                                    </div>
+                                    <div class="info-item">
+                                        <div class="info-label">Last Seen</div>
+                                        <div class="info-value">{{ device.lastSeen }}</div>
+                                    </div>
+                                    <div class="info-item">
+                                        <div class="info-label">Storage Used</div>
+                                        <div class="info-value">{{ device.storageUsed }}%</div>
+                                    </div>
+                                    <div class="info-item">
+                                        <div class="info-label">Compliance</div>
+                                        <div class="info-value" :style="{ color: device.compliant ? '#059669' : '#dc2626' }">
+                                            {{ device.compliant ? 'Compliant' : 'Non-compliant' }}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="progress" style="margin: 1rem 0;">
+                                    <div class="progress-bar" :style="{ width: device.storageUsed + '%' }"></div>
+                                </div>
+                                
+                                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                                    <button class="btn btn-secondary btn-sm" @click="viewDevice(device)">
+                                        <i class="fas fa-eye"></i>
+                                        View
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" @click="manageDevice(device)">
+                                        <i class="fas fa-cog"></i>
+                                        Manage
+                                    </button>
+                                    <button class="btn btn-warning btn-sm" @click="syncDevice(device)" :disabled="device.syncing">
+                                        <i class="fas fa-sync-alt" :class="{ 'loading': device.syncing }"></i>
+                                        Sync
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Apps Page -->
+                    <div v-if="currentPage === 'apps'" class="fade-in">
+                        <div class="card" style="margin-bottom: 2rem;">
+                            <div class="card-header">
+                                <h3 class="card-title">Application Store</h3>
+                                <div class="card-actions">
+                                    <button class="btn btn-secondary" @click="refreshApps()">
+                                        <i class="fas fa-sync-alt" :class="{ 'loading': isRefreshing }"></i>
+                                        Refresh
+                                    </button>
+                                    <button class="btn btn-primary" @click="showAddApp = true">
+                                        <i class="fas fa-plus"></i>
+                                        Add Application
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- App Categories -->
+                        <div v-for="category in appCategories" :key="category.name" class="card" style="margin-bottom: 2rem;">
+                            <div class="card-header">
+                                <h3 class="card-title">
+                                    <i :class="category.icon" style="margin-right: 0.5rem;"></i>
+                                    {{ category.name }}
+                                </h3>
+                                <span class="category-count">{{ category.apps.length }} apps</span>
+                            </div>
+                            
+                            <div class="grid grid-cols-3">
+                                <div v-for="app in category.apps" :key="app.id" class="app-card">
+                                    <div class="app-header">
+                                        <div style="display: flex; align-items: center;">
+                                            <div class="app-icon">
+                                                <i :class="app.icon"></i>
+                                            </div>
+                                            <div class="app-info">
+                                                <div class="app-name">{{ app.name }}</div>
+                                                <div class="app-version">Version {{ app.version }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="app-description">
+                                        {{ app.description }}
+                                    </div>
+                                    
+                                    <div class="app-platforms" style="margin: 1rem 0;">
+                                        <span v-for="platform in app.platforms" :key="platform" 
+                                              class="platform-badge" 
+                                              :class="'platform-' + platform.toLowerCase()">
+                                            {{ platform }}
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="app-stats">
+                                        <div class="stat-item">
+                                            <div class="stat-value">{{ app.installs }}</div>
+                                            <div class="stat-desc">Installs</div>
+                                        </div>
+                                        <div class="stat-item">
+                                            <div class="stat-value">{{ app.size }}</div>
+                                            <div class="stat-desc">Size</div>
+                                        </div>
+                                        <div class="stat-item">
+                                            <div class="stat-value">{{ app.rating }}/5</div>
+                                            <div class="stat-desc">Rating</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="app-actions">
+                                        <button class="btn btn-primary" @click="installApp(app)" :disabled="app.installing">
+                                            <i class="fas fa-download" :class="{ 'loading': app.installing }"></i>
+                                            {{ app.installing ? 'Installing...' : 'Install' }}
+                                        </button>
+                                        <button class="btn btn-secondary" @click="viewAppDetails(app)">
+                                            <i class="fas fa-info-circle"></i>
+                                            Details
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Other pages placeholder -->
+                    <div v-if="!['dashboard', 'devices', 'apps'].includes(currentPage)" class="fade-in">
+                        <div class="card" style="text-align: center; padding: 4rem;">
+                            <i class="fas fa-construction" style="font-size: 4rem; color: var(--warning-color); margin-bottom: 1rem;"></i>
+                            <h2 style="margin-bottom: 1rem;">{{ pageTitle }} - Coming Soon</h2>
+                            <p style="color: var(--text-secondary); font-size: 16px;">
+                                This section is under development. Advanced {{ pageTitle.toLowerCase() }} features will be available soon.
+                            </p>
+                            <button class="btn btn-primary" @click="setPage('dashboard')" style="margin-top: 2rem;">
+                                <i class="fas fa-arrow-left"></i>
+                                Back to Dashboard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Device Enrollment Modal -->
+        <div v-if="showEnrollDevice" class="modal" @click="showEnrollDevice = false">
+            <div class="modal-content" @click.stop>
+                <div class="modal-header">
+                    <h2 class="modal-title">Enroll New Device</h2>
+                    <button class="close-btn" @click="showEnrollDevice = false">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <form @submit.prevent="enrollDevice()">
+                    <div class="form-group">
+                        <label class="form-label">Device Name</label>
+                        <input type="text" class="form-input" v-model="newDevice.name" placeholder="Enter device name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Platform</label>
+                        <select class="form-select" v-model="newDevice.platform" required>
+                            <option value="">Select Platform</option>
+                            <option value="Windows">Windows</option>
+                            <option value="macOS">macOS</option>
+                            <option value="Linux">Linux</option>
+                            <option value="iOS">iOS</option>
+                            <option value="Android">Android</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">User Email</label>
+                        <input type="email" class="form-input" v-model="newDevice.userEmail" placeholder="user@company.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Device Group</label>
+                        <select class="form-select" v-model="newDevice.group">
+                            <option value="">Select Group</option>
+                            <option value="executives">Executives</option>
+                            <option value="developers">Developers</option>
+                            <option value="sales">Sales Team</option>
+                            <option value="general">General Users</option>
+                        </select>
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                        <button type="button" class="btn btn-secondary" @click="showEnrollDevice = false">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary" :disabled="enrolling">
+                            <i class="fas fa-plus" :class="{ 'loading': enrolling }"></i>
+                            {{ enrolling ? 'Enrolling...' : 'Enroll Device' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Add App Modal -->
+        <div v-if="showAddApp" class="modal" @click="showAddApp = false">
+            <div class="modal-content" @click.stop>
+                <div class="modal-header">
+                    <h2 class="modal-title">Add New Application</h2>
+                    <button class="close-btn" @click="showAddApp = false">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <form @submit.prevent="addApp()">
+                    <div class="form-group">
+                        <label class="form-label">Application Name</label>
+                        <input type="text" class="form-input" v-model="newApp.name" placeholder="Enter app name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Version</label>
+                        <input type="text" class="form-input" v-model="newApp.version" placeholder="1.0.0" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-textarea" v-model="newApp.description" placeholder="Enter app description"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <select class="form-select" v-model="newApp.category" required>
+                            <option value="">Select Category</option>
+                            <option value="productivity">Productivity</option>
+                            <option value="development">Development</option>
+                            <option value="browsers">Browsers</option>
+                            <option value="security">Security</option>
+                            <option value="media">Media</option>
+                            <option value="utilities">Utilities</option>
+                        </select>
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                        <button type="button" class="btn btn-secondary" @click="showAddApp = false">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary" :disabled="addingApp">
+                            <i class="fas fa-plus" :class="{ 'loading': addingApp }"></i>
+                            {{ addingApp ? 'Adding...' : 'Add Application' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Notifications -->
+        <div v-for="notification in visibleNotifications" :key="notification.id" 
+             class="alert" 
+             :class="'alert-' + notification.type"
+             style="position: fixed; top: 20px; right: 20px; z-index: 1001; max-width: 400px;">
+            <i :class="notification.icon"></i>
+            <span>{{ notification.message }}</span>
+            <button @click="removeNotification(notification.id)" style="margin-left: auto; background: none; border: none; cursor: pointer;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            data() {
+                return {
+                    currentPage: 'dashboard',
+                    sidebarOpen: false,
+                    searchQuery: '',
+                    showUserMenu: false,
+                    showEnrollDevice: false,
+                    showAddApp: false,
+                    isRefreshing: false,
+                    enrolling: false,
+                    addingApp: false,
+                    
+                    currentUser: {
+                        name: 'Christian Heusser',
+                        initials: 'CH',
+                        role: 'Administrator'
+                    },
+                    
+                    stats: {
+                        totalDevices: 1247,
+                        onlineDevices: 1189,
+                        totalApps: 156,
+                        complianceRate: 94.7
+                    },
+                    
+                    deviceFilter: {
+                        platform: '',
+                        status: '',
+                        compliance: ''
+                    },
+                    
+                    newDevice: {
+                        name: '',
+                        platform: '',
+                        userEmail: '',
+                        group: ''
+                    },
+                    
+                    newApp: {
+                        name: '',
+                        version: '',
+                        description: '',
+                        category: ''
+                    },
+                    
+                    notifications: [],
+                    visibleNotifications: [],
+                    
+                    devices: [
+                        {
+                            id: 1,
+                            name: 'MacBook-Pro-15',
+                            platform: 'macOS',
+                            user: 'john.doe@company.com',
+                            status: 'online',
+                            lastSeen: '2 minutes ago',
+                            osVersion: 'macOS 14.2',
+                            ipAddress: '192.168.1.105',
+                            storageUsed: 67,
+                            compliant: true,
+                            syncing: false
+                        },
+                        {
+                            id: 2,
+                            name: 'DESKTOP-ABC123',
+                            platform: 'Windows',
+                            user: 'sarah.smith@company.com',
+                            status: 'online',
+                            lastSeen: '5 minutes ago',
+                            osVersion: 'Windows 11 Pro',
+                            ipAddress: '192.168.1.110',
+                            storageUsed: 82,
+                            compliant: true,
+                            syncing: false
+                        },
+                        {
+                            id: 3,
+                            name: 'Ubuntu-Dev-01',
+                            platform: 'Linux',
+                            user: 'mike.wilson@company.com',
+                            status: 'warning',
+                            lastSeen: '15 minutes ago',
+                            osVersion: 'Ubuntu 22.04',
+                            ipAddress: '192.168.1.115',
+                            storageUsed: 45,
+                            compliant: false,
+                            syncing: false
+                        },
+                        {
+                            id: 4,
+                            name: 'iPhone-12-Pro',
+                            platform: 'iOS',
+                            user: 'anna.davis@company.com',
+                            status: 'online',
+                            lastSeen: '1 minute ago',
+                            osVersion: 'iOS 17.2',
+                            ipAddress: '192.168.1.120',
+                            storageUsed: 73,
+                            compliant: true,
+                            syncing: false
+                        },
+                        {
+                            id: 5,
+                            name: 'Galaxy-S23-Ultra',
+                            platform: 'Android',
+                            user: 'tom.brown@company.com',
+                            status: 'online',
+                            lastSeen: '8 minutes ago',
+                            osVersion: 'Android 14',
+                            ipAddress: '192.168.1.125',
+                            storageUsed: 56,
+                            compliant: true,
+                            syncing: false
+                        },
+                        {
+                            id: 6,
+                            name: 'ThinkPad-X1-Carbon',
+                            platform: 'Windows',
+                            user: 'lisa.johnson@company.com',
+                            status: 'offline',
+                            lastSeen: '2 hours ago',
+                            osVersion: 'Windows 11 Pro',
+                            ipAddress: '192.168.1.130',
+                            storageUsed: 91,
+                            compliant: false,
+                            syncing: false
+                        }
+                    ],
+                    
+                    apps: []
+                }
+            },
+            
+            computed: {
+                pageTitle() {
+                    const titles = {
+                        dashboard: 'Dashboard',
+                        devices: 'Device Management',
+                        groups: 'Device Groups',
+                        enrollment: 'Device Enrollment',
+                        apps: 'Application Store',
+                        deployments: 'App Deployments',
+                        policies: 'Policy Management',
+                        compliance: 'Compliance Center',
+                        security: 'Security Center',
+                        users: 'Users & Groups',
+                        settings: 'Settings',
+                        logs: 'Audit Logs',
+                        analytics: 'Analytics Dashboard'
+                    };
+                    return titles[this.currentPage] || 'OpenDirectory';
+                },
+                
+                recentDevices() {
+                    return this.devices.slice(0, 3);
+                },
+                
+                filteredDevices() {
+                    return this.devices.filter(device => {
+                        const matchesPlatform = !this.deviceFilter.platform || device.platform === this.deviceFilter.platform;
+                        const matchesStatus = !this.deviceFilter.status || device.status === this.deviceFilter.status;
+                        const matchesCompliance = !this.deviceFilter.compliance || 
+                            (this.deviceFilter.compliance === 'compliant' && device.compliant) ||
+                            (this.deviceFilter.compliance === 'non-compliant' && !device.compliant);
+                        
+                        const matchesSearch = !this.searchQuery || 
+                            device.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                            device.user.toLowerCase().includes(this.searchQuery.toLowerCase());
+                            
+                        return matchesPlatform && matchesStatus && matchesCompliance && matchesSearch;
+                    });
+                },
+                
+                appCategories() {
+                    const categories = [
+                        { 
+                            name: 'Productivity', 
+                            icon: 'fas fa-briefcase',
+                            apps: [
+                                {
+                                    id: 1,
+                                    name: 'Microsoft Office 365',
+                                    version: '2024.1',
+                                    description: 'Complete office suite with Word, Excel, PowerPoint, and more.',
+                                    platforms: ['Windows', 'macOS'],
+                                    icon: 'fas fa-file-word',
+                                    installs: 1247,
+                                    size: '3.2 GB',
+                                    rating: 4.8,
+                                    installing: false
+                                },
+                                {
+                                    id: 2,
+                                    name: 'Slack',
+                                    version: '4.35.0',
+                                    description: 'Team collaboration and messaging platform.',
+                                    platforms: ['Windows', 'macOS', 'Linux'],
+                                    icon: 'fab fa-slack',
+                                    installs: 956,
+                                    size: '180 MB',
+                                    rating: 4.6,
+                                    installing: false
+                                },
+                                {
+                                    id: 3,
+                                    name: 'Zoom',
+                                    version: '5.16.10',
+                                    description: 'Video conferencing and online meetings.',
+                                    platforms: ['Windows', 'macOS', 'Linux'],
+                                    icon: 'fas fa-video',
+                                    installs: 1189,
+                                    size: '95 MB',
+                                    rating: 4.4,
+                                    installing: false
+                                }
+                            ]
+                        },
+                        {
+                            name: 'Development',
+                            icon: 'fas fa-code',
+                            apps: [
+                                {
+                                    id: 4,
+                                    name: 'Visual Studio Code',
+                                    version: '1.85.1',
+                                    description: 'Lightweight but powerful source code editor.',
+                                    platforms: ['Windows', 'macOS', 'Linux'],
+                                    icon: 'fas fa-code',
+                                    installs: 834,
+                                    size: '85 MB',
+                                    rating: 4.9,
+                                    installing: false
+                                },
+                                {
+                                    id: 5,
+                                    name: 'Git',
+                                    version: '2.43.0',
+                                    description: 'Distributed version control system.',
+                                    platforms: ['Windows', 'macOS', 'Linux'],
+                                    icon: 'fab fa-git-alt',
+                                    installs: 723,
+                                    size: '45 MB',
+                                    rating: 4.7,
+                                    installing: false
+                                },
+                                {
+                                    id: 6,
+                                    name: 'Docker Desktop',
+                                    version: '4.26.1',
+                                    description: 'Containerization platform for developers.',
+                                    platforms: ['Windows', 'macOS'],
+                                    icon: 'fab fa-docker',
+                                    installs: 456,
+                                    size: '520 MB',
+                                    rating: 4.3,
+                                    installing: false
+                                }
+                            ]
+                        },
+                        {
+                            name: 'Browsers',
+                            icon: 'fas fa-globe',
+                            apps: [
+                                {
+                                    id: 7,
+                                    name: 'Google Chrome',
+                                    version: '120.0.6099.129',
+                                    description: 'Fast, secure web browser from Google.',
+                                    platforms: ['Windows', 'macOS', 'Linux'],
+                                    icon: 'fab fa-chrome',
+                                    installs: 1156,
+                                    size: '89 MB',
+                                    rating: 4.5,
+                                    installing: false
+                                },
+                                {
+                                    id: 8,
+                                    name: 'Mozilla Firefox',
+                                    version: '121.0.1',
+                                    description: 'Open-source web browser with privacy focus.',
+                                    platforms: ['Windows', 'macOS', 'Linux'],
+                                    icon: 'fab fa-firefox',
+                                    installs: 667,
+                                    size: '67 MB',
+                                    rating: 4.4,
+                                    installing: false
+                                },
+                                {
+                                    id: 9,
+                                    name: 'Microsoft Edge',
+                                    version: '120.0.2210.121',
+                                    description: 'Modern web browser from Microsoft.',
+                                    platforms: ['Windows', 'macOS'],
+                                    icon: 'fab fa-edge',
+                                    installs: 789,
+                                    size: '125 MB',
+                                    rating: 4.2,
+                                    installing: false
+                                }
+                            ]
+                        }
+                    ];
+                    
+                    return categories;
+                }
+            },
+            
+            methods: {
+                setPage(page) {
+                    this.currentPage = page;
+                    this.sidebarOpen = false; // Close sidebar on mobile
+                },
+                
+                refreshDevices() {
+                    this.isRefreshing = true;
+                    setTimeout(() => {
+                        this.isRefreshing = false;
+                        this.showNotification('success', 'Devices refreshed successfully', 'fas fa-check-circle');
+                    }, 2000);
+                },
+                
+                refreshApps() {
+                    this.isRefreshing = true;
+                    setTimeout(() => {
+                        this.isRefreshing = false;
+                        this.showNotification('success', 'Applications refreshed successfully', 'fas fa-check-circle');
+                    }, 2000);
+                },
+                
+                viewDevice(device) {
+                    this.showNotification('info', `Viewing details for ${device.name}`, 'fas fa-eye');
+                },
+                
+                manageDevice(device) {
+                    this.showNotification('info', `Managing ${device.name}`, 'fas fa-cog');
+                },
+                
+                syncDevice(device) {
+                    device.syncing = true;
+                    setTimeout(() => {
+                        device.syncing = false;
+                        device.lastSeen = 'Just now';
+                        this.showNotification('success', `${device.name} synced successfully`, 'fas fa-sync-alt');
+                    }, 3000);
+                },
+                
+                enrollDevice() {
+                    this.enrolling = true;
+                    setTimeout(() => {
+                        // Add new device to list
+                        const newId = Math.max(...this.devices.map(d => d.id)) + 1;
+                        this.devices.unshift({
+                            id: newId,
+                            name: this.newDevice.name,
+                            platform: this.newDevice.platform,
+                            user: this.newDevice.userEmail,
+                            status: 'online',
+                            lastSeen: 'Just now',
+                            osVersion: 'Latest',
+                            ipAddress: '192.168.1.' + (100 + newId),
+                            storageUsed: Math.floor(Math.random() * 90) + 10,
+                            compliant: true,
+                            syncing: false
+                        });
+                        
+                        // Reset form
+                        this.newDevice = { name: '', platform: '', userEmail: '', group: '' };
+                        this.enrolling = false;
+                        this.showEnrollDevice = false;
+                        
+                        this.showNotification('success', 'Device enrolled successfully', 'fas fa-check-circle');
+                        this.stats.totalDevices++;
+                        this.stats.onlineDevices++;
+                    }, 2000);
+                },
+                
+                addApp() {
+                    this.addingApp = true;
+                    setTimeout(() => {
+                        this.addingApp = false;
+                        this.showAddApp = false;
+                        this.newApp = { name: '', version: '', description: '', category: '' };
+                        this.showNotification('success', 'Application added successfully', 'fas fa-check-circle');
+                        this.stats.totalApps++;
+                    }, 2000);
+                },
+                
+                installApp(app) {
+                    app.installing = true;
+                    setTimeout(() => {
+                        app.installing = false;
+                        app.installs++;
+                        this.showNotification('success', `${app.name} installed successfully`, 'fas fa-download');
+                    }, 3000);
+                },
+                
+                viewAppDetails(app) {
+                    this.showNotification('info', `Viewing details for ${app.name}`, 'fas fa-info-circle');
+                },
+                
+                deployApp() {
+                    this.showNotification('info', 'Opening app deployment wizard', 'fas fa-rocket');
+                },
+                
+                runCompliance() {
+                    this.showNotification('info', 'Starting compliance scan...', 'fas fa-shield-alt');
+                    setTimeout(() => {
+                        this.showNotification('success', 'Compliance scan completed', 'fas fa-check-circle');
+                    }, 5000);
+                },
+                
+                generateReport() {
+                    this.showNotification('info', 'Generating report...', 'fas fa-chart-bar');
+                    setTimeout(() => {
+                        this.showNotification('success', 'Report generated and downloaded', 'fas fa-download');
+                    }, 3000);
+                },
+                
+                showNotification(type, message, icon = '') {
+                    const id = Date.now() + Math.random();
+                    const notification = {
+                        id,
+                        type,
+                        message,
+                        icon: icon || this.getDefaultIcon(type)
+                    };
+                    
+                    this.notifications.push(notification);
+                    this.visibleNotifications.push(notification);
+                    
+                    setTimeout(() => {
+                        this.removeNotification(id);
+                    }, 5000);
+                },
+                
+                removeNotification(id) {
+                    this.visibleNotifications = this.visibleNotifications.filter(n => n.id !== id);
+                },
+                
+                getDefaultIcon(type) {
+                    const icons = {
+                        success: 'fas fa-check-circle',
+                        error: 'fas fa-exclamation-circle',
+                        warning: 'fas fa-exclamation-triangle',
+                        info: 'fas fa-info-circle'
+                    };
+                    return icons[type] || 'fas fa-info-circle';
+                },
+                
+                // Mobile responsiveness
+                handleResize() {
+                    if (window.innerWidth <= 768) {
+                        this.sidebarOpen = false;
+                        document.getElementById('mobile-menu').style.display = 'inline-flex';
+                    } else {
+                        document.getElementById('mobile-menu').style.display = 'none';
+                    }
+                }
+            },
+            
+            mounted() {
+                // Initialize with welcome notification
+                this.showNotification('success', 'Welcome to OpenDirectory MDM!', 'fas fa-home');
+                
+                // Handle mobile responsiveness
+                this.handleResize();
+                window.addEventListener('resize', this.handleResize);
+                
+                // Simulate real-time updates
+                setInterval(() => {
+                    // Update last seen times randomly
+                    this.devices.forEach(device => {
+                        if (Math.random() > 0.95 && device.status === 'online') {
+                            device.lastSeen = 'Just now';
+                        }
+                    });
+                }, 30000);
+            },
+            
+            beforeUnmount() {
+                window.removeEventListener('resize', this.handleResize);
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

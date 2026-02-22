@@ -1,0 +1,1107 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: modern-mdm-ui
+  namespace: opendirectory
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>OpenDirectory MDM - Enterprise Management Console</title>
+        <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+        <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+        
+        <!-- Enhanced Modern CSS -->
+        <style>
+            :root {
+                --primary: #3b82f6;
+                --primary-dark: #1d4ed8;
+                --success: #10b981;
+                --warning: #f59e0b;
+                --danger: #ef4444;
+                --dark: #1e293b;
+                --light: #f8fafc;
+                --border: #e2e8f0;
+                --text: #1e293b;
+                --text-light: #64748b;
+            }
+            
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            
+            body {
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                background: var(--light);
+                color: var(--text);
+                line-height: 1.6;
+            }
+            
+            .app { display: flex; min-height: 100vh; }
+            
+            .sidebar {
+                width: 280px;
+                background: var(--dark);
+                color: white;
+                position: fixed;
+                height: 100vh;
+                overflow-y: auto;
+                z-index: 1000;
+            }
+            
+            .sidebar-header {
+                padding: 1.5rem;
+                border-bottom: 1px solid #334155;
+                background: linear-gradient(135deg, #1e293b, #334155);
+            }
+            
+            .logo {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 20px;
+                font-weight: 700;
+            }
+            
+            .logo-icon {
+                width: 40px;
+                height: 40px;
+                background: linear-gradient(135deg, var(--primary), #60a5fa);
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .nav-section { margin: 1rem 0; }
+            
+            .nav-title {
+                padding: 0.5rem 1.5rem;
+                font-size: 11px;
+                text-transform: uppercase;
+                color: #94a3b8;
+                font-weight: 600;
+                letter-spacing: 0.05em;
+            }
+            
+            .nav-item {
+                display: flex;
+                align-items: center;
+                padding: 12px 1.5rem;
+                color: #cbd5e1;
+                cursor: pointer;
+                transition: all 0.2s;
+                position: relative;
+            }
+            
+            .nav-item:hover {
+                background: rgba(59, 130, 246, 0.1);
+                color: var(--primary);
+            }
+            
+            .nav-item.active {
+                background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), transparent);
+                color: var(--primary);
+                border-right: 3px solid var(--primary);
+            }
+            
+            .nav-item i { width: 20px; margin-right: 12px; }
+            
+            .nav-badge {
+                margin-left: auto;
+                background: var(--primary);
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            
+            .main-content {
+                margin-left: 280px;
+                flex: 1;
+            }
+            
+            .header {
+                background: white;
+                padding: 1rem 2rem;
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                position: sticky;
+                top: 0;
+                z-index: 900;
+            }
+            
+            .page-title {
+                font-size: 24px;
+                font-weight: 700;
+                color: var(--text);
+            }
+            
+            .header-actions {
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            }
+            
+            .search-box {
+                position: relative;
+            }
+            
+            .search-input {
+                width: 300px;
+                padding: 10px 16px 10px 40px;
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                background: #f8fafc;
+                transition: all 0.2s;
+            }
+            
+            .search-input:focus {
+                outline: none;
+                border-color: var(--primary);
+                background: white;
+                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            }
+            
+            .search-icon {
+                position: absolute;
+                left: 12px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--text-light);
+            }
+            
+            .container {
+                padding: 2rem;
+                max-width: 1400px;
+                margin: 0 auto;
+            }
+            
+            .card {
+                background: white;
+                border-radius: 12px;
+                padding: 1.5rem;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                border: 1px solid var(--border);
+                transition: all 0.2s;
+                margin-bottom: 1.5rem;
+            }
+            
+            .card:hover {
+                box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            }
+            
+            .card-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 1.5rem;
+            }
+            
+            .card-title {
+                font-size: 18px;
+                font-weight: 600;
+            }
+            
+            .btn {
+                padding: 10px 20px;
+                border: none;
+                border-radius: 8px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                text-decoration: none;
+                font-size: 14px;
+            }
+            
+            .btn-primary {
+                background: var(--primary);
+                color: white;
+            }
+            
+            .btn-primary:hover {
+                background: var(--primary-dark);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            }
+            
+            .btn-success { background: var(--success); color: white; }
+            .btn-warning { background: var(--warning); color: white; }
+            .btn-danger { background: var(--danger); color: white; }
+            .btn-secondary {
+                background: #f1f5f9;
+                color: var(--text);
+                border: 1px solid var(--border);
+            }
+            
+            .btn-sm { padding: 6px 12px; font-size: 12px; }
+            .btn-lg { padding: 14px 28px; font-size: 16px; }
+            
+            .grid { display: grid; gap: 1.5rem; }
+            .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+            .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+            .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+            
+            .stat-card {
+                text-align: center;
+                position: relative;
+                overflow: hidden;
+            }
+            
+            .stat-card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 4px;
+                background: linear-gradient(90deg, var(--primary), #60a5fa);
+            }
+            
+            .stat-number {
+                font-size: 2.5rem;
+                font-weight: 700;
+                color: var(--primary);
+                margin-bottom: 0.5rem;
+            }
+            
+            .stat-label {
+                color: var(--text-light);
+                font-size: 14px;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            
+            .device-card {
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 1.5rem;
+                background: white;
+                transition: all 0.2s;
+            }
+            
+            .device-card:hover {
+                border-color: var(--primary);
+                box-shadow: 0 8px 25px rgba(59, 130, 246, 0.1);
+                transform: translateY(-2px);
+            }
+            
+            .device-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 1rem;
+            }
+            
+            .device-status {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            
+            .status-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+            }
+            
+            .status-online { background: var(--success); }
+            .status-offline { background: #64748b; }
+            .status-warning { background: var(--warning); }
+            .status-error { background: var(--danger); }
+            
+            .platform-badge {
+                padding: 4px 12px;
+                border-radius: 16px;
+                font-size: 11px;
+                font-weight: 600;
+                text-transform: uppercase;
+            }
+            
+            .platform-windows { background: #0078d4; color: white; }
+            .platform-macos { background: #000; color: white; }
+            .platform-linux { background: #ff6600; color: white; }
+            .platform-ios { background: #007aff; color: white; }
+            .platform-android { background: #3ddc84; color: black; }
+            
+            .device-info {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1rem;
+                margin: 1rem 0;
+            }
+            
+            .info-item {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+            
+            .info-label {
+                font-size: 12px;
+                color: var(--text-light);
+                font-weight: 500;
+                text-transform: uppercase;
+            }
+            
+            .info-value {
+                font-weight: 600;
+            }
+            
+            .modal {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.6);
+                z-index: 2000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                backdrop-filter: blur(4px);
+            }
+            
+            .modal-content {
+                background: white;
+                padding: 2rem;
+                border-radius: 16px;
+                max-width: 600px;
+                width: 90%;
+                max-height: 80vh;
+                overflow-y: auto;
+                box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+                animation: modalSlideIn 0.3s ease-out;
+            }
+            
+            @keyframes modalSlideIn {
+                from { opacity: 0; transform: scale(0.95) translateY(-20px); }
+                to { opacity: 1; transform: scale(1) translateY(0); }
+            }
+            
+            .modal-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 1.5rem;
+            }
+            
+            .modal-title {
+                font-size: 20px;
+                font-weight: 700;
+            }
+            
+            .close-btn {
+                background: none;
+                border: none;
+                font-size: 24px;
+                cursor: pointer;
+                color: var(--text-light);
+                padding: 4px;
+            }
+            
+            .form-group { margin-bottom: 1.5rem; }
+            
+            .form-label {
+                display: block;
+                font-weight: 600;
+                margin-bottom: 0.5rem;
+                font-size: 14px;
+            }
+            
+            .form-input, .form-select {
+                width: 100%;
+                padding: 10px 16px;
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                font-size: 14px;
+                transition: all 0.2s;
+            }
+            
+            .form-input:focus, .form-select:focus {
+                outline: none;
+                border-color: var(--primary);
+                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            }
+            
+            .loading {
+                width: 16px;
+                height: 16px;
+                border: 2px solid transparent;
+                border-top: 2px solid currentColor;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            }
+            
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            
+            .fade-in { animation: fadeIn 0.3s ease-in; }
+            
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            
+            .alert {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 2001;
+                padding: 1rem 1.5rem;
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                max-width: 400px;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            }
+            
+            .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+            .alert-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+            .alert-warning { background: #fffbeb; border: 1px solid #fed7aa; color: #92400e; }
+            .alert-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+            
+            @media (max-width: 768px) {
+                .sidebar {
+                    transform: translateX(-100%);
+                    transition: transform 0.3s ease;
+                }
+                
+                .sidebar.mobile-open {
+                    transform: translateX(0);
+                }
+                
+                .main-content { margin-left: 0; }
+                .search-input { width: 200px; }
+                .grid-cols-4, .grid-cols-3 { grid-template-columns: repeat(2, 1fr); }
+                .grid-cols-2 { grid-template-columns: 1fr; }
+                .device-info { grid-template-columns: 1fr; }
+            }
+        </style>
+    </head>
+    <body>
+        <div id="app">
+            <div class="app">
+                <!-- Sidebar -->
+                <nav class="sidebar" :class="{ 'mobile-open': sidebarOpen }">
+                    <div class="sidebar-header">
+                        <div class="logo">
+                            <div class="logo-icon">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <span>OpenDirectory</span>
+                        </div>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <div class="nav-title">Overview</div>
+                        <div class="nav-item" :class="{ active: currentPage === 'dashboard' }" @click="setPage('dashboard')">
+                            <i class="fas fa-tachometer-alt"></i>
+                            Dashboard
+                        </div>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <div class="nav-title">Device Management</div>
+                        <div class="nav-item" :class="{ active: currentPage === 'devices' }" @click="setPage('devices')">
+                            <i class="fas fa-laptop"></i>
+                            Devices
+                            <span class="nav-badge">{{ devices.length }}</span>
+                        </div>
+                        <div class="nav-item" :class="{ active: currentPage === 'enrollment' }" @click="setPage('enrollment')">
+                            <i class="fas fa-plus-circle"></i>
+                            Enrollment
+                        </div>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <div class="nav-title">Applications</div>
+                        <div class="nav-item" :class="{ active: currentPage === 'apps' }" @click="setPage('apps')">
+                            <i class="fas fa-th-large"></i>
+                            App Store
+                            <span class="nav-badge">{{ totalApps }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <div class="nav-title">Security</div>
+                        <div class="nav-item" :class="{ active: currentPage === 'policies' }" @click="setPage('policies')">
+                            <i class="fas fa-shield-virus"></i>
+                            Policies
+                        </div>
+                        <div class="nav-item" :class="{ active: currentPage === 'compliance' }" @click="setPage('compliance')">
+                            <i class="fas fa-check-circle"></i>
+                            Compliance
+                        </div>
+                    </div>
+                </nav>
+                
+                <!-- Main Content -->
+                <div class="main-content">
+                    <header class="header">
+                        <h1 class="page-title">{{ pageTitle }}</h1>
+                        <div class="header-actions">
+                            <div class="search-box">
+                                <i class="fas fa-search search-icon"></i>
+                                <input type="text" class="search-input" placeholder="Search..." v-model="searchQuery">
+                            </div>
+                            <button class="btn btn-primary" @click="showEnrollModal = true">
+                                <i class="fas fa-plus"></i>
+                                Enroll Device
+                            </button>
+                        </div>
+                    </header>
+                    
+                    <div class="container">
+                        <!-- Dashboard -->
+                        <div v-if="currentPage === 'dashboard'" class="fade-in">
+                            <div class="grid grid-cols-4">
+                                <div class="card stat-card">
+                                    <div class="stat-number">{{ stats.totalDevices }}</div>
+                                    <div class="stat-label">Total Devices</div>
+                                </div>
+                                <div class="card stat-card">
+                                    <div class="stat-number">{{ stats.onlineDevices }}</div>
+                                    <div class="stat-label">Online</div>
+                                </div>
+                                <div class="card stat-card">
+                                    <div class="stat-number">{{ stats.totalApps }}</div>
+                                    <div class="stat-label">Apps</div>
+                                </div>
+                                <div class="card stat-card">
+                                    <div class="stat-number">{{ stats.complianceRate }}%</div>
+                                    <div class="stat-label">Compliance</div>
+                                </div>
+                            </div>
+                            
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Quick Actions</h3>
+                                </div>
+                                <div class="grid grid-cols-4">
+                                    <button class="btn btn-primary btn-lg" @click="showEnrollModal = true">
+                                        <i class="fas fa-plus"></i>
+                                        Enroll Device
+                                    </button>
+                                    <button class="btn btn-success btn-lg" @click="deployApp">
+                                        <i class="fas fa-rocket"></i>
+                                        Deploy App
+                                    </button>
+                                    <button class="btn btn-warning btn-lg" @click="runCompliance">
+                                        <i class="fas fa-shield-alt"></i>
+                                        Run Compliance
+                                    </button>
+                                    <button class="btn btn-secondary btn-lg" @click="generateReport">
+                                        <i class="fas fa-chart-bar"></i>
+                                        Generate Report
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Recent Devices</h3>
+                                    <button class="btn btn-secondary btn-sm" @click="setPage('devices')">View All</button>
+                                </div>
+                                <div class="grid grid-cols-3">
+                                    <div v-for="device in recentDevices" :key="device.id" class="device-card">
+                                        <div class="device-header">
+                                            <div class="device-status">
+                                                <div class="status-dot" :class="'status-' + device.status"></div>
+                                                <strong>{{ device.name }}</strong>
+                                            </div>
+                                            <span class="platform-badge" :class="'platform-' + device.platform.toLowerCase()">
+                                                {{ device.platform }}
+                                            </span>
+                                        </div>
+                                        <div class="device-info">
+                                            <div class="info-item">
+                                                <div class="info-label">User</div>
+                                                <div class="info-value">{{ device.user }}</div>
+                                            </div>
+                                            <div class="info-item">
+                                                <div class="info-label">Last Seen</div>
+                                                <div class="info-value">{{ device.lastSeen }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Devices -->
+                        <div v-if="currentPage === 'devices'" class="fade-in">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Device Management</h3>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button class="btn btn-secondary" @click="refreshDevices" :disabled="loading">
+                                            <i class="fas fa-sync-alt" :class="{ loading: loading }"></i>
+                                            Refresh
+                                        </button>
+                                        <button class="btn btn-primary" @click="showEnrollModal = true">
+                                            <i class="fas fa-plus"></i>
+                                            Enroll Device
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-3">
+                                    <div v-for="device in filteredDevices" :key="device.id" class="device-card">
+                                        <div class="device-header">
+                                            <div class="device-status">
+                                                <div class="status-dot" :class="'status-' + device.status"></div>
+                                                <strong>{{ device.name }}</strong>
+                                            </div>
+                                            <span class="platform-badge" :class="'platform-' + device.platform.toLowerCase()">
+                                                {{ device.platform }}
+                                            </span>
+                                        </div>
+                                        
+                                        <div class="device-info">
+                                            <div class="info-item">
+                                                <div class="info-label">User</div>
+                                                <div class="info-value">{{ device.user }}</div>
+                                            </div>
+                                            <div class="info-item">
+                                                <div class="info-label">IP Address</div>
+                                                <div class="info-value">{{ device.ipAddress }}</div>
+                                            </div>
+                                            <div class="info-item">
+                                                <div class="info-label">OS Version</div>
+                                                <div class="info-value">{{ device.osVersion }}</div>
+                                            </div>
+                                            <div class="info-item">
+                                                <div class="info-label">Last Seen</div>
+                                                <div class="info-value">{{ device.lastSeen }}</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                                            <button class="btn btn-secondary btn-sm" @click="viewDevice(device)">
+                                                <i class="fas fa-eye"></i>
+                                                View
+                                            </button>
+                                            <button class="btn btn-primary btn-sm" @click="manageDevice(device)">
+                                                <i class="fas fa-cog"></i>
+                                                Manage
+                                            </button>
+                                            <button class="btn btn-warning btn-sm" @click="syncDevice(device)" :disabled="device.syncing">
+                                                <i class="fas fa-sync-alt" :class="{ loading: device.syncing }"></i>
+                                                Sync
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Apps -->
+                        <div v-if="currentPage === 'apps'" class="fade-in">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Application Store</h3>
+                                    <button class="btn btn-primary" @click="addApp">
+                                        <i class="fas fa-plus"></i>
+                                        Add App
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-3">
+                                    <div v-for="app in apps" :key="app.id" class="card" style="margin-bottom: 0;">
+                                        <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+                                            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--primary), #60a5fa); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.25rem; margin-right: 1rem;">
+                                                <i :class="app.icon"></i>
+                                            </div>
+                                            <div>
+                                                <div style="font-weight: 600; margin-bottom: 0.25rem;">{{ app.name }}</div>
+                                                <div style="font-size: 12px; color: var(--text-light);">Version {{ app.version }}</div>
+                                            </div>
+                                        </div>
+                                        <p style="color: var(--text-light); font-size: 14px; margin-bottom: 1rem;">{{ app.description }}</p>
+                                        <div style="display: flex; gap: 0.25rem; margin-bottom: 1rem;">
+                                            <span v-for="platform in app.platforms" :key="platform" class="platform-badge" :class="'platform-' + platform.toLowerCase()">
+                                                {{ platform }}
+                                            </span>
+                                        </div>
+                                        <button class="btn btn-primary" @click="installApp(app)" :disabled="app.installing" style="width: 100%;">
+                                            <i class="fas fa-download" :class="{ loading: app.installing }"></i>
+                                            {{ app.installing ? 'Installing...' : 'Install' }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Other Pages -->
+                        <div v-if="!['dashboard', 'devices', 'apps'].includes(currentPage)" class="fade-in">
+                            <div class="card" style="text-align: center; padding: 4rem;">
+                                <i class="fas fa-construction" style="font-size: 4rem; color: var(--warning); margin-bottom: 1rem;"></i>
+                                <h2 style="margin-bottom: 1rem;">{{ pageTitle }} - Coming Soon</h2>
+                                <p style="color: var(--text-light); margin-bottom: 2rem;">This feature is under development.</p>
+                                <button class="btn btn-primary" @click="setPage('dashboard')">
+                                    <i class="fas fa-arrow-left"></i>
+                                    Back to Dashboard
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Enrollment Modal -->
+            <div v-if="showEnrollModal" class="modal" @click="showEnrollModal = false">
+                <div class="modal-content" @click.stop>
+                    <div class="modal-header">
+                        <h2 class="modal-title">Enroll New Device</h2>
+                        <button class="close-btn" @click="showEnrollModal = false">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <form @submit.prevent="enrollDevice">
+                        <div class="form-group">
+                            <label class="form-label">Device Name</label>
+                            <input type="text" class="form-input" v-model="newDevice.name" placeholder="Enter device name" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Platform</label>
+                            <select class="form-select" v-model="newDevice.platform" required>
+                                <option value="">Select Platform</option>
+                                <option value="Windows">Windows</option>
+                                <option value="macOS">macOS</option>
+                                <option value="Linux">Linux</option>
+                                <option value="iOS">iOS</option>
+                                <option value="Android">Android</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">User Email</label>
+                            <input type="email" class="form-input" v-model="newDevice.userEmail" placeholder="user@company.com" required>
+                        </div>
+                        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                            <button type="button" class="btn btn-secondary" @click="showEnrollModal = false">Cancel</button>
+                            <button type="submit" class="btn btn-primary" :disabled="enrolling">
+                                <i class="fas fa-plus" :class="{ loading: enrolling }"></i>
+                                {{ enrolling ? 'Enrolling...' : 'Enroll Device' }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Notifications -->
+            <div v-for="notification in notifications" :key="notification.id" class="alert" :class="'alert-' + notification.type">
+                <i :class="notification.icon"></i>
+                <span>{{ notification.message }}</span>
+                <button @click="removeNotification(notification.id)" style="margin-left: auto; background: none; border: none; cursor: pointer;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+
+        <script>
+            const { createApp } = Vue;
+
+            createApp({
+                data() {
+                    return {
+                        currentPage: 'dashboard',
+                        sidebarOpen: false,
+                        searchQuery: '',
+                        showEnrollModal: false,
+                        loading: false,
+                        enrolling: false,
+                        
+                        stats: {
+                            totalDevices: 247,
+                            onlineDevices: 189,
+                            totalApps: 56,
+                            complianceRate: 94
+                        },
+                        
+                        newDevice: {
+                            name: '',
+                            platform: '',
+                            userEmail: ''
+                        },
+                        
+                        notifications: [],
+                        
+                        devices: [
+                            {
+                                id: 1,
+                                name: 'MacBook-Pro-15',
+                                platform: 'macOS',
+                                user: 'john.doe@company.com',
+                                status: 'online',
+                                lastSeen: '2 min ago',
+                                osVersion: 'macOS 14.2',
+                                ipAddress: '192.168.1.105',
+                                syncing: false
+                            },
+                            {
+                                id: 2,
+                                name: 'DESKTOP-ABC123',
+                                platform: 'Windows',
+                                user: 'sarah.smith@company.com',
+                                status: 'online',
+                                lastSeen: '5 min ago',
+                                osVersion: 'Windows 11',
+                                ipAddress: '192.168.1.110',
+                                syncing: false
+                            },
+                            {
+                                id: 3,
+                                name: 'Ubuntu-Dev-01',
+                                platform: 'Linux',
+                                user: 'mike.wilson@company.com',
+                                status: 'warning',
+                                lastSeen: '15 min ago',
+                                osVersion: 'Ubuntu 22.04',
+                                ipAddress: '192.168.1.115',
+                                syncing: false
+                            }
+                        ],
+                        
+                        apps: [
+                            {
+                                id: 1,
+                                name: 'Google Chrome',
+                                version: '120.0.6099',
+                                description: 'Fast, secure web browser from Google.',
+                                platforms: ['Windows', 'macOS', 'Linux'],
+                                icon: 'fab fa-chrome',
+                                installing: false
+                            },
+                            {
+                                id: 2,
+                                name: 'Visual Studio Code',
+                                version: '1.85.1',
+                                description: 'Lightweight code editor with powerful features.',
+                                platforms: ['Windows', 'macOS', 'Linux'],
+                                icon: 'fas fa-code',
+                                installing: false
+                            },
+                            {
+                                id: 3,
+                                name: 'Slack',
+                                version: '4.35.0',
+                                description: 'Team collaboration and messaging.',
+                                platforms: ['Windows', 'macOS'],
+                                icon: 'fab fa-slack',
+                                installing: false
+                            }
+                        ]
+                    }
+                },
+                
+                computed: {
+                    pageTitle() {
+                        const titles = {
+                            dashboard: 'Dashboard',
+                            devices: 'Device Management',
+                            enrollment: 'Device Enrollment',
+                            apps: 'Application Store',
+                            policies: 'Policy Management',
+                            compliance: 'Compliance Center'
+                        };
+                        return titles[this.currentPage] || 'OpenDirectory';
+                    },
+                    
+                    recentDevices() {
+                        return this.devices.slice(0, 3);
+                    },
+                    
+                    filteredDevices() {
+                        if (!this.searchQuery) return this.devices;
+                        return this.devices.filter(device => 
+                            device.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                            device.user.toLowerCase().includes(this.searchQuery.toLowerCase())
+                        );
+                    },
+                    
+                    totalApps() {
+                        return this.apps.length;
+                    }
+                },
+                
+                methods: {
+                    setPage(page) {
+                        this.currentPage = page;
+                        this.sidebarOpen = false;
+                    },
+                    
+                    refreshDevices() {
+                        this.loading = true;
+                        setTimeout(() => {
+                            this.loading = false;
+                            this.showNotification('success', 'Devices refreshed successfully');
+                        }, 2000);
+                    },
+                    
+                    enrollDevice() {
+                        this.enrolling = true;
+                        setTimeout(() => {
+                            const newId = Math.max(...this.devices.map(d => d.id)) + 1;
+                            this.devices.unshift({
+                                id: newId,
+                                name: this.newDevice.name,
+                                platform: this.newDevice.platform,
+                                user: this.newDevice.userEmail,
+                                status: 'online',
+                                lastSeen: 'Just now',
+                                osVersion: 'Latest',
+                                ipAddress: `192.168.1.${100 + newId}`,
+                                syncing: false
+                            });
+                            
+                            this.newDevice = { name: '', platform: '', userEmail: '' };
+                            this.enrolling = false;
+                            this.showEnrollModal = false;
+                            this.stats.totalDevices++;
+                            this.stats.onlineDevices++;
+                            this.showNotification('success', 'Device enrolled successfully');
+                        }, 2000);
+                    },
+                    
+                    viewDevice(device) {
+                        this.showNotification('info', `Viewing ${device.name}`);
+                    },
+                    
+                    manageDevice(device) {
+                        this.showNotification('info', `Managing ${device.name}`);
+                    },
+                    
+                    syncDevice(device) {
+                        device.syncing = true;
+                        setTimeout(() => {
+                            device.syncing = false;
+                            device.lastSeen = 'Just now';
+                            this.showNotification('success', `${device.name} synced`);
+                        }, 3000);
+                    },
+                    
+                    installApp(app) {
+                        app.installing = true;
+                        setTimeout(() => {
+                            app.installing = false;
+                            this.showNotification('success', `${app.name} installed`);
+                        }, 3000);
+                    },
+                    
+                    deployApp() {
+                        this.showNotification('info', 'Opening app deployment wizard');
+                    },
+                    
+                    runCompliance() {
+                        this.showNotification('info', 'Running compliance scan...');
+                    },
+                    
+                    generateReport() {
+                        this.showNotification('info', 'Generating report...');
+                    },
+                    
+                    addApp() {
+                        this.showNotification('info', 'Opening add application form');
+                    },
+                    
+                    showNotification(type, message, icon = null) {
+                        const id = Date.now();
+                        const icons = {
+                            success: 'fas fa-check-circle',
+                            error: 'fas fa-exclamation-circle',
+                            warning: 'fas fa-exclamation-triangle',
+                            info: 'fas fa-info-circle'
+                        };
+                        
+                        const notification = {
+                            id,
+                            type,
+                            message,
+                            icon: icon || icons[type]
+                        };
+                        
+                        this.notifications.push(notification);
+                        
+                        setTimeout(() => {
+                            this.removeNotification(id);
+                        }, 5000);
+                    },
+                    
+                    removeNotification(id) {
+                        this.notifications = this.notifications.filter(n => n.id !== id);
+                    }
+                },
+                
+                mounted() {
+                    this.showNotification('success', 'Welcome to OpenDirectory MDM!');
+                    
+                    // Auto-refresh device status
+                    setInterval(() => {
+                        this.devices.forEach(device => {
+                            if (Math.random() > 0.95 && device.status === 'online') {
+                                device.lastSeen = 'Just now';
+                            }
+                        });
+                    }, 30000);
+                }
+            }).mount('#app');
+        </script>
+    </body>
+    </html>
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: modern-mdm-ui
+  namespace: opendirectory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: modern-mdm-ui
+  template:
+    metadata:
+      labels:
+        app: modern-mdm-ui
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: ui-files
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: ui-files
+        configMap:
+          name: modern-mdm-ui
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: modern-mdm-ui
+  namespace: opendirectory
+spec:
+  selector:
+    app: modern-mdm-ui
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30056
+  type: NodePort
