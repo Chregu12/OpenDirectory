@@ -1,7 +1,7 @@
 # OpenDirectory Makefile
 # Simplifies common development tasks
 
-.PHONY: help install dev build test deploy clean
+.PHONY: help install dev build test deploy clean services-list services-start services-health
 
 # Colors for terminal output
 RED := \033[0;31m
@@ -16,11 +16,10 @@ help: ## Show this help message
 
 install: ## Install all dependencies
 	@echo "$(GREEN)Installing dependencies...$(NC)"
-	@npm install --prefix services/identity-service
-	@npm install --prefix services/auth-service
-	@npm install --prefix services/device-service
-	@npm install --prefix services/policy-service
+	@npm install --prefix services/api-backend
+	@npm install --prefix services/integration-service
 	@npm install --prefix frontend/web-app
+	@./services/service-manager.sh install
 	@echo "$(GREEN)Dependencies installed!$(NC)"
 
 dev: ## Start development environment
@@ -48,6 +47,10 @@ dev-full: ## Start full development stack
 
 build: ## Build all services
 	@echo "$(GREEN)Building all services...$(NC)"
+	@cd services/api-backend && npm run build
+	@cd services/integration-service && npm run build
+	@cd frontend/web-app && npm run build
+	@echo "$(GREEN)Build complete!$(NC)"
 	docker-compose build --parallel
 	@echo "$(GREEN)Build complete!$(NC)"
 
@@ -190,3 +193,15 @@ release: ## Create a new release (usage: make release VERSION=1.0.0)
 	@git tag -a v$(VERSION) -m "Release v$(VERSION)"
 	@echo "$(GREEN)Release v$(VERSION) created!$(NC)"
 	@echo "$(YELLOW)Don't forget to push: git push origin main --tags$(NC)"
+# Service management commands
+services-list: ## List all services
+	@./services/service-manager.sh list
+
+services-start: ## Start all services
+	@./services/service-manager.sh start
+
+services-health: ## Check service health
+	@./services/service-manager.sh health
+
+services-count: ## Count services
+	@./services/service-manager.sh count
