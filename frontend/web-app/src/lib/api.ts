@@ -161,8 +161,8 @@ export const networkApi = {
   getNetworkAlerts: (severity?: string, acknowledged?: boolean) =>
     api.get('/api/network/monitoring/alerts', { params: { severity, acknowledged } }),
   
-  getBandwidthUsage: (interface?: string, period?: string) =>
-    api.get('/api/network/monitoring/bandwidth', { params: { interface, period } }),
+  getBandwidthUsage: (networkInterface?: string, period?: string) =>
+    api.get('/api/network/monitoring/bandwidth', { params: { interface: networkInterface, period } }),
 };
 
 // Device Management API

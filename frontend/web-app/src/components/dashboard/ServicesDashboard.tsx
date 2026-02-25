@@ -9,7 +9,7 @@ import {
   PrinterIcon,
   ComputerDesktopIcon,
   ChartBarIcon,
-  BackupIcon,
+  ArchiveBoxIcon,
   PlayIcon,
   CheckCircleIcon,
   XCircleIcon,
