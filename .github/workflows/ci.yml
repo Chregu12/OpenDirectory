@@ -26,10 +26,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci --ignore-scripts
+          else
+            npm install --ignore-scripts
+          fi
       
       - name: Check code formatting
         run: |
@@ -54,10 +58,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci --ignore-scripts
+          else
+            npm install --ignore-scripts
+          fi
       
       - name: Check service structure
         run: |
@@ -90,10 +98,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci --ignore-scripts
+          else
+            npm install --ignore-scripts
+          fi
       
       - name: Run npm audit
         run: |

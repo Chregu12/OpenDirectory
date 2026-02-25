@@ -105,7 +105,7 @@ temp/
 *~
 
 # Package manager files
-package-lock.json
+# Note: package-lock.json is included for reproducible builds
 yarn.lock
 pnpm-lock.yaml
 .pnp
