@@ -14,7 +14,6 @@ on:
 permissions:
   contents: write
   packages: write
-  id-token: write
 
 jobs:
   # ===================
@@ -23,12 +22,9 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      upload_url: ${{ steps.release.outputs.upload_url }}
     
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
@@ -42,188 +38,42 @@ jobs:
           fi
       
       - name: Generate changelog
-        id: changelog
         run: |
-          git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD > CHANGELOG.txt
+          echo "# Release Notes" > RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "## Changes in this release:" >> RELEASE_NOTES.md
+          git log --pretty=format:"- %s" HEAD~10..HEAD >> RELEASE_NOTES.md || echo "- Initial release" >> RELEASE_NOTES.md
       
       - name: Create Release
-        id: release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          release_name: OpenDirectory ${{ steps.version.outputs.version }}
-          body_path: CHANGELOG.txt
+          name: OpenDirectory ${{ steps.version.outputs.version }}
+          body_path: RELEASE_NOTES.md
           draft: false
           prerelease: false
-
-  # ===================
-  # Build Platform Binaries
-  # ===================
-  build-binaries:
-    name: Build Binaries
-    needs: release
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            arch: x64
-          - os: windows-latest
-            platform: windows
-            arch: x64
-          - os: macos-latest
-            platform: darwin
-            arch: x64
-          - os: macos-latest
-            platform: darwin
-            arch: arm64
-    
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Build agent binary
-        run: |
-          cd deployment-agents/${{ matrix.platform }}-agent
-          npm ci
-          npm run build:${{ matrix.arch }}
-      
-      - name: Create archive
-        run: |
-          if [ "${{ matrix.platform }}" == "windows" ]; then
-            7z a opendirectory-agent-${{ matrix.platform }}-${{ matrix.arch }}.zip ./dist/*
-          else
-            tar -czf opendirectory-agent-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz -C dist .
-          fi
-        shell: bash
-      
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
-          asset_path: ./opendirectory-agent-${{ matrix.platform }}-${{ matrix.arch }}.${{ matrix.platform == 'windows' && 'zip' || 'tar.gz' }}
-          asset_name: opendirectory-agent-${{ matrix.platform }}-${{ matrix.arch }}.${{ matrix.platform == 'windows' && 'zip' || 'tar.gz' }}
-          asset_content_type: application/${{ matrix.platform == 'windows' && 'zip' || 'gzip' }}
 
   # ===================
-  # Build Docker Images
+  # Create Source Archive
   # ===================
-  docker:
-    name: Build and Push Docker Images
+  archive:
+    name: Create Source Archive
+    runs-on: ubuntu-latest
     needs: release
-    runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+      - name: Create source archive
+        run: |
+          # Remove .git directory for cleaner archive
+          rm -rf .git
+          tar -czf opendirectory-source.tar.gz .
       
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+      - name: Upload source archive
+        uses: softprops/action-gh-release@v1
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-      
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build and push multi-platform images
-        run: |
-          VERSION=${{ needs.release.outputs.version }}
-          
-          # Build all services
-          for SERVICE in api-gateway api-backend identity-service auth-service device-service policy-service; do
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              --tag opendirectory/$SERVICE:$VERSION \
-              --tag opendirectory/$SERVICE:latest \
-              --tag ghcr.io/${{ github.repository }}/$SERVICE:$VERSION \
-              --tag ghcr.io/${{ github.repository }}/$SERVICE:latest \
-              --push \
-              ./services/core/$SERVICE
-          done
-
-  # ===================
-  # Deploy Helm Chart
-  # ===================
-  helm:
-    name: Package and Publish Helm Chart
-    needs: [release, docker]
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Install Helm
-        uses: azure/setup-helm@v3
-      
-      - name: Update Chart version
-        run: |
-          VERSION=${{ needs.release.outputs.version }}
-          sed -i "s/version: .*/version: ${VERSION#v}/" ./infrastructure/helm/opendirectory/Chart.yaml
-          sed -i "s/appVersion: .*/appVersion: ${VERSION#v}/" ./infrastructure/helm/opendirectory/Chart.yaml
-      
-      - name: Package Helm chart
-        run: |
-          helm package ./infrastructure/helm/opendirectory
-      
-      - name: Upload Helm chart
-        uses: actions/upload-release-asset@v1
+          files: opendirectory-source.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
-          asset_path: ./opendirectory-*.tgz
-          asset_name: opendirectory-helm-${{ needs.release.outputs.version }}.tgz
-          asset_content_type: application/gzip
-
-  # ===================
-  # Update Documentation
-  # ===================
-  docs:
-    name: Update Documentation
-    needs: release
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Update version in docs
-        run: |
-          VERSION=${{ needs.release.outputs.version }}
-          find ./docs -type f -name "*.md" -exec sed -i "s/version: .*/version: $VERSION/" {} \;
-      
-      - name: Generate release notes
-        run: |
-          echo "# Release Notes for ${{ needs.release.outputs.version }}" > RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          cat CHANGELOG.txt >> RELEASE_NOTES.md
-      
-      - name: Commit documentation updates
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add docs/ RELEASE_NOTES.md
-          git commit -m "docs: update for release ${{ needs.release.outputs.version }}"
-          git push
