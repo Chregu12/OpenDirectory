@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  license-management:
+    build: .
+    container_name: opendirectory-license-management
+    ports:
+      - "${LICENSE_SERVICE_PORT:-3018}:${LICENSE_SERVICE_PORT:-3018}"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - LICENSE_SERVICE_PORT=${LICENSE_SERVICE_PORT:-3018}
+      - DATABASE_URL=${LICENSE_DATABASE_URL:-postgresql://localhost/opendirectory_licenses}
+      - MOBILE_SERVICE_URL=${MOBILE_SERVICE_URL:-http://mobile-management:3013}
+      - MOBILE_API_KEY=${MOBILE_API_KEY:-}
+      - MOBILE_SYNC_INTERVAL=${MOBILE_SYNC_INTERVAL:-300000}
+      - ALERTING_ENABLED=${ALERTING_ENABLED:-true}
+      - SMTP_HOST=${SMTP_HOST:-localhost}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - AUTO_REMEDIATION=${AUTO_REMEDIATION:-false}
+      - UTILIZATION_THRESHOLD=${UTILIZATION_THRESHOLD:-85}
+      - EXPIRY_WARNING_DAYS=${EXPIRY_WARNING_DAYS:-30}
+      - OVERUSAGE_THRESHOLD=${OVERUSAGE_THRESHOLD:-5}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    volumes:
+      - license-data:/app/data
+      - license-logs:/app/logs
+    networks:
+      - opendirectory-network
+    depends_on:
+      - license-db
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${LICENSE_SERVICE_PORT:-3018}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  license-db:
+    image: postgres:15-alpine
+    container_name: opendirectory-license-db
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-opendirectory_licenses}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - license-db-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - opendirectory-network
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-opendirectory_licenses}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: opendirectory-license-redis
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - license-redis-data:/data
+    networks:
+      - opendirectory-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  opendirectory-network:
+    external: true
+
+volumes:
+  license-data:
+    driver: local
+  license-logs:
+    driver: local
+  license-db-data:
+    driver: local
+  license-redis-data:
+    driver: local

@@ -1,0 +1,137 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opendirectory-api-gateway
+    ports:
+      - "3000:3000"     # HTTP API Gateway
+      - "3001:3001"     # WebSocket Gateway
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - API_GATEWAY_PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - DISCOVERY_ENABLED=true
+      - DISCOVERY_INTERVAL=30000
+      - HEALTH_CHECK_INTERVAL=15000
+      - RATE_LIMIT_MAX=1000
+      - RATE_LIMIT_WINDOW=900000
+    depends_on:
+      - redis
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+    networks:
+      - opendirectory-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: opendirectory-redis
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: |
+      sh -c '
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+        else
+          redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+        fi
+      '
+    volumes:
+      - redis-data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - opendirectory-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Service Discovery Sidecar (for external services)
+  service-registrar:
+    build:
+      context: ./registrar
+      dockerfile: Dockerfile
+    container_name: opendirectory-registrar
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - GATEWAY_HOST=api-gateway
+      - GATEWAY_PORT=3000
+      - DISCOVERY_TARGETS=${DISCOVERY_TARGETS:-localhost:3001,localhost:3002,localhost:3003}
+    depends_on:
+      - redis
+      - api-gateway
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - opendirectory-network
+    restart: unless-stopped
+
+  # Monitoring and Metrics
+  gateway-monitor:
+    image: prom/prometheus:latest
+    container_name: opendirectory-gateway-monitor
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - opendirectory-network
+    restart: unless-stopped
+    depends_on:
+      - api-gateway
+
+  # Log aggregation
+  log-aggregator:
+    image: fluent/fluentd:edge-debian
+    container_name: opendirectory-log-aggregator
+    volumes:
+      - ./logs:/fluentd/log
+      - ./monitoring/fluentd.conf:/fluentd/etc/fluent.conf
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+    networks:
+      - opendirectory-network
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+
+networks:
+  opendirectory-network:
+    driver: bridge
+    name: opendirectory
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

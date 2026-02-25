@@ -1,0 +1,86 @@
+{
+  "name": "@opendirectory/update-management",
+  "version": "1.0.0",
+  "description": "OpenDirectory Update Management Service - Comprehensive update management and remote device actions",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "docker:build": "docker build -t opendirectory/update-management .",
+    "docker:run": "docker run -p 3000:3000 opendirectory/update-management",
+    "health-check": "curl -f http://localhost:3000/health || exit 1"
+  },
+  "keywords": [
+    "opendirectory",
+    "update-management",
+    "device-management",
+    "remote-actions",
+    "patch-management",
+    "mam",
+    "mobile-application-management",
+    "terms-of-use",
+    "multi-tenant",
+    "windows-update",
+    "macos-update",
+    "linux-update",
+    "deployment-rings",
+    "enterprise"
+  ],
+  "author": "OpenDirectory Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opendirectory/services.git",
+    "directory": "services/core/update-management"
+  },
+  "bugs": {
+    "url": "https://github.com/opendirectory/services/issues"
+  },
+  "homepage": "https://github.com/opendirectory/services/tree/main/services/core/update-management#readme",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.0.0",
+    "compression": "^1.7.4",
+    "express-rate-limit": "^6.8.1",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.1",
+    "bcrypt": "^5.1.0",
+    "uuid": "^9.0.0",
+    "winston": "^3.10.0",
+    "winston-daily-rotate-file": "^4.7.1",
+    "node-cron": "^3.0.2",
+    "axios": "^1.4.0",
+    "lodash": "^4.17.21",
+    "moment": "^2.29.4",
+    "yaml": "^2.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "jest": "^29.6.1",
+    "supertest": "^6.3.3",
+    "eslint": "^8.44.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-n": "^16.0.1",
+    "eslint-plugin-promise": "^6.1.1"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "os": [
+    "linux",
+    "darwin",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

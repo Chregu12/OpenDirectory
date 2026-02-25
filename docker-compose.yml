@@ -11,7 +11,7 @@ services:
     environment:
       POSTGRES_USER: opendirectory
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
-      POSTGRES_MULTIPLE_DATABASES: identity,auth,policy,audit,integration,printers
+      POSTGRES_MULTIPLE_DATABASES: identity,auth,policy,audit,integration,printers,network
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
@@ -184,12 +184,36 @@ services:
       - /app/node_modules
 
   # ===================
-  # Main API Backend
+  # Platform Services
   # ===================
   
+  api-gateway:
+    build:
+      context: ./services/platform/api-gateway
+      dockerfile: Dockerfile
+    container_name: od-api-gateway
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - API_GATEWAY_PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+      - JWT_SECRET=${JWT_SECRET:-changeme}
+      - LOG_LEVEL=info
+    ports:
+      - "3000:3000"
+      - "3001:3001"  # WebSocket
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+    volumes:
+      - ./services/platform/api-gateway:/app
+      - /app/node_modules
+
   api-backend:
     build:
-      context: ./services/api-backend
+      context: ./services/platform/api-backend
       dockerfile: Dockerfile
     container_name: od-api-backend
     environment:
@@ -210,36 +234,33 @@ services:
       - auth-service
       - device-service
       - policy-service
+      - network-infrastructure
     volumes:
-      - ./services/api-backend:/app
+      - ./services/platform/api-backend:/app
       - /app/node_modules
 
-  # ===================
-  # Integration Service
-  # ===================
-  
   integration-service:
     build:
-      context: ./services/integration-service
+      context: ./services/platform/integration-service
       dockerfile: Dockerfile
     container_name: od-integration-service
     environment:
       - NODE_ENV=${NODE_ENV:-development}
-      - PORT=3005
+      - PORT=4000
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/integration
       - LLDAP_URL=http://lldap:17170
       - GRAFANA_URL=${GRAFANA_URL:-http://grafana:3000}
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://prometheus:9090}
       - VAULT_URL=${VAULT_URL:-http://vault:8200}
     ports:
-      - "3005:3005"
+      - "4000:4000"
     networks:
       - opendirectory
     depends_on:
       - postgres
       - lldap
     volumes:
-      - ./services/integration-service:/app
+      - ./services/platform/integration-service:/app
       - /app/node_modules
 
   # ===================
@@ -280,6 +301,58 @@ services:
       - /dev/bus/usb:/dev/bus/usb  # USB printers/scanners
 
   # ===================
+  # Network Infrastructure Service
+  # ===================
+  
+  network-infrastructure:
+    build:
+      context: ./services/core/network-infrastructure
+      dockerfile: Dockerfile
+    container_name: od-network-infrastructure
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3007
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/network
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      - ENABLE_DNS_SERVER=true
+      - ENABLE_DHCP_SERVER=true
+      - ENABLE_FILE_SHARES=true
+      - ENABLE_NETWORK_DISCOVERY=true
+      - ENABLE_NETWORK_MONITORING=true
+      - BIND_CONFIG_PATH=/etc/bind
+      - DHCP_CONFIG_PATH=/etc/dhcp
+      - SAMBA_CONFIG_PATH=/etc/samba
+    ports:
+      - "3007:3007"
+      - "53:53/tcp"     # DNS
+      - "53:53/udp"     # DNS
+      - "67:67/udp"     # DHCP
+      - "68:68/udp"     # DHCP
+      - "139:139"       # SMB
+      - "445:445"       # SMB
+      - "2049:2049"     # NFS
+    networks:
+      - opendirectory
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./services/core/network-infrastructure:/app
+      - /app/node_modules
+      - network-dns-config:/etc/bind
+      - network-dhcp-config:/etc/dhcp
+      - network-samba-config:/etc/samba
+      - network-shares:/srv/shares
+      - network-logs:/var/log/network
+    privileged: true  # Required for network service binding
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+
+  # ===================
   # Frontend
   # ===================
   
@@ -302,30 +375,6 @@ services:
       - /app/node_modules
       - /app/.next
 
-  # ===================
-  # API Gateway (Traefik)
-  # ===================
-  
-  traefik:
-    image: traefik:v3.0
-    container_name: od-traefik
-    command:
-      - --api.insecure=true
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-    ports:
-      - "80:80"
-      - "443:443"
-      - "8090:8080" # Traefik dashboard
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik-certs:/letsencrypt
-    networks:
-      - opendirectory
-    labels:
-      - "traefik.enable=true"
 
   # ===================
   # Monitoring (Optional)
@@ -378,8 +427,12 @@ volumes:
   lldap-data:
   grafana-data:
   prometheus-data:
-  traefik-certs:
   printer-spool:
   printer-cache:
   printer-config:
   scanned-documents:
+  network-dns-config:
+  network-dhcp-config:
+  network-samba-config:
+  network-shares:
+  network-logs:

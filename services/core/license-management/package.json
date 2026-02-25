@@ -1,0 +1,59 @@
+{
+  "name": "@opendirectory/license-management-service",
+  "version": "1.0.0",
+  "description": "OpenDirectory License Management Service - Software Asset Management, Compliance, Optimization",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4",
+    "express-rate-limit": "^7.1.5",
+    "ws": "^8.14.2",
+    "axios": "^1.6.2",
+    "uuid": "^9.0.1",
+    "crypto": "^1.0.1",
+    "node-cron": "^3.0.3",
+    "joi": "^17.11.0",
+    "winston": "^3.11.0",
+    "dotenv": "^16.3.1",
+    "moment": "^2.29.4",
+    "moment-timezone": "^0.5.43",
+    "semver": "^7.5.4",
+    "fast-csv": "^4.3.6",
+    "xlsx": "^0.18.5",
+    "pdf-lib": "^1.17.1",
+    "nodemailer": "^6.9.7",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "mime-types": "^2.1.35",
+    "archiver": "^6.0.1",
+    "extract-zip": "^2.0.1",
+    "registry-js": "^1.15.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "eslint": "^8.54.0",
+    "supertest": "^6.3.3"
+  },
+  "keywords": [
+    "opendirectory",
+    "license-management",
+    "software-asset-management",
+    "compliance",
+    "optimization",
+    "tracking"
+  ],
+  "author": "OpenDirectory Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

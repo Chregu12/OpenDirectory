@@ -1,0 +1,43 @@
+{
+  "name": "@opendirectory/configuration-service",
+  "version": "1.0.0",
+  "description": "OpenDirectory Central Configuration Service - Manages module settings and feature flags",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0",
+    "yaml": "^2.3.4",
+    "redis": "^4.6.10",
+    "pg": "^8.11.3",
+    "winston": "^3.11.0",
+    "dotenv": "^16.3.1",
+    "chokidar": "^3.5.3",
+    "ws": "^8.14.2",
+    "eventemitter3": "^5.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "eslint": "^8.54.0",
+    "supertest": "^6.3.3"
+  },
+  "keywords": [
+    "opendirectory",
+    "configuration",
+    "settings",
+    "feature-flags"
+  ],
+  "author": "OpenDirectory Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

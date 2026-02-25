@@ -9,13 +9,18 @@ import {
   PresentationChartLineIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  WifiIcon,
+  CpuChipIcon,
+  RectangleGroupIcon
 } from '@heroicons/react/24/outline';
 
 import LLDAPIntegration from '@/components/integrations/LLDAPIntegration';
 import GrafanaIntegration from '@/components/integrations/GrafanaIntegration';
 import PrometheusIntegration from '@/components/integrations/PrometheusIntegration';
 import VaultIntegration from '@/components/integrations/VaultIntegration';
+import NetworkInfrastructureIntegration from '@/components/integrations/NetworkInfrastructureIntegration';
+import ServicesDashboard from '@/components/dashboard/ServicesDashboard';
 import { healthApi } from '@/lib/api';
 
 interface ServiceHealth {
@@ -60,7 +65,9 @@ export default function Dashboard() {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: PresentationChartLineIcon },
+    { id: 'services', label: 'Services', icon: CpuChipIcon },
     { id: 'users', label: 'User Directory', icon: UserGroupIcon },
+    { id: 'network', label: 'Network Infrastructure', icon: WifiIcon },
     { id: 'monitoring', label: 'Monitoring', icon: ChartBarIcon },
     { id: 'metrics', label: 'Metrics', icon: ChartBarIcon },
     { id: 'secrets', label: 'Secrets', icon: ShieldCheckIcon },
@@ -133,7 +140,20 @@ export default function Dashboard() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mt-6">
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <CpuChipIcon className="h-8 w-8 text-purple-600 mr-3" />
+                    <div>
+                      <p className="text-sm font-medium text-purple-600">Services</p>
+                      <p className="text-lg font-bold text-purple-900">
+                        {serviceHealth.filter(s => s.status === 'healthy').length}/{serviceHealth.length}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-purple-700 mt-2">Module management</p>
+                </div>
+
                 <div className="bg-blue-50 rounded-lg p-4">
                   <div className="flex items-center">
                     <UserGroupIcon className="h-8 w-8 text-blue-600 mr-3" />
@@ -165,6 +185,17 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <p className="text-sm text-red-700 mt-2">System metrics</p>
+                </div>
+
+                <div className="bg-green-50 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <WifiIcon className="h-8 w-8 text-green-600 mr-3" />
+                    <div>
+                      <p className="text-sm font-medium text-green-600">Network</p>
+                      <p className="text-lg font-bold text-green-900">Infrastructure</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-green-700 mt-2">DNS, DHCP, File Shares</p>
                 </div>
 
                 <div className="bg-yellow-50 rounded-lg p-4">
@@ -219,13 +250,34 @@ export default function Dashboard() {
             {/* Quick Actions */}
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                <a
+                  href="/unifi"
+                  className="flex items-center justify-center px-4 py-3 border border-blue-300 rounded-md shadow-sm bg-blue-50 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                >
+                  <RectangleGroupIcon className="h-5 w-5 mr-2" />
+                  Modern UI
+                </a>
+                <button
+                  onClick={() => setActiveTab('services')}
+                  className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <CpuChipIcon className="h-5 w-5 mr-2" />
+                  Manage Services
+                </button>
                 <button
                   onClick={() => setActiveTab('users')}
                   className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   <UserGroupIcon className="h-5 w-5 mr-2" />
                   Manage Users
+                </button>
+                <button
+                  onClick={() => setActiveTab('network')}
+                  className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <WifiIcon className="h-5 w-5 mr-2" />
+                  Network Setup
                 </button>
                 <button
                   onClick={() => setActiveTab('monitoring')}
@@ -253,7 +305,9 @@ export default function Dashboard() {
           </div>
         )}
 
+        {activeTab === 'services' && <ServicesDashboard />}
         {activeTab === 'users' && <LLDAPIntegration />}
+        {activeTab === 'network' && <NetworkInfrastructureIntegration />}
         {activeTab === 'monitoring' && <GrafanaIntegration />}
         {activeTab === 'metrics' && <PrometheusIntegration />}
         {activeTab === 'secrets' && <VaultIntegration />}

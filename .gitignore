@@ -1,7 +1,7 @@
 # Environment variables and secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.env
 secrets/
 *.key
@@ -9,18 +9,25 @@ secrets/
 *.crt
 *.p12
 *.pfx
+*.jks
+*.keystore
 
 # Private/Personal data
 private/
 personal/
 credentials/
 config/secrets/
+config/local/
+*.secret
+*.password
 
 # Dependencies
 node_modules/
 */node_modules/
 vendor/
 bower_components/
+jspm_packages/
+web_modules/
 
 # Build outputs
 dist/
@@ -30,6 +37,14 @@ out/
 .next/
 .nuxt/
 .cache/
+.parcel-cache/
+.turbo/
+.vuepress/dist
+.docusaurus
+.serverless/
+.fusebox/
+.dynamodb/
+.terraform/
 
 # IDE and editor files
 .vscode/
@@ -43,6 +58,13 @@ Thumbs.db
 .project
 .classpath
 .settings/
+.vs/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.history/
 
 # Logs
 logs/
@@ -52,12 +74,23 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 .npm/
+pids/
+*.pid
+*.seed
+*.pid.lock
 
 # Testing
 coverage/
 *.lcov
 .nyc_output/
 test-results/
+junit.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Temporary files
 tmp/
@@ -68,6 +101,8 @@ temp/
 *.bak
 *.backup
 *.old
+*.orig
+*~
 
 # Package manager files
 package-lock.json
@@ -75,57 +110,75 @@ yarn.lock
 pnpm-lock.yaml
 .pnp
 .pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
 
 # Database files
 *.sqlite
 *.sqlite3
 *.db
 data/
+db/
+database/
+*.sql
+!migrations/*.sql
+!schema/*.sql
 
-# Claude specific
-.claude/
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.venv/
-
-# Docker volumes
+# Docker
+docker-compose.override.yml
+.dockerignore
+*.tar
 volumes/
 docker-volumes/
 
-# Kubernetes secrets
+# Kubernetes
 *-secret.yaml
 *-secrets.yaml
 secrets.yaml
+kubeconfig
+*.kubeconfig
 
-# Certificates and keys
+# Certificates and keys (additional)
 ssl/
 tls/
 certs/
 *.cert
+ca/
+*.ca
 
 # Backup files
 backups/
 *.dump
 *.sql.gz
+*.backup
+*.bck
+*.old
 
 # OS specific
 .Spotlight-V100
 .Trashes
 ehthumbs.db
 Desktop.ini
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
 
 # Archive files
 *.tar.gz
 *.zip
 *.rar
 *.7z
+*.gz
+*.bz2
+*.xz
 
 # Large binary files
 *.exe
@@ -136,3 +189,87 @@ Desktop.ini
 *.pkg
 *.deb
 *.rpm
+*.msi
+*.app
+*.war
+*.ear
+*.jar
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+.venv/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Ruby
+*.gem
+.bundle/
+.ruby-version
+.ruby-gemset
+
+# Go
+*.exe
+*.exe~
+*.test
+*.out
+go.work
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+
+# Java
+*.class
+*.war
+*.ear
+*.jar
+hs_err_pid*
+.gradle/
+gradle-app.setting
+
+# PHP
+composer.phar
+/vendor/
+.phpunit.result.cache
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+terraform.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ansible
+*.retry
+ansible.cfg
+
+# CloudFormation
+packaged.yaml
+samconfig.toml
+
+# Custom OpenDirectory specific
+/services/*/node_modules/
+/services/*/dist/
+/services/*/build/
+/services/*/.env
+/frontend/*/node_modules/
+/frontend/*/dist/
+/frontend/*/build/
+/clients/*/bin/
+/clients/*/obj/
+deployment-keys/
+production-configs/
+customer-data/
+audit-logs/
+*.audit
+*.compliance

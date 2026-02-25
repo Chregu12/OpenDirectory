@@ -6,14 +6,23 @@ Consolidated service architecture for the OpenDirectory Universal Endpoint Manag
 
 ```
 services/
-├── core/               # Core platform services
-├── enterprise/         # Enterprise-grade services (48+ services)
+├── platform/          # Platform infrastructure services
+│   ├── api-gateway/   # Auto-extending API Gateway
+│   ├── api-backend/   # Main REST API backend
+│   └── integration-service/ # External integrations
+├── core/              # Core business services
+├── enterprise/        # Enterprise-grade services (50+ services)
 ├── domains/           # Domain-Driven Design bounded contexts
-├── api-backend/       # Main API backend
-└── integration-service/ # External integrations
+└── service-manager.sh # Service management script
 ```
 
 ## 🏗️ Architecture Overview
+
+### Platform Services (`/platform`)
+Core infrastructure services that provide the foundation:
+- **api-gateway** - Auto-extending API Gateway with service discovery
+- **api-backend** - Main REST API backend  
+- **integration-service** - External system integrations
 
 ### Core Services (`/core`)
 Essential platform services including:
@@ -45,20 +54,6 @@ Domain-Driven Design bounded contexts:
 - **authentication** - Authentication mechanisms
 - **authorization** - Access control
 
-### API Services (`/api-backend`)
-Main REST API backend with:
-- Device management endpoints
-- User management endpoints
-- Policy management endpoints
-- Application store endpoints
-- Real-time WebSocket support
-
-### Integration Services (`/integration-service`)
-External service integrations:
-- LDAP/LLDAP integration
-- Grafana monitoring
-- Prometheus metrics
-- Vault secrets management
 
 ## 🔧 Service Communication
 
@@ -96,11 +91,10 @@ npm start
 
 | Category | Services | Purpose |
 |----------|----------|---------|
-| Core | 7 | Essential platform functionality |
-| Enterprise | 48+ | Advanced enterprise features |
+| Platform | 3 | Infrastructure and gateway services |
+| Core | 10 | Essential platform functionality |
+| Enterprise | 50+ | Advanced enterprise features |
 | Domains | 7 | Business logic separation |
-| API | 1 | Main API backend |
-| Integration | 1 | External service connectors |
 
 ## 🔒 Security
 
@@ -134,11 +128,10 @@ npm test
 ## 📚 Documentation
 
 Detailed documentation for each service is available in their respective directories:
+- [Platform Services](./platform/README.md)
 - [Core Services](./core/README.md)
 - [Enterprise Services](./enterprise/README.md)
 - [Domain Services](./domains/README.md)
-- [API Backend](./api-backend/README.md)
-- [Integration Service](./integration-service/README.md)
 
 ## 🤝 Contributing
 

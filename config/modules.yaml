@@ -1,0 +1,295 @@
+version: '1.0.0'
+modules:
+  # Core modules (always enabled)
+  authentication-service:
+    enabled: true
+    port: 3001
+    required: true
+    features:
+      local-auth: true
+      ldap-auth: true
+      jwt: true
+      mfa: true
+      zero-trust: true
+      sso: false
+    config:
+      session_timeout: 3600
+      mfa_required: false
+      trust_score_threshold: 70
+
+  configuration-service:
+    enabled: true
+    port: 3002
+    required: true
+    features:
+      module-management: true
+      feature-flags: true
+      settings-validation: true
+    config:
+      auto_save: true
+      validation_strict: false
+
+  # Optional modules (user selectable)
+  network-infrastructure:
+    enabled: false
+    port: 3007
+    features:
+      dns: true
+      dhcp: true
+      file-shares: true
+      discovery: true
+      monitoring: true
+    config:
+      dns:
+        bind_config_path: /etc/bind
+        default_ttl: 300
+        zones: []
+      dhcp:
+        config_path: /etc/dhcp
+        default_lease_time: 86400
+        scopes: []
+      file_shares:
+        samba_path: /etc/samba
+        share_root: /srv/shares
+
+  security-suite:
+    enabled: false
+    port: 3008
+    features:
+      threat-intel: true
+      dlp: false
+      pam: true
+      microsegmentation: false
+      security-orchestration: true
+      zero-trust: true
+    config:
+      threat_intel:
+        feeds: []
+        update_interval: 3600
+      pam:
+        session_timeout: 1800
+        require_approval: true
+
+  printer-service:
+    enabled: false
+    port: 3006
+    features:
+      cups: true
+      scanning: true
+      quotas: true
+      analytics: true
+    config:
+      cups:
+        host: localhost
+        port: 631
+      scanning:
+        formats: [pdf, jpg, png]
+        ocr: true
+
+  monitoring-analytics:
+    enabled: false
+    port: 3009
+    features:
+      health-monitoring: true
+      ai-analytics: false
+      prometheus-integration: true
+      alerting: true
+    config:
+      prometheus:
+        url: http://prometheus:9090
+        scrape_interval: 15s
+      alerting:
+        email:
+          enabled: false
+          smtp_server: ''
+        webhook:
+          enabled: false
+          url: ''
+
+  device-management:
+    enabled: false
+    port: 3003
+    features:
+      enrollment: true
+      policies: true
+      compliance: true
+      inventory: true
+    config:
+      enrollment:
+        auto_approve: false
+        require_admin_approval: true
+      compliance:
+        check_interval: 3600
+        auto_remediate: false
+
+  policy-compliance:
+    enabled: false
+    port: 3010
+    features:
+      policy-engine: true
+      compliance-scanner: true
+      auto-remediation: false
+    config:
+      scanner:
+        scan_interval: 86400
+        compliance_frameworks: [SOC2, GDPR, HIPAA]
+
+  backup-disaster:
+    enabled: false
+    port: 3011
+    features:
+      automated-backup: true
+      geo-replication: false
+      disaster-recovery: true
+      retention-management: true
+    config:
+      backup:
+        schedule: '0 2 * * *'
+        retention_days: 30
+        compression: true
+
+  automation-workflows:
+    enabled: false
+    port: 3012
+    features:
+      workflow-engine: true
+      task-scheduler: true
+      event-automation: true
+      nlp-interface: false
+    config:
+      scheduler:
+        max_concurrent_jobs: 10
+        history_retention_days: 7
+
+  container-orchestration:
+    enabled: false
+    port: 3013
+    features:
+      kubernetes: false
+      docker: true
+      cost-optimization: false
+      security-scanning: true
+    config:
+      docker:
+        socket_path: /var/run/docker.sock
+        registry: ''
+
+  enterprise-integrations:
+    enabled: false
+    port: 3014
+    features:
+      erp-connector: false
+      sap-connector: false
+      o365-connector: false
+      api-gateway: true
+    config:
+      connectors:
+        timeout: 30000
+        retry_attempts: 3
+
+  ai-intelligence:
+    enabled: false
+    port: 3015
+    features:
+      predictive-analytics: false
+      anomaly-detection: false
+      pattern-recognition: false
+      recommendations: false
+    config:
+      ai:
+        model_path: /app/models
+        training_interval: 604800
+
+  license-management:
+    enabled: false
+    port: 3018
+    features:
+      software-license-tracking: true
+      compliance-monitoring: true
+      license-optimization: true
+      asset-management: true
+      real-time-usage-tracking: true
+      mobile-integration: true
+      audit-reporting: true
+      cost-analysis: true
+      renewal-management: true
+    config:
+      database:
+        url: postgresql://localhost/opendirectory_licenses
+        pool_size: 10
+      mobile_integration:
+        service_url: http://mobile-management:3013
+        sync_interval: 300000
+        enabled: true
+      alerting:
+        enabled: true
+        email_notifications: true
+        utilization_threshold: 85
+        expiry_warning_days: 30
+        overusage_threshold: 5
+      compliance:
+        auto_remediation: false
+        scan_interval: 86400
+        retention_days: 365
+      reporting:
+        retention_days: 90
+        scheduled_reports: true
+        formats: [pdf, excel, json]
+
+# Gateway configuration
+gateway:
+  port: 8080
+  cors_origin:
+    - http://localhost:3000
+    - http://localhost:3001
+  rate_limit:
+    window_ms: 900000
+    max_requests: 1000
+  logging:
+    level: info
+    format: combined
+  health_check:
+    interval: 30000
+    timeout: 5000
+
+# Deployment profiles
+profiles:
+  minimal:
+    name: Minimal Setup
+    description: Core services only for basic functionality
+    modules:
+      - authentication-service
+      - configuration-service
+    
+  standard:
+    name: Standard Setup
+    description: Recommended setup for most organizations
+    modules:
+      - authentication-service
+      - configuration-service
+      - network-infrastructure
+      - device-management
+      - monitoring-analytics
+    
+  enterprise:
+    name: Enterprise Setup
+    description: Full-featured setup for large organizations
+    modules:
+      - authentication-service
+      - configuration-service
+      - network-infrastructure
+      - security-suite
+      - device-management
+      - monitoring-analytics
+      - policy-compliance
+      - backup-disaster
+      - automation-workflows
+      - license-management
+    
+  developer:
+    name: Developer Setup
+    description: Setup for development and testing
+    modules:
+      - authentication-service
+      - configuration-service
+      - monitoring-analytics

@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://docs.opendirectory.io
+    about: Read the documentation for setup and usage guides
+  - name: Community Discord
+    url: https://discord.gg/opendirectory
+    about: Join our Discord for real-time help and discussion
+  - name: Security Issue
+    url: mailto:security@opendirectory.io
+    about: Please report security vulnerabilities via email
+  - name: Commercial Support
+    url: https://opendirectory.io/support
+    about: Get enterprise support for your deployment

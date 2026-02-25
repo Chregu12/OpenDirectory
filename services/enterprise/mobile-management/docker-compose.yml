@@ -1,0 +1,170 @@
+version: '3.8'
+
+services:
+  ios-management:
+    build: .
+    container_name: ios-management-service
+    command: npm run start:ios
+    ports:
+      - "3011:3011"
+    environment:
+      - NODE_ENV=production
+      - IOS_MANAGEMENT_PORT=3011
+      - APPLE_DEP_CLIENT_ID=${APPLE_DEP_CLIENT_ID}
+      - APPLE_DEP_CLIENT_SECRET=${APPLE_DEP_CLIENT_SECRET}
+      - APPLE_VPP_CLIENT_ID=${APPLE_VPP_CLIENT_ID}
+      - APPLE_VPP_CLIENT_SECRET=${APPLE_VPP_CLIENT_SECRET}
+      - APPLE_PUSH_CERT=${APPLE_PUSH_CERT}
+      - APPLE_PUSH_CERT_PASSWORD=${APPLE_PUSH_CERT_PASSWORD}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    volumes:
+      - ios_certs:/usr/src/app/certificates
+      - ios_logs:/usr/src/app/logs
+    networks:
+      - mobile-management
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  android-enterprise:
+    build: .
+    container_name: android-enterprise-service
+    command: npm run start:android
+    ports:
+      - "3012:3012"
+    environment:
+      - NODE_ENV=production
+      - ANDROID_ENTERPRISE_PORT=3012
+      - GOOGLE_CLIENT_EMAIL=${GOOGLE_CLIENT_EMAIL}
+      - GOOGLE_PRIVATE_KEY=${GOOGLE_PRIVATE_KEY}
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - ANDROID_ENTERPRISE_ID=${ANDROID_ENTERPRISE_ID}
+      - KNOX_CLIENT_ID=${KNOX_CLIENT_ID}
+      - KNOX_CLIENT_SECRET=${KNOX_CLIENT_SECRET}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    volumes:
+      - android_data:/usr/src/app/data
+      - android_logs:/usr/src/app/logs
+    networks:
+      - mobile-management
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3012/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  mobile-app-management:
+    build: .
+    container_name: mobile-app-management-service
+    command: npm run start:mam
+    ports:
+      - "3013:3013"
+    environment:
+      - NODE_ENV=production
+      - MAM_SERVICE_PORT=3013
+      - APP_STORAGE_PATH=/usr/src/app/storage
+      - MAX_APP_SIZE=524288000  # 500MB
+      - APP_WRAPPING_ENABLED=${APP_WRAPPING_ENABLED:-false}
+      - APP_WRAPPING_ENDPOINT=${APP_WRAPPING_ENDPOINT}
+      - APP_WRAPPING_API_KEY=${APP_WRAPPING_API_KEY}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
+      - AWS_S3_REGION=${AWS_S3_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    volumes:
+      - mam_storage:/usr/src/app/storage
+      - mam_logs:/usr/src/app/logs
+    networks:
+      - mobile-management
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3013/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  mobile-threat-defense:
+    build: .
+    container_name: mobile-threat-defense-service
+    command: npm run start:mtd
+    ports:
+      - "3014:3014"
+    environment:
+      - NODE_ENV=production
+      - MTD_SERVICE_PORT=3014
+      - VIRUSTOTAL_ENABLED=${VIRUSTOTAL_ENABLED:-false}
+      - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY}
+      - SIEM_ENABLED=${SIEM_ENABLED:-false}
+      - SIEM_ENDPOINT=${SIEM_ENDPOINT}
+      - SIEM_API_KEY=${SIEM_API_KEY}
+      - SANDBOX_ENABLED=${SANDBOX_ENABLED:-false}
+      - SANDBOX_ENDPOINT=${SANDBOX_ENDPOINT}
+      - SANDBOX_API_KEY=${SANDBOX_API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    volumes:
+      - mtd_data:/usr/src/app/data
+      - mtd_logs:/usr/src/app/logs
+    networks:
+      - mobile-management
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3014/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Load Balancer / Reverse Proxy for Mobile Services
+  mobile-proxy:
+    image: nginx:alpine
+    container_name: mobile-management-proxy
+    ports:
+      - "3010:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - ios-management
+      - android-enterprise
+      - mobile-app-management
+      - mobile-threat-defense
+    networks:
+      - mobile-management
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  ios_certs:
+    driver: local
+  ios_logs:
+    driver: local
+  android_data:
+    driver: local
+  android_logs:
+    driver: local
+  mam_storage:
+    driver: local
+  mam_logs:
+    driver: local
+  mtd_data:
+    driver: local
+  mtd_logs:
+    driver: local
+
+networks:
+  mobile-management:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
