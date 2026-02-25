@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+// Empty string = relative URLs → requests go through Next.js rewrites (cluster-internal proxy)
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 // Create axios instance with default configuration
 export const api = axios.create({

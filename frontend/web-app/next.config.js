@@ -2,24 +2,20 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  // All API calls are proxied server-side to the integration service.
+  // INTEGRATION_SERVICE_URL is a runtime env var set in the k8s deployment.
+  // This way only the frontend is exposed externally - the backend stays internal.
   async rewrites() {
+    const integrationUrl = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:3005';
     return [
-      {
-        source: '/api/integration/:path*',
-        destination: `${process.env.INTEGRATION_SERVICE_URL || 'http://localhost:3005'}/api/:path*`,
-      },
-      {
-        source: '/api/health/:path*',
-        destination: `${process.env.INTEGRATION_SERVICE_URL || 'http://localhost:3005'}/health/:path*`,
-      },
+      { source: '/api/:path*',    destination: `${integrationUrl}/api/:path*` },
+      { source: '/health',        destination: `${integrationUrl}/health` },
+      { source: '/health/:path*', destination: `${integrationUrl}/health/:path*` },
     ];
   },
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005',
-    NEXT_PUBLIC_GRAFANA_URL: process.env.NEXT_PUBLIC_GRAFANA_URL || 'http://localhost:30300',
-    NEXT_PUBLIC_LLDAP_URL: process.env.NEXT_PUBLIC_LLDAP_URL || 'http://localhost:30170',
-    NEXT_PUBLIC_PROMETHEUS_URL: process.env.NEXT_PUBLIC_PROMETHEUS_URL || 'http://localhost:30909',
-    NEXT_PUBLIC_VAULT_URL: process.env.NEXT_PUBLIC_VAULT_URL || 'http://localhost:30820',
+    // Points to the same origin so browser requests go through Next.js rewrites
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
   },
   images: {
     domains: ['localhost'],
