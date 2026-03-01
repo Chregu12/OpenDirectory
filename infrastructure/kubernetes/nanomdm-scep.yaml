@@ -1,0 +1,279 @@
+---
+# OpenDirectory — NanoMDM + SCEP Deployment
+# Voraussetzung: APNs-Cert als Secret erstellt:
+#   kubectl create secret generic apns-cert \
+#     --from-file=mdm.pem=/path/to/mdm.pem \
+#     --from-file=mdm.key=/path/to/mdm.key \
+#     -n opendirectory
+#
+# MDM Signing Cert (self-signed):
+#   openssl req -x509 -newkey rsa:4096 -keyout mdm-sign.key \
+#     -out mdm-sign.crt -days 3650 -nodes -subj "/CN=OpenDirectory MDM"
+#   kubectl create secret generic mdm-sign-cert \
+#     --from-file=mdm-sign.crt=mdm-sign.crt \
+#     --from-file=mdm-sign.key=mdm-sign.key \
+#     -n opendirectory
+#
+# SSH-Key für SYSVOL-Deploy:
+#   kubectl create secret generic samba-ssh-key \
+#     --from-file=id_ed25519=/root/.ssh/id_ed25519 \
+#     -n opendirectory
+
+# ── NanoMDM Deployment ────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nanomdm
+  namespace: opendirectory
+  labels:
+    app: nanomdm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nanomdm
+  template:
+    metadata:
+      labels:
+        app: nanomdm
+    spec:
+      containers:
+        - name: nanomdm
+          image: ghcr.io/micromdm/nanomdm:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9000
+              name: http
+          args:
+            - -listen=:9000
+            - -api-key=$(NANOMDM_API_KEY)
+            - -push-cert=/certs/apns/mdm.pem
+            - -push-key=/certs/apns/mdm.key
+            - -storage=file
+            - -storage-dsn=/data
+            - -debug
+          env:
+            - name: NANOMDM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nanomdm-config
+                  key: api-key
+          volumeMounts:
+            - name: apns-cert
+              mountPath: /certs/apns
+              readOnly: true
+            - name: nanomdm-data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          readinessProbe:
+            httpGet:
+              path: /version
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /version
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+      volumes:
+        - name: apns-cert
+          secret:
+            secretName: apns-cert
+        - name: nanomdm-data
+          persistentVolumeClaim:
+            claimName: nanomdm-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nanomdm-data
+  namespace: opendirectory
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nanomdm
+  namespace: opendirectory
+spec:
+  selector:
+    app: nanomdm
+  ports:
+    - port: 9000
+      targetPort: 9000
+      name: http
+---
+# ── SCEP Server (Zertifikat-Ausstellung für MDM-Enrollment) ──────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scep
+  namespace: opendirectory
+  labels:
+    app: scep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scep
+  template:
+    metadata:
+      labels:
+        app: scep
+    spec:
+      containers:
+        - name: scep
+          image: ghcr.io/micromdm/scep:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          args:
+            - -depot=/depot
+            - -port=8080
+            - -challenge=$(SCEP_CHALLENGE)
+          env:
+            - name: SCEP_CHALLENGE
+              valueFrom:
+                secretKeyRef:
+                  name: nanomdm-config
+                  key: scep-challenge
+          volumeMounts:
+            - name: scep-depot
+              mountPath: /depot
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+      volumes:
+        - name: scep-depot
+          persistentVolumeClaim:
+            claimName: scep-depot
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scep-depot
+  namespace: opendirectory
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scep
+  namespace: opendirectory
+spec:
+  selector:
+    app: scep
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+---
+# ── Config Secret (API-Key + SCEP Challenge) ──────────────────────────────────
+# kubectl create secret generic nanomdm-config \
+#   --from-literal=api-key="$(openssl rand -hex 32)" \
+#   --from-literal=scep-challenge="$(openssl rand -hex 16)" \
+#   -n opendirectory
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nanomdm-config
+  namespace: opendirectory
+type: Opaque
+stringData:
+  api-key: "CHANGE-ME-generate-with-openssl-rand-hex-32"
+  scep-challenge: "CHANGE-ME-generate-with-openssl-rand-hex-16"
+---
+# ── Ingress (MDM muss über HTTPS erreichbar sein — Apple-Anforderung) ─────────
+# Voraussetzung: cert-manager oder manuelles TLS-Secret
+# TLS-Secret erstellen:
+#   kubectl create secret tls mdm-tls \
+#     --cert=/path/to/fullchain.pem \
+#     --key=/path/to/privkey.pem \
+#     -n opendirectory
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mdm-ingress
+  namespace: opendirectory
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    # MDM checkin/connect brauchen raw body:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - mdm.heusser.local
+      secretName: mdm-tls
+  rules:
+    - host: mdm.heusser.local
+      http:
+        paths:
+          # MDM Endpoints
+          - path: /mdm
+            pathType: Prefix
+            backend:
+              service:
+                name: nanomdm
+                port:
+                  number: 9000
+          # SCEP Endpoint
+          - path: /scep
+            pathType: Prefix
+            backend:
+              service:
+                name: scep
+                port:
+                  number: 8080
+          # Enrollment Profile + Portal (served by Integration Service)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: working-integration-service
+                port:
+                  number: 3005
+---
+# ── Integration Service: SSH-Key Volume Mount ergänzen ───────────────────────
+# Das bestehende Deployment (working-integration-service) benötigt:
+# volumes:
+#   - name: samba-ssh-key
+#     secret:
+#       secretName: samba-ssh-key
+#       defaultMode: 0400
+# volumeMounts:
+#   - name: samba-ssh-key
+#     mountPath: /etc/ssh
+#     readOnly: true
+#
+# Patch-Befehl:
+# kubectl patch deployment working-integration-service -n opendirectory \
+#   --type=json -p='[
+#     {"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"samba-ssh-key","secret":{"secretName":"samba-ssh-key","defaultMode":256}}},
+#     {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-","value":{"name":"samba-ssh-key","mountPath":"/etc/ssh","readOnly":true}}
+#   ]'
