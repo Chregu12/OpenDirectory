@@ -125,6 +125,26 @@ try {
     Write-Warning "Device registration failed: $($_.Exception.Message)"
 }
 
+# Install OpenDirectory Agent (background service with notifications)
+Write-Host "Installing OpenDirectory Agent service..." -ForegroundColor Yellow
+$AgentSourcePath = Join-Path $PSScriptRoot "OpenDirectoryAgent.ps1"
+if (Test-Path $AgentSourcePath) {
+    & $AgentSourcePath -Action Install
+    Write-Host "OpenDirectory Agent service installed and started" -ForegroundColor Green
+} else {
+    # Download agent script from server if not bundled
+    try {
+        $AgentUrl = "$ServerUrl/api/v1/agent/windows/download"
+        $AgentDestPath = "$OD_DIR\OpenDirectoryAgent.ps1"
+        Invoke-WebRequest -Uri $AgentUrl -OutFile $AgentDestPath -ErrorAction Stop
+        & $AgentDestPath -Action Install
+        Write-Host "OpenDirectory Agent service downloaded, installed and started" -ForegroundColor Green
+    } catch {
+        Write-Warning "Could not install Agent service: $($_.Exception.Message)"
+        Write-Warning "The agent can be installed manually later with: OpenDirectoryAgent.ps1 -Action Install"
+    }
+}
+
 # Create desktop shortcut for OpenDirectory tools
 $ShortcutPath = "$env:PUBLIC\Desktop\OpenDirectory Tools.lnk"
 $WshShell = New-Object -comObject WScript.Shell
@@ -146,3 +166,9 @@ Write-Host "- Install-ODApplication -AppId <app-id>" -ForegroundColor White
 Write-Host "- Get-ODPatches" -ForegroundColor White
 Write-Host ""
 Write-Host "Desktop shortcut created: OpenDirectory Tools" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Background Agent:" -ForegroundColor Yellow
+Write-Host "- Persistent service running as SYSTEM" -ForegroundColor White
+Write-Host "- Toast notifications for updates, compliance, policies" -ForegroundColor White
+Write-Host "- Polls server every 60 seconds for commands" -ForegroundColor White
+Write-Host "- Logs: C:\Program Files\OpenDirectory\Logs\Agent" -ForegroundColor White

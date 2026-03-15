@@ -322,6 +322,16 @@ class EnterpriseDeviceManagementService {
     this.app.post('/api/bulk/compliance-scan', this.bulkComplianceScan.bind(this));
     this.app.get('/api/bulk/operations/:operationId/status', this.getBulkOperationStatus.bind(this));
 
+    // Agent Communication Routes (used by OpenDirectory Windows/macOS/Linux agents)
+    this.app.post('/api/v1/devices/:deviceId/checkin', this.handleAgentCheckin.bind(this));
+    this.app.get('/api/v1/devices/:deviceId/commands/pending', this.getPendingCommands.bind(this));
+    this.app.post('/api/v1/devices/:deviceId/commands/:commandId/result', this.handleCommandResult.bind(this));
+    this.app.get('/api/v1/devices/:deviceId/policies', this.getDevicePolicies.bind(this));
+    this.app.post('/api/v1/devices/:deviceId/notifications', this.pushNotificationToDevice.bind(this));
+    this.app.post('/api/v1/notifications/broadcast', this.broadcastNotification.bind(this));
+    this.app.post('/api/v1/devices/:deviceId/commands', this.queueCommand.bind(this));
+    this.app.get('/api/v1/agent/windows/download', this.downloadWindowsAgent.bind(this));
+
     // Error handling
     this.app.use(this.errorHandler.bind(this));
   }
@@ -574,6 +584,229 @@ class EnterpriseDeviceManagementService {
     // Auto-isolate device if critical threat
     if (threat.severity === 'critical') {
       await this.remoteActionService.isolateDevice(deviceId, 'Automatic isolation due to critical threat');
+    }
+  }
+
+  // ── Agent Communication Handlers ──────────────────────────────────────────
+
+  async handleAgentCheckin(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const checkinData = req.body;
+
+      await this.deviceManager.updateLastSeen(deviceId);
+
+      // Store agent metadata
+      if (this.cache) {
+        await this.cache.set(`agent:${deviceId}`, JSON.stringify({
+          ...checkinData,
+          lastCheckin: new Date().toISOString()
+        }), 'EX', 300); // 5 min TTL
+      }
+
+      logger.debug(`Agent checkin from device: ${deviceId}`);
+
+      res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        serverVersion: '1.0.0'
+      });
+    } catch (error) {
+      logger.error('Agent checkin error:', error);
+      res.status(500).json({ error: 'Checkin failed' });
+    }
+  }
+
+  async getPendingCommands(req, res) {
+    try {
+      const { deviceId } = req.params;
+
+      // Retrieve pending commands from cache/db
+      let commands = [];
+      let notifications = [];
+
+      if (this.cache) {
+        const cmdData = await this.cache.get(`commands:${deviceId}`);
+        if (cmdData) {
+          commands = JSON.parse(cmdData);
+          // Clear after retrieval (commands are one-time)
+          await this.cache.del(`commands:${deviceId}`);
+        }
+
+        const notifData = await this.cache.get(`notifications:${deviceId}`);
+        if (notifData) {
+          notifications = JSON.parse(notifData);
+          await this.cache.del(`notifications:${deviceId}`);
+        }
+      }
+
+      res.json({
+        commands,
+        notifications,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Get pending commands error:', error);
+      res.status(500).json({ error: 'Failed to retrieve commands' });
+    }
+  }
+
+  async handleCommandResult(req, res) {
+    try {
+      const { deviceId, commandId } = req.params;
+      const result = req.body;
+
+      logger.info(`Command result from device ${deviceId}: ${commandId} - ${result.status}`);
+
+      // Store result and broadcast to admin WebSocket subscribers
+      this.broadcastToSubscribers('device_events', {
+        type: 'command_result',
+        deviceId,
+        commandId,
+        status: result.status,
+        output: result.output,
+        timestamp: result.timestamp || new Date().toISOString()
+      });
+
+      res.json({ status: 'received' });
+    } catch (error) {
+      logger.error('Command result error:', error);
+      res.status(500).json({ error: 'Failed to process result' });
+    }
+  }
+
+  async getDevicePolicies(req, res) {
+    try {
+      const { deviceId } = req.params;
+
+      // Retrieve policies assigned to this device
+      const policies = await this.policyEngine.getDevicePolicies(deviceId);
+
+      res.json({
+        policies: policies || [],
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Get device policies error:', error);
+      res.status(500).json({ error: 'Failed to retrieve policies' });
+    }
+  }
+
+  async pushNotificationToDevice(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const notification = req.body;
+
+      // Queue notification for the device agent to pick up
+      if (this.cache) {
+        const existing = await this.cache.get(`notifications:${deviceId}`);
+        const notifications = existing ? JSON.parse(existing) : [];
+        notifications.push({
+          id: this.generateRequestId(),
+          ...notification,
+          queuedAt: new Date().toISOString()
+        });
+        await this.cache.set(`notifications:${deviceId}`, JSON.stringify(notifications), 'EX', 3600);
+      }
+
+      logger.info(`Notification queued for device ${deviceId}: ${notification.category}`);
+
+      res.json({
+        status: 'queued',
+        deviceId,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Push notification error:', error);
+      res.status(500).json({ error: 'Failed to queue notification' });
+    }
+  }
+
+  async broadcastNotification(req, res) {
+    try {
+      const { notification, deviceIds, platform } = req.body;
+
+      let targetDevices = deviceIds || [];
+
+      // If no specific devices, broadcast to all (or filtered by platform)
+      if (targetDevices.length === 0 && this.deviceManager) {
+        const allDevices = await this.deviceManager.getDevices({ platform });
+        targetDevices = allDevices.map(d => d.id);
+      }
+
+      // Queue notification for each device
+      let queued = 0;
+      for (const deviceId of targetDevices) {
+        if (this.cache) {
+          const existing = await this.cache.get(`notifications:${deviceId}`);
+          const notifications = existing ? JSON.parse(existing) : [];
+          notifications.push({
+            id: this.generateRequestId(),
+            ...notification,
+            queuedAt: new Date().toISOString()
+          });
+          await this.cache.set(`notifications:${deviceId}`, JSON.stringify(notifications), 'EX', 3600);
+          queued++;
+        }
+      }
+
+      logger.info(`Broadcast notification queued for ${queued} devices: ${notification.category}`);
+
+      res.json({
+        status: 'queued',
+        devicesQueued: queued,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Broadcast notification error:', error);
+      res.status(500).json({ error: 'Failed to broadcast notification' });
+    }
+  }
+
+  async queueCommand(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const command = req.body;
+
+      if (this.cache) {
+        const existing = await this.cache.get(`commands:${deviceId}`);
+        const commands = existing ? JSON.parse(existing) : [];
+        commands.push({
+          id: this.generateRequestId(),
+          ...command,
+          queuedAt: new Date().toISOString()
+        });
+        await this.cache.set(`commands:${deviceId}`, JSON.stringify(commands), 'EX', 3600);
+      }
+
+      logger.info(`Command queued for device ${deviceId}: ${command.type}`);
+
+      res.json({
+        status: 'queued',
+        deviceId,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Queue command error:', error);
+      res.status(500).json({ error: 'Failed to queue command' });
+    }
+  }
+
+  async downloadWindowsAgent(req, res) {
+    try {
+      const agentPath = require('path').join(__dirname, '../../../../clients/windows/OpenDirectoryAgent.ps1');
+      const fs = require('fs');
+
+      if (fs.existsSync(agentPath)) {
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Disposition', 'attachment; filename="OpenDirectoryAgent.ps1"');
+        fs.createReadStream(agentPath).pipe(res);
+      } else {
+        res.status(404).json({ error: 'Agent script not found' });
+      }
+    } catch (error) {
+      logger.error('Agent download error:', error);
+      res.status(500).json({ error: 'Failed to serve agent' });
     }
   }
 
