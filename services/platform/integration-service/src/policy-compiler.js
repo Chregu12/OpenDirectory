@@ -1,6 +1,10 @@
 'use strict';
 // =============================================================================
-// OpenDirectory — Cross-Platform Policy Compiler
+// DEPRECATED: This monolithic compiler has been replaced by split modules in
+// ./compilers/ (WindowsPolicyCompiler, LinuxPolicyCompiler, MacOSPolicyCompiler,
+// NetworkDrivesCompiler, PrintersCompiler). Kept for reference only.
+// =============================================================================
+// OpenDirectory — Cross-Platform Policy Compiler (LEGACY)
 // Transforms intent-based YAML/JSON policies into OS-specific artifacts:
 //   Windows → GPO XML (SYSVOL/Registry.pol compatible), Logon-Scripts
 //   Linux   → sysctl, sshd_config, PAM, sudoers, systemd units

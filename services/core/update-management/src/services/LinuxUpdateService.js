@@ -3,9 +3,10 @@ const logger = require('../utils/logger');
 const AuditLogger = require('../audit/AuditLogger');
 
 class LinuxUpdateService extends EventEmitter {
-    constructor() {
+    constructor(updateAgentService) {
         super();
         this.auditLogger = new AuditLogger();
+        this.updateAgentService = updateAgentService; // Generic agent dispatch
         this.updatePolicies = new Map();
         this.packageManagers = new Map();
         this.updateSchedules = new Map();
@@ -49,12 +50,32 @@ class LinuxUpdateService extends EventEmitter {
 
             this.updatePolicies.set(deviceId, updatePolicy);
 
-            // Generate configuration script based on detected package managers
-            const configScript = await this.generateLinuxConfigScript(updatePolicy);
+            // Dispatch to agent via WebSocket (agent handles apt/dnf/snap enforcement)
+            let agentResult = null;
+            if (this.updateAgentService) {
+                agentResult = this.updateAgentService.configureUpdates(deviceId, {
+                    id: `linux-policy-${deviceId}`,
+                    automatic: updatePolicy.automaticUpdates,
+                    schedule: { interval: updatePolicy.updateFrequency, time: updatePolicy.rebootTime },
+                    maintenanceWindow: updatePolicy.maintenanceWindow,
+                    rebootPolicy: updatePolicy.installOnShutdown ? 'scheduled' : 'user-choice',
+                    _linux: {
+                        securityUpdatesOnly: updatePolicy.securityUpdatesOnly,
+                        unattendedUpgrades: updatePolicy.unattendedUpgradesEnabled,
+                        autoRemoveUnused: updatePolicy.autoRemoveUnused,
+                        packageManagers: updatePolicy.packageManagers,
+                        kernelUpdates: updatePolicy.kernelUpdates,
+                        blockedPackages: updatePolicy.blockedPackages,
+                        bandwidthLimit: updatePolicy.bandwidthLimit
+                    },
+                    notifyUser: true
+                });
+            }
 
             await this.auditLogger.log('linux_update_policy_configured', {
                 deviceId,
                 policy: updatePolicy,
+                agentDispatched: !!agentResult,
                 timestamp: new Date().toISOString()
             });
 
@@ -63,7 +84,7 @@ class LinuxUpdateService extends EventEmitter {
             return {
                 success: true,
                 policyId: `linux-policy-${deviceId}`,
-                script: configScript,
+                agentResult,
                 policy: updatePolicy
             };
 

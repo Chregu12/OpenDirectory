@@ -204,6 +204,20 @@ handle_command() {
             output=$(handle_apply_policy "$json") || status="failed"
             ;;
 
+        # ── Update Management Commands ──────────────────────────────────
+        configure_updates)
+            output=$(handle_configure_updates "$json") || status="failed"
+            ;;
+        check_update_status)
+            output=$(handle_check_update_status) || status="failed"
+            ;;
+        trigger_update)
+            output=$(handle_trigger_update "$json") || status="failed"
+            ;;
+        get_update_compliance)
+            output=$(handle_get_update_compliance) || status="failed"
+            ;;
+
         # ── Printer Commands (macOS: lpadmin / CUPS) ──────────────────
         deploy_printers)
             output=$(handle_deploy_printers "$json") || status="failed"
@@ -522,6 +536,80 @@ handle_rollback_policy() {
     log "Policy rolled back: $policy_id"
     show_notification "Richtlinie zurueckgesetzt" "$policy_id" "OpenDirectory - Policies"
     echo "Rolled back: $policy_id"
+}
+
+# ============================================================================
+# UPDATE MANAGEMENT (macOS: softwareupdate, defaults, mas)
+# ============================================================================
+
+handle_configure_updates() {
+    local json="$1"
+    python3 << 'PYEOF' "$json"
+import sys, json, subprocess
+
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+settings = data.get('settings', {})
+configured = []
+errors = []
+
+try:
+    # Configure automatic check
+    auto = '1' if settings.get('automatic') else '0'
+    subprocess.run(['defaults', 'write', '/Library/Preferences/com.apple.SoftwareUpdate', 'AutomaticCheckEnabled', '-bool', 'true' if settings.get('automatic') else 'false'], capture_output=True)
+    subprocess.run(['defaults', 'write', '/Library/Preferences/com.apple.SoftwareUpdate', 'AutomaticDownload', '-bool', 'true' if settings.get('automatic') else 'false'], capture_output=True)
+    configured.append('automaticCheck')
+
+    # macOS-specific extensions
+    macos_ext = settings.get('_macos', {})
+    if macos_ext.get('automaticInstallOSUpdates') is not None:
+        subprocess.run(['defaults', 'write', '/Library/Preferences/com.apple.SoftwareUpdate', 'AutomaticallyInstallMacOSUpdates', '-bool', 'true' if macos_ext['automaticInstallOSUpdates'] else 'false'], capture_output=True)
+    if macos_ext.get('automaticInstallAppUpdates') is not None:
+        subprocess.run(['defaults', 'write', '/Library/Preferences/com.apple.commerce', 'AutoUpdate', '-bool', 'true' if macos_ext['automaticInstallAppUpdates'] else 'false'], capture_output=True)
+    if macos_ext.get('automaticInstallSecurityUpdates') is not None:
+        subprocess.run(['defaults', 'write', '/Library/Preferences/com.apple.SoftwareUpdate', 'CriticalUpdateInstall', '-bool', 'true' if macos_ext['automaticInstallSecurityUpdates'] else 'false'], capture_output=True)
+    if macos_ext.get('catalogURL'):
+        subprocess.run(['defaults', 'write', '/Library/Preferences/com.apple.SoftwareUpdate', 'CatalogURL', macos_ext['catalogURL']], capture_output=True)
+    configured.append('macosSettings')
+
+    # Deferrals (via managed preferences)
+    deferrals = settings.get('deferrals', {})
+    if deferrals.get('featureUpdates'):
+        subprocess.run(['defaults', 'write', '/Library/Preferences/com.apple.SoftwareUpdate', 'MajorOSUserDeferralCount', '-int', str(deferrals['featureUpdates'])], capture_output=True)
+    configured.append('deferrals')
+
+except Exception as e:
+    errors.append(str(e))
+
+print(json.dumps({'status': 'success' if not errors else 'partial', 'configured': configured, 'errors': errors}))
+PYEOF
+}
+
+handle_check_update_status() {
+    python3 -c "
+import subprocess, json
+result = subprocess.run(['softwareupdate', '-l'], capture_output=True, text=True)
+updates = []
+for line in result.stdout.split('\n'):
+    line = line.strip()
+    if line.startswith('*'):
+        updates.append(line.lstrip('* '))
+print(json.dumps({'status': 'success', 'updateStatus': {'availableUpdates': updates, 'count': len(updates)}}))
+"
+}
+
+handle_trigger_update() {
+    local json="$1"
+    softwareupdate -ia --agree-to-license 2>&1
+    echo '{"status":"success","triggered":true}'
+}
+
+handle_get_update_compliance() {
+    python3 -c "
+import subprocess, json
+result = subprocess.run(['softwareupdate', '-l'], capture_output=True, text=True)
+pending = [l.strip().lstrip('* ') for l in result.stdout.split('\n') if l.strip().startswith('*')]
+print(json.dumps({'status': 'success', 'complianceReport': {'compliant': len(pending) == 0, 'pendingUpdates': pending, 'count': len(pending)}}))
+"
 }
 
 # ============================================================================

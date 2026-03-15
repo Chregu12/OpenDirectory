@@ -8,9 +8,10 @@ const AuditLogger = require('../audit/AuditLogger');
  * Inspired by Romanitho/Winget-AutoUpdate - implemented natively in OpenDirectory
  */
 class WingetAutoUpdateService extends EventEmitter {
-    constructor() {
+    constructor(updateAgentService) {
         super();
         this.auditLogger = new AuditLogger();
+        this.updateAgentService = updateAgentService; // Generic agent dispatch
         this.deviceConfigs = new Map();
         this.appPolicies = new Map();
     }
@@ -42,14 +43,16 @@ class WingetAutoUpdateService extends EventEmitter {
 
             this.deviceConfigs.set(deviceId, config);
 
-            const prerequisiteScript = this.generateWingetPrerequisiteScript();
-            const updateScript = this.generateWingetUpdateScript(config);
-            const scheduleScript = this.generateScheduleScript(config);
-            const fullScript = [prerequisiteScript, updateScript, scheduleScript].join('\n\n');
+            // Dispatch to agent via WebSocket (agent handles winget-specific enforcement)
+            let agentResult = null;
+            if (this.updateAgentService) {
+                agentResult = this.updateAgentService.configureWingetAutoUpdate(deviceId, config);
+            }
 
             await this.auditLogger.log('winget_autoupdate_configured', {
                 deviceId,
                 config,
+                agentDispatched: !!agentResult,
                 timestamp: new Date().toISOString()
             });
 
@@ -58,7 +61,7 @@ class WingetAutoUpdateService extends EventEmitter {
             return {
                 success: true,
                 policyId: `wau-policy-${deviceId}`,
-                script: fullScript,
+                agentResult,
                 config
             };
 

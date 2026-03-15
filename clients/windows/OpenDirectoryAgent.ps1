@@ -263,6 +263,26 @@ function Invoke-AgentCommand {
                 $Result.output = (Invoke-ApplyPolicyModule -Module $Command.data.module -Settings $Command.data.settings | Out-String)
             }
 
+            # ── Update Management Commands ──────────────────────────────────
+            "configure_updates" {
+                $output = Invoke-ConfigureUpdates -Json $json
+            }
+            "check_update_status" {
+                $output = Invoke-CheckUpdateStatus
+            }
+            "trigger_update" {
+                $output = Invoke-TriggerUpdate -Json $json
+            }
+            "get_update_compliance" {
+                $output = Invoke-GetUpdateCompliance
+            }
+            "configure_winget" {
+                $output = Invoke-ConfigureWinget -Json $json
+            }
+            "check_winget_status" {
+                $output = Invoke-CheckWingetStatus
+            }
+
             default {
                 $Result.status = "failed"; $Result.output = "Unknown command: $CommandType"
             }
@@ -545,6 +565,182 @@ function Invoke-ApplyPolicyModule {
         "updates"    { $wrapperSettings.software.updates = $Settings }
     }
     return Invoke-ApplyPolicy -Data @{ policyId = "module-$Module"; policyName = "Module: $Module"; settings = $wrapperSettings; enforceMode = "enforce"; notifyUser = $false }
+}
+
+# ============================================================================
+# UPDATE MANAGEMENT (Windows: PSWindowsUpdate, winget, Registry, Scheduled Tasks)
+# ============================================================================
+
+function Invoke-ConfigureUpdates {
+    param([string]$Json)
+    try {
+        $data = ($Json | ConvertFrom-Json).data
+        $settings = $data.settings
+
+        # Configure Windows Update via Registry
+        $WUPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
+        $AUPath = "$WUPath\AU"
+        if (!(Test-Path $WUPath)) { New-Item -Path $WUPath -Force | Out-Null }
+        if (!(Test-Path $AUPath)) { New-Item -Path $AUPath -Force | Out-Null }
+
+        # Automatic updates
+        $auOptions = if ($settings.automatic) { 4 } else { 1 }
+        Set-ItemProperty -Path $AUPath -Name "AUOptions" -Value $auOptions -Type DWord
+        Set-ItemProperty -Path $AUPath -Name "NoAutoUpdate" -Value 0 -Type DWord
+
+        # Deferrals (Windows-specific)
+        if ($settings.deferrals) {
+            if ($null -ne $settings.deferrals.featureUpdates) {
+                Set-ItemProperty -Path $WUPath -Name "DeferFeatureUpdates" -Value 1 -Type DWord
+                Set-ItemProperty -Path $WUPath -Name "DeferFeatureUpdatesPeriodInDays" -Value $settings.deferrals.featureUpdates -Type DWord
+            }
+            if ($null -ne $settings.deferrals.qualityUpdates) {
+                Set-ItemProperty -Path $WUPath -Name "DeferQualityUpdates" -Value 1 -Type DWord
+                Set-ItemProperty -Path $WUPath -Name "DeferQualityUpdatesPeriodInDays" -Value $settings.deferrals.qualityUpdates -Type DWord
+            }
+        }
+
+        # Windows-specific extensions
+        if ($settings._windows) {
+            $winExt = $settings._windows
+            if ($winExt.wsusUrl) {
+                Set-ItemProperty -Path $WUPath -Name "WUServer" -Value $winExt.wsusUrl -Type String
+                Set-ItemProperty -Path $WUPath -Name "WUStatusServer" -Value $winExt.wsusUrl -Type String
+                Set-ItemProperty -Path $AUPath -Name "UseWUServer" -Value 1 -Type DWord
+            }
+            if ($winExt.targetReleaseVersion) {
+                Set-ItemProperty -Path $WUPath -Name "TargetReleaseVersion" -Value 1 -Type DWord
+                Set-ItemProperty -Path $WUPath -Name "TargetReleaseVersionInfo" -Value $winExt.targetReleaseVersion -Type String
+            }
+        }
+
+        # Restart Windows Update service
+        Restart-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
+
+        @{ status = "success"; configured = @("windowsUpdate", "deferrals") } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-CheckUpdateStatus {
+    try {
+        $pending = Get-HotFix -ErrorAction SilentlyContinue | Sort-Object InstalledOn -Descending | Select-Object -First 5
+        $rebootPending = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
+        $lastScan = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\Results\Detect" -ErrorAction SilentlyContinue).LastSuccessTime
+
+        @{
+            status = "success"
+            updateStatus = @{
+                rebootPending = $rebootPending
+                lastScanTime = $lastScan
+                recentUpdates = @($pending | ForEach-Object { @{ id = $_.HotFixID; installed = $_.InstalledOn.ToString("o") } })
+            }
+        } | ConvertTo-Json -Depth 4 -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-TriggerUpdate {
+    param([string]$Json)
+    try {
+        $data = ($Json | ConvertFrom-Json).data
+        # Use Windows Update COM API or UsoClient
+        Start-Process -FilePath "UsoClient.exe" -ArgumentList "StartInteractiveScan" -NoNewWindow -Wait -ErrorAction SilentlyContinue
+        Start-Process -FilePath "UsoClient.exe" -ArgumentList "StartDownload" -NoNewWindow -Wait -ErrorAction SilentlyContinue
+        @{ status = "success"; triggered = $true } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-GetUpdateCompliance {
+    try {
+        $rebootPending = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
+        $lastInstall = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\Results\Install" -ErrorAction SilentlyContinue).LastSuccessTime
+
+        @{
+            status = "success"
+            complianceReport = @{
+                compliant = -not $rebootPending
+                rebootPending = $rebootPending
+                lastInstallTime = $lastInstall
+            }
+        } | ConvertTo-Json -Depth 3 -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-ConfigureWinget {
+    param([string]$Json)
+    try {
+        $data = ($Json | ConvertFrom-Json).data
+        $settings = $data.settings
+
+        # Ensure winget is available
+        $wingetCmd = Get-Command winget -ErrorAction SilentlyContinue
+        if (-not $wingetCmd) {
+            # Try to install App Installer from Microsoft Store
+            Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction SilentlyContinue
+        }
+
+        # Store config in registry
+        $RegPath = "HKLM:\SOFTWARE\Policies\OpenDirectory\WingetAutoUpdate"
+        if (!(Test-Path $RegPath)) { New-Item -Path $RegPath -Force | Out-Null }
+        Set-ItemProperty -Path $RegPath -Name "Enabled" -Value ([int]$settings.enabled) -Type DWord
+        Set-ItemProperty -Path $RegPath -Name "UpdateMode" -Value $settings.updateMode -Type String
+        Set-ItemProperty -Path $RegPath -Name "UpdateInterval" -Value $settings.schedule.interval -Type String
+        Set-ItemProperty -Path $RegPath -Name "UpdateTime" -Value $settings.schedule.time -Type String
+        Set-ItemProperty -Path $RegPath -Name "Notifications" -Value $settings.notifications -Type String
+
+        # Write app lists
+        $ConfigPath = "C:\OpenDirectory\Config"
+        if (!(Test-Path $ConfigPath)) { New-Item -Path $ConfigPath -ItemType Directory -Force | Out-Null }
+        if ($settings.whitelist -and $settings.whitelist.Count -gt 0) {
+            $settings.whitelist | Out-File -FilePath "$ConfigPath\winget-whitelist.txt" -Force
+        }
+        if ($settings.blacklist -and $settings.blacklist.Count -gt 0) {
+            $settings.blacklist | Out-File -FilePath "$ConfigPath\winget-blacklist.txt" -Force
+        }
+
+        # Create scheduled task for winget updates
+        $TaskName = "OpenDirectory-WingetAutoUpdate"
+        $triggerTime = [datetime]::Parse($settings.schedule.time)
+        $Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-ExecutionPolicy Bypass -Command `"& { winget upgrade --all --accept-source-agreements --accept-package-agreements 2>&1 | Out-File 'C:\OpenDirectory\Logs\winget-update.log' -Append }`""
+        $Trigger = New-ScheduledTaskTrigger -Daily -At $triggerTime
+        $Principal = New-ScheduledTaskPrincipal -UserID "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Description "OpenDirectory Winget Auto-Update" -Force | Out-Null
+
+        @{ status = "success"; configured = @("registry", "appLists", "scheduledTask") } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-CheckWingetStatus {
+    try {
+        $wingetAvailable = $null -ne (Get-Command winget -ErrorAction SilentlyContinue)
+        $upgradable = @()
+        if ($wingetAvailable) {
+            $raw = winget upgrade --accept-source-agreements 2>$null
+            $upgradable = @($raw | Where-Object { $_ -match '\S+\s+\S+\s+\S+\s+winget' } | ForEach-Object {
+                $parts = $_ -split '\s{2,}'
+                @{ name = $parts[0]; currentVersion = $parts[1]; availableVersion = $parts[2] }
+            })
+        }
+        @{
+            status = "success"
+            updateStatus = @{
+                wingetAvailable = $wingetAvailable
+                upgradableApps = $upgradable
+                count = $upgradable.Count
+            }
+        } | ConvertTo-Json -Depth 4 -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
 }
 
 # ============================================================================

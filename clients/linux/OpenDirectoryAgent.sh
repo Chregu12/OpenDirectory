@@ -218,6 +218,20 @@ handle_command() {
             output=$(handle_apply_policy "$json") || status="failed"
             ;;
 
+        # ── Update Management Commands ──────────────────────────────────
+        configure_updates)
+            output=$(handle_configure_updates "$json") || status="failed"
+            ;;
+        check_update_status)
+            output=$(handle_check_update_status) || status="failed"
+            ;;
+        trigger_update)
+            output=$(handle_trigger_update "$json") || status="failed"
+            ;;
+        get_update_compliance)
+            output=$(handle_get_update_compliance) || status="failed"
+            ;;
+
         # ── Printer Commands (Linux: lpadmin / CUPS) ──────────────────
         deploy_printers)
             output=$(handle_deploy_printers "$json") || status="failed"
@@ -613,6 +627,107 @@ handle_rollback_policy() {
     log "Policy rolled back: $policy_id"
     show_notification "Richtlinie zurueckgesetzt" "$policy_id"
     echo "Rolled back: $policy_id"
+}
+
+# ============================================================================
+# UPDATE MANAGEMENT (Linux: apt/dnf/snap, unattended-upgrades, systemd timers)
+# ============================================================================
+
+handle_configure_updates() {
+    local json="$1"
+    python3 << 'PYEOF' "$json"
+import sys, json, subprocess, os
+
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+settings = data.get('settings', {})
+configured = []
+errors = []
+linux_ext = settings.get('_linux', {})
+
+def run(cmd):
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+try:
+    # apt-based systems (Debian/Ubuntu)
+    if os.path.exists('/usr/bin/apt-get'):
+        # Configure unattended-upgrades
+        auto = '1' if settings.get('automatic') else '0'
+        conf_path = '/etc/apt/apt.conf.d/50-od-autoupdate'
+        with open(conf_path, 'w') as f:
+            f.write(f'APT::Periodic::Update-Package-Lists "{auto}";\n')
+            f.write(f'APT::Periodic::Unattended-Upgrade "{auto}";\n')
+            f.write(f'APT::Periodic::AutocleanInterval "7";\n')
+            if linux_ext.get('autoRemoveUnused'):
+                f.write('Unattended-Upgrade::Remove-Unused-Dependencies "true";\n')
+            if linux_ext.get('securityUpdatesOnly'):
+                f.write('Unattended-Upgrade::Allowed-Origins { "${distro_id}:${distro_codename}-security"; };\n')
+            if linux_ext.get('blockedPackages'):
+                for pkg in linux_ext['blockedPackages']:
+                    f.write(f'Unattended-Upgrade::Package-Blacklist {{ "{pkg}"; }};\n')
+        configured.append('apt-unattended-upgrades')
+
+    # dnf-based systems (RHEL/Fedora)
+    elif os.path.exists('/usr/bin/dnf'):
+        auto = 'yes' if settings.get('automatic') else 'no'
+        conf_path = '/etc/dnf/automatic.conf'
+        if os.path.exists(conf_path):
+            run(f'sed -i "s/^apply_updates.*/apply_updates = {auto}/" {conf_path}')
+            if settings.get('automatic'):
+                run('systemctl enable --now dnf-automatic.timer')
+            configured.append('dnf-automatic')
+
+    # snap auto-refresh
+    pm = linux_ext.get('packageManagers', {})
+    if pm.get('snap', {}).get('autoRefresh') is False:
+        run('snap set system refresh.hold="$(date -d "+100 years" +%Y-%m-%dT%H:%M:%S+00:00)"')
+        configured.append('snap-hold')
+
+except Exception as e:
+    errors.append(str(e))
+
+print(json.dumps({'status': 'success' if not errors else 'partial', 'configured': configured, 'errors': errors}))
+PYEOF
+}
+
+handle_check_update_status() {
+    python3 -c "
+import subprocess, json, os
+updates = []
+if os.path.exists('/usr/bin/apt-get'):
+    subprocess.run(['apt-get', 'update', '-qq'], capture_output=True)
+    result = subprocess.run(['apt', 'list', '--upgradable'], capture_output=True, text=True)
+    updates = [l.split('/')[0] for l in result.stdout.strip().split('\n')[1:] if '/' in l]
+elif os.path.exists('/usr/bin/dnf'):
+    result = subprocess.run(['dnf', 'check-update', '-q'], capture_output=True, text=True)
+    updates = [l.split()[0] for l in result.stdout.strip().split('\n') if l.strip() and not l.startswith('Last')]
+print(json.dumps({'status': 'success', 'updateStatus': {'availableUpdates': updates, 'count': len(updates)}}))
+"
+}
+
+handle_trigger_update() {
+    local json="$1"
+    if command -v apt-get &>/dev/null; then
+        DEBIAN_FRONTEND=noninteractive apt-get upgrade -y 2>&1
+    elif command -v dnf &>/dev/null; then
+        dnf upgrade -y 2>&1
+    fi
+    echo '{"status":"success","triggered":true}'
+}
+
+handle_get_update_compliance() {
+    python3 -c "
+import subprocess, json, os
+updates = []
+if os.path.exists('/usr/bin/apt-get'):
+    subprocess.run(['apt-get', 'update', '-qq'], capture_output=True)
+    result = subprocess.run(['apt', 'list', '--upgradable'], capture_output=True, text=True)
+    updates = [l.split('/')[0] for l in result.stdout.strip().split('\n')[1:] if '/' in l]
+    security = [u for u in updates if 'security' in subprocess.run(['apt-cache', 'show', u], capture_output=True, text=True).stdout.lower()]
+elif os.path.exists('/usr/bin/dnf'):
+    result = subprocess.run(['dnf', 'check-update', '-q', '--security'], capture_output=True, text=True)
+    updates = [l.split()[0] for l in result.stdout.strip().split('\n') if l.strip()]
+print(json.dumps({'status': 'success', 'complianceReport': {'compliant': len(updates) == 0, 'pendingUpdates': updates, 'count': len(updates)}}))
+"
 }
 
 # ============================================================================
