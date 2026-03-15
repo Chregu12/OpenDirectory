@@ -20,6 +20,13 @@ const CertificateManager = require('./services/certificateManager');
 const ThreatDetector = require('./services/threatDetector');
 const AnalyticsEngine = require('./services/analyticsEngine');
 const PolicyAgentService = require('./services/PolicyAgentService');
+let UpdateAgentService, NetworkProfileAgentService;
+try {
+  UpdateAgentService = require('../../update-management/src/services/UpdateAgentService');
+} catch (e) { /* UpdateAgentService not available */ }
+try {
+  NetworkProfileAgentService = require('../../certificate-network/src/services/NetworkProfileAgentService');
+} catch (e) { /* NetworkProfileAgentService not available */ }
 
 // Utilities
 const logger = require('./utils/logger');
@@ -58,6 +65,8 @@ class EnterpriseDeviceManagementService {
     this.threatDetector = new ThreatDetector(this.db, this.eventBus);
     this.analyticsEngine = new AnalyticsEngine(this.db, this.cache);
     this.policyAgentService = new PolicyAgentService(this);
+    this.updateAgentService = UpdateAgentService ? new UpdateAgentService(this) : null;
+    this.networkProfileAgentService = NetworkProfileAgentService ? new NetworkProfileAgentService(this) : null;
 
     // Connected agent registry: deviceId -> WebSocket connection
     this.connectedAgents = new Map();
@@ -369,6 +378,68 @@ class EnterpriseDeviceManagementService {
     this.app.post('/api/agent/policy/apply-module', this.agentApplyPolicyModule.bind(this));
     this.app.get('/api/agent/policy/status/:deviceId', this.agentGetPolicyStatus.bind(this));
 
+    // Update Agent Routes
+    this.app.post('/api/agent/update/configure', (req, res) => {
+      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
+      const result = this.updateAgentService.configureUpdates(req.body.deviceId, req.body.policy);
+      res.json(result);
+    });
+    this.app.post('/api/agent/update/check-status', (req, res) => {
+      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
+      const result = this.updateAgentService.checkUpdateStatus(req.body.deviceId);
+      res.json(result);
+    });
+    this.app.post('/api/agent/update/trigger', (req, res) => {
+      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
+      const result = this.updateAgentService.triggerUpdate(req.body.deviceId, req.body.options);
+      res.json(result);
+    });
+    this.app.get('/api/agent/update/status/:deviceId', (req, res) => {
+      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
+      res.json(this.updateAgentService.getDeviceUpdateStatus(req.params.deviceId));
+    });
+    this.app.post('/api/agent/update/configure-winget', (req, res) => {
+      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
+      const result = this.updateAgentService.configureWingetAutoUpdate(req.body.deviceId, req.body.policy);
+      res.json(result);
+    });
+
+    // Network Profile Agent Routes
+    this.app.post('/api/agent/network/configure-wifi', (req, res) => {
+      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
+      const result = this.networkProfileAgentService.configureWiFi(req.body.deviceId, req.body.profile);
+      res.json(result);
+    });
+    this.app.post('/api/agent/network/remove-wifi', (req, res) => {
+      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
+      const result = this.networkProfileAgentService.removeWiFi(req.body.deviceId, req.body.profileId, req.body.ssid);
+      res.json(result);
+    });
+    this.app.post('/api/agent/network/configure-vpn', (req, res) => {
+      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
+      const result = this.networkProfileAgentService.configureVPN(req.body.deviceId, req.body.profile);
+      res.json(result);
+    });
+    this.app.post('/api/agent/network/remove-vpn', (req, res) => {
+      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
+      const result = this.networkProfileAgentService.removeVPN(req.body.deviceId, req.body.profileId);
+      res.json(result);
+    });
+    this.app.post('/api/agent/network/configure-email', (req, res) => {
+      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
+      const result = this.networkProfileAgentService.configureEmail(req.body.deviceId, req.body.profile);
+      res.json(result);
+    });
+    this.app.post('/api/agent/network/remove-email', (req, res) => {
+      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
+      const result = this.networkProfileAgentService.removeEmail(req.body.deviceId, req.body.profileId);
+      res.json(result);
+    });
+    this.app.get('/api/agent/network/status/:deviceId', (req, res) => {
+      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
+      res.json(this.networkProfileAgentService.getDeviceProfileState(req.params.deviceId));
+    });
+
     // Agent Communication Routes (used by OpenDirectory Windows/macOS/Linux agents)
     this.app.post('/api/v1/devices/:deviceId/checkin', this.handleAgentCheckin.bind(this));
     this.app.get('/api/v1/devices/:deviceId/commands/pending', this.getPendingCommands.bind(this));
@@ -462,9 +533,13 @@ class EnterpriseDeviceManagementService {
 
       case 'command_result':
         logger.info(\`Command result from \${ws.deviceId}: \${data.commandId} - \${data.status}\`);
-        // Forward policy-related results to PolicyAgentService
+        // Forward results to the correct AgentService based on command prefix
         if (data.commandId && data.commandId.startsWith('pol-')) {
           this.policyAgentService.handleCommandResult(ws.deviceId, data);
+        } else if (data.commandId && data.commandId.startsWith('upd-') && this.updateAgentService) {
+          this.updateAgentService.handleCommandResult(ws.deviceId, data);
+        } else if (data.commandId && data.commandId.startsWith('net-') && this.networkProfileAgentService) {
+          this.networkProfileAgentService.handleCommandResult(ws.deviceId, data);
         }
         this.broadcastToSubscribers('device_events', {
           type: 'command_result',

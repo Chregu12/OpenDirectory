@@ -14,7 +14,7 @@ const { Pool }   = require('pg');
 let policyCompiler = null;
 let policyTemplates = null;
 try {
-  policyCompiler  = require('./compilers');
+  policyCompiler  = require('./src/compilers');
   policyTemplates = require('./policy-templates');
   console.log('Policy Compiler loaded (split modules)');
 } catch (e) {

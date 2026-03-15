@@ -278,7 +278,7 @@ class PrinterPolicyManager {
     // Use the split PrintersCompiler for artifact generation
     let compilePrinters;
     try {
-      ({ compilePrinters } = require('../../../platform/integration-service/src/compilers'));
+      ({ compilePrinters } = require('../../../../platform/integration-service/src/compilers'));
     } catch (e) {
       this.logger.warn('PrintersCompiler not available, using legacy generation:', e.message);
       return this._legacyGenerateDeploymentPackages(policy);
