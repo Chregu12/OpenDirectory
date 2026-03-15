@@ -22,6 +22,9 @@ const crypto = require('crypto');
 //     software?: { blockedApps, requiredApps },
 //     encryption?: { diskEncryption, requireFileVault, requireBitLocker },
 //     browser?: { homepage, defaultSearchEngine, blockedExtensions },
+//     wingetAutoUpdate?: { enabled, updateMode, whitelist[], blacklist[],
+//       schedule: { interval, time, timeDelay, daysOfWeek },
+//       notifications, userContext, acceptAllSourceAgreements, maxConcurrentUpdates },
 //   }
 // }
 
@@ -263,6 +266,81 @@ ${entries.map(e => `  <Registry clsid="{9CD4B2F4-923D-47f5-A062-E897DD1DAD50}"
   if (s.updates?.automatic !== undefined) {
     psLines.push('# Windows Update Policy');
     psLines.push(`Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU" -Name "AUOptions" -Value ${s.updates.automatic ? 4 : 1} -ErrorAction SilentlyContinue`);
+    psLines.push('');
+  }
+
+  // ── Winget Auto-Update Policy ─────────────────────────────────────────────
+  if (s.wingetAutoUpdate?.enabled) {
+    const wau = s.wingetAutoUpdate;
+    const regKey = 'SOFTWARE\\Policies\\OpenDirectory\\WingetAutoUpdate';
+
+    // Registry entries for policy configuration
+    machineRegistryEntries.push({
+      hive: 'HKEY_LOCAL_MACHINE',
+      key: regKey,
+      name: 'Enabled',
+      type: 'DWORD',
+      value: '1',
+    });
+    machineRegistryEntries.push({
+      hive: 'HKEY_LOCAL_MACHINE',
+      key: regKey,
+      name: 'UpdateMode',
+      type: 'REG_SZ',
+      value: wau.updateMode || 'blacklist',
+    });
+    machineRegistryEntries.push({
+      hive: 'HKEY_LOCAL_MACHINE',
+      key: regKey,
+      name: 'UpdateInterval',
+      type: 'REG_SZ',
+      value: wau.schedule?.interval || 'Daily',
+    });
+    machineRegistryEntries.push({
+      hive: 'HKEY_LOCAL_MACHINE',
+      key: regKey,
+      name: 'UpdateTime',
+      type: 'REG_SZ',
+      value: wau.schedule?.time || '06:00',
+    });
+    machineRegistryEntries.push({
+      hive: 'HKEY_LOCAL_MACHINE',
+      key: regKey,
+      name: 'NotificationLevel',
+      type: 'REG_SZ',
+      value: wau.notifications || 'Full',
+    });
+    machineRegistryEntries.push({
+      hive: 'HKEY_LOCAL_MACHINE',
+      key: regKey,
+      name: 'UserContext',
+      type: 'DWORD',
+      value: wau.userContext ? '1' : '0',
+    });
+
+    // PowerShell lines for winget auto-update configuration
+    psLines.push('# Winget Auto-Update Policy (OpenDirectory)');
+    psLines.push('$WAURegPath = "HKLM:\\SOFTWARE\\Policies\\OpenDirectory\\WingetAutoUpdate"');
+    psLines.push('if (!(Test-Path $WAURegPath)) { New-Item -Path $WAURegPath -Force | Out-Null }');
+    psLines.push(`Set-ItemProperty -Path $WAURegPath -Name "Enabled" -Value 1 -Type DWord`);
+    psLines.push(`Set-ItemProperty -Path $WAURegPath -Name "UpdateMode" -Value "${wau.updateMode || 'blacklist'}" -Type String`);
+    psLines.push(`Set-ItemProperty -Path $WAURegPath -Name "UpdateInterval" -Value "${wau.schedule?.interval || 'Daily'}" -Type String`);
+    psLines.push(`Set-ItemProperty -Path $WAURegPath -Name "UpdateTime" -Value "${wau.schedule?.time || '06:00'}" -Type String`);
+    psLines.push(`Set-ItemProperty -Path $WAURegPath -Name "NotificationLevel" -Value "${wau.notifications || 'Full'}" -Type String`);
+
+    // Write app lists
+    if (wau.updateMode === 'whitelist' && wau.whitelist?.length) {
+      const apps = wau.whitelist.map(id => `"${id}"`).join(', ');
+      psLines.push('$WAUConfigPath = "C:\\OpenDirectory\\Config"');
+      psLines.push('if (!(Test-Path $WAUConfigPath)) { New-Item -Path $WAUConfigPath -ItemType Directory -Force | Out-Null }');
+      psLines.push(`@(${apps}) | Out-File -FilePath "$WAUConfigPath\\winget-whitelist.txt" -Force`);
+    }
+    if (wau.updateMode === 'blacklist' && wau.blacklist?.length) {
+      const apps = wau.blacklist.map(id => `"${id}"`).join(', ');
+      psLines.push('$WAUConfigPath = "C:\\OpenDirectory\\Config"');
+      psLines.push('if (!(Test-Path $WAUConfigPath)) { New-Item -Path $WAUConfigPath -ItemType Directory -Force | Out-Null }');
+      psLines.push(`@(${apps}) | Out-File -FilePath "$WAUConfigPath\\winget-blacklist.txt" -Force`);
+    }
     psLines.push('');
   }
 

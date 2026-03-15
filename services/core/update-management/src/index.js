@@ -14,6 +14,7 @@ const UpdateRingsService = require('./services/UpdateRingsService');
 const MAMService = require('./services/MAMService');
 const TermsOfUseService = require('./services/TermsOfUseService');
 const MultiTenantService = require('./services/MultiTenantService');
+const WingetAutoUpdateService = require('./services/WingetAutoUpdateService');
 
 // Import utilities
 const logger = require('./utils/logger');
@@ -65,7 +66,8 @@ class UpdateManagementService extends EventEmitter {
             updateRings: new UpdateRingsService(),
             mam: new MAMService(),
             termsOfUse: new TermsOfUseService(),
-            multiTenant: new MultiTenantService()
+            multiTenant: new MultiTenantService(),
+            wingetAutoUpdate: new WingetAutoUpdateService()
         };
 
         // Set up service event listeners
@@ -194,7 +196,8 @@ class UpdateManagementService extends EventEmitter {
                     updateRings: 'operational',
                     mam: 'operational',
                     termsOfUse: 'operational',
-                    multiTenant: 'operational'
+                    multiTenant: 'operational',
+                    wingetAutoUpdate: 'operational'
                 }
             });
         });
@@ -384,6 +387,17 @@ class UpdateManagementService extends EventEmitter {
         this.services.multiTenant.on('tenantCreated', (tenant) => {
             logger.info(`Tenant created: ${tenant.name} (${tenant.id})`);
             this.emit('tenantCreated', tenant);
+        });
+
+        // Winget Auto-Update service events
+        this.services.wingetAutoUpdate.on('wingetAutoUpdateConfigured', (data) => {
+            logger.info(`Winget Auto-Update configured for device: ${data.deviceId}`);
+            this.emit('wingetAutoUpdateConfigured', data);
+        });
+
+        this.services.wingetAutoUpdate.on('wingetUpdateForced', (data) => {
+            logger.info(`Winget update forced for device: ${data.deviceId}`);
+            this.emit('wingetUpdateForced', data);
         });
 
         // Cross-service integration

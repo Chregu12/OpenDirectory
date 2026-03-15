@@ -695,10 +695,89 @@ ${comp.preferences?.powerManagement ? this.generateWindowsPowerManagement(comp.p
 # Startup Scripts
 ${comp.windowsSettings?.scripts?.startup?.length > 0 ? this.generateWindowsScripts(comp.windowsSettings.scripts.startup, 'Startup') : ''}
 
+# Winget Auto-Update Configuration
+${comp.wingetAutoUpdate?.enabled ? this.generateWingetAutoUpdateGPO(comp.wingetAutoUpdate) : ''}
+
 Write-EventLog -LogName Application -Source "OpenDirectory GPO" -EventId 1001 -Message "Completed Computer Configuration for ${policy.name}"
 `;
   }
-  
+
+  /**
+   * Generate Winget Auto-Update GPO configuration
+   * Configures registry-based policy and scheduled task for automatic app updates via winget
+   */
+  generateWingetAutoUpdateGPO(wauConfig) {
+    const updateMode = wauConfig.updateMode || 'blacklist';
+    const schedule = wauConfig.schedule || {};
+    const interval = schedule.interval || 'Daily';
+    const time = schedule.time || '06:00';
+    const timeDelay = schedule.timeDelay || 0;
+    const notifications = wauConfig.notifications || 'Full';
+    const userContext = wauConfig.userContext || false;
+
+    let appListBlock = '';
+    if (updateMode === 'whitelist' && wauConfig.whitelist?.length) {
+      const apps = wauConfig.whitelist.map(id => `"${id}"`).join(', ');
+      appListBlock = `
+# Write whitelist
+\$WAUConfigPath = "C:\\OpenDirectory\\Config"
+if (!(Test-Path \$WAUConfigPath)) { New-Item -Path \$WAUConfigPath -ItemType Directory -Force | Out-Null }
+@(${apps}) | Out-File -FilePath "\$WAUConfigPath\\winget-whitelist.txt" -Force
+Write-EventLog -LogName Application -Source "OpenDirectory GPO" -EventId 1040 -Message "Winget Auto-Update whitelist configured: ${wauConfig.whitelist.length} apps"`;
+    } else if (updateMode === 'blacklist' && wauConfig.blacklist?.length) {
+      const apps = wauConfig.blacklist.map(id => `"${id}"`).join(', ');
+      appListBlock = `
+# Write blacklist
+\$WAUConfigPath = "C:\\OpenDirectory\\Config"
+if (!(Test-Path \$WAUConfigPath)) { New-Item -Path \$WAUConfigPath -ItemType Directory -Force | Out-Null }
+@(${apps}) | Out-File -FilePath "\$WAUConfigPath\\winget-blacklist.txt" -Force
+Write-EventLog -LogName Application -Source "OpenDirectory GPO" -EventId 1040 -Message "Winget Auto-Update blacklist configured: ${wauConfig.blacklist.length} apps"`;
+    }
+
+    return `
+# ── Winget Auto-Update Policy Configuration ──────────────────────────────
+Write-Host "Configuring Winget Auto-Update policy..."
+
+# Configure policy registry keys
+\$WAURegPath = "HKLM:\\SOFTWARE\\Policies\\OpenDirectory\\WingetAutoUpdate"
+if (!(Test-Path \$WAURegPath)) { New-Item -Path \$WAURegPath -Force | Out-Null }
+
+Set-ItemProperty -Path \$WAURegPath -Name "Enabled" -Value 1 -Type DWord
+Set-ItemProperty -Path \$WAURegPath -Name "UpdateMode" -Value "${updateMode}" -Type String
+Set-ItemProperty -Path \$WAURegPath -Name "UpdateInterval" -Value "${interval}" -Type String
+Set-ItemProperty -Path \$WAURegPath -Name "UpdateTime" -Value "${time}" -Type String
+Set-ItemProperty -Path \$WAURegPath -Name "TimeDelay" -Value ${timeDelay} -Type DWord
+Set-ItemProperty -Path \$WAURegPath -Name "NotificationLevel" -Value "${notifications}" -Type String
+Set-ItemProperty -Path \$WAURegPath -Name "UserContext" -Value ${userContext ? 1 : 0} -Type DWord
+Set-ItemProperty -Path \$WAURegPath -Name "LastConfigured" -Value (Get-Date).ToString("o") -Type String
+
+${appListBlock}
+
+# Ensure winget is available
+\$WingetAvailable = [bool](Get-Command winget -ErrorAction SilentlyContinue)
+if (-not \$WingetAvailable) {
+    Write-EventLog -LogName Application -Source "OpenDirectory GPO" -EventId 1050 -EntryType Warning -Message "Winget not found - Auto-Update scheduled task will not be created"
+} else {
+    # Register scheduled task for automatic updates
+    \$TaskName = "OpenDirectory-WingetAutoUpdate"
+    Unregister-ScheduledTask -TaskName \$TaskName -Confirm:\$false -ErrorAction SilentlyContinue
+
+    \$ScriptPath = "C:\\OpenDirectory\\Scripts\\Invoke-WingetAutoUpdate.ps1"
+    \$ScriptDir = Split-Path \$ScriptPath -Parent
+    if (!(Test-Path \$ScriptDir)) { New-Item -Path \$ScriptDir -ItemType Directory -Force | Out-Null }
+
+    \$Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File \`"\$ScriptPath\`""
+    \$Trigger = New-ScheduledTaskTrigger -Daily -At "${time}"
+    \$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+    \$Principal = New-ScheduledTaskPrincipal -UserID "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+
+    Register-ScheduledTask -TaskName \$TaskName -Action \$Action -Trigger \$Trigger -Settings \$Settings -Principal \$Principal -Description "OpenDirectory Winget Auto-Update" -Force
+
+    Write-EventLog -LogName Application -Source "OpenDirectory GPO" -EventId 1041 -Message "Winget Auto-Update scheduled task configured: ${interval} at ${time}"
+}
+`;
+  }
+
   /**
    * Generate Windows User Configuration Script
    */
