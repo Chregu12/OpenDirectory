@@ -5,147 +5,825 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
-const { createServer } = require('http');
-const WebSocket = require('ws');
+const { EventEmitter } = require('events');
+const winston = require('winston');
+const path = require('path');
+const fs = require('fs');
 const Joi = require('joi');
 const { v4: uuidv4 } = require('uuid');
+const http = require('http');
+const WebSocket = require('ws');
 
-const ExposureScanner = require('./services/exposureScanner');
+// ====================================================================== //
+//  Logger setup
+// ====================================================================== //
 
-/**
- * Security Exposure Scanner Service
- *
- * Express server with REST API and WebSocket support for real-time scan progress.
- * Scans AD/Intune/device configurations for security vulnerabilities and
- * compliance gaps against CIS, NIST, and DISA STIG benchmarks.
- */
-class SecurityScannerService {
-  constructor() {
-    this.app = express();
-    this.server = createServer(this.app);
-    this.wss = new WebSocket.Server({
-      server: this.server,
-      path: '/ws/scanner',
-    });
+const logsDir = path.join(__dirname, '../logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
 
-    this.port = process.env.SECURITY_SCANNER_PORT || 3040;
-    this.activeConnections = new Map();
+const logFormat = winston.format.combine(
+  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  winston.format.errors({ stack: true }),
+  winston.format.json()
+);
 
-    // Initialize logger
-    this.logger = this._createLogger();
+const consoleFormat = winston.format.combine(
+  winston.format.colorize(),
+  winston.format.timestamp({ format: 'HH:mm:ss' }),
+  winston.format.printf(({ timestamp, level, message, ...meta }) => {
+    let msg = `${timestamp} [${level}]: ${message}`;
+    if (Object.keys(meta).length > 0) {
+      msg += ' ' + JSON.stringify(meta);
+    }
+    return msg;
+  })
+);
 
-    // Initialize scanner
-    this.scanner = new ExposureScanner({ logger: this.logger });
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: logFormat,
+  defaultMeta: { service: 'security-scanner', version: '1.0.0' },
+  transports: [
+    new winston.transports.File({
+      filename: path.join(logsDir, 'error.log'),
+      level: 'error',
+      maxsize: 20 * 1024 * 1024,
+      maxFiles: 14,
+    }),
+    new winston.transports.File({
+      filename: path.join(logsDir, 'combined.log'),
+      maxsize: 20 * 1024 * 1024,
+      maxFiles: 30,
+    }),
+  ],
+});
 
-    this._initializeMiddleware();
-    this._initializeWebSocket();
-    this._initializeRoutes();
-    this._initializeScannerEvents();
+if (process.env.NODE_ENV !== 'production') {
+  logger.add(new winston.transports.Console({
+    format: consoleFormat,
+    level: process.env.LOG_LEVEL || 'debug',
+  }));
+}
+
+// ====================================================================== //
+//  Import services
+// ====================================================================== //
+
+const GPOAnalyzer = require('./services/gpoAnalyzer');
+const PrivilegeAuditor = require('./services/privilegeAuditor');
+const DeviceSecurityAnalyzer = require('./services/deviceSecurityAnalyzer');
+
+// ====================================================================== //
+//  ExposureScanner - inline orchestrator that coordinates all analyzers
+// ====================================================================== //
+
+class ExposureScanner extends EventEmitter {
+  constructor(options = {}) {
+    super();
+    this.logger = options.logger || console;
+    this.gpoAnalyzer = options.gpoAnalyzer;
+    this.privilegeAuditor = options.privilegeAuditor;
+    this.deviceSecurityAnalyzer = options.deviceSecurityAnalyzer;
+
+    // In-memory stores
+    this.scans = new Map();
+    this.findings = new Map();
+    this.schedules = new Map();
+    this.trends = [];
   }
 
-  // --- Middleware ---
+  /**
+   * Start a new security scan.
+   */
+  async startScan(params) {
+    const scanId = uuidv4();
+    const scan = {
+      id: scanId,
+      status: 'running',
+      type: params.type || 'full',
+      targets: params.targets || [],
+      benchmarks: params.benchmarks || ['CIS'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      progress: 0,
+      message: 'Initializing scan...',
+      results: null,
+      error: null,
+    };
+
+    this.scans.set(scanId, scan);
+    this.emit('scanStarted', { scanId });
+
+    // Run asynchronously so the HTTP response returns immediately
+    this._executeScan(scanId, params).catch((err) => {
+      this.logger.error(`Scan ${scanId} failed: ${err.message}`);
+      scan.status = 'failed';
+      scan.error = err.message;
+      scan.updatedAt = new Date().toISOString();
+      this.emit('scanFailed', { scanId, error: err.message });
+    });
+
+    return { scanId, status: scan.status, createdAt: scan.createdAt };
+  }
+
+  async _executeScan(scanId, params) {
+    const scan = this.scans.get(scanId);
+    if (!scan) return;
+
+    const allFindings = [];
+    const phases = [];
+
+    if (!params.type || params.type === 'full' || params.type === 'gpo') {
+      phases.push({ name: 'GPO Analysis', weight: 30, run: () => this._runGPOAnalysis(params) });
+    }
+    if (!params.type || params.type === 'full' || params.type === 'privilege') {
+      phases.push({ name: 'Privilege Audit', weight: 30, run: () => this._runPrivilegeAudit(params) });
+    }
+    if (!params.type || params.type === 'full' || params.type === 'device') {
+      phases.push({ name: 'Device Security', weight: 40, run: () => this._runDeviceAnalysis(params) });
+    }
+
+    let completedWeight = 0;
+
+    for (const phase of phases) {
+      scan.message = `Running ${phase.name}...`;
+      scan.updatedAt = new Date().toISOString();
+      this.emit('scanProgress', { scanId, progress: completedWeight, message: scan.message });
+
+      try {
+        const phaseResult = await phase.run();
+        if (phaseResult && phaseResult.findings) {
+          allFindings.push(...phaseResult.findings);
+        }
+      } catch (err) {
+        this.logger.error(`Phase ${phase.name} failed: ${err.message}`);
+      }
+
+      completedWeight += phase.weight;
+      scan.progress = completedWeight;
+    }
+
+    // Store findings
+    for (const finding of allFindings) {
+      this.findings.set(finding.id, finding);
+    }
+
+    // Finalise scan
+    scan.status = 'completed';
+    scan.progress = 100;
+    scan.message = 'Scan complete';
+    scan.updatedAt = new Date().toISOString();
+    scan.results = {
+      totalFindings: allFindings.length,
+      findingIds: allFindings.map((f) => f.id),
+      bySeverity: this._countBySeverity(allFindings),
+      riskScore: this._computeOverallRiskScore(allFindings),
+    };
+
+    // Record trend data-point
+    this.trends.push({
+      timestamp: new Date().toISOString(),
+      scanId,
+      riskScore: scan.results.riskScore,
+      totalFindings: allFindings.length,
+      bySeverity: { ...scan.results.bySeverity },
+    });
+
+    this.emit('scanCompleted', { scanId, results: scan.results });
+  }
+
+  async _runGPOAnalysis(params) {
+    const gpoData = params.gpoData || params.data || {};
+    return this.gpoAnalyzer.analyze(gpoData.gpos || [], params.benchmarks || ['CIS']);
+  }
+
+  async _runPrivilegeAudit(params) {
+    const adData = params.adData || params.data || {};
+    return this.privilegeAuditor.audit(adData);
+  }
+
+  async _runDeviceAnalysis(params) {
+    const devices = params.devices || (params.data && params.data.devices) || [];
+    if (devices.length === 0) return { findings: [] };
+    return this.deviceSecurityAnalyzer.analyzeFleet(devices, params.benchmarks || ['CIS']);
+  }
+
+  getScan(scanId) {
+    return this.scans.get(scanId) || null;
+  }
+
+  getFindings(filters = {}) {
+    let results = Array.from(this.findings.values());
+
+    if (filters.severity) {
+      const sevArr = Array.isArray(filters.severity) ? filters.severity : [filters.severity];
+      results = results.filter((f) => sevArr.includes(f.severity));
+    }
+    if (filters.category) {
+      results = results.filter((f) => f.category === filters.category);
+    }
+    if (filters.status) {
+      results = results.filter((f) => f.status === filters.status);
+    }
+    if (filters.scanId) {
+      const scan = this.scans.get(filters.scanId);
+      if (scan && scan.results) {
+        const ids = new Set(scan.results.findingIds);
+        results = results.filter((f) => ids.has(f.id));
+      }
+    }
+
+    // Sort by severity weight descending
+    const severityOrder = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+    results.sort((a, b) => (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0));
+
+    const limit = filters.limit || 100;
+    const offset = filters.offset || 0;
+    return {
+      total: results.length,
+      offset,
+      limit,
+      findings: results.slice(offset, offset + limit),
+    };
+  }
+
+  getFinding(findingId) {
+    return this.findings.get(findingId) || null;
+  }
+
+  getOverallRiskScore() {
+    const allFindings = Array.from(this.findings.values()).filter((f) => f.status === 'open');
+    return {
+      riskScore: this._computeOverallRiskScore(allFindings),
+      totalOpenFindings: allFindings.length,
+      bySeverity: this._countBySeverity(allFindings),
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  getEntityRiskScore(entityType, entityId) {
+    const allFindings = Array.from(this.findings.values());
+    const entityFindings = allFindings.filter((f) =>
+      (f.affectedObjects || []).some((obj) => {
+        const objType = (obj.type || '').toLowerCase();
+        const objName = (obj.name || obj.id || '').toLowerCase();
+        return objType === entityType.toLowerCase() && objName === entityId.toLowerCase();
+      })
+    );
+
+    return {
+      entityType,
+      entityId,
+      riskScore: this._computeOverallRiskScore(entityFindings),
+      totalFindings: entityFindings.length,
+      bySeverity: this._countBySeverity(entityFindings),
+      findings: entityFindings.map((f) => ({ id: f.id, title: f.title, severity: f.severity })),
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  getBenchmarks() {
+    return [
+      { id: 'CIS', name: 'CIS Benchmarks', version: '3.0', description: 'Center for Internet Security best practices' },
+      { id: 'NIST', name: 'NIST SP 800-53', version: 'Rev 5', description: 'NIST security and privacy controls' },
+      { id: 'STIG', name: 'DISA STIG', version: '2024Q4', description: 'Security Technical Implementation Guides' },
+    ];
+  }
+
+  getTrends(filters = {}) {
+    let data = [...this.trends];
+
+    if (filters.from) {
+      const from = new Date(filters.from);
+      data = data.filter((t) => new Date(t.timestamp) >= from);
+    }
+    if (filters.to) {
+      const to = new Date(filters.to);
+      data = data.filter((t) => new Date(t.timestamp) <= to);
+    }
+    if (filters.days) {
+      const cutoff = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000);
+      data = data.filter((t) => new Date(t.timestamp) >= cutoff);
+    }
+
+    return {
+      dataPoints: data,
+      total: data.length,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  scheduleScan(params) {
+    const scheduleId = uuidv4();
+    const schedule = {
+      id: scheduleId,
+      name: params.name || `Schedule ${scheduleId.slice(0, 8)}`,
+      cron: params.cron || params.cronExpression || '0 2 * * 0',
+      type: params.type || 'full',
+      benchmarks: params.benchmarks || ['CIS'],
+      scope: params.scope || ['gpo', 'privilege', 'device'],
+      targets: params.targets || [],
+      enabled: params.enabled !== undefined ? params.enabled : true,
+      createdAt: new Date().toISOString(),
+      nextRun: params.nextRun || null,
+    };
+
+    this.schedules.set(scheduleId, schedule);
+    this.logger.info(`Scan scheduled: ${scheduleId} with cron "${schedule.cron}"`);
+    this.emit('scanScheduled', { scheduleId, schedule });
+
+    return schedule;
+  }
+
+  getSchedules() {
+    return Array.from(this.schedules.values());
+  }
+
+  deleteSchedule(scheduleId) {
+    return this.schedules.delete(scheduleId);
+  }
+
+  shutdown() {
+    this.schedules.clear();
+  }
+
+  _countBySeverity(findings) {
+    const counts = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+    for (const f of findings) {
+      counts[f.severity] = (counts[f.severity] || 0) + 1;
+    }
+    return counts;
+  }
+
+  _computeOverallRiskScore(findings) {
+    if (findings.length === 0) return 0;
+    const severityScores = { Critical: 10, High: 8, Medium: 5, Low: 2 };
+    const total = findings.reduce((sum, f) => sum + (severityScores[f.severity] || 5), 0);
+    const maxPossible = findings.length * 10;
+    return Math.min(100, Math.round((total / maxPossible) * 100));
+  }
+}
+
+// ====================================================================== //
+//  Validation schemas
+// ====================================================================== //
+
+const schemas = {
+  startScan: Joi.object({
+    type: Joi.string().valid('full', 'gpo', 'privilege', 'device').optional(),
+    targets: Joi.array().items(Joi.string()).optional(),
+    benchmarks: Joi.array().items(Joi.string().valid('CIS', 'NIST', 'STIG')).optional(),
+    data: Joi.object().optional(),
+    gpoData: Joi.object().optional(),
+    adData: Joi.object().optional(),
+    devices: Joi.array().items(Joi.object()).optional(),
+    scope: Joi.array().items(Joi.string().valid('gpo', 'privilege', 'device')).optional(),
+  }),
+  scheduleScan: Joi.object({
+    name: Joi.string().max(255).optional(),
+    cron: Joi.string().optional(),
+    cronExpression: Joi.string().optional(),
+    type: Joi.string().valid('full', 'gpo', 'privilege', 'device').optional(),
+    benchmarks: Joi.array().items(Joi.string().valid('CIS', 'NIST', 'STIG')).optional(),
+    scope: Joi.array().items(Joi.string().valid('gpo', 'privilege', 'device')).optional(),
+    targets: Joi.array().items(Joi.string()).optional(),
+    enabled: Joi.boolean().optional(),
+    nextRun: Joi.string().isoDate().optional(),
+  }),
+};
+
+// ====================================================================== //
+//  SecurityScannerService
+// ====================================================================== //
+
+class SecurityScannerService extends EventEmitter {
+  constructor() {
+    super();
+    this.app = express();
+    this.server = null;
+    this.wss = null;
+
+    // Initialise analysers
+    this.gpoAnalyzer = new GPOAnalyzer({ logger });
+    this.privilegeAuditor = new PrivilegeAuditor({ logger });
+    this.deviceSecurityAnalyzer = new DeviceSecurityAnalyzer({ logger });
+
+    // Orchestrator
+    this.scanner = new ExposureScanner({
+      logger,
+      gpoAnalyzer: this.gpoAnalyzer,
+      privilegeAuditor: this.privilegeAuditor,
+      deviceSecurityAnalyzer: this.deviceSecurityAnalyzer,
+    });
+
+    this._initializeMiddleware();
+    this._initializeRoutes();
+    this._initializeErrorHandling();
+  }
+
+  // ------------------------------------------------------------------ //
+  //  Middleware
+  // ------------------------------------------------------------------ //
 
   _initializeMiddleware() {
+    logger.info('Setting up middleware...');
+
     this.app.use(helmet({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
           scriptSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          mediaSrc: ["'self'"],
+          frameSrc: ["'none'"],
         },
       },
+      crossOriginEmbedderPolicy: false,
     }));
 
     this.app.use(cors({
-      origin: process.env.CORS_ORIGIN || '*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        const allowed = (process.env.CORS_ORIGINS || 'http://localhost:3000').split(',');
+        if (allowed.indexOf(origin) !== -1) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Request-ID'],
     }));
 
     this.app.use(compression());
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true }));
 
-    // Rate limiting
+    // Rate limiting on API routes
     const limiter = rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 100,
+      windowMs: 15 * 60 * 1000,
+      max: parseInt(process.env.RATE_LIMIT_MAX, 10) || 1000,
+      message: {
+        error: 'Too many requests from this IP, please try again later',
+        retryAfter: '15 minutes',
+      },
       standardHeaders: true,
       legacyHeaders: false,
-      message: { error: 'Too many requests, please try again later.' },
+      skip: (req) => req.path === '/health' || req.path === '/metrics',
     });
-    this.app.use('/api/', limiter);
+    this.app.use('/api', limiter);
 
-    // Scan endpoint has stricter rate limiting
+    // Stricter rate limit for scan endpoint
     const scanLimiter = rateLimit({
-      windowMs: 60 * 60 * 1000, // 1 hour
-      max: 10,
-      message: { error: 'Scan rate limit exceeded. Maximum 10 scans per hour.' },
+      windowMs: 60 * 60 * 1000,
+      max: 20,
+      message: { error: 'Scan rate limit exceeded. Maximum 20 scans per hour.' },
     });
     this.app.use('/api/scanner/scan', scanLimiter);
 
-    // Request ID and logging middleware
+    // Request logging
     this.app.use((req, res, next) => {
       req.requestId = req.headers['x-request-id'] || uuidv4();
       res.setHeader('X-Request-ID', req.requestId);
 
       const start = Date.now();
       res.on('finish', () => {
-        const duration = Date.now() - start;
-        this.logger.info(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`, {
+        logger.info(`${req.method} ${req.originalUrl}`, {
+          statusCode: res.statusCode,
+          durationMs: Date.now() - start,
+          ip: req.ip,
           requestId: req.requestId,
-          method: req.method,
-          url: req.originalUrl,
-          status: res.statusCode,
-          duration,
         });
       });
-
       next();
     });
+
+    logger.info('Middleware setup completed');
   }
 
-  // --- WebSocket ---
+  // ------------------------------------------------------------------ //
+  //  Routes
+  // ------------------------------------------------------------------ //
 
-  _initializeWebSocket() {
-    this.wss.on('connection', (ws, req) => {
+  _initializeRoutes() {
+    logger.info('Setting up routes...');
+
+    // ---- Health ----
+
+    this.app.get('/health', (_req, res) => {
+      const uptime = process.uptime();
+      const memUsage = process.memoryUsage();
+
+      res.json({
+        status: 'healthy',
+        service: 'security-exposure-scanner',
+        timestamp: new Date().toISOString(),
+        version: '1.0.0',
+        services: {
+          gpoAnalyzer: 'operational',
+          privilegeAuditor: 'operational',
+          deviceSecurityAnalyzer: 'operational',
+          exposureScanner: 'operational',
+        },
+        uptime: {
+          seconds: Math.floor(uptime),
+          formatted: this._formatUptime(uptime),
+        },
+        memory: {
+          rss: this._formatBytes(memUsage.rss),
+          heapUsed: this._formatBytes(memUsage.heapUsed),
+          heapTotal: this._formatBytes(memUsage.heapTotal),
+        },
+        scans: {
+          active: Array.from(this.scanner.scans.values()).filter((s) => s.status === 'running').length,
+          completed: Array.from(this.scanner.scans.values()).filter((s) => s.status === 'completed').length,
+        },
+        findings: {
+          total: this.scanner.findings.size,
+        },
+      });
+    });
+
+    // ---- Scanner API ----
+
+    const router = express.Router();
+
+    // POST /api/scanner/scan - Start a new scan
+    router.post('/scan', async (req, res, next) => {
+      try {
+        const { error, value } = schemas.startScan.validate(req.body);
+        if (error) {
+          return res.status(400).json({
+            error: 'Validation error',
+            details: error.details.map((d) => d.message),
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        const result = await this.scanner.startScan(value);
+
+        res.status(202).json({
+          message: 'Scan started',
+          ...result,
+          links: {
+            status: `/api/scanner/scan/${result.scanId}`,
+            findings: `/api/scanner/findings?scanId=${result.scanId}`,
+            ws: `ws://localhost:${this.port}/ws`,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    // GET /api/scanner/scan/:scanId - Get scan status / results
+    router.get('/scan/:scanId', (req, res, next) => {
+      try {
+        const scan = this.scanner.getScan(req.params.scanId);
+        if (!scan) {
+          return res.status(404).json({
+            error: 'Scan not found',
+            scanId: req.params.scanId,
+            timestamp: new Date().toISOString(),
+          });
+        }
+        res.json({ success: true, data: scan });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    // GET /api/scanner/findings - List findings
+    router.get('/findings', (req, res, next) => {
+      try {
+        const filters = {
+          severity: req.query.severity ? req.query.severity.split(',') : null,
+          category: req.query.category || null,
+          status: req.query.status || null,
+          scanId: req.query.scanId || null,
+          limit: req.query.limit ? parseInt(req.query.limit, 10) : 100,
+          offset: req.query.offset ? parseInt(req.query.offset, 10) : 0,
+        };
+        const result = this.scanner.getFindings(filters);
+        res.json({ success: true, ...result });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    // GET /api/scanner/findings/:findingId - Finding detail
+    router.get('/findings/:findingId', (req, res, next) => {
+      try {
+        const finding = this.scanner.getFinding(req.params.findingId);
+        if (!finding) {
+          return res.status(404).json({
+            error: 'Finding not found',
+            findingId: req.params.findingId,
+            timestamp: new Date().toISOString(),
+          });
+        }
+        res.json({ success: true, data: finding });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    // GET /api/scanner/risk-score - Overall risk score
+    router.get('/risk-score', (_req, res, next) => {
+      try {
+        const score = this.scanner.getOverallRiskScore();
+        res.json({ success: true, data: score });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    // GET /api/scanner/risk-score/:entityType/:entityId - Entity risk score
+    router.get('/risk-score/:entityType/:entityId', (req, res, next) => {
+      try {
+        const validTypes = ['device', 'user', 'group', 'gpo', 'service-account', 'principal'];
+        if (!validTypes.includes(req.params.entityType)) {
+          return res.status(400).json({
+            error: 'Validation error',
+            message: `Invalid entity type. Must be one of: ${validTypes.join(', ')}`,
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        const score = this.scanner.getEntityRiskScore(
+          req.params.entityType,
+          req.params.entityId
+        );
+        res.json({ success: true, data: score });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    // GET /api/scanner/benchmarks - Available benchmarks
+    router.get('/benchmarks', (_req, res, next) => {
+      try {
+        const benchmarks = this.scanner.getBenchmarks();
+        res.json({ success: true, data: benchmarks, timestamp: new Date().toISOString() });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    // GET /api/scanner/trends - Risk trends over time
+    router.get('/trends', (req, res, next) => {
+      try {
+        const filters = {
+          from: req.query.from || null,
+          to: req.query.to || null,
+          days: req.query.days ? parseInt(req.query.days, 10) : null,
+        };
+        const trends = this.scanner.getTrends(filters);
+        res.json({ success: true, data: trends });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    // POST /api/scanner/schedule - Schedule a recurring scan
+    router.post('/schedule', (req, res, next) => {
+      try {
+        const { error, value } = schemas.scheduleScan.validate(req.body);
+        if (error) {
+          return res.status(400).json({
+            error: 'Validation error',
+            details: error.details.map((d) => d.message),
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        const schedule = this.scanner.scheduleScan(value);
+
+        res.status(201).json({
+          message: 'Scan scheduled',
+          success: true,
+          data: schedule,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    this.app.use('/api/scanner', router);
+
+    logger.info('Routes setup completed');
+  }
+
+  // ------------------------------------------------------------------ //
+  //  Error handling
+  // ------------------------------------------------------------------ //
+
+  _initializeErrorHandling() {
+    // 404 handler
+    this.app.use('*', (req, res) => {
+      res.status(404).json({
+        error: 'Endpoint not found',
+        message: `The requested endpoint ${req.method} ${req.originalUrl} was not found`,
+        availableEndpoints: [
+          'POST   /api/scanner/scan',
+          'GET    /api/scanner/scan/:scanId',
+          'GET    /api/scanner/findings',
+          'GET    /api/scanner/findings/:findingId',
+          'GET    /api/scanner/risk-score',
+          'GET    /api/scanner/risk-score/:entityType/:entityId',
+          'GET    /api/scanner/benchmarks',
+          'GET    /api/scanner/trends',
+          'POST   /api/scanner/schedule',
+          'GET    /health',
+          'WS     /ws',
+        ],
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    // Global error handler
+    this.app.use((err, _req, res, _next) => {
+      const statusCode = err.statusCode || 500;
+      const isDev = process.env.NODE_ENV === 'development';
+
+      if (statusCode >= 500) {
+        logger.error('Unhandled error', { message: err.message, stack: err.stack });
+      } else {
+        logger.warn('Client error', { statusCode, message: err.message });
+      }
+
+      res.status(statusCode).json({
+        error: statusCode >= 500 && !isDev ? 'Internal server error' : err.message,
+        ...(isDev && { stack: err.stack }),
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    // Process-level handlers
+    process.on('uncaughtException', (err) => {
+      logger.error('Uncaught Exception', { message: err.message, stack: err.stack });
+      process.exit(1);
+    });
+
+    process.on('unhandledRejection', (reason) => {
+      logger.error('Unhandled Rejection', { reason: String(reason) });
+    });
+
+    logger.info('Error handling setup completed');
+  }
+
+  // ------------------------------------------------------------------ //
+  //  WebSocket for scan progress
+  // ------------------------------------------------------------------ //
+
+  _initializeWebSocket(server) {
+    this.wss = new WebSocket.Server({ server, path: '/ws' });
+    this.activeConnections = new Map();
+
+    this.wss.on('connection', (ws) => {
       const connectionId = uuidv4();
       this.activeConnections.set(connectionId, ws);
-
-      this.logger.info(`WebSocket client connected: ${connectionId}`);
+      logger.info(`WebSocket client connected: ${connectionId}`);
 
       ws.send(JSON.stringify({
         type: 'connected',
         connectionId,
-        message: 'Connected to Security Exposure Scanner',
+        message: 'Connected to Security Scanner WebSocket',
         timestamp: new Date().toISOString(),
       }));
+
+      ws.isAlive = true;
+      ws.subscribedScans = new Set();
+
+      ws.on('pong', () => { ws.isAlive = true; });
 
       ws.on('message', (data) => {
         try {
           const message = JSON.parse(data.toString());
           this._handleWebSocketMessage(connectionId, ws, message);
         } catch (err) {
-          ws.send(JSON.stringify({
-            type: 'error',
-            message: 'Invalid message format. Expected JSON.',
-          }));
+          ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format. Expected JSON.' }));
         }
       });
 
       ws.on('close', () => {
         this.activeConnections.delete(connectionId);
-        this.logger.info(`WebSocket client disconnected: ${connectionId}`);
+        logger.info(`WebSocket client disconnected: ${connectionId}`);
       });
 
       ws.on('error', (err) => {
-        this.logger.error(`WebSocket error for ${connectionId}:`, err.message);
+        logger.error(`WebSocket error for ${connectionId}: ${err.message}`);
         this.activeConnections.delete(connectionId);
       });
-
-      // Heartbeat
-      ws.isAlive = true;
-      ws.on('pong', () => { ws.isAlive = true; });
     });
 
     // Heartbeat interval
@@ -160,25 +838,41 @@ class SecurityScannerService {
     this.wss.on('close', () => {
       clearInterval(this.heartbeatInterval);
     });
+
+    // Wire scanner events to WebSocket broadcast
+    const broadcast = (eventType, data) => {
+      const message = JSON.stringify({ type: eventType, ...data, timestamp: new Date().toISOString() });
+      this.wss.clients.forEach((client) => {
+        if (client.readyState !== WebSocket.OPEN) return;
+        // Send to all clients, or only subscribed clients if they have subscriptions
+        if (!data.scanId || !client.subscribedScans || client.subscribedScans.size === 0 || client.subscribedScans.has(data.scanId)) {
+          client.send(message);
+        }
+      });
+    };
+
+    this.scanner.on('scanStarted', (data) => broadcast('scanStarted', data));
+    this.scanner.on('scanProgress', (data) => broadcast('scanProgress', data));
+    this.scanner.on('scanCompleted', (data) => broadcast('scanCompleted', data));
+    this.scanner.on('scanFailed', (data) => broadcast('scanFailed', data));
+    this.scanner.on('scanScheduled', (data) => broadcast('scanScheduled', data));
+
+    logger.info('WebSocket server initialized on /ws');
   }
 
   _handleWebSocketMessage(connectionId, ws, message) {
     switch (message.type) {
       case 'subscribe':
-        // Client subscribes to scan progress updates
-        ws.subscribedScans = ws.subscribedScans || new Set();
         if (message.scanId) {
           ws.subscribedScans.add(message.scanId);
-          ws.send(JSON.stringify({
-            type: 'subscribed',
-            scanId: message.scanId,
-          }));
+          ws.send(JSON.stringify({ type: 'subscribed', scanId: message.scanId }));
         }
         break;
 
       case 'unsubscribe':
-        if (ws.subscribedScans) {
+        if (message.scanId) {
           ws.subscribedScans.delete(message.scanId);
+          ws.send(JSON.stringify({ type: 'unsubscribed', scanId: message.scanId }));
         }
         break;
 
@@ -187,438 +881,13 @@ class SecurityScannerService {
         break;
 
       default:
-        ws.send(JSON.stringify({
-          type: 'error',
-          message: `Unknown message type: ${message.type}`,
-        }));
+        ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${message.type}` }));
     }
   }
 
-  _broadcastScanEvent(eventType, data) {
-    const message = JSON.stringify({
-      type: eventType,
-      ...data,
-      timestamp: new Date().toISOString(),
-    });
-
-    this.wss.clients.forEach((ws) => {
-      if (ws.readyState !== WebSocket.OPEN) return;
-
-      // Send to all clients if no scan filtering, or to subscribed clients
-      if (!data.scanId || !ws.subscribedScans || ws.subscribedScans.size === 0 || ws.subscribedScans.has(data.scanId)) {
-        ws.send(message);
-      }
-    });
-  }
-
-  // --- Scanner events ---
-
-  _initializeScannerEvents() {
-    this.scanner.on('scanStarted', (data) => {
-      this._broadcastScanEvent('scanStarted', data);
-    });
-
-    this.scanner.on('scanProgress', (data) => {
-      this._broadcastScanEvent('scanProgress', data);
-    });
-
-    this.scanner.on('scanCompleted', (data) => {
-      this._broadcastScanEvent('scanCompleted', data);
-    });
-
-    this.scanner.on('scanFailed', (data) => {
-      this._broadcastScanEvent('scanFailed', data);
-    });
-
-    this.scanner.on('scanScheduled', (data) => {
-      this._broadcastScanEvent('scanScheduled', data);
-    });
-  }
-
-  // --- Routes ---
-
-  _initializeRoutes() {
-    const router = express.Router();
-
-    // POST /api/scanner/scan - Start a new scan
-    router.post('/scan', async (req, res) => {
-      try {
-        const schema = Joi.object({
-          scope: Joi.array().items(
-            Joi.string().valid('gpo', 'privilege', 'device')
-          ).default(['gpo', 'privilege', 'device']),
-          targets: Joi.object({
-            gpoData: Joi.object().optional(),
-            adData: Joi.object().optional(),
-            devices: Joi.array().items(Joi.object()).optional(),
-          }).default({}),
-          benchmarks: Joi.array().items(
-            Joi.string().valid('CIS', 'NIST', 'DISA_STIG')
-          ).default(['CIS']),
-        });
-
-        const { error, value } = schema.validate(req.body);
-        if (error) {
-          return res.status(400).json({
-            error: 'Validation Error',
-            details: error.details.map((d) => d.message),
-          });
-        }
-
-        const result = await this.scanner.startScan(value);
-
-        res.status(202).json({
-          success: true,
-          message: 'Scan started successfully',
-          data: result,
-          links: {
-            status: `/api/scanner/scan/${result.scanId}`,
-            findings: `/api/scanner/findings?scanId=${result.scanId}`,
-            ws: `ws://localhost:${this.port}/ws/scanner`,
-          },
-        });
-      } catch (err) {
-        this.logger.error('Error starting scan:', err);
-        res.status(500).json({
-          error: 'Internal Server Error',
-          message: 'Failed to start scan',
-        });
-      }
-    });
-
-    // GET /api/scanner/scan/:scanId - Get scan status/results
-    router.get('/scan/:scanId', (req, res) => {
-      try {
-        const scan = this.scanner.getScan(req.params.scanId);
-        if (!scan) {
-          return res.status(404).json({
-            error: 'Not Found',
-            message: `Scan ${req.params.scanId} not found`,
-          });
-        }
-
-        res.json({
-          success: true,
-          data: scan,
-          links: {
-            findings: `/api/scanner/findings?scanId=${req.params.scanId}`,
-            riskScore: '/api/scanner/risk-score',
-          },
-        });
-      } catch (err) {
-        this.logger.error('Error getting scan:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
-    });
-
-    // GET /api/scanner/findings - List all findings with filtering
-    router.get('/findings', (req, res) => {
-      try {
-        const filters = {
-          scanId: req.query.scanId,
-          severity: req.query.severity ? req.query.severity.split(',') : undefined,
-          category: req.query.category,
-          subcategory: req.query.subcategory,
-          benchmark: req.query.benchmark,
-          status: req.query.status,
-          deviceId: req.query.deviceId,
-          search: req.query.search,
-          sortBy: req.query.sortBy,
-          sortOrder: req.query.sortOrder,
-          page: req.query.page ? parseInt(req.query.page, 10) : 1,
-          pageSize: req.query.pageSize ? Math.min(parseInt(req.query.pageSize, 10), 100) : 50,
-        };
-
-        const result = this.scanner.getFindings(filters);
-
-        res.json({
-          success: true,
-          data: result.findings,
-          pagination: result.pagination,
-        });
-      } catch (err) {
-        this.logger.error('Error getting findings:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
-    });
-
-    // GET /api/scanner/findings/:findingId - Get specific finding with remediation
-    router.get('/findings/:findingId', (req, res) => {
-      try {
-        const finding = this.scanner.getFinding(req.params.findingId);
-        if (!finding) {
-          return res.status(404).json({
-            error: 'Not Found',
-            message: `Finding ${req.params.findingId} not found`,
-          });
-        }
-
-        res.json({
-          success: true,
-          data: finding,
-        });
-      } catch (err) {
-        this.logger.error('Error getting finding:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
-    });
-
-    // GET /api/scanner/risk-score - Overall risk score
-    router.get('/risk-score', (req, res) => {
-      try {
-        const riskScore = this.scanner.getOverallRiskScore();
-
-        res.json({
-          success: true,
-          data: riskScore,
-        });
-      } catch (err) {
-        this.logger.error('Error getting risk score:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
-    });
-
-    // GET /api/scanner/risk-score/:entityType/:entityId - Risk score for entity
-    router.get('/risk-score/:entityType/:entityId', (req, res) => {
-      try {
-        const validTypes = ['device', 'user', 'group', 'gpo'];
-        if (!validTypes.includes(req.params.entityType)) {
-          return res.status(400).json({
-            error: 'Validation Error',
-            message: `Invalid entity type. Must be one of: ${validTypes.join(', ')}`,
-          });
-        }
-
-        const riskScore = this.scanner.getEntityRiskScore(
-          req.params.entityType,
-          req.params.entityId
-        );
-
-        res.json({
-          success: true,
-          data: riskScore,
-        });
-      } catch (err) {
-        this.logger.error('Error getting entity risk score:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
-    });
-
-    // GET /api/scanner/benchmarks - Available compliance benchmarks
-    router.get('/benchmarks', (req, res) => {
-      try {
-        const benchmarks = this.scanner.getBenchmarks();
-
-        res.json({
-          success: true,
-          data: benchmarks,
-        });
-      } catch (err) {
-        this.logger.error('Error getting benchmarks:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
-    });
-
-    // GET /api/scanner/trends - Risk trends over time
-    router.get('/trends', (req, res) => {
-      try {
-        const days = req.query.days ? parseInt(req.query.days, 10) : 30;
-
-        if (days < 1 || days > 365) {
-          return res.status(400).json({
-            error: 'Validation Error',
-            message: 'Days parameter must be between 1 and 365.',
-          });
-        }
-
-        const trends = this.scanner.getTrends({ days });
-
-        res.json({
-          success: true,
-          data: trends,
-        });
-      } catch (err) {
-        this.logger.error('Error getting trends:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
-    });
-
-    // POST /api/scanner/schedule - Schedule recurring scan
-    router.post('/schedule', (req, res) => {
-      try {
-        const schema = Joi.object({
-          name: Joi.string().max(255).optional(),
-          cronExpression: Joi.string().required(),
-          scope: Joi.array().items(
-            Joi.string().valid('gpo', 'privilege', 'device')
-          ).default(['gpo', 'privilege', 'device']),
-          benchmarks: Joi.array().items(
-            Joi.string().valid('CIS', 'NIST', 'DISA_STIG')
-          ).default(['CIS']),
-          enabled: Joi.boolean().default(true),
-        });
-
-        const { error, value } = schema.validate(req.body);
-        if (error) {
-          return res.status(400).json({
-            error: 'Validation Error',
-            details: error.details.map((d) => d.message),
-          });
-        }
-
-        const schedule = this.scanner.scheduleScan(value);
-
-        res.status(201).json({
-          success: true,
-          message: 'Scan scheduled successfully',
-          data: schedule,
-        });
-      } catch (err) {
-        if (err.message.includes('Invalid cron expression')) {
-          return res.status(400).json({
-            error: 'Validation Error',
-            message: err.message,
-          });
-        }
-        this.logger.error('Error scheduling scan:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
-    });
-
-    // GET /api/scanner/schedules - List all schedules
-    router.get('/schedules', (req, res) => {
-      try {
-        const schedules = this.scanner.getSchedules();
-
-        res.json({
-          success: true,
-          data: schedules,
-        });
-      } catch (err) {
-        this.logger.error('Error getting schedules:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
-    });
-
-    // DELETE /api/scanner/schedules/:scheduleId - Delete a schedule
-    router.delete('/schedules/:scheduleId', (req, res) => {
-      try {
-        const deleted = this.scanner.deleteSchedule(req.params.scheduleId);
-        if (!deleted) {
-          return res.status(404).json({
-            error: 'Not Found',
-            message: `Schedule ${req.params.scheduleId} not found`,
-          });
-        }
-
-        res.json({
-          success: true,
-          message: 'Schedule deleted successfully',
-        });
-      } catch (err) {
-        this.logger.error('Error deleting schedule:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
-    });
-
-    // Mount router
-    this.app.use('/api/scanner', router);
-
-    // Health check endpoint
-    this.app.get('/health', (req, res) => {
-      const uptime = process.uptime();
-      const memUsage = process.memoryUsage();
-
-      res.json({
-        status: 'healthy',
-        service: 'security-exposure-scanner',
-        version: '1.0.0',
-        uptime: {
-          seconds: Math.floor(uptime),
-          formatted: this._formatUptime(uptime),
-        },
-        memory: {
-          rss: this._formatBytes(memUsage.rss),
-          heapUsed: this._formatBytes(memUsage.heapUsed),
-          heapTotal: this._formatBytes(memUsage.heapTotal),
-        },
-        connections: {
-          websocket: this.activeConnections.size,
-        },
-        scans: {
-          active: Array.from(this.scanner.scans.values()).filter((s) => s.status === 'running').length,
-          completed: Array.from(this.scanner.scans.values()).filter((s) => s.status === 'completed').length,
-          scheduled: this.scanner.getSchedules().length,
-        },
-        findings: {
-          total: this.scanner.findings.size,
-        },
-        timestamp: new Date().toISOString(),
-      });
-    });
-
-    // 404 handler
-    this.app.use((req, res) => {
-      res.status(404).json({
-        error: 'Not Found',
-        message: `Route ${req.method} ${req.originalUrl} not found`,
-        availableEndpoints: [
-          'POST   /api/scanner/scan',
-          'GET    /api/scanner/scan/:scanId',
-          'GET    /api/scanner/findings',
-          'GET    /api/scanner/findings/:findingId',
-          'GET    /api/scanner/risk-score',
-          'GET    /api/scanner/risk-score/:entityType/:entityId',
-          'GET    /api/scanner/benchmarks',
-          'GET    /api/scanner/trends',
-          'POST   /api/scanner/schedule',
-          'GET    /api/scanner/schedules',
-          'DELETE /api/scanner/schedules/:scheduleId',
-          'GET    /health',
-          'WS     /ws/scanner',
-        ],
-      });
-    });
-
-    // Error handler
-    this.app.use((err, req, res, _next) => {
-      this.logger.error('Unhandled error:', err);
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: process.env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred',
-        requestId: req.requestId,
-      });
-    });
-  }
-
-  // --- Logger ---
-
-  _createLogger() {
-    const levels = { error: 0, warn: 1, info: 2, debug: 3 };
-    const currentLevel = levels[process.env.LOG_LEVEL || 'info'] || 2;
-
-    const log = (level, message, meta = {}) => {
-      if (levels[level] > currentLevel) return;
-      const timestamp = new Date().toISOString();
-      const metaStr = Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : '';
-      const output = `[${timestamp}] [${level.toUpperCase()}] [security-scanner] ${message}${metaStr}`;
-
-      if (level === 'error') {
-        process.stderr.write(output + '\n');
-      } else {
-        process.stdout.write(output + '\n');
-      }
-    };
-
-    return {
-      error: (msg, ...args) => log('error', msg, args[0]),
-      warn: (msg, ...args) => log('warn', msg, args[0]),
-      info: (msg, ...args) => log('info', msg, args[0]),
-      debug: (msg, ...args) => log('debug', msg, args[0]),
-    };
-  }
-
-  // --- Utility ---
+  // ------------------------------------------------------------------ //
+  //  Utility
+  // ------------------------------------------------------------------ //
 
   _formatUptime(seconds) {
     const d = Math.floor(seconds / 86400);
@@ -641,69 +910,104 @@ class SecurityScannerService {
     return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
   }
 
-  // --- Start / Stop ---
+  // ------------------------------------------------------------------ //
+  //  Lifecycle
+  // ------------------------------------------------------------------ //
 
-  start() {
-    return new Promise((resolve) => {
-      this.server.listen(this.port, () => {
-        this.logger.info(`Security Exposure Scanner started on port ${this.port}`);
-        this.logger.info(`REST API: http://localhost:${this.port}/api/scanner`);
-        this.logger.info(`WebSocket: ws://localhost:${this.port}/ws/scanner`);
-        this.logger.info(`Health:    http://localhost:${this.port}/health`);
+  async start() {
+    this.port = parseInt(process.env.PORT, 10) || 3902;
+    const host = process.env.HOST || '0.0.0.0';
+
+    return new Promise((resolve, reject) => {
+      this.server = http.createServer(this.app);
+
+      // Attach WebSocket server
+      this._initializeWebSocket(this.server);
+
+      this.server.listen(this.port, host, () => {
+        logger.info(`OpenDirectory Security Scanner Service started on ${host}:${this.port}`);
+        logger.info(`Health check: http://${host}:${this.port}/health`);
+        logger.info(`API base:     http://${host}:${this.port}/api/scanner`);
+        logger.info(`WebSocket:    ws://${host}:${this.port}/ws`);
+        this.emit('started');
         resolve(this.server);
       });
+
+      this.server.on('error', (err) => {
+        logger.error('Server error', { message: err.message });
+        this.emit('error', err);
+        reject(err);
+      });
+
+      // Graceful shutdown
+      const shutdown = (signal) => {
+        logger.info(`Received ${signal}, shutting down...`);
+
+        // Stop scheduled scans
+        this.scanner.shutdown();
+
+        // Close WebSocket connections
+        if (this.wss) {
+          this.wss.clients.forEach((client) => {
+            client.send(JSON.stringify({ type: 'shutdown', message: 'Server shutting down' }));
+            client.close(1001, 'Server shutting down');
+          });
+          clearInterval(this.heartbeatInterval);
+          this.wss.close();
+        }
+
+        this.server.close(() => {
+          logger.info('Graceful shutdown completed');
+          process.exit(0);
+        });
+
+        // Force exit after 10 seconds
+        setTimeout(() => {
+          logger.error('Forced shutdown after timeout');
+          process.exit(1);
+        }, 10000);
+      };
+
+      process.on('SIGTERM', () => shutdown('SIGTERM'));
+      process.on('SIGINT', () => shutdown('SIGINT'));
     });
   }
 
   async stop() {
-    this.logger.info('Shutting down Security Exposure Scanner...');
-
-    // Stop scheduled scans
+    logger.info('Shutting down Security Scanner...');
     this.scanner.shutdown();
 
-    // Close WebSocket connections
-    this.wss.clients.forEach((ws) => {
-      ws.send(JSON.stringify({ type: 'shutdown', message: 'Server shutting down' }));
-      ws.close();
-    });
-
-    clearInterval(this.heartbeatInterval);
+    if (this.wss) {
+      this.wss.clients.forEach((client) => {
+        client.send(JSON.stringify({ type: 'shutdown', message: 'Server shutting down' }));
+        client.close();
+      });
+      clearInterval(this.heartbeatInterval);
+    }
 
     return new Promise((resolve) => {
-      this.server.close(() => {
-        this.logger.info('Security Exposure Scanner stopped');
+      if (this.server) {
+        this.server.close(() => {
+          logger.info('Security Scanner stopped');
+          resolve();
+        });
+      } else {
         resolve();
-      });
+      }
     });
   }
 }
 
-// --- Entry point ---
-
-const service = new SecurityScannerService();
-
-service.start().catch((err) => {
-  console.error('Failed to start Security Exposure Scanner:', err);
-  process.exit(1);
-});
-
-// Graceful shutdown
-const shutdown = async (signal) => {
-  console.log(`\nReceived ${signal}. Graceful shutdown...`);
-  await service.stop();
-  process.exit(0);
-};
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
-
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason);
-});
+// ====================================================================== //
+//  Export & auto-start
+// ====================================================================== //
 
 module.exports = SecurityScannerService;
+
+if (require.main === module) {
+  const service = new SecurityScannerService();
+  service.start().catch((err) => {
+    logger.error('Failed to start Security Scanner Service', { message: err.message });
+    process.exit(1);
+  });
+}
