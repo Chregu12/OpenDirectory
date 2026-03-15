@@ -275,6 +275,26 @@ handle_command() {
             output=$(echo "OpenDirectory Test Print - $(date) - $(hostname) - $pname" | lp -d "$pname" 2>&1) || status="failed"
             ;;
 
+        # ── Network Profile Commands ──────────────────────────────────────
+        configure_wifi)
+            output=$(handle_configure_wifi "$json") || status="failed"
+            ;;
+        remove_wifi)
+            output=$(handle_remove_wifi "$json") || status="failed"
+            ;;
+        configure_vpn)
+            output=$(handle_configure_vpn "$json") || status="failed"
+            ;;
+        remove_vpn)
+            output=$(handle_remove_vpn "$json") || status="failed"
+            ;;
+        configure_email)
+            output=$(handle_configure_email "$json") || status="failed"
+            ;;
+        remove_email)
+            output=$(handle_remove_email "$json") || status="failed"
+            ;;
+
         *)
             status="failed"; output="Unknown command: $cmd_type"
             ;;
@@ -610,6 +630,276 @@ result = subprocess.run(['softwareupdate', '-l'], capture_output=True, text=True
 pending = [l.strip().lstrip('* ') for l in result.stdout.split('\n') if l.strip().startswith('*')]
 print(json.dumps({'status': 'success', 'complianceReport': {'compliant': len(pending) == 0, 'pendingUpdates': pending, 'count': len(pending)}}))
 "
+}
+
+# ============================================================================
+# NETWORK PROFILE MANAGEMENT (macOS: profiles / networksetup)
+# ============================================================================
+
+handle_configure_wifi() {
+    local json="$1"
+    python3 -c "
+import subprocess, json, sys, tempfile, os, uuid, plistlib
+
+data = json.loads(sys.stdin.read())
+profile = data.get('data', {}).get('profile', {})
+ssid = profile.get('ssid', '')
+security = profile.get('security', 'WPA2-Enterprise')
+auth = profile.get('authentication', {})
+auto_connect = profile.get('autoConnect', True)
+hidden = profile.get('hidden', False)
+
+# Generate .mobileconfig for WiFi
+payload_uuid = str(uuid.uuid4())
+profile_uuid = str(uuid.uuid4())
+
+wifi_payload = {
+    'PayloadType': 'com.apple.wifi.managed',
+    'PayloadVersion': 1,
+    'PayloadIdentifier': f'com.opendirectory.wifi.{ssid}',
+    'PayloadUUID': payload_uuid,
+    'PayloadDisplayName': f'WiFi: {ssid}',
+    'AutoJoin': auto_connect,
+    'HIDDEN_NETWORK': hidden,
+    'SSID_STR': ssid,
+}
+
+if 'Enterprise' in security:
+    wifi_payload['EncryptionType'] = 'WPA2'
+    wifi_payload['SetupModes'] = []
+    eap_method = auth.get('method', 'EAP-TLS')
+    eap_types = {'EAP-TLS': 13, 'EAP-TTLS': 21, 'EAP-PEAP': 25, 'EAP-FAST': 43}
+    wifi_payload['EAPClientConfiguration'] = {
+        'AcceptEAPTypes': [eap_types.get(eap_method, 13)],
+    }
+    if auth.get('identity'):
+        wifi_payload['EAPClientConfiguration']['UserName'] = auth['identity']
+    if auth.get('anonymousIdentity'):
+        wifi_payload['EAPClientConfiguration']['OuterIdentity'] = auth['anonymousIdentity']
+elif 'WPA' in security:
+    wifi_payload['EncryptionType'] = 'WPA2'
+    if auth.get('password'):
+        wifi_payload['Password'] = auth['password']
+else:
+    wifi_payload['EncryptionType'] = 'None'
+
+mobileconfig = {
+    'PayloadType': 'Configuration',
+    'PayloadVersion': 1,
+    'PayloadIdentifier': f'com.opendirectory.wifi.profile.{ssid}',
+    'PayloadUUID': profile_uuid,
+    'PayloadDisplayName': f'OpenDirectory WiFi - {ssid}',
+    'PayloadOrganization': 'OpenDirectory',
+    'PayloadContent': [wifi_payload],
+    'PayloadRemovalDisallowed': False,
+}
+
+# Write and install .mobileconfig
+config_path = tempfile.mktemp(suffix='.mobileconfig')
+with open(config_path, 'wb') as f:
+    plistlib.dump(mobileconfig, f)
+
+result = subprocess.run(['profiles', 'install', '-path', config_path], capture_output=True, text=True)
+os.unlink(config_path)
+
+if result.returncode == 0:
+    print(json.dumps({'status': 'success', 'profileId': profile_uuid, 'message': f'WiFi profile {ssid} installed'}))
+else:
+    print(json.dumps({'status': 'failed', 'error': result.stderr.strip()}))
+" <<< "$json"
+}
+
+handle_remove_wifi() {
+    local json="$1"
+    local ssid
+    ssid=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('ssid',''))" 2>/dev/null)
+    local profile_id="com.opendirectory.wifi.profile.${ssid}"
+    if profiles remove -identifier "$profile_id" 2>/dev/null; then
+        echo "{\"status\":\"success\",\"message\":\"WiFi profile ${ssid} removed\"}"
+    else
+        networksetup -removepreferredwirelessnetwork en0 "$ssid" 2>/dev/null
+        echo "{\"status\":\"success\",\"message\":\"WiFi profile ${ssid} removed from preferred networks\"}"
+    fi
+}
+
+handle_configure_vpn() {
+    local json="$1"
+    python3 -c "
+import subprocess, json, sys, tempfile, os, uuid, plistlib
+
+data = json.loads(sys.stdin.read())
+profile = data.get('data', {}).get('profile', {})
+name = profile.get('name', 'OD-VPN')
+vpn_type = profile.get('vpnType', 'openvpn')
+server = profile.get('server', '')
+port = profile.get('port', 1194)
+auth = profile.get('authentication', {})
+routing = profile.get('routing', {})
+
+payload_uuid = str(uuid.uuid4())
+profile_uuid = str(uuid.uuid4())
+
+vpn_payload = {
+    'PayloadType': 'com.apple.vpn.managed',
+    'PayloadVersion': 1,
+    'PayloadIdentifier': f'com.opendirectory.vpn.{name}',
+    'PayloadUUID': payload_uuid,
+    'PayloadDisplayName': f'VPN: {name}',
+    'UserDefinedName': name,
+    'VPNType': 'VPN',
+}
+
+if vpn_type == 'ikev2':
+    vpn_payload['VPNSubType'] = 'IKEv2'
+    vpn_payload['IKEv2'] = {
+        'RemoteAddress': server,
+        'RemoteIdentifier': server,
+        'AuthenticationMethod': 'Certificate' if auth.get('method') == 'certificate' else 'SharedSecret',
+    }
+elif vpn_type == 'l2tp':
+    vpn_payload['VPNSubType'] = 'L2TP'
+    vpn_payload['PPP'] = {
+        'CommRemoteAddress': server,
+    }
+    vpn_payload['IPSec'] = {
+        'AuthenticationMethod': 'SharedSecret',
+    }
+else:
+    # OpenVPN or WireGuard via .mobileconfig custom payload
+    vpn_payload['VPNSubType'] = 'net.openvpn.connect.app' if vpn_type == 'openvpn' else 'com.wireguard.macos'
+    vpn_payload['VendorConfig'] = {
+        'server': server,
+        'port': str(port),
+    }
+
+mobileconfig = {
+    'PayloadType': 'Configuration',
+    'PayloadVersion': 1,
+    'PayloadIdentifier': f'com.opendirectory.vpn.profile.{name}',
+    'PayloadUUID': profile_uuid,
+    'PayloadDisplayName': f'OpenDirectory VPN - {name}',
+    'PayloadOrganization': 'OpenDirectory',
+    'PayloadContent': [vpn_payload],
+    'PayloadRemovalDisallowed': False,
+}
+
+config_path = tempfile.mktemp(suffix='.mobileconfig')
+with open(config_path, 'wb') as f:
+    plistlib.dump(mobileconfig, f)
+
+result = subprocess.run(['profiles', 'install', '-path', config_path], capture_output=True, text=True)
+os.unlink(config_path)
+
+if result.returncode == 0:
+    print(json.dumps({'status': 'success', 'profileId': profile_uuid, 'message': f'VPN profile {name} installed'}))
+else:
+    print(json.dumps({'status': 'failed', 'error': result.stderr.strip()}))
+" <<< "$json"
+}
+
+handle_remove_vpn() {
+    local json="$1"
+    local name
+    name=$(echo "$json" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('profileId', d.get('name','')))" 2>/dev/null)
+    local profile_id="com.opendirectory.vpn.profile.${name}"
+    if profiles remove -identifier "$profile_id" 2>/dev/null; then
+        echo "{\"status\":\"success\",\"message\":\"VPN profile removed\"}"
+    else
+        echo "{\"status\":\"failed\",\"error\":\"VPN profile not found\"}"
+    fi
+}
+
+handle_configure_email() {
+    local json="$1"
+    python3 -c "
+import subprocess, json, sys, tempfile, os, uuid, plistlib
+
+data = json.loads(sys.stdin.read())
+profile = data.get('data', {}).get('profile', {})
+account_name = profile.get('accountName', 'Corporate Email')
+account_type = profile.get('accountType', 'exchange')
+email = profile.get('emailAddress', '')
+display_name = profile.get('displayName', '')
+server = profile.get('server', {})
+auth = profile.get('authentication', {})
+sync = profile.get('syncSettings', {})
+
+payload_uuid = str(uuid.uuid4())
+profile_uuid = str(uuid.uuid4())
+
+if account_type == 'exchange':
+    email_payload = {
+        'PayloadType': 'com.apple.eas.account',
+        'PayloadVersion': 1,
+        'PayloadIdentifier': f'com.opendirectory.email.{account_name}',
+        'PayloadUUID': payload_uuid,
+        'PayloadDisplayName': account_name,
+        'Host': server.get('incoming', {}).get('host', ''),
+        'EmailAddress': email,
+        'UserName': auth.get('username', email),
+        'MailNumberOfPastDaysToSync': sync.get('mailDays', 30),
+        'CalDAVUseSSL': server.get('incoming', {}).get('ssl', True),
+    }
+else:
+    incoming = server.get('incoming', {})
+    outgoing = server.get('outgoing', {})
+    email_payload = {
+        'PayloadType': 'com.apple.mail.managed',
+        'PayloadVersion': 1,
+        'PayloadIdentifier': f'com.opendirectory.email.{account_name}',
+        'PayloadUUID': payload_uuid,
+        'PayloadDisplayName': account_name,
+        'EmailAccountName': display_name or account_name,
+        'EmailAddress': email,
+        'IncomingMailServerHostName': incoming.get('host', ''),
+        'IncomingMailServerPortNumber': incoming.get('port', 993),
+        'IncomingMailServerUseSSL': incoming.get('ssl', True),
+        'IncomingMailServerAuthentication': 'EmailAuthPassword',
+        'IncomingMailServerUsername': auth.get('username', email),
+        'IncomingPassword': auth.get('password', ''),
+        'OutgoingMailServerHostName': outgoing.get('host', ''),
+        'OutgoingMailServerPortNumber': outgoing.get('port', 587),
+        'OutgoingMailServerUseSSL': outgoing.get('ssl', True),
+        'OutgoingMailServerAuthentication': 'EmailAuthPassword',
+        'OutgoingMailServerUsername': auth.get('username', email),
+        'OutgoingPassword': auth.get('password', ''),
+    }
+
+mobileconfig = {
+    'PayloadType': 'Configuration',
+    'PayloadVersion': 1,
+    'PayloadIdentifier': f'com.opendirectory.email.profile.{account_name}',
+    'PayloadUUID': profile_uuid,
+    'PayloadDisplayName': f'OpenDirectory Email - {account_name}',
+    'PayloadOrganization': 'OpenDirectory',
+    'PayloadContent': [email_payload],
+    'PayloadRemovalDisallowed': False,
+}
+
+config_path = tempfile.mktemp(suffix='.mobileconfig')
+with open(config_path, 'wb') as f:
+    plistlib.dump(mobileconfig, f)
+
+result = subprocess.run(['profiles', 'install', '-path', config_path], capture_output=True, text=True)
+os.unlink(config_path)
+
+if result.returncode == 0:
+    print(json.dumps({'status': 'success', 'profileId': profile_uuid, 'message': f'Email profile {account_name} installed'}))
+else:
+    print(json.dumps({'status': 'failed', 'error': result.stderr.strip()}))
+" <<< "$json"
+}
+
+handle_remove_email() {
+    local json="$1"
+    local account_name
+    account_name=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('profileId',''))" 2>/dev/null)
+    local profile_id="com.opendirectory.email.profile.${account_name}"
+    if profiles remove -identifier "$profile_id" 2>/dev/null; then
+        echo "{\"status\":\"success\",\"message\":\"Email profile removed\"}"
+    else
+        echo "{\"status\":\"failed\",\"error\":\"Email profile not found\"}"
+    fi
 }
 
 # ============================================================================

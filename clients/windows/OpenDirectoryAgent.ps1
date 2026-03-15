@@ -283,6 +283,26 @@ function Invoke-AgentCommand {
                 $output = Invoke-CheckWingetStatus
             }
 
+            # ── Network Profile Commands ──────────────────────────────────
+            "configure_wifi" {
+                $output = Invoke-ConfigureWiFi -Json $json
+            }
+            "remove_wifi" {
+                $output = Invoke-RemoveWiFi -Json $json
+            }
+            "configure_vpn" {
+                $output = Invoke-ConfigureVPN -Json $json
+            }
+            "remove_vpn" {
+                $output = Invoke-RemoveVPN -Json $json
+            }
+            "configure_email" {
+                $output = Invoke-ConfigureEmail -Json $json
+            }
+            "remove_email" {
+                $output = Invoke-RemoveEmail -Json $json
+            }
+
             default {
                 $Result.status = "failed"; $Result.output = "Unknown command: $CommandType"
             }
@@ -738,6 +758,206 @@ function Invoke-CheckWingetStatus {
                 count = $upgradable.Count
             }
         } | ConvertTo-Json -Depth 4 -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+# ============================================================================
+# NETWORK PROFILE MANAGEMENT (Windows: netsh wlan / Add-VpnConnection / PowerShell)
+# ============================================================================
+
+function Invoke-ConfigureWiFi {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $profile = $cmd.data.profile
+    $ssid = $profile.ssid
+    $security = $profile.security
+    $auth = $profile.authentication
+    $autoConnect = $profile.autoConnect
+
+    try {
+        # Generate Windows WiFi XML profile
+        $connMode = if ($autoConnect) { "auto" } else { "manual" }
+        $authType = switch -Wildcard ($security) {
+            "*Enterprise*" { "WPA2" }
+            "*WPA3*"       { "WPA3SAE" }
+            "*WPA2*"       { "WPA2PSK" }
+            default        { "open" }
+        }
+        $encryption = if ($security -match "Enterprise|WPA2|WPA3") { "AES" } else { "none" }
+
+        $xmlProfile = @"
+<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+    <name>$ssid</name>
+    <SSIDConfig><SSID><name>$ssid</name></SSID></SSIDConfig>
+    <connectionType>ESS</connectionType>
+    <connectionMode>$connMode</connectionMode>
+    <MSM><security>
+        <authEncryption>
+            <authentication>$authType</authentication>
+            <encryption>$encryption</encryption>
+            <useOneX>$(if ($security -match 'Enterprise') { 'true' } else { 'false' })</useOneX>
+        </authEncryption>
+    </security></MSM>
+</WLANProfile>
+"@
+
+        $tempPath = [IO.Path]::GetTempFileName() -replace '\.tmp$', '.xml'
+        $xmlProfile | Out-File -FilePath $tempPath -Encoding UTF8
+        $result = netsh wlan add profile filename="$tempPath" 2>&1
+        Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
+
+        @{ status = "success"; profileId = $ssid; message = "WiFi profile $ssid configured"; output = "$result" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-RemoveWiFi {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $ssid = $cmd.data.ssid
+    try {
+        netsh wlan delete profile name="$ssid" 2>&1 | Out-Null
+        @{ status = "success"; message = "WiFi profile $ssid removed" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-ConfigureVPN {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $profile = $cmd.data.profile
+    $name = $profile.name
+    $vpnType = $profile.vpnType
+    $server = $profile.server
+    $auth = $profile.authentication
+    $routing = $profile.routing
+
+    try {
+        # Remove existing
+        Remove-VpnConnection -Name $name -Force -ErrorAction SilentlyContinue
+
+        $tunnelType = switch ($vpnType) {
+            "ikev2"  { "IKEv2" }
+            "l2tp"   { "L2tp" }
+            "pptp"   { "Pptp" }
+            default  { "Sstp" }
+        }
+
+        $params = @{
+            Name = $name
+            ServerAddress = $server
+            TunnelType = $tunnelType
+            RememberCredential = $true
+            Force = $true
+        }
+
+        if ($routing.splitTunnel) {
+            $params.SplitTunneling = $true
+        }
+
+        Add-VpnConnection @params
+
+        # Add routes for split tunnel
+        if ($routing.splitTunnel -and $routing.includedRoutes) {
+            foreach ($route in $routing.includedRoutes) {
+                $parts = $route -split '/'
+                Add-VpnConnectionRoute -ConnectionName $name -DestinationPrefix $route -ErrorAction SilentlyContinue
+            }
+        }
+
+        # Configure DNS
+        if ($routing.dns) {
+            Set-VpnConnectionDnsConfiguration -ConnectionName $name -DnsServers $routing.dns -ErrorAction SilentlyContinue
+        }
+
+        @{ status = "success"; profileId = $name; message = "VPN profile $name configured" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-RemoveVPN {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $profileId = $cmd.data.profileId
+    try {
+        Remove-VpnConnection -Name $profileId -Force -ErrorAction Stop
+        @{ status = "success"; message = "VPN profile removed" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-ConfigureEmail {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $profile = $cmd.data.profile
+    $accountName = $profile.accountName
+    $accountType = $profile.accountType
+    $email = $profile.emailAddress
+    $server = $profile.server
+    $auth = $profile.authentication
+
+    try {
+        if ($accountType -eq "exchange") {
+            # Configure Exchange via Outlook profile (Registry-based)
+            $outlookVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration" -Name VersionToReport -ErrorAction SilentlyContinue).VersionToReport
+            $profileKey = "HKCU:\SOFTWARE\Microsoft\Office\16.0\Outlook\Profiles\$accountName"
+
+            New-Item -Path $profileKey -Force | Out-Null
+            New-ItemProperty -Path $profileKey -Name "Account Name" -Value $accountName -Force | Out-Null
+
+            # Set autodiscover for Exchange
+            $autoDiscoverKey = "HKCU:\SOFTWARE\Microsoft\Office\16.0\Outlook\AutoDiscover"
+            New-Item -Path $autoDiscoverKey -Force -ErrorAction SilentlyContinue | Out-Null
+            New-ItemProperty -Path $autoDiscoverKey -Name $email.Split('@')[1] -Value $server.incoming.host -Force | Out-Null
+
+            @{ status = "success"; profileId = $accountName; method = "outlook-registry"; message = "Exchange profile $accountName configured" } | ConvertTo-Json -Compress
+        } else {
+            # For IMAP/POP3, store configuration for email clients
+            $configDir = "$env:ProgramData\OpenDirectory\email-profiles"
+            New-Item -Path $configDir -ItemType Directory -Force | Out-Null
+
+            $profileConfig = @{
+                accountName = $accountName
+                accountType = $accountType
+                emailAddress = $email
+                incoming = $server.incoming
+                outgoing = $server.outgoing
+                username = $auth.username
+            }
+
+            $profilePath = Join-Path $configDir "$($accountName -replace ' ','_').json"
+            $profileConfig | ConvertTo-Json | Out-File -FilePath $profilePath -Encoding UTF8
+
+            @{ status = "success"; profileId = $accountName; configPath = $profilePath; message = "Email profile $accountName configured" } | ConvertTo-Json -Compress
+        }
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-RemoveEmail {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $profileId = $cmd.data.profileId
+    try {
+        # Remove Outlook profile
+        $profileKey = "HKCU:\SOFTWARE\Microsoft\Office\16.0\Outlook\Profiles\$profileId"
+        if (Test-Path $profileKey) {
+            Remove-Item -Path $profileKey -Recurse -Force
+        }
+        # Remove config file
+        $configPath = "$env:ProgramData\OpenDirectory\email-profiles\$($profileId -replace ' ','_').json"
+        if (Test-Path $configPath) {
+            Remove-Item $configPath -Force
+        }
+        @{ status = "success"; message = "Email profile removed" } | ConvertTo-Json -Compress
     } catch {
         @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
     }

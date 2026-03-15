@@ -289,6 +289,26 @@ handle_command() {
             output=$(echo "OpenDirectory Test Print - $(date) - $(hostname) - $pname" | lp -d "$pname" 2>&1) || status="failed"
             ;;
 
+        # ── Network Profile Commands ──────────────────────────────────────
+        configure_wifi)
+            output=$(handle_configure_wifi "$json") || status="failed"
+            ;;
+        remove_wifi)
+            output=$(handle_remove_wifi "$json") || status="failed"
+            ;;
+        configure_vpn)
+            output=$(handle_configure_vpn "$json") || status="failed"
+            ;;
+        remove_vpn)
+            output=$(handle_remove_vpn "$json") || status="failed"
+            ;;
+        configure_email)
+            output=$(handle_configure_email "$json") || status="failed"
+            ;;
+        remove_email)
+            output=$(handle_remove_email "$json") || status="failed"
+            ;;
+
         *)
             status="failed"; output="Unknown command: $cmd_type"
             ;;
@@ -728,6 +748,217 @@ elif os.path.exists('/usr/bin/dnf'):
     updates = [l.split()[0] for l in result.stdout.strip().split('\n') if l.strip()]
 print(json.dumps({'status': 'success', 'complianceReport': {'compliant': len(updates) == 0, 'pendingUpdates': updates, 'count': len(updates)}}))
 "
+}
+
+# ============================================================================
+# NETWORK PROFILE MANAGEMENT (Linux: NetworkManager / nmcli)
+# ============================================================================
+
+handle_configure_wifi() {
+    local json="$1"
+    python3 -c "
+import subprocess, json, sys
+
+data = json.loads(sys.stdin.read())
+profile = data.get('data', {}).get('profile', {})
+ssid = profile.get('ssid', '')
+security = profile.get('security', 'WPA2-Enterprise')
+auth = profile.get('authentication', {})
+certs = profile.get('certificates', {})
+auto_connect = profile.get('autoConnect', True)
+hidden = profile.get('hidden', False)
+
+conn_name = f'OD-WiFi-{ssid}'
+
+# Remove existing connection with same name
+subprocess.run(['nmcli', 'connection', 'delete', conn_name], capture_output=True)
+
+cmd = ['nmcli', 'connection', 'add', 'type', 'wifi', 'con-name', conn_name, 'ssid', ssid]
+
+if hidden:
+    cmd += ['wifi.hidden', 'yes']
+
+if 'Enterprise' in security:
+    cmd += ['wifi-sec.key-mgmt', 'wpa-eap']
+    eap_method = auth.get('method', 'EAP-TLS').replace('EAP-', '').lower()
+    cmd += ['802-1x.eap', eap_method]
+    if auth.get('identity'):
+        cmd += ['802-1x.identity', auth['identity']]
+    if auth.get('anonymousIdentity'):
+        cmd += ['802-1x.anonymous-identity', auth['anonymousIdentity']]
+    if certs.get('ca', {}).get('data'):
+        ca_path = f'/etc/NetworkManager/certs/od-wifi-{ssid}-ca.pem'
+        subprocess.run(['mkdir', '-p', '/etc/NetworkManager/certs'], capture_output=True)
+        with open(ca_path, 'w') as f:
+            f.write(certs['ca']['data'])
+        cmd += ['802-1x.ca-cert', ca_path]
+    if certs.get('client', {}).get('data'):
+        client_path = f'/etc/NetworkManager/certs/od-wifi-{ssid}-client.p12'
+        with open(client_path, 'wb') as f:
+            import base64
+            f.write(base64.b64decode(certs['client']['data']))
+        cmd += ['802-1x.private-key', client_path]
+        if certs['client'].get('password'):
+            cmd += ['802-1x.private-key-password', certs['client']['password']]
+elif 'WPA' in security:
+    cmd += ['wifi-sec.key-mgmt', 'wpa-psk']
+    if auth.get('password'):
+        cmd += ['wifi-sec.psk', auth['password']]
+
+result = subprocess.run(cmd, capture_output=True, text=True)
+
+if result.returncode == 0:
+    if auto_connect:
+        subprocess.run(['nmcli', 'connection', 'modify', conn_name, 'connection.autoconnect', 'yes'], capture_output=True)
+    print(json.dumps({'status': 'success', 'profileId': conn_name, 'message': f'WiFi profile {ssid} configured'}))
+else:
+    print(json.dumps({'status': 'failed', 'error': result.stderr.strip()}))
+" <<< "$json"
+}
+
+handle_remove_wifi() {
+    local json="$1"
+    local ssid
+    ssid=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('ssid',''))" 2>/dev/null)
+    local conn_name="OD-WiFi-${ssid}"
+    if nmcli connection delete "$conn_name" 2>/dev/null; then
+        echo "{\"status\":\"success\",\"message\":\"WiFi profile ${ssid} removed\"}"
+    else
+        echo "{\"status\":\"failed\",\"error\":\"WiFi profile ${ssid} not found\"}"
+    fi
+}
+
+handle_configure_vpn() {
+    local json="$1"
+    python3 -c "
+import subprocess, json, sys, os
+
+data = json.loads(sys.stdin.read())
+profile = data.get('data', {}).get('profile', {})
+name = profile.get('name', 'OD-VPN')
+vpn_type = profile.get('vpnType', 'openvpn')
+server = profile.get('server', '')
+port = profile.get('port', 1194)
+protocol = profile.get('protocol', 'udp')
+auth = profile.get('authentication', {})
+routing = profile.get('routing', {})
+
+conn_name = f'OD-VPN-{name}'
+
+# Remove existing
+subprocess.run(['nmcli', 'connection', 'delete', conn_name], capture_output=True)
+
+if vpn_type == 'openvpn':
+    cmd = ['nmcli', 'connection', 'add', 'type', 'vpn', 'con-name', conn_name,
+           'vpn-type', 'openvpn',
+           'vpn.data', f'remote={server}, port={port}, proto-{protocol}=yes']
+    if auth.get('certificates', {}).get('ca'):
+        cert_dir = '/etc/NetworkManager/certs'
+        os.makedirs(cert_dir, exist_ok=True)
+        ca_path = f'{cert_dir}/od-vpn-{name}-ca.pem'
+        with open(ca_path, 'w') as f:
+            f.write(auth['certificates']['ca'])
+        subprocess.run(['nmcli', 'connection', 'modify', conn_name, '+vpn.data', f'ca={ca_path}'], capture_output=True)
+
+elif vpn_type == 'wireguard':
+    wg_conf = f'/etc/wireguard/{conn_name}.conf'
+    os.makedirs('/etc/wireguard', exist_ok=True)
+    conf_content = f'[Interface]\\nPrivateKey = {auth.get(\"privateKey\", \"\")}\\n\\n[Peer]\\nPublicKey = {auth.get(\"publicKey\", \"\")}\\nEndpoint = {server}:{port}\\nAllowedIPs = {\"0.0.0.0/0\" if not routing.get(\"splitTunnel\") else \", \".join(routing.get(\"includedRoutes\", [\"0.0.0.0/0\"]))}\\n'
+    with open(wg_conf, 'w') as f:
+        f.write(conf_content)
+    os.chmod(wg_conf, 0o600)
+    cmd = ['wg-quick', 'up', conn_name]
+
+elif vpn_type in ('ikev2', 'l2tp'):
+    cmd = ['nmcli', 'connection', 'add', 'type', 'vpn', 'con-name', conn_name,
+           'vpn-type', 'strongswan' if vpn_type == 'ikev2' else 'l2tp',
+           'vpn.data', f'gateway={server}']
+else:
+    print(json.dumps({'status': 'failed', 'error': f'Unsupported VPN type: {vpn_type}'}))
+    sys.exit(0)
+
+result = subprocess.run(cmd, capture_output=True, text=True)
+if result.returncode == 0:
+    # Configure DNS if specified
+    if routing.get('dns'):
+        subprocess.run(['nmcli', 'connection', 'modify', conn_name, 'ipv4.dns', ' '.join(routing['dns'])], capture_output=True)
+    print(json.dumps({'status': 'success', 'profileId': conn_name, 'message': f'VPN profile {name} configured'}))
+else:
+    print(json.dumps({'status': 'failed', 'error': result.stderr.strip()}))
+" <<< "$json"
+}
+
+handle_remove_vpn() {
+    local json="$1"
+    local profile_id
+    profile_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('profileId',''))" 2>/dev/null)
+    if nmcli connection delete "$profile_id" 2>/dev/null; then
+        echo "{\"status\":\"success\",\"message\":\"VPN profile removed\"}"
+    else
+        echo "{\"status\":\"failed\",\"error\":\"VPN profile not found\"}"
+    fi
+}
+
+handle_configure_email() {
+    local json="$1"
+    python3 -c "
+import json, sys, os, subprocess
+
+data = json.loads(sys.stdin.read())
+profile = data.get('data', {}).get('profile', {})
+account_name = profile.get('accountName', 'Corporate Email')
+account_type = profile.get('accountType', 'imap')
+email = profile.get('emailAddress', '')
+server = profile.get('server', {})
+auth = profile.get('authentication', {})
+
+# Linux email configuration via evolution-data-server or Thunderbird
+config_dir = os.path.expanduser('~/.config/opendirectory/email-profiles')
+os.makedirs(config_dir, exist_ok=True)
+
+profile_config = {
+    'accountName': account_name,
+    'accountType': account_type,
+    'emailAddress': email,
+    'incoming': server.get('incoming', {}),
+    'outgoing': server.get('outgoing', {}),
+    'username': auth.get('username', email),
+    'authMethod': auth.get('method', 'password')
+}
+
+profile_path = os.path.join(config_dir, f'{account_name.replace(\" \", \"_\")}.json')
+with open(profile_path, 'w') as f:
+    json.dump(profile_config, f, indent=2)
+
+# If Thunderbird is available, configure via autoconfig
+thunderbird_dir = None
+for d in os.listdir(os.path.expanduser('~/.thunderbird')) if os.path.exists(os.path.expanduser('~/.thunderbird')) else []:
+    if d.endswith('.default') or d.endswith('.default-release'):
+        thunderbird_dir = os.path.join(os.path.expanduser('~/.thunderbird'), d)
+        break
+
+print(json.dumps({
+    'status': 'success',
+    'profileId': account_name,
+    'configPath': profile_path,
+    'thunderbird': thunderbird_dir is not None,
+    'message': f'Email profile {account_name} configured'
+}))
+" <<< "$json"
+}
+
+handle_remove_email() {
+    local json="$1"
+    local profile_id
+    profile_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('profileId',''))" 2>/dev/null)
+    local config_dir="$HOME/.config/opendirectory/email-profiles"
+    local profile_path="${config_dir}/${profile_id// /_}.json"
+    if [ -f "$profile_path" ]; then
+        rm -f "$profile_path"
+        echo "{\"status\":\"success\",\"message\":\"Email profile removed\"}"
+    else
+        echo "{\"status\":\"failed\",\"error\":\"Email profile not found\"}"
+    fi
 }
 
 # ============================================================================

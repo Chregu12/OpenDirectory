@@ -7,8 +7,9 @@ const EventEmitter = require('events');
 const crypto = require('crypto');
 
 class EncryptionManager extends EventEmitter {
-    constructor() {
+    constructor(deviceService = null) {
         super();
+        this.deviceService = deviceService;
         this.encryptionPolicies = new Map();
         this.deviceEncryptionStates = new Map();
         this.recoveryKeys = new Map(); // Secured key escrow
@@ -41,8 +42,29 @@ class EncryptionManager extends EventEmitter {
      */
     async checkEncryptionStatus(deviceInfo) {
         const platform = this.detectPlatform(deviceInfo);
+
+        // Prefer agent-based check via WebSocket
+        if (this.deviceService && deviceInfo.deviceId) {
+            try {
+                const commandId = `enc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                const sent = this.deviceService.sendToDevice(deviceInfo.deviceId, {
+                    type: 'command',
+                    id: commandId,
+                    command_type: 'check_encryption_status',
+                    data: { platform },
+                    category: 'encryption'
+                });
+                if (sent) {
+                    this.emit('encryptionStatusChecked', { deviceId: deviceInfo.deviceId, platform, dispatched: true });
+                    return { dispatched: true, commandId, platform };
+                }
+            } catch (e) {
+                // Fall through to legacy
+            }
+        }
+
         let manager;
-        
+
         switch (platform.toLowerCase()) {
             case 'windows':
                 manager = this.bitLockerManager;
@@ -98,7 +120,29 @@ class EncryptionManager extends EventEmitter {
         };
         
         this.encryptionJobs.set(jobId, encryptionJob);
-        
+
+        // Prefer agent-based encryption via WebSocket
+        if (this.deviceService) {
+            try {
+                const commandId = `enc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                const sent = this.deviceService.sendToDevice(deviceId, {
+                    type: 'command',
+                    id: commandId,
+                    command_type: 'enable_encryption',
+                    data: { platform: deviceState.platform, options },
+                    category: 'encryption'
+                });
+                if (sent) {
+                    encryptionJob.status = 'DISPATCHED_TO_AGENT';
+                    encryptionJob.commandId = commandId;
+                    this.emit('encryptionJobUpdated', encryptionJob);
+                    return { jobId, status: 'DISPATCHED_TO_AGENT', commandId };
+                }
+            } catch (e) {
+                // Fall through to legacy
+            }
+        }
+
         try {
             let manager;
             switch (deviceState.platform.toLowerCase()) {
@@ -112,7 +156,7 @@ class EncryptionManager extends EventEmitter {
                     manager = this.luksManager;
                     break;
             }
-            
+
             encryptionJob.status = 'IN_PROGRESS';
             this.emit('encryptionJobUpdated', encryptionJob);
             
