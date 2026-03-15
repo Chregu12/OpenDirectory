@@ -9,6 +9,7 @@ import PoliciesView from '@/components/views/PoliciesView';
 import GraphExplorerView from '@/components/views/GraphExplorerView';
 import PolicySimulatorView from '@/components/views/PolicySimulatorView';
 import SecurityScannerView from '@/components/views/SecurityScannerView';
+import AntivirusView from '@/components/views/AntivirusView';
 import ServicesDashboard from '@/components/dashboard/ServicesDashboard';
 
 // Placeholder components for other views
@@ -67,6 +68,8 @@ export default function UnifiApp() {
         return <PolicySimulatorView />;
       case 'security-scanner':
         return <SecurityScannerView />;
+      case 'antivirus':
+        return <AntivirusView />;
       case 'policies':
         return <PoliciesView />;
       case 'monitoring':

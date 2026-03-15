@@ -371,6 +371,10 @@ class APIGateway {
     this.setupServiceProxy('auto-remediation', 'http://auto-remediation:3904', '/api/auto-remediation');
     connectedServices.push('auto-remediation');
 
+    this.setupServiceProxy('antivirus', 'http://antivirus-protection:3905', '/api/antivirus');
+    this.setupServiceProxy('clamav', 'http://antivirus-protection:3905', '/api/clamav');
+    connectedServices.push('antivirus-protection');
+
     logger.info(`API Gateway configured with ${connectedServices.length} services`);
     logger.info(`Connected services: ${connectedServices.join(', ')}`);
     logger.info(`Enabled modules: ${enabledModules.join(', ') || 'none'}`);

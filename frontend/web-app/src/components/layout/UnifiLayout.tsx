@@ -19,7 +19,8 @@ import {
   ShieldExclamationIcon,
   DocumentTextIcon,
   ArrowPathRoundedSquareIcon,
-  WrenchScrewdriverIcon
+  WrenchScrewdriverIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi } from '@/lib/api';
 
@@ -54,6 +55,7 @@ export default function UnifiLayout({ children, activeView, onViewChange }: Layo
     { id: 'graph-explorer', name: 'Graph Explorer', icon: ShareIcon },
     { id: 'policy-simulator', name: 'Policy Simulator', icon: BeakerIcon },
     { id: 'security-scanner', name: 'Security Scanner', icon: ShieldExclamationIcon },
+    { id: 'antivirus', name: 'Antivirus (ClamAV)', icon: ShieldCheckIcon },
     { id: 'policies', name: 'Policies', icon: DocumentTextIcon },
     { id: 'monitoring', name: 'Insights', icon: ChartBarIcon },
     { id: 'settings', name: 'Settings', icon: Cog6ToothIcon },

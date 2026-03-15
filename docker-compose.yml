@@ -505,6 +505,29 @@ services:
       timeout: 10s
       retries: 3
 
+  antivirus-protection:
+    build:
+      context: ./services/enterprise/antivirus-protection
+    container_name: od-antivirus-protection
+    environment:
+      PORT: 3905
+      NODE_ENV: production
+      DEVICE_SERVICE_URL: http://device-service:3456
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+    ports:
+      - "3905:3905"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3905/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   auto-remediation:
     build:
       context: ./services/enterprise/auto-remediation
