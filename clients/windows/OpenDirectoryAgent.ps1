@@ -1,7 +1,8 @@
 #Requires -RunAsAdministrator
 # ============================================================================
-# OpenDirectory Windows Agent Service
-# Persistent background agent with WebSocket connection and Toast notifications
+# OpenDirectory Windows Agent
+# Persistent WebSocket connection to server - receives commands & notifications
+# Server pushes to agent (no polling)
 # ============================================================================
 
 param(
@@ -10,39 +11,24 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
-$script:AgentVersion = "1.0.0"
+$script:AgentVersion = "2.0.0"
+$script:Platform = "windows"
 $script:ODPath = "C:\Program Files\OpenDirectory"
 $script:LogPath = "$script:ODPath\Logs\Agent"
 $script:ConfigPath = "$script:ODPath\device-config.json"
-$script:ServiceName = "OpenDirectoryAgent"
 $script:TaskName = "OpenDirectory-Agent"
-$script:PollingIntervalSec = 60
 $script:HeartbeatIntervalSec = 30
 $script:ReconnectDelaySec = 5
 $script:MaxReconnectDelaySec = 300
-$script:WebSocketConnected = $false
 
 # ============================================================================
 # LOGGING
 # ============================================================================
 function Write-AgentLog {
-    param(
-        [string]$Message,
-        [ValidateSet('INFO', 'WARN', 'ERROR', 'DEBUG')]
-        [string]$Level = 'INFO'
-    )
-
-    if (!(Test-Path $script:LogPath)) {
-        New-Item -Path $script:LogPath -ItemType Directory -Force | Out-Null
-    }
-
-    $Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss.fff")
-    $LogEntry = "$Timestamp [$Level] $Message"
+    param([string]$Message, [string]$Level = 'INFO')
+    if (!(Test-Path $script:LogPath)) { New-Item -Path $script:LogPath -ItemType Directory -Force | Out-Null }
     $LogFile = Join-Path $script:LogPath "agent-$(Get-Date -Format 'yyyyMMdd').log"
-
-    $LogEntry | Out-File -Append -FilePath $LogFile -Encoding UTF8
-
-    # Rotate logs older than 14 days
+    "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') [$Level] $Message" | Out-File -Append -FilePath $LogFile -Encoding UTF8
     Get-ChildItem -Path $script:LogPath -Filter "agent-*.log" -ErrorAction SilentlyContinue |
         Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-14) } |
         Remove-Item -Force -ErrorAction SilentlyContinue
@@ -52,604 +38,376 @@ function Write-AgentLog {
 # CONFIGURATION
 # ============================================================================
 function Get-AgentConfig {
-    if (Test-Path $script:ConfigPath) {
-        return Get-Content $script:ConfigPath -Raw | ConvertFrom-Json
-    }
-    Write-AgentLog "No device configuration found at $script:ConfigPath" "ERROR"
+    if (Test-Path $script:ConfigPath) { return Get-Content $script:ConfigPath -Raw | ConvertFrom-Json }
     return $null
 }
 
 function Get-DeviceId {
-    $Config = Get-AgentConfig
-    if ($Config -and $Config.device_id) {
-        return $Config.device_id
-    }
+    $c = Get-AgentConfig; if ($c -and $c.device_id) { return $c.device_id }
     return (Get-WmiObject -Class Win32_ComputerSystemProduct).UUID
 }
 
 function Get-ServerUrl {
-    $Config = Get-AgentConfig
-    if ($Config -and $Config.server_url) {
-        return $Config.server_url
-    }
+    $c = Get-AgentConfig; if ($c -and $c.server_url) { return $c.server_url }
     return "https://mdm.opendirectory.local"
 }
 
+function Get-WebSocketUrl {
+    $url = Get-ServerUrl
+    $wsUrl = $url -replace '^https://', 'wss://' -replace '^http://', 'ws://'
+    return "$wsUrl/ws/devices"
+}
+
 # ============================================================================
-# TOAST NOTIFICATIONS
+# TOAST NOTIFICATIONS (Windows-specific)
 # ============================================================================
 function Show-ODNotification {
     param(
-        [string]$Title,
-        [string]$Body,
-        [ValidateSet('Info', 'Success', 'Warning', 'Error')]
-        [string]$Type = 'Info',
-        [string]$Attribution = 'OpenDirectory',
-        [string]$ActionUrl = $null
+        [string]$Title, [string]$Body,
+        [string]$Type = 'Info', [string]$Attribution = 'OpenDirectory'
     )
-
     try {
-        # Load required assemblies for Toast notifications
         [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
         [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null
-
-        # Choose icon based on type
-        $IconHint = switch ($Type) {
-            'Success' { 'ms-appx:///Assets/success.png' }
-            'Warning' { 'ms-appx:///Assets/warning.png' }
-            'Error'   { 'ms-appx:///Assets/error.png' }
-            default   { 'ms-appx:///Assets/info.png' }
-        }
-
-        # Build toast XML
-        $ActionBlock = ""
-        if ($ActionUrl) {
-            $ActionBlock = @"
-        <actions>
-            <action content="Details anzeigen" arguments="$ActionUrl" activationType="protocol"/>
-            <action content="Schliessen" arguments="dismiss" activationType="system"/>
-        </actions>
-"@
-        }
-
         $ToastXml = @"
 <toast duration="long">
-    <visual>
-        <binding template="ToastGeneric">
-            <text>$([System.Security.SecurityElement]::Escape($Title))</text>
-            <text>$([System.Security.SecurityElement]::Escape($Body))</text>
-            <text placement="attribution">$([System.Security.SecurityElement]::Escape($Attribution))</text>
-        </binding>
-    </visual>
+    <visual><binding template="ToastGeneric">
+        <text>$([System.Security.SecurityElement]::Escape($Title))</text>
+        <text>$([System.Security.SecurityElement]::Escape($Body))</text>
+        <text placement="attribution">$([System.Security.SecurityElement]::Escape($Attribution))</text>
+    </binding></visual>
     <audio src="ms-winsoundevent:Notification.Default"/>
-    $ActionBlock
 </toast>
 "@
-
         $XmlDoc = New-Object Windows.Data.Xml.Dom.XmlDocument
         $XmlDoc.LoadXml($ToastXml)
-
         $AppId = "OpenDirectory.Agent"
-
-        # Register app ID in registry if not present
         $RegPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Notifications\Settings\$AppId"
         if (!(Test-Path $RegPath)) {
             New-Item -Path $RegPath -Force | Out-Null
             Set-ItemProperty -Path $RegPath -Name "ShowInActionCenter" -Value 1 -Type DWord
         }
-
-        $Toast = [Windows.UI.Notifications.ToastNotification]::new($XmlDoc)
-        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($AppId).Show($Toast)
-
-        Write-AgentLog "Notification shown: [$Type] $Title - $Body"
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($AppId).Show(
+            [Windows.UI.Notifications.ToastNotification]::new($XmlDoc))
+        Write-AgentLog "Notification: [$Type] $Title"
     } catch {
-        Write-AgentLog "Failed to show notification: $($_.Exception.Message)" "WARN"
-
-        # Fallback: BalloonTip via NotifyIcon
+        Write-AgentLog "Notification failed: $($_.Exception.Message)" "WARN"
         try {
-            Show-BalloonNotification -Title $Title -Body $Body -Type $Type
-        } catch {
-            Write-AgentLog "Fallback notification also failed: $($_.Exception.Message)" "WARN"
-        }
-    }
-}
-
-function Show-BalloonNotification {
-    param(
-        [string]$Title,
-        [string]$Body,
-        [string]$Type = 'Info'
-    )
-
-    Add-Type -AssemblyName System.Windows.Forms
-
-    $BalloonIcon = switch ($Type) {
-        'Error'   { [System.Windows.Forms.ToolTipIcon]::Error }
-        'Warning' { [System.Windows.Forms.ToolTipIcon]::Warning }
-        default   { [System.Windows.Forms.ToolTipIcon]::Info }
-    }
-
-    $Balloon = New-Object System.Windows.Forms.NotifyIcon
-    $Balloon.Icon = [System.Drawing.SystemIcons]::Information
-    $Balloon.BalloonTipIcon = $BalloonIcon
-    $Balloon.BalloonTipTitle = $Title
-    $Balloon.BalloonTipText = $Body
-    $Balloon.Visible = $true
-    $Balloon.ShowBalloonTip(10000)
-
-    # Cleanup after display
-    Start-Sleep -Seconds 12
-    $Balloon.Dispose()
-}
-
-# ============================================================================
-# SERVER COMMUNICATION (HTTP Polling)
-# ============================================================================
-function Invoke-ServerCheckin {
-    param([string]$ServerUrl, [string]$DeviceId)
-
-    try {
-        $SystemInfo = @{
-            device_id    = $DeviceId
-            hostname     = $env:COMPUTERNAME
-            agent_version = $script:AgentVersion
-            os_version   = (Get-WmiObject -Class Win32_OperatingSystem).Version
-            os_build     = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").CurrentBuildNumber
-            uptime_hours = [math]::Round((Get-CimInstance Win32_OperatingSystem).LastBootUpTime.Subtract((Get-Date)).TotalHours * -1, 1)
-            timestamp    = (Get-Date).ToString("o")
-        }
-
-        $Response = Invoke-RestMethod -Uri "$ServerUrl/api/v1/devices/$DeviceId/checkin" `
-            -Method POST `
-            -Body ($SystemInfo | ConvertTo-Json -Depth 3) `
-            -ContentType "application/json" `
-            -TimeoutSec 30 `
-            -ErrorAction Stop
-
-        return $Response
-    } catch {
-        Write-AgentLog "Server checkin failed: $($_.Exception.Message)" "WARN"
-        return $null
-    }
-}
-
-function Get-PendingCommands {
-    param([string]$ServerUrl, [string]$DeviceId)
-
-    try {
-        $Response = Invoke-RestMethod -Uri "$ServerUrl/api/v1/devices/$DeviceId/commands/pending" `
-            -Method GET `
-            -ContentType "application/json" `
-            -TimeoutSec 15 `
-            -ErrorAction Stop
-
-        return $Response
-    } catch {
-        Write-AgentLog "Failed to fetch pending commands: $($_.Exception.Message)" "DEBUG"
-        return $null
-    }
-}
-
-function Send-CommandResult {
-    param(
-        [string]$ServerUrl,
-        [string]$DeviceId,
-        [string]$CommandId,
-        [string]$Status,
-        [string]$Output
-    )
-
-    try {
-        Invoke-RestMethod -Uri "$ServerUrl/api/v1/devices/$DeviceId/commands/$CommandId/result" `
-            -Method POST `
-            -Body (@{
-                status = $Status
-                output = $Output
-                timestamp = (Get-Date).ToString("o")
-            } | ConvertTo-Json) `
-            -ContentType "application/json" `
-            -TimeoutSec 15 `
-            -ErrorAction SilentlyContinue
-    } catch {
-        Write-AgentLog "Failed to send command result: $($_.Exception.Message)" "WARN"
+            Add-Type -AssemblyName System.Windows.Forms
+            $b = New-Object System.Windows.Forms.NotifyIcon
+            $b.Icon = [System.Drawing.SystemIcons]::Information
+            $b.BalloonTipTitle = $Title; $b.BalloonTipText = $Body; $b.Visible = $true
+            $b.ShowBalloonTip(10000); Start-Sleep -Seconds 12; $b.Dispose()
+        } catch { Write-AgentLog "Fallback notification failed: $($_.Exception.Message)" "WARN" }
     }
 }
 
 # ============================================================================
-# NOTIFICATION HANDLER - Process server-pushed notifications
+# NOTIFICATION HANDLER (generic - same message format across all platforms)
 # ============================================================================
 function Invoke-NotificationHandler {
-    param([PSObject]$Notification)
+    param([PSObject]$Message)
+    $d = $Message.data
+    $cat = $Message.category
 
-    $Category = $Notification.category
-    $Title = $Notification.title
-    $Body = $Notification.body
-    $Type = $Notification.type  # Info, Success, Warning, Error
-
-    switch ($Category) {
-        "app_update" {
-            $AppName = $Notification.data.app_name
-            $OldVersion = $Notification.data.old_version
-            $NewVersion = $Notification.data.new_version
-
-            Show-ODNotification `
-                -Title "App aktualisiert: $AppName" `
-                -Body "$AppName wurde von $OldVersion auf $NewVersion aktualisiert." `
-                -Type "Success" `
-                -Attribution "OpenDirectory - App Updates"
-
-            Write-AgentLog "App update notification: $AppName $OldVersion -> $NewVersion"
-        }
-
-        "app_installed" {
-            $AppName = $Notification.data.app_name
-            Show-ODNotification `
-                -Title "App installiert: $AppName" `
-                -Body "$AppName wurde erfolgreich auf diesem Geraet installiert." `
-                -Type "Success" `
-                -Attribution "OpenDirectory - Software Deployment"
-
-            Write-AgentLog "App install notification: $AppName"
-        }
-
-        "app_update_failed" {
-            $AppName = $Notification.data.app_name
-            $ErrorMsg = $Notification.data.error
-            Show-ODNotification `
-                -Title "Update fehlgeschlagen: $AppName" `
-                -Body "Das Update von $AppName ist fehlgeschlagen: $ErrorMsg" `
-                -Type "Error" `
-                -Attribution "OpenDirectory - App Updates"
-
-            Write-AgentLog "App update failed notification: $AppName - $ErrorMsg" "WARN"
-        }
-
-        "compliance_violation" {
-            $Rule = $Notification.data.rule
-            $Details = $Notification.data.details
-            Show-ODNotification `
-                -Title "Compliance-Verstoss erkannt" `
-                -Body "$Rule - $Details. Bitte kontaktieren Sie den IT-Support." `
-                -Type "Warning" `
-                -Attribution "OpenDirectory - Compliance"
-
-            Write-AgentLog "Compliance violation notification: $Rule" "WARN"
-        }
-
-        "compliance_restored" {
-            Show-ODNotification `
-                -Title "Compliance wiederhergestellt" `
-                -Body "Ihr Geraet erfuellt wieder alle Sicherheitsrichtlinien." `
-                -Type "Success" `
-                -Attribution "OpenDirectory - Compliance"
-
-            Write-AgentLog "Compliance restored notification"
-        }
-
-        "policy_deployed" {
-            $PolicyName = $Notification.data.policy_name
-            Show-ODNotification `
-                -Title "Neue Richtlinie angewendet" `
-                -Body "Die Richtlinie '$PolicyName' wurde auf diesem Geraet angewendet." `
-                -Type "Info" `
-                -Attribution "OpenDirectory - Policies"
-
-            Write-AgentLog "Policy deployed notification: $PolicyName"
-        }
-
-        "policy_changed" {
-            $PolicyName = $Notification.data.policy_name
-            $Changes = $Notification.data.changes
-            Show-ODNotification `
-                -Title "Richtlinie geaendert: $PolicyName" `
-                -Body "Die Richtlinie '$PolicyName' wurde aktualisiert. $Changes" `
-                -Type "Info" `
-                -Attribution "OpenDirectory - Policies"
-
-            Write-AgentLog "Policy changed notification: $PolicyName"
-        }
-
-        "device_action" {
-            $ActionType = $Notification.data.action_type
-            Show-ODNotification `
-                -Title "Geraete-Aktion: $ActionType" `
-                -Body "$($Notification.body)" `
-                -Type "Warning" `
-                -Attribution "OpenDirectory - Geraeteverwaltung"
-
-            Write-AgentLog "Device action notification: $ActionType"
-        }
-
-        "winget_update_summary" {
-            $Updated = $Notification.data.updated_count
-            $Failed = $Notification.data.failed_count
-            $Apps = $Notification.data.updated_apps -join ", "
-
-            if ($Failed -gt 0) {
-                Show-ODNotification `
-                    -Title "App Updates abgeschlossen" `
-                    -Body "$Updated Apps aktualisiert, $Failed fehlgeschlagen. Aktualisiert: $Apps" `
-                    -Type "Warning" `
-                    -Attribution "OpenDirectory - Winget Auto-Update"
-            } else {
-                Show-ODNotification `
-                    -Title "App Updates abgeschlossen" `
-                    -Body "$Updated Apps erfolgreich aktualisiert: $Apps" `
-                    -Type "Success" `
-                    -Attribution "OpenDirectory - Winget Auto-Update"
-            }
-
-            Write-AgentLog "Winget update summary: $Updated updated, $Failed failed"
-        }
-
-        "security_alert" {
-            Show-ODNotification `
-                -Title "Sicherheitswarnung" `
-                -Body "$($Notification.body)" `
-                -Type "Error" `
-                -Attribution "OpenDirectory - Sicherheit"
-
-            Write-AgentLog "Security alert: $($Notification.body)" "WARN"
-        }
-
-        default {
-            # Generic notification
-            if ($Title -and $Body) {
-                Show-ODNotification -Title $Title -Body $Body -Type ($Type ?? "Info")
-                Write-AgentLog "Generic notification: $Title"
-            }
-        }
+    $map = @{
+        "app_update"           = @{ Title = "App aktualisiert: $($d.app_name)"; Body = "$($d.app_name) $($d.old_version) -> $($d.new_version)"; Type = "Success"; Attr = "App Updates" }
+        "app_installed"        = @{ Title = "App installiert: $($d.app_name)"; Body = "$($d.app_name) wurde installiert."; Type = "Success"; Attr = "Software" }
+        "app_update_failed"    = @{ Title = "Update fehlgeschlagen: $($d.app_name)"; Body = "$($d.error)"; Type = "Error"; Attr = "App Updates" }
+        "compliance_violation" = @{ Title = "Compliance-Verstoss"; Body = "$($d.rule) - $($d.details)"; Type = "Warning"; Attr = "Compliance" }
+        "compliance_restored"  = @{ Title = "Compliance OK"; Body = "Alle Richtlinien erfuellt."; Type = "Success"; Attr = "Compliance" }
+        "policy_deployed"      = @{ Title = "Richtlinie angewendet"; Body = "$($d.policy_name)"; Type = "Info"; Attr = "Policies" }
+        "policy_changed"       = @{ Title = "Richtlinie geaendert"; Body = "$($d.policy_name): $($d.changes)"; Type = "Info"; Attr = "Policies" }
+        "security_alert"       = @{ Title = "Sicherheitswarnung"; Body = "$($Message.body)"; Type = "Error"; Attr = "Sicherheit" }
+        "winget_update_summary"= @{ Title = "App Updates"; Body = "$($d.updated_count) aktualisiert, $($d.failed_count) fehlgeschlagen"; Type = if ($d.failed_count -gt 0) { "Warning" } else { "Success" }; Attr = "Auto-Update" }
+        "device_action"        = @{ Title = "Geraete-Aktion: $($d.action_type)"; Body = "$($Message.body)"; Type = "Warning"; Attr = "Verwaltung" }
     }
+
+    $entry = $map[$cat]
+    if ($entry) {
+        Show-ODNotification -Title $entry.Title -Body $entry.Body -Type $entry.Type -Attribution "OpenDirectory - $($entry.Attr)"
+    } elseif ($Message.title -and $Message.body) {
+        Show-ODNotification -Title $Message.title -Body $Message.body -Type ($Message.notification_type ?? "Info")
+    }
+    Write-AgentLog "Notification handled: $cat"
 }
 
 # ============================================================================
-# COMMAND EXECUTION
+# COMMAND EXECUTION (generic - commands come via WebSocket push)
 # ============================================================================
 function Invoke-AgentCommand {
-    param(
-        [PSObject]$Command,
-        [string]$ServerUrl,
-        [string]$DeviceId
-    )
+    param([PSObject]$Command, [System.Net.WebSockets.ClientWebSocket]$WS)
 
     $CommandId = $Command.id
-    $CommandType = $Command.type
-
+    $CommandType = $Command.command_type ?? $Command.type
     Write-AgentLog "Executing command: $CommandType (ID: $CommandId)"
+
+    $Result = @{ commandId = $CommandId; status = "completed"; output = "" }
 
     try {
         switch ($CommandType) {
             "run_script" {
-                $ScriptContent = $Command.data.script
-                $Output = Invoke-Expression $ScriptContent 2>&1 | Out-String
-                Send-CommandResult -ServerUrl $ServerUrl -DeviceId $DeviceId -CommandId $CommandId -Status "completed" -Output $Output
-
-                # Notify user if configured
+                $Result.output = Invoke-Expression $Command.data.script 2>&1 | Out-String
                 if ($Command.data.notify_user) {
-                    Show-ODNotification `
-                        -Title "Script ausgefuehrt" `
-                        -Body "Ein Verwaltungsscript wurde auf diesem Geraet ausgefuehrt." `
-                        -Type "Info"
+                    Show-ODNotification -Title "Script ausgefuehrt" -Body "Verwaltungsscript wurde ausgefuehrt." -Type "Info"
                 }
             }
-
             "install_app" {
-                $AppId = $Command.data.app_id
-                $AppName = $Command.data.app_name ?? $AppId
-
-                Show-ODNotification `
-                    -Title "App wird installiert..." `
-                    -Body "$AppName wird installiert. Bitte warten." `
-                    -Type "Info" `
-                    -Attribution "OpenDirectory - Software"
-
-                $Output = & winget install --id $AppId --silent --accept-source-agreements --accept-package-agreements --source winget 2>&1 | Out-String
-
+                $AppId = $Command.data.app_id; $AppName = $Command.data.app_name ?? $AppId
+                Show-ODNotification -Title "Installiere $AppName..." -Body "Bitte warten." -Type "Info" -Attribution "OpenDirectory"
+                $Result.output = & winget install --id $AppId --silent --accept-source-agreements --accept-package-agreements --source winget 2>&1 | Out-String
                 if ($LASTEXITCODE -eq 0) {
-                    Send-CommandResult -ServerUrl $ServerUrl -DeviceId $DeviceId -CommandId $CommandId -Status "completed" -Output $Output
-                    Show-ODNotification `
-                        -Title "App installiert: $AppName" `
-                        -Body "$AppName wurde erfolgreich installiert." `
-                        -Type "Success"
+                    Show-ODNotification -Title "Installiert: $AppName" -Body "Erfolgreich installiert." -Type "Success"
                 } else {
-                    Send-CommandResult -ServerUrl $ServerUrl -DeviceId $DeviceId -CommandId $CommandId -Status "failed" -Output $Output
-                    Show-ODNotification `
-                        -Title "Installation fehlgeschlagen" `
-                        -Body "$AppName konnte nicht installiert werden." `
-                        -Type "Error"
+                    $Result.status = "failed"
+                    Show-ODNotification -Title "Fehlgeschlagen: $AppName" -Body "Installation fehlgeschlagen." -Type "Error"
                 }
             }
-
             "update_app" {
-                $AppId = $Command.data.app_id
-                $AppName = $Command.data.app_name ?? $AppId
-                $Output = & winget upgrade --id $AppId --silent --accept-source-agreements --accept-package-agreements --source winget 2>&1 | Out-String
-
+                $AppId = $Command.data.app_id; $AppName = $Command.data.app_name ?? $AppId
+                $Result.output = & winget upgrade --id $AppId --silent --accept-source-agreements --accept-package-agreements --source winget 2>&1 | Out-String
                 if ($LASTEXITCODE -eq 0) {
-                    Send-CommandResult -ServerUrl $ServerUrl -DeviceId $DeviceId -CommandId $CommandId -Status "completed" -Output $Output
-                    Show-ODNotification `
-                        -Title "App aktualisiert: $AppName" `
-                        -Body "$AppName wurde aktualisiert." `
-                        -Type "Success"
-                } else {
-                    Send-CommandResult -ServerUrl $ServerUrl -DeviceId $DeviceId -CommandId $CommandId -Status "failed" -Output $Output
-                }
+                    Show-ODNotification -Title "Aktualisiert: $AppName" -Body "$AppName wurde aktualisiert." -Type "Success"
+                } else { $Result.status = "failed" }
             }
-
             "sync_policies" {
-                $Output = "Policy sync requested"
-                Invoke-PolicySync -ServerUrl $ServerUrl -DeviceId $DeviceId
-                Send-CommandResult -ServerUrl $ServerUrl -DeviceId $DeviceId -CommandId $CommandId -Status "completed" -Output $Output
-                Show-ODNotification `
-                    -Title "Richtlinien synchronisiert" `
-                    -Body "Die Geraeterichtlinien wurden mit dem Server synchronisiert." `
-                    -Type "Info"
-            }
-
-            "show_notification" {
-                Invoke-NotificationHandler -Notification $Command.data
-                Send-CommandResult -ServerUrl $ServerUrl -DeviceId $DeviceId -CommandId $CommandId -Status "completed" -Output "Notification shown"
-            }
-
-            "collect_inventory" {
-                $Inventory = Get-DeviceInventory
-                Send-CommandResult -ServerUrl $ServerUrl -DeviceId $DeviceId -CommandId $CommandId -Status "completed" -Output ($Inventory | ConvertTo-Json -Depth 3)
-            }
-
-            default {
-                Write-AgentLog "Unknown command type: $CommandType" "WARN"
-                Send-CommandResult -ServerUrl $ServerUrl -DeviceId $DeviceId -CommandId $CommandId -Status "failed" -Output "Unknown command type: $CommandType"
-            }
-        }
-    } catch {
-        Write-AgentLog "Command execution failed: $($_.Exception.Message)" "ERROR"
-        Send-CommandResult -ServerUrl $ServerUrl -DeviceId $DeviceId -CommandId $CommandId -Status "failed" -Output $_.Exception.Message
-    }
-}
-
-# ============================================================================
-# POLICY SYNC
-# ============================================================================
-function Invoke-PolicySync {
-    param([string]$ServerUrl, [string]$DeviceId)
-
-    try {
-        $Policies = Invoke-RestMethod -Uri "$ServerUrl/api/v1/devices/$DeviceId/policies" `
-            -Method GET `
-            -ContentType "application/json" `
-            -TimeoutSec 30 `
-            -ErrorAction Stop
-
-        if ($Policies -and $Policies.policies) {
-            foreach ($Policy in $Policies.policies) {
-                if ($Policy.script) {
-                    Write-AgentLog "Applying policy: $($Policy.name)"
-                    try {
-                        Invoke-Expression $Policy.script 2>&1 | Out-Null
-                        Write-AgentLog "Policy applied successfully: $($Policy.name)"
-                    } catch {
-                        Write-AgentLog "Policy application failed: $($Policy.name) - $($_.Exception.Message)" "ERROR"
+                $ServerUrl = Get-ServerUrl; $DeviceId = Get-DeviceId
+                try {
+                    $Policies = Invoke-RestMethod -Uri "$ServerUrl/api/v1/devices/$DeviceId/policies" -Method GET -ContentType "application/json" -TimeoutSec 30
+                    if ($Policies.policies) {
+                        foreach ($p in $Policies.policies) { if ($p.script) { Invoke-Expression $p.script 2>&1 | Out-Null } }
                     }
-                }
+                    $Result.output = "Policies synced: $($Policies.policies.Count)"
+                } catch { $Result.status = "failed"; $Result.output = $_.Exception.Message }
+                Show-ODNotification -Title "Richtlinien synchronisiert" -Body "Policies wurden angewendet." -Type "Info"
+            }
+            "show_notification" {
+                Invoke-NotificationHandler -Message $Command.data
+                $Result.output = "Notification shown"
+            }
+            "collect_inventory" {
+                $Result.output = (Get-DeviceInventory | ConvertTo-Json -Depth 3)
+            }
+            default {
+                $Result.status = "failed"; $Result.output = "Unknown command: $CommandType"
             }
         }
     } catch {
-        Write-AgentLog "Policy sync failed: $($_.Exception.Message)" "WARN"
+        $Result.status = "failed"; $Result.output = $_.Exception.Message
+        Write-AgentLog "Command failed: $($_.Exception.Message)" "ERROR"
     }
+
+    # Send result back via WebSocket
+    Send-WSMessage -WS $WS -Message @{ type = "command_result"; data = $Result }
 }
 
 # ============================================================================
 # DEVICE INVENTORY
 # ============================================================================
 function Get-DeviceInventory {
-    $Inventory = @{
-        device_id   = Get-DeviceId
-        hostname    = $env:COMPUTERNAME
-        timestamp   = (Get-Date).ToString("o")
-        os          = @{
-            name     = (Get-WmiObject Win32_OperatingSystem).Caption
-            version  = (Get-WmiObject Win32_OperatingSystem).Version
-            build    = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").CurrentBuildNumber
-            arch     = $env:PROCESSOR_ARCHITECTURE
+    return @{
+        device_id = Get-DeviceId; hostname = $env:COMPUTERNAME; platform = "windows"
+        timestamp = (Get-Date).ToString("o")
+        os = @{
+            name = (Get-WmiObject Win32_OperatingSystem).Caption
+            version = (Get-WmiObject Win32_OperatingSystem).Version
+            build = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").CurrentBuildNumber
+            arch = $env:PROCESSOR_ARCHITECTURE
         }
-        hardware    = @{
-            cpu         = (Get-WmiObject Win32_Processor | Select-Object -First 1).Name
-            ram_gb      = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
+        hardware = @{
+            cpu = (Get-WmiObject Win32_Processor | Select-Object -First 1).Name
+            ram_gb = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
             disk_free_gb = [math]::Round((Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace / 1GB, 1)
         }
-        network     = @{
+        network = @{
             ip_addresses = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -ne '127.0.0.1' }).IPAddress
-            domain       = (Get-WmiObject Win32_ComputerSystem).Domain
+            domain = (Get-WmiObject Win32_ComputerSystem).Domain
             domain_joined = (Get-WmiObject Win32_ComputerSystem).PartOfDomain
         }
-        agent       = @{
-            version   = $script:AgentVersion
-            uptime    = [math]::Round(((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalHours, 1)
-        }
-        winget      = @{
+        winget = @{
             installed = [bool](Get-Command winget -ErrorAction SilentlyContinue)
-            version   = if (Get-Command winget -ErrorAction SilentlyContinue) { (& winget --version 2>$null).Trim() } else { $null }
+            version = if (Get-Command winget -ErrorAction SilentlyContinue) { (& winget --version 2>$null).Trim() } else { $null }
         }
     }
-
-    return $Inventory
 }
 
 # ============================================================================
-# MAIN AGENT LOOP
+# WEBSOCKET CLIENT - Server pushes messages to us
+# ============================================================================
+function Send-WSMessage {
+    param([System.Net.WebSockets.ClientWebSocket]$WS, [hashtable]$Message)
+    try {
+        $json = ($Message | ConvertTo-Json -Depth 5 -Compress)
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+        $segment = New-Object System.ArraySegment[byte] -ArgumentList @(,$bytes)
+        $WS.SendAsync($segment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [System.Threading.CancellationToken]::None).Wait()
+    } catch {
+        Write-AgentLog "WebSocket send failed: $($_.Exception.Message)" "WARN"
+    }
+}
+
+function Receive-WSMessage {
+    param([System.Net.WebSockets.ClientWebSocket]$WS)
+    $buffer = New-Object byte[] 65536
+    $segment = New-Object System.ArraySegment[byte] -ArgumentList @(,$buffer)
+    $result = $WS.ReceiveAsync($segment, [System.Threading.CancellationToken]::None).Result
+
+    if ($result.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
+        return $null
+    }
+
+    $json = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $result.Count)
+    return $json | ConvertFrom-Json
+}
+
+function Connect-WebSocket {
+    param([string]$Url, [string]$DeviceId)
+
+    $WS = New-Object System.Net.WebSockets.ClientWebSocket
+    $WS.Options.SetRequestHeader("X-Device-Id", $DeviceId)
+    $WS.Options.SetRequestHeader("X-Device-Platform", $script:Platform)
+    $WS.Options.SetRequestHeader("X-Agent-Version", $script:AgentVersion)
+    $WS.Options.KeepAliveInterval = [TimeSpan]::FromSeconds(30)
+
+    $uri = New-Object System.Uri($Url)
+    $WS.ConnectAsync($uri, [System.Threading.CancellationToken]::None).Wait()
+
+    # Register agent
+    Send-WSMessage -WS $WS -Message @{
+        type = "agent_register"
+        data = @{
+            deviceId = $DeviceId
+            platform = $script:Platform
+            agentVersion = $script:AgentVersion
+            hostname = $env:COMPUTERNAME
+        }
+    }
+
+    return $WS
+}
+
+# ============================================================================
+# MAIN AGENT LOOP (WebSocket-based, server pushes to us)
 # ============================================================================
 function Start-AgentLoop {
     $ServerUrl = Get-ServerUrl
+    $WsUrl = Get-WebSocketUrl
     $DeviceId = Get-DeviceId
+    $ReconnectDelay = $script:ReconnectDelaySec
 
     Write-AgentLog "========================================="
-    Write-AgentLog "OpenDirectory Agent v$script:AgentVersion starting"
+    Write-AgentLog "OpenDirectory Agent v$script:AgentVersion (WebSocket)"
     Write-AgentLog "Device ID: $DeviceId"
     Write-AgentLog "Server: $ServerUrl"
-    Write-AgentLog "Polling interval: ${script:PollingIntervalSec}s"
+    Write-AgentLog "WebSocket: $WsUrl"
+    Write-AgentLog "Platform: $script:Platform"
     Write-AgentLog "========================================="
 
-    # Initial checkin
-    $CheckinResult = Invoke-ServerCheckin -ServerUrl $ServerUrl -DeviceId $DeviceId
-    if ($CheckinResult) {
-        Write-AgentLog "Initial server checkin successful"
-    } else {
-        Write-AgentLog "Initial server checkin failed - will retry" "WARN"
-    }
+    Show-ODNotification -Title "OpenDirectory Agent" -Body "Agent gestartet, verbinde mit Server..." -Type "Info"
 
-    # Show startup notification
-    Show-ODNotification `
-        -Title "OpenDirectory Agent gestartet" `
-        -Body "Der OpenDirectory Agent ist aktiv und verbunden." `
-        -Type "Info" `
-        -Attribution "OpenDirectory"
-
-    $LastCheckin = Get-Date
-    $LastHeartbeat = Get-Date
-    $PollingCycle = 0
-
-    # Main loop
+    # Reconnect loop - agent stays connected, server pushes messages
     while ($true) {
+        $WS = $null
         try {
-            $Now = Get-Date
-            $PollingCycle++
+            Write-AgentLog "Connecting to WebSocket: $WsUrl"
+            $WS = Connect-WebSocket -Url $WsUrl -DeviceId $DeviceId
 
-            # Heartbeat (every 30 seconds)
-            if (($Now - $LastHeartbeat).TotalSeconds -ge $script:HeartbeatIntervalSec) {
-                Invoke-ServerCheckin -ServerUrl $ServerUrl -DeviceId $DeviceId | Out-Null
-                $LastHeartbeat = $Now
-            }
+            Write-AgentLog "WebSocket connected"
+            Show-ODNotification -Title "OpenDirectory Agent" -Body "Verbunden mit Server." -Type "Success"
+            $ReconnectDelay = $script:ReconnectDelaySec  # Reset on successful connect
 
-            # Poll for pending commands (every polling interval)
-            if (($Now - $LastCheckin).TotalSeconds -ge $script:PollingIntervalSec) {
-                $PendingCommands = Get-PendingCommands -ServerUrl $ServerUrl -DeviceId $DeviceId
+            $LastHeartbeat = Get-Date
 
-                if ($PendingCommands -and $PendingCommands.commands) {
-                    foreach ($Command in $PendingCommands.commands) {
-                        Invoke-AgentCommand -Command $Command -ServerUrl $ServerUrl -DeviceId $DeviceId
+            # Message receive loop - server pushes, we react
+            while ($WS.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
+
+                # Send heartbeat periodically
+                if (((Get-Date) - $LastHeartbeat).TotalSeconds -ge $script:HeartbeatIntervalSec) {
+                    Send-WSMessage -WS $WS -Message @{
+                        type = "device_heartbeat"
+                        data = @{ deviceId = $DeviceId; timestamp = (Get-Date).ToString("o") }
                     }
+                    $LastHeartbeat = Get-Date
                 }
 
-                # Check for pending notifications
-                if ($PendingCommands -and $PendingCommands.notifications) {
-                    foreach ($Notification in $PendingCommands.notifications) {
-                        Invoke-NotificationHandler -Notification $Notification
+                # Check if data available (non-blocking with timeout)
+                # Use a short timeout so heartbeats can still fire
+                try {
+                    $buffer = New-Object byte[] 65536
+                    $segment = New-Object System.ArraySegment[byte] -ArgumentList @(,$buffer)
+                    $cts = New-Object System.Threading.CancellationTokenSource(5000) # 5s timeout
+                    $task = $WS.ReceiveAsync($segment, $cts.Token)
+
+                    try {
+                        $task.Wait()
+                        $result = $task.Result
+
+                        if ($result.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
+                            Write-AgentLog "Server closed connection" "WARN"
+                            break
+                        }
+
+                        $json = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $result.Count)
+                        $msg = $json | ConvertFrom-Json
+
+                        # Handle server-pushed message
+                        switch ($msg.type) {
+                            "notification" {
+                                Write-AgentLog "Received notification: $($msg.category)"
+                                Invoke-NotificationHandler -Message $msg
+                            }
+                            "command" {
+                                Write-AgentLog "Received command: $($msg.command_type ?? $msg.type)"
+                                Invoke-AgentCommand -Command $msg -WS $WS
+                            }
+                            "heartbeat_ack" {
+                                # Server acknowledged heartbeat
+                            }
+                            "agent_registered" {
+                                Write-AgentLog "Agent registration confirmed by server"
+                            }
+                            "connection" {
+                                Write-AgentLog "Connection confirmed: $($msg.connectionId)"
+                            }
+                            "policy_sync" {
+                                Write-AgentLog "Server requests policy sync"
+                                Invoke-AgentCommand -Command @{ id = "policy-sync-$(Get-Date -Format 'yyyyMMddHHmmss')"; type = "sync_policies"; data = @{} } -WS $WS
+                            }
+                            default {
+                                Write-AgentLog "Unknown message type: $($msg.type)" "DEBUG"
+                            }
+                        }
+                    } catch [System.AggregateException] {
+                        # Timeout - no message received, loop continues (heartbeat check)
+                        if ($_.Exception.InnerException -is [System.OperationCanceledException]) {
+                            # Normal timeout, continue loop
+                        } else {
+                            throw $_.Exception.InnerException
+                        }
+                    } finally {
+                        $cts.Dispose()
                     }
+                } catch [System.OperationCanceledException] {
+                    # Timeout, continue
+                } catch {
+                    Write-AgentLog "Receive error: $($_.Exception.Message)" "ERROR"
+                    break
                 }
-
-                $LastCheckin = $Now
-            }
-
-            # Log status every 60 cycles (approx every hour)
-            if ($PollingCycle % 60 -eq 0) {
-                Write-AgentLog "Agent running - cycle $PollingCycle, server: $ServerUrl"
             }
 
         } catch {
-            Write-AgentLog "Agent loop error: $($_.Exception.Message)" "ERROR"
+            Write-AgentLog "WebSocket error: $($_.Exception.Message)" "ERROR"
+        } finally {
+            if ($WS -and $WS.State -ne [System.Net.WebSockets.WebSocketState]::Closed) {
+                try { $WS.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, "Reconnecting", [System.Threading.CancellationToken]::None).Wait() } catch {}
+                $WS.Dispose()
+            }
         }
 
-        Start-Sleep -Seconds 10
+        # Exponential backoff reconnect
+        Write-AgentLog "Reconnecting in ${ReconnectDelay}s..."
+        Start-Sleep -Seconds $ReconnectDelay
+        $ReconnectDelay = [math]::Min($ReconnectDelay * 2, $script:MaxReconnectDelaySec)
     }
 }
 
@@ -657,100 +415,42 @@ function Start-AgentLoop {
 # SERVICE INSTALLATION / MANAGEMENT
 # ============================================================================
 function Install-Agent {
-    Write-Host "Installing OpenDirectory Agent..." -ForegroundColor Green
-
-    # Ensure directories exist
+    Write-Host "Installing OpenDirectory Agent v$script:AgentVersion..." -ForegroundColor Green
     @($script:ODPath, $script:LogPath, "$script:ODPath\Scripts", "$script:ODPath\Config") | ForEach-Object {
         if (!(Test-Path $_)) { New-Item -Path $_ -ItemType Directory -Force | Out-Null }
     }
-
-    # Copy agent script to install directory
     $AgentScript = "$script:ODPath\OpenDirectoryAgent.ps1"
     Copy-Item -Path $PSCommandPath -Destination $AgentScript -Force
 
-    # Create scheduled task that runs at startup and keeps running
-    $TaskName = $script:TaskName
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-
-    $Action = New-ScheduledTaskAction `
-        -Execute "PowerShell.exe" `
-        -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentScript`" -Action Run"
-
-    $TriggerStartup = New-ScheduledTaskTrigger -AtStartup
-    $TriggerLogon = New-ScheduledTaskTrigger -AtLogOn
-
-    $Settings = New-ScheduledTaskSettingsSet `
-        -AllowStartIfOnBatteries `
-        -DontStopIfGoingOnBatteries `
-        -StartWhenAvailable `
-        -RestartCount 3 `
-        -RestartInterval (New-TimeSpan -Minutes 1) `
-        -ExecutionTimeLimit ([TimeSpan]::Zero)
-
+    Unregister-ScheduledTask -TaskName $script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    $Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentScript`" -Action Run"
+    $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
     $Principal = New-ScheduledTaskPrincipal -UserID "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    Register-ScheduledTask -TaskName $script:TaskName -Action $Action -Trigger @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -AtLogOn)) -Settings $Settings -Principal $Principal -Description "OpenDirectory Agent - WebSocket-based device management" -Force
+    Start-ScheduledTask -TaskName $script:TaskName
 
-    Register-ScheduledTask `
-        -TaskName $TaskName `
-        -Action $Action `
-        -Trigger @($TriggerStartup, $TriggerLogon) `
-        -Settings $Settings `
-        -Principal $Principal `
-        -Description "OpenDirectory Agent - Background service for device management, policy sync, and notifications" `
-        -Force
-
-    # Start the task immediately
-    Start-ScheduledTask -TaskName $TaskName
-
-    Write-Host "OpenDirectory Agent installed and started" -ForegroundColor Green
-    Write-Host "Task Name: $TaskName" -ForegroundColor Cyan
-    Write-Host "Agent Path: $AgentScript" -ForegroundColor Cyan
-    Write-Host "Log Path: $script:LogPath" -ForegroundColor Cyan
+    Write-Host "Agent installed and started (WebSocket mode)" -ForegroundColor Green
+    Write-Host "Task: $($script:TaskName) | Logs: $script:LogPath" -ForegroundColor Cyan
 }
 
 function Uninstall-Agent {
-    Write-Host "Uninstalling OpenDirectory Agent..." -ForegroundColor Yellow
-
-    # Stop and remove scheduled task
     Stop-ScheduledTask -TaskName $script:TaskName -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
-
-    # Remove agent script (keep config and logs)
-    $AgentScript = "$script:ODPath\OpenDirectoryAgent.ps1"
-    if (Test-Path $AgentScript) {
-        Remove-Item $AgentScript -Force
-    }
-
-    Write-Host "OpenDirectory Agent uninstalled" -ForegroundColor Green
-    Write-Host "Note: Configuration and logs were preserved in $script:ODPath" -ForegroundColor Cyan
+    $s = "$script:ODPath\OpenDirectoryAgent.ps1"; if (Test-Path $s) { Remove-Item $s -Force }
+    Write-Host "Agent uninstalled (config/logs preserved)" -ForegroundColor Green
 }
 
 function Get-AgentStatus {
     $Task = Get-ScheduledTask -TaskName $script:TaskName -ErrorAction SilentlyContinue
-    $TaskInfo = Get-ScheduledTaskInfo -TaskName $script:TaskName -ErrorAction SilentlyContinue
-
-    $Status = @{
-        Installed    = [bool]$Task
-        TaskState    = if ($Task) { $Task.State.ToString() } else { "Not installed" }
-        LastRunTime  = if ($TaskInfo) { $TaskInfo.LastRunTime } else { $null }
-        LastResult   = if ($TaskInfo) { $TaskInfo.LastTaskResult } else { $null }
-        AgentVersion = $script:AgentVersion
-        DeviceId     = Get-DeviceId
-        ServerUrl    = Get-ServerUrl
-        ConfigExists = Test-Path $script:ConfigPath
-        LogPath      = $script:LogPath
-    }
-
-    Write-Host "`nOpenDirectory Agent Status" -ForegroundColor Green
-    Write-Host "=========================" -ForegroundColor Green
-    $Status.GetEnumerator() | Sort-Object Name | ForEach-Object {
-        Write-Host "$($_.Key): $($_.Value)" -ForegroundColor Cyan
-    }
-
-    return $Status
+    $Info = Get-ScheduledTaskInfo -TaskName $script:TaskName -ErrorAction SilentlyContinue
+    @{
+        Version = $script:AgentVersion; Mode = "WebSocket (server-push)"
+        Platform = $script:Platform; DeviceId = Get-DeviceId; Server = Get-ServerUrl
+        Installed = [bool]$Task; State = if ($Task) { $Task.State.ToString() } else { "Not installed" }
+        LastRun = if ($Info) { $Info.LastRunTime } else { $null }
+    } | Format-Table -AutoSize
 }
 
-# ============================================================================
-# ENTRY POINT
 # ============================================================================
 switch ($Action) {
     'Install'   { Install-Agent }
