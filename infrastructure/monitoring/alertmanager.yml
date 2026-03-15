@@ -1,0 +1,97 @@
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alertmanager@opendirectory.local'
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default'
+
+  routes:
+    # Critical alerts → Slack + PagerDuty
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Warning alerts → Email
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      repeat_interval: 4h
+
+    # Backup alerts → dedicated channel
+    - match_re:
+        alertname: '^(BackupFailed|ReplicationLag.*|DRDrillOverdue)$'
+      receiver: 'backup-alerts'
+      repeat_interval: 2h
+
+    # Threat/Security alerts → immediate
+    - match_re:
+        alertname: '^(ThreatDetected|BruteForceDetected)$'
+      receiver: 'security-alerts'
+      group_wait: 0s
+      repeat_interval: 30m
+
+receivers:
+  - name: 'default'
+    webhook_configs:
+      - url: 'http://localhost:3000/api/webhooks/alertmanager'
+        send_resolved: true
+
+  - name: 'critical-alerts'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#opendirectory-critical'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}\n{{ end }}'
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+        send_resolved: true
+    webhook_configs:
+      - url: 'http://localhost:3000/api/webhooks/alertmanager'
+        send_resolved: true
+
+  - name: 'warning-alerts'
+    email_configs:
+      - to: '${ALERT_EMAIL}'
+        headers:
+          Subject: '[OpenDirectory Warning] {{ .GroupLabels.alertname }}'
+        send_resolved: true
+    webhook_configs:
+      - url: 'http://localhost:3000/api/webhooks/alertmanager'
+        send_resolved: true
+
+  - name: 'backup-alerts'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#opendirectory-backup'
+        title: 'Backup Alert: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+
+  - name: 'security-alerts'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#opendirectory-security'
+        title: 'SECURITY: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        color: 'danger'
+        send_resolved: true
+    webhook_configs:
+      - url: 'http://localhost:3000/api/webhooks/alertmanager'
+        send_resolved: true
+
+inhibit_rules:
+  # Don't alert on warnings when critical is firing for same service
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'job']

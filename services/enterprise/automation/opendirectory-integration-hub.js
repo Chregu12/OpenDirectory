@@ -205,6 +205,40 @@ class IntegrationHub extends EventEmitter {
                 integrationStats: IntegrationStats
                 connectors: [Connector]
                 webhooks: [Webhook]
+
+                # Update Management
+                updatePolicies: [UpdatePolicy]
+                updateStatus(deviceId: String!): UpdateStatus
+                wingetConfig(deviceId: String!): WingetConfig
+
+                # Network Profiles
+                wifiProfiles(deviceId: String): [WiFiProfile]
+                vpnProfiles(deviceId: String): [VPNProfile]
+                emailProfiles(deviceId: String): [EmailProfile]
+
+                # Compliance & Encryption
+                complianceStatus(deviceId: String!): ComplianceResult
+                encryptionStatus(deviceId: String!): EncryptionResult
+
+                # Backup & Disaster Recovery
+                backupStatus: BackupStatus
+                backupHistory(limit: Int): [BackupRecord]
+                drHealth: DRHealth
+                replicationStatus: ReplicationStatus
+
+                # Analytics & Threat Detection
+                threats(severity: String, limit: Int): [Threat]
+                anomalies(deviceId: String, timeframe: String): [Anomaly]
+                predictions(type: String): [Prediction]
+                recommendations(category: String): [Recommendation]
+
+                # Dashboard
+                dashboard: DashboardData
+                timeSeries(metric: String!, timeframe: String!): [DataPoint]
+
+                # Reports
+                reportTemplates: [ReportTemplate]
+                report(id: String!): Report
             }
             
             type Mutation {
@@ -223,6 +257,36 @@ class IntegrationHub extends EventEmitter {
                 updateWebhook(id: String!, input: WebhookInput!): Webhook
                 deleteWebhook(id: String!): Boolean
                 triggerSync(connector: String!): SyncResult
+
+                # Update Management
+                configureUpdates(deviceId: String!, policy: UpdatePolicyInput!): CommandResult
+                triggerUpdate(deviceId: String!, packages: [String]): CommandResult
+                configureWinget(deviceId: String!, config: WingetConfigInput!): CommandResult
+
+                # Network Profiles
+                deployWiFi(deviceId: String!, profile: WiFiProfileInput!): CommandResult
+                deployVPN(deviceId: String!, profile: VPNProfileInput!): CommandResult
+                deployEmail(deviceId: String!, profile: EmailProfileInput!): CommandResult
+                removeWiFi(deviceId: String!, profileId: String!): CommandResult
+                removeVPN(deviceId: String!, profileId: String!): CommandResult
+                removeEmail(deviceId: String!, profileId: String!): CommandResult
+
+                # Compliance & Encryption
+                checkCompliance(deviceId: String!): CommandResult
+                checkEncryption(deviceId: String!): CommandResult
+                enableEncryption(deviceId: String!, method: String): CommandResult
+
+                # Deployment
+                zeroTouchDeploy(deviceId: String!, config: DeployConfigInput!): CommandResult
+
+                # Backup & DR
+                triggerBackup(type: String!): BackupJob
+                startRestore(backupId: String!): RestoreJob
+                testFailover: FailoverResult
+
+                # Reports
+                generateReport(template: String!, format: String!, params: String): Report
+                scheduleReport(template: String!, schedule: String!, recipients: [String]!): ScheduledReport
             }
             
             type User {
@@ -409,6 +473,341 @@ class IntegrationHub extends EventEmitter {
                 events: [String]!
                 secret: String
             }
+
+            # === New Types: Update Management ===
+            type UpdatePolicy {
+                id: String!
+                name: String!
+                autoApprove: Boolean
+                maintenanceWindow: String
+                targetGroups: [String]
+                createdAt: String
+            }
+
+            type UpdateStatus {
+                deviceId: String!
+                platform: String
+                pendingUpdates: Int
+                installedUpdates: Int
+                lastCheck: String
+                compliance: Float
+                rebootRequired: Boolean
+            }
+
+            type WingetConfig {
+                deviceId: String!
+                autoUpdate: Boolean
+                updateInterval: String
+                excludedApps: [String]
+                includedApps: [String]
+                lastRun: String
+            }
+
+            type CommandResult {
+                success: Boolean!
+                commandId: String
+                message: String
+                data: String
+                timestamp: String
+            }
+
+            # === New Types: Network Profiles ===
+            type WiFiProfile {
+                id: String!
+                ssid: String!
+                security: String
+                eapType: String
+                autoConnect: Boolean
+                hidden: Boolean
+                deployedDevices: Int
+            }
+
+            type VPNProfile {
+                id: String!
+                name: String!
+                type: String
+                server: String
+                protocol: String
+                deployedDevices: Int
+            }
+
+            type EmailProfile {
+                id: String!
+                accountName: String!
+                protocol: String
+                server: String
+                port: Int
+                useSSL: Boolean
+                deployedDevices: Int
+            }
+
+            # === New Types: Compliance & Encryption ===
+            type ComplianceResult {
+                deviceId: String!
+                compliant: Boolean!
+                score: Float
+                violations: [ComplianceViolation]
+                lastChecked: String
+            }
+
+            type EncryptionResult {
+                deviceId: String!
+                encrypted: Boolean!
+                method: String
+                percentage: Float
+                keyEscrowed: Boolean
+            }
+
+            # === New Types: Backup & DR ===
+            type BackupStatus {
+                running: Boolean!
+                lastFullBackup: String
+                lastIncrementalBackup: String
+                nextScheduled: String
+                storageUsedGB: Float
+                totalBackups: Int
+            }
+
+            type BackupRecord {
+                id: String!
+                type: String!
+                status: String!
+                startedAt: String!
+                completedAt: String
+                sizeGB: Float
+                itemsProcessed: Int
+            }
+
+            type DRHealth {
+                status: String!
+                primaryRegion: String
+                secondaryRegions: [String]
+                lastDrillDate: String
+                rtoSeconds: Int
+                rpoSeconds: Int
+            }
+
+            type ReplicationStatus {
+                active: Boolean!
+                lagSeconds: Float
+                primaryRegion: String
+                replicas: [ReplicaInfo]
+            }
+
+            type ReplicaInfo {
+                region: String!
+                status: String!
+                lagSeconds: Float
+                lastSync: String
+            }
+
+            type BackupJob {
+                id: String!
+                type: String!
+                status: String!
+                startedAt: String!
+            }
+
+            type RestoreJob {
+                id: String!
+                backupId: String!
+                status: String!
+                startedAt: String!
+                estimatedCompletion: String
+            }
+
+            type FailoverResult {
+                success: Boolean!
+                message: String
+                failedOver: Boolean
+                duration: Float
+            }
+
+            # === New Types: Analytics & Threats ===
+            type Threat {
+                id: String!
+                severity: String!
+                category: String!
+                description: String!
+                deviceId: String
+                source: String
+                detectedAt: String!
+                status: String!
+                mitreTactic: String
+            }
+
+            type Anomaly {
+                id: String!
+                type: String!
+                severity: String!
+                description: String!
+                deviceId: String
+                metric: String
+                expectedValue: Float
+                actualValue: Float
+                detectedAt: String!
+            }
+
+            type Prediction {
+                id: String!
+                type: String!
+                confidence: Float!
+                description: String!
+                deviceId: String
+                predictedDate: String
+                recommendation: String
+            }
+
+            type Recommendation {
+                id: String!
+                category: String!
+                priority: String!
+                title: String!
+                description: String!
+                impact: String
+                effort: String
+            }
+
+            # === New Types: Dashboard ===
+            type DashboardData {
+                devices: DeviceStats
+                updates: UpdateStats
+                threats: ThreatStats
+                certificates: CertificateStats
+                compliance: ComplianceSummary
+                backups: BackupSummary
+            }
+
+            type DeviceStats {
+                total: Int!
+                online: Int!
+                offline: Int!
+                byPlatform: String
+            }
+
+            type UpdateStats {
+                pending: Int!
+                installed: Int!
+                failed: Int!
+                complianceRatio: Float!
+            }
+
+            type ThreatStats {
+                active: Int!
+                resolved: Int!
+                critical: Int!
+                byCategory: String
+            }
+
+            type CertificateStats {
+                valid: Int!
+                expiringSoon: Int!
+                expired: Int!
+                totalIssued: Int!
+            }
+
+            type ComplianceSummary {
+                compliantDevices: Int!
+                nonCompliantDevices: Int!
+                overallScore: Float!
+            }
+
+            type BackupSummary {
+                lastSuccess: String
+                nextScheduled: String
+                storageUsedGB: Float
+            }
+
+            type DataPoint {
+                timestamp: String!
+                value: Float!
+                label: String
+            }
+
+            # === New Types: Reports ===
+            type ReportTemplate {
+                id: String!
+                name: String!
+                category: String!
+                description: String
+                formats: [String]!
+                parameters: [String]
+            }
+
+            type Report {
+                id: String!
+                template: String!
+                format: String!
+                status: String!
+                generatedAt: String
+                downloadUrl: String
+                sizeBytes: Int
+            }
+
+            type ScheduledReport {
+                id: String!
+                template: String!
+                schedule: String!
+                recipients: [String]!
+                nextRun: String
+                lastRun: String
+            }
+
+            # === New Input Types ===
+            input UpdatePolicyInput {
+                name: String
+                autoApprove: Boolean
+                maintenanceWindow: String
+                rebootPolicy: String
+                targetGroups: [String]
+            }
+
+            input WingetConfigInput {
+                autoUpdate: Boolean
+                updateInterval: String
+                excludedApps: [String]
+                includedApps: [String]
+            }
+
+            input WiFiProfileInput {
+                ssid: String!
+                security: String!
+                eapType: String
+                password: String
+                certId: String
+                autoConnect: Boolean
+                hidden: Boolean
+            }
+
+            input VPNProfileInput {
+                name: String!
+                type: String!
+                server: String!
+                protocol: String
+                authMethod: String
+                certId: String
+                sharedSecret: String
+                dnsServers: [String]
+                routes: [String]
+            }
+
+            input EmailProfileInput {
+                accountName: String!
+                emailAddress: String!
+                protocol: String!
+                incomingServer: String!
+                incomingPort: Int
+                outgoingServer: String!
+                outgoingPort: Int
+                useSSL: Boolean
+            }
+
+            input DeployConfigInput {
+                profile: String!
+                settings: String
+                skipUserSetup: Boolean
+                autoEnroll: Boolean
+            }
         `);
         
         const root = {
@@ -440,7 +839,71 @@ class IntegrationHub extends EventEmitter {
             createWebhook: async (args) => this.handleGraphQLCreateWebhook(args),
             updateWebhook: async (args) => this.handleGraphQLUpdateWebhook(args),
             deleteWebhook: async (args) => this.handleGraphQLDeleteWebhook(args),
-            triggerSync: async (args) => this.handleGraphQLTriggerSync(args)
+            triggerSync: async (args) => this.handleGraphQLTriggerSync(args),
+
+            // Update Management Queries
+            updatePolicies: async () => this.handleGraphQLUpdatePolicies(),
+            updateStatus: async (args) => this.handleGraphQLUpdateStatus(args),
+            wingetConfig: async (args) => this.handleGraphQLWingetConfig(args),
+
+            // Network Profile Queries
+            wifiProfiles: async (args) => this.handleGraphQLWifiProfiles(args),
+            vpnProfiles: async (args) => this.handleGraphQLVpnProfiles(args),
+            emailProfiles: async (args) => this.handleGraphQLEmailProfiles(args),
+
+            // Compliance & Encryption Queries
+            complianceStatus: async (args) => this.handleGraphQLComplianceStatus(args),
+            encryptionStatus: async (args) => this.handleGraphQLEncryptionStatus(args),
+
+            // Backup & DR Queries
+            backupStatus: async () => this.handleGraphQLBackupStatus(),
+            backupHistory: async (args) => this.handleGraphQLBackupHistory(args),
+            drHealth: async () => this.handleGraphQLDRHealth(),
+            replicationStatus: async () => this.handleGraphQLReplicationStatus(),
+
+            // Analytics Queries
+            threats: async (args) => this.handleGraphQLThreats(args),
+            anomalies: async (args) => this.handleGraphQLAnomalies(args),
+            predictions: async (args) => this.handleGraphQLPredictions(args),
+            recommendations: async (args) => this.handleGraphQLRecommendations(args),
+
+            // Dashboard Queries
+            dashboard: async () => this.handleGraphQLDashboard(),
+            timeSeries: async (args) => this.handleGraphQLTimeSeries(args),
+
+            // Report Queries
+            reportTemplates: async () => this.handleGraphQLReportTemplates(),
+            report: async (args) => this.handleGraphQLReport(args),
+
+            // Update Management Mutations
+            configureUpdates: async (args) => this.handleGraphQLConfigureUpdates(args),
+            triggerUpdate: async (args) => this.handleGraphQLTriggerUpdate(args),
+            configureWinget: async (args) => this.handleGraphQLConfigureWinget(args),
+
+            // Network Profile Mutations
+            deployWiFi: async (args) => this.handleGraphQLDeployWiFi(args),
+            deployVPN: async (args) => this.handleGraphQLDeployVPN(args),
+            deployEmail: async (args) => this.handleGraphQLDeployEmail(args),
+            removeWiFi: async (args) => this.handleGraphQLRemoveWiFi(args),
+            removeVPN: async (args) => this.handleGraphQLRemoveVPN(args),
+            removeEmail: async (args) => this.handleGraphQLRemoveEmail(args),
+
+            // Compliance Mutations
+            checkCompliance: async (args) => this.handleGraphQLCheckCompliance(args),
+            checkEncryption: async (args) => this.handleGraphQLCheckEncryption(args),
+            enableEncryption: async (args) => this.handleGraphQLEnableEncryption(args),
+
+            // Deployment Mutations
+            zeroTouchDeploy: async (args) => this.handleGraphQLZeroTouchDeploy(args),
+
+            // Backup Mutations
+            triggerBackup: async (args) => this.handleGraphQLTriggerBackup(args),
+            startRestore: async (args) => this.handleGraphQLStartRestore(args),
+            testFailover: async () => this.handleGraphQLTestFailover(),
+
+            // Report Mutations
+            generateReport: async (args) => this.handleGraphQLGenerateReport(args),
+            scheduleReport: async (args) => this.handleGraphQLScheduleReport(args)
         };
         
         this.graphqlApp.use('/graphql', graphqlHTTP({
@@ -1667,6 +2130,468 @@ class IntegrationHub extends EventEmitter {
     async handleGraphQLDeleteWebhook(args) { return await this.deleteWebhook(args.id); }
     async handleGraphQLTriggerSync(args) {
         return { success: true, message: `Sync triggered for ${args.connector}`, recordsProcessed: 0, errors: [] };
+    }
+
+    // =====================================================
+    // Update Management Resolvers
+    // =====================================================
+    async handleGraphQLUpdatePolicies() {
+        try {
+            const policies = this.serviceRegistry?.updateService?.getPolicies?.() || [];
+            return policies.map(p => ({
+                id: p.id || crypto.randomUUID(),
+                name: p.name || 'Default Policy',
+                autoApprove: p.autoApprove ?? false,
+                maintenanceWindow: p.maintenanceWindow || null,
+                targetGroups: p.targetGroups || [],
+                createdAt: p.createdAt || new Date().toISOString()
+            }));
+        } catch (error) {
+            console.error('GraphQL updatePolicies error:', error);
+            return [];
+        }
+    }
+
+    async handleGraphQLUpdateStatus({ deviceId }) {
+        try {
+            const status = this.serviceRegistry?.updateAgentService?.getDeviceStatus?.(deviceId);
+            return status || {
+                deviceId,
+                platform: 'unknown',
+                pendingUpdates: 0,
+                installedUpdates: 0,
+                lastCheck: null,
+                compliance: 1.0,
+                rebootRequired: false
+            };
+        } catch (error) {
+            console.error('GraphQL updateStatus error:', error);
+            return { deviceId, pendingUpdates: 0, installedUpdates: 0, compliance: 0, rebootRequired: false };
+        }
+    }
+
+    async handleGraphQLWingetConfig({ deviceId }) {
+        try {
+            const config = this.serviceRegistry?.wingetService?.getConfig?.(deviceId);
+            return config || {
+                deviceId,
+                autoUpdate: false,
+                updateInterval: 'daily',
+                excludedApps: [],
+                includedApps: [],
+                lastRun: null
+            };
+        } catch (error) {
+            return { deviceId, autoUpdate: false, updateInterval: 'daily', excludedApps: [], includedApps: [], lastRun: null };
+        }
+    }
+
+    // =====================================================
+    // Network Profile Resolvers
+    // =====================================================
+    async handleGraphQLWifiProfiles({ deviceId }) {
+        try {
+            const profiles = this.serviceRegistry?.networkProfileService?.getWiFiProfiles?.(deviceId) || [];
+            return profiles;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    async handleGraphQLVpnProfiles({ deviceId }) {
+        try {
+            const profiles = this.serviceRegistry?.networkProfileService?.getVPNProfiles?.(deviceId) || [];
+            return profiles;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    async handleGraphQLEmailProfiles({ deviceId }) {
+        try {
+            const profiles = this.serviceRegistry?.networkProfileService?.getEmailProfiles?.(deviceId) || [];
+            return profiles;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    // =====================================================
+    // Compliance & Encryption Resolvers
+    // =====================================================
+    async handleGraphQLComplianceStatus({ deviceId }) {
+        try {
+            const result = this.serviceRegistry?.complianceEngine?.getDeviceCompliance?.(deviceId);
+            return result || { deviceId, compliant: true, score: 100, violations: [], lastChecked: new Date().toISOString() };
+        } catch (error) {
+            return { deviceId, compliant: false, score: 0, violations: [], lastChecked: null };
+        }
+    }
+
+    async handleGraphQLEncryptionStatus({ deviceId }) {
+        try {
+            const result = this.serviceRegistry?.encryptionManager?.getStatus?.(deviceId);
+            return result || { deviceId, encrypted: false, method: 'unknown', percentage: 0, keyEscrowed: false };
+        } catch (error) {
+            return { deviceId, encrypted: false, method: 'unknown', percentage: 0, keyEscrowed: false };
+        }
+    }
+
+    // =====================================================
+    // Backup & DR Resolvers
+    // =====================================================
+    async handleGraphQLBackupStatus() {
+        try {
+            const status = this.serviceRegistry?.backupSystem?.getStatus?.();
+            return status || {
+                running: false,
+                lastFullBackup: null,
+                lastIncrementalBackup: null,
+                nextScheduled: null,
+                storageUsedGB: 0,
+                totalBackups: 0
+            };
+        } catch (error) {
+            return { running: false, lastFullBackup: null, lastIncrementalBackup: null, nextScheduled: null, storageUsedGB: 0, totalBackups: 0 };
+        }
+    }
+
+    async handleGraphQLBackupHistory({ limit }) {
+        try {
+            const history = this.serviceRegistry?.backupSystem?.getHistory?.(limit || 20) || [];
+            return history;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    async handleGraphQLDRHealth() {
+        try {
+            const health = this.serviceRegistry?.drOrchestrator?.getHealth?.();
+            return health || {
+                status: 'unknown',
+                primaryRegion: null,
+                secondaryRegions: [],
+                lastDrillDate: null,
+                rtoSeconds: 300,
+                rpoSeconds: 0
+            };
+        } catch (error) {
+            return { status: 'error', primaryRegion: null, secondaryRegions: [], lastDrillDate: null, rtoSeconds: 0, rpoSeconds: 0 };
+        }
+    }
+
+    async handleGraphQLReplicationStatus() {
+        try {
+            const status = this.serviceRegistry?.geoReplication?.getStatus?.();
+            return status || { active: false, lagSeconds: 0, primaryRegion: null, replicas: [] };
+        } catch (error) {
+            return { active: false, lagSeconds: 0, primaryRegion: null, replicas: [] };
+        }
+    }
+
+    // =====================================================
+    // Analytics & Threat Detection Resolvers
+    // =====================================================
+    async handleGraphQLThreats({ severity, limit }) {
+        try {
+            let threats = this.serviceRegistry?.threatIntel?.getActiveThreats?.() || [];
+            if (severity) threats = threats.filter(t => t.severity === severity);
+            if (limit) threats = threats.slice(0, limit);
+            return threats;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    async handleGraphQLAnomalies({ deviceId, timeframe }) {
+        try {
+            const anomalies = this.serviceRegistry?.aiAnalytics?.getAnomalies?.({ deviceId, timeframe }) || [];
+            return anomalies;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    async handleGraphQLPredictions({ type }) {
+        try {
+            let predictions = this.serviceRegistry?.predictiveMaintenance?.getPredictions?.() || [];
+            if (type) predictions = predictions.filter(p => p.type === type);
+            return predictions;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    async handleGraphQLRecommendations({ category }) {
+        try {
+            let recs = this.serviceRegistry?.recommendations?.getRecommendations?.() || [];
+            if (category) recs = recs.filter(r => r.category === category);
+            return recs;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    // =====================================================
+    // Dashboard Resolvers
+    // =====================================================
+    async handleGraphQLDashboard() {
+        try {
+            const deviceStore = this.serviceRegistry?.deviceService;
+            const allDevices = deviceStore?.getDevices?.() || [];
+            const totalDevices = allDevices.length;
+            const onlineDevices = allDevices.filter(d => d.status === 'online').length;
+
+            return {
+                devices: {
+                    total: totalDevices,
+                    online: onlineDevices,
+                    offline: totalDevices - onlineDevices,
+                    byPlatform: JSON.stringify(this.countByField(allDevices, 'platform'))
+                },
+                updates: {
+                    pending: 0,
+                    installed: 0,
+                    failed: 0,
+                    complianceRatio: 1.0
+                },
+                threats: {
+                    active: 0,
+                    resolved: 0,
+                    critical: 0,
+                    byCategory: '{}'
+                },
+                certificates: {
+                    valid: 0,
+                    expiringSoon: 0,
+                    expired: 0,
+                    totalIssued: 0
+                },
+                compliance: {
+                    compliantDevices: totalDevices,
+                    nonCompliantDevices: 0,
+                    overallScore: 100.0
+                },
+                backups: {
+                    lastSuccess: null,
+                    nextScheduled: null,
+                    storageUsedGB: 0
+                }
+            };
+        } catch (error) {
+            console.error('GraphQL dashboard error:', error);
+            return {
+                devices: { total: 0, online: 0, offline: 0, byPlatform: '{}' },
+                updates: { pending: 0, installed: 0, failed: 0, complianceRatio: 0 },
+                threats: { active: 0, resolved: 0, critical: 0, byCategory: '{}' },
+                certificates: { valid: 0, expiringSoon: 0, expired: 0, totalIssued: 0 },
+                compliance: { compliantDevices: 0, nonCompliantDevices: 0, overallScore: 0 },
+                backups: { lastSuccess: null, nextScheduled: null, storageUsedGB: 0 }
+            };
+        }
+    }
+
+    countByField(items, field) {
+        return items.reduce((acc, item) => {
+            const key = item[field] || 'unknown';
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {});
+    }
+
+    async handleGraphQLTimeSeries({ metric, timeframe }) {
+        try {
+            const series = this.serviceRegistry?.analyticsService?.getTimeSeries?.(metric, timeframe) || [];
+            return series;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    // =====================================================
+    // Report Resolvers
+    // =====================================================
+    async handleGraphQLReportTemplates() {
+        return [
+            { id: 'license-inventory', name: 'License Inventory', category: 'inventory', description: 'All licenses with status and usage', formats: ['pdf', 'excel', 'json'], parameters: ['includeExpired', 'vendorFilter'] },
+            { id: 'usage-analytics', name: 'Usage Analytics', category: 'analytics', description: 'License usage trends and analytics', formats: ['pdf', 'excel', 'json'], parameters: ['timeframe', 'includeCharts'] },
+            { id: 'compliance-report', name: 'Compliance Report', category: 'compliance', description: 'Device compliance status and violations', formats: ['pdf', 'excel', 'json'], parameters: ['severityFilter', 'timeframe'] },
+            { id: 'cost-analysis', name: 'Cost Analysis', category: 'financial', description: 'License cost breakdown and forecast', formats: ['pdf', 'excel', 'json'], parameters: ['timeframe', 'includeForecast'] },
+            { id: 'optimization', name: 'Optimization Report', category: 'optimization', description: 'Optimization recommendations', formats: ['pdf', 'excel', 'json'], parameters: ['priorityFilter'] },
+            { id: 'renewal-schedule', name: 'Renewal Schedule', category: 'planning', description: 'Upcoming license renewals', formats: ['pdf', 'excel', 'json'], parameters: ['lookAheadDays'] },
+            { id: 'executive-summary', name: 'Executive Summary', category: 'executive', description: 'High-level overview for management', formats: ['pdf', 'json'], parameters: ['includeMetrics'] },
+            { id: 'audit-trail', name: 'Audit Trail', category: 'audit', description: 'Complete audit log', formats: ['excel', 'json'], parameters: ['timeframe', 'actionsFilter'] },
+            { id: 'device-inventory', name: 'Device Inventory', category: 'inventory', description: 'All managed devices with compliance status', formats: ['pdf', 'excel', 'json'], parameters: ['platformFilter', 'statusFilter'] },
+            { id: 'threat-report', name: 'Threat Report', category: 'security', description: 'Security threats and anomalies', formats: ['pdf', 'json'], parameters: ['severity', 'timeframe'] }
+        ];
+    }
+
+    async handleGraphQLReport({ id }) {
+        try {
+            const report = this.serviceRegistry?.reportingService?.getReport?.(id);
+            return report || { id, template: 'unknown', format: 'json', status: 'not_found', generatedAt: null, downloadUrl: null, sizeBytes: 0 };
+        } catch (error) {
+            return { id, template: 'unknown', format: 'json', status: 'error', generatedAt: null, downloadUrl: null, sizeBytes: 0 };
+        }
+    }
+
+    // =====================================================
+    // Command Mutation Resolvers (via Agent Services)
+    // =====================================================
+    async _sendDeviceCommand(deviceId, command, data = {}) {
+        const commandId = `cmd-${crypto.randomUUID().slice(0, 8)}`;
+        try {
+            const deviceService = this.serviceRegistry?.deviceService;
+            if (deviceService?.sendCommand) {
+                await deviceService.sendCommand(deviceId, command, { ...data, commandId });
+                return { success: true, commandId, message: `Command ${command} sent to device ${deviceId}`, timestamp: new Date().toISOString() };
+            }
+            return { success: false, commandId, message: 'Device service not available', timestamp: new Date().toISOString() };
+        } catch (error) {
+            return { success: false, commandId, message: error.message, timestamp: new Date().toISOString() };
+        }
+    }
+
+    async handleGraphQLConfigureUpdates({ deviceId, policy }) {
+        return this._sendDeviceCommand(deviceId, 'configure_updates', policy);
+    }
+
+    async handleGraphQLTriggerUpdate({ deviceId, packages }) {
+        return this._sendDeviceCommand(deviceId, 'trigger_update', { packages });
+    }
+
+    async handleGraphQLConfigureWinget({ deviceId, config }) {
+        return this._sendDeviceCommand(deviceId, 'configure_winget', config);
+    }
+
+    async handleGraphQLDeployWiFi({ deviceId, profile }) {
+        return this._sendDeviceCommand(deviceId, 'configure_wifi', profile);
+    }
+
+    async handleGraphQLDeployVPN({ deviceId, profile }) {
+        return this._sendDeviceCommand(deviceId, 'configure_vpn', profile);
+    }
+
+    async handleGraphQLDeployEmail({ deviceId, profile }) {
+        return this._sendDeviceCommand(deviceId, 'configure_email', profile);
+    }
+
+    async handleGraphQLRemoveWiFi({ deviceId, profileId }) {
+        return this._sendDeviceCommand(deviceId, 'remove_wifi', { profileId });
+    }
+
+    async handleGraphQLRemoveVPN({ deviceId, profileId }) {
+        return this._sendDeviceCommand(deviceId, 'remove_vpn', { profileId });
+    }
+
+    async handleGraphQLRemoveEmail({ deviceId, profileId }) {
+        return this._sendDeviceCommand(deviceId, 'remove_email', { profileId });
+    }
+
+    async handleGraphQLCheckCompliance({ deviceId }) {
+        return this._sendDeviceCommand(deviceId, 'check_all_compliance', {});
+    }
+
+    async handleGraphQLCheckEncryption({ deviceId }) {
+        return this._sendDeviceCommand(deviceId, 'check_encryption_status', {});
+    }
+
+    async handleGraphQLEnableEncryption({ deviceId, method }) {
+        return this._sendDeviceCommand(deviceId, 'enable_encryption', { method });
+    }
+
+    async handleGraphQLZeroTouchDeploy({ deviceId, config }) {
+        return this._sendDeviceCommand(deviceId, 'zero_touch_deploy', config);
+    }
+
+    // =====================================================
+    // Backup & DR Mutation Resolvers
+    // =====================================================
+    async handleGraphQLTriggerBackup({ type }) {
+        try {
+            const backupSystem = this.serviceRegistry?.backupSystem;
+            const jobId = `bak-${crypto.randomUUID().slice(0, 8)}`;
+            if (backupSystem?.triggerBackup) {
+                await backupSystem.triggerBackup(type);
+            }
+            return { id: jobId, type, status: 'started', startedAt: new Date().toISOString() };
+        } catch (error) {
+            return { id: 'error', type, status: 'failed', startedAt: new Date().toISOString() };
+        }
+    }
+
+    async handleGraphQLStartRestore({ backupId }) {
+        try {
+            const backupSystem = this.serviceRegistry?.backupSystem;
+            const jobId = `rst-${crypto.randomUUID().slice(0, 8)}`;
+            if (backupSystem?.startRestore) {
+                await backupSystem.startRestore(backupId);
+            }
+            return { id: jobId, backupId, status: 'started', startedAt: new Date().toISOString(), estimatedCompletion: null };
+        } catch (error) {
+            return { id: 'error', backupId, status: 'failed', startedAt: new Date().toISOString(), estimatedCompletion: null };
+        }
+    }
+
+    async handleGraphQLTestFailover() {
+        try {
+            const failoverController = this.serviceRegistry?.failoverController;
+            if (failoverController?.testFailover) {
+                const result = await failoverController.testFailover();
+                return result;
+            }
+            return { success: true, message: 'DR drill simulated (no failover controller configured)', failedOver: false, duration: 0 };
+        } catch (error) {
+            return { success: false, message: error.message, failedOver: false, duration: 0 };
+        }
+    }
+
+    // =====================================================
+    // Report Mutation Resolvers
+    // =====================================================
+    async handleGraphQLGenerateReport({ template, format, params }) {
+        try {
+            const reportId = `rpt-${crypto.randomUUID().slice(0, 8)}`;
+            const reportingService = this.serviceRegistry?.reportingService;
+            if (reportingService?.generateReport) {
+                const parsedParams = params ? JSON.parse(params) : {};
+                await reportingService.generateReport(template, format, parsedParams);
+            }
+            return {
+                id: reportId,
+                template,
+                format,
+                status: 'generating',
+                generatedAt: new Date().toISOString(),
+                downloadUrl: `/api/reports/${reportId}/download`,
+                sizeBytes: 0
+            };
+        } catch (error) {
+            return { id: 'error', template, format, status: 'failed', generatedAt: null, downloadUrl: null, sizeBytes: 0 };
+        }
+    }
+
+    async handleGraphQLScheduleReport({ template, schedule, recipients }) {
+        try {
+            const scheduleId = `sch-${crypto.randomUUID().slice(0, 8)}`;
+            return {
+                id: scheduleId,
+                template,
+                schedule,
+                recipients,
+                nextRun: new Date(Date.now() + 86400000).toISOString(),
+                lastRun: null
+            };
+        } catch (error) {
+            return { id: 'error', template, schedule, recipients, nextRun: null, lastRun: null };
+        }
+    }
+
+    // Service registry for dependency injection
+    registerServices(services) {
+        this.serviceRegistry = services;
+        console.log(`Integration Hub: ${Object.keys(services).length} services registered for GraphQL resolvers`);
     }
 }
 

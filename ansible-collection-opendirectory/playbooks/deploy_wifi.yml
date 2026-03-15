@@ -1,0 +1,44 @@
+---
+# Deploy corporate WiFi profile to all managed devices
+# Usage: ansible-playbook deploy_wifi.yml -e "od_api_url=https://od.example.com od_api_key=YOUR_KEY"
+
+- name: Deploy Corporate WiFi Profile
+  hosts: localhost
+  gather_facts: false
+  vars:
+    od_api_url: "{{ lookup('env', 'OD_API_URL') }}"
+    od_api_key: "{{ lookup('env', 'OD_API_KEY') }}"
+    wifi_ssid: "Corp-WiFi"
+    wifi_security: "WPA2-Enterprise"
+    wifi_eap_type: "TLS"
+    wifi_cert_id: "corp-wifi-cert"
+
+  tasks:
+    - name: Get all managed devices
+      opendirectory.core.od_compliance:
+        api_url: "{{ od_api_url }}"
+        api_key: "{{ od_api_key }}"
+        action: dashboard
+      register: dashboard
+
+    - name: Display device count
+      ansible.builtin.debug:
+        msg: "Found {{ dashboard.result.devices.total | default(0) }} managed devices"
+
+    - name: Deploy WiFi profile to each device
+      opendirectory.core.od_wifi_profile:
+        api_url: "{{ od_api_url }}"
+        api_key: "{{ od_api_key }}"
+        device_id: "{{ item }}"
+        ssid: "{{ wifi_ssid }}"
+        security: "{{ wifi_security }}"
+        eap_type: "{{ wifi_eap_type }}"
+        cert_id: "{{ wifi_cert_id }}"
+        auto_connect: true
+        state: present
+      loop: "{{ device_ids | default([]) }}"
+      register: wifi_results
+
+    - name: Report deployment results
+      ansible.builtin.debug:
+        msg: "WiFi profile deployment complete. {{ wifi_results.results | default([]) | length }} devices processed."

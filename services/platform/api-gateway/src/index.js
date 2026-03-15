@@ -11,6 +11,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const compression = require('compression');
 const winston = require('winston');
+const { setupGraphQLRoute } = require('./routes/graphql');
 
 // Configuration
 const config = {
@@ -307,6 +308,9 @@ class AutoExtendingApiGateway extends EventEmitter {
     this.app.post('/admin/services/:serviceId/reload', this.reloadService.bind(this));
     this.app.get('/admin/connections', this.getActiveConnections.bind(this));
     
+    // GraphQL proxy to Integration Hub
+    setupGraphQLRoute(this.app, logger);
+
     // Catch-all for service routing
     this.app.use('*', this.handleUnregisteredRoute.bind(this));
   }
@@ -452,7 +456,7 @@ class AutoExtendingApiGateway extends EventEmitter {
   
   authenticateRequest(req, res, next) {
     // Skip authentication for health checks and public endpoints
-    const publicPaths = ['/health', '/status', '/services', '/metrics'];
+    const publicPaths = ['/health', '/status', '/services', '/metrics', '/graphql'];
     if (publicPaths.some(path => req.path.startsWith(path))) {
       return next();
     }

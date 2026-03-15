@@ -1,0 +1,11 @@
+---
+# Default variables for baseline_security role
+
+security_baseline_name: "Ansible Security Baseline"
+firewall_enabled: true
+encryption_required: true
+min_password_length: 12
+screen_lock_timeout: 300
+auto_update_enabled: true
+security_targets:
+  - "all-managed-devices"

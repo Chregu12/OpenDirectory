@@ -1,0 +1,59 @@
+---
+# Disaster Recovery drill playbook
+# Usage: ansible-playbook disaster_recovery.yml -e "od_api_url=https://od.example.com od_api_key=YOUR_KEY"
+
+- name: OpenDirectory Disaster Recovery Drill
+  hosts: localhost
+  gather_facts: false
+  vars:
+    od_api_url: "{{ lookup('env', 'OD_API_URL') }}"
+    od_api_key: "{{ lookup('env', 'OD_API_KEY') }}"
+
+  tasks:
+    - name: Check DR health before drill
+      opendirectory.core.od_backup:
+        api_url: "{{ od_api_url }}"
+        api_key: "{{ od_api_key }}"
+        action: dr_health
+      register: pre_drill_health
+
+    - name: Display pre-drill status
+      ansible.builtin.debug:
+        msg: "DR Status before drill: {{ pre_drill_health.backup.status | default('unknown') }}"
+
+    - name: Trigger full backup before DR drill
+      opendirectory.core.od_backup:
+        api_url: "{{ od_api_url }}"
+        api_key: "{{ od_api_key }}"
+        action: trigger
+        backup_type: full
+      register: backup_result
+
+    - name: Display backup status
+      ansible.builtin.debug:
+        msg: "Backup triggered: {{ backup_result.backup.jobId | default('unknown') }} - Status: {{ backup_result.backup.status | default('unknown') }}"
+
+    - name: Run DR failover test
+      opendirectory.core.od_backup:
+        api_url: "{{ od_api_url }}"
+        api_key: "{{ od_api_key }}"
+        action: dr_test
+      register: dr_test_result
+
+    - name: Display DR test result
+      ansible.builtin.debug:
+        msg: |
+          === DR Drill Result ===
+          Success: {{ dr_test_result.backup.success | default(false) }}
+          Message: {{ dr_test_result.backup.message | default('No message') }}
+
+    - name: Check DR health after drill
+      opendirectory.core.od_backup:
+        api_url: "{{ od_api_url }}"
+        api_key: "{{ od_api_key }}"
+        action: dr_health
+      register: post_drill_health
+
+    - name: Final status
+      ansible.builtin.debug:
+        msg: "DR Status after drill: {{ post_drill_health.backup.status | default('unknown') }}"
