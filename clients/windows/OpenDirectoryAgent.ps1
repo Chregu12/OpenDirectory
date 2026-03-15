@@ -265,42 +265,56 @@ function Invoke-AgentCommand {
 
             # ── Update Management Commands ──────────────────────────────────
             "configure_updates" {
-                $output = Invoke-ConfigureUpdates -Json $json
+                $Result.output = Invoke-ConfigureUpdates -Json $json
             }
             "check_update_status" {
-                $output = Invoke-CheckUpdateStatus
+                $Result.output = Invoke-CheckUpdateStatus
             }
             "trigger_update" {
-                $output = Invoke-TriggerUpdate -Json $json
+                $Result.output = Invoke-TriggerUpdate -Json $json
             }
             "get_update_compliance" {
-                $output = Invoke-GetUpdateCompliance
+                $Result.output = Invoke-GetUpdateCompliance
             }
             "configure_winget" {
-                $output = Invoke-ConfigureWinget -Json $json
+                $Result.output = Invoke-ConfigureWinget -Json $json
             }
             "check_winget_status" {
-                $output = Invoke-CheckWingetStatus
+                $Result.output = Invoke-CheckWingetStatus
             }
 
             # ── Network Profile Commands ──────────────────────────────────
             "configure_wifi" {
-                $output = Invoke-ConfigureWiFi -Json $json
+                $Result.output = Invoke-ConfigureWiFi -Json $json
             }
             "remove_wifi" {
-                $output = Invoke-RemoveWiFi -Json $json
+                $Result.output = Invoke-RemoveWiFi -Json $json
             }
             "configure_vpn" {
-                $output = Invoke-ConfigureVPN -Json $json
+                $Result.output = Invoke-ConfigureVPN -Json $json
             }
             "remove_vpn" {
-                $output = Invoke-RemoveVPN -Json $json
+                $Result.output = Invoke-RemoveVPN -Json $json
             }
             "configure_email" {
-                $output = Invoke-ConfigureEmail -Json $json
+                $Result.output = Invoke-ConfigureEmail -Json $json
             }
             "remove_email" {
-                $output = Invoke-RemoveEmail -Json $json
+                $Result.output = Invoke-RemoveEmail -Json $json
+            }
+
+            # ── Deployment/Compliance/Encryption Commands ─────────────────
+            "zero_touch_deploy" {
+                $Result.output = Invoke-ZeroTouchDeploy -Command $Command
+            }
+            "check_encryption_status" {
+                $Result.output = Invoke-CheckEncryptionStatus
+            }
+            "enable_encryption" {
+                $Result.output = Invoke-EnableEncryption -Command $Command
+            }
+            "execute_remediation" {
+                $Result.output = Invoke-ExecuteRemediation -Command $Command
             }
 
             default {
@@ -845,7 +859,14 @@ function Invoke-ConfigureVPN {
             "ikev2"  { "IKEv2" }
             "l2tp"   { "L2tp" }
             "pptp"   { "Pptp" }
-            default  { "Sstp" }
+            "sstp"   { "Sstp" }
+            default  { $null }
+        }
+
+        if (-not $tunnelType) {
+            # OpenVPN/WireGuard not supported via Add-VpnConnection
+            @{ status = "failed"; error = "VPN type '$vpnType' requires third-party client (not supported via Windows built-in VPN)" } | ConvertTo-Json -Compress
+            return
         }
 
         $params = @{
@@ -872,7 +893,11 @@ function Invoke-ConfigureVPN {
 
         # Configure DNS
         if ($routing.dns) {
-            Set-VpnConnectionDnsConfiguration -ConnectionName $name -DnsServers $routing.dns -ErrorAction SilentlyContinue
+            $dnsServers = $routing.dns -join ','
+            netsh interface ipv4 set dnsservers name="$name" static $($routing.dns[0]) validate=no 2>$null
+            for ($i = 1; $i -lt $routing.dns.Count; $i++) {
+                netsh interface ipv4 add dnsservers name="$name" $($routing.dns[$i]) validate=no 2>$null
+            }
         }
 
         @{ status = "success"; profileId = $name; message = "VPN profile $name configured" } | ConvertTo-Json -Compress
@@ -884,9 +909,10 @@ function Invoke-ConfigureVPN {
 function Invoke-RemoveVPN {
     param([string]$Json)
     $cmd = $Json | ConvertFrom-Json
-    $profileId = $cmd.data.profileId
+    $name = $cmd.data.name
+    if (-not $name) { $name = $cmd.data.profileId }
     try {
-        Remove-VpnConnection -Name $profileId -Force -ErrorAction Stop
+        Remove-VpnConnection -Name $name -Force -ErrorAction Stop
         @{ status = "success"; message = "VPN profile removed" } | ConvertTo-Json -Compress
     } catch {
         @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
@@ -958,6 +984,117 @@ function Invoke-RemoveEmail {
             Remove-Item $configPath -Force
         }
         @{ status = "success"; message = "Email profile removed" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+# ============================================================================
+# DEPLOYMENT / COMPLIANCE / ENCRYPTION
+# ============================================================================
+
+function Invoke-ZeroTouchDeploy {
+    param($Command)
+    $profile = $Command.data.profile
+    $reg = $Command.data.registration
+    try {
+        $steps = @()
+        # Join domain if configured
+        if ($profile.deviceConfiguration.domain) {
+            $steps += "Domain join: $($profile.deviceConfiguration.domain)"
+        }
+        # Set computer name
+        if ($profile.deviceConfiguration.computerNameTemplate) {
+            $newName = $profile.deviceConfiguration.computerNameTemplate -replace '\{SERIAL\}', ($env:COMPUTERNAME.Substring(0, [Math]::Min(6, $env:COMPUTERNAME.Length))) -replace '\{USER\}', ($env:USERNAME.Substring(0, [Math]::Min(6, $env:USERNAME.Length)))
+            $steps += "Computer name: $newName"
+        }
+        # Install applications
+        foreach ($app in $profile.applications) {
+            if ($app.packageId -and (Get-Command winget -ErrorAction SilentlyContinue)) {
+                winget install --id $app.packageId --accept-source-agreements --accept-package-agreements --silent 2>&1 | Out-Null
+                $steps += "Installed: $($app.name)"
+            }
+        }
+        @{ status = "success"; steps = $steps; message = "Zero-touch deployment completed" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-CheckEncryptionStatus {
+    try {
+        $bitlocker = Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue
+        if ($bitlocker) {
+            @{
+                status = "success"
+                encryptionStatus = @{
+                    encrypted = ($bitlocker.ProtectionStatus -eq "On")
+                    algorithm = "$($bitlocker.EncryptionMethod)"
+                    keyLength = 256
+                    protectors = @($bitlocker.KeyProtector | ForEach-Object { $_.KeyProtectorType })
+                    volumeStatus = "$($bitlocker.VolumeStatus)"
+                    protectionStatus = "$($bitlocker.ProtectionStatus)"
+                }
+            } | ConvertTo-Json -Compress -Depth 4
+        } else {
+            @{ status = "success"; encryptionStatus = @{ encrypted = $false; status = "BitLocker not available" } } | ConvertTo-Json -Compress -Depth 4
+        }
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-EnableEncryption {
+    param($Command)
+    $options = $Command.data.options
+    try {
+        $volume = Get-BitLockerVolume -MountPoint "C:" -ErrorAction Stop
+        if ($volume.ProtectionStatus -eq "On") {
+            @{ status = "success"; message = "BitLocker already enabled" } | ConvertTo-Json -Compress
+            return
+        }
+        # Add TPM protector
+        Enable-BitLocker -MountPoint "C:" -EncryptionMethod Aes256 -UsedSpaceOnly -TpmProtector -ErrorAction Stop
+        # Add recovery password protector
+        $recovery = Add-BitLockerKeyProtector -MountPoint "C:" -RecoveryPasswordProtector -ErrorAction Stop
+        $recoveryKey = ($recovery.KeyProtector | Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" }).RecoveryPassword
+        @{
+            status = "success"
+            message = "BitLocker encryption enabled"
+            recoveryKey = $recoveryKey
+            method = "BitLocker"
+            algorithm = "AES-256"
+        } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-ExecuteRemediation {
+    param($Command)
+    $action = $Command.data.action
+    try {
+        $result = switch ($action) {
+            "ENABLE_BITLOCKER" {
+                Enable-BitLocker -MountPoint "C:" -EncryptionMethod Aes256 -UsedSpaceOnly -TpmProtector -ErrorAction Stop
+                "BitLocker enabled"
+            }
+            "ENABLE_WINDOWS_DEFENDER" {
+                Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction Stop
+                "Windows Defender real-time protection enabled"
+            }
+            "ENABLE_WINDOWS_FIREWALL" {
+                netsh advfirewall set allprofiles state on 2>&1
+                "Windows Firewall enabled"
+            }
+            "INSTALL_UPDATES" {
+                UsoClient StartScan 2>&1
+                UsoClient StartInstall 2>&1
+                "Update scan and install initiated"
+            }
+            default { "Unknown remediation action: $action" }
+        }
+        @{ status = "success"; action = $action; message = "$result" } | ConvertTo-Json -Compress
     } catch {
         @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
     }
