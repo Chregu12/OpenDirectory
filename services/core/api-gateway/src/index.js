@@ -349,9 +349,31 @@ class APIGateway {
       connectedServices.push('license-management');
     }
 
-    logger.info(`✅ API Gateway configured with ${connectedServices.length} services`);
-    logger.info(`📋 Connected services: ${connectedServices.join(', ')}`);
-    logger.info(`🔌 Enabled modules: ${enabledModules.join(', ') || 'none'}`);
+    // Intelligence Services (always enabled - core platform value)
+    this.setupServiceProxy('graph', 'http://graph-explorer:3900', '/api/graph');
+    this.setupServiceProxy('graph-explorer', 'http://graph-explorer:3900', '/api/graph-explorer');
+    connectedServices.push('graph-explorer');
+
+    this.setupServiceProxy('simulator', 'http://policy-simulator:3901', '/api/simulator');
+    this.setupServiceProxy('drift', 'http://policy-simulator:3901', '/api/drift');
+    this.setupServiceProxy('timeline', 'http://policy-simulator:3901', '/api/timeline');
+    connectedServices.push('policy-simulator');
+
+    this.setupServiceProxy('scanner', 'http://security-scanner:3902', '/api/scanner');
+    this.setupServiceProxy('security-scan', 'http://security-scanner:3902', '/api/security-scan');
+    connectedServices.push('security-scanner');
+
+    this.setupServiceProxy('lifecycle', 'http://device-lifecycle:3903', '/api/lifecycle');
+    this.setupServiceProxy('device-lifecycle', 'http://device-lifecycle:3903', '/api/device-lifecycle');
+    connectedServices.push('device-lifecycle');
+
+    this.setupServiceProxy('remediation', 'http://auto-remediation:3904', '/api/remediation');
+    this.setupServiceProxy('auto-remediation', 'http://auto-remediation:3904', '/api/auto-remediation');
+    connectedServices.push('auto-remediation');
+
+    logger.info(`API Gateway configured with ${connectedServices.length} services`);
+    logger.info(`Connected services: ${connectedServices.join(', ')}`);
+    logger.info(`Enabled modules: ${enabledModules.join(', ') || 'none'}`);
   }
 
   setupServiceProxy(serviceName, target, pathPrefix) {

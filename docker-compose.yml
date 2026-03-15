@@ -407,6 +407,129 @@ services:
     networks:
       - opendirectory
 
+  # ===================
+  # Intelligence Services
+  # ===================
+
+  graph-explorer:
+    build:
+      context: ./services/enterprise/graph-explorer
+    container_name: od-graph-explorer
+    environment:
+      PORT: 3900
+      NODE_ENV: production
+      DEVICE_SERVICE_URL: http://device-service:3456
+      AUTH_SERVICE_URL: http://authentication-service:3001
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+    ports:
+      - "3900:3900"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3900/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  policy-simulator:
+    build:
+      context: ./services/enterprise/policy-simulator
+    container_name: od-policy-simulator
+    environment:
+      PORT: 3901
+      NODE_ENV: production
+      DEVICE_SERVICE_URL: http://device-service:3456
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+    ports:
+      - "3901:3901"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3901/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  security-scanner:
+    build:
+      context: ./services/enterprise/security-scanner
+    container_name: od-security-scanner
+    environment:
+      PORT: 3902
+      NODE_ENV: production
+      DEVICE_SERVICE_URL: http://device-service:3456
+      AUTH_SERVICE_URL: http://authentication-service:3001
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+    ports:
+      - "3902:3902"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3902/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  device-lifecycle:
+    build:
+      context: ./services/enterprise/device-lifecycle
+    container_name: od-device-lifecycle
+    environment:
+      PORT: 3903
+      NODE_ENV: production
+      DEVICE_SERVICE_URL: http://device-service:3456
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+    ports:
+      - "3903:3903"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3903/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  auto-remediation:
+    build:
+      context: ./services/enterprise/auto-remediation
+    container_name: od-auto-remediation
+    environment:
+      PORT: 3904
+      NODE_ENV: production
+      DEVICE_SERVICE_URL: http://device-service:3456
+      SECURITY_SCANNER_URL: http://security-scanner:3902
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+    ports:
+      - "3904:3904"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+      - security-scanner
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3904/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 # ===================
 # Networks
 # ===================

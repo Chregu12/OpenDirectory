@@ -54,11 +54,22 @@ OpenDirectory is a comprehensive, open-source Universal Endpoint Management plat
 - **File Sharing**: SMB/CIFS network drive mapping and management
 - **Directory Services**: Complete Active Directory replacement
 
+### 🔍 Unified Endpoint Intelligence (NEW)
+- **AD Graph Explorer**: Neo4j-style relationship visualization of Users, Groups, Devices, Policies, and Update Rings with attack path detection and shadow admin discovery
+- **Policy Simulator**: "What-If" analysis for policy changes showing impact on devices, users, and compliance before applying
+- **Security Exposure Scanner**: CIS/NIST/DISA STIG compliance benchmarking with GPO analysis, privilege escalation detection, and automated remediation scripts
+- **Drift Detection**: Real-time comparison of expected policy state vs actual device configuration
+- **Compliance Timeline**: Full historical compliance tracking per device (enrolled, policy applied, compliance gained/lost, remediated)
+- **Device Lifecycle Manager**: Complete lifecycle state machine (Provisioned → Enrolled → Compliant → Retiring → Retired) with risk scoring (0-100)
+- **Auto Remediation Engine**: Detects compliance issues and generates platform-specific remediation scripts (PowerShell/Bash) with approval workflows
+
 ### 🔄 Integration & Automation
 - **API Gateway**: Auto-extending API gateway with service discovery
 - **License Management**: Software license tracking and compliance
 - **Workflow Automation**: Event-driven automation and orchestration
 - **Multi-Tenant Support**: Complete isolation for multiple organizations
+- **Terraform Provider**: Infrastructure-as-code with 8 resources and 2 data sources
+- **Ansible Collection**: 5 modules, inventory plugin, roles, and playbooks for automation
 
 ## 🏗️ Architecture
 
@@ -321,10 +332,22 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🗺️ Roadmap
 
-- [ ] Backup and disaster recovery
-- [ ] Advanced reporting dashboard
-- [ ] Machine learning for threat detection
-- [ ] GraphQL API support
+- [x] Backup and disaster recovery
+- [x] Advanced reporting dashboard
+- [x] Machine learning for threat detection
+- [x] GraphQL API support
+- [x] Terraform provider
+- [x] Ansible collection
+- [x] AD Graph Explorer with attack path detection
+- [x] Policy Simulator with what-if analysis
+- [x] Security Exposure Scanner (CIS/NIST/STIG)
+- [x] Drift Detection and Compliance Timeline
+- [x] Device Lifecycle Management
+- [x] Auto Remediation Engine
+- [ ] SaaS multi-tenant deployment
+- [ ] Mobile app for admins (iOS/Android)
+- [ ] AI-powered anomaly detection
+- [ ] SIEM/Splunk native integration
 - [ ] Terraform provider
 - [ ] Ansible modules
 

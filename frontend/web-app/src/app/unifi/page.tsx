@@ -5,6 +5,10 @@ import UnifiLayout from '@/components/layout/UnifiLayout';
 import DashboardView from '@/components/views/DashboardView';
 import TopologyView from '@/components/views/TopologyView';
 import ApplicationsView from '@/components/views/ApplicationsView';
+import PoliciesView from '@/components/views/PoliciesView';
+import GraphExplorerView from '@/components/views/GraphExplorerView';
+import PolicySimulatorView from '@/components/views/PolicySimulatorView';
+import SecurityScannerView from '@/components/views/SecurityScannerView';
 import ServicesDashboard from '@/components/dashboard/ServicesDashboard';
 
 // Placeholder components for other views
@@ -57,6 +61,14 @@ export default function UnifiApp() {
         return <DevicesView />;
       case 'applications':
         return <ApplicationsView />;
+      case 'graph-explorer':
+        return <GraphExplorerView />;
+      case 'policy-simulator':
+        return <PolicySimulatorView />;
+      case 'security-scanner':
+        return <SecurityScannerView />;
+      case 'policies':
+        return <PoliciesView />;
       case 'monitoring':
         return <MonitoringView />;
       case 'settings':
