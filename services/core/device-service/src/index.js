@@ -57,6 +57,9 @@ class EnterpriseDeviceManagementService {
     this.threatDetector = new ThreatDetector(this.db, this.eventBus);
     this.analyticsEngine = new AnalyticsEngine(this.db, this.cache);
     
+    // Connected agent registry: deviceId -> WebSocket connection
+    this.connectedAgents = new Map();
+
     this.initializeMiddleware();
     this.initializeWebSocket();
     this.initializeRoutes();
@@ -163,8 +166,25 @@ class EnterpriseDeviceManagementService {
     this.wss.on('connection', (ws, req) => {
       ws.id = this.generateRequestId();
       ws.deviceId = req.headers['x-device-id'];
+      ws.platform = req.headers['x-device-platform'] || 'unknown';
+      ws.agentVersion = req.headers['x-agent-version'];
       ws.subscriptions = new Set();
       ws.isAlive = true;
+      ws.connectedAt = new Date().toISOString();
+
+      // Register agent in connected devices registry
+      if (ws.deviceId) {
+        this.connectedAgents.set(ws.deviceId, ws);
+        logger.info('Agent registered', {
+          connectionId: ws.id,
+          deviceId: ws.deviceId,
+          platform: ws.platform,
+          agentVersion: ws.agentVersion
+        });
+
+        // Update last seen in database
+        this.deviceManager.updateLastSeen(ws.deviceId).catch(() => {});
+      }
 
       logger.info('WebSocket connection established', {
         connectionId: ws.id,
@@ -189,9 +209,17 @@ class EnterpriseDeviceManagementService {
       });
 
       ws.on('close', () => {
-        logger.info('WebSocket connection closed', { 
+        // Remove from connected agents registry
+        if (ws.deviceId) {
+          this.connectedAgents.delete(ws.deviceId);
+          logger.info('Agent disconnected', {
+            deviceId: ws.deviceId,
+            platform: ws.platform
+          });
+        }
+        logger.info('WebSocket connection closed', {
           connectionId: ws.id,
-          deviceId: ws.deviceId 
+          deviceId: ws.deviceId
         });
       });
 
@@ -199,19 +227,24 @@ class EnterpriseDeviceManagementService {
         logger.error('WebSocket error:', error);
       });
 
-      // Send initial connection confirmation
+      // Send initial connection confirmation with server info
       ws.send(JSON.stringify({
         type: 'connection',
         status: 'connected',
         connectionId: ws.id,
+        serverVersion: '1.0.0',
+        heartbeatInterval: 30000,
         timestamp: new Date().toISOString()
       }));
     });
 
-    // WebSocket heartbeat
+    // WebSocket heartbeat - server pings, client pongs
     setInterval(() => {
       this.wss.clients.forEach((ws) => {
         if (!ws.isAlive) {
+          if (ws.deviceId) {
+            this.connectedAgents.delete(ws.deviceId);
+          }
           return ws.terminate();
         }
         ws.isAlive = false;
@@ -322,6 +355,18 @@ class EnterpriseDeviceManagementService {
     this.app.post('/api/bulk/compliance-scan', this.bulkComplianceScan.bind(this));
     this.app.get('/api/bulk/operations/:operationId/status', this.getBulkOperationStatus.bind(this));
 
+    // Agent Communication Routes (used by OpenDirectory Windows/macOS/Linux agents)
+    this.app.post('/api/v1/devices/:deviceId/checkin', this.handleAgentCheckin.bind(this));
+    this.app.get('/api/v1/devices/:deviceId/commands/pending', this.getPendingCommands.bind(this));
+    this.app.post('/api/v1/devices/:deviceId/commands/:commandId/result', this.handleCommandResult.bind(this));
+    this.app.get('/api/v1/devices/:deviceId/policies', this.getDevicePolicies.bind(this));
+    this.app.post('/api/v1/devices/:deviceId/notifications', this.pushNotificationToDevice.bind(this));
+    this.app.post('/api/v1/notifications/broadcast', this.broadcastNotification.bind(this));
+    this.app.post('/api/v1/devices/:deviceId/commands', this.queueCommand.bind(this));
+    this.app.get('/api/v1/agents/connected', this.getAgentsStatus.bind(this));
+    this.app.get('/api/v1/agents/download/:platform', this.downloadAgent.bind(this));
+    this.app.get('/api/v1/agent/windows/download', this.downloadWindowsAgent.bind(this));
+
     // Error handling
     this.app.use(this.errorHandler.bind(this));
   }
@@ -348,9 +393,45 @@ class EnterpriseDeviceManagementService {
         }));
         break;
 
+      // ── Agent messages (from device agents) ───────────────────────
+      case 'agent_register':
+        ws.deviceId = data.deviceId || ws.deviceId;
+        ws.platform = data.platform || ws.platform;
+        ws.agentVersion = data.agentVersion;
+        ws.hostname = data.hostname;
+        if (ws.deviceId) {
+          this.connectedAgents.set(ws.deviceId, ws);
+          this.deviceManager.updateLastSeen(ws.deviceId).catch(() => {});
+        }
+        ws.send(JSON.stringify({
+          type: 'agent_registered',
+          deviceId: ws.deviceId,
+          requestId
+        }));
+
+        // Deliver pending messages queued while agent was offline
+        if (this.cache && ws.deviceId) {
+          try {
+            const pendingData = await this.cache.get(`pending:${ws.deviceId}`);
+            if (pendingData) {
+              const pending = JSON.parse(pendingData);
+              for (const msg of pending) {
+                ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() }));
+              }
+              await this.cache.del(`pending:${ws.deviceId}`);
+              logger.info(`Delivered ${pending.length} pending messages to ${ws.deviceId}`);
+            }
+          } catch (e) {
+            logger.warn(`Failed to deliver pending messages: ${e.message}`);
+          }
+        }
+
+        logger.info(`Agent registered: ${ws.deviceId} (${ws.platform})`);
+        break;
+
       case 'device_heartbeat':
-        if (data.deviceId) {
-          await this.deviceManager.updateLastSeen(data.deviceId);
+        if (ws.deviceId || data.deviceId) {
+          await this.deviceManager.updateLastSeen(ws.deviceId || data.deviceId);
           ws.send(JSON.stringify({
             type: 'heartbeat_ack',
             timestamp: new Date().toISOString(),
@@ -365,6 +446,25 @@ class EnterpriseDeviceManagementService {
         }
         break;
 
+      case 'command_result':
+        logger.info(\`Command result from \${ws.deviceId}: \${data.commandId} - \${data.status}\`);
+        this.broadcastToSubscribers('device_events', {
+          type: 'command_result',
+          deviceId: ws.deviceId,
+          commandId: data.commandId,
+          status: data.status,
+          output: data.output,
+          timestamp: data.timestamp || new Date().toISOString()
+        });
+        break;
+
+      case 'inventory_report':
+        if (ws.deviceId && data.inventory) {
+          await this.inventoryService.updateInventory(ws.deviceId, data.inventory);
+          logger.info(\`Inventory updated: \${ws.deviceId}\`);
+        }
+        break;
+
       default:
         ws.send(JSON.stringify({
           type: 'error',
@@ -372,6 +472,51 @@ class EnterpriseDeviceManagementService {
           requestId
         }));
     }
+  }
+
+  // ── Server-Push: send directly to connected agent ──────────────────────
+  sendToDevice(deviceId, message) {
+    const ws = this.connectedAgents.get(deviceId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ ...message, timestamp: new Date().toISOString() }));
+      return true;
+    }
+    return false;
+  }
+
+  sendToDevices(deviceIds, message) {
+    const results = { sent: 0, offline: 0 };
+    for (const id of deviceIds) {
+      if (this.sendToDevice(id, message)) results.sent++;
+      else results.offline++;
+    }
+    return results;
+  }
+
+  sendToAllAgents(message, platform = null) {
+    let sent = 0;
+    this.connectedAgents.forEach((ws) => {
+      if (ws.readyState === WebSocket.OPEN && (!platform || ws.platform === platform)) {
+        ws.send(JSON.stringify({ ...message, timestamp: new Date().toISOString() }));
+        sent++;
+      }
+    });
+    return sent;
+  }
+
+  getConnectedAgents() {
+    const agents = [];
+    this.connectedAgents.forEach((ws, deviceId) => {
+      agents.push({
+        deviceId,
+        platform: ws.platform,
+        agentVersion: ws.agentVersion,
+        hostname: ws.hostname,
+        connectedAt: ws.connectedAt,
+        isAlive: ws.isAlive
+      });
+    });
+    return agents;
   }
 
   initializeEventHandlers() {
@@ -547,7 +692,8 @@ class EnterpriseDeviceManagementService {
 
   async handleComplianceViolation(event) {
     const { deviceId, violation } = event;
-    
+
+    // Notify admin dashboard via WebSocket subscription
     this.broadcastToSubscribers('compliance_alerts', {
       type: 'compliance_violation',
       deviceId,
@@ -555,7 +701,15 @@ class EnterpriseDeviceManagementService {
       timestamp: new Date().toISOString()
     });
 
-    // Auto-remediate if configured
+    // Push notification directly to the affected device agent
+    this.sendToDevice(deviceId, {
+      type: 'notification',
+      category: 'compliance_violation',
+      title: 'Compliance-Verstoss erkannt',
+      body: violation.description || violation.rule,
+      data: { rule: violation.rule, details: violation.details, severity: violation.severity }
+    });
+
     if (violation.autoRemediable) {
       await this.complianceScanner.autoRemediate(violation.id);
     }
@@ -563,7 +717,7 @@ class EnterpriseDeviceManagementService {
 
   async handleThreatDetected(event) {
     const { deviceId, threat } = event;
-    
+
     this.broadcastToSubscribers('security_alerts', {
       type: 'threat_detected',
       deviceId,
@@ -571,9 +725,222 @@ class EnterpriseDeviceManagementService {
       timestamp: new Date().toISOString()
     });
 
-    // Auto-isolate device if critical threat
+    // Push security alert directly to device agent
+    this.sendToDevice(deviceId, {
+      type: 'notification',
+      category: 'security_alert',
+      title: 'Sicherheitswarnung',
+      body: threat.description,
+      data: { severity: threat.severity, threat_type: threat.type }
+    });
+
     if (threat.severity === 'critical') {
       await this.remoteActionService.isolateDevice(deviceId, 'Automatic isolation due to critical threat');
+    }
+  }
+
+  // ── Agent Communication Handlers (generic, platform-agnostic) ────────────
+
+  async handleAgentCheckin(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const checkinData = req.body;
+
+      await this.deviceManager.updateLastSeen(deviceId);
+
+      if (this.cache) {
+        await this.cache.set(`agent:${deviceId}`, JSON.stringify({
+          ...checkinData,
+          lastCheckin: new Date().toISOString()
+        }), 'EX', 300);
+      }
+
+      res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        serverVersion: '1.0.0'
+      });
+    } catch (error) {
+      logger.error('Agent checkin error:', error);
+      res.status(500).json({ error: 'Checkin failed' });
+    }
+  }
+
+  async getDevicePolicies(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const policies = await this.policyEngine.getDevicePolicies(deviceId);
+      res.json({ policies: policies || [], timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('Get device policies error:', error);
+      res.status(500).json({ error: 'Failed to retrieve policies' });
+    }
+  }
+
+  // Push notification directly to device via WebSocket (no polling)
+  async pushNotificationToDevice(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const notification = req.body;
+      const notifMessage = {
+        type: 'notification',
+        id: this.generateRequestId(),
+        ...notification
+      };
+
+      const delivered = this.sendToDevice(deviceId, notifMessage);
+      logger.info(\`Notification \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${notification.category}\`);
+
+      // If device offline, queue in cache for delivery on reconnect
+      if (!delivered && this.cache) {
+        const existing = await this.cache.get(\`pending:\${deviceId}\`);
+        const pending = existing ? JSON.parse(existing) : [];
+        pending.push(notifMessage);
+        await this.cache.set(\`pending:\${deviceId}\`, JSON.stringify(pending), 'EX', 86400);
+      }
+
+      res.json({
+        status: delivered ? 'delivered' : 'queued_offline',
+        deviceId,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Push notification error:', error);
+      res.status(500).json({ error: 'Failed to push notification' });
+    }
+  }
+
+  // Broadcast notification to multiple devices via WebSocket
+  async broadcastNotification(req, res) {
+    try {
+      const { notification, deviceIds, platform } = req.body;
+      const message = {
+        type: 'notification',
+        id: this.generateRequestId(),
+        ...notification
+      };
+
+      let results;
+      if (deviceIds && deviceIds.length > 0) {
+        results = this.sendToDevices(deviceIds, message);
+      } else {
+        // Broadcast to all connected agents (optionally filtered by platform)
+        const sent = this.sendToAllAgents(message, platform);
+        results = { sent, offline: 0 };
+      }
+
+      logger.info(\`Broadcast: \${results.sent} delivered, \${results.offline} offline\`);
+
+      res.json({
+        status: 'broadcast_sent',
+        delivered: results.sent,
+        offline: results.offline,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Broadcast notification error:', error);
+      res.status(500).json({ error: 'Failed to broadcast notification' });
+    }
+  }
+
+  // Push command directly to device via WebSocket
+  async queueCommand(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const command = req.body;
+      const cmdMessage = {
+        type: 'command',
+        id: this.generateRequestId(),
+        ...command
+      };
+
+      const delivered = this.sendToDevice(deviceId, cmdMessage);
+      logger.info(\`Command \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${command.type}\`);
+
+      // If device offline, queue for delivery on reconnect
+      if (!delivered && this.cache) {
+        const existing = await this.cache.get(\`pending:\${deviceId}\`);
+        const pending = existing ? JSON.parse(existing) : [];
+        pending.push(cmdMessage);
+        await this.cache.set(\`pending:\${deviceId}\`, JSON.stringify(pending), 'EX', 86400);
+      }
+
+      res.json({
+        status: delivered ? 'delivered' : 'queued_offline',
+        deviceId,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Push command error:', error);
+      res.status(500).json({ error: 'Failed to push command' });
+    }
+  }
+
+  // Get connected agents status
+  async getAgentsStatus(req, res) {
+    try {
+      const { platform } = req.query;
+      let agents = this.getConnectedAgents();
+      if (platform) {
+        agents = agents.filter(a => a.platform === platform);
+      }
+      res.json({
+        total: agents.length,
+        agents,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get agents status' });
+    }
+  }
+
+  // Generic agent download endpoint (serves platform-specific agent)
+  async downloadAgent(req, res) {
+    try {
+      const { platform } = req.params;
+      const fs = require('fs');
+      const path = require('path');
+
+      const agentFiles = {
+        windows: { file: 'OpenDirectoryAgent.ps1', dir: 'windows' },
+        macos:   { file: 'OpenDirectoryAgent.sh', dir: 'macos' },
+        linux:   { file: 'OpenDirectoryAgent.sh', dir: 'linux' }
+      };
+
+      const agent = agentFiles[platform];
+      if (!agent) {
+        return res.status(400).json({ error: \`Unknown platform: \${platform}. Use: windows, macos, linux\` });
+      }
+
+      const agentPath = path.join(__dirname, '../../../../clients', agent.dir, agent.file);
+      if (fs.existsSync(agentPath)) {
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Disposition', \`attachment; filename="\${agent.file}"\`);
+        fs.createReadStream(agentPath).pipe(res);
+      } else {
+        res.status(404).json({ error: \`Agent for \${platform} not found\` });
+      }
+    } catch (error) {
+      logger.error('Agent download error:', error);
+      res.status(500).json({ error: 'Failed to serve agent' });
+    }
+  }
+
+  async downloadWindowsAgent(req, res) {
+    try {
+      const agentPath = require('path').join(__dirname, '../../../../clients/windows/OpenDirectoryAgent.ps1');
+      const fs = require('fs');
+
+      if (fs.existsSync(agentPath)) {
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Disposition', 'attachment; filename="OpenDirectoryAgent.ps1"');
+        fs.createReadStream(agentPath).pipe(res);
+      } else {
+        res.status(404).json({ error: 'Agent script not found' });
+      }
+    } catch (error) {
+      logger.error('Agent download error:', error);
+      res.status(500).json({ error: 'Failed to serve agent' });
     }
   }
 
