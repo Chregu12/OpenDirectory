@@ -191,6 +191,64 @@ handle_command() {
             handle_notification "$json"
             output="Notification shown"
             ;;
+
+        # ── Printer Commands (Linux: lpadmin / CUPS) ──────────────────
+        deploy_printers)
+            output=$(handle_deploy_printers "$json") || status="failed"
+            ;;
+        remove_printer)
+            local pname
+            pname=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('printerName',''))" 2>/dev/null)
+            output=$(handle_remove_printer "$pname") || status="failed"
+            ;;
+        set_default_printer)
+            local pname
+            pname=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('printerName',''))" 2>/dev/null)
+            output=$(handle_set_default_printer "$pname") || status="failed"
+            ;;
+        list_printers)
+            output=$(handle_list_printers)
+            ;;
+        get_printer_status)
+            local pname
+            pname=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('printerName',''))" 2>/dev/null)
+            output=$(handle_get_printer_status "$pname")
+            ;;
+        update_printer_settings)
+            output=$(handle_update_printer_settings "$json") || status="failed"
+            ;;
+        apply_printer_policy)
+            output=$(handle_apply_printer_policy "$json") || status="failed"
+            ;;
+        set_printer_paused)
+            local pname paused
+            pname=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('printerName',''))" 2>/dev/null)
+            paused=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('paused',False))" 2>/dev/null)
+            [[ "$pname" != OD_* ]] && pname="OD_$pname"
+            if [ "$paused" = "True" ]; then
+                output=$(cupsdisable "$pname" 2>&1) || status="failed"
+            else
+                output=$(cupsenable "$pname" 2>&1) || status="failed"
+            fi
+            ;;
+        cancel_print_job)
+            local job_id
+            job_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('jobId',''))" 2>/dev/null)
+            output=$(cancel "$job_id" 2>&1) || status="failed"
+            ;;
+        clear_print_queue)
+            local pname
+            pname=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('printerName',''))" 2>/dev/null)
+            [[ "$pname" != OD_* ]] && pname="OD_$pname"
+            output=$(cancel -a "$pname" 2>&1) || status="failed"
+            ;;
+        test_print)
+            local pname
+            pname=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('printerName',''))" 2>/dev/null)
+            [[ "$pname" != OD_* ]] && pname="OD_$pname"
+            output=$(echo "OpenDirectory Test Print - $(date) - $(hostname) - $pname" | lp -d "$pname" 2>&1) || status="failed"
+            ;;
+
         *)
             status="failed"; output="Unknown command: $cmd_type"
             ;;
@@ -229,6 +287,199 @@ inv = {
 }
 print(json.dumps(inv, indent=2))
 " 2>/dev/null
+}
+
+# ============================================================================
+# PRINTER MANAGEMENT (Linux: lpadmin / CUPS)
+# ============================================================================
+ensure_cups_installed() {
+    if ! command -v lpadmin &>/dev/null; then
+        log "CUPS not found, installing..." "WARN"
+        if command -v apt-get &>/dev/null; then
+            DEBIAN_FRONTEND=noninteractive apt-get install -y cups cups-client 2>&1
+        elif command -v dnf &>/dev/null; then
+            dnf install -y cups 2>&1
+        elif command -v pacman &>/dev/null; then
+            pacman -S --noconfirm cups 2>&1
+        fi
+        systemctl enable cups 2>/dev/null; systemctl start cups 2>/dev/null
+    fi
+}
+
+handle_deploy_printers() {
+    local json="$1"
+    ensure_cups_installed
+    python3 -c "
+import sys, json, subprocess
+
+data = json.load(sys.stdin).get('data', {})
+printers = data.get('printers', [])
+remove_existing = data.get('removeExisting', False)
+set_default = data.get('setDefault')
+results = []
+
+if remove_existing:
+    out = subprocess.getoutput('lpstat -p 2>/dev/null')
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1].startswith('OD_'):
+            subprocess.run(['lpadmin', '-x', parts[1]], capture_output=True)
+
+for p in printers:
+    name = p.get('name', '')
+    pname = f'OD_{name}'
+    addr = p.get('address', '')
+    proto = p.get('protocol', 'ipp')
+    driver = p.get('driver', 'auto')
+    location = p.get('location', '')
+    desc = p.get('description', '')
+    port = p.get('port', '')
+    is_default = p.get('isDefault', False)
+
+    try:
+        subprocess.run(['lpadmin', '-x', pname], capture_output=True)
+
+        uri_map = {'ipp': f'ipp://{addr}:{port or 631}/ipp/print',
+                    'ipps': f'ipps://{addr}:{port or 631}/ipp/print',
+                    'lpd': f'lpd://{addr}/',
+                    'socket': f'socket://{addr}:{port or 9100}',
+                    'raw': f'socket://{addr}:{port or 9100}'}
+        uri = uri_map.get(proto, f'ipp://{addr}:{port or 631}/ipp/print')
+
+        if not driver or driver in ('auto', 'null'):
+            subprocess.run(['lpadmin', '-p', pname, '-E', '-v', uri, '-m', 'everywhere'], check=True, capture_output=True)
+        else:
+            subprocess.run(['lpadmin', '-p', pname, '-E', '-v', uri, '-m', driver], check=True, capture_output=True)
+
+        if location:
+            subprocess.run(['lpadmin', '-p', pname, '-L', location], capture_output=True)
+        if desc:
+            subprocess.run(['lpadmin', '-p', pname, '-D', desc], capture_output=True)
+
+        subprocess.run(['cupsenable', pname], capture_output=True)
+        subprocess.run(['cupsaccept', pname], capture_output=True)
+
+        if is_default or name == set_default:
+            subprocess.run(['lpadmin', '-d', pname], capture_output=True)
+
+        results.append({'name': pname, 'status': 'installed'})
+    except Exception as e:
+        results.append({'name': pname, 'status': 'failed', 'error': str(e)})
+
+print(json.dumps({'printers': results}))
+" <<< "$json"
+
+    local notify_user
+    notify_user=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('notifyUser',True))" 2>/dev/null)
+    [ "$notify_user" != "False" ] && show_notification "Drucker konfiguriert" "Drucker wurden installiert."
+}
+
+handle_remove_printer() {
+    local pname="$1"
+    [[ "$pname" != OD_* ]] && pname="OD_$pname"
+    if lpstat -p "$pname" &>/dev/null; then
+        lpadmin -x "$pname" 2>&1
+        log "Printer removed: $pname"
+        show_notification "Drucker entfernt" "$pname"
+        echo "Removed: $pname"
+    else
+        echo "Printer not found: $pname"
+    fi
+}
+
+handle_set_default_printer() {
+    local pname="$1"
+    [[ "$pname" != OD_* ]] && pname="OD_$pname"
+    lpadmin -d "$pname" 2>&1
+    log "Default printer set: $pname"
+    echo "Default printer: $pname"
+}
+
+handle_list_printers() {
+    python3 -c "
+import subprocess, json
+out = subprocess.getoutput('lpstat -p -d 2>/dev/null')
+printers = []
+default_printer = ''
+for line in out.splitlines():
+    if line.startswith('printer '):
+        parts = line.split()
+        name = parts[1] if len(parts) >= 2 else ''
+        status = 'idle' if 'idle' in line else 'busy' if 'printing' in line else 'disabled' if 'disabled' in line else 'unknown'
+        printers.append({'name': name, 'status': status})
+    if 'system default destination' in line:
+        default_printer = line.split(':')[-1].strip()
+for p in printers:
+    p['isDefault'] = (p['name'] == default_printer)
+print(json.dumps(printers))
+"
+}
+
+handle_get_printer_status() {
+    local pname="$1"
+    [[ "$pname" != OD_* ]] && pname="OD_$pname"
+    python3 -c "
+import subprocess, json
+pname = '$pname'
+info = subprocess.getoutput(f'lpstat -p {pname} -l 2>/dev/null')
+jobs_out = subprocess.getoutput(f'lpstat -o {pname} 2>/dev/null')
+jobs = []
+for line in jobs_out.splitlines():
+    parts = line.split()
+    if len(parts) >= 4:
+        jobs.append({'id': parts[0], 'user': parts[1], 'size': parts[2]})
+print(json.dumps({'name': pname, 'info': info, 'jobs': jobs, 'jobCount': len(jobs)}))
+"
+}
+
+handle_update_printer_settings() {
+    local json="$1"
+    python3 -c "
+import sys, json, subprocess
+data = json.load(sys.stdin).get('data', {})
+pname = data.get('printerName', '')
+if not pname.startswith('OD_'): pname = f'OD_{pname}'
+settings = data.get('settings', {})
+if settings.get('location'):
+    subprocess.run(['lpadmin', '-p', pname, '-L', settings['location']], capture_output=True)
+if settings.get('description') or settings.get('comment'):
+    subprocess.run(['lpadmin', '-p', pname, '-D', settings.get('description', settings.get('comment', ''))], capture_output=True)
+if settings.get('duplex'):
+    duplex_map = {'long': 'two-sided-long-edge', 'short': 'two-sided-short-edge', 'none': 'one-sided'}
+    val = duplex_map.get(settings['duplex'], 'one-sided')
+    subprocess.run(['lpoptions', '-p', pname, '-o', f'sides={val}'], capture_output=True)
+if settings.get('color') is not None:
+    val = 'Color' if settings['color'] else 'Gray'
+    subprocess.run(['lpoptions', '-p', pname, '-o', f'ColorModel={val}'], capture_output=True)
+if settings.get('paperSize'):
+    subprocess.run(['lpoptions', '-p', pname, '-o', f'media={settings[\"paperSize\"]}'], capture_output=True)
+print(f'Settings updated: {pname}')
+" <<< "$json"
+}
+
+handle_apply_printer_policy() {
+    local json="$1"
+    ensure_cups_installed
+    local remove_unmanaged
+    remove_unmanaged=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('removeUnmanaged',False))" 2>/dev/null)
+    if [ "$remove_unmanaged" = "True" ]; then
+        local managed_names
+        managed_names=$(echo "$json" | python3 -c "
+import sys,json
+printers = json.load(sys.stdin).get('data',{}).get('printers',[])
+print(' '.join(['OD_' + p.get('name','') for p in printers]))
+" 2>/dev/null)
+        lpstat -p 2>/dev/null | awk '/^printer OD_/{print $2}' | while read -r existing; do
+            if ! echo " $managed_names " | grep -q " $existing "; then
+                lpadmin -x "$existing" 2>/dev/null
+                log "Policy: removed unmanaged printer $existing"
+            fi
+        done
+    fi
+    handle_deploy_printers "$json"
+    local policy_id
+    policy_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('policyId',''))" 2>/dev/null)
+    [ -n "$policy_id" ] && [ "$policy_id" != "None" ] && show_notification "Drucker-Richtlinie angewendet" "Drucker gemäss Policy konfiguriert."
 }
 
 # ============================================================================

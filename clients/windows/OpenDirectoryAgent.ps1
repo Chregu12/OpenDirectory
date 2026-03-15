@@ -188,6 +188,46 @@ function Invoke-AgentCommand {
             "collect_inventory" {
                 $Result.output = (Get-DeviceInventory | ConvertTo-Json -Depth 3)
             }
+
+            # ── Printer Commands (platform-specific: Windows) ──────────────
+            "deploy_printers" {
+                $Result.output = (Invoke-DeployPrinters -Data $Command.data | ConvertTo-Json -Depth 3)
+            }
+            "remove_printer" {
+                $Result.output = (Invoke-RemovePrinter -PrinterName $Command.data.printerName | Out-String)
+            }
+            "set_default_printer" {
+                $Result.output = (Invoke-SetDefaultPrinter -PrinterName $Command.data.printerName | Out-String)
+            }
+            "list_printers" {
+                $Result.output = (Get-InstalledPrinters | ConvertTo-Json -Depth 3)
+            }
+            "get_printer_status" {
+                $Result.output = (Get-PrinterStatusDetail -PrinterName $Command.data.printerName | ConvertTo-Json -Depth 3)
+            }
+            "update_printer_settings" {
+                $Result.output = (Invoke-UpdatePrinterSettings -PrinterName $Command.data.printerName -Settings $Command.data.settings | Out-String)
+            }
+            "apply_printer_policy" {
+                $Result.output = (Invoke-ApplyPrinterPolicy -Data $Command.data | ConvertTo-Json -Depth 3)
+            }
+            "set_printer_paused" {
+                if ($Command.data.paused) {
+                    $Result.output = (Set-Printer -Name $Command.data.printerName -PrinterStatus Paused 2>&1 | Out-String)
+                } else {
+                    $Result.output = (Set-Printer -Name $Command.data.printerName -PrinterStatus Normal 2>&1 | Out-String)
+                }
+            }
+            "cancel_print_job" {
+                $Result.output = (Remove-PrintJob -PrinterName $Command.data.printerName -ID $Command.data.jobId 2>&1 | Out-String)
+            }
+            "clear_print_queue" {
+                $Result.output = (Get-PrintJob -PrinterName $Command.data.printerName | Remove-PrintJob 2>&1 | Out-String)
+            }
+            "test_print" {
+                $Result.output = (Invoke-TestPrint -PrinterName $Command.data.printerName | Out-String)
+            }
+
             default {
                 $Result.status = "failed"; $Result.output = "Unknown command: $CommandType"
             }
@@ -229,6 +269,170 @@ function Get-DeviceInventory {
             version = if (Get-Command winget -ErrorAction SilentlyContinue) { (& winget --version 2>$null).Trim() } else { $null }
         }
     }
+}
+
+# ============================================================================
+# PRINTER MANAGEMENT (Windows-specific: Add-Printer, PrintManagement cmdlets)
+# ============================================================================
+function Invoke-DeployPrinters {
+    param([PSObject]$Data)
+    $results = @()
+
+    if ($Data.removeExisting) {
+        Get-Printer | Where-Object { $_.Name -like "OD_*" } | ForEach-Object {
+            Remove-Printer -Name $_.Name -ErrorAction SilentlyContinue
+            Write-AgentLog "Removed existing managed printer: $($_.Name)"
+        }
+    }
+
+    foreach ($p in $Data.printers) {
+        try {
+            $printerName = "OD_$($p.name)"
+            $portName = "IP_$($p.address)"
+
+            # Remove existing printer if already installed
+            Remove-Printer -Name $printerName -ErrorAction SilentlyContinue
+            Remove-PrinterPort -Name $portName -ErrorAction SilentlyContinue
+
+            # Create printer port
+            $portParams = @{ Name = $portName; PrinterHostAddress = $p.address }
+            if ($p.protocol -eq 'ipp') {
+                $portParams.PortNumber = if ($p.port) { $p.port } else { 631 }
+            } else {
+                $portParams.PortNumber = if ($p.port) { $p.port } else { 9100 }
+            }
+            Add-PrinterPort @portParams -ErrorAction Stop
+
+            # Resolve driver
+            $driverName = $p.driver
+            if (-not $driverName -or $driverName -eq 'auto') {
+                $driverName = "Microsoft IPP Class Driver"
+                $fallbacks = @("Microsoft IPP Class Driver", "Generic / Text Only")
+                foreach ($fb in $fallbacks) {
+                    if (Get-PrinterDriver -Name $fb -ErrorAction SilentlyContinue) {
+                        $driverName = $fb; break
+                    }
+                }
+            }
+
+            # Add printer
+            Add-Printer -Name $printerName -PortName $portName -DriverName $driverName -ErrorAction Stop
+            if ($p.location) { Set-Printer -Name $printerName -Location $p.location -ErrorAction SilentlyContinue }
+            if ($p.description) { Set-Printer -Name $printerName -Comment $p.description -ErrorAction SilentlyContinue }
+            if ($p.shared) { Set-Printer -Name $printerName -Shared $true -ShareName $p.name -ErrorAction SilentlyContinue }
+
+            # Set as default
+            if ($p.isDefault -or $p.name -eq $Data.setDefault) {
+                (New-Object -ComObject WScript.Network).SetDefaultPrinter($printerName)
+            }
+
+            $results += @{ name = $printerName; status = "installed" }
+            Write-AgentLog "Printer installed: $printerName at $($p.address)"
+
+            if ($Data.notifyUser) {
+                Show-ODNotification -Title "Drucker installiert" -Body "$($p.displayName ?? $p.name)" -Type "Success" -Attribution "OpenDirectory - Drucker"
+            }
+        } catch {
+            $results += @{ name = "OD_$($p.name)"; status = "failed"; error = $_.Exception.Message }
+            Write-AgentLog "Printer install failed: $($p.name) - $($_.Exception.Message)" "ERROR"
+        }
+    }
+    return @{ printers = $results }
+}
+
+function Invoke-RemovePrinter {
+    param([string]$PrinterName)
+    $target = if ($PrinterName -like "OD_*") { $PrinterName } else { "OD_$PrinterName" }
+    $printer = Get-Printer -Name $target -ErrorAction SilentlyContinue
+    if ($printer) {
+        $portName = $printer.PortName
+        Remove-Printer -Name $target -ErrorAction Stop
+        Remove-PrinterPort -Name $portName -ErrorAction SilentlyContinue
+        Write-AgentLog "Printer removed: $target"
+        Show-ODNotification -Title "Drucker entfernt" -Body $target -Type "Info" -Attribution "OpenDirectory - Drucker"
+        return "Removed: $target"
+    }
+    return "Printer not found: $target"
+}
+
+function Invoke-SetDefaultPrinter {
+    param([string]$PrinterName)
+    $target = if ($PrinterName -like "OD_*") { $PrinterName } else { "OD_$PrinterName" }
+    (New-Object -ComObject WScript.Network).SetDefaultPrinter($target)
+    Write-AgentLog "Default printer set: $target"
+    return "Default printer: $target"
+}
+
+function Get-InstalledPrinters {
+    return @(Get-Printer | Select-Object Name, DriverName, PortName, PrinterStatus, Shared, @{N='IsDefault';E={ $_.Name -eq (Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Default=$true" -ErrorAction SilentlyContinue).Name }})
+}
+
+function Get-PrinterStatusDetail {
+    param([string]$PrinterName)
+    $target = if ($PrinterName -like "OD_*") { $PrinterName } else { "OD_$PrinterName" }
+    $p = Get-Printer -Name $target -ErrorAction Stop
+    $jobs = @(Get-PrintJob -PrinterName $target -ErrorAction SilentlyContinue)
+    return @{
+        name = $p.Name; status = $p.PrinterStatus.ToString()
+        driver = $p.DriverName; port = $p.PortName
+        shared = $p.Shared; location = $p.Location; comment = $p.Comment
+        jobCount = $jobs.Count
+        jobs = $jobs | Select-Object -First 10 Id, JobStatus, DocumentName, UserName, TotalPages
+    }
+}
+
+function Invoke-UpdatePrinterSettings {
+    param([string]$PrinterName, [PSObject]$Settings)
+    $target = if ($PrinterName -like "OD_*") { $PrinterName } else { "OD_$PrinterName" }
+    $params = @{ Name = $target }
+    if ($null -ne $Settings.location) { $params.Location = $Settings.location }
+    if ($null -ne $Settings.comment) { $params.Comment = $Settings.comment }
+    if ($null -ne $Settings.shared) { $params.Shared = $Settings.shared }
+    Set-Printer @params -ErrorAction Stop
+
+    # Printing preferences via PrintConfiguration
+    if ($Settings.duplex) {
+        $config = Get-PrintConfiguration -PrinterName $target
+        $config.DuplexingMode = switch ($Settings.duplex) {
+            "long"  { [System.Printing.Duplexing]::TwoSidedLongEdge }
+            "short" { [System.Printing.Duplexing]::TwoSidedShortEdge }
+            default { [System.Printing.Duplexing]::OneSided }
+        }
+        Set-PrintConfiguration -PrinterName $target -PrintConfiguration $config -ErrorAction SilentlyContinue
+    }
+    Write-AgentLog "Printer settings updated: $target"
+    return "Settings updated: $target"
+}
+
+function Invoke-ApplyPrinterPolicy {
+    param([PSObject]$Data)
+    # Remove unmanaged OD_ printers if policy requires
+    if ($Data.removeUnmanaged) {
+        $managedNames = $Data.printers | ForEach-Object { "OD_$($_.name)" }
+        Get-Printer | Where-Object { $_.Name -like "OD_*" -and $_.Name -notin $managedNames } | ForEach-Object {
+            Remove-Printer -Name $_.Name -ErrorAction SilentlyContinue
+            Write-AgentLog "Policy: removed unmanaged printer $($_.Name)"
+        }
+    }
+    # Deploy policy printers
+    $result = Invoke-DeployPrinters -Data $Data
+    if ($Data.policyId) {
+        Write-AgentLog "Printer policy applied: $($Data.policyId)"
+        Show-ODNotification -Title "Drucker-Richtlinie angewendet" -Body "$($Data.printers.Count) Drucker konfiguriert" -Type "Info" -Attribution "OpenDirectory - Policies"
+    }
+    return $result
+}
+
+function Invoke-TestPrint {
+    param([string]$PrinterName)
+    $target = if ($PrinterName -like "OD_*") { $PrinterName } else { "OD_$PrinterName" }
+    $testContent = "OpenDirectory Test Print`n$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`nDevice: $env:COMPUTERNAME`nPrinter: $target"
+    $tempFile = [System.IO.Path]::GetTempFileName() + ".txt"
+    $testContent | Out-File -FilePath $tempFile -Encoding UTF8
+    Start-Process -FilePath "notepad.exe" -ArgumentList "/p `"$tempFile`"" -Wait -NoNewWindow -ErrorAction Stop
+    Remove-Item $tempFile -ErrorAction SilentlyContinue
+    Write-AgentLog "Test print sent to: $target"
+    return "Test print sent to $target"
 }
 
 # ============================================================================

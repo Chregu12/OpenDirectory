@@ -13,6 +13,7 @@ const PrintJobQueue = require('./services/printQueue');
 const ScannerService = require('./services/scanner');
 const PermissionManager = require('./services/permissions');
 const PrinterDeployment = require('./services/deployment');
+const PrinterAgentService = require('./services/PrinterAgentService');
 const QuotaManager = require('./services/quota');
 const PrintAnalytics = require('./services/analytics');
 
@@ -46,6 +47,17 @@ const permissions = new PermissionManager();
 const deployment = new PrinterDeployment();
 const quota = new QuotaManager();
 const analytics = new PrintAnalytics();
+
+// PrinterAgentService – generic server-push printer management via device-service WebSocket
+// deviceService is injected when available (passed via environment or inter-service communication)
+const printerAgent = new PrinterAgentService(null); // deviceService injected at runtime
+
+// Allow external injection of deviceService reference
+app.set('printerAgent', printerAgent);
+app.injectDeviceService = (deviceService) => {
+  printerAgent.deviceService = deviceService;
+  logger.info('PrinterAgentService: deviceService injected');
+};
 
 // WebSocket connections for real-time updates
 wss.on('connection', (ws) => {
@@ -403,6 +415,169 @@ app.get('/api/analytics/costs', async (req, res) => {
     res.json({ success: true, costs });
   } catch (error) {
     logger.error('Get costs error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Agent-based printer management (server-push via WebSocket)
+// Generic endpoints – platform-specific logic runs on the agents
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Deploy printers to devices (push command to agents)
+app.post('/api/agent/deploy', async (req, res) => {
+  try {
+    const { deviceIds, printers, options = {} } = req.body;
+    if (!deviceIds?.length || !printers?.length) {
+      return res.status(400).json({ error: 'deviceIds and printers are required' });
+    }
+    const results = printerAgent.deployPrintersToDevices(deviceIds, printers, options);
+    res.json({ success: true, results });
+  } catch (error) {
+    logger.error('Agent deploy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Remove printer from devices
+app.post('/api/agent/remove', async (req, res) => {
+  try {
+    const { deviceIds, printerName } = req.body;
+    if (!deviceIds?.length || !printerName) {
+      return res.status(400).json({ error: 'deviceIds and printerName are required' });
+    }
+    const results = printerAgent.removePrinterFromDevices(deviceIds, printerName);
+    res.json({ success: true, results });
+  } catch (error) {
+    logger.error('Agent remove error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Set default printer on a device
+app.post('/api/agent/set-default', async (req, res) => {
+  try {
+    const { deviceId, printerName } = req.body;
+    if (!deviceId || !printerName) {
+      return res.status(400).json({ error: 'deviceId and printerName are required' });
+    }
+    const result = printerAgent.setDefaultPrinter(deviceId, printerName);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Agent set-default error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List installed printers on a device
+app.post('/api/agent/list', async (req, res) => {
+  try {
+    const { deviceId } = req.body;
+    if (!deviceId) {
+      return res.status(400).json({ error: 'deviceId is required' });
+    }
+    const result = printerAgent.listDevicePrinters(deviceId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Agent list error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get printer status from a device
+app.post('/api/agent/status', async (req, res) => {
+  try {
+    const { deviceId, printerName } = req.body;
+    const result = printerAgent.getPrinterStatus(deviceId, printerName);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Agent status error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update printer settings on a device
+app.post('/api/agent/update-settings', async (req, res) => {
+  try {
+    const { deviceId, printerName, settings } = req.body;
+    const result = printerAgent.updatePrinterSettings(deviceId, printerName, settings);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Agent update-settings error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Apply printer policy to devices (policy-based deployment)
+app.post('/api/agent/apply-policy', async (req, res) => {
+  try {
+    const { deviceIds, policy } = req.body;
+    if (!deviceIds?.length || !policy) {
+      return res.status(400).json({ error: 'deviceIds and policy are required' });
+    }
+    const results = printerAgent.applyPrinterPolicy(deviceIds, policy);
+    res.json({ success: true, results });
+  } catch (error) {
+    logger.error('Agent apply-policy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Pause/resume printer on a device
+app.post('/api/agent/set-paused', async (req, res) => {
+  try {
+    const { deviceId, printerName, paused } = req.body;
+    const result = printerAgent.setPrinterPaused(deviceId, printerName, paused);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Agent set-paused error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cancel print job on a device
+app.post('/api/agent/cancel-job', async (req, res) => {
+  try {
+    const { deviceId, printerName, jobId } = req.body;
+    const result = printerAgent.cancelPrintJob(deviceId, printerName, jobId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Agent cancel-job error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Clear all jobs from a printer queue on a device
+app.post('/api/agent/clear-queue', async (req, res) => {
+  try {
+    const { deviceId, printerName } = req.body;
+    const result = printerAgent.clearPrintQueue(deviceId, printerName);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Agent clear-queue error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test print on a device
+app.post('/api/agent/test-print', async (req, res) => {
+  try {
+    const { deviceId, printerName } = req.body;
+    const result = printerAgent.testPrint(deviceId, printerName);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Agent test-print error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get deployment status overview
+app.get('/api/agent/deployment-status', (req, res) => {
+  try {
+    const status = printerAgent.getDeploymentStatus();
+    res.json({ success: true, deployments: status });
+  } catch (error) {
+    logger.error('Agent deployment-status error:', error);
     res.status(500).json({ error: error.message });
   }
 });
