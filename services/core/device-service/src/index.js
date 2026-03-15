@@ -19,6 +19,7 @@ const GeofencingService = require('./services/geofencingService');
 const CertificateManager = require('./services/certificateManager');
 const ThreatDetector = require('./services/threatDetector');
 const AnalyticsEngine = require('./services/analyticsEngine');
+const PolicyAgentService = require('./services/PolicyAgentService');
 
 // Utilities
 const logger = require('./utils/logger');
@@ -56,7 +57,8 @@ class EnterpriseDeviceManagementService {
     this.certificateManager = new CertificateManager(this.db, this.eventBus);
     this.threatDetector = new ThreatDetector(this.db, this.eventBus);
     this.analyticsEngine = new AnalyticsEngine(this.db, this.cache);
-    
+    this.policyAgentService = new PolicyAgentService(this);
+
     // Connected agent registry: deviceId -> WebSocket connection
     this.connectedAgents = new Map();
 
@@ -355,6 +357,18 @@ class EnterpriseDeviceManagementService {
     this.app.post('/api/bulk/compliance-scan', this.bulkComplianceScan.bind(this));
     this.app.get('/api/bulk/operations/:operationId/status', this.getBulkOperationStatus.bind(this));
 
+    // Policy Agent Routes (server-push policy enforcement via WebSocket)
+    this.app.post('/api/agent/policy/apply', this.agentApplyPolicy.bind(this));
+    this.app.post('/api/agent/policy/apply-bulk', this.agentApplyPolicyBulk.bind(this));
+    this.app.post('/api/agent/policy/remove', this.agentRemovePolicy.bind(this));
+    this.app.post('/api/agent/policy/check-compliance', this.agentCheckCompliance.bind(this));
+    this.app.post('/api/agent/policy/check-device-compliance', this.agentCheckDeviceCompliance.bind(this));
+    this.app.post('/api/agent/policy/detect-drift', this.agentDetectDrift.bind(this));
+    this.app.post('/api/agent/policy/rollback', this.agentRollbackPolicy.bind(this));
+    this.app.post('/api/agent/policy/resync', this.agentResyncPolicies.bind(this));
+    this.app.post('/api/agent/policy/apply-module', this.agentApplyPolicyModule.bind(this));
+    this.app.get('/api/agent/policy/status/:deviceId', this.agentGetPolicyStatus.bind(this));
+
     // Agent Communication Routes (used by OpenDirectory Windows/macOS/Linux agents)
     this.app.post('/api/v1/devices/:deviceId/checkin', this.handleAgentCheckin.bind(this));
     this.app.get('/api/v1/devices/:deviceId/commands/pending', this.getPendingCommands.bind(this));
@@ -448,6 +462,10 @@ class EnterpriseDeviceManagementService {
 
       case 'command_result':
         logger.info(\`Command result from \${ws.deviceId}: \${data.commandId} - \${data.status}\`);
+        // Forward policy-related results to PolicyAgentService
+        if (data.commandId && data.commandId.startsWith('pol-')) {
+          this.policyAgentService.handleCommandResult(ws.deviceId, data);
+        }
         this.broadcastToSubscribers('device_events', {
           type: 'command_result',
           deviceId: ws.deviceId,
@@ -526,6 +544,22 @@ class EnterpriseDeviceManagementService {
     this.eventBus.on('device:threat_detected', this.handleThreatDetected.bind(this));
     this.eventBus.on('device:geofence_violation', this.handleGeofenceViolation.bind(this));
     this.eventBus.on('policy:deployed', this.handlePolicyDeployed.bind(this));
+
+    // PolicyAgentService events → broadcast to dashboard subscribers
+    this.policyAgentService.on('complianceViolation', (event) => {
+      this.broadcastToSubscribers('compliance_alerts', {
+        type: 'policy_compliance_violation',
+        ...event,
+        timestamp: new Date().toISOString()
+      });
+    });
+    this.policyAgentService.on('driftDetected', (event) => {
+      this.broadcastToSubscribers('compliance_alerts', {
+        type: 'policy_drift_detected',
+        ...event,
+        timestamp: new Date().toISOString()
+      });
+    });
   }
 
   startBackgroundJobs() {
@@ -941,6 +975,118 @@ class EnterpriseDeviceManagementService {
     } catch (error) {
       logger.error('Agent download error:', error);
       res.status(500).json({ error: 'Failed to serve agent' });
+    }
+  }
+
+  // ── Policy Agent Service Route Handlers ──────────────────────────────────
+
+  async agentApplyPolicy(req, res) {
+    try {
+      const { deviceId, policy } = req.body;
+      const result = this.policyAgentService.applyPolicy(deviceId, policy);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Agent apply policy error:', error);
+      res.status(500).json({ error: 'Failed to apply policy' });
+    }
+  }
+
+  async agentApplyPolicyBulk(req, res) {
+    try {
+      const { deviceIds, policy } = req.body;
+      const results = this.policyAgentService.applyPolicyToDevices(deviceIds, policy);
+      res.json({ success: true, results });
+    } catch (error) {
+      logger.error('Agent bulk apply policy error:', error);
+      res.status(500).json({ error: 'Failed to apply policy to devices' });
+    }
+  }
+
+  async agentRemovePolicy(req, res) {
+    try {
+      const { deviceId, policyId } = req.body;
+      const result = this.policyAgentService.removePolicy(deviceId, policyId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Agent remove policy error:', error);
+      res.status(500).json({ error: 'Failed to remove policy' });
+    }
+  }
+
+  async agentCheckCompliance(req, res) {
+    try {
+      const { deviceId, policyId } = req.body;
+      const result = this.policyAgentService.checkCompliance(deviceId, policyId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Agent check compliance error:', error);
+      res.status(500).json({ error: 'Failed to check compliance' });
+    }
+  }
+
+  async agentCheckDeviceCompliance(req, res) {
+    try {
+      const { deviceId } = req.body;
+      const result = this.policyAgentService.checkDeviceCompliance(deviceId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Agent check device compliance error:', error);
+      res.status(500).json({ error: 'Failed to check device compliance' });
+    }
+  }
+
+  async agentDetectDrift(req, res) {
+    try {
+      const { deviceId } = req.body;
+      const result = this.policyAgentService.detectDrift(deviceId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Agent detect drift error:', error);
+      res.status(500).json({ error: 'Failed to detect drift' });
+    }
+  }
+
+  async agentRollbackPolicy(req, res) {
+    try {
+      const { deviceId, policyId } = req.body;
+      const result = this.policyAgentService.rollbackPolicy(deviceId, policyId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Agent rollback policy error:', error);
+      res.status(500).json({ error: 'Failed to rollback policy' });
+    }
+  }
+
+  async agentResyncPolicies(req, res) {
+    try {
+      const { deviceId } = req.body;
+      const result = this.policyAgentService.resyncPolicies(deviceId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Agent resync policies error:', error);
+      res.status(500).json({ error: 'Failed to resync policies' });
+    }
+  }
+
+  async agentApplyPolicyModule(req, res) {
+    try {
+      const { deviceId, module, settings } = req.body;
+      const result = this.policyAgentService.applyPolicyModule(deviceId, module, settings);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Agent apply policy module error:', error);
+      res.status(500).json({ error: 'Failed to apply policy module' });
+    }
+  }
+
+  async agentGetPolicyStatus(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const status = this.policyAgentService.getDevicePolicyStatus(deviceId);
+      res.json({ success: true, ...status });
+    } catch (error) {
+      logger.error('Agent get policy status error:', error);
+      res.status(500).json({ error: 'Failed to get policy status' });
     }
   }
 

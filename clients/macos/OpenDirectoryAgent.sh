@@ -178,6 +178,32 @@ handle_command() {
             output="Notification shown"
             ;;
 
+        # ── Policy Enforcement Commands ──────────────────────────────
+        apply_policy)
+            output=$(handle_apply_policy "$json") || status="failed"
+            ;;
+        remove_policy)
+            output=$(handle_remove_policy "$json") || status="failed"
+            ;;
+        check_compliance)
+            output=$(handle_check_compliance "$json") || status="failed"
+            ;;
+        check_all_compliance)
+            output=$(handle_check_all_compliance "$json") || status="failed"
+            ;;
+        detect_drift)
+            output=$(handle_detect_drift "$json") || status="failed"
+            ;;
+        rollback_policy)
+            output=$(handle_rollback_policy "$json") || status="failed"
+            ;;
+        resync_policies)
+            output=$(handle_apply_policy "$json") || status="failed"
+            ;;
+        apply_policy_module)
+            output=$(handle_apply_policy "$json") || status="failed"
+            ;;
+
         # ── Printer Commands (macOS: lpadmin / CUPS) ──────────────────
         deploy_printers)
             output=$(handle_deploy_printers "$json") || status="failed"
@@ -269,6 +295,233 @@ inv = {
 }
 print(json.dumps(inv, indent=2))
 " 2>/dev/null
+}
+
+# ============================================================================
+# POLICY ENFORCEMENT (macOS: profiles, defaults, launchctl, security)
+# ============================================================================
+POLICY_STATE_DIR="$OD_PATH/PolicyState"
+POLICY_BACKUP_DIR="$OD_PATH/PolicyBackups"
+
+handle_apply_policy() {
+    local json="$1"
+    mkdir -p "$POLICY_STATE_DIR" "$POLICY_BACKUP_DIR"
+    python3 << 'PYEOF' "$json"
+import sys, json, subprocess, os, hashlib
+from datetime import datetime
+
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+policy_id = data.get('policyId', '')
+policy_name = data.get('policyName', '')
+settings = data.get('settings', {})
+mode = data.get('enforceMode', 'enforce')
+applied = []
+errors = []
+sec = settings.get('security', {})
+
+# Password Policy → .mobileconfig profile
+pw = sec.get('password')
+if pw:
+    try:
+        payload_entries = []
+        if pw.get('minLength') is not None:
+            payload_entries.append(f'\t\t<key>minLength</key>\n\t\t<integer>{pw["minLength"]}</integer>')
+        if pw.get('complexity'):
+            payload_entries.append('\t\t<key>requireAlphanumeric</key>\n\t\t<true/>')
+        if pw.get('maxAgeDays') is not None:
+            payload_entries.append(f'\t\t<key>maxPINAgeInDays</key>\n\t\t<integer>{pw["maxAgeDays"]}</integer>')
+        if pw.get('lockoutThreshold') is not None:
+            payload_entries.append(f'\t\t<key>maxFailedAttempts</key>\n\t\t<integer>{pw["lockoutThreshold"]}</integer>')
+        if payload_entries:
+            profile = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+\t<key>PayloadContent</key><array><dict>
+\t\t<key>PayloadType</key><string>com.apple.mobiledevice.passwordpolicy</string>
+\t\t<key>PayloadIdentifier</key><string>local.od.{policy_id}.password</string>
+\t\t<key>PayloadUUID</key><string>{hashlib.md5(policy_id.encode()).hexdigest()[:8]}-pw</string>
+\t\t<key>PayloadVersion</key><integer>1</integer>
+{chr(10).join(payload_entries)}
+\t</dict></array>
+\t<key>PayloadIdentifier</key><string>local.od.{policy_id}</string>
+\t<key>PayloadType</key><string>Configuration</string>
+\t<key>PayloadUUID</key><string>{hashlib.md5(policy_id.encode()).hexdigest()[:8]}</string>
+\t<key>PayloadVersion</key><integer>1</integer>
+\t<key>PayloadDisplayName</key><string>{policy_name} - Password</string>
+\t<key>PayloadRemovalDisallowed</key><true/>
+</dict></plist>'''
+            profile_path = f'/Library/OpenDirectory/Policies/{policy_id}-password.mobileconfig'
+            os.makedirs(os.path.dirname(profile_path), exist_ok=True)
+            with open(profile_path, 'w') as f: f.write(profile)
+            subprocess.run(['profiles', 'install', '-path', profile_path], capture_output=True)
+            applied.append('password')
+    except Exception as e:
+        errors.append(f'password: {e}')
+
+# Screen Lock
+sl = sec.get('screenLock')
+if sl and sl.get('enabled'):
+    try:
+        timeout = (sl.get('inactivityLockMinutes') or sl.get('timeoutMinutes', 5)) * 60
+        subprocess.run(['defaults', '-currentHost', 'write', 'com.apple.screensaver', 'idleTime', '-int', str(timeout)], capture_output=True)
+        if sl.get('requirePassword'):
+            subprocess.run(['defaults', 'write', 'com.apple.screensaver', 'askForPassword', '-int', '1'], capture_output=True)
+            subprocess.run(['defaults', 'write', 'com.apple.screensaver', 'askForPasswordDelay', '-int', '0'], capture_output=True)
+        applied.append('screenLock')
+    except Exception as e:
+        errors.append(f'screenLock: {e}')
+
+# Firewall
+fw = sec.get('firewall')
+if fw:
+    try:
+        val = '1' if fw.get('enabled') else '0'
+        subprocess.run(['defaults', 'write', '/Library/Preferences/com.apple.alf', 'globalstate', '-int', val], capture_output=True)
+        if fw.get('stealth'):
+            subprocess.run(['/usr/libexec/ApplicationFirewall/socketfilterfw', '--setstealthmode', 'on'], capture_output=True)
+        applied.append('firewall')
+    except Exception as e:
+        errors.append(f'firewall: {e}')
+
+# FileVault
+enc = sec.get('encryption')
+if enc and enc.get('required'):
+    try:
+        result = subprocess.run(['fdesetup', 'status'], capture_output=True, text=True)
+        if 'On' not in result.stdout:
+            subprocess.run(['fdesetup', 'enable'], capture_output=True)
+        applied.append('encryption')
+    except Exception as e:
+        errors.append(f'encryption: {e}')
+
+# Audit (OpenBSM)
+audit = sec.get('audit')
+if audit and audit.get('enabled'):
+    try:
+        subprocess.run(['bash', '-c', 'sed -i "" "s/^flags:/flags:lo,aa,ad,fd,fm/" /etc/security/audit_control 2>/dev/null; audit -s'], capture_output=True)
+        applied.append('audit')
+    except Exception as e:
+        errors.append(f'audit: {e}')
+
+# Browser (Safari)
+browser = settings.get('browser')
+if browser and browser.get('homepage'):
+    try:
+        subprocess.run(['defaults', 'write', 'com.apple.Safari', 'HomePage', browser['homepage']], capture_output=True)
+        applied.append('browser')
+    except Exception as e:
+        errors.append(f'browser: {e}')
+
+# Save state
+state_file = f'/Library/OpenDirectory/PolicyState/{policy_id}.json'
+os.makedirs(os.path.dirname(state_file), exist_ok=True)
+with open(state_file, 'w') as f:
+    json.dump({'policyId': policy_id, 'policyName': policy_name, 'version': data.get('version', '1.0'),
+               'applied': applied, 'appliedAt': datetime.now().isoformat()}, f)
+
+print(json.dumps({'policyId': policy_id, 'applied': applied, 'errors': errors,
+                   'status': 'success' if not errors else 'partial'}))
+PYEOF
+
+    local notify_user
+    notify_user=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('notifyUser',True))" 2>/dev/null)
+    [ "$notify_user" != "False" ] && show_notification "Richtlinie angewendet" "Policy wurde konfiguriert." "OpenDirectory - Policies"
+}
+
+handle_remove_policy() {
+    local json="$1"
+    local policy_id
+    policy_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('policyId',''))" 2>/dev/null)
+    # Remove mobileconfig profiles
+    profiles remove -identifier "local.od.$policy_id" 2>/dev/null || true
+    rm -f "$POLICY_STATE_DIR/$policy_id.json" 2>/dev/null
+    rm -f "/Library/OpenDirectory/Policies/$policy_id-"*.mobileconfig 2>/dev/null
+    log "Policy removed: $policy_id"
+    echo "Removed: $policy_id"
+}
+
+handle_check_compliance() {
+    local json="$1"
+    python3 << 'PYEOF' "$json"
+import sys, json, subprocess
+
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+settings = data.get('expectedSettings', {})
+violations = []
+sec = settings.get('security', {})
+
+# Check firewall
+fw = sec.get('firewall')
+if fw and fw.get('enabled'):
+    result = subprocess.run(['defaults', 'read', '/Library/Preferences/com.apple.alf', 'globalstate'], capture_output=True, text=True)
+    if result.stdout.strip() == '0':
+        violations.append({'module': 'firewall', 'setting': 'enabled', 'expected': True, 'actual': False})
+
+# Check FileVault
+enc = sec.get('encryption')
+if enc and enc.get('required'):
+    result = subprocess.run(['fdesetup', 'status'], capture_output=True, text=True)
+    if 'On' not in result.stdout:
+        violations.append({'module': 'encryption', 'setting': 'FileVault', 'expected': 'On', 'actual': result.stdout.strip()})
+
+# Check screen lock
+sl = sec.get('screenLock')
+if sl and sl.get('enabled'):
+    result = subprocess.run(['defaults', '-currentHost', 'read', 'com.apple.screensaver', 'idleTime'], capture_output=True, text=True)
+    if result.returncode != 0 or result.stdout.strip() == '0':
+        violations.append({'module': 'screenLock', 'setting': 'idleTime', 'expected': 'enabled', 'actual': 'disabled'})
+
+from datetime import datetime
+print(json.dumps({'compliant': len(violations) == 0, 'violations': violations, 'checkedAt': datetime.now().isoformat(), 'policyId': data.get('policyId', '')}))
+PYEOF
+}
+
+handle_check_all_compliance() {
+    local json="$1"
+    python3 -c "
+import sys, json, subprocess
+from datetime import datetime
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+all_violations = []
+for pol in data.get('policies', []):
+    # Simplified: check if state file exists
+    import os
+    state_file = f'/Library/OpenDirectory/PolicyState/{pol[\"policyId\"]}.json'
+    if not os.path.exists(state_file):
+        all_violations.append({'module': 'policy', 'setting': pol['policyId'], 'expected': 'applied', 'actual': 'missing'})
+print(json.dumps({'compliant': len(all_violations) == 0, 'violations': all_violations, 'checkedAt': datetime.now().isoformat()}))
+" "$json"
+}
+
+handle_detect_drift() {
+    local json="$1"
+    python3 -c "
+import sys, json, os
+from datetime import datetime
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+drifted = []; missing = []
+for pol in data.get('expectedPolicies', []):
+    state_file = f'/Library/OpenDirectory/PolicyState/{pol[\"policyId\"]}.json'
+    if os.path.exists(state_file):
+        with open(state_file) as f:
+            state = json.load(f)
+        if state.get('version') != pol.get('version'):
+            drifted.append({'policyId': pol['policyId'], 'expectedVersion': pol.get('version'), 'actualVersion': state.get('version')})
+    else:
+        missing.append(pol['policyId'])
+print(json.dumps({'drifted': drifted, 'missing': missing, 'checkedAt': datetime.now().isoformat()}))
+" "$json"
+}
+
+handle_rollback_policy() {
+    local json="$1"
+    local policy_id
+    policy_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('policyId',''))" 2>/dev/null)
+    profiles remove -identifier "local.od.$policy_id" 2>/dev/null || true
+    rm -f "$POLICY_STATE_DIR/$policy_id.json" 2>/dev/null
+    log "Policy rolled back: $policy_id"
+    show_notification "Richtlinie zurueckgesetzt" "$policy_id" "OpenDirectory - Policies"
+    echo "Rolled back: $policy_id"
 }
 
 # ============================================================================

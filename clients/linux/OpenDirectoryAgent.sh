@@ -192,6 +192,32 @@ handle_command() {
             output="Notification shown"
             ;;
 
+        # ── Policy Enforcement Commands ──────────────────────────────
+        apply_policy)
+            output=$(handle_apply_policy "$json") || status="failed"
+            ;;
+        remove_policy)
+            output=$(handle_remove_policy "$json") || status="failed"
+            ;;
+        check_compliance)
+            output=$(handle_check_compliance "$json") || status="failed"
+            ;;
+        check_all_compliance)
+            output=$(handle_check_all_compliance "$json") || status="failed"
+            ;;
+        detect_drift)
+            output=$(handle_detect_drift "$json") || status="failed"
+            ;;
+        rollback_policy)
+            output=$(handle_rollback_policy "$json") || status="failed"
+            ;;
+        resync_policies)
+            output=$(handle_apply_policy "$json") || status="failed"
+            ;;
+        apply_policy_module)
+            output=$(handle_apply_policy "$json") || status="failed"
+            ;;
+
         # ── Printer Commands (Linux: lpadmin / CUPS) ──────────────────
         deploy_printers)
             output=$(handle_deploy_printers "$json") || status="failed"
@@ -287,6 +313,306 @@ inv = {
 }
 print(json.dumps(inv, indent=2))
 " 2>/dev/null
+}
+
+# ============================================================================
+# POLICY ENFORCEMENT (Linux: sysctl, PAM, sshd, ufw/firewalld, auditd, dconf)
+# ============================================================================
+POLICY_STATE_DIR="$OD_PATH/PolicyState"
+POLICY_BACKUP_DIR="$OD_PATH/PolicyBackups"
+
+handle_apply_policy() {
+    local json="$1"
+    mkdir -p "$POLICY_STATE_DIR" "$POLICY_BACKUP_DIR"
+    python3 << 'PYEOF' "$json"
+import sys, json, subprocess, os, shutil
+from datetime import datetime
+
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+policy_id = data.get('policyId', '')
+policy_name = data.get('policyName', '')
+settings = data.get('settings', {})
+applied = []
+errors = []
+sec = settings.get('security', {})
+
+def run(cmd):
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+# Password Policy → PAM pwquality + faillock
+pw = sec.get('password')
+if pw:
+    try:
+        if os.path.exists('/etc/security/pwquality.conf'):
+            lines = []
+            if pw.get('minLength') is not None:
+                lines.append(f'minlen = {pw["minLength"]}')
+            if pw.get('complexity'):
+                lines.extend(['dcredit = -1', 'ucredit = -1', 'lcredit = -1', 'ocredit = -1'])
+            if lines:
+                with open('/etc/security/pwquality.conf', 'a') as f:
+                    f.write('\n# OpenDirectory Policy\n' + '\n'.join(lines) + '\n')
+        if pw.get('maxAgeDays') is not None:
+            run(f'sed -i "s/^PASS_MAX_DAYS.*/PASS_MAX_DAYS\\t{pw["maxAgeDays"]}/" /etc/login.defs')
+        if pw.get('lockoutThreshold') is not None:
+            with open('/etc/security/faillock.conf', 'a') as f:
+                f.write(f'\n# OpenDirectory Policy\ndeny = {pw["lockoutThreshold"]}\n')
+            if pw.get('lockoutDuration') is not None:
+                with open('/etc/security/faillock.conf', 'a') as f:
+                    f.write(f'unlock_time = {pw["lockoutDuration"] * 60}\n')
+        applied.append('password')
+    except Exception as e:
+        errors.append(f'password: {e}')
+
+# Screen Lock → dconf (GNOME) / xdg-screensaver
+sl = sec.get('screenLock')
+if sl and sl.get('enabled'):
+    try:
+        timeout = (sl.get('inactivityLockMinutes') or sl.get('timeoutMinutes', 5)) * 60
+        dconf_dir = '/etc/dconf/db/local.d'
+        os.makedirs(dconf_dir, exist_ok=True)
+        with open(f'{dconf_dir}/00-od-screenlock', 'w') as f:
+            f.write(f'[org/gnome/desktop/session]\nidle-delay=uint32 {timeout}\n')
+            if sl.get('requirePassword'):
+                f.write('[org/gnome/desktop/screensaver]\nlock-enabled=true\nlock-delay=uint32 0\n')
+        run('dconf update')
+        applied.append('screenLock')
+    except Exception as e:
+        errors.append(f'screenLock: {e}')
+
+# Firewall → ufw or firewalld
+fw = sec.get('firewall')
+if fw:
+    try:
+        if os.path.exists('/usr/sbin/ufw'):
+            if fw.get('enabled'):
+                run('ufw --force enable')
+                if fw.get('defaultDeny'):
+                    run('ufw default deny incoming')
+            else:
+                run('ufw --force disable')
+        elif os.path.exists('/usr/bin/firewall-cmd'):
+            if fw.get('enabled'):
+                run('systemctl enable --now firewalld')
+                if fw.get('defaultDeny'):
+                    run('firewall-cmd --set-default-zone=drop')
+            else:
+                run('systemctl disable --now firewalld')
+        applied.append('firewall')
+    except Exception as e:
+        errors.append(f'firewall: {e}')
+
+# Encryption → LUKS check (report only, no in-place enable)
+enc = sec.get('encryption')
+if enc and enc.get('required'):
+    try:
+        result = run('lsblk -o NAME,FSTYPE | grep -i crypt')
+        if result.returncode != 0:
+            errors.append('encryption: LUKS not detected on root device')
+        else:
+            applied.append('encryption')
+    except Exception as e:
+        errors.append(f'encryption: {e}')
+
+# Audit → auditd rules
+audit = sec.get('audit')
+if audit and audit.get('enabled'):
+    try:
+        run('systemctl enable --now auditd')
+        rules_file = '/etc/audit/rules.d/od-policy.rules'
+        with open(rules_file, 'w') as f:
+            f.write('# OpenDirectory Audit Policy\n')
+            f.write('-w /etc/passwd -p wa -k identity\n')
+            f.write('-w /etc/shadow -p wa -k identity\n')
+            f.write('-w /etc/group -p wa -k identity\n')
+            f.write('-w /var/log/auth.log -p wa -k auth-log\n')
+            f.write('-a always,exit -F arch=b64 -S execve -k exec\n')
+        run('augenrules --load')
+        applied.append('audit')
+    except Exception as e:
+        errors.append(f'audit: {e}')
+
+# SSH hardening
+ssh = sec.get('ssh') or sec.get('remoteAccess')
+if ssh:
+    try:
+        sshd_conf = '/etc/ssh/sshd_config.d/od-policy.conf'
+        os.makedirs(os.path.dirname(sshd_conf), exist_ok=True)
+        lines = ['# OpenDirectory Policy']
+        if ssh.get('disableRoot'):
+            lines.append('PermitRootLogin no')
+        if ssh.get('requireKey'):
+            lines.append('PasswordAuthentication no')
+            lines.append('PubkeyAuthentication yes')
+        if ssh.get('maxAuthTries') is not None:
+            lines.append(f'MaxAuthTries {ssh["maxAuthTries"]}')
+        with open(sshd_conf, 'w') as f:
+            f.write('\n'.join(lines) + '\n')
+        run('systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null')
+        applied.append('ssh')
+    except Exception as e:
+        errors.append(f'ssh: {e}')
+
+# Browser (Chrome/Chromium policies)
+browser = settings.get('browser')
+if browser and browser.get('homepage'):
+    try:
+        policy_dir = '/etc/opt/chrome/policies/managed'
+        os.makedirs(policy_dir, exist_ok=True)
+        chrome_pol = {}
+        if browser.get('homepage'):
+            chrome_pol['HomepageLocation'] = browser['homepage']
+            chrome_pol['HomepageIsNewTabPage'] = False
+        if browser.get('defaultSearchEngine'):
+            chrome_pol['DefaultSearchProviderName'] = browser['defaultSearchEngine']
+        with open(f'{policy_dir}/od-policy.json', 'w') as f:
+            json.dump(chrome_pol, f, indent=2)
+        # Also for Chromium
+        chromium_dir = '/etc/chromium/policies/managed'
+        os.makedirs(chromium_dir, exist_ok=True)
+        shutil.copy(f'{policy_dir}/od-policy.json', f'{chromium_dir}/od-policy.json')
+        applied.append('browser')
+    except Exception as e:
+        errors.append(f'browser: {e}')
+
+# Updates
+updates = settings.get('updates')
+if updates:
+    try:
+        if os.path.exists('/usr/bin/apt-get'):
+            apt_conf = '/etc/apt/apt.conf.d/50-od-autoupdate'
+            enabled = '1' if updates.get('automatic') else '0'
+            with open(apt_conf, 'w') as f:
+                f.write(f'APT::Periodic::Update-Package-Lists "{enabled}";\n')
+                f.write(f'APT::Periodic::Unattended-Upgrade "{enabled}";\n')
+        applied.append('updates')
+    except Exception as e:
+        errors.append(f'updates: {e}')
+
+# Save state
+state_file = f'/opt/opendirectory/PolicyState/{policy_id}.json'
+os.makedirs(os.path.dirname(state_file), exist_ok=True)
+with open(state_file, 'w') as f:
+    json.dump({'policyId': policy_id, 'policyName': policy_name, 'version': data.get('version', '1.0'),
+               'applied': applied, 'appliedAt': datetime.now().isoformat()}, f)
+
+print(json.dumps({'policyId': policy_id, 'applied': applied, 'errors': errors,
+                   'status': 'success' if not errors else 'partial'}))
+PYEOF
+
+    local notify_user
+    notify_user=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('notifyUser',True))" 2>/dev/null)
+    [ "$notify_user" != "False" ] && show_notification "Richtlinie angewendet" "Policy wurde konfiguriert."
+}
+
+handle_remove_policy() {
+    local json="$1"
+    local policy_id
+    policy_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('policyId',''))" 2>/dev/null)
+    # Remove policy config files
+    rm -f "/etc/security/faillock.conf.d/od-$policy_id.conf" 2>/dev/null
+    rm -f "/etc/audit/rules.d/od-policy.rules" 2>/dev/null && augenrules --load 2>/dev/null
+    rm -f "/etc/ssh/sshd_config.d/od-policy.conf" 2>/dev/null && systemctl reload sshd 2>/dev/null
+    rm -f "/etc/dconf/db/local.d/00-od-screenlock" 2>/dev/null && dconf update 2>/dev/null
+    rm -f "$POLICY_STATE_DIR/$policy_id.json" 2>/dev/null
+    log "Policy removed: $policy_id"
+    echo "Removed: $policy_id"
+}
+
+handle_check_compliance() {
+    local json="$1"
+    python3 << 'PYEOF' "$json"
+import sys, json, subprocess, os
+from datetime import datetime
+
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+settings = data.get('expectedSettings', {})
+violations = []
+sec = settings.get('security', {})
+
+def run(cmd):
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+# Check firewall
+fw = sec.get('firewall')
+if fw and fw.get('enabled'):
+    ufw_result = run('ufw status')
+    fwd_result = run('systemctl is-active firewalld')
+    if 'active' not in ufw_result.stdout.lower() and 'active' != fwd_result.stdout.strip():
+        violations.append({'module': 'firewall', 'setting': 'enabled', 'expected': True, 'actual': False})
+
+# Check encryption
+enc = sec.get('encryption')
+if enc and enc.get('required'):
+    result = run('lsblk -o NAME,FSTYPE | grep -i crypt')
+    if result.returncode != 0:
+        violations.append({'module': 'encryption', 'setting': 'LUKS', 'expected': 'encrypted', 'actual': 'unencrypted'})
+
+# Check screen lock (dconf)
+sl = sec.get('screenLock')
+if sl and sl.get('enabled'):
+    if not os.path.exists('/etc/dconf/db/local.d/00-od-screenlock'):
+        violations.append({'module': 'screenLock', 'setting': 'dconf', 'expected': 'configured', 'actual': 'missing'})
+
+# Check audit
+audit = sec.get('audit')
+if audit and audit.get('enabled'):
+    result = run('systemctl is-active auditd')
+    if result.stdout.strip() != 'active':
+        violations.append({'module': 'audit', 'setting': 'auditd', 'expected': 'active', 'actual': result.stdout.strip()})
+
+print(json.dumps({'compliant': len(violations) == 0, 'violations': violations,
+                   'checkedAt': datetime.now().isoformat(), 'policyId': data.get('policyId', '')}))
+PYEOF
+}
+
+handle_check_all_compliance() {
+    local json="$1"
+    python3 -c "
+import sys, json, os
+from datetime import datetime
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+all_violations = []
+for pol in data.get('policies', []):
+    state_file = f'/opt/opendirectory/PolicyState/{pol[\"policyId\"]}.json'
+    if not os.path.exists(state_file):
+        all_violations.append({'module': 'policy', 'setting': pol['policyId'], 'expected': 'applied', 'actual': 'missing'})
+print(json.dumps({'compliant': len(all_violations) == 0, 'violations': all_violations, 'checkedAt': datetime.now().isoformat()}))
+" "$json"
+}
+
+handle_detect_drift() {
+    local json="$1"
+    python3 -c "
+import sys, json, os
+from datetime import datetime
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+drifted = []; missing = []
+for pol in data.get('expectedPolicies', []):
+    state_file = f'/opt/opendirectory/PolicyState/{pol[\"policyId\"]}.json'
+    if os.path.exists(state_file):
+        with open(state_file) as f:
+            state = json.load(f)
+        if state.get('version') != pol.get('version'):
+            drifted.append({'policyId': pol['policyId'], 'expectedVersion': pol.get('version'), 'actualVersion': state.get('version')})
+    else:
+        missing.append(pol['policyId'])
+print(json.dumps({'drifted': drifted, 'missing': missing, 'checkedAt': datetime.now().isoformat()}))
+" "$json"
+}
+
+handle_rollback_policy() {
+    local json="$1"
+    local policy_id
+    policy_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('policyId',''))" 2>/dev/null)
+    # Remove policy artifacts
+    rm -f "/etc/audit/rules.d/od-policy.rules" 2>/dev/null && augenrules --load 2>/dev/null
+    rm -f "/etc/ssh/sshd_config.d/od-policy.conf" 2>/dev/null && systemctl reload sshd 2>/dev/null
+    rm -f "/etc/dconf/db/local.d/00-od-screenlock" 2>/dev/null && dconf update 2>/dev/null
+    rm -f "$POLICY_STATE_DIR/$policy_id.json" 2>/dev/null
+    log "Policy rolled back: $policy_id"
+    show_notification "Richtlinie zurueckgesetzt" "$policy_id"
+    echo "Rolled back: $policy_id"
 }
 
 # ============================================================================

@@ -228,6 +228,41 @@ function Invoke-AgentCommand {
                 $Result.output = (Invoke-TestPrint -PrinterName $Command.data.printerName | Out-String)
             }
 
+            # ── Policy Commands (platform-specific: Windows) ──────────────
+            "apply_policy" {
+                $Result.output = (Invoke-ApplyPolicy -Data $Command.data | ConvertTo-Json -Depth 5)
+            }
+            "remove_policy" {
+                $Result.output = (Invoke-RemovePolicy -Data $Command.data | Out-String)
+            }
+            "check_compliance" {
+                $report = Invoke-CheckCompliance -Data $Command.data
+                $Result.output = ($report | ConvertTo-Json -Depth 5)
+                $Result.complianceReport = $report
+            }
+            "check_all_compliance" {
+                $report = Invoke-CheckAllCompliance -Data $Command.data
+                $Result.output = ($report | ConvertTo-Json -Depth 5)
+                $Result.complianceReport = $report
+            }
+            "detect_drift" {
+                $report = Invoke-DetectDrift -Data $Command.data
+                $Result.output = ($report | ConvertTo-Json -Depth 5)
+                $Result.driftReport = $report
+            }
+            "rollback_policy" {
+                $Result.output = (Invoke-RollbackPolicy -Data $Command.data | Out-String)
+            }
+            "resync_policies" {
+                foreach ($pol in $Command.data.policies) {
+                    Invoke-ApplyPolicy -Data $pol | Out-Null
+                }
+                $Result.output = "Resynced $($Command.data.policies.Count) policies"
+            }
+            "apply_policy_module" {
+                $Result.output = (Invoke-ApplyPolicyModule -Module $Command.data.module -Settings $Command.data.settings | Out-String)
+            }
+
             default {
                 $Result.status = "failed"; $Result.output = "Unknown command: $CommandType"
             }
@@ -269,6 +304,247 @@ function Get-DeviceInventory {
             version = if (Get-Command winget -ErrorAction SilentlyContinue) { (& winget --version 2>$null).Trim() } else { $null }
         }
     }
+}
+
+# ============================================================================
+# POLICY ENFORCEMENT (Windows-specific: Registry, GPO, secedit, BitLocker)
+# ============================================================================
+$script:PolicyBackupPath = "$script:ODPath\PolicyBackups"
+
+function Invoke-ApplyPolicy {
+    param([PSObject]$Data)
+    $policyId = $Data.policyId; $policyName = $Data.policyName
+    $settings = $Data.settings; $mode = $Data.enforceMode ?? "enforce"
+    Write-AgentLog "Applying policy: $policyName ($policyId) mode=$mode"
+
+    # Backup current state before applying
+    Invoke-BackupPolicyState -PolicyId $policyId
+
+    $applied = @()
+    $errors = @()
+
+    # Security → Password
+    if ($settings.security?.password) {
+        try {
+            $p = $settings.security.password
+            $cmds = @()
+            if ($null -ne $p.minLength)         { $cmds += "net accounts /minpwlen:$($p.minLength)" }
+            if ($null -ne $p.maxAgeDays)         { $cmds += "net accounts /maxpwage:$($p.maxAgeDays)" }
+            if ($null -ne $p.historyLength)      { $cmds += "net accounts /uniquepw:$($p.historyLength)" }
+            if ($null -ne $p.lockoutThreshold)   { $cmds += "net accounts /lockoutthreshold:$($p.lockoutThreshold)" }
+            if ($null -ne $p.lockoutDuration)    { $cmds += "net accounts /lockoutduration:$($p.lockoutDuration)" }
+            foreach ($cmd in $cmds) { Invoke-Expression $cmd 2>&1 | Out-Null }
+            $applied += "password"
+        } catch { $errors += "password: $($_.Exception.Message)" }
+    }
+
+    # Security → Screen Lock
+    if ($settings.security?.screenLock?.enabled) {
+        try {
+            $sl = $settings.security.screenLock
+            if ($null -ne $sl.timeoutMinutes) {
+                Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "ScreenSaveTimeOut" -Value ($sl.timeoutMinutes * 60) -ErrorAction Stop
+                Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "ScreenSaveActive" -Value "1" -ErrorAction Stop
+            }
+            if ($sl.requirePassword) {
+                Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "ScreenSaverIsSecure" -Value "1" -ErrorAction Stop
+            }
+            $applied += "screenLock"
+        } catch { $errors += "screenLock: $($_.Exception.Message)" }
+    }
+
+    # Security → Firewall
+    if ($settings.security?.firewall) {
+        try {
+            $fw = $settings.security.firewall
+            if ($fw.enabled) {
+                Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True -ErrorAction Stop
+            } else {
+                Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled False -ErrorAction Stop
+            }
+            if ($fw.defaultDeny) {
+                Set-NetFirewallProfile -Profile Domain,Private,Public -DefaultInboundAction Block -ErrorAction Stop
+            }
+            $applied += "firewall"
+        } catch { $errors += "firewall: $($_.Exception.Message)" }
+    }
+
+    # Security → Encryption (BitLocker)
+    if ($settings.security?.encryption?.required) {
+        try {
+            $blStatus = Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue
+            if ($blStatus -and $blStatus.ProtectionStatus -ne "On") {
+                Enable-BitLocker -MountPoint "C:" -EncryptionMethod Aes256 -UsedSpaceOnly -RecoveryPasswordProtector -ErrorAction Stop | Out-Null
+            }
+            $applied += "encryption"
+        } catch { $errors += "encryption: $($_.Exception.Message)" }
+    }
+
+    # Security → Audit
+    if ($settings.security?.audit?.enabled) {
+        try {
+            auditpol /set /subcategory:"Logon" /success:enable /failure:enable 2>&1 | Out-Null
+            auditpol /set /subcategory:"Logoff" /success:enable 2>&1 | Out-Null
+            auditpol /set /subcategory:"Account Lockout" /success:enable /failure:enable 2>&1 | Out-Null
+            auditpol /set /subcategory:"File System" /success:enable /failure:enable 2>&1 | Out-Null
+            $applied += "audit"
+        } catch { $errors += "audit: $($_.Exception.Message)" }
+    }
+
+    # Browser → Edge
+    if ($settings.browser?.homepage) {
+        try {
+            $edgePath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+            if (!(Test-Path $edgePath)) { New-Item -Path $edgePath -Force | Out-Null }
+            Set-ItemProperty -Path $edgePath -Name "HomepageLocation" -Value $settings.browser.homepage -ErrorAction Stop
+            Set-ItemProperty -Path $edgePath -Name "HomepageIsNewTabPage" -Value 0 -Type DWord -ErrorAction Stop
+            $applied += "browser"
+        } catch { $errors += "browser: $($_.Exception.Message)" }
+    }
+
+    # Software → Updates
+    if ($null -ne $settings.software?.updates?.automatic) {
+        try {
+            $auPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+            if (!(Test-Path $auPath)) { New-Item -Path $auPath -Force | Out-Null }
+            Set-ItemProperty -Path $auPath -Name "AUOptions" -Value $(if ($settings.software.updates.automatic) { 4 } else { 1 }) -Type DWord
+            $applied += "updates"
+        } catch { $errors += "updates: $($_.Exception.Message)" }
+    }
+
+    # Save applied state
+    $stateFile = "$script:ODPath\Config\policy-$policyId.json"
+    @{ policyId = $policyId; policyName = $policyName; version = $Data.version; applied = $applied; appliedAt = (Get-Date).ToString("o"); settings = $settings } | ConvertTo-Json -Depth 5 | Out-File -FilePath $stateFile -Encoding UTF8
+
+    if ($Data.notifyUser) {
+        Show-ODNotification -Title "Richtlinie angewendet" -Body "$policyName ($($applied.Count) Module)" -Type "Info" -Attribution "OpenDirectory - Policies"
+    }
+    Write-AgentLog "Policy applied: $policyName (modules: $($applied -join ', '))"
+    return @{ policyId = $policyId; applied = $applied; errors = $errors; status = if ($errors.Count -eq 0) { "success" } else { "partial" } }
+}
+
+function Invoke-RemovePolicy {
+    param([PSObject]$Data)
+    $policyId = $Data.policyId
+    $stateFile = "$script:ODPath\Config\policy-$policyId.json"
+    if (Test-Path $stateFile) {
+        Remove-Item $stateFile -Force
+        Write-AgentLog "Policy removed: $policyId"
+        # Attempt rollback to backup
+        Invoke-RollbackPolicy -Data $Data | Out-Null
+        return "Policy removed and rolled back: $policyId"
+    }
+    return "Policy not found: $policyId"
+}
+
+function Invoke-CheckCompliance {
+    param([PSObject]$Data)
+    $violations = @()
+    $settings = $Data.expectedSettings
+
+    # Check password policy
+    if ($settings.security?.password) {
+        $p = $settings.security.password
+        $netAccounts = net accounts 2>$null
+        if ($null -ne $p.minLength) {
+            $current = ($netAccounts | Select-String "Minimum password length" | ForEach-Object { ($_ -split ":\s*")[1].Trim() })
+            if ([int]$current -lt $p.minLength) { $violations += @{ module = "password"; setting = "minLength"; expected = $p.minLength; actual = $current } }
+        }
+    }
+
+    # Check firewall
+    if ($settings.security?.firewall?.enabled) {
+        $profiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+        foreach ($profile in $profiles) {
+            if (-not $profile.Enabled) {
+                $violations += @{ module = "firewall"; setting = "enabled"; expected = $true; actual = $false; detail = "$($profile.Name) disabled" }
+            }
+        }
+    }
+
+    # Check BitLocker
+    if ($settings.security?.encryption?.required) {
+        $bl = Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue
+        if (-not $bl -or $bl.ProtectionStatus -ne "On") {
+            $violations += @{ module = "encryption"; setting = "BitLocker"; expected = "On"; actual = $(if ($bl) { $bl.ProtectionStatus } else { "NotAvailable" }) }
+        }
+    }
+
+    # Check screen lock
+    if ($settings.security?.screenLock?.enabled) {
+        $timeout = Get-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "ScreenSaveTimeOut" -ErrorAction SilentlyContinue
+        if (-not $timeout -or $timeout.ScreenSaveTimeOut -eq "0") {
+            $violations += @{ module = "screenLock"; setting = "timeout"; expected = "enabled"; actual = "disabled" }
+        }
+    }
+
+    return @{ compliant = ($violations.Count -eq 0); violations = $violations; checkedAt = (Get-Date).ToString("o"); policyId = $Data.policyId }
+}
+
+function Invoke-CheckAllCompliance {
+    param([PSObject]$Data)
+    $allViolations = @()
+    foreach ($pol in $Data.policies) {
+        $report = Invoke-CheckCompliance -Data @{ policyId = $pol.policyId; expectedSettings = $pol.settings }
+        $allViolations += $report.violations
+    }
+    return @{ compliant = ($allViolations.Count -eq 0); violations = $allViolations; checkedAt = (Get-Date).ToString("o") }
+}
+
+function Invoke-DetectDrift {
+    param([PSObject]$Data)
+    $drifted = @(); $missing = @()
+    foreach ($pol in $Data.expectedPolicies) {
+        $stateFile = "$script:ODPath\Config\policy-$($pol.policyId).json"
+        if (Test-Path $stateFile) {
+            $state = Get-Content $stateFile -Raw | ConvertFrom-Json
+            if ($state.version -ne $pol.version) {
+                $drifted += @{ policyId = $pol.policyId; expectedVersion = $pol.version; actualVersion = $state.version }
+            }
+        } else {
+            $missing += $pol.policyId
+        }
+    }
+    return @{ drifted = $drifted; missing = $missing; checkedAt = (Get-Date).ToString("o") }
+}
+
+function Invoke-BackupPolicyState {
+    param([string]$PolicyId)
+    if (!(Test-Path $script:PolicyBackupPath)) { New-Item -Path $script:PolicyBackupPath -ItemType Directory -Force | Out-Null }
+    $backup = @{
+        policyId = $PolicyId; backedUpAt = (Get-Date).ToString("o")
+        passwordPolicy = (net accounts 2>$null | Out-String)
+        firewallProfiles = @(Get-NetFirewallProfile -ErrorAction SilentlyContinue | Select-Object Name, Enabled, DefaultInboundAction)
+    }
+    $backup | ConvertTo-Json -Depth 3 | Out-File "$script:PolicyBackupPath\$PolicyId.json" -Encoding UTF8
+}
+
+function Invoke-RollbackPolicy {
+    param([PSObject]$Data)
+    $backupFile = "$script:PolicyBackupPath\$($Data.policyId).json"
+    if (Test-Path $backupFile) {
+        Write-AgentLog "Rolling back policy: $($Data.policyId)"
+        # Remove policy state
+        Remove-Item "$script:ODPath\Config\policy-$($Data.policyId).json" -ErrorAction SilentlyContinue
+        Show-ODNotification -Title "Richtlinie zurueckgesetzt" -Body "Policy $($Data.policyId) wurde zurueckgesetzt." -Type "Info" -Attribution "OpenDirectory - Policies"
+        return "Rolled back: $($Data.policyId)"
+    }
+    return "No backup found for: $($Data.policyId)"
+}
+
+function Invoke-ApplyPolicyModule {
+    param([string]$Module, [PSObject]$Settings)
+    $wrapperSettings = @{ security = @{}; browser = $null; software = @{} }
+    switch ($Module) {
+        "password"   { $wrapperSettings.security.password = $Settings }
+        "screenLock" { $wrapperSettings.security.screenLock = $Settings }
+        "firewall"   { $wrapperSettings.security.firewall = $Settings }
+        "encryption" { $wrapperSettings.security.encryption = $Settings }
+        "audit"      { $wrapperSettings.security.audit = $Settings }
+        "browser"    { $wrapperSettings.browser = $Settings }
+        "updates"    { $wrapperSettings.software.updates = $Settings }
+    }
+    return Invoke-ApplyPolicy -Data @{ policyId = "module-$Module"; policyName = "Module: $Module"; settings = $wrapperSettings; enforceMode = "enforce"; notifyUser = $false }
 }
 
 # ============================================================================
