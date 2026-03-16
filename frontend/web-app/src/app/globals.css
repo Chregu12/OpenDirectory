@@ -1,3 +1,72 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    /* Background */
+    --od-bg-primary: theme('colors.gray.50');
+    --od-bg-card: theme('colors.white');
+    --od-bg-secondary: theme('colors.gray.100');
+    --od-bg-hover: theme('colors.gray.50');
+
+    /* Borders */
+    --od-border: theme('colors.gray.200');
+    --od-border-light: theme('colors.gray.100');
+
+    /* Text */
+    --od-text-primary: theme('colors.gray.900');
+    --od-text-secondary: theme('colors.gray.500');
+    --od-text-muted: theme('colors.gray.400');
+
+    /* Accent */
+    --od-accent: theme('colors.blue.600');
+    --od-accent-light: theme('colors.blue.50');
+  }
+}
+
+@layer components {
+  /* Unified card style */
+  .od-card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100;
+  }
+
+  /* Severity badges - light theme */
+  .od-badge-critical {
+    @apply bg-red-100 text-red-700;
+  }
+  .od-badge-high {
+    @apply bg-orange-100 text-orange-700;
+  }
+  .od-badge-medium {
+    @apply bg-yellow-100 text-yellow-700;
+  }
+  .od-badge-low {
+    @apply bg-blue-100 text-blue-700;
+  }
+
+  /* Status badges */
+  .od-badge-success {
+    @apply bg-green-100 text-green-800;
+  }
+  .od-badge-warning {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+  .od-badge-danger {
+    @apply bg-red-100 text-red-800;
+  }
+  .od-badge-info {
+    @apply bg-blue-100 text-blue-800;
+  }
+
+  /* Tab styles */
+  .od-tab {
+    @apply px-4 py-2 text-sm rounded-t-lg transition-colors;
+  }
+  .od-tab-active {
+    @apply bg-white text-gray-900 border-t border-x border-gray-200 shadow-sm;
+  }
+  .od-tab-inactive {
+    @apply text-gray-500 hover:text-gray-700 hover:bg-gray-100;
+  }
+}

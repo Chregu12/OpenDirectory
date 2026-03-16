@@ -103,11 +103,23 @@ const mockConflicts: PolicyConflict[] = [
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const severityColor = (s: string) =>
-  s === 'critical' ? 'text-red-400 bg-red-900/30 border-red-800' :
-  s === 'high' ? 'text-orange-400 bg-orange-900/30 border-orange-800' :
-  s === 'medium' ? 'text-yellow-400 bg-yellow-900/30 border-yellow-800' :
-  'text-blue-400 bg-blue-900/30 border-blue-800';
+const sevBadge = (s: string) =>
+  s === 'critical' ? 'od-badge-critical' :
+  s === 'high' ? 'od-badge-high' :
+  s === 'medium' ? 'od-badge-medium' :
+  'od-badge-low';
+
+const severityBorder = (s: string) =>
+  s === 'critical' ? 'border-red-200' :
+  s === 'high' ? 'border-orange-200' :
+  s === 'medium' ? 'border-yellow-200' :
+  'border-blue-200';
+
+const riskBadge = (s: string) =>
+  s === 'critical' ? 'bg-red-100 text-red-700' :
+  s === 'high' ? 'bg-orange-100 text-orange-700' :
+  s === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+  'bg-blue-100 text-blue-700';
 
 const timelineColor = (type: string) =>
   type === 'enrolled' ? 'bg-blue-500' :
@@ -116,6 +128,12 @@ const timelineColor = (type: string) =>
   type === 'compliance_gained' ? 'bg-green-500' :
   type === 'compliance_lost' ? 'bg-red-500' :
   'bg-amber-500';
+
+const timelineBadge = (type: string) =>
+  type === 'compliance_lost' ? 'bg-red-100 text-red-700' :
+  type === 'compliance_gained' ? 'bg-green-100 text-green-700' :
+  type === 'remediated' ? 'bg-amber-100 text-amber-700' :
+  'bg-gray-100 text-gray-600';
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -129,21 +147,20 @@ export default function PolicySimulatorView() {
 
   const runSimulation = useCallback(async () => {
     setSimulating(true);
-    // Simulate processing time
     await new Promise(r => setTimeout(r, 1500));
     setSimulating(false);
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-gray-950 text-gray-100">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-800">
-        <h1 className="text-xl font-bold flex items-center gap-2"><BeakerIcon className="w-6 h-6 text-purple-400" /> Policy Simulator</h1>
+      <div className="px-6 py-4 border-b border-gray-200">
+        <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2"><BeakerIcon className="w-6 h-6 text-purple-600" /> Policy Simulator</h1>
         <p className="text-sm text-gray-500">What-if analysis, drift detection, compliance timeline</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 px-6 pt-3 border-b border-gray-800">
+      <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 bg-gray-50">
         {([
           ['simulate', 'What-If Simulator'],
           ['drift', `Drift Detection (${mockDrift.length})`],
@@ -151,7 +168,7 @@ export default function PolicySimulatorView() {
           ['conflicts', `Policy Conflicts (${mockConflicts.length})`],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setActiveTab(key)}
-            className={`px-4 py-2 text-sm rounded-t-lg transition-colors ${activeTab === key ? 'bg-gray-800 text-white border-t border-x border-gray-700' : 'text-gray-500 hover:text-gray-300'}`}>
+            className={`od-tab ${activeTab === key ? 'od-tab-active' : 'od-tab-inactive'}`}>
             {label}
           </button>
         ))}
@@ -163,13 +180,13 @@ export default function PolicySimulatorView() {
         {activeTab === 'simulate' && (
           <div className="space-y-6">
             {/* Input form */}
-            <div className="p-4 rounded-lg bg-gray-900 border border-gray-800">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Run Simulation</h3>
+            <div className="od-card p-4">
+              <h3 className="text-sm font-semibold text-gray-600 mb-3">Run Simulation</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-xs text-gray-500">Policy</label>
                   <select value={selectedPolicy} onChange={e => setSelectedPolicy(e.target.value)}
-                    className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                    className="w-full mt-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
                     <option>Update Ring A</option>
                     <option>Update Ring B</option>
                     <option>Security Baseline</option>
@@ -181,13 +198,13 @@ export default function PolicySimulatorView() {
                 <div>
                   <label className="text-xs text-gray-500">Change Description</label>
                   <input value={changeDescription} onChange={e => setChangeDescription(e.target.value)}
-                    className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" />
+                    className="w-full mt-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
                 </div>
                 <div className="flex items-end">
                   <button onClick={runSimulation} disabled={simulating}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 rounded-lg text-sm flex items-center gap-2">
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-lg text-sm text-white flex items-center gap-2 shadow-sm">
                     {simulating ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PlayIcon className="w-4 h-4" />}
-                    {simulating ? 'Simulating…' : 'Run Simulation'}
+                    {simulating ? 'Simulating...' : 'Run Simulation'}
                   </button>
                 </div>
               </div>
@@ -195,42 +212,42 @@ export default function PolicySimulatorView() {
 
             {/* Results */}
             {results.map(sim => (
-              <div key={sim.id} className={`p-4 rounded-lg border ${severityColor(sim.impact.riskLevel)}`}>
+              <div key={sim.id} className={`od-card p-4 ${severityBorder(sim.impact.riskLevel)}`}>
                 <div className="flex justify-between items-start mb-3">
                   <div>
-                    <h3 className="font-semibold flex items-center gap-2">
-                      <DocumentTextIcon className="w-5 h-5" />
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <DocumentTextIcon className="w-5 h-5 text-gray-400" />
                       {sim.policyName}: {sim.change}
                     </h3>
                     <span className="text-xs text-gray-500">{new Date(sim.timestamp).toLocaleString()}</span>
                   </div>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${sim.impact.riskLevel === 'high' ? 'bg-orange-900 text-orange-300' : 'bg-yellow-900 text-yellow-300'}`}>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${riskBadge(sim.impact.riskLevel)}`}>
                     {sim.impact.riskLevel.toUpperCase()} RISK
                   </span>
                 </div>
 
                 {/* Impact metrics */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                  <div className="p-3 bg-gray-950/50 rounded">
-                    <div className="text-2xl font-bold text-blue-400">{sim.impact.devicesAffected}</div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">{sim.impact.devicesAffected}</div>
                     <div className="text-xs text-gray-500">Devices Affected</div>
                   </div>
-                  <div className="p-3 bg-gray-950/50 rounded">
-                    <div className="text-2xl font-bold text-purple-400">{sim.impact.usersAffected}</div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">{sim.impact.usersAffected}</div>
                     <div className="text-xs text-gray-500">Users Impacted</div>
                   </div>
-                  <div className="p-3 bg-gray-950/50 rounded">
+                  <div className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold text-green-400">{sim.impact.complianceChange.before}%</span>
-                      <ChevronRightIcon className="w-3 h-3 text-gray-500" />
-                      <span className={`text-2xl font-bold ${sim.impact.complianceChange.after < sim.impact.complianceChange.before ? 'text-red-400' : 'text-green-400'}`}>
+                      <span className="text-2xl font-bold text-green-600">{sim.impact.complianceChange.before}%</span>
+                      <ChevronRightIcon className="w-3 h-3 text-gray-400" />
+                      <span className={`text-2xl font-bold ${sim.impact.complianceChange.after < sim.impact.complianceChange.before ? 'text-red-600' : 'text-green-600'}`}>
                         {sim.impact.complianceChange.after}%
                       </span>
                     </div>
                     <div className="text-xs text-gray-500">Compliance Change</div>
                   </div>
-                  <div className="p-3 bg-gray-950/50 rounded">
-                    <div className="text-2xl font-bold text-cyan-400">{sim.impact.osUpgradeTriggered}</div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="text-2xl font-bold text-cyan-600">{sim.impact.osUpgradeTriggered}</div>
                     <div className="text-xs text-gray-500">OS Upgrades Triggered</div>
                   </div>
                 </div>
@@ -239,7 +256,7 @@ export default function PolicySimulatorView() {
                 {sim.warnings.length > 0 && (
                   <div className="space-y-1">
                     {sim.warnings.map((w, i) => (
-                      <div key={i} className="flex items-start gap-2 text-sm text-yellow-400">
+                      <div key={i} className="flex items-start gap-2 text-sm text-yellow-700">
                         <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 shrink-0" />
                         {w}
                       </div>
@@ -250,7 +267,7 @@ export default function PolicySimulatorView() {
                 <div className="flex gap-2 mt-3">
                   <span className="text-xs text-gray-500">Affected groups:</span>
                   {sim.affectedGroups.map(g => (
-                    <span key={g} className="text-xs px-2 py-0.5 bg-purple-900/30 text-purple-300 rounded">{g}</span>
+                    <span key={g} className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded">{g}</span>
                   ))}
                 </div>
               </div>
@@ -262,34 +279,34 @@ export default function PolicySimulatorView() {
         {activeTab === 'drift' && (
           <div className="space-y-3">
             <p className="text-sm text-gray-500 mb-4">Devices where actual configuration differs from expected policy state.</p>
-            <div className="overflow-x-auto">
+            <div className="od-card overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-gray-500 border-b border-gray-800">
-                    <th className="pb-2 pr-4">Device</th>
-                    <th className="pb-2 pr-4">Policy</th>
-                    <th className="pb-2 pr-4">Expected</th>
-                    <th className="pb-2 pr-4">Actual</th>
-                    <th className="pb-2 pr-4">Severity</th>
-                    <th className="pb-2">Detected</th>
+                  <tr className="text-left text-gray-500 border-b border-gray-200 bg-gray-50">
+                    <th className="px-4 py-3">Device</th>
+                    <th className="px-4 py-3">Policy</th>
+                    <th className="px-4 py-3">Expected</th>
+                    <th className="px-4 py-3">Actual</th>
+                    <th className="px-4 py-3">Severity</th>
+                    <th className="px-4 py-3">Detected</th>
                   </tr>
                 </thead>
                 <tbody>
                   {mockDrift.map(d => (
-                    <tr key={`${d.deviceId}-${d.policyName}`} className="border-b border-gray-900 hover:bg-gray-900/50">
-                      <td className="py-3 pr-4 font-medium flex items-center gap-2">
-                        <ComputerDesktopIcon className="w-4 h-4 text-gray-500" />
+                    <tr key={`${d.deviceId}-${d.policyName}`} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium text-gray-900 flex items-center gap-2">
+                        <ComputerDesktopIcon className="w-4 h-4 text-gray-400" />
                         {d.deviceName}
                       </td>
-                      <td className="py-3 pr-4 text-gray-400">{d.policyName}</td>
-                      <td className="py-3 pr-4 text-green-400">{d.expectedState}</td>
-                      <td className="py-3 pr-4 text-red-400">{d.actualState}</td>
-                      <td className="py-3 pr-4">
-                        <span className={`px-2 py-0.5 rounded text-xs ${d.severity === 'critical' ? 'bg-red-900/40 text-red-300' : d.severity === 'high' ? 'bg-orange-900/40 text-orange-300' : 'bg-yellow-900/40 text-yellow-300'}`}>
+                      <td className="px-4 py-3 text-gray-600">{d.policyName}</td>
+                      <td className="px-4 py-3 text-green-700">{d.expectedState}</td>
+                      <td className="px-4 py-3 text-red-600">{d.actualState}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded text-xs ${sevBadge(d.severity)}`}>
                           {d.severity}
                         </span>
                       </td>
-                      <td className="py-3 text-gray-500">{new Date(d.detectedAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-3 text-gray-500">{new Date(d.detectedAt).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -304,7 +321,7 @@ export default function PolicySimulatorView() {
             <div className="flex items-center gap-3">
               <label className="text-sm text-gray-500">Device:</label>
               <select value={timelineDevice} onChange={e => setTimelineDevice(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm">
+                className="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
                 <option>LAPTOP-23</option>
                 <option>WS-001</option>
                 <option>SRV-DC01</option>
@@ -316,23 +333,18 @@ export default function PolicySimulatorView() {
                 <div key={i} className="relative mb-6 last:mb-0">
                   {/* Vertical line */}
                   {i < mockTimeline.length - 1 && (
-                    <div className="absolute left-[-20px] top-6 w-0.5 h-full bg-gray-800" />
+                    <div className="absolute left-[-20px] top-6 w-0.5 h-full bg-gray-200" />
                   )}
                   {/* Dot */}
-                  <div className={`absolute left-[-24px] top-1.5 w-3 h-3 rounded-full ${timelineColor(evt.type)} ring-2 ring-gray-950`} />
+                  <div className={`absolute left-[-24px] top-1.5 w-3 h-3 rounded-full ${timelineColor(evt.type)} ring-2 ring-white`} />
                   {/* Content */}
-                  <div className="p-3 rounded-lg bg-gray-900 border border-gray-800">
+                  <div className="od-card p-3">
                     <div className="flex justify-between items-start">
-                      <h4 className="font-medium text-sm">{evt.event}</h4>
+                      <h4 className="font-medium text-sm text-gray-900">{evt.event}</h4>
                       <span className="text-xs text-gray-500">{evt.timestamp}</span>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">{evt.details}</p>
-                    <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded ${
-                      evt.type === 'compliance_lost' ? 'bg-red-900/30 text-red-400' :
-                      evt.type === 'compliance_gained' ? 'bg-green-900/30 text-green-400' :
-                      evt.type === 'remediated' ? 'bg-amber-900/30 text-amber-400' :
-                      'bg-gray-800 text-gray-400'
-                    }`}>
+                    <p className="text-xs text-gray-500 mt-1">{evt.details}</p>
+                    <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded ${timelineBadge(evt.type)}`}>
                       {evt.type.replace('_', ' ')}
                     </span>
                   </div>
@@ -347,20 +359,20 @@ export default function PolicySimulatorView() {
           <div className="space-y-4">
             <p className="text-sm text-gray-500">Conflicting or overlapping policy assignments.</p>
             {mockConflicts.map((c, i) => (
-              <div key={i} className="p-4 rounded-lg bg-gray-900 border border-yellow-800/50">
+              <div key={i} className="od-card p-4 border-yellow-200">
                 <div className="flex items-start gap-2 mb-2">
                   <ExclamationTriangleIcon className="w-5 h-5 text-yellow-500 shrink-0" />
                   <div>
-                    <h3 className="font-semibold text-sm">{c.conflictType}</h3>
+                    <h3 className="font-semibold text-sm text-gray-900">{c.conflictType}</h3>
                     <div className="flex gap-2 mt-1">
                       {c.policies.map(p => (
-                        <span key={p} className="text-xs px-2 py-0.5 bg-gray-800 rounded text-gray-300">{p}</span>
+                        <span key={p} className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-700">{p}</span>
                       ))}
                     </div>
                   </div>
                 </div>
-                <p className="text-sm text-gray-400 mb-2">{c.description}</p>
-                <div className="flex items-start gap-2 text-sm text-green-400">
+                <p className="text-sm text-gray-600 mb-2">{c.description}</p>
+                <div className="flex items-start gap-2 text-sm text-green-700">
                   <CheckCircleIcon className="w-4 h-4 mt-0.5 shrink-0" />
                   <span>{c.resolution}</span>
                 </div>

@@ -166,6 +166,26 @@ const riskTrends = [
   { date: '2026-03-15', score: 68 },
 ];
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+const sevBadge = (s: string) =>
+  s === 'critical' ? 'od-badge-critical' :
+  s === 'high' ? 'od-badge-high' :
+  s === 'medium' ? 'od-badge-medium' :
+  'od-badge-low';
+
+const sevDot = (s: string) =>
+  s === 'critical' ? 'bg-red-500' :
+  s === 'high' ? 'bg-orange-500' :
+  s === 'medium' ? 'bg-yellow-500' :
+  'bg-blue-500';
+
+const sevText = (s: string) =>
+  s === 'critical' ? 'text-red-600' :
+  s === 'high' ? 'text-orange-600' :
+  s === 'medium' ? 'text-yellow-600' :
+  'text-blue-600';
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function SecurityScannerView() {
@@ -193,27 +213,27 @@ export default function SecurityScannerView() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-950 text-gray-100">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
         <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <ShieldExclamationIcon className="w-6 h-6 text-red-400" /> Security Exposure Scanner
+          <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <ShieldExclamationIcon className="w-6 h-6 text-red-600" /> Security Exposure Scanner
           </h1>
           <p className="text-sm text-gray-500">CIS, NIST, DISA STIG compliance benchmarking</p>
         </div>
         <button onClick={startScan} disabled={scanning}
-          className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 rounded-lg text-sm flex items-center gap-2">
+          className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg text-sm text-white flex items-center gap-2 shadow-sm">
           {scanning ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PlayIcon className="w-4 h-4" />}
-          {scanning ? 'Scanning…' : 'Run Scan'}
+          {scanning ? 'Scanning...' : 'Run Scan'}
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 px-6 pt-3 border-b border-gray-800">
+      <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 bg-gray-50">
         {([['overview', 'Overview'], ['findings', `Findings (${mockScan.totalFindings})`], ['trends', 'Risk Trends']] as const).map(([key, label]) => (
           <button key={key} onClick={() => setActiveTab(key)}
-            className={`px-4 py-2 text-sm rounded-t-lg transition-colors ${activeTab === key ? 'bg-gray-800 text-white border-t border-x border-gray-700' : 'text-gray-500 hover:text-gray-300'}`}>
+            className={`od-tab ${activeTab === key ? 'od-tab-active' : 'od-tab-inactive'}`}>
             {label}
           </button>
         ))}
@@ -225,16 +245,16 @@ export default function SecurityScannerView() {
           <div className="space-y-6">
             {/* Risk score + severity cards */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div className="p-5 rounded-lg bg-gray-900 border border-gray-800 col-span-1 text-center">
-                <div className={`text-5xl font-bold ${mockScan.overallRiskScore > 70 ? 'text-red-400' : mockScan.overallRiskScore > 50 ? 'text-orange-400' : 'text-green-400'}`}>
+              <div className="od-card p-5 col-span-1 text-center">
+                <div className={`text-5xl font-bold ${mockScan.overallRiskScore > 70 ? 'text-red-600' : mockScan.overallRiskScore > 50 ? 'text-orange-600' : 'text-green-600'}`}>
                   {mockScan.overallRiskScore}
                 </div>
                 <div className="text-sm text-gray-500 mt-1">Risk Score</div>
-                <div className="text-xs text-gray-600 mt-1">Last scan: {new Date(mockScan.timestamp).toLocaleDateString()}</div>
+                <div className="text-xs text-gray-400 mt-1">Last scan: {new Date(mockScan.timestamp).toLocaleDateString()}</div>
               </div>
               {Object.entries(mockScan.bySeverity).map(([sev, count]) => (
-                <div key={sev} className="p-4 rounded-lg bg-gray-900 border border-gray-800">
-                  <div className={`text-3xl font-bold ${sev === 'critical' ? 'text-red-400' : sev === 'high' ? 'text-orange-400' : sev === 'medium' ? 'text-yellow-400' : 'text-blue-400'}`}>
+                <div key={sev} className="od-card p-4">
+                  <div className={`text-3xl font-bold ${sevText(sev)}`}>
                     {count}
                   </div>
                   <div className="text-sm text-gray-500 capitalize">{sev}</div>
@@ -243,17 +263,17 @@ export default function SecurityScannerView() {
             </div>
 
             {/* Category breakdown */}
-            <div className="p-4 rounded-lg bg-gray-900 border border-gray-800">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Findings by Category</h3>
+            <div className="od-card p-4">
+              <h3 className="text-sm font-semibold text-gray-600 mb-3">Findings by Category</h3>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 {['gpo', 'privilege', 'device', 'network', 'identity'].map(cat => {
                   const count = mockScan.findings.filter(f => f.category === cat).length;
                   const Icon = categoryIcons[cat];
                   return (
-                    <div key={cat} className="flex items-center gap-2 p-2 rounded bg-gray-950">
-                      <Icon className="w-5 h-5 text-gray-500" />
+                    <div key={cat} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
+                      <Icon className="w-5 h-5 text-gray-400" />
                       <div>
-                        <div className="text-lg font-bold">{count}</div>
+                        <div className="text-lg font-bold text-gray-900">{count}</div>
                         <div className="text-xs text-gray-500 capitalize">{cat === 'gpo' ? 'GPO' : cat}</div>
                       </div>
                     </div>
@@ -263,13 +283,13 @@ export default function SecurityScannerView() {
             </div>
 
             {/* Top critical findings */}
-            <div className="p-4 rounded-lg bg-gray-900 border border-red-900/30">
-              <h3 className="text-sm font-semibold text-red-400 mb-3">Critical Findings Requiring Immediate Action</h3>
+            <div className="od-card p-4 border-red-200">
+              <h3 className="text-sm font-semibold text-red-600 mb-3">Critical Findings Requiring Immediate Action</h3>
               {mockScan.findings.filter(f => f.severity === 'critical').map(f => (
                 <div key={f.id} className="flex items-start gap-3 mb-3 last:mb-0">
                   <XCircleIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                   <div>
-                    <div className="font-medium text-sm">{f.title}</div>
+                    <div className="font-medium text-sm text-gray-900">{f.title}</div>
                     <div className="text-xs text-gray-500">{f.description}</div>
                   </div>
                 </div>
@@ -285,7 +305,7 @@ export default function SecurityScannerView() {
             <div className="flex gap-2">
               {['all', 'critical', 'high', 'medium', 'low'].map(s => (
                 <button key={s} onClick={() => setSeverityFilter(s)}
-                  className={`px-3 py-1 text-xs rounded-lg ${severityFilter === s ? 'bg-gray-700 text-white' : 'bg-gray-900 text-gray-500 hover:text-gray-300'}`}>
+                  className={`px-3 py-1 text-xs rounded-lg ${severityFilter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200'}`}>
                   {s === 'all' ? `All (${mockScan.totalFindings})` : `${s} (${mockScan.bySeverity[s] || 0})`}
                 </button>
               ))}
@@ -295,39 +315,39 @@ export default function SecurityScannerView() {
               const expanded = expandedFinding === f.id;
               const Icon = categoryIcons[f.category];
               return (
-                <div key={f.id} className="rounded-lg bg-gray-900 border border-gray-800 overflow-hidden">
+                <div key={f.id} className="od-card overflow-hidden">
                   <button onClick={() => setExpandedFinding(expanded ? null : f.id)}
-                    className="w-full p-4 flex items-start gap-3 text-left hover:bg-gray-800/50">
-                    <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${f.severity === 'critical' ? 'bg-red-500' : f.severity === 'high' ? 'bg-orange-500' : f.severity === 'medium' ? 'bg-yellow-500' : 'bg-blue-500'}`} />
-                    <Icon className="w-5 h-5 text-gray-500 shrink-0" />
+                    className="w-full p-4 flex items-start gap-3 text-left hover:bg-gray-50">
+                    <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${sevDot(f.severity)}`} />
+                    <Icon className="w-5 h-5 text-gray-400 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm">{f.title}</div>
+                      <div className="font-medium text-sm text-gray-900">{f.title}</div>
                       <div className="text-xs text-gray-500 mt-0.5">{f.benchmark}</div>
                     </div>
-                    <span className={`px-2 py-0.5 rounded text-xs shrink-0 ${f.severity === 'critical' ? 'bg-red-900/40 text-red-300' : f.severity === 'high' ? 'bg-orange-900/40 text-orange-300' : f.severity === 'medium' ? 'bg-yellow-900/40 text-yellow-300' : 'bg-blue-900/40 text-blue-300'}`}>
+                    <span className={`px-2 py-0.5 rounded text-xs shrink-0 ${sevBadge(f.severity)}`}>
                       {f.severity}
                     </span>
-                    {expanded ? <ChevronUpIcon className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronDownIcon className="w-4 h-4 text-gray-500 shrink-0" />}
+                    {expanded ? <ChevronUpIcon className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronDownIcon className="w-4 h-4 text-gray-400 shrink-0" />}
                   </button>
                   {expanded && (
-                    <div className="px-4 pb-4 border-t border-gray-800 pt-3 space-y-3">
-                      <p className="text-sm text-gray-400">{f.description}</p>
+                    <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-3">
+                      <p className="text-sm text-gray-600">{f.description}</p>
                       <div>
                         <h4 className="text-xs text-gray-500 uppercase mb-1">Affected Entities</h4>
                         <div className="flex flex-wrap gap-1">
                           {f.affectedEntities.map(e => (
-                            <span key={e} className="text-xs px-2 py-0.5 bg-gray-800 rounded text-gray-300">{e}</span>
+                            <span key={e} className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-700">{e}</span>
                           ))}
                         </div>
                       </div>
-                      <div className="flex items-start gap-2 text-sm text-green-400">
+                      <div className="flex items-start gap-2 text-sm text-green-700">
                         <WrenchScrewdriverIcon className="w-4 h-4 mt-0.5 shrink-0" />
                         <span>{f.remediation}</span>
                       </div>
                       {f.remediationScript && (
                         <div>
                           <h4 className="text-xs text-gray-500 uppercase mb-1">Remediation Script</h4>
-                          <pre className="p-3 bg-gray-950 rounded text-xs text-green-300 overflow-x-auto font-mono">{f.remediationScript}</pre>
+                          <pre className="p-3 bg-gray-900 rounded-lg text-xs text-green-400 overflow-x-auto font-mono">{f.remediationScript}</pre>
                         </div>
                       )}
                     </div>
@@ -341,22 +361,22 @@ export default function SecurityScannerView() {
         {/* ── Risk Trends ────────────────────────────────────────────────── */}
         {activeTab === 'trends' && (
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-400">Risk Score Over Time</h3>
-            <div className="p-4 rounded-lg bg-gray-900 border border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-600">Risk Score Over Time</h3>
+            <div className="od-card p-4">
               <div className="flex items-end gap-4 h-48">
                 {riskTrends.map((t, i) => (
                   <div key={t.date} className="flex-1 flex flex-col items-center gap-2">
-                    <span className="text-xs text-gray-400">{t.score}</span>
+                    <span className="text-xs text-gray-600">{t.score}</span>
                     <div className="w-full relative" style={{ height: `${t.score * 1.8}px` }}>
-                      <div className={`absolute bottom-0 w-full rounded-t ${t.score > 70 ? 'bg-red-600' : t.score > 50 ? 'bg-orange-600' : 'bg-green-600'}`}
+                      <div className={`absolute bottom-0 w-full rounded-t ${t.score > 70 ? 'bg-red-500' : t.score > 50 ? 'bg-orange-500' : 'bg-green-500'}`}
                         style={{ height: '100%' }} />
                     </div>
-                    <span className="text-xs text-gray-600">{new Date(t.date).toLocaleDateString('de-DE', { month: 'short', day: 'numeric' })}</span>
+                    <span className="text-xs text-gray-500">{new Date(t.date).toLocaleDateString('de-DE', { month: 'short', day: 'numeric' })}</span>
                   </div>
                 ))}
               </div>
               <div className="mt-4 text-sm text-gray-500 text-center">
-                Trend: <span className="text-green-400">Improving</span> (-6 points in 30 days)
+                Trend: <span className="text-green-600 font-medium">Improving</span> (-6 points in 30 days)
               </div>
             </div>
           </div>
