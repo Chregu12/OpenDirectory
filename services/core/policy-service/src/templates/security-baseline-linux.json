@@ -1,0 +1,89 @@
+{
+  "id": "tpl-security-baseline-linux",
+  "name": "CIS Linux Security Baseline",
+  "description": "Linux security baseline aligned with CIS Benchmark Level 1 (distribution-independent). Covers PAM password quality, kernel hardening via sysctl, SSH hardening, firewall, automatic updates, and user policy.",
+  "type": "security",
+  "platform": "linux",
+  "version": "1.0.0",
+  "settings": {
+    "password": {
+      "minLength": 14,
+      "maxAge": 60,
+      "minAge": 1,
+      "history": 24,
+      "complexity": true,
+      "requireDigit": true,
+      "requireUppercase": true,
+      "requireLowercase": true,
+      "requireSymbol": true,
+      "minClasses": 3,
+      "maxRepeat": 3,
+      "maxClassRepeat": 4,
+      "dictionaryCheck": true,
+      "warnAge": 14
+    },
+    "lockout": {
+      "threshold": 5,
+      "duration": 30,
+      "window": 30,
+      "lockRoot": false
+    },
+    "network": {
+      "ipForwarding": false,
+      "icmpRedirects": false,
+      "sourceRouting": false,
+      "synCookies": true,
+      "rpFilter": true
+    },
+    "kernel": {
+      "sysrq": 0,
+      "coreDumps": false,
+      "aslr": true,
+      "dmesgRestrict": true,
+      "kptrRestrict": true
+    },
+    "ssh": {
+      "enabled": true,
+      "port": 22,
+      "permitRootLogin": "no",
+      "passwordAuth": false,
+      "maxAuthTries": 3,
+      "loginGraceTime": 60,
+      "clientAliveInterval": 300,
+      "clientAliveCountMax": 3,
+      "allowTcpForwarding": false,
+      "x11Forwarding": false
+    },
+    "firewall": {
+      "enabled": true,
+      "backend": "nftables",
+      "defaultInbound": "drop",
+      "defaultOutbound": "accept",
+      "defaultForward": "drop"
+    },
+    "updates": {
+      "autoInstall": true,
+      "securityOnly": false,
+      "autoReboot": false,
+      "rebootTime": "03:00",
+      "maxDeferDays": 7,
+      "removeUnused": true
+    },
+    "audit": {
+      "enabled": true
+    },
+    "users": {
+      "umask": "027",
+      "shellTimeout": 900,
+      "secureTTY": ["tty1"],
+      "suRestrictGroup": "wheel"
+    },
+    "encryption": {
+      "required": true,
+      "algorithm": "AES-256",
+      "cipher": "aes-xts-plain64",
+      "keySize": 512,
+      "hash": "sha256"
+    }
+  }
+}

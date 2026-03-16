@@ -1,0 +1,62 @@
+{
+  "id": "tpl-security-baseline-macos",
+  "name": "CIS macOS Security Baseline",
+  "description": "macOS security baseline aligned with CIS Benchmark Level 1. Covers password policy, FileVault encryption, Gatekeeper, firewall, software updates, and privacy controls.",
+  "type": "security",
+  "platform": "macos",
+  "version": "1.0.0",
+  "settings": {
+    "password": {
+      "minLength": 14,
+      "maxAge": 60,
+      "minAge": 1,
+      "history": 24,
+      "complexity": true,
+      "requireSymbol": true
+    },
+    "lockout": {
+      "threshold": 5,
+      "duration": 30,
+      "window": 30
+    },
+    "screenLock": {
+      "timeout": 10,
+      "graceSeconds": 5
+    },
+    "firewall": {
+      "enabled": true,
+      "stealthMode": true,
+      "blockAllIncoming": false,
+      "allowSignedApps": true
+    },
+    "encryption": {
+      "required": true,
+      "algorithm": "AES-256",
+      "recoveryKey": true,
+      "institutionalKey": false,
+      "deferAtLogin": false,
+      "maxBypassAttempts": 3,
+      "showRecoveryKey": true,
+      "escrowDescription": "OpenDirectory Server"
+    },
+    "gatekeeper": {
+      "enabled": true,
+      "allowIdentifiedDevelopers": true
+    },
+    "updates": {
+      "autoCheck": true,
+      "autoDownload": true,
+      "autoInstall": true,
+      "criticalAutoInstall": true,
+      "maxDeferDays": 7
+    },
+    "restrictions": {
+      "allowCamera": true,
+      "allowAirDrop": true,
+      "allowiCloud": false
+    },
+    "ssh": {
+      "enabled": false
+    }
+  }
+}

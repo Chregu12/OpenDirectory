@@ -1,0 +1,63 @@
+{
+  "id": "tpl-security-baseline-windows",
+  "name": "CIS Windows Security Baseline",
+  "description": "Comprehensive Windows security baseline aligned with CIS Benchmark Level 1. Enforces password policy, account lockout, audit settings, firewall, SMB signing, and common hardening registry keys.",
+  "type": "security",
+  "platform": "windows",
+  "version": "1.0.0",
+  "settings": {
+    "password": {
+      "minLength": 14,
+      "maxAge": 60,
+      "minAge": 1,
+      "history": 24,
+      "complexity": true
+    },
+    "lockout": {
+      "threshold": 5,
+      "duration": 30,
+      "window": 30
+    },
+    "screenLock": {
+      "timeout": 15
+    },
+    "firewall": {
+      "enabled": true,
+      "defaultInbound": "block",
+      "defaultOutbound": "allow"
+    },
+    "antivirus": {
+      "enabled": true,
+      "realTimeProtection": true
+    },
+    "audit": {
+      "accountLogon": "success,failure",
+      "accountManagement": "success,failure",
+      "dsAccess": "success",
+      "logon": "success,failure",
+      "objectAccess": "failure",
+      "policyChange": "success,failure",
+      "privilegeUse": "failure",
+      "processTracking": "no_auditing",
+      "systemEvents": "success,failure"
+    },
+    "network": {
+      "smbSigning": true
+    },
+    "remoteDesktop": {
+      "enabled": false,
+      "nla": true
+    },
+    "updates": {
+      "autoInstall": true,
+      "maxDeferDays": 7
+    },
+    "encryption": {
+      "required": true,
+      "algorithm": "AES-256",
+      "requireTPM": true,
+      "recoveryPassword": true,
+      "recoveryKey": true
+    }
+  }
+}

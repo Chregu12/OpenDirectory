@@ -1,0 +1,59 @@
+{
+  "id": "tpl-firewall-standard",
+  "name": "Standard Firewall Rules",
+  "description": "Default-deny inbound firewall policy with explicit allow rules for common enterprise services. Applicable to all platforms.",
+  "type": "firewall",
+  "platform": "all",
+  "version": "1.0.0",
+  "settings": {
+    "firewall": {
+      "enabled": true,
+      "defaultInbound": "block",
+      "defaultOutbound": "allow",
+      "stealthMode": true,
+      "rules": {
+        "dns": {
+          "name": "Allow DNS",
+          "direction": "outbound",
+          "action": "allow",
+          "protocol": "udp",
+          "remotePort": "53"
+        },
+        "https": {
+          "name": "Allow HTTPS Outbound",
+          "direction": "outbound",
+          "action": "allow",
+          "protocol": "tcp",
+          "remotePort": "443"
+        },
+        "http": {
+          "name": "Allow HTTP Outbound",
+          "direction": "outbound",
+          "action": "allow",
+          "protocol": "tcp",
+          "remotePort": "80"
+        },
+        "ssh-in": {
+          "name": "Allow SSH Inbound",
+          "direction": "inbound",
+          "action": "allow",
+          "protocol": "tcp",
+          "localPort": "22"
+        },
+        "rdp-block": {
+          "name": "Block RDP from External",
+          "direction": "inbound",
+          "action": "block",
+          "protocol": "tcp",
+          "localPort": "3389"
+        },
+        "icmp": {
+          "name": "Allow ICMP Ping",
+          "direction": "inbound",
+          "action": "allow",
+          "protocol": "icmp"
+        }
+      }
+    }
+  }
+}
