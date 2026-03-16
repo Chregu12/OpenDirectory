@@ -303,6 +303,127 @@ function Invoke-AgentCommand {
                 $Result.output = Invoke-RemoveEmail -Json $json
             }
 
+            # ── Compliance Scanning Commands ───────────────────────────────
+            "compliance_scan" {
+                $results = @()
+                foreach ($check in $Command.data.checks) {
+                    $passed = $false
+                    $actual = $null
+                    try {
+                        switch ($check.type) {
+                            "registry" {
+                                try {
+                                    $actual = Get-ItemPropertyValue -Path "Registry::$($check.path)" -Name $check.key -ErrorAction Stop
+                                    switch ($check.operator) {
+                                        ">=" { $passed = $actual -ge $check.value }
+                                        "<=" { $passed = $actual -le $check.value }
+                                        "==" { $passed = $actual -eq $check.value }
+                                        "!=" { $passed = $actual -ne $check.value }
+                                    }
+                                } catch { $actual = "NOT_FOUND"; $passed = $false }
+                            }
+                            "service" {
+                                $svc = Get-Service -Name $check.serviceName -ErrorAction SilentlyContinue
+                                $actual = if ($svc) { $svc.Status.ToString() } else { "NOT_FOUND" }
+                                $passed = ($actual -eq $check.expectedStatus)
+                            }
+                            "firewall" {
+                                $fw = Get-NetFirewallProfile -Name $check.profile -ErrorAction SilentlyContinue
+                                $actual = if ($fw) { $fw.Enabled } else { $false }
+                                $passed = ($actual -eq $check.expected)
+                            }
+                            "bitlocker" {
+                                $bl = Get-BitLockerVolume -MountPoint $check.drive -ErrorAction SilentlyContinue
+                                $actual = if ($bl) { $bl.ProtectionStatus.ToString() } else { "NOT_FOUND" }
+                                $passed = ($actual -eq "On")
+                            }
+                            "windows_update" {
+                                $updates = Get-HotFix -ErrorAction SilentlyContinue | Sort-Object InstalledOn -Descending
+                                if ($updates -and $updates.Count -gt 0) {
+                                    $daysSince = ((Get-Date) - $updates[0].InstalledOn).Days
+                                    $actual = $daysSince
+                                    $passed = ($daysSince -le $check.maxDays)
+                                } else { $actual = 999; $passed = $false }
+                            }
+                            "antivirus" {
+                                try {
+                                    $av = Get-MpComputerStatus -ErrorAction Stop
+                                    $actual = $av.RealTimeProtectionEnabled
+                                    $passed = ($actual -eq $true)
+                                } catch { $actual = $false; $passed = $false }
+                            }
+                            "screen_lock" {
+                                $actual = Get-ItemPropertyValue -Path "Registry::HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "InactivityTimeoutSecs" -ErrorAction SilentlyContinue
+                                if ($null -eq $actual) { $actual = 0; $passed = $false }
+                                else { $passed = ($actual -le $check.maxSeconds -and $actual -gt 0) }
+                            }
+                        }
+                    } catch { $actual = "ERROR: $($_.Exception.Message)"; $passed = $false }
+                    $results += @{ checkId = $check.id; title = $check.title; passed = $passed; actual = $actual; expected = $check.value; severity = $check.severity; timestamp = (Get-Date -Format "o") }
+                }
+                $totalChecks = $results.Count
+                $passedChecks = ($results | Where-Object { $_.passed }).Count
+                $score = if ($totalChecks -gt 0) { [math]::Round(($passedChecks / $totalChecks) * 100, 1) } else { 0 }
+                $complianceResult = @{ type = "compliance_scan_result"; deviceId = (Get-DeviceId); baselineId = $Command.data.baselineId; results = $results; score = $score; totalChecks = $totalChecks; passedChecks = $passedChecks; scannedAt = (Get-Date -Format "o") }
+                $Result.output = ($complianceResult | ConvertTo-Json -Depth 5)
+            }
+
+            # ── App Store Commands ────────────────────────────────────────────
+            "store_install" {
+                $pkg = $Command.data.packageInfo
+                $storeResult = @{ appId = $Command.data.appId; status = "installing"; startedAt = (Get-Date -Format "o") }
+                try {
+                    switch ($pkg.type) {
+                        "winget" {
+                            $installResult = winget install --id $pkg.packageId --version $pkg.version --silent --accept-package-agreements --accept-source-agreements 2>&1
+                            $storeResult.status = if ($LASTEXITCODE -eq 0) { "completed" } else { "failed" }
+                            $storeResult.output = $installResult | Out-String
+                        }
+                        "msi" {
+                            Start-Process msiexec -ArgumentList "/i `"$($pkg.url)`" /qn /norestart" -Wait -NoNewWindow
+                            $storeResult.status = if ($LASTEXITCODE -eq 0) { "completed" } else { "failed" }
+                        }
+                        "exe" {
+                            Start-Process -FilePath $pkg.url -ArgumentList $pkg.installArgs -Wait -NoNewWindow
+                            $storeResult.status = if ($LASTEXITCODE -eq 0) { "completed" } else { "failed" }
+                        }
+                    }
+                } catch { $storeResult.status = "failed"; $storeResult.error = $_.Exception.Message }
+                $storeResult.completedAt = (Get-Date -Format "o")
+                Show-ODNotification -Title "App Installation" -Body "$($Command.data.appName): $($storeResult.status)" -Type $(if ($storeResult.status -eq "completed") {"Info"} else {"Warning"})
+                $Result.output = (@{ type = "store_install_result"; data = $storeResult } | ConvertTo-Json -Depth 3)
+            }
+            "store_uninstall" {
+                $pkg = $Command.data.packageInfo
+                try {
+                    $uninstallResult = winget uninstall --id $pkg.packageId --silent 2>&1
+                    $uninstallStatus = if ($LASTEXITCODE -eq 0) { "completed" } else { "failed" }
+                } catch { $uninstallStatus = "failed" }
+                $Result.output = (@{ type = "store_uninstall_result"; data = @{ appId = $Command.data.appId; status = $uninstallStatus } } | ConvertTo-Json -Depth 3)
+            }
+
+            # ── Domain Join Commands ──────────────────────────────────────────
+            "domain_join" {
+                try {
+                    $domain = $Command.data.domain
+                    $token = $Command.data.joinToken
+                    # Set DNS to point to Samba AD DC
+                    $dnsServers = $Command.data.dnsServers
+                    foreach ($adapter in (Get-NetAdapter | Where-Object Status -eq 'Up')) {
+                        Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dnsServers
+                    }
+                    # Verify DNS resolution
+                    $dcResolved = Resolve-DnsName -Name $domain -Type SRV -ErrorAction Stop
+                    # Join domain using provided credentials
+                    $secPassword = ConvertTo-SecureString $Command.data.password -AsPlainText -Force
+                    $cred = New-Object System.Management.Automation.PSCredential("$domain\$($Command.data.username)", $secPassword)
+                    Add-Computer -DomainName $domain -Credential $cred -OUPath $Command.data.ouPath -Force -ErrorAction Stop
+                    $joinStatus = "completed"
+                    $needsReboot = $true
+                } catch { $joinStatus = "failed"; $needsReboot = $false }
+                $Result.output = (@{ type = "domain_join_result"; data = @{ status = $joinStatus; domain = $Command.data.domain; needsReboot = $needsReboot } } | ConvertTo-Json -Depth 3)
+            }
+
             # ── Deployment/Compliance/Encryption Commands ─────────────────
             "zero_touch_deploy" {
                 $Result.output = Invoke-ZeroTouchDeploy -Command $Command

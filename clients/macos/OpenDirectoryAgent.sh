@@ -320,6 +320,140 @@ print(json.dumps({'status': 'success', 'module': module, 'message': f'Policy mod
             output=$(handle_execute_remediation "$json") || status="failed"
             ;;
 
+        # ── Compliance Scanning Commands ──────────────────────────────
+        compliance_scan)
+            output=$(python3 << 'PYEOF' "$json"
+import sys, json, subprocess, os
+from datetime import datetime
+
+data = json.loads(sys.argv[1]).get('data', {})
+checks = data.get('checks', [])
+results = []
+
+for check in checks:
+    passed = False
+    actual = None
+    try:
+        ctype = check.get('type', '')
+        if ctype == 'defaults':
+            domain = check.get('domain', '')
+            key = check.get('key', '')
+            val = subprocess.getoutput(f"defaults read {domain} {key} 2>/dev/null").strip()
+            actual = val if val else 'NOT_FOUND'
+            if check.get('operator') == '==':
+                passed = (actual == str(check.get('value', '')))
+            elif check.get('operator') == '>=':
+                try: passed = (int(actual) >= int(check['value']))
+                except: passed = False
+            elif check.get('operator') == '<=':
+                try: passed = (int(actual) <= int(check['value']))
+                except: passed = False
+            elif check.get('operator') == '!=':
+                passed = (actual != str(check.get('value', '')))
+        elif ctype == 'filevault':
+            fv_status = subprocess.getoutput('fdesetup status 2>/dev/null')
+            actual = 'On' if 'FileVault is On' in fv_status else 'Off'
+            passed = (actual == 'On')
+        elif ctype == 'gatekeeper':
+            gk_status = subprocess.getoutput('spctl --status 2>/dev/null')
+            actual = 'enabled' if 'assessments enabled' in gk_status else 'disabled'
+            passed = (actual == 'enabled')
+        elif ctype == 'sip':
+            sip_status = subprocess.getoutput('csrutil status 2>/dev/null')
+            actual = 'enabled' if 'enabled' in sip_status else 'disabled'
+            passed = (actual == 'enabled')
+        elif ctype == 'firewall':
+            fw = subprocess.getoutput('/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate 2>/dev/null')
+            actual = 'enabled' if 'enabled' in fw.lower() else 'disabled'
+            passed = (actual == check.get('expected', 'enabled'))
+        elif ctype == 'screen_lock':
+            idle_time = subprocess.getoutput("defaults read com.apple.screensaver idleTime 2>/dev/null").strip()
+            if idle_time and idle_time.isdigit():
+                actual = int(idle_time)
+                max_seconds = check.get('maxSeconds', 300)
+                passed = (actual <= max_seconds and actual > 0)
+            else:
+                actual = 0
+                passed = False
+        elif ctype == 'software_update':
+            updates = subprocess.getoutput('softwareupdate -l 2>/dev/null')
+            count = updates.count('*')
+            actual = count
+            passed = (count <= check.get('maxPending', 5))
+        elif ctype == 'service':
+            svc = check.get('serviceName', '')
+            result = subprocess.run(['launchctl', 'list'], capture_output=True, text=True)
+            actual = 'running' if svc in result.stdout else 'not_running'
+            passed = (actual == check.get('expectedStatus', 'running'))
+    except Exception as e:
+        actual = f'ERROR: {str(e)}'
+
+    results.append({
+        'checkId': check.get('id', ''),
+        'title': check.get('title', ''),
+        'passed': passed,
+        'actual': actual,
+        'expected': check.get('value', ''),
+        'severity': check.get('severity', 'medium'),
+        'timestamp': datetime.now().isoformat()
+    })
+
+total = len(results)
+passed_count = sum(1 for r in results if r['passed'])
+score = round((passed_count / total) * 100, 1) if total > 0 else 0
+
+print(json.dumps({
+    'type': 'compliance_scan_result',
+    'deviceId': subprocess.getoutput("ioreg -d2 -c IOPlatformExpertDevice | awk -F'\"' '/IOPlatformUUID/{print $(NF-1)}'"),
+    'baselineId': data.get('baselineId', ''),
+    'results': results,
+    'score': score,
+    'totalChecks': total,
+    'passedChecks': passed_count,
+    'scannedAt': datetime.now().isoformat()
+}))
+PYEOF
+            ) || status="failed"
+            ;;
+
+        # ── App Store Commands ───────────────────────────────────────────
+        store_install)
+            local pkg_type pkg_id app_name
+            pkg_type=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('type',''))" 2>/dev/null)
+            pkg_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('packageId',''))" 2>/dev/null)
+            app_name=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('appName',''))" 2>/dev/null)
+            local install_status="completed" install_output=""
+            if command -v brew &>/dev/null; then
+                case "$pkg_type" in
+                    cask)
+                        install_output=$(brew install --cask "$pkg_id" 2>&1) || install_status="failed"
+                        ;;
+                    brew|*)
+                        install_output=$(brew install "$pkg_id" 2>&1) || {
+                            install_output=$(brew install --cask "$pkg_id" 2>&1) || install_status="failed"
+                        }
+                        ;;
+                esac
+            else
+                install_status="failed"; install_output="Homebrew not installed"
+            fi
+            show_notification "App Installation" "$app_name: $install_status" "OpenDirectory"
+            output=$(python3 -c "import json; print(json.dumps({'type':'store_install_result','data':{'appId':$(echo "$json" | python3 -c "import sys,json; print(repr(json.load(sys.stdin).get('data',{}).get('appId','')))"),'status':'$install_status'}}))" 2>/dev/null)
+            ;;
+        store_uninstall)
+            local pkg_id
+            pkg_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('packageId',''))" 2>/dev/null)
+            local uninstall_status="completed"
+            if command -v brew &>/dev/null; then
+                brew uninstall "$pkg_id" &>/dev/null || {
+                    brew uninstall --cask "$pkg_id" &>/dev/null || uninstall_status="failed"
+                }
+            else
+                uninstall_status="failed"
+            fi
+            output=$(python3 -c "import json; print(json.dumps({'type':'store_uninstall_result','data':{'appId':$(echo "$json" | python3 -c "import sys,json; print(repr(json.load(sys.stdin).get('data',{}).get('appId','')))"),'status':'$uninstall_status'}}))" 2>/dev/null)
+            ;;
+
         # ── Windows-only commands (graceful no-op) ────────────────────
         configure_winget|check_winget_status)
             output='{"status":"success","message":"Not applicable on macOS"}'

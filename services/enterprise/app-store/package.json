@@ -1,24 +1,26 @@
 {
-  "name": "@opendirectory/compliance-engine",
+  "name": "@opendirectory/app-store",
   "version": "1.0.0",
-  "description": "Centralized compliance evaluation engine with CIS/NIST/BSI baselines",
+  "description": "Enterprise App Store with domain-aware catalog and push installation",
   "main": "src/index.js",
-  "scripts": { "start": "node src/index.js", "dev": "nodemon src/index.js" },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "helmet": "^7.1.0",
     "compression": "^1.7.4",
     "express-rate-limit": "^7.1.4",
+    "winston": "^3.11.0",
     "pg": "^8.11.3",
     "ioredis": "^5.3.2",
     "amqplib": "^0.10.3",
-    "winston": "^3.11.0",
     "ws": "^8.14.2",
-    "node-cron": "^3.0.3",
     "axios": "^1.6.2",
+    "multer": "^1.4.5-lts.1",
     "prom-client": "^15.0.0",
-    "pdfkit": "^0.13.0",
-    "json2csv": "^5.0.7"
+    "semver": "^7.5.4"
   }
 }

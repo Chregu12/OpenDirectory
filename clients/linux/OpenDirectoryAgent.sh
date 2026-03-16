@@ -334,6 +334,163 @@ print(json.dumps({'status': 'success', 'module': module, 'message': f'Policy mod
             output=$(handle_execute_remediation "$json") || status="failed"
             ;;
 
+        # ── Compliance Scanning Commands ──────────────────────────────
+        compliance_scan)
+            output=$(python3 << 'PYEOF' "$json"
+import sys, json, subprocess, os
+from datetime import datetime
+
+data = json.loads(sys.argv[1]).get('data', {})
+checks = data.get('checks', [])
+results = []
+
+for check in checks:
+    passed = False
+    actual = None
+    try:
+        ctype = check.get('type', '')
+        if ctype == 'sysctl':
+            actual = subprocess.getoutput(f"sysctl -n {check['key']}").strip()
+            if check.get('operator') == '==':
+                passed = (actual == str(check['value']))
+            elif check.get('operator') == '>=':
+                passed = (int(actual) >= int(check['value']))
+            elif check.get('operator') == '<=':
+                passed = (int(actual) <= int(check['value']))
+            elif check.get('operator') == '!=':
+                passed = (actual != str(check['value']))
+        elif ctype == 'service':
+            result = subprocess.run(['systemctl', 'is-active', check['serviceName']], capture_output=True, text=True)
+            actual = result.stdout.strip()
+            passed = (actual == check.get('expectedStatus', 'active'))
+        elif ctype == 'firewall':
+            ufw_out = subprocess.getoutput('ufw status')
+            actual = 'active' if 'Status: active' in ufw_out else 'inactive'
+            passed = (actual == check.get('expected', 'active'))
+        elif ctype == 'luks':
+            blk = subprocess.getoutput(f"lsblk -no TYPE {check.get('device', '/dev/sda1')} 2>/dev/null")
+            actual = 'encrypted' if 'crypt' in blk else 'unencrypted'
+            passed = (actual == 'encrypted')
+        elif ctype == 'ssh_config':
+            key = check.get('key', '')
+            val = subprocess.getoutput(f"sshd -T 2>/dev/null | grep -i '^{key} ' | awk '{{print $2}}'").strip()
+            actual = val if val else 'NOT_FOUND'
+            passed = (actual.lower() == str(check.get('value', '')).lower())
+        elif ctype == 'pam':
+            pam_file = check.get('file', '/etc/pam.d/common-auth')
+            search = check.get('contains', '')
+            if os.path.exists(pam_file):
+                content = open(pam_file).read()
+                actual = 'present' if search in content else 'absent'
+                passed = (actual == 'present')
+            else:
+                actual = 'FILE_NOT_FOUND'
+        elif ctype == 'package_updates':
+            if os.path.exists('/usr/bin/apt-get'):
+                subprocess.run(['apt-get', 'update', '-qq'], capture_output=True)
+                out = subprocess.getoutput('apt-get -s upgrade 2>/dev/null | grep ^Inst | wc -l')
+            elif os.path.exists('/usr/bin/dnf'):
+                out = subprocess.getoutput('dnf check-update --quiet 2>/dev/null | wc -l')
+            else:
+                out = '0'
+            actual = int(out.strip()) if out.strip().isdigit() else 0
+            passed = (actual <= check.get('maxPending', 10))
+        elif ctype == 'file_permissions':
+            import stat
+            path = check.get('path', '')
+            if os.path.exists(path):
+                mode = oct(os.stat(path).st_mode)[-3:]
+                actual = mode
+                passed = (mode == check.get('expected', ''))
+            else:
+                actual = 'NOT_FOUND'
+    except Exception as e:
+        actual = f'ERROR: {str(e)}'
+
+    results.append({
+        'checkId': check.get('id', ''),
+        'title': check.get('title', ''),
+        'passed': passed,
+        'actual': actual,
+        'expected': check.get('value', ''),
+        'severity': check.get('severity', 'medium'),
+        'timestamp': datetime.now().isoformat()
+    })
+
+total = len(results)
+passed_count = sum(1 for r in results if r['passed'])
+score = round((passed_count / total) * 100, 1) if total > 0 else 0
+
+print(json.dumps({
+    'type': 'compliance_scan_result',
+    'deviceId': subprocess.getoutput('cat /etc/machine-id 2>/dev/null || hostname'),
+    'baselineId': data.get('baselineId', ''),
+    'results': results,
+    'score': score,
+    'totalChecks': total,
+    'passedChecks': passed_count,
+    'scannedAt': datetime.now().isoformat()
+}))
+PYEOF
+            ) || status="failed"
+            ;;
+
+        # ── App Store Commands ───────────────────────────────────────────
+        store_install)
+            local pkg_type pkg_id pkg_version app_name
+            pkg_type=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('type',''))" 2>/dev/null)
+            pkg_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('packageId',''))" 2>/dev/null)
+            pkg_version=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('version',''))" 2>/dev/null)
+            app_name=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('appName',''))" 2>/dev/null)
+            local install_status="completed" install_output=""
+            case "$pkg_type" in
+                apt)
+                    install_output=$(DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg_id" 2>&1) || install_status="failed"
+                    ;;
+                dnf)
+                    install_output=$(dnf install -y "$pkg_id" 2>&1) || install_status="failed"
+                    ;;
+                pacman)
+                    install_output=$(pacman -S --noconfirm "$pkg_id" 2>&1) || install_status="failed"
+                    ;;
+                snap)
+                    install_output=$(snap install "$pkg_id" 2>&1) || install_status="failed"
+                    ;;
+                flatpak)
+                    install_output=$(flatpak install -y "$pkg_id" 2>&1) || install_status="failed"
+                    ;;
+                *)
+                    # Auto-detect package manager
+                    if command -v apt-get &>/dev/null; then
+                        install_output=$(DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg_id" 2>&1) || install_status="failed"
+                    elif command -v dnf &>/dev/null; then
+                        install_output=$(dnf install -y "$pkg_id" 2>&1) || install_status="failed"
+                    elif command -v pacman &>/dev/null; then
+                        install_output=$(pacman -S --noconfirm "$pkg_id" 2>&1) || install_status="failed"
+                    else
+                        install_status="failed"; install_output="No supported package manager found"
+                    fi
+                    ;;
+            esac
+            show_notification "App Installation" "$app_name: $install_status"
+            output=$(python3 -c "import json; print(json.dumps({'type':'store_install_result','data':{'appId':$(echo "$json" | python3 -c "import sys,json; print(repr(json.load(sys.stdin).get('data',{}).get('appId','')))"),'status':'$install_status'}}))" 2>/dev/null)
+            ;;
+        store_uninstall)
+            local pkg_id
+            pkg_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('packageId',''))" 2>/dev/null)
+            local uninstall_status="completed"
+            if command -v apt-get &>/dev/null; then
+                apt-get remove -y "$pkg_id" &>/dev/null || uninstall_status="failed"
+            elif command -v dnf &>/dev/null; then
+                dnf remove -y "$pkg_id" &>/dev/null || uninstall_status="failed"
+            elif command -v pacman &>/dev/null; then
+                pacman -R --noconfirm "$pkg_id" &>/dev/null || uninstall_status="failed"
+            else
+                uninstall_status="failed"
+            fi
+            output=$(python3 -c "import json; print(json.dumps({'type':'store_uninstall_result','data':{'appId':$(echo "$json" | python3 -c "import sys,json; print(repr(json.load(sys.stdin).get('data',{}).get('appId','')))"),'status':'$uninstall_status'}}))" 2>/dev/null)
+            ;;
+
         # ── Windows-only commands (graceful no-op) ────────────────────
         configure_winget|check_winget_status)
             output='{"status":"success","message":"Not applicable on Linux"}'
