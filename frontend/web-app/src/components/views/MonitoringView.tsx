@@ -104,8 +104,75 @@ const cpuTimeseries = generateTimeseries();
 
 export default function MonitoringView() {
   const [activeTab, setActiveTab] = useState<'overview' | 'alerts' | 'services' | 'metrics'>('overview');
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts);
-  const [loading, setLoading] = useState(false);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [metrics, setMetrics] = useState<SystemMetric[]>([]);
+  const [services, setServices] = useState<ServiceMetric[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadMonitoringData(); }, []);
+
+  const loadMonitoringData = async () => {
+    setLoading(true);
+    try {
+      const [alertsRes, statusRes, servicesRes] = await Promise.allSettled([
+        monitoringApi.getAlerts(),
+        monitoringApi.getSystemStatus(),
+        gatewayApi.getServices(),
+      ]);
+
+      // Alerts
+      if (alertsRes.status === 'fulfilled' && alertsRes.value.data?.length > 0) {
+        setAlerts(alertsRes.value.data.map((a: any) => ({
+          id: a.id,
+          severity: a.severity || 'info',
+          title: a.title || a.message || 'Alert',
+          description: a.description || '',
+          source: a.source || 'System',
+          timestamp: a.timestamp || new Date().toISOString(),
+          acknowledged: a.acknowledged ?? false,
+        })));
+      } else {
+        setAlerts(mockAlerts);
+      }
+
+      // Metrics from system status
+      if (statusRes.status === 'fulfilled' && statusRes.value.data) {
+        const s = statusRes.value.data;
+        if (s.cpu !== undefined || s.memory !== undefined) {
+          setMetrics([
+            { name: 'CPU Usage', value: s.cpu ?? 0, unit: '%', trend: 'stable', trendValue: '0%', status: (s.cpu ?? 0) > 80 ? 'critical' : 'healthy' },
+            { name: 'Memory Usage', value: s.memory ?? 0, unit: '%', trend: 'stable', trendValue: '0%', status: (s.memory ?? 0) > 80 ? 'warning' : 'healthy' },
+            ...mockMetrics.slice(2),
+          ]);
+        } else {
+          setMetrics(mockMetrics);
+        }
+      } else {
+        setMetrics(mockMetrics);
+      }
+
+      // Services
+      if (servicesRes.status === 'fulfilled' && servicesRes.value.data?.length > 0) {
+        setServices(servicesRes.value.data.map((s: any) => ({
+          name: s.name || 'Unknown',
+          status: s.status || 'unknown',
+          responseTime: s.responseTime || 0,
+          uptime: s.uptime || 'N/A',
+          requests: s.requests || 0,
+          errors: s.errors || 0,
+          lastCheck: s.lastCheck || new Date().toISOString(),
+        })));
+      } else {
+        setServices(mockServices);
+      }
+    } catch {
+      setAlerts(mockAlerts);
+      setMetrics(mockMetrics);
+      setServices(mockServices);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const unacknowledgedAlerts = alerts.filter(a => !a.acknowledged).length;
 
@@ -150,7 +217,7 @@ export default function MonitoringView() {
         {([
           ['overview', 'Overview'],
           ['alerts', `Alerts (${unacknowledgedAlerts})`],
-          ['services', `Services (${mockServices.length})`],
+          ['services', `Services (${services.length})`],
           ['metrics', 'Metrics'],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setActiveTab(key)}
@@ -166,7 +233,7 @@ export default function MonitoringView() {
           <div className="space-y-6">
             {/* System Metrics Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {mockMetrics.map(m => (
+              {metrics.map(m => (
                 <div key={m.name} className="od-card p-4">
                   <div className="text-xs text-gray-500 mb-1">{m.name}</div>
                   <div className="text-2xl font-bold text-gray-900">
@@ -225,20 +292,20 @@ export default function MonitoringView() {
             {/* Service Status Summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="od-card p-4 text-center">
-                <div className="text-3xl font-bold text-green-600">{mockServices.filter(s => s.status === 'healthy').length}</div>
+                <div className="text-3xl font-bold text-green-600">{services.filter(s => s.status === 'healthy').length}</div>
                 <div className="text-xs text-gray-500">Healthy Services</div>
               </div>
               <div className="od-card p-4 text-center">
-                <div className="text-3xl font-bold text-red-600">{mockServices.filter(s => s.status === 'unhealthy').length}</div>
+                <div className="text-3xl font-bold text-red-600">{services.filter(s => s.status === 'unhealthy').length}</div>
                 <div className="text-xs text-gray-500">Unhealthy</div>
               </div>
               <div className="od-card p-4 text-center">
-                <div className="text-3xl font-bold text-yellow-600">{mockServices.filter(s => s.status === 'unknown').length}</div>
+                <div className="text-3xl font-bold text-yellow-600">{services.filter(s => s.status === 'unknown').length}</div>
                 <div className="text-xs text-gray-500">Unknown</div>
               </div>
               <div className="od-card p-4 text-center">
                 <div className="text-3xl font-bold text-blue-600">
-                  {Math.round(mockServices.reduce((acc, s) => acc + s.responseTime, 0) / mockServices.filter(s => s.responseTime > 0).length)}ms
+                  {Math.round(services.reduce((acc, s) => acc + s.responseTime, 0) / (services.filter(s => s.responseTime > 0).length || 1))}ms
                 </div>
                 <div className="text-xs text-gray-500">Avg Response</div>
               </div>
@@ -304,7 +371,7 @@ export default function MonitoringView() {
                 </tr>
               </thead>
               <tbody>
-                {mockServices.map(s => (
+                {services.map(s => (
                   <tr key={s.name} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -348,7 +415,7 @@ export default function MonitoringView() {
         {activeTab === 'metrics' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {mockMetrics.map(m => (
+              {metrics.map(m => (
                 <div key={m.name} className="od-card p-4">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-gray-600">{m.name}</h3>

@@ -84,11 +84,43 @@ const typeIcon = (t: string) =>
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function DevicesView() {
-  const [devices, setDevices] = useState<Device[]>(mockDevices);
-  const [loading, setLoading] = useState(false);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'compliant' | 'non_compliant' | 'offline'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+
+  useEffect(() => { loadDevices(); }, []);
+
+  const loadDevices = async () => {
+    setLoading(true);
+    try {
+      const res = await deviceApi.getDevices();
+      const apiDevices = (res.data || []).map((d: any) => ({
+        id: d.id || d.deviceId,
+        name: d.name || d.deviceName || 'Unknown',
+        platform: d.platform || 'windows',
+        type: d.type || 'workstation',
+        os: d.os || 'Unknown',
+        osVersion: d.osVersion || '',
+        user: d.user || d.assignedUser || '',
+        status: d.status || 'offline',
+        compliance: d.compliance || d.complianceStatus || 'unknown',
+        lastSeen: d.lastSeen || d.lastCheckin || new Date().toISOString(),
+        enrolledAt: d.enrolledAt || d.enrollmentDate || '',
+        ipAddress: d.ipAddress || d.ip || '',
+        policies: d.policies || d.policyCount || 0,
+        pendingUpdates: d.pendingUpdates || 0,
+        encrypted: d.encrypted ?? false,
+        managed: d.managed ?? true,
+      }));
+      setDevices(apiDevices.length > 0 ? apiDevices : mockDevices);
+    } catch {
+      setDevices(mockDevices);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const stats = {
     total: devices.length,

@@ -19,6 +19,7 @@ import {
   CheckCircleIcon,
   UserIcon
 } from '@heroicons/react/24/outline';
+import { lldapApi, deviceApi } from '@/lib/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -268,18 +269,102 @@ export default function GraphExplorerView() {
   const loadGraphData = useCallback(async () => {
     setLoading(true);
     try {
+      // Try to load real data from LLDAP and Device APIs
+      const [usersRes, groupsRes, devicesRes] = await Promise.allSettled([
+        lldapApi.getUsers(),
+        lldapApi.getGroups(),
+        deviceApi.getDevices(),
+      ]);
+
+      let apiNodes: GraphNode[] = [];
+      let apiEdges: GraphEdge[] = [];
+      const cx = 500, cy = 400;
+
+      const hasUsers = usersRes.status === 'fulfilled' && usersRes.value.data?.length > 0;
+      const hasGroups = groupsRes.status === 'fulfilled' && groupsRes.value.data?.length > 0;
+
+      if (hasUsers || hasGroups) {
+        // Build nodes from real data
+        if (hasUsers) {
+          const users = usersRes.value.data;
+          users.forEach((u: any, i: number) => {
+            const angle = (i / users.length) * Math.PI * 2;
+            apiNodes.push({
+              id: `user-${u.id || u.uid}`, label: u.displayName || u.uid || u.id,
+              type: 'user', riskLevel: 'low',
+              properties: { email: u.email || '', lastLogin: u.lastLogin || '', enabled: u.enabled ?? true },
+              x: cx + Math.cos(angle) * 320, y: cy + Math.sin(angle) * 280,
+            });
+          });
+        }
+
+        if (hasGroups) {
+          const groups = groupsRes.value.data;
+          groups.forEach((g: any, i: number) => {
+            const angle = (i / groups.length) * Math.PI * 2 + 0.3;
+            apiNodes.push({
+              id: `group-${g.id || g.name}`, label: g.displayName || g.name || g.id,
+              type: 'group', riskLevel: 'low',
+              properties: { memberCount: g.members?.length || 0, scope: 'Global' },
+              x: cx + Math.cos(angle) * 200, y: cy + Math.sin(angle) * 180,
+            });
+
+            // Build membership edges
+            (g.members || []).forEach((m: any) => {
+              const memberId = typeof m === 'string' ? m : m.id || m.uid;
+              apiEdges.push({
+                id: `e-${memberId}-${g.id || g.name}`,
+                source: `user-${memberId}`, target: `group-${g.id || g.name}`,
+                relationship: 'MEMBER_OF',
+              });
+            });
+          });
+        }
+
+        if (devicesRes.status === 'fulfilled' && devicesRes.value.data?.length > 0) {
+          const devs = devicesRes.value.data;
+          devs.forEach((d: any, i: number) => {
+            const angle = (i / devs.length) * Math.PI * 2 + 0.6;
+            apiNodes.push({
+              id: `device-${d.id || d.name}`, label: d.name || d.id,
+              type: 'device', riskLevel: d.compliance === 'non_compliant' ? 'high' : 'low',
+              properties: { os: d.os || 'Unknown', compliance: d.compliance !== 'non_compliant' },
+              x: cx + Math.cos(angle) * 380, y: cy + Math.sin(angle) * 340,
+            });
+          });
+        }
+
+        setNodes(apiNodes);
+        setEdges(apiEdges.filter(e => apiNodes.some(n => n.id === e.source) && apiNodes.some(n => n.id === e.target)));
+      } else {
+        // Fallback to mock data
+        const { nodes: n, edges: e } = generateMockGraph();
+        setNodes(n);
+        setEdges(e);
+      }
+
+      setAttackPaths(generateAttackPaths());
+      setShadowAdmins(generateShadowAdmins());
+    } catch {
+      // Fallback to mock data
       const { nodes: n, edges: e } = generateMockGraph();
       setNodes(n);
       setEdges(e);
       setAttackPaths(generateAttackPaths());
       setShadowAdmins(generateShadowAdmins());
-      setStats(generateStats(n, e));
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { loadGraphData(); }, [loadGraphData]);
+
+  // Recalculate stats when nodes/edges change
+  useEffect(() => {
+    if (nodes.length > 0) {
+      setStats(generateStats(nodes, edges));
+    }
+  }, [nodes, edges]);
 
   // ── Filtering ────────────────────────────────────────────────────────────
 

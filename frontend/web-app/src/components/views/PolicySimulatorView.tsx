@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   BeakerIcon,
   ArrowPathIcon,
@@ -15,6 +15,7 @@ import {
   ComputerDesktopIcon,
   DocumentTextIcon
 } from '@heroicons/react/24/outline';
+import { securityApi, deviceApi } from '@/lib/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -143,12 +144,44 @@ export default function PolicySimulatorView() {
   const [selectedPolicy, setSelectedPolicy] = useState('Update Ring A');
   const [changeDescription, setChangeDescription] = useState('Change deferral from 14 to 0 days');
   const [results, setResults] = useState<SimulationResult[]>(mockSimulations);
+  const [drift, setDrift] = useState<DriftItem[]>(mockDrift);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>(mockTimeline);
+  const [conflicts, setConflicts] = useState<PolicyConflict[]>(mockConflicts);
   const [timelineDevice, setTimelineDevice] = useState('LAPTOP-23');
+
+  useEffect(() => { loadSimulatorData(); }, []);
+
+  const loadSimulatorData = async () => {
+    try {
+      const [complianceRes, devicesRes] = await Promise.allSettled([
+        securityApi.getComplianceStatus(),
+        deviceApi.getDevices(),
+      ]);
+
+      if (complianceRes.status === 'fulfilled' && complianceRes.value.data) {
+        const data = complianceRes.value.data;
+        if (data.drift?.length > 0) setDrift(data.drift);
+        if (data.conflicts?.length > 0) setConflicts(data.conflicts);
+        if (data.timeline?.length > 0) setTimeline(data.timeline);
+      }
+    } catch {
+      // Keep mock data as fallback
+    }
+  };
 
   const runSimulation = useCallback(async () => {
     setSimulating(true);
-    await new Promise(r => setTimeout(r, 1500));
-    setSimulating(false);
+    try {
+      const res = await securityApi.getComplianceStatus();
+      if (res.data?.simulation) {
+        setResults(prev => [res.data.simulation, ...prev]);
+      }
+    } catch {
+      // Fallback: keep existing mock results
+    } finally {
+      await new Promise(r => setTimeout(r, 500));
+      setSimulating(false);
+    }
   }, []);
 
   return (
@@ -163,9 +196,9 @@ export default function PolicySimulatorView() {
       <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 bg-gray-50">
         {([
           ['simulate', 'What-If Simulator'],
-          ['drift', `Drift Detection (${mockDrift.length})`],
+          ['drift', `Drift Detection (${drift.length})`],
           ['timeline', 'Compliance Timeline'],
-          ['conflicts', `Policy Conflicts (${mockConflicts.length})`],
+          ['conflicts', `Policy Conflicts (${conflicts.length})`],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setActiveTab(key)}
             className={`od-tab ${activeTab === key ? 'od-tab-active' : 'od-tab-inactive'}`}>
@@ -292,7 +325,7 @@ export default function PolicySimulatorView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockDrift.map(d => (
+                  {drift.map(d => (
                     <tr key={`${d.deviceId}-${d.policyName}`} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-900 flex items-center gap-2">
                         <ComputerDesktopIcon className="w-4 h-4 text-gray-400" />
@@ -329,10 +362,10 @@ export default function PolicySimulatorView() {
               </select>
             </div>
             <div className="relative pl-8">
-              {mockTimeline.map((evt, i) => (
+              {timeline.map((evt, i) => (
                 <div key={i} className="relative mb-6 last:mb-0">
                   {/* Vertical line */}
-                  {i < mockTimeline.length - 1 && (
+                  {i < timeline.length - 1 && (
                     <div className="absolute left-[-20px] top-6 w-0.5 h-full bg-gray-200" />
                   )}
                   {/* Dot */}
@@ -358,7 +391,7 @@ export default function PolicySimulatorView() {
         {activeTab === 'conflicts' && (
           <div className="space-y-4">
             <p className="text-sm text-gray-500">Conflicting or overlapping policy assignments.</p>
-            {mockConflicts.map((c, i) => (
+            {conflicts.map((c, i) => (
               <div key={i} className="od-card p-4 border-yellow-200">
                 <div className="flex items-start gap-2 mb-2">
                   <ExclamationTriangleIcon className="w-5 h-5 text-yellow-500 shrink-0" />

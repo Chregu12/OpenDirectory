@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldExclamationIcon,
   ArrowPathIcon,
@@ -17,6 +17,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon
 } from '@heroicons/react/24/outline';
+import { securityApi } from '@/lib/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -193,16 +194,55 @@ export default function SecurityScannerView() {
   const [scanning, setScanning] = useState(false);
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [scanResult, setScanResult] = useState<ScanResult>(mockScan);
+  const [trends, setTrends] = useState(riskTrends);
+
+  useEffect(() => { loadSecurityData(); }, []);
+
+  const loadSecurityData = async () => {
+    try {
+      const [complianceRes, alertsRes] = await Promise.allSettled([
+        securityApi.getComplianceStatus(),
+        securityApi.getSecurityAlerts(),
+      ]);
+
+      if (complianceRes.status === 'fulfilled' && complianceRes.value.data) {
+        const data = complianceRes.value.data;
+        if (data.findings?.length > 0) {
+          setScanResult({
+            ...mockScan,
+            findings: data.findings,
+            totalFindings: data.findings.length,
+            overallRiskScore: data.riskScore ?? scanResult.overallRiskScore,
+            bySeverity: data.bySeverity ?? scanResult.bySeverity,
+          });
+        }
+      }
+
+      if (alertsRes.status === 'fulfilled' && alertsRes.value.data?.trends) {
+        setTrends(alertsRes.value.data.trends);
+      }
+    } catch {
+      // Keep mock data as fallback
+    }
+  };
 
   const startScan = async () => {
     setScanning(true);
-    await new Promise(r => setTimeout(r, 2000));
-    setScanning(false);
+    try {
+      await securityApi.getComplianceStatus();
+      await loadSecurityData();
+    } catch {
+      // Scan simulation fallback
+      await new Promise(r => setTimeout(r, 2000));
+    } finally {
+      setScanning(false);
+    }
   };
 
   const filteredFindings = severityFilter === 'all'
-    ? mockScan.findings
-    : mockScan.findings.filter(f => f.severity === severityFilter);
+    ? scanResult.findings
+    : scanResult.findings.filter(f => f.severity === severityFilter);
 
   const categoryIcons: Record<string, React.ComponentType<any>> = {
     gpo: DocumentTextIcon,
@@ -231,7 +271,7 @@ export default function SecurityScannerView() {
 
       {/* Tabs */}
       <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 bg-gray-50">
-        {([['overview', 'Overview'], ['findings', `Findings (${mockScan.totalFindings})`], ['trends', 'Risk Trends']] as const).map(([key, label]) => (
+        {([['overview', 'Overview'], ['findings', `Findings (${scanResult.totalFindings})`], ['trends', 'Risk Trends']] as const).map(([key, label]) => (
           <button key={key} onClick={() => setActiveTab(key)}
             className={`od-tab ${activeTab === key ? 'od-tab-active' : 'od-tab-inactive'}`}>
             {label}
@@ -246,13 +286,13 @@ export default function SecurityScannerView() {
             {/* Risk score + severity cards */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="od-card p-5 col-span-1 text-center">
-                <div className={`text-5xl font-bold ${mockScan.overallRiskScore > 70 ? 'text-red-600' : mockScan.overallRiskScore > 50 ? 'text-orange-600' : 'text-green-600'}`}>
-                  {mockScan.overallRiskScore}
+                <div className={`text-5xl font-bold ${scanResult.overallRiskScore > 70 ? 'text-red-600' : scanResult.overallRiskScore > 50 ? 'text-orange-600' : 'text-green-600'}`}>
+                  {scanResult.overallRiskScore}
                 </div>
                 <div className="text-sm text-gray-500 mt-1">Risk Score</div>
-                <div className="text-xs text-gray-400 mt-1">Last scan: {new Date(mockScan.timestamp).toLocaleDateString()}</div>
+                <div className="text-xs text-gray-400 mt-1">Last scan: {new Date(scanResult.timestamp).toLocaleDateString()}</div>
               </div>
-              {Object.entries(mockScan.bySeverity).map(([sev, count]) => (
+              {Object.entries(scanResult.bySeverity).map(([sev, count]) => (
                 <div key={sev} className="od-card p-4">
                   <div className={`text-3xl font-bold ${sevText(sev)}`}>
                     {count}
@@ -267,7 +307,7 @@ export default function SecurityScannerView() {
               <h3 className="text-sm font-semibold text-gray-600 mb-3">Findings by Category</h3>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 {['gpo', 'privilege', 'device', 'network', 'identity'].map(cat => {
-                  const count = mockScan.findings.filter(f => f.category === cat).length;
+                  const count = scanResult.findings.filter(f => f.category === cat).length;
                   const Icon = categoryIcons[cat];
                   return (
                     <div key={cat} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
@@ -285,7 +325,7 @@ export default function SecurityScannerView() {
             {/* Top critical findings */}
             <div className="od-card p-4 border-red-200">
               <h3 className="text-sm font-semibold text-red-600 mb-3">Critical Findings Requiring Immediate Action</h3>
-              {mockScan.findings.filter(f => f.severity === 'critical').map(f => (
+              {scanResult.findings.filter(f => f.severity === 'critical').map(f => (
                 <div key={f.id} className="flex items-start gap-3 mb-3 last:mb-0">
                   <XCircleIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                   <div>
@@ -306,7 +346,7 @@ export default function SecurityScannerView() {
               {['all', 'critical', 'high', 'medium', 'low'].map(s => (
                 <button key={s} onClick={() => setSeverityFilter(s)}
                   className={`px-3 py-1 text-xs rounded-lg ${severityFilter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200'}`}>
-                  {s === 'all' ? `All (${mockScan.totalFindings})` : `${s} (${mockScan.bySeverity[s] || 0})`}
+                  {s === 'all' ? `All (${scanResult.totalFindings})` : `${s} (${scanResult.bySeverity[s] || 0})`}
                 </button>
               ))}
             </div>
@@ -364,7 +404,7 @@ export default function SecurityScannerView() {
             <h3 className="text-sm font-semibold text-gray-600">Risk Score Over Time</h3>
             <div className="od-card p-4">
               <div className="flex items-end gap-4 h-48">
-                {riskTrends.map((t, i) => (
+                {trends.map((t, i) => (
                   <div key={t.date} className="flex-1 flex flex-col items-center gap-2">
                     <span className="text-xs text-gray-600">{t.score}</span>
                     <div className="w-full relative" style={{ height: `${t.score * 1.8}px` }}>

@@ -21,6 +21,7 @@ import {
   SignalIcon,
   ArchiveBoxIcon
 } from '@heroicons/react/24/outline';
+import { securityApi, deviceApi } from '@/lib/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ const mockStats: AVStatistics = {
   signatureVersion: 'ClamAV 0.104.3 / 27180 / 2026-03-15',
 };
 
-const mockDevices: DeviceAVStatus[] = [
+const _mockDevices: DeviceAVStatus[] = [
   { deviceId: 'd-1', deviceName: 'WS-001', platform: 'windows', clamavVersion: '0.104.3', signatureVersion: '27180', signatureDate: '2026-03-15', lastScan: '2026-03-15T08:00:00Z', lastScanType: 'quick', threatsFound: 0, quarantinedFiles: 0, realtimeProtection: true, status: 'protected' },
   { deviceId: 'd-2', deviceName: 'LAPTOP-23', platform: 'windows', clamavVersion: '0.104.3', signatureVersion: '27180', signatureDate: '2026-03-15', lastScan: '2026-03-15T07:30:00Z', lastScanType: 'full', threatsFound: 2, quarantinedFiles: 2, realtimeProtection: true, status: 'at_risk' },
   { deviceId: 'd-3', deviceName: 'SRV-DC01', platform: 'windows', clamavVersion: '0.104.3', signatureVersion: '27180', signatureDate: '2026-03-15', lastScan: '2026-03-15T02:00:00Z', lastScanType: 'full', threatsFound: 0, quarantinedFiles: 0, realtimeProtection: true, status: 'protected' },
@@ -110,7 +111,7 @@ const mockDevices: DeviceAVStatus[] = [
   { deviceId: 'd-8', deviceName: 'MAC-EXEC-01', platform: 'macos', clamavVersion: '0.104.3', signatureVersion: '27180', signatureDate: '2026-03-15', lastScan: '2026-03-15T09:00:00Z', lastScanType: 'quick', threatsFound: 0, quarantinedFiles: 0, realtimeProtection: true, status: 'scanning' },
 ];
 
-const mockScans: ScanJob[] = [
+const _mockScans: ScanJob[] = [
   { id: 'scan-1', deviceName: 'MAC-EXEC-01', scanType: 'quick', status: 'scanning', progress: 67, filesScanned: 34200, threatsFound: 0, startedAt: '2026-03-15T09:00:00Z', duration: '3m 24s' },
   { id: 'scan-2', deviceName: 'LAPTOP-23', scanType: 'full', status: 'completed', progress: 100, filesScanned: 892341, threatsFound: 2, startedAt: '2026-03-15T07:30:00Z', duration: '47m 12s' },
   { id: 'scan-3', deviceName: 'SRV-FILE01', scanType: 'full', status: 'completed', progress: 100, filesScanned: 1245000, threatsFound: 1, startedAt: '2026-03-15T06:00:00Z', duration: '1h 23m' },
@@ -118,7 +119,7 @@ const mockScans: ScanJob[] = [
   { id: 'scan-5', deviceName: 'SRV-DC01', scanType: 'full', status: 'completed', progress: 100, filesScanned: 567000, threatsFound: 0, startedAt: '2026-03-15T02:00:00Z', duration: '58m 44s' },
 ];
 
-const mockThreats: Threat[] = [
+const _mockThreats: Threat[] = [
   { id: 't-1', name: 'Win.Trojan.Agent-798234', severity: 'critical', type: 'Trojan', deviceName: 'LAPTOP-23', filePath: 'C:\\Users\\k.chen\\Downloads\\setup_crack.exe', fileHash: 'a1b2c3d4e5f6...', detectedAt: '2026-03-15T07:45:00Z', action: 'quarantined' },
   { id: 't-2', name: 'Win.Malware.CoinMiner-9823', severity: 'high', type: 'Cryptominer', deviceName: 'LAPTOP-23', filePath: 'C:\\Users\\k.chen\\AppData\\Local\\Temp\\svchost.exe', fileHash: 'f6e5d4c3b2a1...', detectedAt: '2026-03-15T07:46:00Z', action: 'quarantined' },
   { id: 't-3', name: 'Unix.Trojan.Mirai-234', severity: 'high', type: 'Trojan', deviceName: 'SRV-FILE01', filePath: '/tmp/.hidden/payload.bin', fileHash: '1a2b3c4d5e6f...', detectedAt: '2026-03-15T06:22:00Z', action: 'quarantined' },
@@ -128,7 +129,7 @@ const mockThreats: Threat[] = [
   { id: 't-7', name: 'Phishing.Email.FakeLogin-87', severity: 'medium', type: 'Phishing', deviceName: 'MAC-DEV-01', filePath: '/Users/dev/Mail/Attachments/login_verify.html', fileHash: '4d5e6f7a8b9c...', detectedAt: '2026-03-13T09:20:00Z', action: 'quarantined' },
 ];
 
-const mockQuarantine: QuarantineItem[] = [
+const _mockQuarantine: QuarantineItem[] = [
   { id: 'q-1', fileName: 'setup_crack.exe', originalPath: 'C:\\Users\\k.chen\\Downloads\\setup_crack.exe', threatName: 'Win.Trojan.Agent-798234', severity: 'critical', deviceName: 'LAPTOP-23', quarantinedAt: '2026-03-15T07:45:00Z', fileSize: '2.4 MB', sha256: 'a1b2c3d4e5f67890...' },
   { id: 'q-2', fileName: 'svchost.exe', originalPath: 'C:\\Users\\k.chen\\AppData\\Local\\Temp\\svchost.exe', threatName: 'Win.Malware.CoinMiner-9823', severity: 'high', deviceName: 'LAPTOP-23', quarantinedAt: '2026-03-15T07:46:00Z', fileSize: '856 KB', sha256: 'f6e5d4c3b2a19876...' },
   { id: 'q-3', fileName: 'payload.bin', originalPath: '/tmp/.hidden/payload.bin', threatName: 'Unix.Trojan.Mirai-234', severity: 'high', deviceName: 'SRV-FILE01', quarantinedAt: '2026-03-15T06:22:00Z', fileSize: '124 KB', sha256: '1a2b3c4d5e6f7890...' },
@@ -179,16 +180,68 @@ export default function AntivirusView() {
   const [scanning, setScanning] = useState(false);
   const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState('all');
+  const [stats, setStats] = useState<AVStatistics>(mockStats);
+  const [devices, setDevices] = useState<DeviceAVStatus[]>(_mockDevices);
+  const [scans, setScans] = useState<ScanJob[]>(_mockScans);
+  const [threats, setThreats] = useState<Threat[]>(_mockThreats);
+  const [quarantine, setQuarantine] = useState<QuarantineItem[]>(_mockQuarantine);
+
+  useEffect(() => { loadAntivirusData(); }, []);
+
+  const loadAntivirusData = async () => {
+    try {
+      const [threatRes, deviceRes] = await Promise.allSettled([
+        securityApi.getThreatIntel(),
+        deviceApi.getDevices(),
+      ]);
+
+      if (threatRes.status === 'fulfilled' && threatRes.value.data) {
+        const d = threatRes.value.data;
+        if (d.threats?.length > 0) setThreats(d.threats);
+        if (d.quarantine?.length > 0) setQuarantine(d.quarantine);
+        if (d.scans?.length > 0) setScans(d.scans);
+        if (d.stats) setStats({ ...mockStats, ...d.stats });
+      }
+
+      if (deviceRes.status === 'fulfilled' && deviceRes.value.data?.length > 0) {
+        const avDevices = deviceRes.value.data
+          .filter((d: any) => d.antivirus || d.clamav)
+          .map((d: any) => ({
+            deviceId: d.id,
+            deviceName: d.name,
+            platform: d.platform || 'windows',
+            clamavVersion: d.antivirus?.version || d.clamav?.version || '0.104.3',
+            signatureVersion: d.antivirus?.signatureVersion || '27180',
+            signatureDate: d.antivirus?.signatureDate || '2026-03-15',
+            lastScan: d.antivirus?.lastScan || new Date().toISOString(),
+            lastScanType: d.antivirus?.lastScanType || 'quick',
+            threatsFound: d.antivirus?.threatsFound || 0,
+            quarantinedFiles: d.antivirus?.quarantinedFiles || 0,
+            realtimeProtection: d.antivirus?.realtimeProtection ?? true,
+            status: d.antivirus?.status || 'protected',
+          }));
+        if (avDevices.length > 0) setDevices(avDevices);
+      }
+    } catch {
+      // Keep mock data as fallback
+    }
+  };
 
   const startFleetScan = async () => {
     setScanning(true);
-    await new Promise(r => setTimeout(r, 2000));
-    setScanning(false);
+    try {
+      await securityApi.getThreatIntel();
+      await loadAntivirusData();
+    } catch {
+      await new Promise(r => setTimeout(r, 2000));
+    } finally {
+      setScanning(false);
+    }
   };
 
   const filteredThreats = severityFilter === 'all'
-    ? mockThreats
-    : mockThreats.filter(t => t.severity === severityFilter);
+    ? threats
+    : threats.filter(t => t.severity === severityFilter);
 
   return (
     <div className="flex flex-col h-full">
@@ -203,7 +256,7 @@ export default function AntivirusView() {
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">
             <SignalIcon className="w-3 h-3 inline mr-1" />
-            Signatures: {mockStats.signatureVersion}
+            Signatures: {stats.signatureVersion}
           </span>
           <button onClick={startFleetScan} disabled={scanning}
             className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg text-sm text-white flex items-center gap-2 shadow-sm">
@@ -217,10 +270,10 @@ export default function AntivirusView() {
       <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 bg-gray-50">
         {([
           ['dashboard', 'Dashboard'],
-          ['devices', `Devices (${mockDevices.length})`],
-          ['scans', `Scans (${mockScans.length})`],
-          ['threats', `Threats (${mockThreats.length})`],
-          ['quarantine', `Quarantine (${mockQuarantine.length})`],
+          ['devices', `Devices (${devices.length})`],
+          ['scans', `Scans (${scans.length})`],
+          ['threats', `Threats (${threats.length})`],
+          ['quarantine', `Quarantine (${quarantine.length})`],
           ['signatures', 'Signatures'],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setActiveTab(key)}
@@ -239,19 +292,19 @@ export default function AntivirusView() {
               <div className="od-card p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold text-green-600">{mockStats.protectedDevices}</div>
+                    <div className="text-3xl font-bold text-green-600">{stats.protectedDevices}</div>
                     <div className="text-sm text-gray-500">Protected</div>
                   </div>
                   <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                     <ShieldCheckIcon className="w-6 h-6 text-green-600" />
                   </div>
                 </div>
-                <div className="mt-2 text-xs text-gray-400">of {mockStats.totalDevices} devices</div>
+                <div className="mt-2 text-xs text-gray-400">of {stats.totalDevices} devices</div>
               </div>
               <div className="od-card p-4 border-red-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold text-red-600">{mockStats.atRiskDevices}</div>
+                    <div className="text-3xl font-bold text-red-600">{stats.atRiskDevices}</div>
                     <div className="text-sm text-gray-500">At Risk</div>
                   </div>
                   <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
@@ -263,7 +316,7 @@ export default function AntivirusView() {
               <div className="od-card p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold text-blue-600">{mockStats.totalScansToday}</div>
+                    <div className="text-3xl font-bold text-blue-600">{stats.totalScansToday}</div>
                     <div className="text-sm text-gray-500">Scans Today</div>
                   </div>
                   <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -274,7 +327,7 @@ export default function AntivirusView() {
               <div className="od-card p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold text-orange-600">{mockStats.totalThreatsToday}</div>
+                    <div className="text-3xl font-bold text-orange-600">{stats.totalThreatsToday}</div>
                     <div className="text-sm text-gray-500">Threats Today</div>
                   </div>
                   <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -302,10 +355,10 @@ export default function AntivirusView() {
             </div>
 
             {/* Active Scans */}
-            {mockScans.filter(s => s.status === 'scanning').length > 0 && (
+            {scans.filter(s => s.status === 'scanning').length > 0 && (
               <div className="od-card p-4 border-blue-200">
                 <h3 className="text-sm font-semibold text-blue-700 mb-3">Active Scans</h3>
-                {mockScans.filter(s => s.status === 'scanning').map(scan => (
+                {scans.filter(s => s.status === 'scanning').map(scan => (
                   <div key={scan.id} className="flex items-center gap-4">
                     <ArrowPathIcon className="w-5 h-5 text-blue-600 animate-spin" />
                     <div className="flex-1">
@@ -327,7 +380,7 @@ export default function AntivirusView() {
             <div className="od-card p-4">
               <h3 className="text-sm font-semibold text-gray-600 mb-3">Recent Threats</h3>
               <div className="space-y-2">
-                {mockThreats.slice(0, 5).map(t => (
+                {threats.slice(0, 5).map(t => (
                   <div key={t.id} className="flex items-center gap-3 text-sm p-2 rounded-lg hover:bg-gray-50">
                     <BugAntIcon className={`w-4 h-4 ${t.severity === 'critical' ? 'text-red-500' : t.severity === 'high' ? 'text-orange-500' : 'text-yellow-500'}`} />
                     <span className="font-mono text-xs text-gray-700 flex-1 truncate">{t.name}</span>
@@ -358,7 +411,7 @@ export default function AntivirusView() {
                 </tr>
               </thead>
               <tbody>
-                {mockDevices.map(d => (
+                {devices.map(d => (
                   <tr key={d.deviceId} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900 flex items-center gap-2">
                       <ComputerDesktopIcon className="w-4 h-4 text-gray-400" />
@@ -401,7 +454,7 @@ export default function AntivirusView() {
         {/* ── Scans ──────────────────────────────────────────────────────── */}
         {activeTab === 'scans' && (
           <div className="space-y-3">
-            {mockScans.map(scan => (
+            {scans.map(scan => (
               <div key={scan.id} className={`od-card p-4 ${scan.status === 'scanning' ? 'border-blue-200' : scan.status === 'failed' ? 'border-red-200' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
@@ -436,7 +489,7 @@ export default function AntivirusView() {
               {['all', 'critical', 'high', 'medium', 'low'].map(s => (
                 <button key={s} onClick={() => setSeverityFilter(s)}
                   className={`px-3 py-1 text-xs rounded-lg ${severityFilter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200'}`}>
-                  {s === 'all' ? `All (${mockThreats.length})` : `${s} (${mockThreats.filter(t => t.severity === s).length})`}
+                  {s === 'all' ? `All (${threats.length})` : `${s} (${threats.filter(t => t.severity === s).length})`}
                 </button>
               ))}
             </div>
@@ -472,7 +525,7 @@ export default function AntivirusView() {
         {activeTab === 'quarantine' && (
           <div className="space-y-3">
             <p className="text-sm text-gray-500">Quarantined files are isolated and cannot execute. Review and take action.</p>
-            {mockQuarantine.map(q => (
+            {quarantine.map(q => (
               <div key={q.id} className="od-card p-4 flex items-start gap-4">
                 <ArchiveBoxIcon className="w-5 h-5 text-amber-500 shrink-0 mt-1" />
                 <div className="flex-1 min-w-0">
@@ -542,11 +595,11 @@ export default function AntivirusView() {
               <h3 className="text-sm font-semibold text-gray-600 mb-3">Fleet Signature Status</h3>
               <div className="grid grid-cols-3 gap-4">
                 <div className="p-3 bg-gray-50 rounded-lg text-center">
-                  <div className="text-2xl font-bold text-green-600">{mockStats.totalDevices - mockStats.outdatedSignatures}</div>
+                  <div className="text-2xl font-bold text-green-600">{stats.totalDevices - stats.outdatedSignatures}</div>
                   <div className="text-xs text-gray-500">Up to Date</div>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg text-center">
-                  <div className="text-2xl font-bold text-yellow-600">{mockStats.outdatedSignatures}</div>
+                  <div className="text-2xl font-bold text-yellow-600">{stats.outdatedSignatures}</div>
                   <div className="text-xs text-gray-500">Outdated</div>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg text-center">
