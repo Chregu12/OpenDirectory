@@ -11,10 +11,10 @@ const wss = new WebSocket.Server({ server });
 
 // Configuration
 const CT2001_CONFIG = {
-    host: '192.168.1.51',
-    username: 'root',
-    password: 'your_password_here', // Update this with actual password
-    port: 22,
+    host: process.env.CT2001_HOST || '192.168.1.51',
+    username: process.env.CT2001_USERNAME || 'root',
+    password: process.env.CT2001_PASSWORD || '',
+    port: parseInt(process.env.CT2001_PORT, 10) || 22,
     readyTimeout: 60000
 };
 

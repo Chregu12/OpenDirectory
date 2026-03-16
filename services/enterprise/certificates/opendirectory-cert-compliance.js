@@ -624,11 +624,11 @@ class CertificateComplianceMonitor extends EventEmitter {
                 result: details.result || 'success',
                 details: {
                     ...details,
-                    // Remove sensitive information
-                    userId: undefined,
-                    sessionId: undefined,
-                    ipAddress: undefined,
-                    userAgent: undefined
+                    // Remove sensitive information from details copy
+                    userId: '[redacted]',
+                    sessionId: '[redacted]',
+                    ipAddress: '[redacted]',
+                    userAgent: '[redacted]'
                 },
                 hash: null, // Will be calculated
                 previousRecordHash: null,

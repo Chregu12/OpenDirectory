@@ -747,17 +747,22 @@ class AuthenticationManager {
         const decoded = Buffer.from(credentials, 'base64').toString('utf-8');
         const [username, password] = decoded.split(':');
         
-        // In production, verify against user database
-        if (username === 'admin' && password === 'password') {
+        // Verify against configured admin credentials (set via environment variables)
+        const adminUser = process.env.ADMIN_USERNAME;
+        const adminPass = process.env.ADMIN_PASSWORD;
+        if (!adminUser || !adminPass) {
+            throw new APIError('Basic auth not configured - set ADMIN_USERNAME and ADMIN_PASSWORD', 500);
+        }
+        if (username === adminUser && password === adminPass) {
             return {
                 id: 'admin',
-                username: 'admin',
+                username: adminUser,
                 roles: ['admin'],
                 permissions: ['*'],
                 method: 'basic'
             };
         }
-        
+
         throw new APIError('Invalid credentials', 401);
     }
 

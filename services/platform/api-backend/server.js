@@ -110,7 +110,7 @@ app.post('/api/devices/:id/refresh', async (req, res) => {
       await ssh.connect({
         host: CT2001_HOST,
         username: 'root',
-        password: 'your_password', // In production, use SSH keys
+        password: process.env.SSH_PASSWORD || '', // In production, use SSH keys
         port: 22
       });
 
@@ -154,7 +154,7 @@ app.post('/api/devices/:id/apps/install', async (req, res) => {
       await ssh.connect({
         host: CT2001_HOST,
         username: 'root',
-        password: 'your_password',
+        password: process.env.SSH_PASSWORD || '',
         port: 22
       });
 
@@ -229,7 +229,7 @@ app.delete('/api/devices/:id/apps/:appId', async (req, res) => {
       await ssh.connect({
         host: CT2001_HOST,
         username: 'root',
-        password: 'your_password',
+        password: process.env.SSH_PASSWORD || '',
         port: 22
       });
 
@@ -423,7 +423,7 @@ setInterval(async () => {
         await ssh.connect({
           host: CT2001_HOST,
           username: 'root',
-          password: 'your_password',
+          password: process.env.SSH_PASSWORD || '',
           port: 22,
           readyTimeout: 5000
         });
