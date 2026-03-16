@@ -442,6 +442,18 @@ app.post('/api/policies/:id/compile/:platform', async (req, res) => {
 // ============================
 // Inheritance Chain
 // ============================
+app.get('/api/policies/inheritance/:ouId', async (req, res) => {
+  try {
+    const { ouId } = req.params;
+    const chain = await inheritanceEngine.getInheritanceChain('ou', ouId);
+    res.json(chain);
+  } catch (err) {
+    logger.error('Failed to get inheritance chain', { error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Extended inheritance chain endpoint (supports all target types)
 app.get('/api/policies/inheritance/:targetType/:targetId', async (req, res) => {
   try {
     const { targetType, targetId } = req.params;

@@ -1,0 +1,19 @@
+{
+  "id": "tpl-screen-lock",
+  "name": "Screen Lock Timeout Policy",
+  "description": "Enforces automatic screen lock after a period of inactivity across all platforms. Requires password to unlock. Configures screensaver activation, grace period, and lock-on-sleep behavior.",
+  "type": "security",
+  "platform": "all",
+  "version": "1.0.0",
+  "settings": {
+    "screenLock": {
+      "timeout": 5,
+      "requirePassword": true,
+      "graceSeconds": 0,
+      "lockOnSleep": true,
+      "lockOnScreensaver": true,
+      "showMessageOnLock": true,
+      "lockMessage": "This device is managed by your organization. Contact IT for assistance."
+    }
+  }
+}
