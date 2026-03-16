@@ -5,7 +5,7 @@ const logger = require('../config/logger');
 class AuthenticationMiddleware {
   constructor() {
     this.jwtSecret = process.env.JWT_SECRET || 'changeme';
-    this.authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://authentication-service:3001';
+    this.authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://authentication-service:3002';
     this.publicPaths = [
       '/health',
       '/health/*',

@@ -117,7 +117,7 @@ services:
 
   auth-service:
     build:
-      context: ./services/core/auth-service
+      context: ./services/core/authentication-service
       dockerfile: Dockerfile
     container_name: od-auth-service
     environment:
@@ -201,8 +201,8 @@ services:
       - JWT_SECRET=${JWT_SECRET:-changeme}
       - LOG_LEVEL=info
     ports:
-      - "3000:3000"
-      - "3001:3001"  # WebSocket
+      - "3010:3000"
+      - "3011:3001"  # WebSocket
     networks:
       - opendirectory
     depends_on:
@@ -418,8 +418,8 @@ services:
     environment:
       PORT: 3900
       NODE_ENV: production
-      DEVICE_SERVICE_URL: http://device-service:3456
-      AUTH_SERVICE_URL: http://authentication-service:3001
+      DEVICE_SERVICE_URL: http://device-service:3003
+      AUTH_SERVICE_URL: http://auth-service:3002
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
     ports:
       - "3900:3900"
@@ -442,7 +442,7 @@ services:
     environment:
       PORT: 3901
       NODE_ENV: production
-      DEVICE_SERVICE_URL: http://device-service:3456
+      DEVICE_SERVICE_URL: http://device-service:3003
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
     ports:
       - "3901:3901"
@@ -465,8 +465,8 @@ services:
     environment:
       PORT: 3902
       NODE_ENV: production
-      DEVICE_SERVICE_URL: http://device-service:3456
-      AUTH_SERVICE_URL: http://authentication-service:3001
+      DEVICE_SERVICE_URL: http://device-service:3003
+      AUTH_SERVICE_URL: http://auth-service:3002
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
     ports:
       - "3902:3902"
@@ -489,7 +489,7 @@ services:
     environment:
       PORT: 3903
       NODE_ENV: production
-      DEVICE_SERVICE_URL: http://device-service:3456
+      DEVICE_SERVICE_URL: http://device-service:3003
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
     ports:
       - "3903:3903"
@@ -512,7 +512,7 @@ services:
     environment:
       PORT: 3905
       NODE_ENV: production
-      DEVICE_SERVICE_URL: http://device-service:3456
+      DEVICE_SERVICE_URL: http://device-service:3003
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
     ports:
       - "3905:3905"
@@ -535,7 +535,7 @@ services:
     environment:
       PORT: 3904
       NODE_ENV: production
-      DEVICE_SERVICE_URL: http://device-service:3456
+      DEVICE_SERVICE_URL: http://device-service:3003
       SECURITY_SCANNER_URL: http://security-scanner:3902
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
     ports:
