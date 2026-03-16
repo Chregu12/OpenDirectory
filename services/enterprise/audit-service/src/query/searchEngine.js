@@ -1,144 +1,223 @@
 'use strict';
 
+const logger = require('../utils/logger');
+
 class SearchEngine {
-  constructor({ logger, pool }) {
-    this.logger = logger;
-    this.pool = pool;
+  constructor(db) {
+    this.db = db;
   }
 
-  async search(query, filters = {}, pagination = {}) {
+  async search(query) {
     const conditions = [];
     const params = [];
     let paramIndex = 1;
 
-    // Full-text search
-    if (query && query.trim()) {
-      conditions.push(
-        `to_tsvector('english', COALESCE(action, '') || ' ' || COALESCE(details::text, ''))
-         @@ plainto_tsquery('english', $${paramIndex++})`
-      );
-      params.push(query.trim());
-    }
-
-    // Time range filter
-    if (filters.startTime) {
+    // Time range filters
+    if (query.startTime) {
       conditions.push(`timestamp >= $${paramIndex++}`);
-      params.push(filters.startTime);
+      params.push(query.startTime);
     }
-    if (filters.endTime) {
+    if (query.endTime) {
       conditions.push(`timestamp <= $${paramIndex++}`);
-      params.push(filters.endTime);
+      params.push(query.endTime);
     }
 
     // Category filter
-    if (filters.category) {
-      if (Array.isArray(filters.category)) {
-        conditions.push(`category = ANY($${paramIndex++})`);
-        params.push(filters.category);
-      } else {
-        conditions.push(`category = $${paramIndex++}`);
-        params.push(filters.category);
-      }
+    if (query.category) {
+      conditions.push(`category = $${paramIndex++}`);
+      params.push(query.category);
     }
 
     // Severity filter
-    if (filters.severity) {
-      if (Array.isArray(filters.severity)) {
+    if (query.severity) {
+      if (Array.isArray(query.severity)) {
         conditions.push(`severity = ANY($${paramIndex++})`);
-        params.push(filters.severity);
+        params.push(query.severity);
       } else {
         conditions.push(`severity = $${paramIndex++}`);
-        params.push(filters.severity);
+        params.push(query.severity);
       }
     }
 
     // Actor filter
-    if (filters.actorId) {
-      conditions.push(`actor->>'id' = $${paramIndex++}`);
-      params.push(filters.actorId);
+    if (query.actorId) {
+      conditions.push(`actor_id = $${paramIndex++}`);
+      params.push(query.actorId);
     }
-    if (filters.actorName) {
-      conditions.push(`actor->>'name' ILIKE $${paramIndex++}`);
-      params.push(`%${filters.actorName}%`);
+    if (query.actorName) {
+      conditions.push(`actor_name ILIKE $${paramIndex++}`);
+      params.push(`%${query.actorName}%`);
     }
 
     // Target filter
-    if (filters.targetId) {
-      conditions.push(`target->>'id' = $${paramIndex++}`);
-      params.push(filters.targetId);
+    if (query.targetId) {
+      conditions.push(`target_id = $${paramIndex++}`);
+      params.push(query.targetId);
     }
-    if (filters.targetType) {
-      conditions.push(`target->>'type' = $${paramIndex++}`);
-      params.push(filters.targetType);
+    if (query.targetType) {
+      conditions.push(`target_type = $${paramIndex++}`);
+      params.push(query.targetType);
     }
 
     // Result filter
-    if (filters.result) {
+    if (query.result) {
       conditions.push(`result = $${paramIndex++}`);
-      params.push(filters.result);
+      params.push(query.result);
     }
 
-    // Source filter
-    if (filters.source) {
-      conditions.push(`source = $${paramIndex++}`);
-      params.push(filters.source);
+    // Free text search across action, details, actor_name, target_name
+    if (query.text) {
+      const textParam = `%${query.text}%`;
+      conditions.push(`(
+        action ILIKE $${paramIndex} OR
+        actor_name ILIKE $${paramIndex} OR
+        target_name ILIKE $${paramIndex} OR
+        details::text ILIKE $${paramIndex}
+      )`);
+      params.push(textParam);
+      paramIndex++;
     }
 
-    // Action pattern filter
-    if (filters.action) {
-      conditions.push(`action LIKE $${paramIndex++}`);
-      params.push(`%${filters.action}%`);
+    // JSONB details filter
+    if (query.detailsFilter && typeof query.detailsFilter === 'object') {
+      conditions.push(`details @> $${paramIndex++}`);
+      params.push(JSON.stringify(query.detailsFilter));
     }
 
-    // Cursor-based pagination
-    if (pagination.cursor) {
-      conditions.push(`created_at < $${paramIndex++}`);
-      params.push(pagination.cursor);
-    }
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 1000);
+    const offset = Math.max(parseInt(query.offset, 10) || 0, 0);
 
-    const whereClause = conditions.length > 0
-      ? 'WHERE ' + conditions.join(' AND ')
-      : '';
-
-    // Sorting
-    const sortField = filters.sortBy === 'severity' ? 'severity' : 'timestamp';
-    const sortDir = filters.sortDir === 'asc' ? 'ASC' : 'DESC';
-    const limit = Math.min(parseInt(pagination.limit, 10) || 50, 500);
-
-    // Execute count and data queries in parallel
-    const countParams = params.slice();
-    const dataParams = [...params, limit];
-
-    const countQuery = `SELECT COUNT(*) as total FROM audit_events ${whereClause}`;
-    const dataQuery = `
+    const countSql = `SELECT COUNT(*) AS total FROM audit_events ${whereClause}`;
+    const dataSql = `
       SELECT * FROM audit_events
       ${whereClause}
-      ORDER BY ${sortField} ${sortDir}, created_at DESC
-      LIMIT $${paramIndex}
+      ORDER BY timestamp DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
+    params.push(limit, offset);
 
-    const [countResult, dataResult] = await Promise.all([
-      this.pool.query(countQuery, countParams),
-      this.pool.query(dataQuery, dataParams)
-    ]);
+    try {
+      const [countResult, dataResult] = await Promise.all([
+        this.db.query(countSql, params.slice(0, params.length - 2)),
+        this.db.query(dataSql, params),
+      ]);
 
-    const events = dataResult.rows;
-    const total = parseInt(countResult.rows[0].total, 10);
-    const nextCursor = events.length === limit
-      ? events[events.length - 1].created_at.toISOString()
-      : null;
+      const total = parseInt(countResult.rows[0].total, 10);
 
-    return {
-      events,
-      total,
-      limit,
-      cursor: nextCursor,
-      query: query || null,
-      filters
-    };
+      // Add search highlights for free text matches
+      let events = dataResult.rows;
+      if (query.text) {
+        events = events.map((event) => ({
+          ...event,
+          _highlights: this._findHighlights(event, query.text),
+        }));
+      }
+
+      return {
+        events,
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      };
+    } catch (err) {
+      logger.error('Search query failed', { error: err.message, query });
+      throw err;
+    }
   }
 
-  async aggregate(filters = {}) {
+  _findHighlights(event, text) {
+    const highlights = [];
+    const lower = text.toLowerCase();
+
+    if (event.action && event.action.toLowerCase().includes(lower)) {
+      highlights.push({ field: 'action', value: event.action });
+    }
+    if (event.actor_name && event.actor_name.toLowerCase().includes(lower)) {
+      highlights.push({ field: 'actor_name', value: event.actor_name });
+    }
+    if (event.target_name && event.target_name.toLowerCase().includes(lower)) {
+      highlights.push({ field: 'target_name', value: event.target_name });
+    }
+    if (event.details) {
+      const detailsStr = JSON.stringify(event.details);
+      if (detailsStr.toLowerCase().includes(lower)) {
+        highlights.push({ field: 'details', value: detailsStr.substring(0, 200) });
+      }
+    }
+
+    return highlights;
+  }
+
+  async correlate(eventId) {
+    if (!eventId || typeof eventId !== 'string') {
+      throw new Error('Valid event ID is required');
+    }
+
+    // Get the source event
+    const sourceResult = await this.db.query('SELECT * FROM audit_events WHERE id = $1', [eventId]);
+    if (sourceResult.rows.length === 0) {
+      return { source: null, related: [] };
+    }
+
+    const source = sourceResult.rows[0];
+    const related = [];
+
+    // Find by correlation_id
+    if (source.correlation_id) {
+      const corrResult = await this.db.query(
+        'SELECT * FROM audit_events WHERE correlation_id = $1 AND id != $2 ORDER BY timestamp ASC',
+        [source.correlation_id, eventId]
+      );
+      for (const row of corrResult.rows) {
+        related.push({ ...row, _relation: 'correlation_id' });
+      }
+    }
+
+    // Find by same actor within time window (5 minutes)
+    if (source.actor_id) {
+      const actorResult = await this.db.query(
+        `SELECT * FROM audit_events
+         WHERE actor_id = $1 AND id != $2
+         AND timestamp BETWEEN $3::timestamptz - interval '5 minutes' AND $3::timestamptz + interval '5 minutes'
+         ORDER BY timestamp ASC
+         LIMIT 20`,
+        [source.actor_id, eventId, source.timestamp]
+      );
+      for (const row of actorResult.rows) {
+        if (!related.find((r) => r.id === row.id)) {
+          related.push({ ...row, _relation: 'same_actor' });
+        }
+      }
+    }
+
+    // Find by same target within time window
+    if (source.target_id) {
+      const targetResult = await this.db.query(
+        `SELECT * FROM audit_events
+         WHERE target_id = $1 AND id != $2
+         AND timestamp BETWEEN $3::timestamptz - interval '5 minutes' AND $3::timestamptz + interval '5 minutes'
+         ORDER BY timestamp ASC
+         LIMIT 20`,
+        [source.target_id, eventId, source.timestamp]
+      );
+      for (const row of targetResult.rows) {
+        if (!related.find((r) => r.id === row.id)) {
+          related.push({ ...row, _relation: 'same_target' });
+        }
+      }
+    }
+
+    return { source, related };
+  }
+
+  async aggregate(groupBy, filters = {}) {
+    const validGroupBy = ['category', 'severity', 'actor_id', 'target_type', 'result', 'source'];
+    if (!validGroupBy.includes(groupBy)) {
+      throw new Error(`Invalid groupBy field. Must be one of: ${validGroupBy.join(', ')}`);
+    }
+
     const conditions = [];
     const params = [];
     let paramIndex = 1;
@@ -151,45 +230,43 @@ class SearchEngine {
       conditions.push(`timestamp <= $${paramIndex++}`);
       params.push(filters.endTime);
     }
+    if (filters.category) {
+      conditions.push(`category = $${paramIndex++}`);
+      params.push(filters.category);
+    }
 
-    const whereClause = conditions.length > 0
-      ? 'WHERE ' + conditions.join(' AND ')
-      : '';
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const [byCategory, bySeverity, byActor, byHour] = await Promise.all([
-      this.pool.query(
-        `SELECT category, COUNT(*) as count
-         FROM audit_events ${whereClause}
-         GROUP BY category ORDER BY count DESC`,
-        params
-      ),
-      this.pool.query(
-        `SELECT severity, COUNT(*) as count
-         FROM audit_events ${whereClause}
-         GROUP BY severity ORDER BY count DESC`,
-        params
-      ),
-      this.pool.query(
-        `SELECT actor->>'id' as actor_id, actor->>'name' as actor_name, COUNT(*) as count
-         FROM audit_events ${whereClause}
-         GROUP BY actor->>'id', actor->>'name'
-         ORDER BY count DESC LIMIT 20`,
-        params
-      ),
-      this.pool.query(
-        `SELECT date_trunc('hour', timestamp) as hour, COUNT(*) as count
-         FROM audit_events ${whereClause}
-         GROUP BY date_trunc('hour', timestamp)
-         ORDER BY hour DESC LIMIT 168`,
-        params
-      )
-    ]);
+    // Standard aggregation
+    const query = `
+      SELECT ${groupBy} AS key, COUNT(*) AS count
+      FROM audit_events
+      ${whereClause}
+      GROUP BY ${groupBy}
+      ORDER BY count DESC
+      LIMIT 100
+    `;
+
+    const result = await this.db.query(query, params);
+
+    // Daily breakdown if time range is provided
+    let daily = null;
+    if (filters.startTime && filters.endTime) {
+      const dailyQuery = `
+        SELECT DATE(timestamp) AS date, COUNT(*) AS count
+        FROM audit_events
+        ${whereClause}
+        GROUP BY DATE(timestamp)
+        ORDER BY date ASC
+      `;
+      const dailyResult = await this.db.query(dailyQuery, params);
+      daily = dailyResult.rows;
+    }
 
     return {
-      byCategory: byCategory.rows,
-      bySeverity: bySeverity.rows,
-      topActors: byActor.rows,
-      byHour: byHour.rows
+      groupBy,
+      buckets: result.rows,
+      daily,
     };
   }
 }

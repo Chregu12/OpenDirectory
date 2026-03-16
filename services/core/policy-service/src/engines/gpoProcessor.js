@@ -21,13 +21,24 @@ const logger = winston.createLogger({
  */
 const LINK_ORDER = ['local', 'site', 'domain', 'ou'];
 
+/**
+ * Setting key prefixes that belong to the computer-configuration half
+ * of a GPO.  Everything else is considered user-configuration.
+ */
+const COMPUTER_PREFIXES = [
+  'firewall.', 'encryption.', 'network.', 'kernel.', 'sysctl.',
+  'updates.', 'antivirus.', 'audit.', 'ssh.', 'systemd.',
+  'remoteDesktop.', 'software.', 'registry.', 'bitlocker.'
+];
+
 class RSOPEngine {
   /**
    * Calculate the Resultant Set of Policy for a given device/user.
    *
    * @param {string} deviceId  - Target device identifier
    * @param {string} userId    - Target user identifier (optional)
-   * @param {object} context   - Additional context (groups, OS info, etc.)
+   * @param {object} context   - Additional context (groups, OS info, disabled flags, etc.)
+   *   context.disabledHalves - optional map of policyId -> { computer: bool, user: bool }
    * @returns {{ settings: object, sources: object[], conflicts: object[], appliedPolicies: object[] }}
    */
   async calculateRSOP(deviceId, userId, context = {}) {
@@ -65,8 +76,11 @@ class RSOPEngine {
       applicableLinks.push(link);
     }
 
-    // 3. Merge policies respecting enforce / block flags
-    const merged = this._mergePolicies(applicableLinks);
+    // 3. Apply disabled-half filtering (computer/user halves independently)
+    const filteredLinks = this._applyDisabledHalves(applicableLinks, deviceId, userId, context);
+
+    // 4. Merge policies respecting enforce / block flags
+    const merged = this._mergePolicies(filteredLinks);
 
     logger.info('RSoP calculation complete', {
       deviceId,
@@ -76,6 +90,68 @@ class RSOPEngine {
     });
 
     return merged;
+  }
+
+  /**
+   * Apply disabled-half filtering.
+   *
+   * In Windows GPO, each GPO has two halves: Computer Configuration and
+   * User Configuration.  Either half can be disabled independently.
+   *
+   * When the computer half is disabled, computer-scoped settings are stripped.
+   * When the user half is disabled, user-scoped settings are stripped.
+   *
+   * The disabled state is read from:
+   *   - context.disabledHalves[policyId] = { computer: true/false, user: true/false }
+   *   - Or from the policy link itself: link.disabled_computer / link.disabled_user
+   */
+  _applyDisabledHalves(links, deviceId, userId, context) {
+    const disabledMap = context.disabledHalves || {};
+
+    return links.map(link => {
+      const policy = link._policy;
+      const disabled = disabledMap[policy.id] || {};
+      const computerDisabled = disabled.computer || link.disabled_computer || false;
+      const userDisabled = disabled.user || link.disabled_user || false;
+
+      // If both halves disabled, skip entirely
+      if (computerDisabled && userDisabled) {
+        logger.debug('Policy fully disabled (both halves)', { policyId: policy.id });
+        return null;
+      }
+
+      // If neither half disabled, pass through
+      if (!computerDisabled && !userDisabled) return link;
+
+      // Partially disabled: filter settings by half
+      const settings = policy.settings || {};
+      const filteredSettings = {};
+
+      for (const [key, value] of Object.entries(this._flattenObject(settings))) {
+        const isComputerSetting = COMPUTER_PREFIXES.some(p => key.startsWith(p));
+
+        if (isComputerSetting && computerDisabled) {
+          logger.debug('Stripping computer setting from disabled half', { policyId: policy.id, key });
+          continue;
+        }
+        if (!isComputerSetting && userDisabled) {
+          logger.debug('Stripping user setting from disabled half', { policyId: policy.id, key });
+          continue;
+        }
+
+        filteredSettings[key] = value;
+      }
+
+      // Return a copy with filtered settings (un-flattened back to nested)
+      return {
+        ...link,
+        _policy: {
+          ...policy,
+          settings: filteredSettings
+        },
+        _settingsPreFlattened: true
+      };
+    }).filter(Boolean);
   }
 
   /**
@@ -221,7 +297,7 @@ class RSOPEngine {
         policyName: policy.name,
         level: link._level,
         enforce: isEnforced
-      });
+      }, link._settingsPreFlattened || false);
     }
 
     return { settings: merged, sources, conflicts, appliedPolicies };
@@ -238,8 +314,8 @@ class RSOPEngine {
    * @param {object} incoming  - New settings to merge
    * @param {object} meta      - { policyId, policyName, level, enforce }
    */
-  mergeSettings(existing, sources, enforced, conflicts, incoming, meta) {
-    const flatIncoming = this._flattenObject(incoming);
+  mergeSettings(existing, sources, enforced, conflicts, incoming, meta, preFlattened = false) {
+    const flatIncoming = preFlattened ? incoming : this._flattenObject(incoming);
 
     for (const [key, value] of Object.entries(flatIncoming)) {
       // If this key is already locked by an enforced policy, record a conflict

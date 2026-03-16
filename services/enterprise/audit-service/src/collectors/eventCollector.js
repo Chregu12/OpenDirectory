@@ -1,211 +1,165 @@
 'use strict';
 
-const amqplib = require('amqplib');
-const { v4: uuidv4 } = require('uuid');
+const logger = require('../utils/logger');
 
-const EXCHANGE_NAME = 'opendirectory.events';
-const QUEUE_NAME = 'audit-service-events';
-const ROUTING_KEY = '#';
-
-const EVENT_CATEGORIES = [
-  'identity', 'device', 'policy', 'app',
-  'security', 'admin', 'system'
+const ROUTING_KEYS = [
+  'policy.#',
+  'device.#',
+  'identity.#',
+  'app.#',
+  'security.#',
+  'compliance.#',
+  'admin.#',
+  'system.#',
 ];
 
 class EventCollector {
-  constructor({ logger, eventStore, onEvent }) {
-    this.logger = logger;
+  constructor(db, channel, integrityChecker, eventStore, alertEngine, wsClients, metrics) {
+    this.db = db;
+    this.channel = channel;
+    this.integrityChecker = integrityChecker;
     this.eventStore = eventStore;
-    this.onEvent = onEvent;
-    this.connection = null;
-    this.channel = null;
-    this.connected = false;
-    this.reconnectTimer = null;
-    this.reconnectDelay = 5000;
-    this.maxReconnectDelay = 60000;
-    this.rabbitmqUrl = process.env.RABBITMQ_URL || 'amqp://localhost:5672';
+    this.alertEngine = alertEngine;
+    this.wsClients = wsClients;
+    this.metrics = metrics;
+    this.queueName = 'audit-service-events';
+    this.exchangeName = 'opendirectory.events';
   }
 
-  async connect() {
+  async start() {
     try {
-      this.connection = await amqplib.connect(this.rabbitmqUrl);
-      this.channel = await this.connection.createChannel();
-
-      await this.channel.assertExchange(EXCHANGE_NAME, 'topic', {
-        durable: true,
-        autoDelete: false
-      });
-
-      await this.channel.assertQueue(QUEUE_NAME, {
+      await this.channel.assertExchange(this.exchangeName, 'topic', { durable: true });
+      await this.channel.assertQueue(this.queueName, {
         durable: true,
         arguments: {
-          'x-message-ttl': 86400000,       // 24h TTL
-          'x-max-length': 1000000,          // max 1M messages
-          'x-queue-type': 'classic'
-        }
+          'x-message-ttl': 86400000, // 24 hours
+          'x-max-length': 100000,
+        },
       });
 
-      await this.channel.bindQueue(QUEUE_NAME, EXCHANGE_NAME, ROUTING_KEY);
+      for (const key of ROUTING_KEYS) {
+        await this.channel.bindQueue(this.queueName, this.exchangeName, key);
+        logger.info('Bound queue to routing key', { queue: this.queueName, routingKey: key });
+      }
 
-      await this.channel.prefetch(100);
+      this.channel.prefetch(10);
 
-      this.channel.consume(QUEUE_NAME, async (msg) => {
+      this.channel.consume(this.queueName, async (msg) => {
         if (!msg) return;
+
         try {
           await this._processMessage(msg);
           this.channel.ack(msg);
         } catch (err) {
-          this.logger.error('Failed to process audit event', {
+          logger.error('Failed to process audit event message', {
             error: err.message,
-            routingKey: msg.fields.routingKey
+            routingKey: msg.fields.routingKey,
           });
-          // Reject and requeue once, then discard
-          const redelivered = msg.fields.redelivered;
-          this.channel.nack(msg, false, !redelivered);
+          // Requeue on first failure, dead-letter on subsequent
+          this.channel.nack(msg, false, !msg.fields.redelivered);
         }
       });
 
-      this.connection.on('close', () => {
-        this.connected = false;
-        this.logger.warn('RabbitMQ connection closed, scheduling reconnect');
-        this._scheduleReconnect();
-      });
-
-      this.connection.on('error', (err) => {
-        this.logger.error('RabbitMQ connection error', { error: err.message });
-      });
-
-      this.connected = true;
-      this.reconnectDelay = 5000;
-      this.logger.info('EventCollector connected to RabbitMQ', {
-        exchange: EXCHANGE_NAME,
-        queue: QUEUE_NAME,
-        routingKey: ROUTING_KEY
-      });
+      logger.info('Event collector started', { queue: this.queueName, routingKeys: ROUTING_KEYS });
     } catch (err) {
-      this.logger.error('Failed to connect to RabbitMQ', { error: err.message });
-      this._scheduleReconnect();
+      logger.error('Failed to start event collector', { error: err.message });
+      throw err;
     }
   }
 
   async _processMessage(msg) {
     const routingKey = msg.fields.routingKey;
-    const content = JSON.parse(msg.content.toString());
+    let event;
 
-    const category = this._extractCategory(routingKey);
-    const severity = this._determineSeverity(routingKey, content);
-
-    const auditEvent = {
-      id: content.id || uuidv4(),
-      timestamp: content.timestamp || new Date().toISOString(),
-      category,
-      severity,
-      actor: this._extractActor(content),
-      target: this._extractTarget(content),
-      action: routingKey,
-      details: content.data || content.details || content,
-      result: content.result || 'success',
-      correlation_id: content.correlationId || content.correlation_id || null,
-      source: content.source || this._extractSource(routingKey)
-    };
-
-    await this.eventStore.storeEvent(auditEvent);
-
-    if (typeof this.onEvent === 'function') {
-      this.onEvent(auditEvent);
+    try {
+      event = JSON.parse(msg.content.toString());
+    } catch (err) {
+      logger.error('Invalid JSON in audit event message', { routingKey, error: err.message });
+      return;
     }
 
-    this.logger.debug('Audit event stored', {
-      id: auditEvent.id,
-      action: auditEvent.action,
-      category: auditEvent.category,
-      severity: auditEvent.severity
+    // Derive category from routing key if not present
+    if (!event.category) {
+      event.category = routingKey.split('.')[0];
+    }
+    if (!event.action) {
+      event.action = routingKey;
+    }
+    if (!event.timestamp) {
+      event.timestamp = new Date().toISOString();
+    }
+
+    // Store event with hash chain
+    const storedEvent = await this.eventStore.store(event);
+
+    // Check alert rules
+    if (this.alertEngine) {
+      try {
+        await this.alertEngine.evaluate(storedEvent);
+      } catch (err) {
+        logger.error('Alert evaluation failed', { error: err.message, eventId: storedEvent.id });
+      }
+    }
+
+    // Broadcast to WebSocket clients
+    this._broadcastToWebSocket(storedEvent);
+
+    // Update Prometheus metrics
+    this._updateMetrics(storedEvent);
+
+    logger.debug('Audit event processed', {
+      id: storedEvent.id,
+      category: storedEvent.category,
+      action: storedEvent.action,
     });
   }
 
-  _extractCategory(routingKey) {
-    const parts = routingKey.split('.');
-    const prefix = parts[0];
-    if (EVENT_CATEGORIES.includes(prefix)) {
-      return prefix;
+  _broadcastToWebSocket(event) {
+    if (!this.wsClients || this.wsClients.size === 0) return;
+
+    const payload = JSON.stringify({
+      type: 'audit_event',
+      data: {
+        id: event.id,
+        timestamp: event.timestamp,
+        category: event.category,
+        severity: event.severity,
+        action: event.action,
+        actor_name: event.actor_name,
+        target_name: event.target_name,
+        result: event.result,
+      },
+    });
+
+    let sent = 0;
+    for (const client of this.wsClients) {
+      if (client.readyState === 1) { // WebSocket.OPEN
+        try {
+          client.send(payload);
+          sent++;
+        } catch (err) {
+          logger.debug('Failed to send to WebSocket client', { error: err.message });
+        }
+      }
     }
-    return 'system';
+
+    if (sent > 0) {
+      logger.debug('Broadcast audit event to WebSocket clients', { eventId: event.id, clients: sent });
+    }
   }
 
-  _determineSeverity(routingKey, content) {
-    if (content.severity) return content.severity;
+  _updateMetrics(event) {
+    if (!this.metrics) return;
 
-    const key = routingKey.toLowerCase();
-
-    if (key.includes('security.breach') || key.includes('security.intrusion')) {
-      return 'critical';
-    }
-    if (key.includes('security.') || key.includes('policy.violation') || key.includes('admin.delete')) {
-      return 'high';
-    }
-    if (key.includes('admin.') || key.includes('policy.') || key.includes('identity.delete')) {
-      return 'medium';
-    }
-    if (key.includes('.error') || key.includes('.failed')) {
-      return 'medium';
-    }
-    return 'low';
-  }
-
-  _extractActor(content) {
-    if (content.actor) return content.actor;
-    return {
-      id: content.userId || content.actorId || null,
-      type: content.actorType || 'user',
-      name: content.userName || content.actorName || null,
-      ip: content.ip || content.sourceIp || null
-    };
-  }
-
-  _extractTarget(content) {
-    if (content.target) return content.target;
-    return {
-      id: content.targetId || content.resourceId || null,
-      type: content.targetType || content.resourceType || null,
-      name: content.targetName || content.resourceName || null
-    };
-  }
-
-  _extractSource(routingKey) {
-    const parts = routingKey.split('.');
-    if (parts.length >= 2) {
-      return `${parts[0]}-service`;
-    }
-    return 'unknown';
-  }
-
-  _scheduleReconnect() {
-    if (this.reconnectTimer) return;
-    this.reconnectTimer = setTimeout(async () => {
-      this.reconnectTimer = null;
-      this.logger.info('Attempting RabbitMQ reconnection', { delay: this.reconnectDelay });
-      await this.connect();
-      this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
-    }, this.reconnectDelay);
-  }
-
-  async disconnect() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
     try {
-      if (this.channel) await this.channel.close();
-      if (this.connection) await this.connection.close();
+      this.metrics.eventsProcessed.inc({
+        category: event.category,
+        severity: event.severity,
+        result: event.result,
+      });
     } catch (err) {
-      this.logger.error('Error closing RabbitMQ connection', { error: err.message });
+      logger.debug('Failed to update metrics', { error: err.message });
     }
-    this.connected = false;
-    this.logger.info('EventCollector disconnected');
-  }
-
-  isConnected() {
-    return this.connected;
   }
 }
 

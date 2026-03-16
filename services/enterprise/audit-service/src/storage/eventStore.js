@@ -1,144 +1,79 @@
 'use strict';
 
-const { Pool } = require('pg');
-const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
-
-const CREATE_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS audit_events (
-    id UUID PRIMARY KEY,
-    timestamp TIMESTAMPTZ NOT NULL,
-    category VARCHAR(64) NOT NULL,
-    severity VARCHAR(16) NOT NULL,
-    actor JSONB,
-    target JSONB,
-    action TEXT NOT NULL,
-    details JSONB,
-    result VARCHAR(32),
-    correlation_id UUID,
-    hash VARCHAR(64) NOT NULL,
-    source VARCHAR(128),
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp ON audit_events (timestamp DESC);
-  CREATE INDEX IF NOT EXISTS idx_audit_events_category ON audit_events (category);
-  CREATE INDEX IF NOT EXISTS idx_audit_events_severity ON audit_events (severity);
-  CREATE INDEX IF NOT EXISTS idx_audit_events_action ON audit_events (action);
-  CREATE INDEX IF NOT EXISTS idx_audit_events_correlation_id ON audit_events (correlation_id);
-  CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events USING GIN (actor);
-  CREATE INDEX IF NOT EXISTS idx_audit_events_target ON audit_events USING GIN (target);
-  CREATE INDEX IF NOT EXISTS idx_audit_events_details ON audit_events USING GIN (details);
-  CREATE INDEX IF NOT EXISTS idx_audit_events_result ON audit_events (result);
-  CREATE INDEX IF NOT EXISTS idx_audit_events_source ON audit_events (source);
-  CREATE INDEX IF NOT EXISTS idx_audit_events_created_at ON audit_events (created_at DESC);
-`;
-
-const FULLTEXT_INDEX_SQL = `
-  CREATE INDEX IF NOT EXISTS idx_audit_events_fulltext
-  ON audit_events USING GIN (
-    to_tsvector('english', COALESCE(action, '') || ' ' || COALESCE(details::text, ''))
-  );
-`;
+const logger = require('../utils/logger');
 
 class EventStore {
-  constructor({ logger }) {
-    this.logger = logger;
-    this.lastHash = null;
-    this.pool = new Pool({
-      host: process.env.PG_HOST || 'localhost',
-      port: parseInt(process.env.PG_PORT, 10) || 5432,
-      database: process.env.PG_DATABASE || 'audit_service',
-      user: process.env.PG_USER || 'postgres',
-      password: process.env.PG_PASSWORD || 'postgres',
-      max: parseInt(process.env.PG_POOL_MAX, 10) || 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000
-    });
-
-    this.pool.on('error', (err) => {
-      this.logger.error('Unexpected PostgreSQL pool error', { error: err.message });
-    });
+  constructor(db, integrityChecker) {
+    this.db = db;
+    this.integrityChecker = integrityChecker;
   }
 
-  async initialize() {
-    const client = await this.pool.connect();
-    try {
-      await client.query(CREATE_TABLE_SQL);
-      await client.query(FULLTEXT_INDEX_SQL);
-      this.logger.info('Audit events table and indexes created');
-
-      // Load last hash for chain continuity
-      const result = await client.query(
-        'SELECT hash FROM audit_events ORDER BY created_at DESC LIMIT 1'
-      );
-      if (result.rows.length > 0) {
-        this.lastHash = result.rows[0].hash;
-        this.logger.info('Resumed hash chain', { lastHash: this.lastHash });
-      } else {
-        this.lastHash = '0'.repeat(64);
-        this.logger.info('Starting new hash chain');
-      }
-    } finally {
-      client.release();
-    }
-  }
-
-  _computeHash(previousHash, event) {
-    const payload = previousHash + JSON.stringify({
-      id: event.id,
-      timestamp: event.timestamp,
-      category: event.category,
-      severity: event.severity,
-      actor: event.actor,
-      target: event.target,
-      action: event.action,
-      details: event.details,
-      result: event.result,
-      correlation_id: event.correlation_id,
-      source: event.source
+  async store(event) {
+    const timestamp = event.timestamp || new Date().toISOString();
+    const eventWithHash = this.integrityChecker.calculateHash({
+      ...event,
+      timestamp,
     });
-    return crypto.createHash('sha256').update(payload).digest('hex');
-  }
-
-  async storeEvent(event) {
-    const id = event.id || uuidv4();
-    const hash = this._computeHash(this.lastHash, event);
 
     const query = `
-      INSERT INTO audit_events
-        (id, timestamp, category, severity, actor, target, action, details, result, correlation_id, hash, source)
-      VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO audit_events (
+        id, timestamp, category, severity, actor_type, actor_id, actor_name, actor_ip,
+        target_type, target_id, target_name, action, details, result,
+        correlation_id, source, hash, previous_hash
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8,
+        $9, $10, $11, $12, $13, $14,
+        $15, $16, $17, $18
+      )
       RETURNING *
     `;
 
+    const id = event.id || uuidv4();
     const values = [
       id,
-      event.timestamp || new Date().toISOString(),
-      event.category || 'system',
-      event.severity || 'low',
-      JSON.stringify(event.actor || {}),
-      JSON.stringify(event.target || {}),
-      event.action,
-      JSON.stringify(event.details || {}),
-      event.result || 'success',
-      event.correlation_id || null,
-      hash,
-      event.source || 'unknown'
+      timestamp,
+      eventWithHash.category,
+      eventWithHash.severity || 'info',
+      eventWithHash.actor_type || null,
+      eventWithHash.actor_id || null,
+      eventWithHash.actor_name || null,
+      eventWithHash.actor_ip || null,
+      eventWithHash.target_type || null,
+      eventWithHash.target_id || null,
+      eventWithHash.target_name || null,
+      eventWithHash.action,
+      JSON.stringify(eventWithHash.details || {}),
+      eventWithHash.result || 'success',
+      eventWithHash.correlation_id || null,
+      eventWithHash.source || null,
+      eventWithHash.hash,
+      eventWithHash.previous_hash,
     ];
 
-    const result = await this.pool.query(query, values);
-    this.lastHash = hash;
-
-    return result.rows[0];
+    try {
+      const result = await this.db.query(query, values);
+      logger.debug('Audit event stored', { id, category: eventWithHash.category, action: eventWithHash.action });
+      return result.rows[0];
+    } catch (err) {
+      logger.error('Failed to store audit event', { error: err.message, category: eventWithHash.category });
+      throw err;
+    }
   }
 
-  async getEvents(filters = {}, pagination = {}) {
+  async query(filters = {}) {
     const conditions = [];
     const params = [];
     let paramIndex = 1;
 
+    if (filters.startTime) {
+      conditions.push(`timestamp >= $${paramIndex++}`);
+      params.push(filters.startTime);
+    }
+    if (filters.endTime) {
+      conditions.push(`timestamp <= $${paramIndex++}`);
+      params.push(filters.endTime);
+    }
     if (filters.category) {
       conditions.push(`category = $${paramIndex++}`);
       params.push(filters.category);
@@ -147,8 +82,20 @@ class EventStore {
       conditions.push(`severity = $${paramIndex++}`);
       params.push(filters.severity);
     }
+    if (filters.actorId) {
+      conditions.push(`actor_id = $${paramIndex++}`);
+      params.push(filters.actorId);
+    }
+    if (filters.targetId) {
+      conditions.push(`target_id = $${paramIndex++}`);
+      params.push(filters.targetId);
+    }
+    if (filters.targetType) {
+      conditions.push(`target_type = $${paramIndex++}`);
+      params.push(filters.targetType);
+    }
     if (filters.action) {
-      conditions.push(`action LIKE $${paramIndex++}`);
+      conditions.push(`action ILIKE $${paramIndex++}`);
       params.push(`%${filters.action}%`);
     }
     if (filters.result) {
@@ -159,125 +106,103 @@ class EventStore {
       conditions.push(`source = $${paramIndex++}`);
       params.push(filters.source);
     }
-    if (filters.actorId) {
-      conditions.push(`actor->>'id' = $${paramIndex++}`);
-      params.push(filters.actorId);
-    }
-    if (filters.targetId) {
-      conditions.push(`target->>'id' = $${paramIndex++}`);
-      params.push(filters.targetId);
-    }
-    if (filters.startTime) {
-      conditions.push(`timestamp >= $${paramIndex++}`);
-      params.push(filters.startTime);
-    }
-    if (filters.endTime) {
-      conditions.push(`timestamp <= $${paramIndex++}`);
-      params.push(filters.endTime);
-    }
     if (filters.correlationId) {
       conditions.push(`correlation_id = $${paramIndex++}`);
       params.push(filters.correlationId);
     }
 
-    // Cursor-based pagination
-    if (pagination.cursor) {
-      conditions.push(`created_at < $${paramIndex++}`);
-      params.push(pagination.cursor);
-    }
-
-    const whereClause = conditions.length > 0
-      ? 'WHERE ' + conditions.join(' AND ')
-      : '';
-
-    const sortField = filters.sortBy === 'severity' ? 'severity' : 'timestamp';
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = Math.min(Math.max(parseInt(filters.limit, 10) || 50, 1), 1000);
+    const offset = Math.max(parseInt(filters.offset, 10) || 0, 0);
     const sortDir = filters.sortDir === 'asc' ? 'ASC' : 'DESC';
-    const limit = Math.min(parseInt(pagination.limit, 10) || 50, 500);
 
-    const countQuery = `SELECT COUNT(*) as total FROM audit_events ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) AS total FROM audit_events ${whereClause}`;
     const dataQuery = `
       SELECT * FROM audit_events
       ${whereClause}
-      ORDER BY ${sortField} ${sortDir}, created_at DESC
-      LIMIT $${paramIndex}
+      ORDER BY timestamp ${sortDir}
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
-    params.push(limit);
+    params.push(limit, offset);
 
-    const [countResult, dataResult] = await Promise.all([
-      this.pool.query(countQuery, params.slice(0, -1)),
-      this.pool.query(dataQuery, params)
-    ]);
+    try {
+      const [countResult, dataResult] = await Promise.all([
+        this.db.query(countQuery, params.slice(0, params.length - 2)),
+        this.db.query(dataQuery, params),
+      ]);
 
-    const events = dataResult.rows;
-    const nextCursor = events.length === limit
-      ? events[events.length - 1].created_at.toISOString()
-      : null;
-
-    return {
-      events,
-      total: parseInt(countResult.rows[0].total, 10),
-      limit,
-      cursor: nextCursor
-    };
+      return {
+        events: dataResult.rows,
+        total: parseInt(countResult.rows[0].total, 10),
+        limit,
+        offset,
+        hasMore: offset + limit < parseInt(countResult.rows[0].total, 10),
+      };
+    } catch (err) {
+      logger.error('Failed to query audit events', { error: err.message, filters });
+      throw err;
+    }
   }
 
-  async getEventById(id) {
-    const result = await this.pool.query(
-      'SELECT * FROM audit_events WHERE id = $1',
-      [id]
-    );
+  async getById(id) {
+    if (!id || typeof id !== 'string') {
+      throw new Error('Valid event ID is required');
+    }
+
+    const result = await this.db.query('SELECT * FROM audit_events WHERE id = $1', [id]);
     return result.rows[0] || null;
   }
 
-  async verifyIntegrity(startId, endId) {
-    const query = `
-      SELECT id, timestamp, category, severity, actor, target, action,
-             details, result, correlation_id, hash, source, created_at
-      FROM audit_events
-      WHERE created_at >= (SELECT created_at FROM audit_events WHERE id = $1)
-        AND created_at <= (SELECT created_at FROM audit_events WHERE id = $2)
-      ORDER BY created_at ASC
-    `;
-    const result = await this.pool.query(query, [startId, endId]);
-    const events = result.rows;
-
-    if (events.length === 0) {
-      return { valid: true, checked: 0, errors: [] };
+  async getByCorrelation(correlationId) {
+    if (!correlationId || typeof correlationId !== 'string') {
+      throw new Error('Valid correlation ID is required');
     }
 
-    // Get hash of event just before the range
-    const prevResult = await this.pool.query(
-      `SELECT hash FROM audit_events
-       WHERE created_at < $1
-       ORDER BY created_at DESC LIMIT 1`,
-      [events[0].created_at]
+    const result = await this.db.query(
+      'SELECT * FROM audit_events WHERE correlation_id = $1 ORDER BY timestamp ASC',
+      [correlationId]
     );
-    let previousHash = prevResult.rows.length > 0
-      ? prevResult.rows[0].hash
-      : '0'.repeat(64);
-
-    const errors = [];
-    for (const event of events) {
-      const expectedHash = this._computeHash(previousHash, event);
-      if (expectedHash !== event.hash) {
-        errors.push({
-          eventId: event.id,
-          timestamp: event.timestamp,
-          expected: expectedHash,
-          actual: event.hash
-        });
-      }
-      previousHash = event.hash;
-    }
-
-    return {
-      valid: errors.length === 0,
-      checked: events.length,
-      errors
-    };
+    return result.rows;
   }
 
-  async getStats(filters = {}) {
+  async getTimeline(targetId, options = {}) {
+    if (!targetId || typeof targetId !== 'string') {
+      throw new Error('Valid target ID is required');
+    }
+
+    const conditions = ['target_id = $1'];
+    const params = [targetId];
+    let paramIndex = 2;
+
+    if (options.targetType) {
+      conditions.push(`target_type = $${paramIndex++}`);
+      params.push(options.targetType);
+    }
+    if (options.startTime) {
+      conditions.push(`timestamp >= $${paramIndex++}`);
+      params.push(options.startTime);
+    }
+    if (options.endTime) {
+      conditions.push(`timestamp <= $${paramIndex++}`);
+      params.push(options.endTime);
+    }
+
+    const limit = Math.min(Math.max(parseInt(options.limit, 10) || 100, 1), 1000);
+    const offset = Math.max(parseInt(options.offset, 10) || 0, 0);
+
+    const query = `
+      SELECT * FROM audit_events
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY timestamp DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+    `;
+    params.push(limit, offset);
+
+    const result = await this.db.query(query, params);
+    return result.rows;
+  }
+
+  async count(filters = {}) {
     const conditions = [];
     const params = [];
     let paramIndex = 1;
@@ -290,34 +215,28 @@ class EventStore {
       conditions.push(`timestamp <= $${paramIndex++}`);
       params.push(filters.endTime);
     }
+    if (filters.category) {
+      conditions.push(`category = $${paramIndex++}`);
+      params.push(filters.category);
+    }
+    if (filters.severity) {
+      conditions.push(`severity = $${paramIndex++}`);
+      params.push(filters.severity);
+    }
 
-    const whereClause = conditions.length > 0
-      ? 'WHERE ' + conditions.join(' AND ')
-      : '';
-
-    const queries = [
-      `SELECT category, COUNT(*) as count FROM audit_events ${whereClause} GROUP BY category ORDER BY count DESC`,
-      `SELECT severity, COUNT(*) as count FROM audit_events ${whereClause} GROUP BY severity ORDER BY count DESC`,
-      `SELECT actor->>'id' as actor_id, actor->>'name' as actor_name, COUNT(*) as count
-       FROM audit_events ${whereClause} GROUP BY actor->>'id', actor->>'name' ORDER BY count DESC LIMIT 20`,
-      `SELECT COUNT(*) as total FROM audit_events ${whereClause}`
-    ];
-
-    const [byCategory, bySeverity, byActor, totalResult] = await Promise.all(
-      queries.map(q => this.pool.query(q, params))
-    );
-
-    return {
-      total: parseInt(totalResult.rows[0].total, 10),
-      byCategory: byCategory.rows,
-      bySeverity: bySeverity.rows,
-      topActors: byActor.rows
-    };
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const result = await this.db.query(`SELECT COUNT(*) AS total FROM audit_events ${whereClause}`, params);
+    return parseInt(result.rows[0].total, 10);
   }
 
-  async shutdown() {
-    await this.pool.end();
-    this.logger.info('EventStore PostgreSQL pool closed');
+  async getCategories() {
+    const result = await this.db.query(`
+      SELECT category, COUNT(*) AS count
+      FROM audit_events
+      GROUP BY category
+      ORDER BY count DESC
+    `);
+    return result.rows;
   }
 }
 
