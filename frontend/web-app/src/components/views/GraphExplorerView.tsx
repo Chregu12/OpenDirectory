@@ -69,20 +69,20 @@ interface GraphStats {
 // ── Color / Icon Maps ──────────────────────────────────────────────────────────
 
 const NODE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  user:        { bg: 'bg-blue-500/20',   border: 'border-blue-500',   text: 'text-blue-400' },
-  group:       { bg: 'bg-purple-500/20', border: 'border-purple-500', text: 'text-purple-400' },
-  device:      { bg: 'bg-green-500/20',  border: 'border-green-500',  text: 'text-green-400' },
-  policy:      { bg: 'bg-amber-500/20',  border: 'border-amber-500',  text: 'text-amber-400' },
-  update_ring: { bg: 'bg-cyan-500/20',   border: 'border-cyan-500',   text: 'text-cyan-400' },
-  permission:  { bg: 'bg-red-500/20',    border: 'border-red-500',    text: 'text-red-400' },
-  certificate: { bg: 'bg-pink-500/20',   border: 'border-pink-500',   text: 'text-pink-400' },
+  user:        { bg: 'bg-blue-100',   border: 'border-blue-500',   text: 'text-blue-700' },
+  group:       { bg: 'bg-purple-100', border: 'border-purple-500', text: 'text-purple-700' },
+  device:      { bg: 'bg-green-100',  border: 'border-green-500',  text: 'text-green-700' },
+  policy:      { bg: 'bg-amber-100',  border: 'border-amber-500',  text: 'text-amber-700' },
+  update_ring: { bg: 'bg-cyan-100',   border: 'border-cyan-500',   text: 'text-cyan-700' },
+  permission:  { bg: 'bg-red-100',    border: 'border-red-500',    text: 'text-red-700' },
+  certificate: { bg: 'bg-pink-100',   border: 'border-pink-500',   text: 'text-pink-700' },
 };
 
 const RISK_COLORS: Record<string, string> = {
-  critical: 'text-red-500',
-  high:     'text-orange-500',
-  medium:   'text-yellow-500',
-  low:      'text-blue-400',
+  critical: 'text-red-600',
+  high:     'text-orange-600',
+  medium:   'text-yellow-600',
+  low:      'text-blue-600',
   none:     'text-gray-400',
 };
 
@@ -268,7 +268,6 @@ export default function GraphExplorerView() {
   const loadGraphData = useCallback(async () => {
     setLoading(true);
     try {
-      // In production: fetch from /api/graph/full, /api/graph/attack-paths, etc.
       const { nodes: n, edges: e } = generateMockGraph();
       setNodes(n);
       setEdges(e);
@@ -300,54 +299,48 @@ export default function GraphExplorerView() {
     });
   };
 
-  // ── Highlight an attack path ─────────────────────────────────────────────
-
   const highlightAttackPath = (path: AttackPath) => {
     setHighlightedPath(path.path);
     setActiveTab('graph');
   };
 
-  // ── Node positions for edges ─────────────────────────────────────────────
-
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
-
-  // ── Render ───────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-500" />
-        <span className="ml-3 text-gray-400">Loading Graph Explorer…</span>
+        <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-3 text-gray-500">Loading Graph Explorer...</span>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-950 text-gray-100">
+    <div className="flex flex-col h-full">
       {/* ── Header ───────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
         <div>
-          <h1 className="text-xl font-bold">AD Graph Explorer</h1>
-          <p className="text-sm text-gray-500">Unified Endpoint Intelligence – Relationship Graph</p>
+          <h1 className="text-xl font-semibold text-gray-900">AD Graph Explorer</h1>
+          <p className="text-sm text-gray-500">Unified Endpoint Intelligence - Relationship Graph</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
+            <MagnifyingGlassIcon className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
             <input
-              className="pl-9 pr-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500 w-64"
-              placeholder="Search nodes…"
+              className="pl-9 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 w-64"
+              placeholder="Search nodes..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
-          <button onClick={loadGraphData} className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700" title="Refresh">
+          <button onClick={loadGraphData} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600" title="Refresh">
             <ArrowPathIcon className="w-5 h-5" />
           </button>
         </div>
       </div>
 
       {/* ── Tabs ─────────────────────────────────────────────────────────── */}
-      <div className="flex gap-1 px-6 pt-3 border-b border-gray-800">
+      <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 bg-gray-50">
         {([
           ['graph',   'Relationship Graph'],
           ['attacks', `Attack Paths (${attackPaths.length})`],
@@ -357,7 +350,7 @@ export default function GraphExplorerView() {
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`px-4 py-2 text-sm rounded-t-lg transition-colors ${activeTab === key ? 'bg-gray-800 text-white border-t border-x border-gray-700' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`od-tab ${activeTab === key ? 'od-tab-active' : 'od-tab-inactive'}`}
           >
             {label}
           </button>
@@ -369,7 +362,7 @@ export default function GraphExplorerView() {
         {activeTab === 'graph' && (
           <div className="flex h-full">
             {/* Filter sidebar */}
-            <div className="w-48 border-r border-gray-800 p-4 flex flex-col gap-3">
+            <div className="w-48 border-r border-gray-200 bg-white p-4 flex flex-col gap-3">
               <h3 className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1"><FunnelIcon className="w-3 h-3" /> Filters</h3>
               {Object.keys(NODE_COLORS).map(type => (
                 <label key={type} className="flex items-center gap-2 cursor-pointer text-sm">
@@ -377,21 +370,21 @@ export default function GraphExplorerView() {
                     type="checkbox"
                     checked={filterTypes.has(type)}
                     onChange={() => toggleFilter(type)}
-                    className="rounded border-gray-600 bg-gray-800"
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className={NODE_COLORS[type].text}>{type.replace('_', ' ')}</span>
                 </label>
               ))}
-              <hr className="border-gray-800" />
-              <div className="text-xs text-gray-600">
+              <hr className="border-gray-200" />
+              <div className="text-xs text-gray-500">
                 {filteredNodes.length} nodes / {filteredEdges.length} edges
               </div>
               {/* Zoom */}
               <div className="flex gap-1 mt-auto">
-                <button onClick={() => setZoom(z => Math.min(z + 0.2, 2))} className="p-1 bg-gray-800 rounded text-xs hover:bg-gray-700">
+                <button onClick={() => setZoom(z => Math.min(z + 0.2, 2))} className="p-1 bg-gray-100 rounded text-xs hover:bg-gray-200 text-gray-600">
                   <ArrowsPointingOutIcon className="w-4 h-4" />
                 </button>
-                <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.4))} className="p-1 bg-gray-800 rounded text-xs hover:bg-gray-700">
+                <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.4))} className="p-1 bg-gray-100 rounded text-xs hover:bg-gray-200 text-gray-600">
                   <ArrowsPointingInIcon className="w-4 h-4" />
                 </button>
                 <span className="text-xs text-gray-500 self-center ml-1">{Math.round(zoom * 100)}%</span>
@@ -399,7 +392,7 @@ export default function GraphExplorerView() {
             </div>
 
             {/* SVG Canvas */}
-            <div className="flex-1 relative overflow-auto bg-gray-950">
+            <div className="flex-1 relative overflow-auto bg-gray-50">
               <svg ref={svgRef} width="1100" height="850" className="mx-auto" style={{ transform: `scale(${zoom})`, transformOrigin: 'center top' }}>
                 {/* Edges */}
                 {filteredEdges.map(e => {
@@ -411,14 +404,14 @@ export default function GraphExplorerView() {
                     <g key={e.id}>
                       <line
                         x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
-                        stroke={isHighlighted ? '#ef4444' : '#374151'}
+                        stroke={isHighlighted ? '#ef4444' : '#d1d5db'}
                         strokeWidth={isHighlighted ? 2.5 : 1}
                         strokeDasharray={isHighlighted ? '' : '4 2'}
                         opacity={isHighlighted ? 1 : 0.6}
                       />
                       <text
                         x={(src.x + tgt.x) / 2} y={(src.y + tgt.y) / 2 - 6}
-                        fill="#6b7280" fontSize={9} textAnchor="middle"
+                        fill="#9ca3af" fontSize={9} textAnchor="middle"
                       >
                         {e.relationship}
                       </text>
@@ -427,7 +420,6 @@ export default function GraphExplorerView() {
                 })}
                 {/* Nodes */}
                 {filteredNodes.map(n => {
-                  const colors = NODE_COLORS[n.type] || NODE_COLORS.user;
                   const isHighlighted = highlightedPath.includes(n.id);
                   const isSelected = selectedNode?.id === n.id;
                   return (
@@ -435,14 +427,14 @@ export default function GraphExplorerView() {
                       <circle
                         cx={n.x} cy={n.y}
                         r={isSelected ? 28 : isHighlighted ? 24 : 20}
-                        fill={isHighlighted ? '#7f1d1d' : '#111827'}
-                        stroke={isSelected ? '#3b82f6' : isHighlighted ? '#ef4444' : '#374151'}
+                        fill={isHighlighted ? '#fef2f2' : '#ffffff'}
+                        stroke={isSelected ? '#2563eb' : isHighlighted ? '#ef4444' : '#d1d5db'}
                         strokeWidth={isSelected ? 3 : isHighlighted ? 2.5 : 1.5}
                       />
-                      <text x={n.x} y={n.y + 4} fill="#e5e7eb" fontSize={11} textAnchor="middle" fontWeight={isSelected ? 'bold' : 'normal'}>
+                      <text x={n.x} y={n.y + 4} fill="#374151" fontSize={11} textAnchor="middle" fontWeight={isSelected ? 'bold' : 'normal'}>
                         {n.type === 'user' ? '👤' : n.type === 'group' ? '👥' : n.type === 'device' ? '💻' : n.type === 'policy' ? '📋' : n.type === 'update_ring' ? '🔄' : '🔑'}
                       </text>
-                      <text x={n.x} y={n.y + 36} fill="#9ca3af" fontSize={10} textAnchor="middle">
+                      <text x={n.x} y={n.y + 36} fill="#6b7280" fontSize={10} textAnchor="middle">
                         {n.label}
                       </text>
                       {n.riskLevel !== 'none' && n.riskLevel !== 'low' && (
@@ -458,15 +450,15 @@ export default function GraphExplorerView() {
 
             {/* Detail panel */}
             {selectedNode && (
-              <div className="w-72 border-l border-gray-800 p-4 overflow-y-auto">
+              <div className="w-72 border-l border-gray-200 bg-white p-4 overflow-y-auto">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="font-semibold">{selectedNode.label}</h3>
+                    <h3 className="font-semibold text-gray-900">{selectedNode.label}</h3>
                     <span className={`text-xs px-2 py-0.5 rounded ${NODE_COLORS[selectedNode.type]?.bg} ${NODE_COLORS[selectedNode.type]?.text}`}>
                       {selectedNode.type.replace('_', ' ')}
                     </span>
                   </div>
-                  <button onClick={() => setSelectedNode(null)} className="text-gray-500 hover:text-white">
+                  <button onClick={() => setSelectedNode(null)} className="text-gray-400 hover:text-gray-600">
                     <XMarkIcon className="w-4 h-4" />
                   </button>
                 </div>
@@ -480,7 +472,7 @@ export default function GraphExplorerView() {
                   {Object.entries(selectedNode.properties).map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
                       <span className="text-gray-500">{k}</span>
-                      <span className="text-gray-300">{String(v)}</span>
+                      <span className="text-gray-700">{String(v)}</span>
                     </div>
                   ))}
                 </div>
@@ -492,10 +484,10 @@ export default function GraphExplorerView() {
                       const otherId = e.source === selectedNode.id ? e.target : e.source;
                       const other = nodeMap.get(otherId);
                       return (
-                        <div key={e.id} className="text-sm flex items-center gap-1 text-gray-400 cursor-pointer hover:text-white"
+                        <div key={e.id} className="text-sm flex items-center gap-1 text-gray-500 cursor-pointer hover:text-gray-900"
                           onClick={() => { const o = nodeMap.get(otherId); if (o) setSelectedNode(o); }}>
                           <ChevronRightIcon className="w-3 h-3" />
-                          <span className="text-gray-500">{e.relationship}</span>
+                          <span className="text-gray-400">{e.relationship}</span>
                           <span className={NODE_COLORS[other?.type || 'user']?.text}>{other?.label}</span>
                         </div>
                       );
@@ -511,23 +503,23 @@ export default function GraphExplorerView() {
           <div className="p-6 space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
             <p className="text-sm text-gray-500">Detected privilege escalation and lateral movement paths.</p>
             {attackPaths.map(ap => (
-              <div key={ap.id} className={`p-4 rounded-lg border ${ap.severity === 'critical' ? 'border-red-800 bg-red-950/30' : ap.severity === 'high' ? 'border-orange-800 bg-orange-950/30' : 'border-yellow-800 bg-yellow-950/30'}`}>
+              <div key={ap.id} className={`od-card p-4 ${ap.severity === 'critical' ? 'border-red-200' : ap.severity === 'high' ? 'border-orange-200' : 'border-yellow-200'}`}>
                 <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-semibold flex items-center gap-2">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
                     <ShieldExclamationIcon className="w-5 h-5 text-red-500" />
                     {ap.name}
                   </h3>
-                  <span className={`text-xs px-2 py-1 rounded font-medium ${ap.severity === 'critical' ? 'bg-red-900 text-red-300' : ap.severity === 'high' ? 'bg-orange-900 text-orange-300' : 'bg-yellow-900 text-yellow-300'}`}>
+                  <span className={`text-xs px-2 py-1 rounded font-medium ${ap.severity === 'critical' ? 'od-badge-critical' : ap.severity === 'high' ? 'od-badge-high' : 'od-badge-medium'}`}>
                     {ap.severity.toUpperCase()}
                   </span>
                 </div>
-                <p className="text-sm text-gray-400 mb-2">{ap.description}</p>
+                <p className="text-sm text-gray-600 mb-2">{ap.description}</p>
                 <div className="flex items-center gap-2 mb-3 text-xs">
                   {ap.path.map((nodeId, i) => {
                     const node = nodeMap.get(nodeId);
                     return (
                       <React.Fragment key={nodeId}>
-                        {i > 0 && <ChevronRightIcon className="w-3 h-3 text-gray-600" />}
+                        {i > 0 && <ChevronRightIcon className="w-3 h-3 text-gray-400" />}
                         <span className={`px-2 py-0.5 rounded ${NODE_COLORS[node?.type || 'user']?.bg} ${NODE_COLORS[node?.type || 'user']?.text}`}>
                           {node?.label || nodeId}
                         </span>
@@ -536,8 +528,8 @@ export default function GraphExplorerView() {
                   })}
                 </div>
                 <div className="flex items-center justify-between">
-                  <div className="text-xs text-green-400"><CheckCircleIcon className="w-4 h-4 inline mr-1" />{ap.mitigation}</div>
-                  <button onClick={() => highlightAttackPath(ap)} className="text-xs px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded">
+                  <div className="text-xs text-green-700"><CheckCircleIcon className="w-4 h-4 inline mr-1" />{ap.mitigation}</div>
+                  <button onClick={() => highlightAttackPath(ap)} className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg">
                     <EyeIcon className="w-3 h-3 inline mr-1" />Show in Graph
                   </button>
                 </div>
@@ -551,27 +543,29 @@ export default function GraphExplorerView() {
           <div className="p-6 space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
             <p className="text-sm text-gray-500">Accounts with admin-equivalent permissions through indirect/nested group membership.</p>
             {shadowAdmins.map(sa => (
-              <div key={sa.userId} className="p-4 rounded-lg border border-gray-800 bg-gray-900/50">
+              <div key={sa.userId} className="od-card p-4">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-2">
-                    <UserIcon className="w-5 h-5 text-orange-400" />
-                    <h3 className="font-semibold">{sa.userName}</h3>
+                    <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <UserIcon className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900">{sa.userName}</h3>
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-orange-400">{sa.riskScore}</div>
+                    <div className="text-2xl font-bold text-orange-600">{sa.riskScore}</div>
                     <div className="text-xs text-gray-500">Risk Score</div>
                   </div>
                 </div>
                 <h4 className="text-xs text-gray-500 uppercase mb-1">Effective Permissions</h4>
                 <div className="flex flex-wrap gap-1 mb-3">
                   {sa.effectivePermissions.map(p => (
-                    <span key={p} className="px-2 py-0.5 rounded bg-red-900/40 text-red-300 text-xs">{p}</span>
+                    <span key={p} className="px-2 py-0.5 rounded od-badge-critical text-xs">{p}</span>
                   ))}
                 </div>
                 <h4 className="text-xs text-gray-500 uppercase mb-1">Inherited From</h4>
                 <div className="flex flex-wrap gap-1">
                   {sa.inheritedFrom.map(g => (
-                    <span key={g} className="px-2 py-0.5 rounded bg-purple-900/40 text-purple-300 text-xs">{g}</span>
+                    <span key={g} className="px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-xs">{g}</span>
                   ))}
                 </div>
               </div>
@@ -582,50 +576,47 @@ export default function GraphExplorerView() {
         {/* ── Stats Tab ──────────────────────────────────────────────────── */}
         {activeTab === 'stats' && stats && (
           <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[calc(100vh-200px)]">
-            {/* Summary cards */}
-            <div className="p-4 rounded-lg bg-gray-900 border border-gray-800">
-              <div className="text-3xl font-bold text-blue-400">{stats.totalNodes}</div>
+            <div className="od-card p-4">
+              <div className="text-3xl font-bold text-blue-600">{stats.totalNodes}</div>
               <div className="text-sm text-gray-500">Total Nodes</div>
             </div>
-            <div className="p-4 rounded-lg bg-gray-900 border border-gray-800">
-              <div className="text-3xl font-bold text-purple-400">{stats.totalEdges}</div>
+            <div className="od-card p-4">
+              <div className="text-3xl font-bold text-purple-600">{stats.totalEdges}</div>
               <div className="text-sm text-gray-500">Total Edges</div>
             </div>
-            <div className="p-4 rounded-lg bg-gray-900 border border-gray-800">
-              <div className="text-3xl font-bold text-cyan-400">{(stats.density * 100).toFixed(1)}%</div>
+            <div className="od-card p-4">
+              <div className="text-3xl font-bold text-cyan-600">{(stats.density * 100).toFixed(1)}%</div>
               <div className="text-sm text-gray-500">Graph Density</div>
             </div>
-            <div className="p-4 rounded-lg bg-gray-900 border border-gray-800">
-              <div className="text-3xl font-bold text-green-400">{stats.avgConnections.toFixed(1)}</div>
+            <div className="od-card p-4">
+              <div className="text-3xl font-bold text-green-600">{stats.avgConnections.toFixed(1)}</div>
               <div className="text-sm text-gray-500">Avg Connections</div>
             </div>
-            {/* Nodes by type */}
-            <div className="p-4 rounded-lg bg-gray-900 border border-gray-800 col-span-1">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Nodes by Type</h3>
+            <div className="od-card p-4">
+              <h3 className="text-sm font-semibold text-gray-600 mb-3">Nodes by Type</h3>
               <div className="space-y-2">
                 {Object.entries(stats.nodesByType).map(([type, count]) => (
                   <div key={type} className="flex justify-between items-center text-sm">
-                    <span className={NODE_COLORS[type]?.text || 'text-gray-400'}>{type.replace('_', ' ')}</span>
-                    <span className="text-gray-300 font-mono">{count}</span>
+                    <span className={NODE_COLORS[type]?.text || 'text-gray-600'}>{type.replace('_', ' ')}</span>
+                    <span className="text-gray-700 font-mono">{count}</span>
                   </div>
                 ))}
               </div>
             </div>
-            {/* Risk distribution */}
-            <div className="p-4 rounded-lg bg-gray-900 border border-gray-800 col-span-1">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Risk Distribution</h3>
+            <div className="od-card p-4">
+              <h3 className="text-sm font-semibold text-gray-600 mb-3">Risk Distribution</h3>
               <div className="space-y-2">
                 {Object.entries(stats.riskDistribution).map(([level, count]) => (
                   <div key={level} className="flex justify-between items-center text-sm">
                     <span className={RISK_COLORS[level]}>{level}</span>
                     <div className="flex items-center gap-2">
-                      <div className="w-24 h-2 bg-gray-800 rounded-full overflow-hidden">
+                      <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full ${level === 'critical' ? 'bg-red-500' : level === 'high' ? 'bg-orange-500' : level === 'medium' ? 'bg-yellow-500' : level === 'low' ? 'bg-blue-500' : 'bg-gray-600'}`}
+                          className={`h-full rounded-full ${level === 'critical' ? 'bg-red-500' : level === 'high' ? 'bg-orange-500' : level === 'medium' ? 'bg-yellow-500' : level === 'low' ? 'bg-blue-500' : 'bg-gray-300'}`}
                           style={{ width: `${(count / stats.totalNodes) * 100}%` }}
                         />
                       </div>
-                      <span className="text-gray-300 font-mono w-6 text-right">{count}</span>
+                      <span className="text-gray-700 font-mono w-6 text-right">{count}</span>
                     </div>
                   </div>
                 ))}
