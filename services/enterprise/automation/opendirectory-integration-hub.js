@@ -11,6 +11,18 @@ const express = require('express');
 const { graphqlHTTP } = require('express-graphql');
 const { buildSchema } = require('graphql');
 
+// Optional dependencies - loaded lazily with clear error messages
+function requireOptional(moduleName) {
+    try {
+        return require(moduleName);
+    } catch (e) {
+        return null;
+    }
+}
+const nodeFetch = requireOptional('node-fetch');
+const nodemailer = requireOptional('nodemailer');
+const twilioModule = requireOptional('twilio');
+
 class IntegrationHub extends EventEmitter {
     constructor(config = {}) {
         super();
@@ -1417,7 +1429,8 @@ class IntegrationHub extends EventEmitter {
     // Slack Integration Methods
     async sendSlackMessage(message, channel, options = {}) {
         const connector = this.externalConnectors.get('slack');
-        const fetch = require('node-fetch');
+        if (!nodeFetch) throw new Error('node-fetch is required for this integration. Install it with: npm install node-fetch');
+        const fetch = nodeFetch;
         
         if (!connector.config.webhookUrl && !connector.config.botToken) {
             throw new Error('Slack webhook URL or bot token not configured');
@@ -1467,7 +1480,8 @@ class IntegrationHub extends EventEmitter {
     // Microsoft Teams Integration Methods
     async sendTeamsMessage(message, options = {}) {
         const connector = this.externalConnectors.get('teams');
-        const fetch = require('node-fetch');
+        if (!nodeFetch) throw new Error('node-fetch is required for this integration. Install it with: npm install node-fetch');
+        const fetch = nodeFetch;
         
         if (!connector.config.webhookUrl) {
             throw new Error('Teams webhook URL not configured');
@@ -1499,7 +1513,8 @@ class IntegrationHub extends EventEmitter {
     
     async sendTeamsCard(card) {
         const connector = this.externalConnectors.get('teams');
-        const fetch = require('node-fetch');
+        if (!nodeFetch) throw new Error('node-fetch is required for this integration. Install it with: npm install node-fetch');
+        const fetch = nodeFetch;
         
         const response = await fetch(connector.config.webhookUrl, {
             method: 'POST',
@@ -1520,7 +1535,8 @@ class IntegrationHub extends EventEmitter {
     // Jira Integration Methods
     async createJiraTicket(ticket) {
         const connector = this.externalConnectors.get('jira');
-        const fetch = require('node-fetch');
+        if (!nodeFetch) throw new Error('node-fetch is required for this integration. Install it with: npm install node-fetch');
+        const fetch = nodeFetch;
         
         const auth = Buffer.from(`${connector.config.username}:${connector.config.apiToken}`).toString('base64');
         
@@ -1561,7 +1577,8 @@ class IntegrationHub extends EventEmitter {
     // ServiceNow Integration Methods
     async createServiceNowIncident(incident) {
         const connector = this.externalConnectors.get('servicenow');
-        const fetch = require('node-fetch');
+        if (!nodeFetch) throw new Error('node-fetch is required for this integration. Install it with: npm install node-fetch');
+        const fetch = nodeFetch;
         
         const auth = Buffer.from(`${connector.config.username}:${connector.config.password}`).toString('base64');
         
@@ -1602,7 +1619,7 @@ class IntegrationHub extends EventEmitter {
     // Email Integration Methods
     async sendEmail(emailData) {
         const connector = this.externalConnectors.get('email');
-        const nodemailer = require('nodemailer');
+        if (!nodemailer) throw new Error('nodemailer is required for email integration. Install it with: npm install nodemailer');
         
         const transporter = nodemailer.createTransporter({
             host: connector.config.smtpHost,
@@ -1642,7 +1659,8 @@ class IntegrationHub extends EventEmitter {
         const connector = this.externalConnectors.get('sms');
         
         if (connector.config.provider === 'twilio') {
-            const twilio = require('twilio');
+            if (!twilioModule) throw new Error('twilio is required for SMS integration. Install it with: npm install twilio');
+            const twilio = twilioModule;
             const client = twilio(connector.config.accountSid, connector.config.authToken);
             
             const result = await client.messages.create({
@@ -1818,7 +1836,8 @@ class IntegrationHub extends EventEmitter {
     }
     
     async sendWebhookPayload(webhook, eventType, data) {
-        const fetch = require('node-fetch');
+        if (!nodeFetch) throw new Error('node-fetch is required for this integration. Install it with: npm install node-fetch');
+        const fetch = nodeFetch;
         
         const payload = {
             event: eventType,

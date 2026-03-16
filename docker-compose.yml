@@ -10,7 +10,7 @@ services:
     container_name: od-postgres
     environment:
       POSTGRES_USER: opendirectory
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       POSTGRES_MULTIPLE_DATABASES: identity,auth,policy,audit,integration,printers,network
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -27,7 +27,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: od-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
     volumes:
       - redis-data:/data
     ports:
@@ -45,7 +45,7 @@ services:
     container_name: od-mongodb
     environment:
       MONGO_INITDB_ROOT_USERNAME: opendirectory
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-changeme}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}
       MONGO_INITDB_DATABASE: devices
     volumes:
       - mongo-data:/data/db
@@ -59,7 +59,7 @@ services:
     container_name: od-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: opendirectory
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     ports:
@@ -76,10 +76,10 @@ services:
     image: nitnelave/lldap:stable
     container_name: od-lldap
     environment:
-      - LLDAP_JWT_SECRET=${LLDAP_JWT_SECRET:-super_secret_random_string}
+      - LLDAP_JWT_SECRET=${LLDAP_JWT_SECRET:?LLDAP_JWT_SECRET must be set in .env}
       - LLDAP_LDAP_BASE_DN=dc=opendirectory,dc=local
       - LLDAP_LDAP_USER_DN=admin
-      - LLDAP_LDAP_USER_PASS=${LLDAP_ADMIN_PASSWORD:-changeme}
+      - LLDAP_LDAP_USER_PASS=${LLDAP_ADMIN_PASSWORD:?LLDAP_ADMIN_PASSWORD must be set in .env}
     volumes:
       - lldap-data:/data
     ports:
@@ -100,9 +100,9 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3001
-      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/identity
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
-      - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/identity
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}@rabbitmq:5672
     ports:
       - "3001:3001"
     networks:
@@ -123,9 +123,9 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3002
-      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/auth
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
-      - JWT_SECRET=${JWT_SECRET:-changeme}
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/auth
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
       - LDAP_URL=ldap://lldap:3890
     ports:
       - "3002:3002"
@@ -147,9 +147,9 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3003
-      - MONGODB_URL=mongodb://opendirectory:${MONGO_PASSWORD:-changeme}@mongodb:27017/devices
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
-      - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+      - MONGODB_URL=mongodb://opendirectory:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongodb:27017/devices
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}@rabbitmq:5672
     ports:
       - "3003:3003"
     networks:
@@ -170,8 +170,8 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3004
-      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/policy
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/policy
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
     ports:
       - "3004:3004"
     networks:
@@ -197,8 +197,8 @@ services:
       - API_GATEWAY_PORT=3000
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
-      - JWT_SECRET=${JWT_SECRET:-changeme}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
       - LOG_LEVEL=info
     ports:
       - "3010:3000"
@@ -220,9 +220,9 @@ services:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=8080
       - CORS_ORIGIN=http://localhost:3000
-      - JWT_SECRET=${JWT_SECRET:-changeme}
-      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/api
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/api
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
     ports:
       - "8080:8080"
     networks:
@@ -247,7 +247,7 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=4000
-      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/integration
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/integration
       - LLDAP_URL=http://lldap:17170
       - GRAFANA_URL=${GRAFANA_URL:-http://grafana:3000}
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://prometheus:9090}
@@ -275,8 +275,8 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3006
-      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/printers
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/printers
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - CUPS_HOST=localhost
       - CUPS_PORT=631
       - ENABLE_DISCOVERY=true
@@ -312,8 +312,8 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3007
-      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:-changeme}@postgres/network
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/network
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - ENABLE_DNS_SERVER=true
       - ENABLE_DHCP_SERVER=true
       - ENABLE_FILE_SHARES=true
@@ -384,7 +384,7 @@ services:
     image: grafana/grafana:latest
     container_name: od-grafana
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in .env}
       - GF_INSTALL_PLUGINS=redis-datasource
     volumes:
       - grafana-data:/var/lib/grafana
@@ -420,7 +420,7 @@ services:
       NODE_ENV: production
       DEVICE_SERVICE_URL: http://device-service:3003
       AUTH_SERVICE_URL: http://auth-service:3002
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
     ports:
       - "3900:3900"
     networks:
@@ -443,7 +443,7 @@ services:
       PORT: 3901
       NODE_ENV: production
       DEVICE_SERVICE_URL: http://device-service:3003
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
     ports:
       - "3901:3901"
     networks:
@@ -467,7 +467,7 @@ services:
       NODE_ENV: production
       DEVICE_SERVICE_URL: http://device-service:3003
       AUTH_SERVICE_URL: http://auth-service:3002
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
     ports:
       - "3902:3902"
     networks:
@@ -490,7 +490,7 @@ services:
       PORT: 3903
       NODE_ENV: production
       DEVICE_SERVICE_URL: http://device-service:3003
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
     ports:
       - "3903:3903"
     networks:
@@ -513,7 +513,7 @@ services:
       PORT: 3905
       NODE_ENV: production
       DEVICE_SERVICE_URL: http://device-service:3003
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
     ports:
       - "3905:3905"
     networks:
@@ -537,7 +537,7 @@ services:
       NODE_ENV: production
       DEVICE_SERVICE_URL: http://device-service:3003
       SECURITY_SCANNER_URL: http://security-scanner:3902
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
     ports:
       - "3904:3904"
     networks:

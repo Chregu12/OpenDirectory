@@ -27,7 +27,7 @@ class PIMService extends EventEmitter {
     }
 
     async initialize() {
-        console.log('🔐 Initializing Privileged Identity Management...');
+        console.log('Initializing Privileged Identity Management...');
         
         // Initialize components
         await this.roleManager.initialize();
@@ -35,7 +35,7 @@ class PIMService extends EventEmitter {
         await this.sessionManager.initialize();
         await this.justInTimeAccess.initialize();
         
-        console.log('✅ Privileged Identity Management initialized');
+        console.log('Privileged Identity Management initialized');
     }
 
     /**
@@ -370,19 +370,18 @@ class PIMService extends EventEmitter {
     }
 
     /**
-     * Start session monitoring for all active elevations
+     * Start periodic session health checks for all active elevations
      */
-    startSessionMonitoring() {
-        // Monitor all active sessions every 30 seconds
-        setInterval(async () => {
+    startPeriodicSessionMonitoring() {
+        this._monitoringInterval = setInterval(async () => {
             for (const [elevationId, elevation] of this.activeElevations) {
                 if (elevation.status === 'ACTIVE' && elevation.monitoringEnabled) {
                     await this.checkSessionHealth(elevationId);
                 }
             }
         }, 30000);
-        
-        console.log('🔄 PIM session monitoring started');
+
+        console.log('PIM periodic session monitoring started');
     }
 
     /**
@@ -507,7 +506,7 @@ class PIMService extends EventEmitter {
             }
         });
         
-        console.log(`✅ Initialized ${this.privilegedRoles.size} privileged roles`);
+        console.log(`Initialized ${this.privilegedRoles.size} privileged roles`);
     }
 
     /**
@@ -579,25 +578,69 @@ class PIMService extends EventEmitter {
             }
         });
         
-        console.log(`✅ Initialized ${this.accessPolicies.size} access policies`);
+        console.log(`Initialized ${this.accessPolicies.size} access policies`);
     }
 
     /**
      * Helper methods
      */
     async checkRoleEligibility(userId, role) {
-        // TODO: Integrate with HR/Identity system to check eligibility
-        // For now, assume all users are eligible
-        return {
-            eligible: true,
-            reason: 'User meets all eligibility criteria'
-        };
+        const criteria = role.eligibilityCriteria;
+        if (!criteria) {
+            return { eligible: true, reason: 'No eligibility criteria defined' };
+        }
+
+        // Check if user has an active elevation for the same role (prevent stacking)
+        const activeElevations = this.getUserActiveElevations(userId);
+        const alreadyElevated = activeElevations.some(e => e.roleId === role.id);
+        if (alreadyElevated) {
+            return { eligible: false, reason: 'User already has an active elevation for this role' };
+        }
+
+        // Check required roles
+        if (criteria.requiredRoles && criteria.requiredRoles.length > 0) {
+            const userRoles = await this.roleManager.getUserRoles(userId);
+            const hasRequiredRole = criteria.requiredRoles.some(r => userRoles.includes(r));
+            if (!hasRequiredRole) {
+                return {
+                    eligible: false,
+                    reason: `User lacks required role. Needs one of: ${criteria.requiredRoles.join(', ')}`
+                };
+            }
+        }
+
+        // Check clearance level
+        if (criteria.minimumClearanceLevel) {
+            const clearanceLevels = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+            const userClearance = await this.roleManager.getUserClearanceLevel(userId);
+            const requiredIndex = clearanceLevels.indexOf(criteria.minimumClearanceLevel);
+            const userIndex = clearanceLevels.indexOf(userClearance);
+            if (userIndex < requiredIndex) {
+                return {
+                    eligible: false,
+                    reason: `Insufficient clearance level. Required: ${criteria.minimumClearanceLevel}, has: ${userClearance}`
+                };
+            }
+        }
+
+        // Check training requirements
+        if (criteria.trainingRequired && criteria.trainingRequired.length > 0) {
+            const completedTraining = await this.roleManager.getUserCompletedTraining(userId);
+            const missingTraining = criteria.trainingRequired.filter(t => !completedTraining.includes(t));
+            if (missingTraining.length > 0) {
+                return {
+                    eligible: false,
+                    reason: `Missing required training: ${missingTraining.join(', ')}`
+                };
+            }
+        }
+
+        return { eligible: true, reason: 'User meets all eligibility criteria' };
     }
 
     async calculateRequestRisk(userId, role) {
-        // Calculate risk based on various factors
         let riskScore = 0.0;
-        
+
         // Base risk from role sensitivity
         switch (role.id) {
             case 'domain-admin':
@@ -612,13 +655,23 @@ class PIMService extends EventEmitter {
             default:
                 riskScore += 0.2;
         }
-        
-        // TODO: Add more risk factors
-        // - User's recent activity
-        // - Time of request
-        // - Location
-        // - Device trust
-        
+
+        // Time-based risk: requests outside business hours are riskier
+        const hour = new Date().getHours();
+        const isBusinessHours = hour >= 8 && hour <= 18;
+        const isWeekend = [0, 6].includes(new Date().getDay());
+        if (!isBusinessHours) riskScore += 0.1;
+        if (isWeekend) riskScore += 0.1;
+
+        // Frequency risk: many recent requests from same user
+        const recentRequests = this.getUserElevationHistory(userId, 1); // last 24h
+        if (recentRequests.length > 3) riskScore += 0.15;
+        if (recentRequests.length > 5) riskScore += 0.15;
+
+        // Check if user has other active elevations (privilege stacking risk)
+        const activeElevations = this.getUserActiveElevations(userId);
+        if (activeElevations.length > 0) riskScore += 0.1;
+
         return Math.min(1.0, riskScore);
     }
 
@@ -663,17 +716,76 @@ class PIMService extends EventEmitter {
     }
 
     async validateApproverPermissions(approverId, roleId) {
-        // TODO: Implement proper approval permission checking
-        // For now, assume approver has permissions
-        return true;
+        // Approver cannot approve their own request
+        const request = [...this.accessRequests.values()].find(
+            r => r.roleId === roleId && r.requesterId === approverId && r.status === 'PENDING'
+        );
+        if (request) {
+            return false; // Self-approval not allowed
+        }
+
+        // Check if approver has the required approval role
+        const approverRoles = await this.roleManager.getUserRoles(approverId);
+        const role = this.privilegedRoles.get(roleId);
+        const policy = this.accessPolicies.get(role.policyId);
+
+        // High-privilege roles require Security Admin or IT Director approval
+        if (policy.id === 'high-privilege-policy') {
+            return approverRoles.some(r => ['SECURITY_ADMIN', 'IT_DIRECTOR', 'CISO'].includes(r));
+        }
+
+        // Medium-privilege roles require team lead or above
+        if (policy.id === 'medium-privilege-policy') {
+            return approverRoles.some(r =>
+                ['SECURITY_ADMIN', 'IT_DIRECTOR', 'CISO', 'TEAM_LEAD', 'IT_MANAGER'].includes(r)
+            );
+        }
+
+        return approverRoles.length > 0;
     }
 
     async startApprovalWorkflow(request) {
-        // TODO: Implement approval workflow logic
+        const workflowId = crypto.randomUUID();
+        const role = this.privilegedRoles.get(request.roleId);
+        const policy = this.accessPolicies.get(role.policyId);
+
+        const workflow = {
+            id: workflowId,
+            requestId: request.id,
+            policyId: policy.id,
+            status: 'AWAITING_APPROVAL',
+            requiredApprovals: policy.id === 'high-privilege-policy' ? 2 : 1,
+            currentApprovals: [],
+            rejections: [],
+            createdAt: new Date(),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            escalationAt: new Date(Date.now() + 4 * 60 * 60 * 1000) // Auto-escalate after 4h
+        };
+
+        this.approvalWorkflows.set(workflowId, workflow);
+        request.workflowId = workflowId;
+
+        // Schedule escalation if not approved in time
+        setTimeout(() => {
+            const wf = this.approvalWorkflows.get(workflowId);
+            if (wf && wf.status === 'AWAITING_APPROVAL') {
+                wf.status = 'ESCALATED';
+                this.emit('approvalEscalated', {
+                    workflowId,
+                    requestId: request.id,
+                    roleId: request.roleId
+                });
+            }
+        }, 4 * 60 * 60 * 1000);
+
         this.emit('approvalWorkflowStarted', {
             requestId: request.id,
-            workflowId: request.approvalWorkflowId
+            workflowId,
+            requiredApprovals: workflow.requiredApprovals,
+            expiresAt: workflow.expiresAt
         });
+
+        return workflow;
     }
 
     /**
@@ -730,13 +842,17 @@ class PIMService extends EventEmitter {
      * Shutdown the service
      */
     async shutdown() {
-        console.log('🔐 Shutting down Privileged Identity Management...');
+        console.log('Shutting down Privileged Identity Management...');
+        if (this._monitoringInterval) {
+            clearInterval(this._monitoringInterval);
+            this._monitoringInterval = null;
+        }
         this.removeAllListeners();
         this.privilegedRoles.clear();
         this.accessRequests.clear();
         this.activeElevations.clear();
         this.sessionMonitoring.clear();
-        console.log('✅ Privileged Identity Management shutdown complete');
+        console.log('Privileged Identity Management shutdown complete');
     }
 }
 
@@ -745,26 +861,125 @@ class PIMService extends EventEmitter {
  */
 
 class RoleManager {
+    constructor() {
+        this.userRoles = new Map();
+        this.userClearance = new Map();
+        this.userTraining = new Map();
+    }
+
     async initialize() {
-        console.log('👑 Role Manager initialized');
+        console.log('RoleManager initialized');
+    }
+
+    async getUserRoles(userId) {
+        return this.userRoles.get(userId) || [];
+    }
+
+    async setUserRoles(userId, roles) {
+        this.userRoles.set(userId, roles);
+    }
+
+    async getUserClearanceLevel(userId) {
+        return this.userClearance.get(userId) || 'PUBLIC';
+    }
+
+    async setUserClearanceLevel(userId, level) {
+        this.userClearance.set(userId, level);
+    }
+
+    async getUserCompletedTraining(userId) {
+        return this.userTraining.get(userId) || [];
+    }
+
+    async addUserTraining(userId, trainingId) {
+        const current = this.userTraining.get(userId) || [];
+        if (!current.includes(trainingId)) {
+            current.push(trainingId);
+            this.userTraining.set(userId, current);
+        }
     }
 }
 
 class ApprovalEngine {
+    constructor() {
+        this.approvers = new Map();
+    }
+
     async initialize() {
-        console.log('✅ Approval Engine initialized');
+        console.log('ApprovalEngine initialized');
+    }
+
+    async getEligibleApprovers(policyId) {
+        return this.approvers.get(policyId) || [];
+    }
+
+    async registerApprover(policyId, approverId) {
+        const current = this.approvers.get(policyId) || [];
+        if (!current.includes(approverId)) {
+            current.push(approverId);
+            this.approvers.set(policyId, current);
+        }
     }
 }
 
 class PrivilegedSessionManager {
+    constructor() {
+        this.sessions = new Map();
+    }
+
     async initialize() {
-        console.log('🎭 Privileged Session Manager initialized');
+        console.log('PrivilegedSessionManager initialized');
+    }
+
+    async createSession(elevationId, userId, permissions) {
+        const session = {
+            elevationId,
+            userId,
+            permissions,
+            startedAt: new Date(),
+            commands: []
+        };
+        this.sessions.set(elevationId, session);
+        return session;
+    }
+
+    async terminateSession(elevationId) {
+        const session = this.sessions.get(elevationId);
+        if (session) {
+            session.endedAt = new Date();
+            this.sessions.delete(elevationId);
+        }
+        return session;
     }
 }
 
 class JustInTimeAccessManager {
+    constructor() {
+        this.pendingAccess = new Map();
+    }
+
     async initialize() {
-        console.log('⏰ Just-In-Time Access Manager initialized');
+        console.log('JustInTimeAccessManager initialized');
+    }
+
+    async grantAccess(userId, resource, durationMs) {
+        const accessId = crypto.randomUUID();
+        const access = {
+            id: accessId,
+            userId,
+            resource,
+            grantedAt: new Date(),
+            expiresAt: new Date(Date.now() + durationMs)
+        };
+        this.pendingAccess.set(accessId, access);
+
+        // Auto-revoke on expiry
+        setTimeout(() => this.revokeAccess(accessId), durationMs);
+        return access;
+    }
+
+    async revokeAccess(accessId) {
+        this.pendingAccess.delete(accessId);
     }
 }
 
