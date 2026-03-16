@@ -533,6 +533,66 @@ export const aiApi = {
     api.post('/api/ai/models/train', modelData),
 };
 
+// App Store API
+export const appStoreApi = {
+  // Admin - Catalog
+  getCatalog: (params?: { search?: string; category?: string; platform?: string; tags?: string; enabled?: string; page?: number; limit?: number }) =>
+    api.get('/api/store/catalog', { params }),
+
+  createApp: (appData: any) =>
+    api.post('/api/store/catalog', appData),
+
+  updateApp: (appId: string, updates: any) =>
+    api.put(`/api/store/catalog/${appId}`, updates),
+
+  deleteApp: (appId: string) =>
+    api.delete(`/api/store/catalog/${appId}`),
+
+  assignApp: (appId: string, data: { targets: Array<{ target_type: string; target_id: string; target_name?: string }>; install_type?: string }) =>
+    api.post(`/api/store/catalog/${appId}/assign`, data),
+
+  removeAssignment: (appId: string, assignId: string) =>
+    api.delete(`/api/store/catalog/${appId}/assign/${assignId}`),
+
+  getAssignments: (appId: string) =>
+    api.get(`/api/store/catalog/${appId}/assignments`),
+
+  getCategories: () =>
+    api.get('/api/store/categories'),
+
+  seedCatalog: () =>
+    api.post('/api/store/catalog/seed'),
+
+  // Client / Self-Service
+  getAvailable: (deviceId: string) =>
+    api.get(`/api/store/available/${deviceId}`),
+
+  getRequired: (deviceId: string) =>
+    api.get(`/api/store/required/${deviceId}`),
+
+  getInstalled: (deviceId: string) =>
+    api.get(`/api/store/installed/${deviceId}`),
+
+  requestInstall: (data: { appId: string; deviceId: string }) =>
+    api.post('/api/store/install', data),
+
+  requestUninstall: (data: { appId: string; deviceId: string }) =>
+    api.post('/api/store/uninstall', data),
+
+  getInstallStatus: (installId: string) =>
+    api.get(`/api/store/install/${installId}/status`),
+
+  // Reporting
+  getHistory: (params?: { deviceId?: string; appId?: string; status?: string; page?: number; limit?: number }) =>
+    api.get('/api/store/history', { params }),
+
+  getLicenses: () =>
+    api.get('/api/store/licenses'),
+
+  getStats: () =>
+    api.get('/api/store/stats'),
+};
+
 // Utility functions
 export const formatError = (error: any): string => {
   if (error.response?.data?.error) {

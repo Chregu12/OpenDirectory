@@ -1,212 +1,180 @@
 'use strict';
 
-const VALID_TARGET_TYPES = ['device', 'user', 'group', 'ou', 'domain'];
-const VALID_ASSIGNMENT_TYPES = ['required', 'available'];
+const winston = require('winston');
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'app-store-assignment' },
+  transports: [new winston.transports.Console()],
+});
 
 class AssignmentEngine {
-  constructor(pool, redis, logger) {
+  /**
+   * @param {import('pg').Pool} pool - PostgreSQL connection pool
+   * @param {import('../distribution/distributionEngine')} distributionEngine - Distribution engine for triggering required pushes
+   */
+  constructor(pool, distributionEngine) {
     this.pool = pool;
-    this.redis = redis;
-    this.logger = logger;
+    this.distributionEngine = distributionEngine;
   }
 
   /**
-   * Assign an app to a target (group, OU, device, user, domain).
+   * Assign an app to one or more targets
+   * @param {string} appId - The app to assign
+   * @param {Array<{target_type: string, target_id: string, target_name?: string}>} targets - Assignment targets
+   * @param {string} installType - 'required', 'available', or 'uninstall'
+   * @param {string} createdBy - User creating the assignment
+   * @returns {Array} Created assignments
    */
-  async assignApp(appId, targetType, targetId, assignmentType = 'available') {
-    if (!VALID_TARGET_TYPES.includes(targetType)) {
-      throw new Error(`Invalid target type. Must be one of: ${VALID_TARGET_TYPES.join(', ')}`);
-    }
-    if (!VALID_ASSIGNMENT_TYPES.includes(assignmentType)) {
-      throw new Error(`Invalid assignment type. Must be one of: ${VALID_ASSIGNMENT_TYPES.join(', ')}`);
-    }
-
+  async assignApp(appId, targets, installType = 'available', createdBy = null) {
     // Verify app exists
-    const appCheck = await this.pool.query('SELECT id FROM apps WHERE id = $1', [appId]);
-    if (appCheck.rows.length === 0) throw new Error('App not found');
+    const appResult = await this.pool.query('SELECT id, display_name FROM store_apps WHERE id = $1', [appId]);
+    if (appResult.rows.length === 0) {
+      throw new Error('App not found');
+    }
 
+    const validTargetTypes = ['ou', 'group', 'domain', 'device', 'user'];
+    const validInstallTypes = ['required', 'available', 'uninstall'];
+
+    if (!validInstallTypes.includes(installType)) {
+      throw new Error(`Invalid install type: ${installType}. Must be one of: ${validInstallTypes.join(', ')}`);
+    }
+
+    const client = await this.pool.connect();
+    const assignments = [];
+
+    try {
+      await client.query('BEGIN');
+
+      for (const target of targets) {
+        if (!validTargetTypes.includes(target.target_type)) {
+          throw new Error(`Invalid target type: ${target.target_type}. Must be one of: ${validTargetTypes.join(', ')}`);
+        }
+
+        // Check for existing assignment for same app + target
+        const existing = await client.query(
+          `SELECT id FROM store_assignments WHERE app_id = $1 AND target_type = $2 AND target_id = $3`,
+          [appId, target.target_type, target.target_id]
+        );
+
+        if (existing.rows.length > 0) {
+          // Update existing assignment
+          const updateResult = await client.query(
+            `UPDATE store_assignments SET install_type = $1, target_name = $2, created_by = $3
+             WHERE app_id = $4 AND target_type = $5 AND target_id = $6 RETURNING *`,
+            [installType, target.target_name || null, createdBy, appId, target.target_type, target.target_id]
+          );
+          assignments.push(updateResult.rows[0]);
+        } else {
+          // Create new assignment
+          const insertResult = await client.query(
+            `INSERT INTO store_assignments (app_id, target_type, target_id, target_name, install_type, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [appId, target.target_type, target.target_id, target.target_name || null, installType, createdBy]
+          );
+          assignments.push(insertResult.rows[0]);
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    logger.info('App assigned to targets', {
+      appId,
+      appName: appResult.rows[0].display_name,
+      targetCount: targets.length,
+      installType,
+    });
+
+    // If the assignment is 'required', trigger push for affected devices
+    if (installType === 'required') {
+      this._triggerRequiredPush(targets).catch((err) => {
+        logger.error('Failed to trigger required app push after assignment', { error: err.message });
+      });
+    }
+
+    return assignments;
+  }
+
+  /**
+   * Remove an assignment
+   */
+  async removeAssignment(assignId) {
     const result = await this.pool.query(
-      `INSERT INTO assignments (app_id, target_type, target_id, assignment_type)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (app_id, target_type, target_id) DO UPDATE
-       SET assignment_type = $4
-       RETURNING *`,
-      [appId, targetType, targetId, assignmentType]
+      'DELETE FROM store_assignments WHERE id = $1 RETURNING *',
+      [assignId]
     );
 
-    this.logger.info('App assigned', { appId, targetType, targetId, assignmentType });
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    logger.info('Assignment removed', { assignId, appId: result.rows[0].app_id });
     return result.rows[0];
   }
 
   /**
-   * Remove an assignment.
+   * Get all assignments for an app
    */
-  async unassignApp(assignmentId) {
+  async getAppAssignments(appId) {
     const result = await this.pool.query(
-      'DELETE FROM assignments WHERE id = $1 RETURNING *',
-      [assignmentId]
-    );
-    if (result.rows.length === 0) throw new Error('Assignment not found');
-
-    this.logger.info('App unassigned', { assignmentId });
-    return { deleted: true, id: assignmentId };
-  }
-
-  /**
-   * Unassign by app/target combination.
-   */
-  async unassignAppByTarget(appId, targetType, targetId) {
-    const result = await this.pool.query(
-      'DELETE FROM assignments WHERE app_id = $1 AND target_type = $2 AND target_id = $3 RETURNING *',
-      [appId, targetType, targetId]
-    );
-    if (result.rows.length === 0) throw new Error('Assignment not found');
-    return { deleted: true };
-  }
-
-  /**
-   * Get all assignments for a device, resolving group/OU/domain memberships.
-   * Takes a device context with deviceId, groups, ou, domain, userId.
-   */
-  async getAssignmentsForDevice(deviceId, deviceContext = {}) {
-    const { groups = [], ou = null, domain = null, userId = null } = deviceContext;
-
-    // Build all possible target conditions
-    const conditions = [];
-    const values = [];
-    let idx = 1;
-
-    // Direct device assignment
-    conditions.push(`(target_type = 'device' AND target_id = $${idx++})`);
-    values.push(deviceId);
-
-    // User assignment
-    if (userId) {
-      conditions.push(`(target_type = 'user' AND target_id = $${idx++})`);
-      values.push(userId);
-    }
-
-    // Group assignments
-    for (const groupId of groups) {
-      conditions.push(`(target_type = 'group' AND target_id = $${idx++})`);
-      values.push(groupId);
-    }
-
-    // OU assignment
-    if (ou) {
-      conditions.push(`(target_type = 'ou' AND target_id = $${idx++})`);
-      values.push(ou);
-    }
-
-    // Domain assignment
-    if (domain) {
-      conditions.push(`(target_type = 'domain' AND target_id = $${idx++})`);
-      values.push(domain);
-    }
-
-    const where = conditions.join(' OR ');
-
-    const result = await this.pool.query(
-      `SELECT a.*, apps.name AS app_name, apps.platforms, apps.mandatory AS app_mandatory
-       FROM assignments a
-       JOIN apps ON apps.id = a.app_id
-       WHERE ${where}
-       ORDER BY a.assignment_type ASC, apps.name ASC`,
-      values
-    );
-
-    // Deduplicate: if the same app is assigned multiple times, "required" wins over "available"
-    const appMap = new Map();
-    for (const row of result.rows) {
-      const existing = appMap.get(row.app_id);
-      if (!existing || row.assignment_type === 'required') {
-        appMap.set(row.app_id, row);
-      }
-    }
-
-    return Array.from(appMap.values());
-  }
-
-  /**
-   * Get mandatory apps for a device context.
-   */
-  async getMandatoryAppsForDevice(deviceId, deviceContext = {}) {
-    const assignments = await this.getAssignmentsForDevice(deviceId, deviceContext);
-    return assignments.filter((a) => a.assignment_type === 'required' || a.app_mandatory);
-  }
-
-  /**
-   * List all assignments with optional filters.
-   */
-  async listAssignments({ appId, targetType, targetId, assignmentType, limit = 100, offset = 0 } = {}) {
-    const conditions = [];
-    const values = [];
-    let idx = 1;
-
-    if (appId) {
-      conditions.push(`a.app_id = $${idx++}`);
-      values.push(appId);
-    }
-    if (targetType) {
-      conditions.push(`a.target_type = $${idx++}`);
-      values.push(targetType);
-    }
-    if (targetId) {
-      conditions.push(`a.target_id = $${idx++}`);
-      values.push(targetId);
-    }
-    if (assignmentType) {
-      conditions.push(`a.assignment_type = $${idx++}`);
-      values.push(assignmentType);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const countResult = await this.pool.query(
-      `SELECT COUNT(*) FROM assignments a ${where}`,
-      values
-    );
-
-    values.push(limit, offset);
-    const result = await this.pool.query(
-      `SELECT a.*, apps.name AS app_name
-       FROM assignments a
-       JOIN apps ON apps.id = a.app_id
-       ${where}
-       ORDER BY a.created_at DESC
-       LIMIT $${idx++} OFFSET $${idx}`,
-      values
-    );
-
-    return {
-      assignments: result.rows,
-      total: parseInt(countResult.rows[0].count, 10),
-      limit,
-      offset,
-    };
-  }
-
-  /**
-   * Get assignments for a specific app.
-   */
-  async getAssignmentsForApp(appId) {
-    const result = await this.pool.query(
-      `SELECT * FROM assignments WHERE app_id = $1 ORDER BY target_type, target_id`,
+      `SELECT * FROM store_assignments WHERE app_id = $1 ORDER BY target_type, target_name ASC`,
       [appId]
     );
     return result.rows;
   }
 
   /**
-   * Get all app IDs assigned to a given target.
+   * Get all assignments for a specific target
    */
-  async getAppIdsForTarget(targetType, targetId) {
+  async getTargetAssignments(targetType, targetId) {
     const result = await this.pool.query(
-      `SELECT app_id, assignment_type FROM assignments WHERE target_type = $1 AND target_id = $2`,
+      `SELECT sa.*, sapp.display_name as app_name, sapp.category, sapp.icon_url
+       FROM store_assignments sa
+       JOIN store_apps sapp ON sa.app_id = sapp.id
+       WHERE sa.target_type = $1 AND sa.target_id = $2
+       ORDER BY sapp.display_name ASC`,
       [targetType, targetId]
     );
     return result.rows;
   }
+
+  /**
+   * Trigger push of required apps to devices affected by the assignment targets
+   */
+  async _triggerRequiredPush(targets) {
+    if (!this.distributionEngine) return;
+
+    for (const target of targets) {
+      if (target.target_type === 'device') {
+        // Direct device assignment - push immediately
+        try {
+          await this.distributionEngine.pushRequiredApps(target.target_id);
+        } catch (error) {
+          logger.warn('Failed to push required apps to device', {
+            deviceId: target.target_id,
+            error: error.message,
+          });
+        }
+      }
+      // For OU, group, domain, user targets we would need to resolve
+      // the list of devices and push to each. This is handled asynchronously
+      // by the device enrollment flow and periodic sync.
+      logger.info('Required app push triggered for target', {
+        targetType: target.target_type,
+        targetId: target.target_id,
+      });
+    }
+  }
 }
 
-module.exports = { AssignmentEngine, VALID_TARGET_TYPES, VALID_ASSIGNMENT_TYPES };
+module.exports = AssignmentEngine;

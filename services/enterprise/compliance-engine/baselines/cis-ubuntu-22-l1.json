@@ -1,0 +1,81 @@
+{
+  "id": "cis-ubuntu22-l1",
+  "name": "CIS Ubuntu 22.04 LTS Level 1 Server",
+  "framework": "cis",
+  "platform": "linux",
+  "version": "1.0.0",
+  "checks": [
+    {
+      "id": "1.1.1", "title": "Ensure UFW is installed and enabled",
+      "category": "Network Security", "severity": "critical",
+      "check": { "type": "package", "name": "ufw", "expected": true },
+      "remediation": { "type": "command", "script": "apt-get install -y ufw && ufw enable" }
+    },
+    {
+      "id": "1.1.2", "title": "Ensure UFW default deny firewall policy",
+      "category": "Network Security", "severity": "high",
+      "check": { "type": "command", "command": "ufw status verbose | grep Default", "expected": "deny (incoming)" },
+      "remediation": { "type": "command", "script": "ufw default deny incoming && ufw default allow outgoing" }
+    },
+    {
+      "id": "2.1.1", "title": "Ensure SSH PermitRootLogin is disabled",
+      "category": "SSH Configuration", "severity": "critical",
+      "check": { "type": "config_file", "path": "/etc/ssh/sshd_config", "key": "PermitRootLogin", "value": "no", "operator": "==" },
+      "remediation": { "type": "config_set", "path": "/etc/ssh/sshd_config", "key": "PermitRootLogin", "value": "no" }
+    },
+    {
+      "id": "2.1.2", "title": "Ensure SSH PasswordAuthentication is disabled",
+      "category": "SSH Configuration", "severity": "high",
+      "check": { "type": "config_file", "path": "/etc/ssh/sshd_config", "key": "PasswordAuthentication", "value": "no", "operator": "==" },
+      "remediation": { "type": "config_set", "path": "/etc/ssh/sshd_config", "key": "PasswordAuthentication", "value": "no" }
+    },
+    {
+      "id": "2.1.3", "title": "Ensure SSH MaxAuthTries <= 4",
+      "category": "SSH Configuration", "severity": "medium",
+      "check": { "type": "config_file", "path": "/etc/ssh/sshd_config", "key": "MaxAuthTries", "value": 4, "operator": "<=" },
+      "remediation": { "type": "config_set", "path": "/etc/ssh/sshd_config", "key": "MaxAuthTries", "value": "4" }
+    },
+    {
+      "id": "3.1.1", "title": "Ensure password minimum length >= 14",
+      "category": "Password Policy", "severity": "high",
+      "check": { "type": "config_file", "path": "/etc/security/pwquality.conf", "key": "minlen", "value": 14, "operator": ">=" },
+      "remediation": { "type": "config_set", "path": "/etc/security/pwquality.conf", "key": "minlen", "value": "14" }
+    },
+    {
+      "id": "4.1.1", "title": "Ensure /tmp is a separate partition with noexec",
+      "category": "Filesystem Permissions", "severity": "medium",
+      "check": { "type": "command", "command": "findmnt -n /tmp -o OPTIONS", "expected": "noexec" },
+      "remediation": { "type": "manual", "description": "Configure /etc/fstab to mount /tmp with noexec,nosuid,nodev options" }
+    },
+    {
+      "id": "5.1.1", "title": "Ensure kernel parameter net.ipv4.ip_forward is disabled",
+      "category": "Kernel Parameters", "severity": "medium",
+      "check": { "type": "sysctl", "key": "net.ipv4.ip_forward", "value": 0, "operator": "==" },
+      "remediation": { "type": "command", "script": "sysctl -w net.ipv4.ip_forward=0" }
+    },
+    {
+      "id": "5.1.2", "title": "Ensure ICMP redirect acceptance is disabled",
+      "category": "Kernel Parameters", "severity": "medium",
+      "check": { "type": "sysctl", "key": "net.ipv4.conf.all.accept_redirects", "value": 0, "operator": "==" },
+      "remediation": { "type": "command", "script": "sysctl -w net.ipv4.conf.all.accept_redirects=0" }
+    },
+    {
+      "id": "6.1.1", "title": "Ensure AppArmor is installed and enforcing",
+      "category": "Mandatory Access Control", "severity": "high",
+      "check": { "type": "package", "name": "apparmor", "expected": true },
+      "remediation": { "type": "command", "script": "apt-get install -y apparmor apparmor-utils && aa-enforce /etc/apparmor.d/*" }
+    },
+    {
+      "id": "7.1.1", "title": "Ensure unattended-upgrades is installed",
+      "category": "Software Updates", "severity": "high",
+      "check": { "type": "package", "name": "unattended-upgrades", "expected": true },
+      "remediation": { "type": "command", "script": "apt-get install -y unattended-upgrades && dpkg-reconfigure -plow unattended-upgrades" }
+    },
+    {
+      "id": "8.1.1", "title": "Ensure permissions on /etc/passwd are 644",
+      "category": "File Permissions", "severity": "high",
+      "check": { "type": "permission", "path": "/etc/passwd", "value": "644", "operator": "==" },
+      "remediation": { "type": "command", "script": "chmod 644 /etc/passwd" }
+    }
+  ]
+}

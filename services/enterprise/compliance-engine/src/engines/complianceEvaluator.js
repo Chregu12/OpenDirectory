@@ -1,388 +1,517 @@
 'use strict';
 
-/**
- * ComplianceEvaluator – Central evaluation engine that compares device inventory
- * data against assigned baselines and produces a ComplianceResult.
- */
+const logger = require('../utils/logger');
+const ScoreCalculator = require('./scoreCalculator');
+
 class ComplianceEvaluator {
-  constructor({ pgPool, redis, logger, baselineManager, waiverManager, scoreCalculator, trendAnalyzer }) {
-    this.pgPool = pgPool;
+  constructor(db, redis, eventBus) {
+    this.db = db;
     this.redis = redis;
-    this.logger = logger;
-    this.baselineManager = baselineManager;
-    this.waiverManager = waiverManager;
-    this.scoreCalculator = scoreCalculator;
-    this.trendAnalyzer = trendAnalyzer;
-    this.scanners = {};
+    this.eventBus = eventBus;
+    this.scoreCalculator = new ScoreCalculator(db);
   }
 
   /**
-   * Register a platform-specific scanner.
-   */
-  registerScanner(platform, scanner) {
-    this.scanners[platform] = scanner;
-  }
-
-  /**
-   * Evaluate a device against all applicable baselines.
-   * @param {string} deviceId
-   * @param {object|null} inventoryData - live inventory snapshot; null = use cached
-   * @returns {object} ComplianceResult
+   * Evaluate a device against all applicable compliance baselines.
+   * @param {string} deviceId - The device identifier
+   * @param {object} inventoryData - Device inventory/telemetry data
+   * @returns {object} Evaluation summary with per-baseline results
    */
   async evaluateDevice(deviceId, inventoryData) {
-    const timer = Date.now();
-    this.logger.info('Evaluating device compliance', { deviceId });
+    const startTime = Date.now();
+    logger.info(`Starting compliance evaluation for device ${deviceId}`);
 
-    // Determine platform from inventory data
-    const platform = this._detectPlatform(inventoryData);
-    if (!platform) {
-      this.logger.warn('Cannot determine platform for device', { deviceId });
-      return null;
-    }
+    try {
+      // 1. Determine device platform
+      const platform = this._detectPlatform(inventoryData);
 
-    // Get applicable baselines
-    const baselines = this.baselineManager.getBaselinesForDevice(deviceId, platform);
-    if (baselines.length === 0) {
-      this.logger.info('No applicable baselines for device', { deviceId, platform });
-      return null;
-    }
+      // 2. Get all active baselines for device's platform
+      const baselines = await this._getActiveBaselines(platform);
+      if (baselines.length === 0) {
+        logger.warn(`No active baselines found for platform "${platform}"`);
+        return { deviceId, platform, baselines: [], overallScore: null };
+      }
 
-    // Retrieve previous results for change detection
-    const previousResults = await this._getPreviousResults(deviceId);
+      // 3. Get applicable waivers for device
+      const waivers = await this._getActiveWaivers(deviceId);
+      const waiverMap = this._buildWaiverMap(waivers);
 
-    // Evaluate each baseline
-    const allCheckResults = [];
-    let totalPassed = 0;
-    let totalFailed = 0;
-    let totalSkipped = 0;
-    let criticalFailures = 0;
-    let highFailures = 0;
-    let mediumFailures = 0;
-    let lowFailures = 0;
+      const results = [];
 
-    for (const baseline of baselines) {
-      const scanner = this.scanners[platform];
-      const checks = scanner ? scanner.getChecksForBaseline(baseline.id) : baseline.checks;
+      // 4. For each baseline: compare inventory data against checks
+      for (const baseline of baselines) {
+        const checkResults = [];
+        const checks = baseline.checks || [];
 
-      for (const check of checks) {
-        const result = await this._evaluateCheck(check, inventoryData, deviceId);
-        allCheckResults.push({
-          checkId: check.id,
+        for (const check of checks) {
+          const result = await this.evaluateCheck(check, inventoryData);
+          // Apply waiver if one exists
+          const waiverKey = `${baseline.id}:${check.id}`;
+          if (waiverMap.has(waiverKey) || waiverMap.has(`*:${check.id}`)) {
+            result.waived = true;
+            result.waiverReason = (waiverMap.get(waiverKey) || waiverMap.get(`*:${check.id}`)).reason;
+          }
+          checkResults.push(result);
+        }
+
+        // 5. Calculate score per baseline
+        const score = this.scoreCalculator.calculate(checks, checkResults, waivers);
+
+        // 6. Store results in DB
+        const resultRecord = await this._storeResult(deviceId, baseline, score, checkResults);
+
+        // 7. Record history entry
+        await this._recordHistory(deviceId, baseline.id, score.score);
+
+        results.push({
           baselineId: baseline.id,
-          title: check.title,
-          category: check.category,
-          severity: check.severity,
-          status: result.status,
-          actual: result.actual,
-          expected: result.expected,
-          message: result.message,
-          remediation: check.remediation || null,
+          baselineName: baseline.name,
+          framework: baseline.framework,
+          score: score.score,
+          breakdown: score.breakdown,
+          totalChecks: checks.length,
+          passedChecks: score.passedCount,
+          failedChecks: score.failedCount,
+          skippedChecks: score.skippedCount,
+          criticalFailures: score.breakdown.critical.failed,
+          highFailures: score.breakdown.high.failed,
+          mediumFailures: score.breakdown.medium.failed,
+          lowFailures: score.breakdown.low.failed,
+          details: checkResults,
         });
 
-        if (result.status === 'pass') {
-          totalPassed++;
-        } else if (result.status === 'fail') {
-          totalFailed++;
-          switch (check.severity) {
-            case 'critical': criticalFailures++; break;
-            case 'high': highFailures++; break;
-            case 'medium': mediumFailures++; break;
-            case 'low': lowFailures++; break;
-          }
-        } else {
-          totalSkipped++;
+        // 8. Emit compliance event
+        const previousScore = await this._getPreviousScore(deviceId, baseline.id);
+        const event = this._buildComplianceEvent(deviceId, baseline, score, previousScore);
+        await this._emitEvent(event);
+
+        // If score drops significantly, trigger alert
+        if (previousScore !== null && score.score < previousScore - 10) {
+          await this._emitEvent({
+            type: 'compliance.alert.regression',
+            deviceId,
+            baselineId: baseline.id,
+            previousScore,
+            currentScore: score.score,
+            delta: score.score - previousScore,
+            timestamp: new Date().toISOString(),
+          });
+          logger.warn(`Compliance regression detected for device ${deviceId}: ${previousScore} -> ${score.score}`);
         }
+      }
+
+      // Compute overall score across baselines
+      const overallScore = results.length > 0
+        ? parseFloat((results.reduce((sum, r) => sum + r.score, 0) / results.length).toFixed(2))
+        : 0;
+
+      // Cache the latest score
+      if (this.redis) {
+        await this.redis.setex(
+          `compliance:score:${deviceId}`,
+          3600,
+          JSON.stringify({ score: overallScore, evaluatedAt: new Date().toISOString() })
+        );
+      }
+
+      const duration = Date.now() - startTime;
+      logger.info(`Compliance evaluation for device ${deviceId} completed in ${duration}ms. Overall score: ${overallScore}`);
+
+      return {
+        deviceId,
+        platform,
+        overallScore,
+        baselines: results,
+        evaluatedAt: new Date().toISOString(),
+        durationMs: duration,
+      };
+    } catch (error) {
+      logger.error(`Compliance evaluation failed for device ${deviceId}: ${error.message}`, { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Evaluate a single compliance check against device data.
+   * @param {object} check - Check definition from baseline
+   * @param {object} deviceData - Device inventory data
+   * @returns {object} Check result
+   */
+  async evaluateCheck(check, deviceData) {
+    const result = {
+      checkId: check.id,
+      title: check.title,
+      category: check.category,
+      severity: check.severity || 'medium',
+      passed: false,
+      waived: false,
+      skipped: false,
+      actual: null,
+      expected: null,
+      message: '',
+    };
+
+    try {
+      const checkDef = check.check;
+      if (!checkDef) {
+        result.skipped = true;
+        result.message = 'No check definition provided';
+        return result;
+      }
+
+      switch (checkDef.type) {
+        case 'registry':
+          result.expected = checkDef.value !== undefined ? checkDef.value : checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['registry', checkDef.path, checkDef.key]);
+          if (result.actual === undefined || result.actual === null) {
+            result.actual = this._getNestedValue(deviceData, ['registrySettings', checkDef.key]);
+          }
+          result.passed = this._compareValues(result.actual, result.expected, checkDef.operator || '==');
+          break;
+
+        case 'policy':
+          result.expected = checkDef.value !== undefined ? checkDef.value : checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['policies', checkDef.setting]);
+          if (result.actual === undefined) {
+            result.actual = this._getNestedValue(deviceData, ['securityPolicy', checkDef.setting]);
+          }
+          result.passed = this._compareValues(result.actual, result.expected, checkDef.operator || '==');
+          break;
+
+        case 'firewall':
+          result.expected = checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['firewall', checkDef.profile, checkDef.setting]);
+          result.passed = result.actual === checkDef.expected;
+          break;
+
+        case 'bitlocker':
+          result.expected = checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['encryption', checkDef.drive || 'C:', 'status']);
+          if (result.actual === undefined) {
+            result.actual = this._getNestedValue(deviceData, ['bitlocker', checkDef.drive || 'C:']);
+          }
+          result.passed = result.actual === checkDef.expected;
+          break;
+
+        case 'defender':
+          result.expected = checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['antivirus', checkDef.setting]);
+          if (result.actual === undefined) {
+            result.actual = this._getNestedValue(deviceData, ['defender', checkDef.setting]);
+          }
+          result.passed = result.actual === checkDef.expected;
+          break;
+
+        case 'system':
+          result.expected = checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['system', checkDef.setting]);
+          result.passed = result.actual === checkDef.expected;
+          break;
+
+        case 'service':
+          result.expected = checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['services', checkDef.name, checkDef.property || 'status']);
+          result.passed = result.actual === checkDef.expected;
+          break;
+
+        case 'file':
+          result.expected = checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['files', checkDef.path, checkDef.property || 'exists']);
+          if (checkDef.operator) {
+            result.passed = this._compareValues(result.actual, result.expected, checkDef.operator);
+          } else {
+            result.passed = result.actual === checkDef.expected;
+          }
+          break;
+
+        case 'command':
+          result.expected = checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['commandResults', checkDef.command]);
+          result.passed = result.actual === checkDef.expected;
+          break;
+
+        case 'plist':
+          result.expected = checkDef.value !== undefined ? checkDef.value : checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['plist', checkDef.domain, checkDef.key]);
+          if (checkDef.operator) {
+            result.passed = this._compareValues(result.actual, result.expected, checkDef.operator);
+          } else {
+            result.passed = result.actual === result.expected;
+          }
+          break;
+
+        case 'sysctl':
+          result.expected = checkDef.value !== undefined ? checkDef.value : checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['sysctl', checkDef.key]);
+          if (checkDef.operator) {
+            result.passed = this._compareValues(result.actual, result.expected, checkDef.operator);
+          } else {
+            result.passed = result.actual === result.expected;
+          }
+          break;
+
+        case 'config_file':
+          result.expected = checkDef.value !== undefined ? checkDef.value : checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['configFiles', checkDef.path, checkDef.key]);
+          if (checkDef.operator) {
+            result.passed = this._compareValues(result.actual, result.expected, checkDef.operator);
+          } else {
+            result.passed = result.actual === result.expected;
+          }
+          break;
+
+        case 'package':
+          result.expected = checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['packages', checkDef.name, 'installed']);
+          result.passed = result.actual === checkDef.expected;
+          break;
+
+        case 'permission':
+          result.expected = checkDef.value !== undefined ? checkDef.value : checkDef.expected;
+          result.actual = this._getNestedValue(deviceData, ['permissions', checkDef.path, 'mode']);
+          if (checkDef.operator) {
+            result.passed = this._compareValues(result.actual, result.expected, checkDef.operator);
+          } else {
+            result.passed = result.actual === result.expected;
+          }
+          break;
+
+        default:
+          result.skipped = true;
+          result.message = `Unknown check type: ${checkDef.type}`;
+          logger.warn(`Unknown check type "${checkDef.type}" in check ${check.id}`);
+      }
+
+      if (!result.skipped && result.actual === null || result.actual === undefined) {
+        result.message = 'Data not available from device inventory';
+      }
+    } catch (error) {
+      result.skipped = true;
+      result.message = `Evaluation error: ${error.message}`;
+      logger.error(`Error evaluating check ${check.id}: ${error.message}`);
+    }
+
+    return result;
+  }
+
+  /**
+   * Get aggregated compliance score for a device across all baselines.
+   */
+  async getDeviceScore(deviceId) {
+    // Check cache first
+    if (this.redis) {
+      const cached = await this.redis.get(`compliance:score:${deviceId}`);
+      if (cached) {
+        return JSON.parse(cached);
       }
     }
 
-    const totalChecks = totalPassed + totalFailed + totalSkipped;
-    const score = this.scoreCalculator.calculateDeviceScore(allCheckResults);
+    const { rows } = await this.db.query(
+      `SELECT cr.baseline_id, cb.name AS baseline_name, cb.framework,
+              cr.score, cr.total_checks, cr.passed_checks, cr.failed_checks,
+              cr.critical_failures, cr.high_failures, cr.medium_failures, cr.low_failures,
+              cr.scanned_at
+       FROM compliance_results cr
+       JOIN compliance_baselines cb ON cr.baseline_id = cb.id
+       WHERE cr.device_id = $1
+         AND cr.scanned_at = (
+           SELECT MAX(scanned_at) FROM compliance_results
+           WHERE device_id = $1 AND baseline_id = cr.baseline_id
+         )
+       ORDER BY cb.framework, cb.name`,
+      [deviceId]
+    );
 
-    // Detect changes from previous evaluation
-    const { newViolations, resolvedViolations } = this._detectChanges(allCheckResults, previousResults);
-
-    // Build result object
-    const complianceResult = {
-      deviceId,
-      platform,
-      baselineIds: baselines.map((b) => b.id),
-      baselineId: baselines[0]?.id,
-      score,
-      totalChecks,
-      passedChecks: totalPassed,
-      failedChecks: totalFailed,
-      skippedChecks: totalSkipped,
-      criticalFailures,
-      highFailures,
-      mediumFailures,
-      lowFailures,
-      details: allCheckResults,
-      newViolations,
-      resolvedViolations,
-      scannedAt: new Date().toISOString(),
-      evaluationDurationMs: Date.now() - timer,
-    };
-
-    // Persist results
-    await this._persistResult(complianceResult);
-
-    // Record history snapshot for trend analysis
-    await this.trendAnalyzer.recordSnapshot(deviceId, score, baselines[0]?.id);
-
-    // Cache in Redis
-    await this._cacheResult(deviceId, complianceResult);
-
-    this.logger.info('Device compliance evaluation complete', {
-      deviceId,
-      score,
-      passed: totalPassed,
-      failed: totalFailed,
-      duration: complianceResult.evaluationDurationMs,
-    });
-
-    return complianceResult;
-  }
-
-  /**
-   * Evaluate a single check against inventory data.
-   */
-  async _evaluateCheck(check, inventoryData, deviceId) {
-    // Check if waived
-    const waived = await this.waiverManager.isWaived(deviceId, check.id);
-    if (waived) {
-      return { status: 'waived', actual: null, expected: null, message: 'Check waived' };
+    if (rows.length === 0) {
+      return { deviceId, overallScore: null, baselines: [] };
     }
 
-    if (!inventoryData) {
-      return { status: 'skipped', actual: null, expected: null, message: 'No inventory data available' };
-    }
+    const overallScore = parseFloat(
+      (rows.reduce((sum, r) => sum + parseFloat(r.score), 0) / rows.length).toFixed(2)
+    );
 
-    try {
-      return this._performCheck(check, inventoryData);
-    } catch (err) {
-      this.logger.error('Check evaluation error', { checkId: check.id, error: err.message });
-      return { status: 'error', actual: null, expected: null, message: err.message };
-    }
-  }
-
-  /**
-   * Perform the actual comparison for a check.
-   */
-  _performCheck(check, inventoryData) {
-    const checkDef = check.check || check;
-    const type = checkDef.type;
-
-    // Extract actual value from inventory data based on check type
-    let actual;
-    switch (type) {
-      case 'registry':
-        actual = this._getNestedValue(inventoryData, ['registry', checkDef.path, checkDef.key]);
-        break;
-      case 'service_status':
-        actual = this._getNestedValue(inventoryData, ['services', checkDef.name, 'status']);
-        break;
-      case 'firewall':
-        actual = this._getNestedValue(inventoryData, ['firewall', checkDef.profile || 'enabled']);
-        break;
-      case 'encryption':
-        actual = this._getNestedValue(inventoryData, ['encryption', checkDef.target || 'enabled']);
-        break;
-      case 'software_update':
-        actual = this._getNestedValue(inventoryData, ['updates', 'compliant']);
-        break;
-      case 'antivirus':
-        actual = this._getNestedValue(inventoryData, ['antivirus', checkDef.property || 'enabled']);
-        break;
-      case 'defaults':
-        actual = this._getNestedValue(inventoryData, ['defaults', checkDef.domain, checkDef.key]);
-        break;
-      case 'command':
-        actual = this._getNestedValue(inventoryData, ['commands', checkDef.command]);
-        break;
-      case 'sysctl':
-        actual = this._getNestedValue(inventoryData, ['sysctl', checkDef.key]);
-        break;
-      case 'file_content':
-        actual = this._getNestedValue(inventoryData, ['files', checkDef.path, checkDef.key || 'content']);
-        break;
-      case 'file_permissions':
-        actual = this._getNestedValue(inventoryData, ['files', checkDef.path, 'permissions']);
-        break;
-      case 'package':
-        actual = this._getNestedValue(inventoryData, ['packages', checkDef.name, 'installed']);
-        break;
-      case 'pam':
-        actual = this._getNestedValue(inventoryData, ['pam', checkDef.module, checkDef.key]);
-        break;
-      case 'gatekeeper':
-        actual = this._getNestedValue(inventoryData, ['security', 'gatekeeper']);
-        break;
-      case 'sip':
-        actual = this._getNestedValue(inventoryData, ['security', 'sip']);
-        break;
-      case 'filevault':
-        actual = this._getNestedValue(inventoryData, ['encryption', 'filevault']);
-        break;
-      case 'selinux':
-        actual = this._getNestedValue(inventoryData, ['security', 'selinux']);
-        break;
-      case 'apparmor':
-        actual = this._getNestedValue(inventoryData, ['security', 'apparmor']);
-        break;
-      case 'audit_policy':
-        actual = this._getNestedValue(inventoryData, ['audit', checkDef.category, checkDef.subcategory]);
-        break;
-      case 'uac':
-        actual = this._getNestedValue(inventoryData, ['uac', checkDef.key]);
-        break;
-      case 'screen_lock':
-        actual = this._getNestedValue(inventoryData, ['screenlock', checkDef.key || 'timeout']);
-        break;
-      default:
-        actual = this._getNestedValue(inventoryData, [type, ...(checkDef.path ? [checkDef.path] : [])]);
-    }
-
-    const expected = checkDef.value;
-    const operator = checkDef.operator || '==';
-
-    if (actual === undefined || actual === null) {
-      return { status: 'fail', actual: null, expected, message: 'Value not found in inventory data' };
-    }
-
-    const passed = this._compare(actual, operator, expected);
     return {
-      status: passed ? 'pass' : 'fail',
-      actual,
-      expected,
-      message: passed ? 'Check passed' : `Expected ${operator} ${expected}, got ${actual}`,
+      deviceId,
+      overallScore,
+      baselines: rows.map(r => ({
+        baselineId: r.baseline_id,
+        baselineName: r.baseline_name,
+        framework: r.framework,
+        score: parseFloat(r.score),
+        totalChecks: r.total_checks,
+        passedChecks: r.passed_checks,
+        failedChecks: r.failed_checks,
+        criticalFailures: r.critical_failures,
+        highFailures: r.high_failures,
+        mediumFailures: r.medium_failures,
+        lowFailures: r.low_failures,
+        scannedAt: r.scanned_at,
+      })),
     };
   }
 
   /**
-   * Compare values using the specified operator.
+   * Get fleet-wide compliance score with optional filters.
    */
-  _compare(actual, operator, expected) {
+  async getFleetScore(filters = {}) {
+    let query = `
+      SELECT
+        COUNT(DISTINCT cr.device_id) AS device_count,
+        AVG(cr.score) AS avg_score,
+        MIN(cr.score) AS min_score,
+        MAX(cr.score) AS max_score,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cr.score) AS median_score,
+        SUM(cr.critical_failures) AS total_critical,
+        SUM(cr.high_failures) AS total_high,
+        SUM(cr.failed_checks) AS total_failures
+      FROM compliance_results cr
+      JOIN compliance_baselines cb ON cr.baseline_id = cb.id
+      WHERE cr.scanned_at = (
+        SELECT MAX(scanned_at) FROM compliance_results
+        WHERE device_id = cr.device_id AND baseline_id = cr.baseline_id
+      )
+    `;
+
+    const params = [];
+
+    if (filters.framework) {
+      params.push(filters.framework);
+      query += ` AND cb.framework = $${params.length}`;
+    }
+
+    if (filters.platform) {
+      params.push(filters.platform);
+      query += ` AND cb.platform = $${params.length}`;
+    }
+
+    if (filters.baselineId) {
+      params.push(filters.baselineId);
+      query += ` AND cr.baseline_id = $${params.length}`;
+    }
+
+    const { rows } = await this.db.query(query, params);
+    const row = rows[0];
+
+    // Score distribution
+    const distQuery = `
+      SELECT
+        CASE
+          WHEN cr.score >= 90 THEN 'compliant'
+          WHEN cr.score >= 70 THEN 'partially_compliant'
+          WHEN cr.score >= 50 THEN 'at_risk'
+          ELSE 'non_compliant'
+        END AS status,
+        COUNT(DISTINCT cr.device_id) AS count
+      FROM compliance_results cr
+      JOIN compliance_baselines cb ON cr.baseline_id = cb.id
+      WHERE cr.scanned_at = (
+        SELECT MAX(scanned_at) FROM compliance_results
+        WHERE device_id = cr.device_id AND baseline_id = cr.baseline_id
+      )
+      GROUP BY status
+    `;
+
+    const { rows: distRows } = await this.db.query(distQuery);
+
+    const distribution = {
+      compliant: 0,
+      partially_compliant: 0,
+      at_risk: 0,
+      non_compliant: 0,
+    };
+    for (const d of distRows) {
+      distribution[d.status] = parseInt(d.count, 10);
+    }
+
+    return {
+      deviceCount: parseInt(row.device_count, 10) || 0,
+      averageScore: row.avg_score ? parseFloat(parseFloat(row.avg_score).toFixed(2)) : 0,
+      minScore: row.min_score ? parseFloat(parseFloat(row.min_score).toFixed(2)) : 0,
+      maxScore: row.max_score ? parseFloat(parseFloat(row.max_score).toFixed(2)) : 0,
+      medianScore: row.median_score ? parseFloat(parseFloat(row.median_score).toFixed(2)) : 0,
+      totalCriticalFailures: parseInt(row.total_critical, 10) || 0,
+      totalHighFailures: parseInt(row.total_high, 10) || 0,
+      totalFailures: parseInt(row.total_failures, 10) || 0,
+      distribution,
+      filters,
+    };
+  }
+
+  // ─── Private helpers ──────────────────────────────────────────────
+
+  _detectPlatform(inventoryData) {
+    if (inventoryData.platform) return inventoryData.platform.toLowerCase();
+    if (inventoryData.os) {
+      const os = inventoryData.os.toLowerCase();
+      if (os.includes('windows')) return 'windows';
+      if (os.includes('macos') || os.includes('darwin')) return 'macos';
+      if (os.includes('linux') || os.includes('ubuntu') || os.includes('debian') || os.includes('rhel')) return 'linux';
+    }
+    return 'unknown';
+  }
+
+  async _getActiveBaselines(platform) {
+    const { rows } = await this.db.query(
+      `SELECT * FROM compliance_baselines
+       WHERE enabled = true AND (platform = $1 OR platform = 'all')
+       ORDER BY framework, name`,
+      [platform]
+    );
+    return rows;
+  }
+
+  async _getActiveWaivers(deviceId) {
+    const { rows } = await this.db.query(
+      `SELECT * FROM compliance_waivers
+       WHERE (device_id = $1 OR device_id IS NULL)
+         AND status = 'active'
+         AND expires_at > NOW()`,
+      [deviceId]
+    );
+    return rows;
+  }
+
+  _buildWaiverMap(waivers) {
+    const map = new Map();
+    for (const w of waivers) {
+      const key = `${w.baseline_id || '*'}:${w.check_id}`;
+      map.set(key, { reason: w.reason, approvedBy: w.approved_by, expiresAt: w.expires_at });
+    }
+    return map;
+  }
+
+  _compareValues(actual, expected, operator) {
+    if (actual === null || actual === undefined) return false;
+
+    const numActual = typeof actual === 'string' ? parseFloat(actual) : actual;
+    const numExpected = typeof expected === 'string' ? parseFloat(expected) : expected;
+
     switch (operator) {
       case '==':
       case '===':
-        return actual === expected;
+        return actual === expected || numActual === numExpected;
       case '!=':
       case '!==':
         return actual !== expected;
       case '>=':
-        return Number(actual) >= Number(expected);
+        return numActual >= numExpected;
       case '<=':
-        return Number(actual) <= Number(expected);
+        return numActual <= numExpected;
       case '>':
-        return Number(actual) > Number(expected);
+        return numActual > numExpected;
       case '<':
-        return Number(actual) < Number(expected);
+        return numActual < numExpected;
       case 'contains':
         return String(actual).includes(String(expected));
       case 'not_contains':
         return !String(actual).includes(String(expected));
-      case 'matches':
+      case 'regex':
         return new RegExp(expected).test(String(actual));
-      case 'in':
-        return Array.isArray(expected) && expected.includes(actual);
-      case 'not_in':
-        return Array.isArray(expected) && !expected.includes(actual);
-      case 'exists':
-        return actual !== null && actual !== undefined;
-      case 'not_exists':
-        return actual === null || actual === undefined;
       default:
         return actual === expected;
     }
   }
 
-  /**
-   * Detect changes between current and previous evaluation.
-   */
-  _detectChanges(currentResults, previousResults) {
-    const prevFailedIds = new Set(
-      (previousResults || []).filter((r) => r.status === 'fail').map((r) => r.checkId || r.check_id)
-    );
-    const currFailedIds = new Set(
-      currentResults.filter((r) => r.status === 'fail').map((r) => r.checkId)
-    );
-
-    const newViolations = currentResults.filter(
-      (r) => r.status === 'fail' && !prevFailedIds.has(r.checkId)
-    );
-    const resolvedViolations = (previousResults || []).filter(
-      (r) => (r.status === 'fail') && !currFailedIds.has(r.checkId || r.check_id)
-    );
-
-    return { newViolations, resolvedViolations };
-  }
-
-  /**
-   * Get previous compliance results for a device.
-   */
-  async _getPreviousResults(deviceId) {
-    try {
-      const { rows } = await this.pgPool.query(
-        `SELECT details FROM compliance_results WHERE device_id = $1 ORDER BY scanned_at DESC LIMIT 1`,
-        [deviceId]
-      );
-      if (rows.length === 0) return [];
-      return Array.isArray(rows[0].details) ? rows[0].details : [];
-    } catch {
-      return [];
-    }
-  }
-
-  /**
-   * Persist compliance result to PostgreSQL.
-   */
-  async _persistResult(result) {
-    try {
-      await this.pgPool.query(
-        `INSERT INTO compliance_results
-         (device_id, baseline_id, score, total_checks, passed_checks, failed_checks,
-          skipped_checks, critical_failures, high_failures, medium_failures, low_failures,
-          details, scanned_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [
-          result.deviceId,
-          null, // baseline_id is a UUID FK; we store baseline info in details instead
-          result.score,
-          result.totalChecks,
-          result.passedChecks,
-          result.failedChecks,
-          result.skippedChecks,
-          result.criticalFailures,
-          result.highFailures,
-          result.mediumFailures,
-          result.lowFailures,
-          JSON.stringify(result.details),
-          result.scannedAt,
-        ]
-      );
-    } catch (err) {
-      this.logger.error('Failed to persist compliance result', { error: err.message });
-    }
-  }
-
-  /**
-   * Cache the latest result in Redis.
-   */
-  async _cacheResult(deviceId, result) {
-    try {
-      await this.redis.setex(
-        `device:${deviceId}:latest`,
-        3600,
-        JSON.stringify(result)
-      );
-    } catch {
-      // Redis cache is best-effort
-    }
-  }
-
-  /**
-   * Safely access nested properties.
-   */
   _getNestedValue(obj, keys) {
     let current = obj;
     for (const key of keys) {
@@ -390,6 +519,96 @@ class ComplianceEvaluator {
       current = current[key];
     }
     return current;
+  }
+
+  async _storeResult(deviceId, baseline, score, checkResults) {
+    const { rows } = await this.db.query(
+      `INSERT INTO compliance_results
+        (device_id, baseline_id, score, total_checks, passed_checks, failed_checks,
+         skipped_checks, critical_failures, high_failures, medium_failures, low_failures,
+         details, scanned_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+       RETURNING id`,
+      [
+        deviceId,
+        baseline.id,
+        score.score,
+        score.totalCount,
+        score.passedCount,
+        score.failedCount,
+        score.skippedCount,
+        score.breakdown.critical.failed,
+        score.breakdown.high.failed,
+        score.breakdown.medium.failed,
+        score.breakdown.low.failed,
+        JSON.stringify(checkResults),
+      ]
+    );
+    return rows[0];
+  }
+
+  async _recordHistory(deviceId, baselineId, currentScore) {
+    // Get previous score for delta calculation
+    const { rows } = await this.db.query(
+      `SELECT score FROM compliance_history
+       WHERE device_id = $1 AND baseline_id = $2
+       ORDER BY recorded_at DESC LIMIT 1`,
+      [deviceId, baselineId]
+    );
+    const previousScore = rows.length > 0 ? parseFloat(rows[0].score) : currentScore;
+    const delta = parseFloat((currentScore - previousScore).toFixed(2));
+
+    await this.db.query(
+      `INSERT INTO compliance_history (device_id, baseline_id, score, delta)
+       VALUES ($1, $2, $3, $4)`,
+      [deviceId, baselineId, currentScore, delta]
+    );
+  }
+
+  async _getPreviousScore(deviceId, baselineId) {
+    const { rows } = await this.db.query(
+      `SELECT score FROM compliance_history
+       WHERE device_id = $1 AND baseline_id = $2
+       ORDER BY recorded_at DESC LIMIT 1 OFFSET 1`,
+      [deviceId, baselineId]
+    );
+    return rows.length > 0 ? parseFloat(rows[0].score) : null;
+  }
+
+  _buildComplianceEvent(deviceId, baseline, score, previousScore) {
+    let type;
+    if (score.score >= 90) {
+      type = 'compliance.passed';
+    } else if (previousScore !== null && score.score !== previousScore) {
+      type = 'compliance.changed';
+    } else {
+      type = 'compliance.failed';
+    }
+
+    return {
+      type,
+      deviceId,
+      baselineId: baseline.id,
+      baselineName: baseline.name,
+      framework: baseline.framework,
+      score: score.score,
+      previousScore,
+      passedChecks: score.passedCount,
+      failedChecks: score.failedCount,
+      criticalFailures: score.breakdown.critical.failed,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  async _emitEvent(event) {
+    try {
+      if (this.eventBus) {
+        await this.eventBus.publish('compliance.events', Buffer.from(JSON.stringify(event)));
+      }
+      logger.debug(`Emitted compliance event: ${event.type}`, { event });
+    } catch (error) {
+      logger.error(`Failed to emit compliance event: ${error.message}`);
+    }
   }
 }
 

@@ -1,173 +1,295 @@
 'use strict';
 
-/**
- * TrendAnalyzer – stores daily compliance snapshots and computes trends
- * for devices and the overall fleet.
- */
+const logger = require('../utils/logger');
+
 class TrendAnalyzer {
-  constructor({ pgPool, redis, logger }) {
-    this.pgPool = pgPool;
-    this.redis = redis;
-    this.logger = logger;
+  constructor(db) {
+    this.db = db;
   }
 
-  // ---------------------------------------------------------------------------
-  // Recording
-  // ---------------------------------------------------------------------------
-
   /**
-   * Record a compliance score snapshot.
+   * Analyze compliance trends over a given period and detect anomalies.
+   * @param {object} options - Analysis options
+   * @returns {object} Trend analysis report
    */
-  async recordSnapshot(deviceId, score, baselineId) {
-    try {
-      // Get previous score for delta calculation
-      const { rows: prev } = await this.pgPool.query(
-        `SELECT score FROM compliance_history
-         WHERE device_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
-        [deviceId]
-      );
-      const delta = prev.length > 0 ? score - parseFloat(prev[0].score) : 0;
+  async analyzeTrends(options = {}) {
+    const { days = 30, framework, platform } = options;
 
-      await this.pgPool.query(
-        `INSERT INTO compliance_history (device_id, baseline_id, score, delta, recorded_at)
-         VALUES ($1, $2, $3, $4, NOW())`,
-        [deviceId, baselineId || null, score, Math.round(delta * 100) / 100]
-      );
-    } catch (err) {
-      this.logger.error('Failed to record compliance snapshot', { error: err.message });
-    }
+    logger.info(`Analyzing compliance trends over ${days} days`);
+
+    const [fleetTrend, regressions, improvements, topFailures] = await Promise.all([
+      this._getFleetTrend(days, framework, platform),
+      this._detectRegressions(days),
+      this._detectImprovements(days),
+      this._getTopFailedChecks(framework, platform),
+    ]);
+
+    return {
+      period: { days, startDate: new Date(Date.now() - days * 86400000).toISOString(), endDate: new Date().toISOString() },
+      fleetTrend,
+      regressions,
+      improvements,
+      topFailures,
+      predictions: await this._predictCompliance(days),
+      analyzedAt: new Date().toISOString(),
+    };
   }
 
-  // ---------------------------------------------------------------------------
-  // Device trend
-  // ---------------------------------------------------------------------------
-
   /**
-   * Get compliance trend for a specific device.
-   * @param {string} deviceId
-   * @param {number} days - number of days to look back
+   * Detect devices with declining compliance scores.
    */
-  async getDeviceTrend(deviceId, days = 30) {
-    try {
-      const { rows } = await this.pgPool.query(
-        `SELECT
-           DATE(recorded_at) AS date,
-           ROUND(AVG(score)::numeric, 2) AS score,
-           ROUND(AVG(delta)::numeric, 2) AS delta
-         FROM compliance_history
-         WHERE device_id = $1
-           AND recorded_at >= NOW() - INTERVAL '1 day' * $2
-         GROUP BY DATE(recorded_at)
-         ORDER BY date ASC`,
-        [deviceId, days]
-      );
-
-      const trend = this._calculateTrendDirection(rows);
-
-      return {
-        deviceId,
-        days,
-        dataPoints: rows,
-        trend: trend.direction,
-        averageScore: trend.average,
-        changeRate: trend.changeRate,
-        prediction: trend.prediction,
-      };
-    } catch (err) {
-      this.logger.error('Failed to get device trend', { error: err.message });
-      return { deviceId, days, dataPoints: [], trend: 'unknown' };
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Fleet trend
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Get fleet-wide compliance trend.
-   * @param {number} days
-   */
-  async getFleetTrend(days = 30) {
-    try {
-      const { rows } = await this.pgPool.query(
-        `SELECT
-           DATE(recorded_at) AS date,
-           ROUND(AVG(score)::numeric, 2) AS avg_score,
-           COUNT(DISTINCT device_id) AS devices_evaluated,
-           COUNT(DISTINCT device_id) FILTER (WHERE score = 100) AS fully_compliant,
-           COUNT(DISTINCT device_id) FILTER (WHERE score < 70) AS at_risk
+  async _detectRegressions(days = 7) {
+    const { rows } = await this.db.query(
+      `WITH recent_scores AS (
+         SELECT device_id, baseline_id, score, recorded_at,
+                ROW_NUMBER() OVER (PARTITION BY device_id, baseline_id ORDER BY recorded_at DESC) AS rn
          FROM compliance_history
          WHERE recorded_at >= NOW() - INTERVAL '1 day' * $1
-         GROUP BY DATE(recorded_at)
-         ORDER BY date ASC`,
-        [days]
-      );
+       )
+       SELECT
+         r1.device_id,
+         r1.baseline_id,
+         cb.name AS baseline_name,
+         r1.score AS current_score,
+         r2.score AS previous_score,
+         (r1.score - r2.score) AS delta
+       FROM recent_scores r1
+       JOIN recent_scores r2 ON r1.device_id = r2.device_id
+         AND r1.baseline_id = r2.baseline_id AND r2.rn = 2
+       LEFT JOIN compliance_baselines cb ON r1.baseline_id = cb.id
+       WHERE r1.rn = 1 AND (r1.score - r2.score) < -5
+       ORDER BY delta ASC
+       LIMIT 50`,
+      [days]
+    );
 
-      const scorePoints = rows.map((r) => ({ date: r.date, score: parseFloat(r.avg_score) }));
-      const trend = this._calculateTrendDirection(scorePoints);
+    return rows.map(r => ({
+      deviceId: r.device_id,
+      baselineId: r.baseline_id,
+      baselineName: r.baseline_name,
+      currentScore: parseFloat(r.current_score),
+      previousScore: parseFloat(r.previous_score),
+      delta: parseFloat(r.delta),
+    }));
+  }
 
-      return {
-        days,
-        dataPoints: rows,
-        trend: trend.direction,
-        averageScore: trend.average,
-        changeRate: trend.changeRate,
-        prediction: trend.prediction,
-      };
-    } catch (err) {
-      this.logger.error('Failed to get fleet trend', { error: err.message });
-      return { days, dataPoints: [], trend: 'unknown' };
+  /**
+   * Detect devices with improving compliance scores.
+   */
+  async _detectImprovements(days = 7) {
+    const { rows } = await this.db.query(
+      `WITH recent_scores AS (
+         SELECT device_id, baseline_id, score, recorded_at,
+                ROW_NUMBER() OVER (PARTITION BY device_id, baseline_id ORDER BY recorded_at DESC) AS rn
+         FROM compliance_history
+         WHERE recorded_at >= NOW() - INTERVAL '1 day' * $1
+       )
+       SELECT
+         r1.device_id,
+         r1.baseline_id,
+         cb.name AS baseline_name,
+         r1.score AS current_score,
+         r2.score AS previous_score,
+         (r1.score - r2.score) AS delta
+       FROM recent_scores r1
+       JOIN recent_scores r2 ON r1.device_id = r2.device_id
+         AND r1.baseline_id = r2.baseline_id AND r2.rn = 2
+       LEFT JOIN compliance_baselines cb ON r1.baseline_id = cb.id
+       WHERE r1.rn = 1 AND (r1.score - r2.score) > 5
+       ORDER BY delta DESC
+       LIMIT 50`,
+      [days]
+    );
+
+    return rows.map(r => ({
+      deviceId: r.device_id,
+      baselineId: r.baseline_id,
+      baselineName: r.baseline_name,
+      currentScore: parseFloat(r.current_score),
+      previousScore: parseFloat(r.previous_score),
+      delta: parseFloat(r.delta),
+    }));
+  }
+
+  /**
+   * Get fleet-wide compliance trend aggregation.
+   */
+  async _getFleetTrend(days, framework, platform) {
+    let query = `
+      SELECT
+        DATE_TRUNC('day', ch.recorded_at) AS day,
+        AVG(ch.score) AS avg_score,
+        MIN(ch.score) AS min_score,
+        MAX(ch.score) AS max_score,
+        COUNT(DISTINCT ch.device_id) AS device_count
+      FROM compliance_history ch
+    `;
+
+    const params = [days];
+    const conditions = ['ch.recorded_at >= NOW() - INTERVAL \'1 day\' * $1'];
+
+    if (framework) {
+      params.push(framework);
+      conditions.push(`ch.baseline_id IN (SELECT id FROM compliance_baselines WHERE framework = $${params.length})`);
+    }
+
+    if (platform) {
+      params.push(platform);
+      conditions.push(`ch.baseline_id IN (SELECT id FROM compliance_baselines WHERE platform = $${params.length})`);
+    }
+
+    query += ` WHERE ${conditions.join(' AND ')} GROUP BY day ORDER BY day ASC`;
+
+    const { rows } = await this.db.query(query, params);
+
+    return rows.map(r => ({
+      date: r.day,
+      averageScore: parseFloat(parseFloat(r.avg_score).toFixed(2)),
+      minScore: parseFloat(parseFloat(r.min_score).toFixed(2)),
+      maxScore: parseFloat(parseFloat(r.max_score).toFixed(2)),
+      deviceCount: parseInt(r.device_count, 10),
+    }));
+  }
+
+  /**
+   * Get the most commonly failed compliance checks across the fleet.
+   */
+  async _getTopFailedChecks(framework, platform) {
+    // Parse failed checks from the latest results
+    let query = `
+      SELECT
+        detail->>'checkId' AS check_id,
+        detail->>'title' AS title,
+        detail->>'severity' AS severity,
+        detail->>'category' AS category,
+        COUNT(*) AS failure_count,
+        COUNT(DISTINCT cr.device_id) AS affected_devices
+      FROM compliance_results cr,
+           jsonb_array_elements(cr.details) AS detail
+      WHERE cr.scanned_at = (
+        SELECT MAX(scanned_at) FROM compliance_results
+        WHERE device_id = cr.device_id AND baseline_id = cr.baseline_id
+      )
+      AND (detail->>'passed')::boolean = false
+      AND (detail->>'skipped')::boolean IS DISTINCT FROM true
+    `;
+
+    const params = [];
+
+    if (framework) {
+      params.push(framework);
+      query += ` AND cr.baseline_id IN (SELECT id FROM compliance_baselines WHERE framework = $${params.length})`;
+    }
+
+    if (platform) {
+      params.push(platform);
+      query += ` AND cr.baseline_id IN (SELECT id FROM compliance_baselines WHERE platform = $${params.length})`;
+    }
+
+    query += `
+      GROUP BY check_id, title, severity, category
+      ORDER BY failure_count DESC
+      LIMIT 20
+    `;
+
+    try {
+      const { rows } = await this.db.query(query, params);
+      return rows.map(r => ({
+        checkId: r.check_id,
+        title: r.title,
+        severity: r.severity,
+        category: r.category,
+        failureCount: parseInt(r.failure_count, 10),
+        affectedDevices: parseInt(r.affected_devices, 10),
+      }));
+    } catch (error) {
+      logger.error(`Failed to get top failed checks: ${error.message}`);
+      return [];
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Trend calculation
-  // ---------------------------------------------------------------------------
+  /**
+   * Simple linear regression to predict future compliance based on historical trend.
+   */
+  async _predictCompliance(historicalDays = 30) {
+    const { rows } = await this.db.query(
+      `SELECT
+         DATE_TRUNC('day', recorded_at) AS day,
+         AVG(score) AS avg_score
+       FROM compliance_history
+       WHERE recorded_at >= NOW() - INTERVAL '1 day' * $1
+       GROUP BY day
+       ORDER BY day ASC`,
+      [historicalDays]
+    );
+
+    if (rows.length < 3) {
+      return { available: false, message: 'Insufficient historical data for prediction' };
+    }
+
+    // Simple linear regression
+    const n = rows.length;
+    const xValues = rows.map((_, i) => i);
+    const yValues = rows.map(r => parseFloat(r.avg_score));
+
+    const sumX = xValues.reduce((a, b) => a + b, 0);
+    const sumY = yValues.reduce((a, b) => a + b, 0);
+    const sumXY = xValues.reduce((a, x, i) => a + x * yValues[i], 0);
+    const sumXX = xValues.reduce((a, x) => a + x * x, 0);
+
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    // Predict 7, 14, 30 days ahead
+    const predictions = [7, 14, 30].map(daysAhead => {
+      const predicted = Math.min(100, Math.max(0, intercept + slope * (n + daysAhead)));
+      return {
+        daysAhead,
+        predictedScore: parseFloat(predicted.toFixed(2)),
+        date: new Date(Date.now() + daysAhead * 86400000).toISOString().split('T')[0],
+      };
+    });
+
+    const direction = slope > 0.1 ? 'improving' : slope < -0.1 ? 'declining' : 'stable';
+
+    return {
+      available: true,
+      direction,
+      slopePerDay: parseFloat(slope.toFixed(4)),
+      currentAverage: parseFloat(yValues[yValues.length - 1].toFixed(2)),
+      predictions,
+    };
+  }
 
   /**
-   * Determine trend direction from data points.
-   * Uses simple linear regression on score values.
+   * Get a summary of compliance changes for a specific device.
    */
-  _calculateTrendDirection(dataPoints) {
-    if (!dataPoints || dataPoints.length < 2) {
-      const score = dataPoints.length === 1 ? parseFloat(dataPoints[0].score || dataPoints[0].avg_score || 0) : 0;
-      return { direction: 'insufficient_data', average: score, changeRate: 0, prediction: score };
-    }
+  async getDeviceChangelog(deviceId, limit = 50) {
+    const { rows } = await this.db.query(
+      `SELECT
+         ch.baseline_id,
+         cb.name AS baseline_name,
+         cb.framework,
+         ch.score,
+         ch.delta,
+         ch.recorded_at
+       FROM compliance_history ch
+       LEFT JOIN compliance_baselines cb ON ch.baseline_id = cb.id
+       WHERE ch.device_id = $1 AND ch.delta != 0
+       ORDER BY ch.recorded_at DESC
+       LIMIT $2`,
+      [deviceId, limit]
+    );
 
-    const scores = dataPoints.map((p) => parseFloat(p.score || p.avg_score || 0));
-    const n = scores.length;
-
-    // Calculate average
-    const average = Math.round((scores.reduce((a, b) => a + b, 0) / n) * 100) / 100;
-
-    // Simple linear regression: y = mx + b
-    const xMean = (n - 1) / 2;
-    const yMean = average;
-
-    let numerator = 0;
-    let denominator = 0;
-    for (let i = 0; i < n; i++) {
-      numerator += (i - xMean) * (scores[i] - yMean);
-      denominator += (i - xMean) ** 2;
-    }
-
-    const slope = denominator !== 0 ? numerator / denominator : 0;
-    const changeRate = Math.round(slope * 100) / 100;
-
-    // Predict next value
-    const prediction = Math.min(100, Math.max(0, Math.round((scores[n - 1] + slope) * 100) / 100));
-
-    // Classify direction
-    let direction;
-    if (Math.abs(slope) < 0.5) {
-      direction = 'stable';
-    } else if (slope > 0) {
-      direction = 'improving';
-    } else {
-      direction = 'declining';
-    }
-
-    return { direction, average, changeRate, prediction };
+    return rows.map(r => ({
+      baselineId: r.baseline_id,
+      baselineName: r.baseline_name,
+      framework: r.framework,
+      score: parseFloat(r.score),
+      delta: parseFloat(r.delta),
+      direction: r.delta > 0 ? 'improved' : 'declined',
+      recordedAt: r.recorded_at,
+    }));
   }
 }
 

@@ -18,7 +18,6 @@
     "node-cron": "^3.0.3",
     "axios": "^1.6.2",
     "prom-client": "^15.0.0",
-    "pdfkit": "^0.13.0",
-    "json2csv": "^5.0.7"
+    "pdfkit": "^0.13.0"
   }
 }

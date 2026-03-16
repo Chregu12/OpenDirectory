@@ -1,219 +1,224 @@
 'use strict';
 
-/**
- * WaiverManager – manages compliance exception waivers with audit trails,
- * auto-expiry and device/group scoping.
- */
+const logger = require('../utils/logger');
+
 class WaiverManager {
-  constructor({ pgPool, redis, logger }) {
-    this.pgPool = pgPool;
-    this.redis = redis;
-    this.logger = logger;
+  constructor(db) {
+    this.db = db;
   }
 
-  // ---------------------------------------------------------------------------
-  // Core operations
-  // ---------------------------------------------------------------------------
-
   /**
-   * Create a new waiver.
-   * @param {object} waiver
-   * @param {string} waiver.deviceId - target device (or null for group)
-   * @param {string} [waiver.groupId] - target group (alternative to deviceId)
-   * @param {string} waiver.checkId - the compliance check to waive
-   * @param {string} waiver.reason - justification
-   * @param {string} waiver.approvedBy - who approved the waiver
-   * @param {string} waiver.expiresAt - ISO date when waiver expires
-   * @param {string} [waiver.baselineId] - optional baseline scope
+   * Create a compliance waiver with expiration and approval tracking.
    */
-  async createWaiver(waiver) {
-    if (!waiver.checkId) throw new Error('checkId is required');
-    if (!waiver.reason) throw new Error('reason is required');
-    if (!waiver.approvedBy) throw new Error('approvedBy is required');
-    if (!waiver.expiresAt) throw new Error('expiresAt is required');
-    if (!waiver.deviceId && !waiver.groupId) {
-      throw new Error('Either deviceId or groupId is required');
+  async createWaiver(data) {
+    const { deviceId, deviceGroup, baselineId, checkId, reason, approvedBy, expiresAt } = data;
+
+    // Validation
+    if (!checkId) {
+      throw new Error('check_id is required');
+    }
+    if (!reason || reason.trim().length < 10) {
+      throw new Error('A meaningful reason is required (minimum 10 characters)');
+    }
+    if (!approvedBy) {
+      throw new Error('approved_by is required');
+    }
+    if (!expiresAt) {
+      throw new Error('expires_at is required');
     }
 
-    const expiresAt = new Date(waiver.expiresAt);
-    if (expiresAt <= new Date()) throw new Error('expiresAt must be in the future');
+    const expirationDate = new Date(expiresAt);
+    if (isNaN(expirationDate.getTime())) {
+      throw new Error('Invalid expires_at date format');
+    }
+    if (expirationDate <= new Date()) {
+      throw new Error('expires_at must be in the future');
+    }
 
-    const { rows } = await this.pgPool.query(
+    // Maximum waiver duration: 1 year
+    const maxExpiration = new Date();
+    maxExpiration.setFullYear(maxExpiration.getFullYear() + 1);
+    if (expirationDate > maxExpiration) {
+      throw new Error('Waiver duration cannot exceed 1 year');
+    }
+
+    if (!deviceId && !deviceGroup) {
+      throw new Error('Either device_id or device_group is required');
+    }
+
+    // Check for duplicate active waivers
+    const duplicateCheck = await this.db.query(
+      `SELECT id FROM compliance_waivers
+       WHERE check_id = $1 AND status = 'active' AND expires_at > NOW()
+         AND (device_id = $2 OR device_group = $3)`,
+      [checkId, deviceId || null, deviceGroup || null]
+    );
+
+    if (duplicateCheck.rows.length > 0) {
+      throw new Error(`An active waiver already exists for check ${checkId} on this device/group`);
+    }
+
+    const { rows } = await this.db.query(
       `INSERT INTO compliance_waivers
-       (device_id, device_group, baseline_id, check_id, reason, approved_by, expires_at, status)
+        (device_id, device_group, baseline_id, check_id, reason, approved_by, expires_at, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
        RETURNING *`,
       [
-        waiver.deviceId || null,
-        waiver.groupId || null,
-        waiver.baselineId || null,
-        waiver.checkId,
-        waiver.reason,
-        waiver.approvedBy,
-        expiresAt.toISOString(),
+        deviceId || null,
+        deviceGroup || null,
+        baselineId || null,
+        checkId,
+        reason.trim(),
+        approvedBy,
+        expirationDate.toISOString(),
       ]
     );
 
-    const created = rows[0];
-
-    // Cache in Redis for fast lookup
-    await this._cacheWaiver(created);
-
-    this.logger.info('Waiver created', {
-      id: created.id,
-      deviceId: created.device_id,
-      checkId: created.check_id,
-      expiresAt: created.expires_at,
+    logger.info(`Created waiver ${rows[0].id} for check ${checkId}`, {
+      waiverId: rows[0].id,
+      deviceId,
+      deviceGroup,
+      checkId,
+      approvedBy,
+      expiresAt: expirationDate.toISOString(),
     });
 
-    return created;
+    return rows[0];
   }
 
   /**
-   * Revoke a waiver by ID.
+   * Revoke an active waiver.
    */
-  async revokeWaiver(waiverId) {
-    const { rows } = await this.pgPool.query(
+  async revokeWaiver(id) {
+    const { rows } = await this.db.query(
       `UPDATE compliance_waivers SET status = 'revoked' WHERE id = $1 AND status = 'active' RETURNING *`,
-      [waiverId]
+      [id]
     );
-    if (rows.length === 0) return null;
 
-    const waiver = rows[0];
-    await this._invalidateWaiverCache(waiver);
-
-    this.logger.info('Waiver revoked', { id: waiverId });
-    return waiver;
-  }
-
-  /**
-   * Check if a specific check is waived for a device.
-   */
-  async isWaived(deviceId, checkId) {
-    // Fast path: Redis cache
-    const cacheKey = `waiver:${deviceId}:${checkId}`;
-    try {
-      const cached = await this.redis.get(cacheKey);
-      if (cached !== null) return cached === '1';
-    } catch {
-      // Redis unavailable, fall through to DB
+    if (rows.length === 0) {
+      throw new Error(`Waiver not found or already revoked/expired: ${id}`);
     }
 
-    // Query database
-    try {
-      const { rows } = await this.pgPool.query(
-        `SELECT id FROM compliance_waivers
-         WHERE (device_id = $1 OR device_group IN (
-           SELECT device_group FROM compliance_waivers WHERE device_id = $1
-         ))
-         AND check_id = $2
-         AND status = 'active'
-         AND expires_at > NOW()
-         LIMIT 1`,
-        [deviceId, checkId]
-      );
-      const waived = rows.length > 0;
-
-      // Cache result (short TTL)
-      try {
-        await this.redis.setex(cacheKey, 300, waived ? '1' : '0');
-      } catch {
-        // best effort
-      }
-
-      return waived;
-    } catch {
-      return false;
-    }
+    logger.info(`Revoked waiver ${id}`, { waiverId: id, checkId: rows[0].check_id });
+    return rows[0];
   }
 
   /**
-   * Get all active waivers.
+   * Get all active waivers for a device.
    */
-  async getActiveWaivers() {
-    // First, expire any past-due waivers
-    await this._expireWaivers();
-
-    const { rows } = await this.pgPool.query(
-      `SELECT * FROM compliance_waivers WHERE status = 'active' ORDER BY expires_at ASC`
-    );
-    return rows;
-  }
-
-  /**
-   * Get active waivers for a specific device.
-   */
-  async getActiveWaiversForDevice(deviceId) {
-    const { rows } = await this.pgPool.query(
-      `SELECT * FROM compliance_waivers
-       WHERE (device_id = $1 OR device_group IS NOT NULL)
-       AND status = 'active' AND expires_at > NOW()
-       ORDER BY expires_at ASC`,
+  async getActiveWaivers(deviceId) {
+    const { rows } = await this.db.query(
+      `SELECT cw.*, cb.name AS baseline_name, cb.framework
+       FROM compliance_waivers cw
+       LEFT JOIN compliance_baselines cb ON cw.baseline_id = cb.id
+       WHERE (cw.device_id = $1 OR cw.device_id IS NULL)
+         AND cw.status = 'active'
+         AND cw.expires_at > NOW()
+       ORDER BY cw.created_at DESC`,
       [deviceId]
     );
     return rows;
   }
 
   /**
-   * Count active waivers.
+   * List all waivers with optional filters.
    */
-  async countActive() {
-    try {
-      const { rows } = await this.pgPool.query(
-        `SELECT COUNT(*) AS count FROM compliance_waivers WHERE status = 'active' AND expires_at > NOW()`
-      );
-      return parseInt(rows[0].count, 10);
-    } catch {
-      return 0;
+  async listWaivers(filters = {}) {
+    let query = `
+      SELECT cw.*, cb.name AS baseline_name, cb.framework
+      FROM compliance_waivers cw
+      LEFT JOIN compliance_baselines cb ON cw.baseline_id = cb.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (filters.status) {
+      params.push(filters.status);
+      query += ` AND cw.status = $${params.length}`;
     }
+
+    if (filters.deviceId) {
+      params.push(filters.deviceId);
+      query += ` AND cw.device_id = $${params.length}`;
+    }
+
+    if (filters.deviceGroup) {
+      params.push(filters.deviceGroup);
+      query += ` AND cw.device_group = $${params.length}`;
+    }
+
+    if (filters.baselineId) {
+      params.push(filters.baselineId);
+      query += ` AND cw.baseline_id = $${params.length}`;
+    }
+
+    if (filters.checkId) {
+      params.push(filters.checkId);
+      query += ` AND cw.check_id = $${params.length}`;
+    }
+
+    query += ' ORDER BY cw.created_at DESC';
+
+    if (filters.limit) {
+      params.push(filters.limit);
+      query += ` LIMIT $${params.length}`;
+    }
+
+    if (filters.offset) {
+      params.push(filters.offset);
+      query += ` OFFSET $${params.length}`;
+    }
+
+    const { rows } = await this.db.query(query, params);
+    return rows;
   }
 
-  // ---------------------------------------------------------------------------
-  // Internal helpers
-  // ---------------------------------------------------------------------------
-
   /**
-   * Auto-expire waivers that are past their expiration date.
+   * Mark expired waivers. Run on schedule (e.g., hourly).
    */
-  async _expireWaivers() {
-    try {
-      const { rowCount } = await this.pgPool.query(
-        `UPDATE compliance_waivers SET status = 'expired'
-         WHERE status = 'active' AND expires_at <= NOW()`
-      );
-      if (rowCount > 0) {
-        this.logger.info('Auto-expired waivers', { count: rowCount });
-      }
-    } catch (err) {
-      this.logger.error('Failed to expire waivers', { error: err.message });
+  async cleanupExpired() {
+    const { rows } = await this.db.query(
+      `UPDATE compliance_waivers
+       SET status = 'expired'
+       WHERE status = 'active' AND expires_at <= NOW()
+       RETURNING id, check_id, device_id, device_group`,
+    );
+
+    if (rows.length > 0) {
+      logger.info(`Expired ${rows.length} waivers`, {
+        expiredIds: rows.map(r => r.id),
+      });
     }
+
+    return rows;
   }
 
   /**
-   * Cache a waiver in Redis.
+   * Get waiver statistics.
    */
-  async _cacheWaiver(waiver) {
-    if (!waiver.device_id) return;
-    const key = `waiver:${waiver.device_id}:${waiver.check_id}`;
-    const ttl = Math.max(1, Math.floor((new Date(waiver.expires_at) - Date.now()) / 1000));
-    try {
-      await this.redis.setex(key, Math.min(ttl, 86400), '1');
-    } catch {
-      // best effort
-    }
-  }
+  async getStats() {
+    const { rows } = await this.db.query(
+      `SELECT
+         status,
+         COUNT(*) AS count
+       FROM compliance_waivers
+       GROUP BY status`
+    );
 
-  /**
-   * Invalidate waiver cache entry.
-   */
-  async _invalidateWaiverCache(waiver) {
-    if (!waiver.device_id) return;
-    const key = `waiver:${waiver.device_id}:${waiver.check_id}`;
-    try {
-      await this.redis.del(key);
-    } catch {
-      // best effort
+    const stats = { active: 0, expired: 0, revoked: 0, total: 0 };
+    for (const row of rows) {
+      stats[row.status] = parseInt(row.count, 10);
+      stats.total += parseInt(row.count, 10);
     }
+
+    // Waivers expiring within 7 days
+    const { rows: expiringSoon } = await this.db.query(
+      `SELECT COUNT(*) AS count FROM compliance_waivers
+       WHERE status = 'active' AND expires_at <= NOW() + INTERVAL '7 days'`
+    );
+    stats.expiringSoon = parseInt(expiringSoon[0].count, 10);
+
+    return stats;
   }
 }
 

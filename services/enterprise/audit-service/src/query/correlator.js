@@ -1,17 +1,18 @@
 'use strict';
 
+const logger = require('../utils/logger');
+
 class Correlator {
-  constructor({ logger, pool }) {
-    this.logger = logger;
-    this.pool = pool;
+  constructor(db) {
+    this.db = db;
   }
 
   async getCorrelatedEvents(correlationId) {
-    if (!correlationId) {
-      throw new Error('correlationId is required');
+    if (!correlationId || typeof correlationId !== 'string') {
+      throw new Error('Valid correlationId is required');
     }
 
-    const result = await this.pool.query(
+    const result = await this.db.query(
       `SELECT * FROM audit_events
        WHERE correlation_id = $1
        ORDER BY timestamp ASC`,
@@ -30,12 +31,14 @@ class Correlator {
       action: event.action,
       category: event.category,
       severity: event.severity,
-      actor: event.actor,
-      target: event.target,
+      actor_id: event.actor_id,
+      actor_name: event.actor_name,
+      target_id: event.target_id,
+      target_name: event.target_name,
       result: event.result,
       timeSincePrevious: index > 0
         ? new Date(event.timestamp) - new Date(events[index - 1].timestamp)
-        : 0
+        : 0,
     }));
 
     const duration = events.length > 1
@@ -51,17 +54,17 @@ class Correlator {
       categories: [...new Set(events.map(e => e.category))],
       severities: [...new Set(events.map(e => e.severity))],
       events,
-      timeline
+      timeline,
     };
   }
 
   async findRelatedEvents(eventId, timeWindowMinutes = 5) {
-    if (!eventId) {
-      throw new Error('eventId is required');
+    if (!eventId || typeof eventId !== 'string') {
+      throw new Error('Valid eventId is required');
     }
 
     // Get the source event
-    const sourceResult = await this.pool.query(
+    const sourceResult = await this.db.query(
       'SELECT * FROM audit_events WHERE id = $1',
       [eventId]
     );
@@ -71,62 +74,60 @@ class Correlator {
     }
 
     const sourceEvent = sourceResult.rows[0];
-    const windowMs = timeWindowMinutes * 60 * 1000;
-    const startTime = new Date(new Date(sourceEvent.timestamp).getTime() - windowMs);
-    const endTime = new Date(new Date(sourceEvent.timestamp).getTime() + windowMs);
+    const related = [];
 
-    // Find related events within the time window that share attributes
-    const conditions = [
-      'id != $1',
-      'timestamp BETWEEN $2 AND $3'
-    ];
-    const params = [eventId, startTime.toISOString(), endTime.toISOString()];
-    let paramIndex = 4;
-
-    // Build OR conditions for related attributes
-    const relatedConditions = [];
-
-    // Same correlation ID
+    // Find by correlation_id
     if (sourceEvent.correlation_id) {
-      relatedConditions.push(`correlation_id = $${paramIndex++}`);
-      params.push(sourceEvent.correlation_id);
+      const corrResult = await this.db.query(
+        'SELECT * FROM audit_events WHERE correlation_id = $1 AND id != $2 ORDER BY timestamp ASC',
+        [sourceEvent.correlation_id, eventId]
+      );
+      for (const row of corrResult.rows) {
+        related.push({ ...row, _relation: 'correlation_id' });
+      }
     }
 
-    // Same actor
-    if (sourceEvent.actor && sourceEvent.actor.id) {
-      relatedConditions.push(`actor->>'id' = $${paramIndex++}`);
-      params.push(sourceEvent.actor.id);
+    // Find by same actor within time window
+    if (sourceEvent.actor_id) {
+      const actorResult = await this.db.query(
+        `SELECT * FROM audit_events
+         WHERE actor_id = $1 AND id != $2
+         AND timestamp BETWEEN $3::timestamptz - interval '${timeWindowMinutes} minutes'
+         AND $3::timestamptz + interval '${timeWindowMinutes} minutes'
+         ORDER BY timestamp ASC
+         LIMIT 20`,
+        [sourceEvent.actor_id, eventId, sourceEvent.timestamp]
+      );
+      for (const row of actorResult.rows) {
+        if (!related.find((r) => r.id === row.id)) {
+          related.push({ ...row, _relation: 'same_actor' });
+        }
+      }
     }
 
-    // Same target
-    if (sourceEvent.target && sourceEvent.target.id) {
-      relatedConditions.push(`target->>'id' = $${paramIndex++}`);
-      params.push(sourceEvent.target.id);
+    // Find by same target within time window
+    if (sourceEvent.target_id) {
+      const targetResult = await this.db.query(
+        `SELECT * FROM audit_events
+         WHERE target_id = $1 AND id != $2
+         AND timestamp BETWEEN $3::timestamptz - interval '${timeWindowMinutes} minutes'
+         AND $3::timestamptz + interval '${timeWindowMinutes} minutes'
+         ORDER BY timestamp ASC
+         LIMIT 20`,
+        [sourceEvent.target_id, eventId, sourceEvent.timestamp]
+      );
+      for (const row of targetResult.rows) {
+        if (!related.find((r) => r.id === row.id)) {
+          related.push({ ...row, _relation: 'same_target' });
+        }
+      }
     }
-
-    // Same source
-    if (sourceEvent.source) {
-      relatedConditions.push(`source = $${paramIndex++}`);
-      params.push(sourceEvent.source);
-    }
-
-    if (relatedConditions.length > 0) {
-      conditions.push('(' + relatedConditions.join(' OR ') + ')');
-    }
-
-    const result = await this.pool.query(
-      `SELECT * FROM audit_events
-       WHERE ${conditions.join(' AND ')}
-       ORDER BY timestamp ASC
-       LIMIT 100`,
-      params
-    );
 
     return {
       sourceEvent,
       timeWindowMinutes,
-      relatedEvents: result.rows,
-      relatedCount: result.rows.length
+      relatedEvents: related,
+      relatedCount: related.length,
     };
   }
 }

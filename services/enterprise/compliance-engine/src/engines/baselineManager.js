@@ -2,215 +2,242 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
+const logger = require('../utils/logger');
 
-/**
- * BaselineManager – loads, stores and manages compliance baselines.
- * Built-in baselines are loaded from JSON files on disk; custom baselines
- * are persisted to PostgreSQL.
- */
 class BaselineManager {
-  constructor({ pgPool, logger }) {
-    this.pgPool = pgPool;
-    this.logger = logger;
-    /** @type {Map<string, object>} id → baseline */
-    this.baselines = new Map();
+  constructor(db) {
+    this.db = db;
+    this.baselinesDir = path.join(__dirname, '../../baselines');
   }
 
-  // ---------------------------------------------------------------------------
-  // Loading
-  // ---------------------------------------------------------------------------
-
   /**
-   * Load all baseline JSON files from a directory.
+   * Load all built-in JSON baselines from the /baselines/ directory into the database.
+   * Performs upsert based on the baseline's embedded id to avoid duplicates.
    */
-  async loadFromDirectory(dir) {
-    try {
-      if (!fs.existsSync(dir)) {
-        this.logger.warn('Baselines directory does not exist', { dir });
-        return;
-      }
+  async loadBuiltInBaselines() {
+    logger.info('Loading built-in compliance baselines...');
 
-      const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-      for (const file of files) {
-        try {
-          const raw = fs.readFileSync(path.join(dir, file), 'utf8');
-          const baseline = JSON.parse(raw);
-          if (!baseline.id) {
-            baseline.id = path.basename(file, '.json');
-          }
-          this.baselines.set(baseline.id, baseline);
-          this.logger.info('Loaded baseline', { id: baseline.id, name: baseline.name, checks: (baseline.checks || []).length });
-        } catch (err) {
-          this.logger.error('Failed to load baseline file', { file, error: err.message });
+    if (!fs.existsSync(this.baselinesDir)) {
+      logger.warn(`Baselines directory not found: ${this.baselinesDir}`);
+      return [];
+    }
+
+    const files = fs.readdirSync(this.baselinesDir).filter(f => f.endsWith('.json'));
+    const loaded = [];
+
+    for (const file of files) {
+      try {
+        const filePath = path.join(this.baselinesDir, file);
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const baseline = JSON.parse(raw);
+
+        if (!baseline.name || !baseline.framework || !baseline.version) {
+          logger.warn(`Skipping invalid baseline file: ${file} (missing required fields)`);
+          continue;
         }
-      }
-    } catch (err) {
-      this.logger.error('Failed to read baselines directory', { dir, error: err.message });
-    }
 
-    // Also load custom baselines from database
-    await this._loadCustomBaselines();
-  }
+        // Upsert: insert or update if matching name + framework + version
+        const { rows } = await this.db.query(
+          `INSERT INTO compliance_baselines (name, description, framework, platform, version, checks, enabled)
+           VALUES ($1, $2, $3, $4, $5, $6, true)
+           ON CONFLICT ON CONSTRAINT compliance_baselines_pkey DO NOTHING
+           RETURNING id`,
+          [
+            baseline.name,
+            baseline.description || `${baseline.framework.toUpperCase()} baseline - ${baseline.name}`,
+            baseline.framework,
+            baseline.platform || 'all',
+            baseline.version,
+            JSON.stringify(baseline.checks || []),
+          ]
+        );
 
-  /**
-   * Load custom baselines from PostgreSQL.
-   */
-  async _loadCustomBaselines() {
-    try {
-      const { rows } = await this.pgPool.query(
-        `SELECT * FROM compliance_baselines WHERE enabled = true`
-      );
-      for (const row of rows) {
-        const baseline = {
-          id: row.id,
-          name: row.name,
-          description: row.description,
-          framework: row.framework,
-          platform: row.platform,
-          version: row.version,
-          checks: row.checks || [],
-          custom: true,
-        };
-        this.baselines.set(baseline.id, baseline);
-      }
-      this.logger.info('Loaded custom baselines from database', { count: rows.length });
-    } catch {
-      this.logger.warn('Could not load custom baselines from database');
-    }
-  }
+        // If ON CONFLICT did nothing, try to find existing and update
+        if (rows.length === 0) {
+          const existing = await this.db.query(
+            `SELECT id FROM compliance_baselines WHERE name = $1 AND framework = $2`,
+            [baseline.name, baseline.framework]
+          );
 
-  // ---------------------------------------------------------------------------
-  // Query
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Get the number of loaded baselines.
-   */
-  getLoadedCount() {
-    return this.baselines.size;
-  }
-
-  /**
-   * List all baselines, optionally filtered by platform.
-   */
-  listBaselines(platform) {
-    const all = Array.from(this.baselines.values());
-    if (!platform) return all.map(this._summarize);
-    return all
-      .filter((b) => b.platform === platform || b.platform === 'all' || b.platform === 'cross-platform')
-      .map(this._summarize);
-  }
-
-  /**
-   * Get a baseline by its ID.
-   */
-  getBaselineById(id) {
-    return this.baselines.get(id) || null;
-  }
-
-  /**
-   * Get all baselines applicable to a specific device/platform.
-   */
-  getBaselinesForDevice(deviceId, platform) {
-    const applicable = [];
-    for (const baseline of this.baselines.values()) {
-      if (
-        baseline.platform === platform ||
-        baseline.platform === 'all' ||
-        baseline.platform === 'cross-platform'
-      ) {
-        applicable.push(baseline);
+          if (existing.rows.length > 0) {
+            await this.db.query(
+              `UPDATE compliance_baselines SET checks = $1, version = $2, platform = $3, updated_at = NOW()
+               WHERE id = $4`,
+              [JSON.stringify(baseline.checks || []), baseline.version, baseline.platform || 'all', existing.rows[0].id]
+            );
+            logger.info(`Updated existing baseline: ${baseline.name}`);
+            loaded.push({ id: existing.rows[0].id, name: baseline.name, action: 'updated' });
+          }
+        } else {
+          logger.info(`Loaded baseline: ${baseline.name} (${rows[0].id})`);
+          loaded.push({ id: rows[0].id, name: baseline.name, action: 'created' });
+        }
+      } catch (error) {
+        logger.error(`Failed to load baseline from ${file}: ${error.message}`);
       }
     }
-    return applicable;
+
+    logger.info(`Loaded ${loaded.length} baselines from ${files.length} files`);
+    return loaded;
   }
 
-  // ---------------------------------------------------------------------------
-  // CRUD
-  // ---------------------------------------------------------------------------
-
   /**
-   * Create a custom baseline and persist it.
+   * Create a custom compliance baseline.
    */
   async createBaseline(data) {
-    if (!data.name) throw new Error('Baseline name is required');
-    if (!data.framework) throw new Error('Baseline framework is required');
-    if (!data.platform) throw new Error('Baseline platform is required');
-    if (!data.checks || !Array.isArray(data.checks) || data.checks.length === 0) {
-      throw new Error('At least one check is required');
+    const { name, description, framework, platform, version, checks, enabled } = data;
+
+    if (!name || !framework || !version) {
+      throw new Error('Missing required fields: name, framework, version');
     }
 
-    const id = data.id || crypto.randomUUID();
-    const version = data.version || '1.0.0';
+    const validFrameworks = ['cis', 'nist', 'bsi', 'iso27001', 'dsgvo', 'stig', 'custom'];
+    if (!validFrameworks.includes(framework)) {
+      throw new Error(`Invalid framework "${framework}". Must be one of: ${validFrameworks.join(', ')}`);
+    }
 
-    const { rows } = await this.pgPool.query(
-      `INSERT INTO compliance_baselines (id, name, description, framework, platform, version, checks)
+    const validPlatforms = ['windows', 'macos', 'linux', 'all'];
+    if (platform && !validPlatforms.includes(platform)) {
+      throw new Error(`Invalid platform "${platform}". Must be one of: ${validPlatforms.join(', ')}`);
+    }
+
+    // Validate checks structure
+    if (checks && Array.isArray(checks)) {
+      for (const check of checks) {
+        if (!check.id || !check.title) {
+          throw new Error('Each check must have an id and title');
+        }
+      }
+    }
+
+    const { rows } = await this.db.query(
+      `INSERT INTO compliance_baselines (name, description, framework, platform, version, checks, enabled)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [id, data.name, data.description || '', data.framework, data.platform, version, JSON.stringify(data.checks)]
+      [
+        name,
+        description || '',
+        framework,
+        platform || 'all',
+        version,
+        JSON.stringify(checks || []),
+        enabled !== false,
+      ]
     );
 
-    const baseline = {
-      id: rows[0].id,
-      name: rows[0].name,
-      description: rows[0].description,
-      framework: rows[0].framework,
-      platform: rows[0].platform,
-      version: rows[0].version,
-      checks: rows[0].checks,
-      custom: true,
-    };
-    this.baselines.set(baseline.id, baseline);
-    this.logger.info('Created custom baseline', { id: baseline.id, name: baseline.name });
-    return baseline;
+    logger.info(`Created custom baseline: ${name} (${rows[0].id})`);
+    return rows[0];
   }
 
   /**
-   * Update an existing custom baseline.
+   * Update an existing baseline.
    */
   async updateBaseline(id, data) {
-    const existing = this.baselines.get(id);
-    if (!existing) return null;
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
 
-    const updates = {
-      name: data.name || existing.name,
-      description: data.description !== undefined ? data.description : existing.description,
-      framework: data.framework || existing.framework,
-      platform: data.platform || existing.platform,
-      version: data.version || existing.version,
-      checks: data.checks || existing.checks,
-    };
+    const allowedFields = ['name', 'description', 'framework', 'platform', 'version', 'checks', 'enabled'];
 
-    if (existing.custom) {
-      await this.pgPool.query(
-        `UPDATE compliance_baselines
-         SET name = $2, description = $3, framework = $4, platform = $5, version = $6, checks = $7, updated_at = NOW()
-         WHERE id = $1`,
-        [id, updates.name, updates.description, updates.framework, updates.platform, updates.version, JSON.stringify(updates.checks)]
-      );
+    for (const field of allowedFields) {
+      if (data[field] !== undefined) {
+        const value = field === 'checks' ? JSON.stringify(data[field]) : data[field];
+        updates.push(`${field} = $${paramIndex}`);
+        values.push(value);
+        paramIndex++;
+      }
     }
 
-    const updated = { ...existing, ...updates };
-    this.baselines.set(id, updated);
-    this.logger.info('Updated baseline', { id });
-    return updated;
+    if (updates.length === 0) {
+      throw new Error('No valid fields to update');
+    }
+
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const { rows } = await this.db.query(
+      `UPDATE compliance_baselines SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      values
+    );
+
+    if (rows.length === 0) {
+      throw new Error(`Baseline not found: ${id}`);
+    }
+
+    logger.info(`Updated baseline: ${rows[0].name} (${id})`);
+    return rows[0];
   }
 
   /**
-   * Return a summary (without full checks array) for listing purposes.
+   * Get a single baseline by ID.
    */
-  _summarize(baseline) {
-    return {
-      id: baseline.id,
-      name: baseline.name,
-      description: baseline.description,
-      framework: baseline.framework,
-      platform: baseline.platform,
-      version: baseline.version,
-      checksCount: (baseline.checks || []).length,
-      custom: baseline.custom || false,
-    };
+  async getBaseline(id) {
+    const { rows } = await this.db.query(
+      'SELECT * FROM compliance_baselines WHERE id = $1',
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return rows[0];
+  }
+
+  /**
+   * List baselines with optional filters.
+   */
+  async listBaselines(filters = {}) {
+    let query = 'SELECT * FROM compliance_baselines WHERE 1=1';
+    const params = [];
+
+    if (filters.framework) {
+      params.push(filters.framework);
+      query += ` AND framework = $${params.length}`;
+    }
+
+    if (filters.platform) {
+      params.push(filters.platform);
+      query += ` AND (platform = $${params.length} OR platform = 'all')`;
+    }
+
+    if (filters.enabled !== undefined) {
+      params.push(filters.enabled);
+      query += ` AND enabled = $${params.length}`;
+    }
+
+    if (filters.search) {
+      params.push(`%${filters.search}%`);
+      query += ` AND (name ILIKE $${params.length} OR description ILIKE $${params.length})`;
+    }
+
+    query += ' ORDER BY framework, name';
+
+    if (filters.limit) {
+      params.push(filters.limit);
+      query += ` LIMIT $${params.length}`;
+    }
+
+    if (filters.offset) {
+      params.push(filters.offset);
+      query += ` OFFSET $${params.length}`;
+    }
+
+    const { rows } = await this.db.query(query, params);
+    return rows;
+  }
+
+  /**
+   * Get baselines applicable to a specific platform.
+   */
+  async getBaselineForPlatform(platform) {
+    const { rows } = await this.db.query(
+      `SELECT * FROM compliance_baselines
+       WHERE enabled = true AND (platform = $1 OR platform = 'all')
+       ORDER BY framework, name`,
+      [platform]
+    );
+    return rows;
   }
 }
 
