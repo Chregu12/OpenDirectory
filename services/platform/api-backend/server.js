@@ -341,6 +341,43 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Setup Wizard APIs
+let setupConfig = null;
+
+app.get('/api/config/setup-status', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      isFirstRun: setupConfig === null,
+      config: setupConfig,
+    }
+  });
+});
+
+app.get('/api/config/wizard/available-modules', (req, res) => {
+  res.json({
+    success: true,
+    data: [
+      { id: 'network', name: 'Netzwerk', ram: '192 MB', profile: 'network' },
+      { id: 'printers', name: 'Drucker', ram: '192 MB', profile: 'printers' },
+      { id: 'monitoring', name: 'Monitoring', ram: '448 MB', profile: 'monitoring' },
+      { id: 'security', name: 'Security', ram: '320 MB', profile: 'security' },
+      { id: 'lifecycle', name: 'Lifecycle', ram: '448 MB', profile: 'lifecycle' },
+    ]
+  });
+});
+
+app.post('/api/config/wizard/setup', (req, res) => {
+  const { orgName, modules, devices, completedAt } = req.body;
+  setupConfig = { orgName, modules, devices, completedAt };
+  console.log('Setup wizard completed:', setupConfig);
+  res.json({
+    success: true,
+    message: 'Setup completed',
+    data: setupConfig,
+  });
+});
+
 // Policy Management APIs
 app.get('/api/policies', (req, res) => {
   res.json({

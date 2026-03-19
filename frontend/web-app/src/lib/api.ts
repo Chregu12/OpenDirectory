@@ -262,9 +262,12 @@ export const configApi = {
   importConfig: (config: any) =>
     api.post('/api/config/import', config),
   
+  getSetupStatus: () =>
+    api.get('/api/config/setup-status'),
+
   getAvailableModules: () =>
     api.get('/api/config/wizard/available-modules'),
-  
+
   runSetupWizard: (setupData: any) =>
     api.post('/api/config/wizard/setup', setupData),
 };

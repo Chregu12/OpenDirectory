@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import UnifiLayout from '@/components/layout/UnifiLayout';
 import DashboardView from '@/components/views/DashboardView';
 import TopologyView from '@/components/views/TopologyView';
@@ -13,6 +13,8 @@ import SecurityScannerView from '@/components/views/SecurityScannerView';
 import AntivirusView from '@/components/views/AntivirusView';
 import MonitoringView from '@/components/views/MonitoringView';
 import ServicesDashboard from '@/components/dashboard/ServicesDashboard';
+import SetupWizard from '@/components/setup/SetupWizard';
+import { configApi } from '@/lib/api';
 
 const SettingsView = () => (
   <div className="p-6">
@@ -22,6 +24,38 @@ const SettingsView = () => (
 
 export default function UnifiApp() {
   const [activeView, setActiveView] = useState('dashboard');
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [setupChecked, setSetupChecked] = useState(false);
+
+  // Check if first-run setup wizard should be shown
+  useEffect(() => {
+    const checkSetupStatus = async () => {
+      if (typeof window !== 'undefined' && localStorage.getItem('od_setup_completed')) {
+        setSetupChecked(true);
+        return;
+      }
+      try {
+        const response = await configApi.getSetupStatus();
+        if (response.data?.data?.isFirstRun) {
+          setShowSetupWizard(true);
+        }
+      } catch {
+        if (typeof window !== 'undefined' && !localStorage.getItem('od_setup_completed')) {
+          setShowSetupWizard(true);
+        }
+      } finally {
+        setSetupChecked(true);
+      }
+    };
+    checkSetupStatus();
+  }, []);
+
+  const handleSetupComplete = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('od_setup_completed', 'true');
+    }
+    setShowSetupWizard(false);
+  };
 
   const renderActiveView = () => {
     switch (activeView) {
@@ -54,6 +88,10 @@ export default function UnifiApp() {
 
   return (
     <UnifiLayout activeView={activeView} onViewChange={setActiveView}>
+      {/* First-run Setup Wizard */}
+      {showSetupWizard && setupChecked && (
+        <SetupWizard onComplete={handleSetupComplete} />
+      )}
       {renderActiveView()}
     </UnifiLayout>
   );
