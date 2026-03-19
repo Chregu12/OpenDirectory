@@ -272,6 +272,12 @@ export const configApi = {
     api.post('/api/config/wizard/setup', setupData),
 };
 
+// System Resources API
+export const systemApi = {
+  getResources: () =>
+    api.get('/api/system/resources'),
+};
+
 // Monitoring & Analytics API
 export const monitoringApi = {
   getSystemStatus: () =>

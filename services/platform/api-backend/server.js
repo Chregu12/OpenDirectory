@@ -341,6 +341,34 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// System Resources API
+const os = require('os');
+
+app.get('/api/system/resources', (req, res) => {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+
+  res.json({
+    success: true,
+    data: {
+      ram: {
+        totalMB: Math.round(totalMem / 1024 / 1024),
+        usedMB: Math.round(usedMem / 1024 / 1024),
+        freeMB: Math.round(freeMem / 1024 / 1024),
+        usagePercent: Math.round((usedMem / totalMem) * 100),
+      },
+      cpu: {
+        cores: os.cpus().length,
+        model: os.cpus()[0]?.model || 'Unknown',
+      },
+      uptime: os.uptime(),
+      platform: os.platform(),
+      hostname: os.hostname(),
+    }
+  });
+});
+
 // Setup Wizard APIs
 let setupConfig = null;
 

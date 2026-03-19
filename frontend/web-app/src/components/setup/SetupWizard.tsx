@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import {
-  WifiIcon,
   PrinterIcon,
   ChartBarIcon,
   ShieldCheckIcon,
@@ -17,67 +16,24 @@ import {
   RocketLaunchIcon,
 } from '@heroicons/react/24/outline';
 import { configApi } from '@/lib/api';
+import { MODULES as MODULE_REGISTRY, calculateRam } from '@/lib/modules';
+import RamMeter from '@/components/shared/RamMeter';
 import toast from 'react-hot-toast';
 
 type WizardStep = 1 | 2 | 3 | 4;
-
-interface ModuleOption {
-  id: string;
-  name: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  ram: string;
-  recommended?: boolean;
-  features: string[];
-}
 
 interface SetupWizardProps {
   onComplete: () => void;
 }
 
-const MODULES: ModuleOption[] = [
-  {
-    id: 'network',
-    name: 'Netzwerk',
-    description: 'DNS-Server, DHCP, SMB/NFS File Shares',
-    icon: GlobeAltIcon,
-    ram: '192 MB',
-    recommended: true,
-    features: ['DNS-Server (Port 53)', 'DHCP-Server (Port 67)', 'SMB File Shares (Port 445)', 'NFS Shares (Port 2049)', 'Netzwerk-Discovery'],
-  },
-  {
-    id: 'printers',
-    name: 'Drucker',
-    description: 'Drucker- & Scanner-Management mit CUPS',
-    icon: PrinterIcon,
-    ram: '192 MB',
-    features: ['CUPS Print Server', 'Auto-Discovery', 'Drucker-Quotas', 'Scanner-Integration', 'Job-Tracking'],
-  },
-  {
-    id: 'monitoring',
-    name: 'Monitoring',
-    description: 'Grafana Dashboards & Prometheus Metriken',
-    icon: ChartBarIcon,
-    ram: '448 MB',
-    features: ['Grafana Dashboards', 'Prometheus Metrics', 'Alert-Regeln', 'Custom Reports', 'Performance-Tracking'],
-  },
-  {
-    id: 'security',
-    name: 'Security',
-    description: 'CIS/NIST Compliance Scanner & Auto-Remediation',
-    icon: ShieldCheckIcon,
-    ram: '320 MB',
-    features: ['CIS Benchmark Scanner', 'NIST Compliance', 'BSI Grundschutz', 'Auto-Remediation', 'Compliance Reports'],
-  },
-  {
-    id: 'lifecycle',
-    name: 'Lifecycle',
-    description: 'Geräte-Lifecycle, Graph Explorer & Policy Simulator',
-    icon: CpuChipIcon,
-    ram: '448 MB',
-    features: ['Device Lifecycle Management', 'AD Graph Explorer', 'Policy Simulator (What-If)', 'Risk Scoring', 'Angriffspfad-Analyse'],
-  },
-];
+// Map icon names from module registry to actual components
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  GlobeAltIcon,
+  PrinterIcon,
+  ChartBarIcon,
+  ShieldCheckIcon,
+  CpuChipIcon,
+};
 
 const STEPS = [
   { n: 1 as const, label: 'Willkommen' },
@@ -88,7 +44,9 @@ const STEPS = [
 
 export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const [step, setStep] = useState<WizardStep>(1);
-  const [selectedModules, setSelectedModules] = useState<string[]>(['network']);
+  const [selectedModules, setSelectedModules] = useState<string[]>(
+    MODULE_REGISTRY.filter(m => m.recommended).map(m => m.id)
+  );
   const [orgName, setOrgName] = useState('');
   const [deviceCounts, setDeviceCounts] = useState({ windows: 5, macos: 5, linux: 3 });
   const [saving, setSaving] = useState(false);
@@ -99,15 +57,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     );
   };
 
-  const totalRam = () => {
-    let ram = 2112; // Kern
-    selectedModules.forEach(id => {
-      const mod = MODULES.find(m => m.id === id);
-      if (mod) ram += parseInt(mod.ram);
-    });
-    return (ram / 1024).toFixed(1);
-  };
-
+  const ram = calculateRam(selectedModules);
   const totalDevices = () => deviceCounts.windows + deviceCounts.macos + deviceCounts.linux;
 
   const handleComplete = async () => {
@@ -235,8 +185,9 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               </div>
 
               <div className="space-y-3">
-                {MODULES.map((mod) => {
+                {MODULE_REGISTRY.map((mod) => {
                   const isSelected = selectedModules.includes(mod.id);
+                  const Icon = ICON_MAP[mod.iconName] || CpuChipIcon;
                   return (
                     <button
                       key={mod.id}
@@ -259,7 +210,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 mr-3 ${
                           isSelected ? 'bg-blue-100' : 'bg-gray-100'
                         }`}>
-                          <mod.icon className={`h-5 w-5 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`} />
+                          <Icon className={`h-5 w-5 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`} />
                         </div>
 
                         {/* Text */}
@@ -271,7 +222,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                                 empfohlen
                               </span>
                             )}
-                            <span className="ml-auto text-xs text-gray-400">+{mod.ram}</span>
+                            <span className="ml-auto text-xs text-gray-400">+{mod.ramMB} MB</span>
                           </div>
                           <p className="text-sm text-gray-500 mt-0.5">{mod.description}</p>
 
@@ -292,16 +243,12 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                 })}
               </div>
 
-              {/* RAM Summary */}
-              <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
-                <div>
-                  <span className="text-sm text-gray-600">Geschätzter RAM-Verbrauch:</span>
-                  <span className="ml-2 text-lg font-bold text-gray-900">~{totalRam()} GB</span>
-                </div>
-                <div className="text-sm text-gray-400">
-                  {selectedModules.length} Module + Kern
-                </div>
-              </div>
+              {/* Live RAM Meter */}
+              <RamMeter
+                enabledModules={selectedModules}
+                compact={false}
+                showBreakdown={false}
+              />
             </div>
           )}
 
@@ -315,9 +262,9 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
               <div className="space-y-4">
                 {[
-                  { key: 'windows' as const, label: 'Windows', color: 'blue', icon: '🪟' },
-                  { key: 'macos' as const, label: 'macOS', color: 'gray', icon: '🍎' },
-                  { key: 'linux' as const, label: 'Linux Server', color: 'orange', icon: '🐧' },
+                  { key: 'windows' as const, label: 'Windows', icon: '🪟' },
+                  { key: 'macos' as const, label: 'macOS', icon: '🍎' },
+                  { key: 'linux' as const, label: 'Linux Server', icon: '🐧' },
                 ].map(({ key, label, icon }) => (
                   <div key={key} className="flex items-center bg-gray-50 rounded-xl p-4">
                     <span className="text-2xl mr-3">{icon}</span>
@@ -378,10 +325,17 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                   <p className="text-xs text-gray-500">Module</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4 text-center">
-                  <p className="text-2xl font-bold text-gray-900">~{totalRam()}</p>
+                  <p className="text-2xl font-bold text-gray-900">~{ram.totalGB}</p>
                   <p className="text-xs text-gray-500">GB RAM</p>
                 </div>
               </div>
+
+              {/* RAM visualization */}
+              <RamMeter
+                enabledModules={selectedModules}
+                compact={false}
+                showBreakdown={true}
+              />
 
               <div className="bg-gray-50 rounded-xl p-5 space-y-3">
                 {orgName && (
@@ -407,7 +361,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                       Kern-System
                     </span>
                     {selectedModules.map(id => {
-                      const mod = MODULES.find(m => m.id === id);
+                      const mod = MODULE_REGISTRY.find(m => m.id === id);
                       return mod ? (
                         <span key={id} className="px-2.5 py-1 text-xs bg-blue-100 text-blue-700 rounded-full font-medium">
                           {mod.name}

@@ -16,6 +16,8 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi, configApi } from '@/lib/api';
+import { MODULES as MODULE_REGISTRY, calculateRam } from '@/lib/modules';
+import RamMeter from '@/components/shared/RamMeter';
 import toast from 'react-hot-toast';
 
 interface Service {
@@ -187,11 +189,27 @@ export default function ServicesDashboard() {
         </div>
       </div>
 
+      {/* RAM Meter */}
+      <RamMeter
+        enabledModules={modules.filter(m => m.enabled).map(m => {
+          // Map service IDs to module registry IDs
+          const mapping: Record<string, string> = {
+            'network-infrastructure': 'network',
+            'printer-service': 'printers',
+            'monitoring-analytics': 'monitoring',
+            'security-suite': 'security',
+            'device-lifecycle': 'lifecycle',
+          };
+          return mapping[m.id] || m.id;
+        }).filter(id => MODULE_REGISTRY.some(mr => mr.id === id))}
+        showBreakdown={true}
+      />
+
       {/* Module Management */}
       <div className="bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-medium text-gray-900">Module Management</h2>
-          <p className="text-sm text-gray-600">Enable or disable OpenDirectory modules</p>
+          <p className="text-sm text-gray-600">Enable or disable OpenDirectory modules — RAM-Verbrauch wird live berechnet</p>
         </div>
         
         <div className="p-6">
