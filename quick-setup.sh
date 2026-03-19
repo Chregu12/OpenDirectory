@@ -1,13 +1,16 @@
 #!/bin/bash
 # ============================================================
-# OpenDirectory - Quick Setup mit Modul-Wizard
-# Interaktive Installation für kleine bis mittlere Büros
+# OpenDirectory - Setup & Update Script
+#
+# Erstinstallation: Zeigt interaktiven Modul-Wizard
+# Updates:          Nutzt gespeicherte Konfiguration, kein Wizard
 #
 # Verwendung:
-#   ./quick-setup.sh                  # Interaktiver Wizard
-#   ./quick-setup.sh --full           # Alle Module (Enterprise)
-#   ./quick-setup.sh --minimal        # Nur Kern, keine Module
+#   ./quick-setup.sh                    # Erstinstall: Wizard | Update: direkt
+#   ./quick-setup.sh --full             # Alle Module (Enterprise)
+#   ./quick-setup.sh --minimal          # Nur Kern, keine Module
 #   ./quick-setup.sh --modules network,printers  # Bestimmte Module
+#   ./quick-setup.sh --reconfigure      # Wizard erneut anzeigen (Module ändern)
 # ============================================================
 
 set -euo pipefail
@@ -22,9 +25,13 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/.od-config"
 COMPOSE_FILE="docker-compose.lite.yml"
 SELECTED_PROFILES=()
 SKIP_WIZARD=false
+FORCE_WIZARD=false
+IS_UPDATE=false
 
 log()   { echo -e "${GREEN}[OK]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
@@ -32,12 +39,44 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 info()  { echo -e "${BLUE}[i]${NC} $1"; }
 
 # ============================================================
+# Konfiguration speichern / laden
+# ============================================================
+save_config() {
+  cat > "$CONFIG_FILE" << EOF
+# OpenDirectory Installation Config
+# Erstellt: $(date '+%Y-%m-%d %H:%M:%S')
+# Nicht manuell bearbeiten — wird vom Setup-Script verwaltet
+OD_COMPOSE_FILE=$COMPOSE_FILE
+OD_PROFILES=${SELECTED_PROFILES[*]:-}
+OD_VERSION=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+OD_INSTALLED=$(date '+%Y-%m-%d %H:%M:%S')
+EOF
+}
+
+load_config() {
+  if [ ! -f "$CONFIG_FILE" ]; then
+    return 1
+  fi
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+  COMPOSE_FILE="${OD_COMPOSE_FILE:-docker-compose.lite.yml}"
+  if [ -n "${OD_PROFILES:-}" ]; then
+    IFS=' ' read -ra SELECTED_PROFILES <<< "$OD_PROFILES"
+  fi
+  return 0
+}
+
+is_installed() {
+  [ -f "$CONFIG_FILE" ] && [ -f "$SCRIPT_DIR/.env" ]
+}
+
+# ============================================================
 # Banner
 # ============================================================
 show_banner() {
   echo ""
   echo -e "  ${BOLD}╔═══════════════════════════════════════════════════════╗${NC}"
-  echo -e "  ${BOLD}║${NC}         ${CYAN}OpenDirectory${NC} — Quick Setup                   ${BOLD}║${NC}"
+  echo -e "  ${BOLD}║${NC}         ${CYAN}OpenDirectory${NC} — Setup                         ${BOLD}║${NC}"
   echo -e "  ${BOLD}║${NC}         Open-Source Device Management                 ${BOLD}║${NC}"
   echo -e "  ${BOLD}╚═══════════════════════════════════════════════════════╝${NC}"
   echo ""
@@ -52,29 +91,38 @@ parse_args() {
       --full)
         COMPOSE_FILE="docker-compose.yml"
         SKIP_WIZARD=true
-        info "Enterprise-Modus: Alle Services"
         ;;
       --minimal)
+        SELECTED_PROFILES=()
         SKIP_WIZARD=true
-        info "Minimal-Modus: Nur Kern-Services"
         ;;
       --modules)
         shift
+        SELECTED_PROFILES=()
         IFS=',' read -ra MODS <<< "$1"
         for mod in "${MODS[@]}"; do
           SELECTED_PROFILES+=("$mod")
         done
         SKIP_WIZARD=true
-        info "Module: ${MODS[*]}"
+        ;;
+      --reconfigure)
+        FORCE_WIZARD=true
         ;;
       --help|-h)
         echo "Verwendung: ./quick-setup.sh [OPTIONEN]"
         echo ""
+        echo "Erste Installation:"
+        echo "  ./quick-setup.sh                Interaktiver Modul-Wizard"
+        echo ""
+        echo "Updates (kein Wizard, bestehende Konfig wird genutzt):"
+        echo "  ./quick-setup.sh                Automatisches Update"
+        echo "  ./quick-setup.sh --reconfigure  Wizard erneut anzeigen"
+        echo ""
         echo "Optionen:"
-        echo "  (keine)                   Interaktiver Modul-Wizard"
         echo "  --minimal                 Nur Kern (~2.0 GB RAM)"
         echo "  --modules network,printers  Bestimmte Module aktivieren"
         echo "  --full                    Enterprise-Modus (~16 GB RAM)"
+        echo "  --reconfigure             Module-Auswahl erneut anzeigen"
         echo "  --help                    Diese Hilfe"
         echo ""
         echo "Verfügbare Module:"
@@ -83,11 +131,6 @@ parse_args() {
         echo "  monitoring  Grafana + Prometheus Dashboards       (~448 MB)"
         echo "  security    CIS/NIST Scanner + Auto-Remediation   (~320 MB)"
         echo "  lifecycle   Device Lifecycle + Graph Explorer      (~448 MB)"
-        echo ""
-        echo "Beispiele:"
-        echo "  ./quick-setup.sh                          # Wizard"
-        echo "  ./quick-setup.sh --modules network        # Kern + DNS/DHCP"
-        echo "  ./quick-setup.sh --modules network,printers,monitoring"
         exit 0
         ;;
       *)
@@ -99,14 +142,13 @@ parse_args() {
 }
 
 # ============================================================
-# Modul-Wizard
+# Modul-Wizard (nur bei Erstinstallation oder --reconfigure)
 # ============================================================
 run_wizard() {
   echo -e "  ${BOLD}Welche Module brauchst du?${NC}"
   echo -e "  ${DIM}Kern-System (User, Geräte, Policies, API, Web-UI) ist immer aktiv.${NC}"
   echo ""
 
-  # Modul-Definitionen: Name | Beschreibung | RAM | Default
   local modules=(
     "network|DNS, DHCP, SMB/NFS Netzlaufwerke|192 MB|empfohlen"
     "printers|Drucker & Scanner Management (CUPS)|192 MB|"
@@ -115,15 +157,12 @@ run_wizard() {
     "lifecycle|Geräte-Lifecycle + Graph Explorer + Policy Simulator|448 MB|"
   )
 
-  local ram_total=2112  # Kern in MB
-  local selections=()
+  local ram_total=2112
 
   for i in "${!modules[@]}"; do
     IFS='|' read -r name desc ram default <<< "${modules[$i]}"
     local num=$((i + 1))
-    local ram_num="${ram//[^0-9]/}"
 
-    # Anzeige
     if [ -n "$default" ]; then
       echo -e "  ${BOLD}[$num]${NC} ${CYAN}$name${NC}"
       echo -e "      $desc"
@@ -140,41 +179,70 @@ run_wizard() {
   echo -e "  Kern-System:  ${BOLD}~2.0 GB RAM${NC} (immer aktiv)"
   echo ""
   echo -e "  ${BOLD}Eingabe:${NC} Nummern durch Komma getrennt, oder ${BOLD}Enter${NC} für empfohlene"
-  echo -e "  ${DIM}Beispiel: 1,2  oder  1,2,3,4,5  oder  Enter für Standard${NC}"
+  echo -e "  ${DIM}Beispiel: 1,2  oder  1,2,3,4,5  oder  0 für keine${NC}"
   echo ""
   echo -ne "  Module aktivieren [1]: "
   read -r choice
 
-  # Default: nur network
   if [ -z "$choice" ]; then
     choice="1"
   fi
 
-  # "alle" / "all"
   if [[ "$choice" == "alle" ]] || [[ "$choice" == "all" ]]; then
     choice="1,2,3,4,5"
   fi
 
-  # "keine" / "none" / "0"
   if [[ "$choice" == "keine" ]] || [[ "$choice" == "none" ]] || [[ "$choice" == "0" ]]; then
     choice=""
   fi
 
-  # Parse Auswahl
-  IFS=',' read -ra nums <<< "$choice"
-  for num in "${nums[@]}"; do
-    num=$(echo "$num" | tr -d ' ')
-    case $num in
-      1) SELECTED_PROFILES+=("network"); ram_total=$((ram_total + 192)) ;;
-      2) SELECTED_PROFILES+=("printers"); ram_total=$((ram_total + 192)) ;;
-      3) SELECTED_PROFILES+=("monitoring"); ram_total=$((ram_total + 448)) ;;
-      4) SELECTED_PROFILES+=("security"); ram_total=$((ram_total + 320)) ;;
-      5) SELECTED_PROFILES+=("lifecycle"); ram_total=$((ram_total + 448)) ;;
-      *) warn "Unbekannte Auswahl: $num (übersprungen)" ;;
-    esac
-  done
+  SELECTED_PROFILES=()
+  if [ -n "$choice" ]; then
+    IFS=',' read -ra nums <<< "$choice"
+    for num in "${nums[@]}"; do
+      num=$(echo "$num" | tr -d ' ')
+      case $num in
+        1) SELECTED_PROFILES+=("network"); ram_total=$((ram_total + 192)) ;;
+        2) SELECTED_PROFILES+=("printers"); ram_total=$((ram_total + 192)) ;;
+        3) SELECTED_PROFILES+=("monitoring"); ram_total=$((ram_total + 448)) ;;
+        4) SELECTED_PROFILES+=("security"); ram_total=$((ram_total + 320)) ;;
+        5) SELECTED_PROFILES+=("lifecycle"); ram_total=$((ram_total + 448)) ;;
+        *) warn "Unbekannte Auswahl: $num (übersprungen)" ;;
+      esac
+    done
+  fi
 
-  # RAM-Zusammenfassung
+  show_config_summary "$ram_total"
+
+  # RAM-Warnung
+  local total_mem_kb
+  total_mem_kb=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "0")
+  local total_mem_mb=$((total_mem_kb / 1024))
+
+  if [ "$total_mem_mb" -gt 0 ] && [ "$ram_total" -gt "$((total_mem_mb * 85 / 100))" ]; then
+    local ram_gb
+    ram_gb=$(awk "BEGIN {printf \"%.1f\", $ram_total / 1024}")
+    warn "RAM-Verbrauch (~${ram_gb} GB) liegt über 85% deines Systems (${total_mem_mb} MB)."
+    echo -ne "  Trotzdem fortfahren? (j/N): "
+    read -r -n 1 confirm
+    echo ""
+    [[ ! $confirm =~ ^[JjYy]$ ]] && exit 1
+  fi
+
+  echo -ne "  ${BOLD}Starten?${NC} (J/n): "
+  read -r -n 1 confirm
+  echo ""
+  [[ $confirm =~ ^[Nn]$ ]] && exit 0
+}
+
+# ============================================================
+# Konfig-Zusammenfassung anzeigen
+# ============================================================
+show_config_summary() {
+  local ram_total="${1:-2112}"
+  local ram_gb
+  ram_gb=$(awk "BEGIN {printf \"%.1f\", $ram_total / 1024}")
+
   echo ""
   echo -e "  ${BOLD}╔═══════════════════════════════════════════════╗${NC}"
   echo -e "  ${BOLD}║${NC}  Konfiguration:                               ${BOLD}║${NC}"
@@ -191,32 +259,10 @@ run_wizard() {
     esac
   done
 
-  local ram_gb
-  ram_gb=$(awk "BEGIN {printf \"%.1f\", $ram_total / 1024}")
   echo -e "  ${BOLD}║${NC}                                               ${BOLD}║${NC}"
   echo -e "  ${BOLD}║${NC}  Geschätzter RAM: ${BOLD}~${ram_gb} GB${NC}                    ${BOLD}║${NC}"
   echo -e "  ${BOLD}╚═══════════════════════════════════════════════╝${NC}"
   echo ""
-
-  # RAM-Warnung
-  local total_mem_kb
-  total_mem_kb=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "0")
-  local total_mem_mb=$((total_mem_kb / 1024))
-
-  if [ "$total_mem_mb" -gt 0 ] && [ "$ram_total" -gt "$((total_mem_mb * 85 / 100))" ]; then
-    warn "RAM-Verbrauch (~${ram_gb} GB) liegt über 85% deines Systems (${total_mem_mb} MB)."
-    warn "Erwäge Module zu deaktivieren oder RAM aufzurüsten."
-    echo ""
-    echo -ne "  Trotzdem fortfahren? (j/N): "
-    read -r -n 1 confirm
-    echo ""
-    [[ ! $confirm =~ ^[JjYy]$ ]] && exit 1
-  fi
-
-  echo -ne "  ${BOLD}Starten?${NC} (J/n): "
-  read -r -n 1 confirm
-  echo ""
-  [[ $confirm =~ ^[Nn]$ ]] && exit 0
 }
 
 # ============================================================
@@ -246,11 +292,11 @@ check_prerequisites() {
 }
 
 # ============================================================
-# .env generieren
+# .env generieren (nur bei Erstinstall)
 # ============================================================
 generate_env() {
-  if [ -f .env ]; then
-    log ".env existiert bereits — wird beibehalten"
+  if [ -f "$SCRIPT_DIR/.env" ]; then
+    log ".env existiert — Passwörter bleiben erhalten"
     return
   fi
 
@@ -263,7 +309,7 @@ generate_env() {
   local lldap_pw
   lldap_pw=$(gen)
 
-  cat > .env << EOF
+  cat > "$SCRIPT_DIR/.env" << EOF
 # OpenDirectory — Automatisch generiert am $(date '+%Y-%m-%d %H:%M:%S')
 
 # Datenbanken
@@ -310,32 +356,63 @@ EOF
 }
 
 # ============================================================
+# Update-Ablauf (kein Wizard, vorherige Konfig)
+# ============================================================
+run_update() {
+  local old_version="${OD_VERSION:-unknown}"
+  local new_version
+  new_version=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+  echo -e "  ${BOLD}Update erkannt${NC}"
+  echo -e "  ${DIM}Installiert: ${OD_INSTALLED:-unbekannt} (${old_version})${NC}"
+  echo -e "  ${DIM}Neu:         $(date '+%Y-%m-%d %H:%M:%S') (${new_version})${NC}"
+  echo ""
+
+  # Aktuelle Konfig anzeigen
+  echo -e "  ${BOLD}Aktive Module:${NC}"
+  echo -e "    ${GREEN}Kern${NC} — User, Geräte, Policies, API, Web-UI"
+  if [ ${#SELECTED_PROFILES[@]} -gt 0 ]; then
+    for p in "${SELECTED_PROFILES[@]}"; do
+      case $p in
+        network)    echo -e "    ${CYAN}Netzwerk${NC} — DNS, DHCP, SMB/NFS" ;;
+        printers)   echo -e "    ${CYAN}Drucker${NC} — CUPS, Auto-Discovery" ;;
+        monitoring) echo -e "    ${CYAN}Monitoring${NC} — Grafana, Prometheus" ;;
+        security)   echo -e "    ${CYAN}Security${NC} — Scanner, Auto-Remediation" ;;
+        lifecycle)  echo -e "    ${CYAN}Lifecycle${NC} — Graph Explorer, Simulator" ;;
+      esac
+    done
+  else
+    echo -e "    ${DIM}(keine optionalen Module)${NC}"
+  fi
+  echo ""
+  echo -e "  ${DIM}Module ändern: ./quick-setup.sh --reconfigure${NC}"
+  echo ""
+}
+
+# ============================================================
 # Services starten
 # ============================================================
 start_services() {
-  # Profiles zusammenbauen
   local profile_args=""
   for p in "${SELECTED_PROFILES[@]}"; do
     profile_args="$profile_args --profile $p"
   done
 
-  local service_count
-  if [ ${#SELECTED_PROFILES[@]} -eq 0 ]; then
-    service_count=12
-    info "Starte Kern-System (12 Container)..."
+  local service_count=12
+  for p in "${SELECTED_PROFILES[@]}"; do
+    case $p in
+      network) service_count=$((service_count + 1)) ;;
+      printers) service_count=$((service_count + 1)) ;;
+      monitoring) service_count=$((service_count + 2)) ;;
+      security) service_count=$((service_count + 2)) ;;
+      lifecycle) service_count=$((service_count + 3)) ;;
+    esac
+  done
+
+  if [ "$IS_UPDATE" = true ]; then
+    info "Update: $service_count Container werden neu gebaut und gestartet..."
   else
-    # Grobe Schätzung
-    service_count=12
-    for p in "${SELECTED_PROFILES[@]}"; do
-      case $p in
-        network) service_count=$((service_count + 1)) ;;
-        printers) service_count=$((service_count + 1)) ;;
-        monitoring) service_count=$((service_count + 2)) ;;
-        security) service_count=$((service_count + 2)) ;;
-        lifecycle) service_count=$((service_count + 3)) ;;
-      esac
-    done
-    info "Starte $service_count Container (Kern + ${SELECTED_PROFILES[*]})..."
+    info "Starte $service_count Container..."
   fi
 
   echo ""
@@ -363,6 +440,9 @@ start_services() {
   else
     warn "API Backend antwortet noch nicht — Container starten möglicherweise noch"
   fi
+
+  # Konfig speichern / aktualisieren
+  save_config
 }
 
 # ============================================================
@@ -375,9 +455,15 @@ show_result() {
   done
 
   echo ""
-  echo -e "  ${BOLD}╔═══════════════════════════════════════════════════════╗${NC}"
-  echo -e "  ${BOLD}║${NC}           ${GREEN}OpenDirectory ist bereit!${NC}                    ${BOLD}║${NC}"
-  echo -e "  ${BOLD}╚═══════════════════════════════════════════════════════╝${NC}"
+  if [ "$IS_UPDATE" = true ]; then
+    echo -e "  ${BOLD}╔═══════════════════════════════════════════════════════╗${NC}"
+    echo -e "  ${BOLD}║${NC}           ${GREEN}Update erfolgreich!${NC}                          ${BOLD}║${NC}"
+    echo -e "  ${BOLD}╚═══════════════════════════════════════════════════════╝${NC}"
+  else
+    echo -e "  ${BOLD}╔═══════════════════════════════════════════════════════╗${NC}"
+    echo -e "  ${BOLD}║${NC}           ${GREEN}OpenDirectory ist bereit!${NC}                    ${BOLD}║${NC}"
+    echo -e "  ${BOLD}╚═══════════════════════════════════════════════════════╝${NC}"
+  fi
   echo ""
   echo -e "  ${BOLD}Zugriff:${NC}"
   echo -e "    Web-UI:        ${GREEN}http://localhost:3000${NC}"
@@ -398,30 +484,15 @@ show_result() {
   done
 
   echo ""
-  echo -e "  ${BOLD}Aktive Module:${NC}"
-  echo -e "    ${GREEN}Kern${NC} — User, Geräte, Policies, API, Web-UI"
-  for p in "${SELECTED_PROFILES[@]}"; do
-    case $p in
-      network)    echo -e "    ${CYAN}Netzwerk${NC} — DNS :53, DHCP :67, SMB :445, NFS :2049" ;;
-      printers)   echo -e "    ${CYAN}Drucker${NC} — CUPS :631, Auto-Discovery, Scanner" ;;
-      monitoring) echo -e "    ${CYAN}Monitoring${NC} — Grafana :3500, Prometheus :9090" ;;
-      security)   echo -e "    ${CYAN}Security${NC} — Scanner :3902, Auto-Remediation :3904" ;;
-      lifecycle)  echo -e "    ${CYAN}Lifecycle${NC} — Graph :3900, Simulator :3901, Lifecycle :3903" ;;
-    esac
-  done
-
-  echo ""
   echo -e "  ${BOLD}Nützliche Befehle:${NC}"
   echo "    Status:     $DC -f $COMPOSE_FILE $profile_args ps"
   echo "    Logs:       $DC -f $COMPOSE_FILE $profile_args logs -f"
   echo "    Stop:       $DC -f $COMPOSE_FILE $profile_args down"
   echo ""
-  echo -e "  ${BOLD}Module nachträglich aktivieren:${NC}"
-  echo "    $DC -f $COMPOSE_FILE --profile monitoring up -d"
-  echo "    $DC -f $COMPOSE_FILE --profile security up -d"
+  echo -e "  ${BOLD}Module nachträglich ändern:${NC}"
+  echo "    ./quick-setup.sh --reconfigure"
   echo ""
 
-  # Container-Status
   info "Container-Status:"
   # shellcheck disable=SC2086
   $DC -f "$COMPOSE_FILE" $profile_args ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || \
@@ -436,7 +507,19 @@ show_banner
 parse_args "$@"
 check_prerequisites
 
-if [ "$SKIP_WIZARD" = false ] && [ "$COMPOSE_FILE" != "docker-compose.yml" ]; then
+# Entscheide: Erstinstall oder Update?
+if is_installed && [ "$SKIP_WIZARD" = false ] && [ "$FORCE_WIZARD" = false ]; then
+  # Bestehende Installation erkannt → Update-Modus
+  IS_UPDATE=true
+  load_config
+  run_update
+elif [ "$SKIP_WIZARD" = false ]; then
+  # Erstinstallation oder --reconfigure → Wizard zeigen
+  if [ "$FORCE_WIZARD" = true ] && is_installed; then
+    load_config  # Lade bestehende Konfig als Ausgangspunkt
+    info "Modul-Konfiguration wird neu gestartet..."
+    echo ""
+  fi
   run_wizard
 fi
 
