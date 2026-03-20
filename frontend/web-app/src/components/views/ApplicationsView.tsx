@@ -22,6 +22,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { configApi, gatewayApi } from '@/lib/api';
 import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 import toast from 'react-hot-toast';
 
 interface Application {
@@ -179,103 +180,60 @@ export default function ApplicationsView() {
     const healthyApps = applications.filter(a => a.status === 'healthy');
     const unhealthyApps = applications.filter(a => a.status === 'unhealthy');
     const enabledApps = applications.filter(a => a.enabled);
-    const allHealthy = unhealthyApps.length === 0 && enabledApps.length > 0;
 
     return (
-      <div className="p-6 space-y-6">
-        {/* Status Hero */}
-        <div className={`rounded-2xl p-8 text-center ${
-          allHealthy
-            ? 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200'
-            : 'bg-gradient-to-br from-red-50 to-red-100 border border-red-200'
-        }`}>
-          <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${
-            allHealthy ? 'bg-green-200' : 'bg-red-200'
-          }`}>
-            {allHealthy ? (
-              <CheckCircleIcon className="w-10 h-10 text-green-600" />
-            ) : (
-              <ExclamationTriangleIcon className="w-10 h-10 text-red-600" />
-            )}
-          </div>
-          <h1 className={`text-2xl font-bold mb-1 ${allHealthy ? 'text-green-900' : 'text-red-900'}`}>
-            {allHealthy ? 'All Applications Healthy' : `${unhealthyApps.length} Application${unhealthyApps.length > 1 ? 's' : ''} Unhealthy`}
-          </h1>
-          <p className="text-sm text-gray-600">
-            {enabledApps.length} of {applications.length} applications enabled
-          </p>
-        </div>
-
-        {/* Compact Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-blue-600">{applications.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Total</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-green-600">{healthyApps.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Healthy</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className={`text-2xl font-bold ${unhealthyApps.length > 0 ? 'text-red-600' : 'text-gray-600'}`}>{unhealthyApps.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Unhealthy</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-purple-600">{enabledApps.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Enabled</p>
-          </div>
-        </div>
-
-        {/* Unhealthy apps list */}
-        {unhealthyApps.length > 0 && (
+      <SimpleViewLayout
+        hero={{
+          status: unhealthyApps.length === 0 && enabledApps.length > 0 ? 'ok' : 'critical',
+          title: unhealthyApps.length === 0 ? 'All Applications Healthy' : `${unhealthyApps.length} Application${unhealthyApps.length > 1 ? 's' : ''} Unhealthy`,
+          subtitle: `${enabledApps.length} of ${applications.length} applications enabled`,
+        }}
+        stats={[
+          { value: applications.length, label: 'Total', color: 'text-blue-600' },
+          { value: healthyApps.length, label: 'Healthy', color: 'text-green-600' },
+          { value: unhealthyApps.length, label: 'Unhealthy', color: unhealthyApps.length > 0 ? 'text-red-600' : 'text-gray-600' },
+          { value: enabledApps.length, label: 'Enabled', color: 'text-purple-600' },
+        ]}
+        sections={[{
+          title: 'Needs Attention',
+          items: unhealthyApps.map(app => {
+            const colors = getColorClasses(app.color);
+            return {
+              key: app.id,
+              icon: <div className={`w-8 h-8 ${colors.bg} rounded-lg flex items-center justify-center`}><app.icon className={`w-5 h-5 ${colors.text}`} /></div>,
+              title: app.name,
+              subtitle: `${app.category} · Port ${app.port}`,
+              trailing: <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700">unhealthy</span>,
+            };
+          }),
+        }]}
+      >
+        {/* Running Apps grid - custom content */}
+        {enabledApps.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Needs Attention</h3>
-            <div className="space-y-2">
-              {unhealthyApps.map(app => {
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Running Applications</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {enabledApps.slice(0, 6).map(app => {
                 const colors = getColorClasses(app.color);
                 return (
-                  <div key={app.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 ${colors.bg} rounded-lg flex items-center justify-center`}>
-                        <app.icon className={`w-5 h-5 ${colors.text}`} />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{app.name}</p>
-                        <p className="text-xs text-gray-500">{app.category} · Port {app.port}</p>
+                  <div key={app.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                    <div className={`w-8 h-8 ${colors.bg} rounded-lg flex items-center justify-center`}>
+                      <app.icon className={`w-4 h-4 ${colors.text}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{app.name}</p>
+                      <div className={`flex items-center gap-1 ${getStatusColor(app.status)}`}>
+                        {getStatusIcon(app.status)}
+                        <span className="text-xs capitalize">{app.status}</span>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700">unhealthy</span>
                   </div>
                 );
               })}
             </div>
           </div>
         )}
-
-        {/* Enabled apps overview */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Running Applications</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {enabledApps.slice(0, 6).map(app => {
-              const colors = getColorClasses(app.color);
-              return (
-                <div key={app.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                  <div className={`w-8 h-8 ${colors.bg} rounded-lg flex items-center justify-center`}>
-                    <app.icon className={`w-4 h-4 ${colors.text}`} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{app.name}</p>
-                    <div className={`flex items-center gap-1 ${getStatusColor(app.status)}`}>
-                      {getStatusIcon(app.status)}
-                      <span className="text-xs capitalize">{app.status}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      </SimpleViewLayout>
     );
   }
 

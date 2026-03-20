@@ -31,6 +31,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { appStoreApi } from '@/lib/api';
 import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 import toast from 'react-hot-toast';
 
 // --- Types ---
@@ -331,21 +332,20 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   // ── Simple Mode: Clean app grid, no tabs, just browse & install ──
   if (isSimple) {
     return (
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">App Store</h1>
-            <p className="text-sm text-gray-500 mt-1">Install apps for your devices</p>
-          </div>
-          {stats && (
-            <div className="flex items-center space-x-4 text-sm">
-              <span className="text-gray-500">{stats.apps.total} Apps</span>
-              <span className="text-green-600">{stats.installations.installed} Installed</span>
-            </div>
-          )}
-        </div>
-
+      <SimpleViewLayout
+        hero={{
+          status: 'ok',
+          icon: <ArrowDownTrayIcon className="w-10 h-10 text-green-600" />,
+          title: 'App Store',
+          subtitle: `${stats?.apps.total ?? 0} apps available · ${stats?.installations.installed ?? 0} installed`,
+        }}
+        stats={[
+          { value: stats?.apps.total ?? 0, label: 'Total Apps' },
+          { value: stats?.installations.installed ?? 0, label: 'Installed', color: 'text-green-600' },
+          { value: stats?.installations.pending ?? 0, label: 'Pending', color: 'text-yellow-600' },
+          { value: stats?.installations.failed ?? 0, label: 'Failed', color: 'text-red-600' },
+        ]}
+      >
         {/* Search */}
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -413,7 +413,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
             )}
           </div>
         )}
-      </div>
+      </SimpleViewLayout>
     );
   }
 

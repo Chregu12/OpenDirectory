@@ -32,6 +32,7 @@ import {
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface PolicyTemplate {
@@ -1109,25 +1110,53 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
 
   // ── Simple Mode: Clean policy list only ──────────────────────────────────
   if (isSimple) {
-    return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Policies</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Richtlinien für Windows, Linux und macOS
-            </p>
-          </div>
-          <button
-            onClick={() => openWizard()}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Neue Policy
-          </button>
-        </div>
+    const deployedCount = policies.filter(p => p.deploy_status === 'deployed').length;
+    const draftCount = policies.filter(p => p.deploy_status === 'draft').length;
 
+    return (
+      <SimpleViewLayout
+        hero={{
+          status: policies.length === 0 ? 'warning' : 'ok',
+          icon: <ShieldCheckIcon className="w-10 h-10 text-blue-600" />,
+          title: policies.length > 0
+            ? `${policies.length} ${policies.length === 1 ? 'Policy' : 'Policies'} Configured`
+            : 'No Policies Yet',
+          subtitle: policies.length > 0
+            ? `${deployedCount} deployed · ${draftCount} drafts`
+            : 'Richtlinien für Windows, Linux und macOS',
+        }}
+        stats={[
+          { value: policies.length, label: 'Total', color: 'text-blue-600' },
+          { value: deployedCount, label: 'Deployed', color: 'text-green-600' },
+          { value: draftCount, label: 'Drafts', color: 'text-gray-600' },
+          { value: templates.length, label: 'Templates', color: 'text-purple-600' },
+        ]}
+        sections={policies.length > 0 ? [{
+          title: 'Active Policies',
+          items: policies.map(policy => ({
+            key: policy.id,
+            icon: (() => {
+              const Icon = CATEGORY_ICONS[policy.category] || ShieldCheckIcon;
+              return <Icon className="w-5 h-5 text-blue-500" />;
+            })(),
+            title: policy.name,
+            subtitle: policy.description || undefined,
+            trailing: (
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[policy.deploy_status] || 'bg-gray-100 text-gray-600'}`}>
+                  {STATUS_LABELS[policy.deploy_status] || policy.deploy_status}
+                </span>
+                <button onClick={() => handleDeletePolicy(policy.id)} className="text-red-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50" title="Löschen">
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </div>
+            ),
+          })),
+        }] : []}
+        actions={[
+          { label: 'Neue Policy', icon: <PlusIcon className="h-4 w-4" />, onClick: () => openWizard() },
+        ]}
+      >
         {/* Wizard overlay when activeView is 'wizard' in simple mode */}
         {activeView === 'wizard' && (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -1368,52 +1397,7 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
             </div>
           </div>
         )}
-
-        {/* Policy Cards */}
-        {policies.length > 0 ? (
-          <div className="space-y-3">
-            {policies.map(policy => (
-              <div key={policy.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="text-sm font-semibold text-gray-900">{policy.name}</h4>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[policy.deploy_status] || 'bg-gray-100 text-gray-600'}`}>
-                        {STATUS_LABELS[policy.deploy_status] || policy.deploy_status}
-                      </span>
-                    </div>
-                    {policy.description && (
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">{policy.description}</p>
-                    )}
-                    <div className="flex gap-1.5 mt-2 flex-wrap">
-                      {(policy.platforms as unknown as Platform[] || []).map(p => (
-                        <PlatformBadge key={p} platform={p} />
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => handleDeletePolicy(policy.id)} className="text-red-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50" title="Löschen">
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-xl">
-            <ShieldCheckIcon className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-500">Noch keine Policies vorhanden.</p>
-            <button
-              onClick={() => openWizard()}
-              className="mt-4 inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Erste Policy erstellen
-            </button>
-          </div>
-        )}
-      </div>
+      </SimpleViewLayout>
     );
   }
 

@@ -7,8 +7,6 @@ import {
   ShieldCheckIcon,
   CpuChipIcon,
   CheckIcon,
-  ArrowRightIcon,
-  ArrowLeftIcon,
   ServerIcon,
   ComputerDesktopIcon,
   UserGroupIcon,
@@ -18,6 +16,7 @@ import {
 import { configApi } from '@/lib/api';
 import { MODULES as MODULE_REGISTRY, calculateRam } from '@/lib/modules';
 import RamMeter from '@/components/shared/RamMeter';
+import WizardLayout from '@/components/shared/WizardLayout';
 import toast from 'react-hot-toast';
 
 type WizardStep = 1 | 2 | 3 | 4;
@@ -89,46 +88,20 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header with steps */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 pt-6 pb-8">
-          <h2 className="text-white text-xl font-bold mb-1">OpenDirectory Setup</h2>
-          <p className="text-blue-200 text-sm">Erstmalige Konfiguration</p>
-
-          {/* Step indicator */}
-          <div className="flex items-center justify-between mt-6">
-            {STEPS.map((s, i) => (
-              <React.Fragment key={s.n}>
-                <div className="flex items-center">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
-                    s.n < step
-                      ? 'bg-blue-300 text-blue-800'
-                      : s.n === step
-                      ? 'bg-white text-blue-600 ring-4 ring-blue-300'
-                      : 'bg-blue-500/40 text-blue-200'
-                  }`}>
-                    {s.n < step ? <CheckIcon className="h-4 w-4" /> : s.n}
-                  </div>
-                  <span className={`ml-2 text-sm hidden sm:block ${
-                    s.n === step ? 'text-white font-medium' : 'text-blue-200'
-                  }`}>
-                    {s.label}
-                  </span>
-                </div>
-                {i < STEPS.length - 1 && (
-                  <div className={`flex-1 h-px mx-3 ${
-                    s.n < step ? 'bg-blue-300' : 'bg-blue-500/40'
-                  }`} />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-8 py-6">
-
+    <WizardLayout
+      title="OpenDirectory Setup"
+      subtitle="Erstmalige Konfiguration"
+      color="blue"
+      steps={STEPS}
+      currentStep={step}
+      onStepChange={(s) => setStep(s as WizardStep)}
+      onClose={onComplete}
+      onComplete={handleComplete}
+      saving={saving}
+      completeLabel="Setup abschließen"
+      savingLabel="Speichern..."
+      maxWidth="max-w-3xl"
+    >
           {/* Step 1: Willkommen */}
           {step === 1 && (
             <div className="space-y-6">
@@ -377,56 +350,6 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               </p>
             </div>
           )}
-        </div>
-
-        {/* Footer with navigation */}
-        <div className="border-t border-gray-200 px-8 py-4 flex items-center justify-between bg-gray-50">
-          <div>
-            {step > 1 && (
-              <button
-                onClick={() => setStep((step - 1) as WizardStep)}
-                className="flex items-center px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <ArrowLeftIcon className="h-4 w-4 mr-1" />
-                Zurück
-              </button>
-            )}
-          </div>
-
-          <div>
-            {step < 4 ? (
-              <button
-                onClick={() => setStep((step + 1) as WizardStep)}
-                className="flex items-center px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                Weiter
-                <ArrowRightIcon className="h-4 w-4 ml-1" />
-              </button>
-            ) : (
-              <button
-                onClick={handleComplete}
-                disabled={saving}
-                className="flex items-center px-6 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                {saving ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Speichern...
-                  </>
-                ) : (
-                  <>
-                    <CheckIcon className="h-4 w-4 mr-1" />
-                    Setup abschließen
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    </WizardLayout>
   );
 }

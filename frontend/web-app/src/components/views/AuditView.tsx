@@ -26,6 +26,7 @@ import {
 import toast from 'react-hot-toast';
 import { auditApi } from '@/lib/api';
 import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -161,95 +162,35 @@ export default function AuditView() {
   if (isSimple) {
     const criticalEvents = events.filter(e => e.severity === 'critical');
     const warningEvents = events.filter(e => e.severity === 'warning');
-    const recentEvents = events.slice(0, 5);
-    const allClear = criticalEvents.length === 0;
 
     return (
-      <div className="p-6 space-y-6">
-        {/* Status Hero */}
-        <div className={`rounded-2xl p-8 text-center ${
-          allClear
-            ? 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200'
-            : 'bg-gradient-to-br from-red-50 to-red-100 border border-red-200'
-        }`}>
-          <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${
-            allClear ? 'bg-green-200' : 'bg-red-200'
-          }`}>
-            {allClear ? (
-              <CheckCircleIcon className="w-10 h-10 text-green-600" />
-            ) : (
-              <ExclamationTriangleIcon className="w-10 h-10 text-red-600" />
-            )}
-          </div>
-          <h1 className={`text-2xl font-bold mb-1 ${allClear ? 'text-green-900' : 'text-red-900'}`}>
-            {allClear ? 'No Critical Events' : `${criticalEvents.length} Critical Event${criticalEvents.length > 1 ? 's' : ''}`}
-          </h1>
-          <p className="text-sm text-gray-600">
-            {stats.eventsToday} events today · Integrity: {integrity.status === 'ok' ? 'OK' : 'BROKEN'}
-          </p>
-        </div>
-
-        {/* Compact Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-blue-600">{stats.eventsToday}</p>
-            <p className="text-xs text-gray-500 mt-1">Events Today</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className={`text-2xl font-bold ${stats.criticalEvents > 0 ? 'text-red-600' : 'text-gray-600'}`}>{stats.criticalEvents}</p>
-            <p className="text-xs text-gray-500 mt-1">Critical</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-yellow-600">{warningEvents.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Warnings</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className={`text-2xl font-bold ${integrity.status === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
-              {integrity.status === 'ok' ? 'OK' : '!!'}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">Integrity</p>
-          </div>
-        </div>
-
-        {/* Recent events */}
-        {recentEvents.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Recent Activity</h3>
-            <div className="space-y-2">
-              {recentEvents.map(event => (
-                <div key={event.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    {getCategoryIcon(event.category)}
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{event.action}</p>
-                      <p className="text-xs text-gray-500">{event.actor} · {new Date(event.timestamp).toLocaleTimeString()}</p>
-                    </div>
-                  </div>
-                  {getSeverityBadge(event.severity)}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Quick Actions */}
-        <div className="flex justify-center gap-3">
-          <button
-            onClick={loadData}
-            className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors shadow-sm"
-          >
-            <ArrowPathIcon className="h-4 w-4" />
-            Refresh
-          </button>
-          <button
-            onClick={() => handleExport('csv')}
-            className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-          >
-            <DocumentArrowDownIcon className="h-4 w-4" />
-            Export CSV
-          </button>
-        </div>
-      </div>
+      <SimpleViewLayout
+        hero={{
+          status: criticalEvents.length === 0 ? 'ok' : 'critical',
+          title: criticalEvents.length === 0 ? 'No Critical Events' : `${criticalEvents.length} Critical Event${criticalEvents.length > 1 ? 's' : ''}`,
+          subtitle: `${stats.eventsToday} events today · Integrity: ${integrity.status === 'ok' ? 'OK' : 'BROKEN'}`,
+        }}
+        stats={[
+          { value: stats.eventsToday, label: 'Events Today', color: 'text-blue-600' },
+          { value: stats.criticalEvents, label: 'Critical', color: stats.criticalEvents > 0 ? 'text-red-600' : 'text-gray-600' },
+          { value: warningEvents.length, label: 'Warnings', color: 'text-yellow-600' },
+          { value: integrity.status === 'ok' ? 'OK' : '!!', label: 'Integrity', color: integrity.status === 'ok' ? 'text-green-600' : 'text-red-600' },
+        ]}
+        sections={[{
+          title: 'Recent Activity',
+          items: events.slice(0, 5).map(event => ({
+            key: event.id,
+            icon: getCategoryIcon(event.category),
+            title: event.action,
+            subtitle: `${event.actor} · ${new Date(event.timestamp).toLocaleTimeString()}`,
+            trailing: getSeverityBadge(event.severity),
+          })),
+        }]}
+        actions={[
+          { label: 'Refresh', icon: <ArrowPathIcon className="h-4 w-4" />, onClick: loadData },
+          { label: 'Export CSV', icon: <DocumentArrowDownIcon className="h-4 w-4" />, onClick: () => handleExport('csv'), variant: 'secondary' },
+        ]}
+      />
     );
   }
 

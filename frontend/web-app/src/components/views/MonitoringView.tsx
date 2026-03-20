@@ -19,6 +19,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { monitoringApi, prometheusApi, healthApi, gatewayApi } from '@/lib/api';
 import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -197,85 +198,62 @@ export default function MonitoringView({ onOpenWizard }: MonitoringViewProps) {
     <CheckCircleIcon className="w-5 h-5 text-blue-500" />;
 
   if (isSimple) {
-    return (
-      <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              <ChartBarIcon className="w-6 h-6 text-purple-600" /> Insights & Analytics
-            </h1>
-            <p className="text-sm text-gray-500">System monitoring, alerts, and performance metrics</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {unacknowledgedAlerts > 0 && (
-              <span className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-sm flex items-center gap-1">
-                <BellAlertIcon className="w-4 h-4" /> {unacknowledgedAlerts} active alerts
-              </span>
-            )}
-            <button className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600" title="Refresh">
-              <ArrowPathIcon className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+    const healthyCount = services.filter(s => s.status === 'healthy').length;
+    const unhealthyCount = services.filter(s => s.status === 'unhealthy').length;
+    const hasCriticalAlerts = alerts.some(a => a.severity === 'critical' && !a.acknowledged);
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {metrics.map(m => (
-              <div key={m.name} className="od-card p-4">
-                <div className="text-xs text-gray-500 mb-1">{m.name}</div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {m.value}<span className="text-sm text-gray-400 ml-1">{m.unit}</span>
-                </div>
-                <div className="flex items-center text-xs mt-1">
-                  {m.trend === 'up' ? <ArrowTrendingUpIcon className="w-3 h-3 text-green-500 mr-1" /> :
-                   m.trend === 'down' ? <ArrowTrendingDownIcon className="w-3 h-3 text-green-500 mr-1" /> :
-                   <span className="w-3 h-3 mr-1">-</span>}
-                  <span className="text-gray-500">{m.trendValue}</span>
+    return (
+      <SimpleViewLayout
+        hero={{
+          status: hasCriticalAlerts || unhealthyCount > 0 ? 'critical' : unacknowledgedAlerts > 0 ? 'warning' : 'ok',
+          icon: <ChartBarIcon className="w-10 h-10 text-purple-600" />,
+          title: hasCriticalAlerts
+            ? `${unacknowledgedAlerts} Active Alert${unacknowledgedAlerts > 1 ? 's' : ''}`
+            : unacknowledgedAlerts > 0
+            ? `${unacknowledgedAlerts} Warning${unacknowledgedAlerts > 1 ? 's' : ''}`
+            : 'All Systems Healthy',
+          subtitle: `${healthyCount} of ${services.length} services running`,
+        }}
+        stats={[
+          { value: healthyCount, label: 'Healthy', color: 'text-green-600' },
+          { value: unhealthyCount, label: 'Unhealthy', color: 'text-red-600' },
+          { value: unacknowledgedAlerts, label: 'Alerts', color: unacknowledgedAlerts > 0 ? 'text-red-600' : 'text-gray-600' },
+          { value: `${Math.round(services.reduce((acc, s) => acc + s.responseTime, 0) / (services.filter(s => s.responseTime > 0).length || 1))}ms`, label: 'Avg Response', color: 'text-blue-600' },
+        ]}
+        sections={alerts.length > 0 ? [{
+          title: 'Recent Alerts',
+          maxItems: 4,
+          items: alerts.slice(0, 4).map(a => ({
+            key: a.id,
+            icon: alertSeverityIcon(a.severity),
+            title: a.title,
+            subtitle: `${a.source} - ${new Date(a.timestamp).toLocaleString('de-DE')}`,
+            trailing: (
+              <span className={`px-2 py-0.5 rounded text-xs ${alertSeverityBadge(a.severity)}`}>{a.severity}</span>
+            ),
+          })),
+        }] : []}
+      >
+        {/* CPU Timeline Chart */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <h3 className="text-sm font-semibold text-gray-600 mb-4">CPU Usage (Last 24h)</h3>
+          <div className="flex items-end gap-1 h-32">
+            {cpuTimeseries.map((p, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div className="w-full relative" style={{ height: `${p.value * 1.2}px` }}>
+                  <div className={`absolute bottom-0 w-full rounded-t ${p.value > 60 ? 'bg-orange-500' : p.value > 40 ? 'bg-blue-500' : 'bg-green-500'}`}
+                    style={{ height: '100%' }} />
                 </div>
               </div>
             ))}
           </div>
-
-          {/* CPU Timeline Chart */}
-          <div className="od-card p-4">
-            <h3 className="text-sm font-semibold text-gray-600 mb-4">CPU Usage (Last 24h)</h3>
-            <div className="flex items-end gap-1 h-32">
-              {cpuTimeseries.map((p, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full relative" style={{ height: `${p.value * 1.2}px` }}>
-                    <div className={`absolute bottom-0 w-full rounded-t ${p.value > 60 ? 'bg-orange-500' : p.value > 40 ? 'bg-blue-500' : 'bg-green-500'}`}
-                      style={{ height: '100%' }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-between mt-2 text-xs text-gray-400">
-              <span>{cpuTimeseries[0]?.time}</span>
-              <span>{cpuTimeseries[Math.floor(cpuTimeseries.length / 2)]?.time}</span>
-              <span>{cpuTimeseries[cpuTimeseries.length - 1]?.time}</span>
-            </div>
-          </div>
-
-          {/* Recent Alerts (max 4) */}
-          <div className="od-card p-4">
-            <h3 className="text-sm font-semibold text-gray-600 mb-3">Recent Alerts</h3>
-            <div className="space-y-2">
-              {alerts.slice(0, 4).map(a => (
-                <div key={a.id} className={`flex items-start gap-3 p-3 rounded-lg ${a.acknowledged ? 'bg-gray-50' : 'bg-white border border-gray-200'}`}>
-                  {alertSeverityIcon(a.severity)}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900">{a.title}</div>
-                    <div className="text-xs text-gray-500">{a.source} - {new Date(a.timestamp).toLocaleString('de-DE')}</div>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded text-xs ${alertSeverityBadge(a.severity)}`}>{a.severity}</span>
-                </div>
-              ))}
-            </div>
+          <div className="flex justify-between mt-2 text-xs text-gray-400">
+            <span>{cpuTimeseries[0]?.time}</span>
+            <span>{cpuTimeseries[Math.floor(cpuTimeseries.length / 2)]?.time}</span>
+            <span>{cpuTimeseries[cpuTimeseries.length - 1]?.time}</span>
           </div>
         </div>
-      </div>
+      </SimpleViewLayout>
     );
   }
 

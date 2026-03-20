@@ -4,21 +4,17 @@ import React, { useState, useEffect } from 'react';
 import {
   PrinterIcon,
   MagnifyingGlassIcon,
-  Cog6ToothIcon,
   UserGroupIcon,
   RocketLaunchIcon,
-  CheckIcon,
-  ArrowRightIcon,
-  ArrowLeftIcon,
   PlusIcon,
   TrashIcon,
-  XMarkIcon,
   SignalIcon,
   ClipboardDocumentIcon,
   MapPinIcon,
 } from '@heroicons/react/24/outline';
 import { printerApi, formatError } from '@/lib/api';
 import toast from 'react-hot-toast';
+import WizardLayout from '@/components/shared/WizardLayout';
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
 
@@ -285,50 +281,20 @@ export default function PrinterSetupWizard({ onClose }: PrinterSetupWizardProps)
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-orange-500 to-red-500 px-8 pt-6 pb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-white text-xl font-bold mb-1">Drucker-Setup</h2>
-              <p className="text-orange-200 text-sm">Drucker finden, konfigurieren und bereitstellen</p>
-            </div>
-            <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
-              <XMarkIcon className="h-6 w-6" />
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between mt-6">
-            {STEPS.map((s, i) => (
-              <React.Fragment key={s.n}>
-                <div className="flex items-center">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
-                    s.n < step
-                      ? 'bg-orange-300 text-orange-800'
-                      : s.n === step
-                      ? 'bg-white text-orange-600 ring-4 ring-orange-300'
-                      : 'bg-orange-400/40 text-orange-200'
-                  }`}>
-                    {s.n < step ? <CheckIcon className="h-4 w-4" /> : s.n}
-                  </div>
-                  <span className={`ml-2 text-sm hidden sm:block ${
-                    s.n === step ? 'text-white font-medium' : 'text-orange-200'
-                  }`}>
-                    {s.label}
-                  </span>
-                </div>
-                {i < STEPS.length - 1 && (
-                  <div className={`flex-1 h-px mx-3 ${s.n < step ? 'bg-orange-300' : 'bg-orange-400/40'}`} />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-8 py-6">
-
+    <WizardLayout
+      title="Drucker-Setup"
+      subtitle="Drucker finden, konfigurieren und bereitstellen"
+      icon={<PrinterIcon className="h-8 w-8" />}
+      color="orange"
+      steps={STEPS}
+      currentStep={step}
+      onStepChange={(s) => setStep(s as WizardStep)}
+      onClose={onClose}
+      onComplete={handleDeploy}
+      saving={saving}
+      completeLabel="Drucker bereitstellen"
+      savingLabel="Bereitstellen..."
+    >
           {/* Step 1: Finden */}
           {step === 1 && (
             <div className="space-y-6">
@@ -789,56 +755,6 @@ export default function PrinterSetupWizard({ onClose }: PrinterSetupWizardProps)
               </div>
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-gray-200 px-8 py-4 flex items-center justify-between bg-gray-50">
-          <div>
-            {step > 1 && (
-              <button
-                onClick={() => setStep((step - 1) as WizardStep)}
-                className="flex items-center px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <ArrowLeftIcon className="h-4 w-4 mr-1" />
-                Zurück
-              </button>
-            )}
-          </div>
-
-          <div>
-            {step < 5 ? (
-              <button
-                onClick={() => setStep((step + 1) as WizardStep)}
-                className="flex items-center px-6 py-2.5 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors"
-              >
-                Weiter
-                <ArrowRightIcon className="h-4 w-4 ml-1" />
-              </button>
-            ) : (
-              <button
-                onClick={handleDeploy}
-                disabled={saving || printers.length === 0}
-                className="flex items-center px-6 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                {saving ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Bereitstellen...
-                  </>
-                ) : (
-                  <>
-                    <RocketLaunchIcon className="h-4 w-4 mr-1" />
-                    Drucker bereitstellen
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    </WizardLayout>
   );
 }

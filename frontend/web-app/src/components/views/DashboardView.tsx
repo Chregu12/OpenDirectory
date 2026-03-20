@@ -15,6 +15,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi, configApi } from '@/lib/api';
 import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 
 interface DashboardStats {
   totalServices: number;
@@ -145,81 +146,38 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
   // ── Simple Mode: UniFi-style "everything is OK" dashboard ──
   if (isSimple) {
     return (
-      <div className="p-6 space-y-6">
-        {/* Status Hero - UniFi clean white card */}
-        <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-          <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${
-            hasCritical ? 'bg-red-50' : allHealthy ? 'bg-emerald-50' : 'bg-amber-50'
-          }`}>
-            {hasCritical ? (
-              <XCircleIcon className="w-8 h-8 text-red-500" />
-            ) : allHealthy ? (
-              <CheckCircleIcon className="w-8 h-8 text-emerald-500" />
-            ) : (
-              <ExclamationTriangleIcon className="w-8 h-8 text-amber-500" />
-            )}
-          </div>
-          <h1 className="text-xl font-semibold text-gray-900 mb-1">
-            {hasCritical
-              ? `${dashboardStats.criticalServices} Service${dashboardStats.criticalServices > 1 ? 's' : ''} Down`
-              : allHealthy
-              ? 'All Systems Operational'
-              : `${dashboardStats.warningServices} Warning${dashboardStats.warningServices > 1 ? 's' : ''}`
-            }
-          </h1>
-          <p className="text-[13px] text-gray-500">
-            {dashboardStats.healthyServices} of {dashboardStats.totalServices} services running
-          </p>
-          <div className="flex items-center justify-center mt-3 space-x-1.5 text-[11px] text-gray-400">
-            <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
-            <span>Live</span>
-            <span>·</span>
-            <span>Uptime {dashboardStats.uptime}</span>
-          </div>
-        </div>
-
-        {/* Compact Stats Row - unified color scheme */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-            <p className="text-2xl font-semibold text-gray-900">{dashboardStats.healthyServices}</p>
-            <p className="text-[11px] text-gray-400 mt-1 font-medium">Healthy</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-            <p className="text-2xl font-semibold text-gray-900">{dashboardStats.enabledModules}</p>
-            <p className="text-[11px] text-gray-400 mt-1 font-medium">Modules</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-            <p className="text-2xl font-semibold text-gray-900">{dashboardStats.memoryUsage}</p>
-            <p className="text-[11px] text-gray-400 mt-1 font-medium">Memory</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-            <p className="text-2xl font-semibold text-gray-900">{dashboardStats.uptime}</p>
-            <p className="text-[11px] text-gray-400 mt-1 font-medium">Uptime</p>
-          </div>
-        </div>
-
-        {/* Only show issues if there are any */}
-        {unhealthyServices.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Attention Required</h3>
-            <div className="space-y-3">
-              {unhealthyServices.map((service, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center">
-                    {getStatusIcon(service.status)}
-                    <span className="ml-3 text-sm font-medium text-gray-900">{service.name}</span>
-                  </div>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    service.status === 'unhealthy' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {service.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
+      <SimpleViewLayout
+        hero={{
+          status: hasCritical ? 'critical' : allHealthy ? 'ok' : 'warning',
+          title: hasCritical
+            ? `${dashboardStats.criticalServices} Service${dashboardStats.criticalServices > 1 ? 's' : ''} Down`
+            : allHealthy
+            ? 'All Systems Operational'
+            : `${dashboardStats.warningServices} Warning${dashboardStats.warningServices > 1 ? 's' : ''}`,
+          subtitle: `${dashboardStats.healthyServices} of ${dashboardStats.totalServices} services running`,
+        }}
+        stats={[
+          { value: dashboardStats.healthyServices, label: 'Healthy' },
+          { value: dashboardStats.enabledModules, label: 'Modules' },
+          { value: dashboardStats.memoryUsage, label: 'Memory' },
+          { value: dashboardStats.uptime, label: 'Uptime' },
+        ]}
+        sections={unhealthyServices.length > 0 ? [{
+          title: 'Attention Required',
+          items: unhealthyServices.map((service, index) => ({
+            key: `svc-${index}`,
+            icon: getStatusIcon(service.status),
+            title: service.name,
+            trailing: (
+              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                service.status === 'unhealthy' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+              }`}>
+                {service.status}
+              </span>
+            ),
+          })),
+        }] : []}
+      >
         {/* Quick Actions - simplified */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {onAddDevice && (
@@ -244,7 +202,7 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
             <span className="text-xs font-medium text-gray-700">Services</span>
           </button>
         </div>
-      </div>
+      </SimpleViewLayout>
     );
   }
 

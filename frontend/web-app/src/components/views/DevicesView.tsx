@@ -20,6 +20,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { deviceApi } from '@/lib/api';
 import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -148,88 +149,43 @@ export default function DevicesView() {
 
   // ── Simple Mode ──
   if (isSimple) {
-    const onlineDevices = devices.filter(d => d.status === 'online' || d.status === 'syncing');
     const issueDevices = devices.filter(d => d.compliance === 'non_compliant' || !d.encrypted || d.pendingUpdates > 0);
-    const allGood = stats.nonCompliant === 0;
 
     return (
-      <div className="p-6 space-y-6">
-        {/* Status Hero */}
-        <div className={`rounded-2xl p-8 text-center ${
-          allGood
-            ? 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200'
-            : 'bg-gradient-to-br from-orange-50 to-amber-100 border border-orange-200'
-        }`}>
-          <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${
-            allGood ? 'bg-green-200' : 'bg-orange-200'
-          }`}>
-            {allGood ? (
-              <CheckCircleIcon className="w-10 h-10 text-green-600" />
-            ) : (
-              <ExclamationTriangleIcon className="w-10 h-10 text-orange-600" />
-            )}
-          </div>
-          <h1 className={`text-2xl font-bold mb-1 ${allGood ? 'text-green-900' : 'text-orange-900'}`}>
-            {allGood ? 'All Devices Compliant' : `${stats.nonCompliant} Device${stats.nonCompliant > 1 ? 's' : ''} Need Attention`}
-          </h1>
-          <p className="text-sm text-gray-600">
-            {stats.online} of {stats.total} devices online
-          </p>
-        </div>
-
-        {/* Compact Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
-            <p className="text-xs text-gray-500 mt-1">Total Devices</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-green-600">{stats.online}</p>
-            <p className="text-xs text-gray-500 mt-1">Online</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-green-600">{stats.compliant}</p>
-            <p className="text-xs text-gray-500 mt-1">Compliant</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-blue-600">{stats.encrypted}</p>
-            <p className="text-xs text-gray-500 mt-1">Encrypted</p>
-          </div>
-        </div>
-
-        {/* Devices needing attention */}
-        {issueDevices.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Needs Attention</h3>
-            <div className="space-y-2">
-              {issueDevices.slice(0, 5).map(d => (
-                <div key={d.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <ComputerDesktopIcon className={`w-5 h-5 ${d.compliance === 'non_compliant' ? 'text-red-500' : 'text-orange-500'}`} />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{d.name}</p>
-                      <p className="text-xs text-gray-500">{d.user} · {d.os}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {d.compliance === 'non_compliant' && <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700">non-compliant</span>}
-                    {!d.encrypted && <span className="px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-700">unencrypted</span>}
-                    {d.pendingUpdates > 0 && <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700">{d.pendingUpdates} updates</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Quick Actions */}
-        <div className="flex justify-center gap-3">
-          <button className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors shadow-sm">
-            <PlusIcon className="h-4 w-4" />
-            Enroll Device
-          </button>
-        </div>
-      </div>
+      <SimpleViewLayout
+        hero={{
+          status: stats.nonCompliant === 0 ? 'ok' : 'warning',
+          title: stats.nonCompliant === 0 ? 'All Devices Compliant' : `${stats.nonCompliant} Device${stats.nonCompliant > 1 ? 's' : ''} Need Attention`,
+          subtitle: `${stats.online} of ${stats.total} devices online`,
+        }}
+        stats={[
+          { value: stats.total, label: 'Total Devices', color: 'text-blue-600' },
+          { value: stats.online, label: 'Online', color: 'text-green-600' },
+          { value: stats.compliant, label: 'Compliant', color: 'text-green-600' },
+          { value: stats.encrypted, label: 'Encrypted', color: 'text-blue-600' },
+        ]}
+        sections={[{
+          title: 'Needs Attention',
+          items: issueDevices.map(d => ({
+            key: d.id,
+            icon: <ComputerDesktopIcon className={`w-5 h-5 ${d.compliance === 'non_compliant' ? 'text-red-500' : 'text-orange-500'}`} />,
+            title: d.name,
+            subtitle: `${d.user} · ${d.os}`,
+            trailing: (
+              <div className="flex items-center gap-2">
+                {d.compliance === 'non_compliant' && <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700">non-compliant</span>}
+                {!d.encrypted && <span className="px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-700">unencrypted</span>}
+                {d.pendingUpdates > 0 && <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700">{d.pendingUpdates} updates</span>}
+              </div>
+            ),
+          })),
+        }]}
+        actions={[{
+          label: 'Enroll Device',
+          icon: <PlusIcon className="h-4 w-4" />,
+          onClick: () => {},
+        }]}
+      />
     );
   }
 

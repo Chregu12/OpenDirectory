@@ -5,16 +5,13 @@ import {
   SquaresPlusIcon,
   MagnifyingGlassIcon,
   CheckIcon,
-  ArrowRightIcon,
-  ArrowLeftIcon,
-  XMarkIcon,
-  PlusIcon,
   UserGroupIcon,
   ComputerDesktopIcon,
   TagIcon,
 } from '@heroicons/react/24/outline';
 import { appStoreApi, formatError } from '@/lib/api';
 import toast from 'react-hot-toast';
+import WizardLayout from '@/components/shared/WizardLayout';
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
 
@@ -184,38 +181,20 @@ export default function AppDeploymentWizard({ onClose }: AppDeploymentWizardProp
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-8 py-6 text-white relative">
-          <button onClick={onClose} className="absolute top-4 right-4 text-white/70 hover:text-white">
-            <XMarkIcon className="h-6 w-6" />
-          </button>
-          <div className="flex items-center gap-3 mb-2">
-            <SquaresPlusIcon className="h-8 w-8" />
-            <h2 className="text-2xl font-bold">App-Verteilung</h2>
-          </div>
-          <p className="text-violet-100 text-sm">App-Katalog befüllen und Software zuweisen</p>
-
-          <div className="flex items-center gap-2 mt-6">
-            {STEPS.map((s, i) => (
-              <React.Fragment key={s.n}>
-                {i > 0 && <div className={`flex-1 h-0.5 ${s.n <= step ? 'bg-violet-300' : 'bg-violet-500/40'}`} />}
-                <div className="flex flex-col items-center gap-1">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                    s.n < step ? 'bg-violet-300 text-violet-800' : s.n === step ? 'bg-white text-violet-700 ring-4 ring-violet-300' : 'bg-violet-500/40 text-violet-200'
-                  }`}>
-                    {s.n < step ? <CheckIcon className="h-4 w-4" /> : s.n}
-                  </div>
-                  <span className={`text-xs whitespace-nowrap ${s.n === step ? 'text-white font-medium' : 'text-violet-200'}`}>{s.label}</span>
-                </div>
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-8">
+    <WizardLayout
+      title="App-Verteilung"
+      subtitle="App-Katalog befüllen und Software zuweisen"
+      icon={<SquaresPlusIcon className="h-8 w-8" />}
+      color="violet"
+      steps={STEPS}
+      currentStep={step}
+      onStepChange={(s) => setStep(s as WizardStep)}
+      onClose={onClose}
+      onComplete={handleComplete}
+      saving={saving}
+      completeLabel="Apps verteilen"
+      savingLabel="Verteilen..."
+    >
           {/* Step 1: Catalog */}
           {step === 1 && (
             <div className="space-y-6">
@@ -480,41 +459,6 @@ export default function AppDeploymentWizard({ onClose }: AppDeploymentWizardProp
               )}
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-gray-200 px-8 py-4 flex items-center justify-between bg-gray-50">
-          <button
-            onClick={() => step === 1 ? onClose() : setStep((step - 1) as WizardStep)}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeftIcon className="h-4 w-4" />
-            {step === 1 ? 'Abbrechen' : 'Zurück'}
-          </button>
-
-          {step < 5 ? (
-            <button
-              onClick={() => setStep((step + 1) as WizardStep)}
-              className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors text-sm font-medium"
-            >
-              Weiter <ArrowRightIcon className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              onClick={handleComplete}
-              disabled={saving || selectedApps.length === 0}
-              className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors text-sm font-medium disabled:opacity-50"
-            >
-              {saving ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                  Verteilen...
-                </>
-              ) : 'Apps verteilen'}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </WizardLayout>
   );
 }

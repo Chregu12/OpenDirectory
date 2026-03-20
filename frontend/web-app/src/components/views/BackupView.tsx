@@ -17,6 +17,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { backupApi } from '@/lib/api';
 import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 import toast from 'react-hot-toast';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -123,101 +124,45 @@ export default function BackupView({ onOpenWizard }: BackupViewProps) {
     const hasRunning = backups.some(b => b.status === 'running');
 
     return (
-      <div className="p-6 space-y-6">
-        {/* Status Hero */}
-        <div className={`rounded-2xl p-8 text-center ${
-          hasRunning
-            ? 'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200'
+      <SimpleViewLayout
+        hero={{
+          status: hasRunning ? 'warning' : lastBackupOk ? 'ok' : 'warning',
+          icon: hasRunning
+            ? <ArrowPathIcon className="w-10 h-10 text-blue-600 animate-spin" />
             : lastBackupOk
-            ? 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200'
-            : 'bg-gradient-to-br from-yellow-50 to-amber-100 border border-yellow-200'
-        }`}>
-          <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${
-            hasRunning ? 'bg-blue-200' : lastBackupOk ? 'bg-green-200' : 'bg-yellow-200'
-          }`}>
-            {hasRunning ? (
-              <ArrowPathIcon className="w-8 h-8 text-blue-600 animate-spin" />
-            ) : lastBackupOk ? (
-              <CheckCircleIcon className="w-8 h-8 text-green-600" />
-            ) : (
-              <ExclamationTriangleIcon className="w-8 h-8 text-yellow-600" />
-            )}
-          </div>
-          <h1 className={`text-xl font-bold mb-1 ${
-            hasRunning ? 'text-blue-900' : lastBackupOk ? 'text-green-900' : 'text-yellow-900'
-          }`}>
-            {hasRunning ? 'Backup Running...' : lastBackupOk ? 'Backups Up to Date' : 'No Recent Backup'}
-          </h1>
-          <p className="text-sm text-gray-600">
-            {status.lastBackup
-              ? `Last backup: ${new Date(status.lastBackup).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
-              : 'No backups yet'}
-          </p>
-        </div>
-
-        {/* Compact Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-blue-600">{status.totalBackups}</p>
-            <p className="text-xs text-gray-500 mt-1">Total Backups</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-purple-600">{status.storageUsed}</p>
-            <p className="text-xs text-gray-500 mt-1">Storage</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-amber-600">{status.encryption ? 'AES-256' : 'Off'}</p>
-            <p className="text-xs text-gray-500 mt-1">Encryption</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-gray-600 capitalize">{status.storageType}</p>
-            <p className="text-xs text-gray-500 mt-1">Storage Type</p>
-          </div>
-        </div>
-
-        {/* Quick Action */}
-        <div className="flex justify-center gap-3">
-          <button
-            onClick={startBackup}
-            className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
-          >
-            <PlayIcon className="h-4 w-4" />
-            Backup starten
-          </button>
-          {onOpenWizard && (
-            <button
-              onClick={onOpenWizard}
-              className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-            >
-              <WrenchScrewdriverIcon className="h-4 w-4" />
-              Setup
-            </button>
-          )}
-        </div>
-
-        {/* Recent backups (last 3) */}
-        {backups.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Recent Backups</h3>
-            <div className="space-y-2">
-              {backups.slice(0, 3).map((b, i) => (
-                <div key={b.id || i} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                  <div className="flex items-center gap-3">
-                    {statusIcon(b.status)}
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{typeLabel(b.type)} Backup</p>
-                      <p className="text-xs text-gray-500">{new Date(b.startedAt).toLocaleString('de-DE')}</p>
-                    </div>
-                  </div>
-                  <span className={`text-xs font-medium ${b.status === 'completed' ? 'text-green-600' : b.status === 'failed' ? 'text-red-600' : 'text-blue-600'}`}>
-                    {b.size}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+            ? <CheckCircleIcon className="w-10 h-10 text-green-600" />
+            : <ExclamationTriangleIcon className="w-10 h-10 text-yellow-600" />,
+          title: hasRunning ? 'Backup Running...' : lastBackupOk ? 'Backups Up to Date' : 'No Recent Backup',
+          subtitle: status.lastBackup
+            ? `Last backup: ${new Date(status.lastBackup).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+            : 'No backups yet',
+        }}
+        stats={[
+          { value: status.totalBackups, label: 'Total Backups', color: 'text-blue-600' },
+          { value: status.storageUsed, label: 'Storage', color: 'text-purple-600' },
+          { value: status.encryption ? 'AES-256' : 'Off', label: 'Encryption', color: 'text-amber-600' },
+          { value: status.storageType, label: 'Storage Type', color: 'text-gray-600' },
+        ]}
+        sections={backups.length > 0 ? [{
+          title: 'Recent Backups',
+          maxItems: 3,
+          items: backups.slice(0, 3).map((b, i) => ({
+            key: b.id || `backup-${i}`,
+            icon: statusIcon(b.status),
+            title: `${typeLabel(b.type)} Backup`,
+            subtitle: new Date(b.startedAt).toLocaleString('de-DE'),
+            trailing: (
+              <span className={`text-xs font-medium ${b.status === 'completed' ? 'text-green-600' : b.status === 'failed' ? 'text-red-600' : 'text-blue-600'}`}>
+                {b.size}
+              </span>
+            ),
+          })),
+        }] : []}
+        actions={[
+          { label: 'Backup starten', icon: <PlayIcon className="h-4 w-4" />, onClick: startBackup },
+          ...(onOpenWizard ? [{ label: 'Setup', icon: <WrenchScrewdriverIcon className="h-4 w-4" />, onClick: onOpenWizard, variant: 'secondary' as const }] : []),
+        ]}
+      />
     );
   }
 
