@@ -2,7 +2,8 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-rule_files: []
+rule_files:
+  - 'alert-rules.yml'
 
 scrape_configs:
   # OpenDirectory Core Services

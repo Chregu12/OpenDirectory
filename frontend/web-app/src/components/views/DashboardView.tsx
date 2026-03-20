@@ -10,9 +10,12 @@ import {
   CloudIcon,
   ShieldCheckIcon,
   ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon
+  ArrowTrendingDownIcon,
+  ComputerDesktopIcon
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi, configApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 
 interface DashboardStats {
   totalServices: number;
@@ -32,7 +35,12 @@ interface ServiceHealth {
   lastCheck: string;
 }
 
-export default function DashboardView() {
+interface DashboardViewProps {
+  onAddDevice?: () => void;
+}
+
+export default function DashboardView({ onAddDevice }: DashboardViewProps) {
+  const { isSimple } = useUiMode();
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     totalServices: 0,
     healthyServices: 0,
@@ -43,13 +51,13 @@ export default function DashboardView() {
     enabledModules: 0,
     totalModules: 0
   });
-  
+
   const [recentServices, setRecentServices] = useState<ServiceHealth[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadDashboardData();
-    const interval = setInterval(loadDashboardData, 10000); // Every 10 seconds
+    const interval = setInterval(loadDashboardData, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -77,7 +85,7 @@ export default function DashboardView() {
       const minutes = Math.floor((uptime % 3600) / 60);
 
       const memoryUsage = healthData?.gateway?.memory;
-      const memoryPercent = memoryUsage 
+      const memoryPercent = memoryUsage
         ? Math.round((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100)
         : 0;
 
@@ -92,25 +100,16 @@ export default function DashboardView() {
         totalModules: totalCount
       });
 
-      // Get recent services (last 5)
       const sortedServices = services
         .sort((a: any, b: any) => new Date(b.lastCheck || 0).getTime() - new Date(a.lastCheck || 0).getTime())
         .slice(0, 5);
-      
+
       setRecentServices(sortedServices);
 
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy': return 'text-green-600';
-      case 'unhealthy': return 'text-red-600';
-      default: return 'text-yellow-600';
     }
   };
 
@@ -140,6 +139,74 @@ export default function DashboardView() {
     );
   }
 
+  const allHealthy = dashboardStats.criticalServices === 0 && dashboardStats.warningServices === 0;
+  const hasCritical = dashboardStats.criticalServices > 0;
+  const unhealthyServices = recentServices.filter(s => s.status !== 'healthy');
+
+  // ── Simple Mode: UniFi-style "everything is OK" dashboard ──
+  if (isSimple) {
+    return (
+      <SimpleViewLayout
+        hero={{
+          status: hasCritical ? 'critical' : allHealthy ? 'ok' : 'warning',
+          title: hasCritical
+            ? `${dashboardStats.criticalServices} Service${dashboardStats.criticalServices > 1 ? 's' : ''} Down`
+            : allHealthy
+            ? 'All Systems Operational'
+            : `${dashboardStats.warningServices} Warning${dashboardStats.warningServices > 1 ? 's' : ''}`,
+          subtitle: `${dashboardStats.healthyServices} of ${dashboardStats.totalServices} services running`,
+        }}
+        stats={[
+          { value: dashboardStats.healthyServices, label: 'Healthy' },
+          { value: dashboardStats.enabledModules, label: 'Modules' },
+          { value: dashboardStats.memoryUsage, label: 'Memory' },
+          { value: dashboardStats.uptime, label: 'Uptime' },
+        ]}
+        sections={unhealthyServices.length > 0 ? [{
+          title: 'Attention Required',
+          items: unhealthyServices.map((service, index) => ({
+            key: `svc-${index}`,
+            icon: getStatusIcon(service.status),
+            title: service.name,
+            trailing: (
+              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                service.status === 'unhealthy' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+              }`}>
+                {service.status}
+              </span>
+            ),
+          })),
+        }] : []}
+      >
+        {/* Quick Actions - simplified */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {onAddDevice && (
+            <button
+              onClick={onAddDevice}
+              className="flex flex-col items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-blue-300 hover:shadow-md transition-all"
+            >
+              <ComputerDesktopIcon className="w-6 h-6 text-blue-600 mb-2" />
+              <span className="text-xs font-medium text-gray-700">Add Device</span>
+            </button>
+          )}
+          <button className="flex flex-col items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-green-300 hover:shadow-md transition-all">
+            <ShieldCheckIcon className="w-6 h-6 text-green-600 mb-2" />
+            <span className="text-xs font-medium text-gray-700">Security</span>
+          </button>
+          <button className="flex flex-col items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-purple-300 hover:shadow-md transition-all">
+            <ChartBarIcon className="w-6 h-6 text-purple-600 mb-2" />
+            <span className="text-xs font-medium text-gray-700">Analytics</span>
+          </button>
+          <button className="flex flex-col items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-gray-300 hover:shadow-md transition-all">
+            <CpuChipIcon className="w-6 h-6 text-gray-600 mb-2" />
+            <span className="text-xs font-medium text-gray-700">Services</span>
+          </button>
+        </div>
+      </SimpleViewLayout>
+    );
+  }
+
+  // ── Expert Mode: Full detailed dashboard ──
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -154,196 +221,123 @@ export default function DashboardView() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <CheckCircleIcon className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Healthy Services</p>
-              <div className="flex items-center">
-                <p className="text-2xl font-semibold text-gray-900">
-                  {dashboardStats.healthyServices}
-                </p>
-                <span className="ml-2 text-xs text-gray-500">
-                  / {dashboardStats.totalServices}
-                </span>
-              </div>
-            </div>
+      {/* Stats Cards - UniFi style: white cards, subtle icons, clean typography */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[13px] font-medium text-gray-500">Healthy Services</p>
+            <CheckCircleIcon className="w-5 h-5 text-emerald-400" />
           </div>
-          <div className="mt-4">
-            <div className="flex items-center text-sm">
-              <ArrowTrendingUpIcon className="w-4 h-4 text-green-500 mr-1" />
-              <span className="text-green-600">+2.4%</span>
-              <span className="text-gray-500 ml-1">from last hour</span>
-            </div>
+          <div className="flex items-baseline">
+            <p className="text-2xl font-semibold text-gray-900">{dashboardStats.healthyServices}</p>
+            <span className="ml-1.5 text-[13px] text-gray-400">/ {dashboardStats.totalServices}</span>
+          </div>
+          <div className="flex items-center mt-2 text-[12px]">
+            <ArrowTrendingUpIcon className="w-3.5 h-3.5 text-emerald-500 mr-1" />
+            <span className="text-emerald-600">+2.4%</span>
+            <span className="text-gray-400 ml-1">from last hour</span>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <CpuChipIcon className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Active Modules</p>
-              <div className="flex items-center">
-                <p className="text-2xl font-semibold text-gray-900">
-                  {dashboardStats.enabledModules}
-                </p>
-                <span className="ml-2 text-xs text-gray-500">
-                  / {dashboardStats.totalModules}
-                </span>
-              </div>
-            </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[13px] font-medium text-gray-500">Active Modules</p>
+            <CpuChipIcon className="w-5 h-5 text-blue-400" />
           </div>
-          <div className="mt-4">
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                style={{ 
-                  width: `${dashboardStats.totalModules > 0 ? (dashboardStats.enabledModules / dashboardStats.totalModules) * 100 : 0}%` 
-                }}
-              ></div>
-            </div>
+          <div className="flex items-baseline">
+            <p className="text-2xl font-semibold text-gray-900">{dashboardStats.enabledModules}</p>
+            <span className="ml-1.5 text-[13px] text-gray-400">/ {dashboardStats.totalModules}</span>
+          </div>
+          <div className="mt-2.5 w-full bg-gray-100 rounded-full h-1.5">
+            <div
+              className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${dashboardStats.totalModules > 0 ? (dashboardStats.enabledModules / dashboardStats.totalModules) * 100 : 0}%` }}
+            />
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <ChartBarIcon className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Memory Usage</p>
-              <div className="flex items-center">
-                <p className="text-2xl font-semibold text-gray-900">
-                  {dashboardStats.memoryUsage}
-                </p>
-              </div>
-            </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[13px] font-medium text-gray-500">Memory Usage</p>
+            <ChartBarIcon className="w-5 h-5 text-gray-400" />
           </div>
-          <div className="mt-4">
-            <div className="flex items-center text-sm">
-              <ArrowTrendingDownIcon className="w-4 h-4 text-green-500 mr-1" />
-              <span className="text-green-600">-1.2%</span>
-              <span className="text-gray-500 ml-1">from last hour</span>
-            </div>
+          <p className="text-2xl font-semibold text-gray-900">{dashboardStats.memoryUsage}</p>
+          <div className="flex items-center mt-2 text-[12px]">
+            <ArrowTrendingDownIcon className="w-3.5 h-3.5 text-emerald-500 mr-1" />
+            <span className="text-emerald-600">-1.2%</span>
+            <span className="text-gray-400 ml-1">from last hour</span>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                <CloudIcon className="w-6 h-6 text-orange-600" />
-              </div>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">System Uptime</p>
-              <div className="flex items-center">
-                <p className="text-2xl font-semibold text-gray-900">
-                  {dashboardStats.uptime}
-                </p>
-              </div>
-            </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[13px] font-medium text-gray-500">System Uptime</p>
+            <CloudIcon className="w-5 h-5 text-gray-400" />
           </div>
-          <div className="mt-4">
-            <div className="flex items-center text-sm">
-              <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-              <span className="text-gray-500">Running stable</span>
-            </div>
+          <p className="text-2xl font-semibold text-gray-900">{dashboardStats.uptime}</p>
+          <div className="flex items-center mt-2 text-[12px]">
+            <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full mr-1.5"></div>
+            <span className="text-gray-400">Running stable</span>
           </div>
         </div>
       </div>
 
       {/* Service Health and Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Recent Service Activities */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="p-6 border-b border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900">Service Health</h3>
-            <p className="text-sm text-gray-500 mt-1">Recent service status updates</p>
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h3 className="text-[14px] font-semibold text-gray-900">Service Health</h3>
           </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              {recentServices.map((service, index) => (
-                <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center">
-                    {getStatusIcon(service.status)}
-                    <div className="ml-3">
-                      <p className="text-sm font-medium text-gray-900">{service.name}</p>
-                      <p className="text-xs text-gray-500">
-                        Last check: {new Date(service.lastCheck).toLocaleTimeString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      service.status === 'healthy' 
-                        ? 'bg-green-100 text-green-800' 
-                        : service.status === 'unhealthy'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {service.status}
-                    </span>
-                    {service.responseTime && (
-                      <p className="text-xs text-gray-500 mt-1">{service.responseTime}ms</p>
-                    )}
+          <div className="p-2">
+            {recentServices.map((service, index) => (
+              <div key={index} className="flex items-center justify-between px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors">
+                <div className="flex items-center">
+                  {getStatusIcon(service.status)}
+                  <div className="ml-3">
+                    <p className="text-[13px] font-medium text-gray-900">{service.name}</p>
+                    <p className="text-[11px] text-gray-400">
+                      {new Date(service.lastCheck).toLocaleTimeString()}
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center space-x-3">
+                  {service.responseTime && (
+                    <span className="text-[11px] text-gray-400">{service.responseTime}ms</span>
+                  )}
+                  <div className={`w-2 h-2 rounded-full ${
+                    service.status === 'healthy' ? 'bg-emerald-400'
+                    : service.status === 'unhealthy' ? 'bg-red-400'
+                    : 'bg-amber-400'
+                  }`} />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="p-6 border-b border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
-            <p className="text-sm text-gray-500 mt-1">Common tasks</p>
+        <div className="bg-white rounded-xl shadow-sm">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h3 className="text-[14px] font-semibold text-gray-900">Quick Actions</h3>
           </div>
-          <div className="p-6 space-y-3">
-            <button className="w-full flex items-center justify-between p-3 text-left bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
-              <div className="flex items-center">
-                <CpuChipIcon className="w-5 h-5 text-blue-600 mr-3" />
-                <span className="text-sm font-medium text-gray-900">Manage Services</span>
-              </div>
-              <span className="text-xs text-blue-600">→</span>
-            </button>
-
-            <button className="w-full flex items-center justify-between p-3 text-left bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
-              <div className="flex items-center">
-                <ShieldCheckIcon className="w-5 h-5 text-green-600 mr-3" />
-                <span className="text-sm font-medium text-gray-900">Security Status</span>
-              </div>
-              <span className="text-xs text-green-600">→</span>
-            </button>
-
-            <button className="w-full flex items-center justify-between p-3 text-left bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors">
-              <div className="flex items-center">
-                <ChartBarIcon className="w-5 h-5 text-purple-600 mr-3" />
-                <span className="text-sm font-medium text-gray-900">View Analytics</span>
-              </div>
-              <span className="text-xs text-purple-600">→</span>
-            </button>
-
-            <button className="w-full flex items-center justify-between p-3 text-left bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
-              <div className="flex items-center">
-                <CloudIcon className="w-5 h-5 text-gray-600 mr-3" />
-                <span className="text-sm font-medium text-gray-900">System Logs</span>
-              </div>
-              <span className="text-xs text-gray-600">→</span>
-            </button>
+          <div className="p-2 space-y-0.5">
+            {[
+              { icon: CpuChipIcon, label: 'Manage Services' },
+              { icon: ShieldCheckIcon, label: 'Security Status' },
+              { icon: ChartBarIcon, label: 'View Analytics' },
+              ...(onAddDevice ? [{ icon: ComputerDesktopIcon, label: 'Add Device', onClick: onAddDevice }] : []),
+              { icon: CloudIcon, label: 'System Logs' },
+            ].map((action, i) => (
+              <button
+                key={i}
+                onClick={(action as any).onClick}
+                className="w-full flex items-center px-4 py-2.5 text-left rounded-lg hover:bg-gray-50 transition-colors group"
+              >
+                <action.icon className="w-[18px] h-[18px] text-gray-400 mr-3 group-hover:text-blue-500 transition-colors" />
+                <span className="text-[13px] font-medium text-gray-600 group-hover:text-gray-900 transition-colors">{action.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </div>

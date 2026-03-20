@@ -270,21 +270,56 @@ class PrinterPolicyManager {
   }
   
   /**
-   * Generate deployment packages for each platform
+   * Generate deployment packages for each platform.
+   * Delegates to the split PrintersCompiler for artifact generation.
+   * The actual deployment is handled by PrinterAgentService via WebSocket push.
    */
   async generateDeploymentPackages(policy) {
-    const packages = {};
-    
-    // Windows deployment package (PowerShell)
-    packages.windows = this.generateWindowsDeployment(policy);
-    
-    // macOS deployment package (Configuration Profile)
-    packages.macos = this.generateMacOSDeployment(policy);
-    
-    // Linux deployment package (Shell script)
-    packages.linux = this.generateLinuxDeployment(policy);
-    
-    return packages;
+    // Use the split PrintersCompiler for artifact generation
+    let compilePrinters;
+    try {
+      ({ compilePrinters } = require('../../../../platform/integration-service/src/compilers'));
+    } catch (e) {
+      this.logger.warn('PrintersCompiler not available, using legacy generation:', e.message);
+      return this._legacyGenerateDeploymentPackages(policy);
+    }
+
+    const compilerPolicy = {
+      id: policy.id,
+      name: policy.name,
+      settings: { printers: policy.settings.printers }
+    };
+
+    const compiled = compilePrinters(compilerPolicy);
+
+    return {
+      windows: compiled.windows ? {
+        platform: 'windows',
+        artifacts: compiled.windows,
+        deployment: { method: 'AgentPush', fallback: 'GPO' }
+      } : null,
+      macos: compiled.macos ? {
+        platform: 'macos',
+        artifacts: compiled.macos,
+        deployment: { method: 'AgentPush', fallback: 'CUPS' }
+      } : null,
+      linux: compiled.linux ? {
+        platform: 'linux',
+        artifacts: compiled.linux,
+        deployment: { method: 'AgentPush', fallback: 'CUPS' }
+      } : null
+    };
+  }
+
+  /**
+   * Legacy fallback when split compilers are not available.
+   */
+  _legacyGenerateDeploymentPackages(policy) {
+    return {
+      windows: this.generateWindowsDeployment(policy),
+      macos: this.generateMacOSDeployment(policy),
+      linux: this.generateLinuxDeployment(policy)
+    };
   }
   
   generateWindowsDeployment(policy) {

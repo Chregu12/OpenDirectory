@@ -7,19 +7,20 @@ const EventEmitter = require('events');
 const crypto = require('crypto');
 
 class DeviceComplianceEngine extends EventEmitter {
-    constructor() {
+    constructor(deviceService = null) {
         super();
+        this.deviceService = deviceService;
         this.compliancePolicies = new Map();
         this.deviceStates = new Map();
         this.complianceResults = new Map();
         this.remediationActions = new Map();
-        
-        // Platform-specific compliance modules
+
+        // Platform-specific compliance modules (legacy — used when agent not reachable)
         this.windowsCompliance = new WindowsComplianceChecker();
         this.macosCompliance = new MacOSComplianceChecker();
         this.linuxCompliance = new LinuxComplianceChecker();
         this.mobileCompliance = new MobileComplianceChecker();
-        
+
         this.initializeDefaultPolicies();
     }
 
@@ -104,8 +105,45 @@ class DeviceComplianceEngine extends EventEmitter {
      * Perform platform-specific compliance checks
      */
     async performComplianceChecks(deviceInfo, platform, policies) {
+        // Prefer agent-based compliance check via WebSocket
+        if (this.deviceService && deviceInfo.deviceId) {
+            try {
+                const commandId = `comp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                const sent = this.deviceService.sendToDevice(deviceInfo.deviceId, {
+                    type: 'command',
+                    id: commandId,
+                    command_type: 'check_all_compliance',
+                    data: {
+                        policies: policies.map(p => ({ id: p.id, name: p.name, checks: p.checks }))
+                    },
+                    category: 'compliance'
+                });
+                if (sent) {
+                    this.emit('complianceCheckDispatched', {
+                        deviceId: deviceInfo.deviceId,
+                        commandId,
+                        policyCount: policies.length
+                    });
+                    // Return pending result — agent will report back asynchronously
+                    return policies.map(policy => ({
+                        policyId: policy.id,
+                        policyName: policy.name,
+                        status: 'PENDING_AGENT',
+                        details: [],
+                        findings: [],
+                        severity: 'LOW',
+                        checkedAt: new Date(),
+                        commandId
+                    }));
+                }
+            } catch (e) {
+                // Fall through to legacy platform-specific checkers
+            }
+        }
+
+        // Legacy: use server-side platform-specific checkers
         const results = [];
-        
+
         let checker;
         switch (platform.toLowerCase()) {
             case 'windows':
@@ -124,7 +162,7 @@ class DeviceComplianceEngine extends EventEmitter {
             default:
                 throw new Error(`Unsupported platform: ${platform}`);
         }
-        
+
         for (const policy of policies) {
             const result = await checker.checkCompliance(deviceInfo, policy);
             results.push({
@@ -137,7 +175,7 @@ class DeviceComplianceEngine extends EventEmitter {
                 checkedAt: new Date()
             });
         }
-        
+
         return results;
     }
 
@@ -273,18 +311,38 @@ class DeviceComplianceEngine extends EventEmitter {
         if (!device) {
             throw new Error('Device not found');
         }
-        
+
         const action = this.remediationActions.get(actionId);
         if (!action) {
             throw new Error('Remediation action not found');
         }
-        
+
         if (!action.autoExecutable) {
             throw new Error('Action requires manual execution');
         }
-        
+
+        // Prefer agent-based remediation via WebSocket
+        if (this.deviceService) {
+            try {
+                const commandId = `rem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                const sent = this.deviceService.sendToDevice(deviceId, {
+                    type: 'command',
+                    id: commandId,
+                    command_type: 'execute_remediation',
+                    data: { actionId, action: action.action, description: action.description },
+                    category: 'compliance'
+                });
+                if (sent) {
+                    this.emit('remediationDispatched', { deviceId, actionId, commandId });
+                    return { status: 'DISPATCHED_TO_AGENT', commandId };
+                }
+            } catch (e) {
+                // Fall through to legacy
+            }
+        }
+
         try {
-            // Execute remediation action
+            // Legacy: Execute remediation action on server
             const result = await this.executeRemediationCommand(device, action);
             
             this.emit('remediationExecuted', {

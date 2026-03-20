@@ -3,9 +3,10 @@ const logger = require('../utils/logger');
 const AuditLogger = require('../audit/AuditLogger');
 
 class WindowsUpdateService extends EventEmitter {
-    constructor() {
+    constructor(updateAgentService) {
         super();
         this.auditLogger = new AuditLogger();
+        this.updateAgentService = updateAgentService; // Generic agent dispatch
         this.updateSessions = new Map();
         this.deferralPolicies = new Map();
         this.maintenanceWindows = new Map();
@@ -47,12 +48,40 @@ class WindowsUpdateService extends EventEmitter {
             // Store policy for device
             this.deferralPolicies.set(deviceId, updatePolicy);
 
-            // Generate PowerShell script for Windows Update configuration
-            const psScript = this.generateWindowsUpdatePSScript(updatePolicy);
-            
+            // Dispatch to agent via WebSocket (agent handles platform-specific enforcement)
+            let agentResult = null;
+            if (this.updateAgentService) {
+                agentResult = this.updateAgentService.configureUpdates(deviceId, {
+                    id: `wu-policy-${deviceId}`,
+                    automatic: updatePolicy.automaticMaintenanceEnabled,
+                    schedule: { interval: 'Daily', time: updatePolicy.activeHoursEnd },
+                    deferrals: {
+                        featureUpdates: updatePolicy.featureUpdateDeferralPeriod,
+                        qualityUpdates: updatePolicy.qualityUpdateDeferralPeriod,
+                        securityUpdates: 0
+                    },
+                    rebootPolicy: updatePolicy.autoRestartRequiredNotificationDismissal ? 'scheduled' : 'user-choice',
+                    maintenanceWindow: {
+                        start: updatePolicy.activeHoursEnd,
+                        end: updatePolicy.activeHoursStart
+                    },
+                    // Windows-specific extensions (agent uses these if platform matches)
+                    _windows: {
+                        wsusUrl: updatePolicy.updateServiceUrl,
+                        targetReleaseVersion: updatePolicy.targetReleaseVersion,
+                        pauseFeatureUpdates: updatePolicy.pauseFeatureUpdates,
+                        pauseQualityUpdates: updatePolicy.pauseQualityUpdates,
+                        branchReadinessLevel: updatePolicy.branchReadinessLevel,
+                        driverUpdatesDeferral: updatePolicy.driverUpdatesDeferral
+                    },
+                    notifyUser: true
+                });
+            }
+
             await this.auditLogger.log('windows_update_policy_configured', {
                 deviceId,
                 policy: updatePolicy,
+                agentDispatched: !!agentResult,
                 timestamp: new Date().toISOString()
             });
 
@@ -61,7 +90,7 @@ class WindowsUpdateService extends EventEmitter {
             return {
                 success: true,
                 policyId: `wu-policy-${deviceId}`,
-                script: psScript,
+                agentResult,
                 policy: updatePolicy
             };
 

@@ -1,0 +1,82 @@
+{
+  "id": "nist-800-171",
+  "name": "NIST SP 800-171 Rev 2 - CUI Protection",
+  "framework": "nist",
+  "platform": "all",
+  "version": "2.0.0",
+  "description": "NIST Special Publication 800-171 controls for protecting Controlled Unclassified Information",
+  "checks": [
+    {
+      "id": "3.1.1", "title": "Limit system access to authorized users",
+      "category": "Access Control", "severity": "critical",
+      "check": { "type": "policy", "setting": "AccountLockoutEnabled", "expected": true },
+      "remediation": { "type": "policy_set", "setting": "AccountLockoutEnabled", "value": true }
+    },
+    {
+      "id": "3.1.2", "title": "Limit system access to authorized transaction types",
+      "category": "Access Control", "severity": "high",
+      "check": { "type": "policy", "setting": "LeastPrivilegeEnforced", "expected": true },
+      "remediation": { "type": "manual", "description": "Review and restrict user permissions to only required functions" }
+    },
+    {
+      "id": "3.1.5", "title": "Employ the principle of least privilege",
+      "category": "Access Control", "severity": "high",
+      "check": { "type": "policy", "setting": "AdminAccountCount", "operator": "<=", "value": 3 },
+      "remediation": { "type": "manual", "description": "Review admin accounts and remove unnecessary privileges" }
+    },
+    {
+      "id": "3.3.1", "title": "Create and retain system audit logs",
+      "category": "Audit and Accountability", "severity": "high",
+      "check": { "type": "service", "name": "auditd", "property": "status", "expected": "running" },
+      "remediation": { "type": "command", "script": "systemctl enable auditd && systemctl start auditd" }
+    },
+    {
+      "id": "3.4.1", "title": "Establish and maintain baseline configurations",
+      "category": "Configuration Management", "severity": "high",
+      "check": { "type": "system", "setting": "BaselineConfigured", "expected": true },
+      "remediation": { "type": "manual", "description": "Document and enforce system baseline configurations" }
+    },
+    {
+      "id": "3.5.1", "title": "Identify system users and processes",
+      "category": "Identification and Authentication", "severity": "critical",
+      "check": { "type": "policy", "setting": "MultiFactorAuthEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable multi-factor authentication for all users" }
+    },
+    {
+      "id": "3.5.3", "title": "Use multifactor authentication for local and network access",
+      "category": "Identification and Authentication", "severity": "critical",
+      "check": { "type": "policy", "setting": "MFAEnforced", "expected": true },
+      "remediation": { "type": "manual", "description": "Deploy and enforce MFA for privileged and non-privileged accounts" }
+    },
+    {
+      "id": "3.8.1", "title": "Protect CUI at rest using encryption",
+      "category": "Media Protection", "severity": "critical",
+      "check": { "type": "system", "setting": "DiskEncryption", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable full-disk encryption (BitLocker/FileVault/LUKS)" }
+    },
+    {
+      "id": "3.13.1", "title": "Monitor and control communications at external boundaries",
+      "category": "System and Communications Protection", "severity": "high",
+      "check": { "type": "system", "setting": "FirewallEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable and configure host-based firewall" }
+    },
+    {
+      "id": "3.13.8", "title": "Implement cryptographic mechanisms to prevent unauthorized disclosure during transmission",
+      "category": "System and Communications Protection", "severity": "high",
+      "check": { "type": "policy", "setting": "TLSMinVersion", "operator": ">=", "value": "1.2" },
+      "remediation": { "type": "manual", "description": "Configure minimum TLS version to 1.2 across all services" }
+    },
+    {
+      "id": "3.14.1", "title": "Identify, report, and correct system flaws in a timely manner",
+      "category": "System and Information Integrity", "severity": "high",
+      "check": { "type": "system", "setting": "AutoUpdateEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable automatic security updates" }
+    },
+    {
+      "id": "3.14.2", "title": "Provide protection from malicious code",
+      "category": "System and Information Integrity", "severity": "critical",
+      "check": { "type": "system", "setting": "AntivirusEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Install and enable antivirus/antimalware protection" }
+    }
+  ]
+}

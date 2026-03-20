@@ -1,0 +1,262 @@
+groups:
+  # =====================================================
+  # Service Availability Alerts
+  # =====================================================
+  - name: opendirectory-services
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} ist nicht erreichbar"
+          description: "Service {{ $labels.job }} ({{ $labels.instance }}) ist seit mehr als 2 Minuten nicht erreichbar."
+
+      - alert: HighLatency
+        expr: http_request_duration_seconds{quantile="0.99"} > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hohe Latenz bei {{ $labels.job }}"
+          description: "P99 Latenz bei {{ $labels.job }} liegt bei {{ $value }}s (> 5s Schwellenwert)."
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hohe Fehlerrate bei {{ $labels.job }}"
+          description: "Fehlerrate bei {{ $labels.job }} liegt bei {{ $value | humanizePercentage }}."
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes > 1e9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hoher Speicherverbrauch bei {{ $labels.job }}"
+          description: "{{ $labels.job }} verbraucht {{ $value | humanize1024 }}B RAM."
+
+  # =====================================================
+  # Agent Connectivity Alerts
+  # =====================================================
+  - name: opendirectory-agents
+    rules:
+      - alert: NoAgentsConnected
+        expr: opendirectory_connected_agents == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Keine Agents verbunden"
+          description: "Kein einziger Agent ist mit dem Server verbunden. Gerätemanagement nicht möglich."
+
+      - alert: AgentDisconnectionSpike
+        expr: delta(opendirectory_connected_agents[10m]) < -5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Viele Agents getrennt"
+          description: "{{ $value }} Agents haben sich in den letzten 10 Minuten getrennt."
+
+      - alert: AgentCommandFailureRate
+        expr: rate(opendirectory_agent_command_failures_total[15m]) / rate(opendirectory_agent_commands_total[15m]) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hohe Agent-Befehlsfehlerrate"
+          description: "{{ $value | humanizePercentage }} der Agent-Befehle schlagen fehl."
+
+  # =====================================================
+  # Policy & Compliance Alerts
+  # =====================================================
+  - name: opendirectory-compliance
+    rules:
+      - alert: PolicyDeploymentFailures
+        expr: rate(opendirectory_policy_deploy_failures_total[1h]) > 5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Policy-Deployment-Fehler"
+          description: "{{ $value }} Policy-Deployment-Fehler pro Stunde."
+
+      - alert: LowComplianceRate
+        expr: opendirectory_compliance_ratio < 0.8
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Niedrige Compliance-Rate"
+          description: "Nur {{ $value | humanizePercentage }} der Geräte sind compliant."
+
+      - alert: CriticalComplianceViolation
+        expr: opendirectory_critical_compliance_violations > 0
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kritische Compliance-Verletzung erkannt"
+          description: "{{ $value }} kritische Compliance-Verletzungen aktiv."
+
+  # =====================================================
+  # Update Management Alerts
+  # =====================================================
+  - name: opendirectory-updates
+    rules:
+      - alert: LowUpdateCompliance
+        expr: opendirectory_update_compliance_ratio < 0.8
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Niedrige Update-Compliance"
+          description: "Nur {{ $value | humanizePercentage }} der Geräte sind update-compliant."
+
+      - alert: CriticalUpdatesPending
+        expr: opendirectory_critical_updates_pending > 10
+        for: 48h
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kritische Updates ausstehend"
+          description: "{{ $value }} kritische Updates seit >48h nicht installiert."
+
+  # =====================================================
+  # Certificate Alerts
+  # =====================================================
+  - name: opendirectory-certificates
+    rules:
+      - alert: CertificateExpiringSoon
+        expr: opendirectory_cert_days_until_expiry < 30
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zertifikat läuft bald ab"
+          description: "Zertifikat {{ $labels.common_name }} läuft in {{ $value }} Tagen ab."
+
+      - alert: CertificateExpired
+        expr: opendirectory_cert_days_until_expiry <= 0
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Zertifikat abgelaufen"
+          description: "Zertifikat {{ $labels.common_name }} ist abgelaufen."
+
+  # =====================================================
+  # Backup & Disaster Recovery Alerts
+  # =====================================================
+  - name: opendirectory-backup
+    rules:
+      - alert: BackupFailed
+        expr: opendirectory_backup_last_success_timestamp < (time() - 86400)
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup seit >24h nicht erfolgreich"
+          description: "Letztes erfolgreiches Backup vor {{ $value | humanizeDuration }} Sekunden."
+
+      - alert: BackupStorageHigh
+        expr: opendirectory_backup_storage_used_bytes / opendirectory_backup_storage_total_bytes > 0.85
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Backup-Speicher fast voll"
+          description: "{{ $value | humanizePercentage }} des Backup-Speichers belegt."
+
+      - alert: ReplicationLagHigh
+        expr: opendirectory_replication_lag_seconds > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hoher Replikations-Lag"
+          description: "Replikation liegt {{ $value }}s hinter dem Primary."
+
+      - alert: ReplicationLagCritical
+        expr: opendirectory_replication_lag_seconds > 300
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kritischer Replikations-Lag"
+          description: "Replikation liegt {{ $value }}s hinter dem Primary (>5 Minuten)."
+
+      - alert: DRDrillOverdue
+        expr: (time() - opendirectory_last_dr_drill_timestamp) > 604800
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "DR-Drill überfällig"
+          description: "Letzter DR-Drill vor mehr als 7 Tagen."
+
+  # =====================================================
+  # Threat Detection Alerts
+  # =====================================================
+  - name: opendirectory-threats
+    rules:
+      - alert: ThreatDetected
+        expr: opendirectory_threat_score > 0.8
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Bedrohung erkannt (Score: {{ $value }})"
+          description: "AI Analytics hat eine Bedrohung mit Score {{ $value }} erkannt."
+
+      - alert: AnomalySpike
+        expr: increase(opendirectory_anomaly_count[15m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Anomalie-Spike erkannt"
+          description: "{{ $value }} Anomalien in den letzten 15 Minuten erkannt."
+
+      - alert: BruteForceDetected
+        expr: rate(opendirectory_auth_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Möglicher Brute-Force-Angriff"
+          description: "{{ $value }} fehlgeschlagene Authentifizierungsversuche pro Sekunde."
+
+  # =====================================================
+  # Infrastructure Alerts
+  # =====================================================
+  - name: opendirectory-infrastructure
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL nicht erreichbar"
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis nicht erreichbar"
+
+      - alert: PostgresConnectionsHigh
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hohe PostgreSQL-Verbindungszahl ({{ $value }})"

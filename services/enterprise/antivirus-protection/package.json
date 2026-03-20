@@ -1,0 +1,64 @@
+{
+  "name": "@opendirectory/od-antivirus-protection",
+  "version": "1.0.0",
+  "description": "Antivirus Protection Service - ClamAV scanning orchestration across managed devices for OpenDirectory UEM Platform",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "docker:build": "docker build -t opendirectory/antivirus-protection .",
+    "docker:run": "docker run -p 3905:3905 opendirectory/antivirus-protection",
+    "health-check": "curl -f http://localhost:3905/health || exit 1"
+  },
+  "keywords": [
+    "opendirectory",
+    "antivirus",
+    "clamav",
+    "threat-detection",
+    "quarantine",
+    "signature-management",
+    "fleet-scanning",
+    "device-management",
+    "enterprise"
+  ],
+  "author": "OpenDirectory Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opendirectory/services.git",
+    "directory": "services/enterprise/antivirus-protection"
+  },
+  "bugs": {
+    "url": "https://github.com/opendirectory/services/issues"
+  },
+  "homepage": "https://github.com/opendirectory/services/tree/main/services/enterprise/antivirus-protection#readme",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.0.0",
+    "compression": "^1.7.4",
+    "express-rate-limit": "^6.8.1",
+    "joi": "^17.9.2",
+    "uuid": "^9.0.0",
+    "winston": "^3.10.0",
+    "winston-daily-rotate-file": "^4.7.1",
+    "ws": "^8.14.2",
+    "node-cron": "^3.0.2",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "jest": "^29.6.1",
+    "supertest": "^6.3.3",
+    "eslint": "^8.44.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

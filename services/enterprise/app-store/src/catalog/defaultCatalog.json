@@ -1,0 +1,317 @@
+{
+  "apps": [
+    {
+      "name": "7-Zip",
+      "description": "Free and open-source file archiver with high compression ratio. Supports 7z, ZIP, GZIP, BZIP2, TAR, and other formats.",
+      "publisher": "Igor Pavlov",
+      "category": "Utilities",
+      "version": "23.01",
+      "changelog": "Initial catalog entry for 7-Zip 23.01",
+      "tags": ["compression", "archive", "zip", "utility"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "7zip.7zip", "installArgs": "/S" },
+        "linux": { "packageType": "apt", "packageId": "p7zip-full", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "Mozilla Firefox",
+      "description": "Fast, private, and secure web browser by Mozilla. Features enhanced tracking protection and a built-in password manager.",
+      "publisher": "Mozilla",
+      "category": "Productivity",
+      "version": "121.0",
+      "changelog": "Initial catalog entry for Firefox 121.0",
+      "tags": ["browser", "web", "internet", "privacy"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "Mozilla.Firefox", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "firefox", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "firefox", "installArgs": "" }
+      },
+      "featured": true,
+      "mandatory": false
+    },
+    {
+      "name": "Google Chrome",
+      "description": "Fast, secure, and widely-used web browser by Google. Integrates with Google Workspace and enterprise management policies.",
+      "publisher": "Google",
+      "category": "Productivity",
+      "version": "120.0.6099.130",
+      "changelog": "Initial catalog entry for Chrome 120",
+      "tags": ["browser", "web", "internet", "google"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "Google.Chrome", "installArgs": "/silent /install" },
+        "macos": { "packageType": "brew", "packageId": "google-chrome", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "google-chrome-stable", "installArgs": "" }
+      },
+      "featured": true,
+      "mandatory": false
+    },
+    {
+      "name": "Visual Studio Code",
+      "description": "Lightweight but powerful source code editor with built-in support for JavaScript, TypeScript, Node.js, and a rich ecosystem of extensions.",
+      "publisher": "Microsoft",
+      "category": "Development",
+      "version": "1.85.1",
+      "changelog": "Initial catalog entry for VS Code 1.85.1",
+      "tags": ["editor", "ide", "code", "development", "microsoft"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "Microsoft.VisualStudioCode", "installArgs": "/VERYSILENT" },
+        "macos": { "packageType": "brew", "packageId": "visual-studio-code", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "code", "installArgs": "" }
+      },
+      "featured": true,
+      "mandatory": false
+    },
+    {
+      "name": "LibreOffice",
+      "description": "Full-featured open-source office productivity suite including Writer, Calc, Impress, Draw, Base, and Math.",
+      "publisher": "The Document Foundation",
+      "category": "Productivity",
+      "version": "7.6.4",
+      "changelog": "Initial catalog entry for LibreOffice 7.6.4",
+      "tags": ["office", "documents", "spreadsheet", "presentation", "word-processor"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "TheDocumentFoundation.LibreOffice", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "libreoffice", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "libreoffice", "installArgs": "" }
+      },
+      "featured": true,
+      "mandatory": false
+    },
+    {
+      "name": "VLC Media Player",
+      "description": "Free and open-source cross-platform multimedia player and framework that plays most multimedia files and streaming protocols.",
+      "publisher": "VideoLAN",
+      "category": "Media",
+      "version": "3.0.20",
+      "changelog": "Initial catalog entry for VLC 3.0.20",
+      "tags": ["media", "video", "audio", "player", "streaming"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "VideoLAN.VLC", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "vlc", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "vlc", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "Slack",
+      "description": "Business communication platform offering real-time messaging, file sharing, and integration with enterprise tools and workflows.",
+      "publisher": "Salesforce",
+      "category": "Communication",
+      "version": "4.36.140",
+      "changelog": "Initial catalog entry for Slack 4.36",
+      "tags": ["messaging", "chat", "communication", "collaboration", "team"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "SlackTechnologies.Slack", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "slack", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "slack-desktop", "installArgs": "" }
+      },
+      "featured": true,
+      "mandatory": false
+    },
+    {
+      "name": "Microsoft Teams",
+      "description": "Unified communication and collaboration platform combining workplace chat, meetings, file storage, and application integration.",
+      "publisher": "Microsoft",
+      "category": "Communication",
+      "version": "24004.1307.2669.7070",
+      "changelog": "Initial catalog entry for Microsoft Teams",
+      "tags": ["messaging", "meetings", "video", "collaboration", "microsoft"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "Microsoft.Teams", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "microsoft-teams", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "teams", "installArgs": "" }
+      },
+      "featured": true,
+      "mandatory": false
+    },
+    {
+      "name": "Zoom",
+      "description": "Video conferencing platform for enterprise meetings, webinars, and team collaboration with cloud recording and breakout rooms.",
+      "publisher": "Zoom Video Communications",
+      "category": "Communication",
+      "version": "5.17.5",
+      "changelog": "Initial catalog entry for Zoom 5.17.5",
+      "tags": ["video", "meetings", "conferencing", "webinar", "communication"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "Zoom.Zoom", "installArgs": "/silent" },
+        "macos": { "packageType": "brew", "packageId": "zoom", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "zoom", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "Git",
+      "description": "Distributed version control system for tracking changes in source code during software development.",
+      "publisher": "Git Community",
+      "category": "Development",
+      "version": "2.43.0",
+      "changelog": "Initial catalog entry for Git 2.43.0",
+      "tags": ["git", "version-control", "scm", "development"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "Git.Git", "installArgs": "/VERYSILENT" },
+        "macos": { "packageType": "brew", "packageId": "git", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "git", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "Python",
+      "description": "Versatile programming language widely used for automation, data science, web development, and scripting in enterprise environments.",
+      "publisher": "Python Software Foundation",
+      "category": "Development",
+      "version": "3.12.1",
+      "changelog": "Initial catalog entry for Python 3.12.1",
+      "tags": ["python", "programming", "scripting", "development", "automation"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "Python.Python.3.12", "installArgs": "/quiet" },
+        "macos": { "packageType": "brew", "packageId": "python@3.12", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "python3", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "Node.js",
+      "description": "JavaScript runtime built on Chrome's V8 engine for building fast, scalable network applications and tooling.",
+      "publisher": "OpenJS Foundation",
+      "category": "Development",
+      "version": "20.10.0",
+      "changelog": "Initial catalog entry for Node.js 20.10.0 LTS",
+      "tags": ["nodejs", "javascript", "runtime", "development", "npm"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "OpenJS.NodeJS.LTS", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "node@20", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "nodejs", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "Notepad++",
+      "description": "Free source code editor and Notepad replacement supporting several languages with syntax highlighting and auto-completion.",
+      "publisher": "Don Ho",
+      "category": "Development",
+      "version": "8.6.2",
+      "changelog": "Initial catalog entry for Notepad++ 8.6.2",
+      "tags": ["editor", "text", "notepad", "code", "syntax-highlighting"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "Notepad++.Notepad++", "installArgs": "/S" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "WinSCP",
+      "description": "Free SFTP, FTP, WebDAV, S3, and SCP client for Windows providing secure file transfer between local and remote computers.",
+      "publisher": "Martin Prikryl",
+      "category": "Utilities",
+      "version": "6.1.2",
+      "changelog": "Initial catalog entry for WinSCP 6.1.2",
+      "tags": ["ftp", "sftp", "scp", "file-transfer", "ssh"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "WinSCP.WinSCP", "installArgs": "/VERYSILENT" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "PuTTY",
+      "description": "Free SSH and telnet client supporting SCP, SFTP, and raw socket connections for secure remote administration.",
+      "publisher": "Simon Tatham",
+      "category": "Utilities",
+      "version": "0.80",
+      "changelog": "Initial catalog entry for PuTTY 0.80",
+      "tags": ["ssh", "telnet", "terminal", "remote", "networking"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "PuTTY.PuTTY", "installArgs": "/S" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "KeePassXC",
+      "description": "Cross-platform community-driven password manager with strong encryption, browser integration, and TOTP support.",
+      "publisher": "KeePassXC Team",
+      "category": "Security",
+      "version": "2.7.6",
+      "changelog": "Initial catalog entry for KeePassXC 2.7.6",
+      "tags": ["password", "security", "encryption", "vault", "2fa"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "KeePassXCTeam.KeePassXC", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "keepassxc", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "keepassxc", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "Signal Desktop",
+      "description": "End-to-end encrypted messaging application for secure private communication with disappearing messages and group chats.",
+      "publisher": "Signal Foundation",
+      "category": "Communication",
+      "version": "6.44.0",
+      "changelog": "Initial catalog entry for Signal Desktop 6.44.0",
+      "tags": ["messaging", "encryption", "privacy", "secure", "chat"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "OpenWhisperSystems.Signal", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "signal", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "signal-desktop", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "Thunderbird",
+      "description": "Free and open-source email client by Mozilla with calendar integration, address book, and support for PGP encryption.",
+      "publisher": "Mozilla",
+      "category": "Communication",
+      "version": "115.6.0",
+      "changelog": "Initial catalog entry for Thunderbird 115.6.0",
+      "tags": ["email", "mail", "calendar", "mozilla", "pgp"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "Mozilla.Thunderbird", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "thunderbird", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "thunderbird", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "GIMP",
+      "description": "GNU Image Manipulation Program - a free and open-source raster graphics editor for photo editing, image composition, and graphic design.",
+      "publisher": "GIMP Development Team",
+      "category": "Media",
+      "version": "2.10.36",
+      "changelog": "Initial catalog entry for GIMP 2.10.36",
+      "tags": ["graphics", "image", "photo", "editing", "design"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "GIMP.GIMP", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "gimp", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "gimp", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    },
+    {
+      "name": "FileZilla",
+      "description": "Free, open-source FTP client supporting FTP, FTPS, and SFTP with drag-and-drop support, directory comparison, and transfer queue.",
+      "publisher": "Tim Kosse",
+      "category": "Utilities",
+      "version": "3.66.4",
+      "changelog": "Initial catalog entry for FileZilla 3.66.4",
+      "tags": ["ftp", "sftp", "file-transfer", "client"],
+      "platforms": {
+        "windows": { "packageType": "winget", "packageId": "TimKosse.FileZilla.Client", "installArgs": "/S" },
+        "macos": { "packageType": "brew", "packageId": "filezilla", "installArgs": "" },
+        "linux": { "packageType": "apt", "packageId": "filezilla", "installArgs": "" }
+      },
+      "featured": false,
+      "mandatory": false
+    }
+  ]
+}

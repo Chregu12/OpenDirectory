@@ -10,13 +10,13 @@ const util       = require('util');
 const execAsync  = util.promisify(exec);
 const { Pool }   = require('pg');
 
-// Policy Compiler + Templates (loaded dynamically if available)
+// Policy Compiler (split modules) + Templates (loaded dynamically if available)
 let policyCompiler = null;
 let policyTemplates = null;
 try {
-  policyCompiler  = require('./policy-compiler');
+  policyCompiler  = require('./src/compilers');
   policyTemplates = require('./policy-templates');
-  console.log('Policy Compiler loaded');
+  console.log('Policy Compiler loaded (split modules)');
 } catch (e) {
   console.log('Policy Compiler not available:', e.message);
 }

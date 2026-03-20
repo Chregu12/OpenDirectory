@@ -456,20 +456,88 @@ class GroupPolicyEngine {
   }
   
   /**
-   * Generate platform-specific deployment packages
+   * Generate platform-specific deployment packages.
+   * Delegates to the split policy compilers instead of generating scripts inline.
+   * The compilers produce platform-specific artifacts (GPO XML, .mobileconfig, etc.)
+   * which can then be pushed to agents via PolicyAgentService or stored for GPO delivery.
    */
   async generateDeploymentPackages(policy) {
+    // Use the split compilers for artifact generation
+    let policyCompilers;
+    try {
+      policyCompilers = require('../../../../platform/integration-service/src/compilers');
+    } catch (e) {
+      this.logger.warn('Policy compilers not available, using legacy generation:', e.message);
+      return this._legacyGenerateDeploymentPackages(policy);
+    }
+
+    // Normalize GPO-style policy to compiler-compatible format
+    const compilerPolicy = this._normalizeForCompiler(policy);
+    const compiled = policyCompilers.compile(compilerPolicy);
+
+    return {
+      windows: compiled.artifacts?.windows ? {
+        platform: 'windows',
+        artifacts: compiled.artifacts.windows,
+        deployment: { method: 'AgentPush', fallback: 'GPO' }
+      } : null,
+      macos: compiled.artifacts?.macos ? {
+        platform: 'macos',
+        artifacts: compiled.artifacts.macos,
+        deployment: { method: 'AgentPush', fallback: 'MDM' }
+      } : null,
+      linux: compiled.artifacts?.linux ? {
+        platform: 'linux',
+        artifacts: compiled.artifacts.linux,
+        deployment: { method: 'AgentPush', fallback: 'SystemD' }
+      } : null
+    };
+  }
+
+  /**
+   * Normalize GPO-style policy structure to the generic compiler format.
+   */
+  _normalizeForCompiler(policy) {
+    const comp = policy.computerConfiguration || {};
+    const user = policy.userConfiguration || {};
+    const secSettings = comp.windowsSettings?.securitySettings || {};
+
+    return {
+      id: policy.id,
+      name: policy.name,
+      version: policy.metadata?.version || '1.0',
+      targets: { platforms: ['windows', 'linux', 'macos'] },
+      settings: {
+        password: secSettings.passwordPolicy ? {
+          minLength: secSettings.passwordPolicy.minimumLength,
+          maxAgeDays: secSettings.passwordPolicy.maxAge,
+          complexity: secSettings.passwordPolicy.complexity,
+          historyLength: secSettings.passwordPolicy.enforceHistory,
+          lockoutThreshold: secSettings.accountLockout?.threshold,
+          lockoutDuration: secSettings.accountLockout?.duration
+        } : undefined,
+        screenLock: secSettings.localPolicies?.screenLock || undefined,
+        firewall: secSettings.windowsFirewall || comp.windowsSettings?.firewall || undefined,
+        audit: secSettings.auditPolicy ? { enabled: true, ...secSettings.auditPolicy } : undefined,
+        encryption: secSettings.bitLocker ? { requireBitLocker: true, ...secSettings.bitLocker } : undefined,
+        browser: user.administrativeTemplates?.browser || undefined,
+        updates: comp.windowsSettings?.windowsUpdate || undefined,
+        networkDrives: user.preferences?.driveMappings || undefined,
+        printers: user.preferences?.printers || undefined,
+        wingetAutoUpdate: comp.windowsSettings?.wingetAutoUpdate || undefined
+      }
+    };
+  }
+
+  /**
+   * Legacy fallback: generates deployment packages using the old inline method.
+   * Used only when split compilers are not available.
+   */
+  async _legacyGenerateDeploymentPackages(policy) {
     const packages = {};
-    
-    // Windows deployment
     packages.windows = await this.generateWindowsGPO(policy);
-    
-    // macOS deployment (Configuration Profiles + Scripts)
     packages.macos = await this.generateMacOSProfile(policy);
-    
-    // Linux deployment (Scripts + Config files)
     packages.linux = await this.generateLinuxPolicy(policy);
-    
     return packages;
   }
   

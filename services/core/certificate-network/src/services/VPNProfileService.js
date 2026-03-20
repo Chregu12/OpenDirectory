@@ -21,9 +21,9 @@ const forge = require('node-forge');
 const config = require('../config');
 
 class VPNProfileService extends EventEmitter {
-    constructor(certificateService, options = {}) {
+    constructor(certificateService, options = {}, networkProfileAgentService = null) {
         super();
-        
+
         this.certificateService = certificateService;
         this.config = {
             ...config.network.vpn,
@@ -67,6 +67,9 @@ class VPNProfileService extends EventEmitter {
             linux: this.adaptForLinux.bind(this)
         };
 
+        // Agent-based deployment (preferred)
+        this.networkProfileAgentService = networkProfileAgentService || options.networkProfileAgentService || null;
+
         // Metrics
         this.metrics = {
             profilesCreated: 0,
@@ -79,6 +82,11 @@ class VPNProfileService extends EventEmitter {
         };
 
         this.init();
+    }
+
+    setNetworkProfileAgentService(service) {
+        this.networkProfileAgentService = service;
+        this.logger.info('VPN Profile Service: Agent-based deployment enabled');
     }
 
     async init() {
@@ -933,6 +941,27 @@ down /etc/openvpn/update-resolv-conf
                 throw new Error(`VPN profile not found: ${profileId}`);
             }
 
+            // Prefer agent-based deployment via WebSocket
+            if (this.networkProfileAgentService && deviceInfo.deviceId) {
+                try {
+                    return await this.networkProfileAgentService.configureVPN(deviceInfo.deviceId, {
+                        id: profile.id || profileId,
+                        name: profile.name,
+                        vpnType: profile.vpnType,
+                        server: profile.server,
+                        authentication: profile.authentication,
+                        splitTunneling: profile.splitTunneling,
+                        autoConnect: profile.autoConnect,
+                        killSwitch: profile.killSwitch,
+                        dns: profile.dns,
+                        platform: platform
+                    });
+                } catch (error) {
+                    this.logger.warn('Agent-based VPN deployment failed, falling back to legacy:', error.message);
+                }
+            }
+
+            // Legacy: local platform-specific profile generation
             const generator = this.profileGenerators[profile.vpnType.toLowerCase()];
             if (!generator) {
                 throw new Error(`Unsupported VPN type: ${profile.vpnType}`);
@@ -945,10 +974,10 @@ down /etc/openvpn/update-resolv-conf
             }
 
             const platformProfile = await generator(profile, certificates, deviceInfo, platform);
-            
+
             this.logger.info(`VPN profile generated: ${profileId} for ${platform}`);
             this.emit('profileGenerated', profile, platform, platformProfile);
-            
+
             return platformProfile;
 
         } catch (error) {

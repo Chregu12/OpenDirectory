@@ -20,9 +20,9 @@ const EventEmitter = require('events');
 const config = require('../config');
 
 class EmailProfileService extends EventEmitter {
-    constructor(certificateService, options = {}) {
+    constructor(certificateService, options = {}, networkProfileAgentService = null) {
         super();
-        
+
         this.certificateService = certificateService;
         this.config = {
             ...config.network.email,
@@ -61,6 +61,9 @@ class EmailProfileService extends EventEmitter {
             linux: this.generateLinuxProfile.bind(this)
         };
 
+        // Agent-based deployment (preferred)
+        this.networkProfileAgentService = networkProfileAgentService || options.networkProfileAgentService || null;
+
         // Metrics
         this.metrics = {
             profilesCreated: 0,
@@ -73,6 +76,11 @@ class EmailProfileService extends EventEmitter {
         };
 
         this.init();
+    }
+
+    setNetworkProfileAgentService(service) {
+        this.networkProfileAgentService = service;
+        this.logger.info('Email Profile Service: Agent-based deployment enabled');
     }
 
     async init() {
@@ -639,6 +647,26 @@ class EmailProfileService extends EventEmitter {
                 throw new Error(`Email profile not found: ${profileId}`);
             }
 
+            // Prefer agent-based deployment via WebSocket
+            if (this.networkProfileAgentService && deviceInfo.deviceId) {
+                try {
+                    return await this.networkProfileAgentService.configureEmail(deviceInfo.deviceId, {
+                        id: profile.id || profileId,
+                        name: profile.name,
+                        accountType: profile.account.type,
+                        emailAddress: profile.account.emailAddress,
+                        server: profile.account.server,
+                        authentication: profile.account.authentication,
+                        security: profile.security,
+                        smime: profile.security.smime,
+                        platform: platform
+                    });
+                } catch (error) {
+                    this.logger.warn('Agent-based email deployment failed, falling back to legacy:', error.message);
+                }
+            }
+
+            // Legacy: local platform-specific profile generation
             const generator = this.profileGenerators[platform.toLowerCase()];
             if (!generator) {
                 throw new Error(`Unsupported platform: ${platform}`);
@@ -651,10 +679,10 @@ class EmailProfileService extends EventEmitter {
             }
 
             const platformProfile = await generator(profile, certificates, deviceInfo);
-            
+
             this.logger.info(`Email profile generated for platform: ${platform}, profile: ${profileId}`);
             this.emit('profileGenerated', profile, platform, platformProfile);
-            
+
             return platformProfile;
 
         } catch (error) {

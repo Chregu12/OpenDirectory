@@ -7,8 +7,9 @@ const EventEmitter = require('events');
 const crypto = require('crypto');
 
 class AutopilotDeployment extends EventEmitter {
-    constructor() {
+    constructor(deviceService = null) {
         super();
+        this.deviceService = deviceService;
         this.deploymentProfiles = new Map();
         this.deploymentJobs = new Map();
         this.deviceRegistrations = new Map();
@@ -112,7 +113,38 @@ class AutopilotDeployment extends EventEmitter {
         };
         
         this.deploymentJobs.set(jobId, deploymentJob);
-        
+
+        const profile = this.deploymentProfiles.get(registration.profileId);
+
+        // Prefer agent-based deployment via WebSocket
+        if (this.deviceService) {
+            try {
+                const commandId = `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                const sent = this.deviceService.sendToDevice(deviceIdentifier, {
+                    type: 'command',
+                    id: commandId,
+                    command_type: 'zero_touch_deploy',
+                    data: {
+                        profile,
+                        registration: {
+                            platform: registration.platform,
+                            deviceInfo: registration.deviceInfo
+                        }
+                    },
+                    category: 'deployment'
+                });
+
+                if (sent) {
+                    deploymentJob.status = 'DISPATCHED_TO_AGENT';
+                    this.emit('deploymentDispatched', { jobId, deviceIdentifier, commandId });
+                    return { jobId, status: 'DISPATCHED_TO_AGENT', commandId };
+                }
+                // If agent not reachable, fall through to legacy managers
+            } catch (e) {
+                // Fall through to legacy managers
+            }
+        }
+
         try {
             let manager;
             switch (registration.platform.toLowerCase()) {
@@ -128,9 +160,7 @@ class AutopilotDeployment extends EventEmitter {
                 default:
                     throw new Error(`Unsupported platform: ${registration.platform}`);
             }
-            
-            const profile = this.deploymentProfiles.get(registration.profileId);
-            
+
             deploymentJob.status = 'IN_PROGRESS';
             this.emit('deploymentStarted', { jobId, deviceIdentifier });
             

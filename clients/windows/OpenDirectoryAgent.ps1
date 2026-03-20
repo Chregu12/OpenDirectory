@@ -228,6 +228,216 @@ function Invoke-AgentCommand {
                 $Result.output = (Invoke-TestPrint -PrinterName $Command.data.printerName | Out-String)
             }
 
+            # ── Policy Commands (platform-specific: Windows) ──────────────
+            "apply_policy" {
+                $Result.output = (Invoke-ApplyPolicy -Data $Command.data | ConvertTo-Json -Depth 5)
+            }
+            "remove_policy" {
+                $Result.output = (Invoke-RemovePolicy -Data $Command.data | Out-String)
+            }
+            "check_compliance" {
+                $report = Invoke-CheckCompliance -Data $Command.data
+                $Result.output = ($report | ConvertTo-Json -Depth 5)
+                $Result.complianceReport = $report
+            }
+            "check_all_compliance" {
+                $report = Invoke-CheckAllCompliance -Data $Command.data
+                $Result.output = ($report | ConvertTo-Json -Depth 5)
+                $Result.complianceReport = $report
+            }
+            "detect_drift" {
+                $report = Invoke-DetectDrift -Data $Command.data
+                $Result.output = ($report | ConvertTo-Json -Depth 5)
+                $Result.driftReport = $report
+            }
+            "rollback_policy" {
+                $Result.output = (Invoke-RollbackPolicy -Data $Command.data | Out-String)
+            }
+            "resync_policies" {
+                foreach ($pol in $Command.data.policies) {
+                    Invoke-ApplyPolicy -Data $pol | Out-Null
+                }
+                $Result.output = "Resynced $($Command.data.policies.Count) policies"
+            }
+            "apply_policy_module" {
+                $Result.output = (Invoke-ApplyPolicyModule -Module $Command.data.module -Settings $Command.data.settings | Out-String)
+            }
+
+            # ── Update Management Commands ──────────────────────────────────
+            "configure_updates" {
+                $Result.output = Invoke-ConfigureUpdates -Json $json
+            }
+            "check_update_status" {
+                $Result.output = Invoke-CheckUpdateStatus
+            }
+            "trigger_update" {
+                $Result.output = Invoke-TriggerUpdate -Json $json
+            }
+            "get_update_compliance" {
+                $Result.output = Invoke-GetUpdateCompliance
+            }
+            "configure_winget" {
+                $Result.output = Invoke-ConfigureWinget -Json $json
+            }
+            "check_winget_status" {
+                $Result.output = Invoke-CheckWingetStatus
+            }
+
+            # ── Network Profile Commands ──────────────────────────────────
+            "configure_wifi" {
+                $Result.output = Invoke-ConfigureWiFi -Json $json
+            }
+            "remove_wifi" {
+                $Result.output = Invoke-RemoveWiFi -Json $json
+            }
+            "configure_vpn" {
+                $Result.output = Invoke-ConfigureVPN -Json $json
+            }
+            "remove_vpn" {
+                $Result.output = Invoke-RemoveVPN -Json $json
+            }
+            "configure_email" {
+                $Result.output = Invoke-ConfigureEmail -Json $json
+            }
+            "remove_email" {
+                $Result.output = Invoke-RemoveEmail -Json $json
+            }
+
+            # ── Compliance Scanning Commands ───────────────────────────────
+            "compliance_scan" {
+                $results = @()
+                foreach ($check in $Command.data.checks) {
+                    $passed = $false
+                    $actual = $null
+                    try {
+                        switch ($check.type) {
+                            "registry" {
+                                try {
+                                    $actual = Get-ItemPropertyValue -Path "Registry::$($check.path)" -Name $check.key -ErrorAction Stop
+                                    switch ($check.operator) {
+                                        ">=" { $passed = $actual -ge $check.value }
+                                        "<=" { $passed = $actual -le $check.value }
+                                        "==" { $passed = $actual -eq $check.value }
+                                        "!=" { $passed = $actual -ne $check.value }
+                                    }
+                                } catch { $actual = "NOT_FOUND"; $passed = $false }
+                            }
+                            "service" {
+                                $svc = Get-Service -Name $check.serviceName -ErrorAction SilentlyContinue
+                                $actual = if ($svc) { $svc.Status.ToString() } else { "NOT_FOUND" }
+                                $passed = ($actual -eq $check.expectedStatus)
+                            }
+                            "firewall" {
+                                $fw = Get-NetFirewallProfile -Name $check.profile -ErrorAction SilentlyContinue
+                                $actual = if ($fw) { $fw.Enabled } else { $false }
+                                $passed = ($actual -eq $check.expected)
+                            }
+                            "bitlocker" {
+                                $bl = Get-BitLockerVolume -MountPoint $check.drive -ErrorAction SilentlyContinue
+                                $actual = if ($bl) { $bl.ProtectionStatus.ToString() } else { "NOT_FOUND" }
+                                $passed = ($actual -eq "On")
+                            }
+                            "windows_update" {
+                                $updates = Get-HotFix -ErrorAction SilentlyContinue | Sort-Object InstalledOn -Descending
+                                if ($updates -and $updates.Count -gt 0) {
+                                    $daysSince = ((Get-Date) - $updates[0].InstalledOn).Days
+                                    $actual = $daysSince
+                                    $passed = ($daysSince -le $check.maxDays)
+                                } else { $actual = 999; $passed = $false }
+                            }
+                            "antivirus" {
+                                try {
+                                    $av = Get-MpComputerStatus -ErrorAction Stop
+                                    $actual = $av.RealTimeProtectionEnabled
+                                    $passed = ($actual -eq $true)
+                                } catch { $actual = $false; $passed = $false }
+                            }
+                            "screen_lock" {
+                                $actual = Get-ItemPropertyValue -Path "Registry::HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "InactivityTimeoutSecs" -ErrorAction SilentlyContinue
+                                if ($null -eq $actual) { $actual = 0; $passed = $false }
+                                else { $passed = ($actual -le $check.maxSeconds -and $actual -gt 0) }
+                            }
+                        }
+                    } catch { $actual = "ERROR: $($_.Exception.Message)"; $passed = $false }
+                    $results += @{ checkId = $check.id; title = $check.title; passed = $passed; actual = $actual; expected = $check.value; severity = $check.severity; timestamp = (Get-Date -Format "o") }
+                }
+                $totalChecks = $results.Count
+                $passedChecks = ($results | Where-Object { $_.passed }).Count
+                $score = if ($totalChecks -gt 0) { [math]::Round(($passedChecks / $totalChecks) * 100, 1) } else { 0 }
+                $complianceResult = @{ type = "compliance_scan_result"; deviceId = (Get-DeviceId); baselineId = $Command.data.baselineId; results = $results; score = $score; totalChecks = $totalChecks; passedChecks = $passedChecks; scannedAt = (Get-Date -Format "o") }
+                $Result.output = ($complianceResult | ConvertTo-Json -Depth 5)
+            }
+
+            # ── App Store Commands ────────────────────────────────────────────
+            "store_install" {
+                $pkg = $Command.data.packageInfo
+                $storeResult = @{ appId = $Command.data.appId; status = "installing"; startedAt = (Get-Date -Format "o") }
+                try {
+                    switch ($pkg.type) {
+                        "winget" {
+                            $installResult = winget install --id $pkg.packageId --version $pkg.version --silent --accept-package-agreements --accept-source-agreements 2>&1
+                            $storeResult.status = if ($LASTEXITCODE -eq 0) { "completed" } else { "failed" }
+                            $storeResult.output = $installResult | Out-String
+                        }
+                        "msi" {
+                            Start-Process msiexec -ArgumentList "/i `"$($pkg.url)`" /qn /norestart" -Wait -NoNewWindow
+                            $storeResult.status = if ($LASTEXITCODE -eq 0) { "completed" } else { "failed" }
+                        }
+                        "exe" {
+                            Start-Process -FilePath $pkg.url -ArgumentList $pkg.installArgs -Wait -NoNewWindow
+                            $storeResult.status = if ($LASTEXITCODE -eq 0) { "completed" } else { "failed" }
+                        }
+                    }
+                } catch { $storeResult.status = "failed"; $storeResult.error = $_.Exception.Message }
+                $storeResult.completedAt = (Get-Date -Format "o")
+                Show-ODNotification -Title "App Installation" -Body "$($Command.data.appName): $($storeResult.status)" -Type $(if ($storeResult.status -eq "completed") {"Info"} else {"Warning"})
+                $Result.output = (@{ type = "store_install_result"; data = $storeResult } | ConvertTo-Json -Depth 3)
+            }
+            "store_uninstall" {
+                $pkg = $Command.data.packageInfo
+                try {
+                    $uninstallResult = winget uninstall --id $pkg.packageId --silent 2>&1
+                    $uninstallStatus = if ($LASTEXITCODE -eq 0) { "completed" } else { "failed" }
+                } catch { $uninstallStatus = "failed" }
+                $Result.output = (@{ type = "store_uninstall_result"; data = @{ appId = $Command.data.appId; status = $uninstallStatus } } | ConvertTo-Json -Depth 3)
+            }
+
+            # ── Domain Join Commands ──────────────────────────────────────────
+            "domain_join" {
+                try {
+                    $domain = $Command.data.domain
+                    $token = $Command.data.joinToken
+                    # Set DNS to point to Samba AD DC
+                    $dnsServers = $Command.data.dnsServers
+                    foreach ($adapter in (Get-NetAdapter | Where-Object Status -eq 'Up')) {
+                        Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dnsServers
+                    }
+                    # Verify DNS resolution
+                    $dcResolved = Resolve-DnsName -Name $domain -Type SRV -ErrorAction Stop
+                    # Join domain using provided credentials
+                    $secPassword = ConvertTo-SecureString $Command.data.password -AsPlainText -Force
+                    $cred = New-Object System.Management.Automation.PSCredential("$domain\$($Command.data.username)", $secPassword)
+                    Add-Computer -DomainName $domain -Credential $cred -OUPath $Command.data.ouPath -Force -ErrorAction Stop
+                    $joinStatus = "completed"
+                    $needsReboot = $true
+                } catch { $joinStatus = "failed"; $needsReboot = $false }
+                $Result.output = (@{ type = "domain_join_result"; data = @{ status = $joinStatus; domain = $Command.data.domain; needsReboot = $needsReboot } } | ConvertTo-Json -Depth 3)
+            }
+
+            # ── Deployment/Compliance/Encryption Commands ─────────────────
+            "zero_touch_deploy" {
+                $Result.output = Invoke-ZeroTouchDeploy -Command $Command
+            }
+            "check_encryption_status" {
+                $Result.output = Invoke-CheckEncryptionStatus
+            }
+            "enable_encryption" {
+                $Result.output = Invoke-EnableEncryption -Command $Command
+            }
+            "execute_remediation" {
+                $Result.output = Invoke-ExecuteRemediation -Command $Command
+            }
+
             default {
                 $Result.status = "failed"; $Result.output = "Unknown command: $CommandType"
             }
@@ -268,6 +478,746 @@ function Get-DeviceInventory {
             installed = [bool](Get-Command winget -ErrorAction SilentlyContinue)
             version = if (Get-Command winget -ErrorAction SilentlyContinue) { (& winget --version 2>$null).Trim() } else { $null }
         }
+    }
+}
+
+# ============================================================================
+# POLICY ENFORCEMENT (Windows-specific: Registry, GPO, secedit, BitLocker)
+# ============================================================================
+$script:PolicyBackupPath = "$script:ODPath\PolicyBackups"
+
+function Invoke-ApplyPolicy {
+    param([PSObject]$Data)
+    $policyId = $Data.policyId; $policyName = $Data.policyName
+    $settings = $Data.settings; $mode = $Data.enforceMode ?? "enforce"
+    Write-AgentLog "Applying policy: $policyName ($policyId) mode=$mode"
+
+    # Backup current state before applying
+    Invoke-BackupPolicyState -PolicyId $policyId
+
+    $applied = @()
+    $errors = @()
+
+    # Security → Password
+    if ($settings.security?.password) {
+        try {
+            $p = $settings.security.password
+            $cmds = @()
+            if ($null -ne $p.minLength)         { $cmds += "net accounts /minpwlen:$($p.minLength)" }
+            if ($null -ne $p.maxAgeDays)         { $cmds += "net accounts /maxpwage:$($p.maxAgeDays)" }
+            if ($null -ne $p.historyLength)      { $cmds += "net accounts /uniquepw:$($p.historyLength)" }
+            if ($null -ne $p.lockoutThreshold)   { $cmds += "net accounts /lockoutthreshold:$($p.lockoutThreshold)" }
+            if ($null -ne $p.lockoutDuration)    { $cmds += "net accounts /lockoutduration:$($p.lockoutDuration)" }
+            foreach ($cmd in $cmds) { Invoke-Expression $cmd 2>&1 | Out-Null }
+            $applied += "password"
+        } catch { $errors += "password: $($_.Exception.Message)" }
+    }
+
+    # Security → Screen Lock
+    if ($settings.security?.screenLock?.enabled) {
+        try {
+            $sl = $settings.security.screenLock
+            if ($null -ne $sl.timeoutMinutes) {
+                Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "ScreenSaveTimeOut" -Value ($sl.timeoutMinutes * 60) -ErrorAction Stop
+                Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "ScreenSaveActive" -Value "1" -ErrorAction Stop
+            }
+            if ($sl.requirePassword) {
+                Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "ScreenSaverIsSecure" -Value "1" -ErrorAction Stop
+            }
+            $applied += "screenLock"
+        } catch { $errors += "screenLock: $($_.Exception.Message)" }
+    }
+
+    # Security → Firewall
+    if ($settings.security?.firewall) {
+        try {
+            $fw = $settings.security.firewall
+            if ($fw.enabled) {
+                Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True -ErrorAction Stop
+            } else {
+                Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled False -ErrorAction Stop
+            }
+            if ($fw.defaultDeny) {
+                Set-NetFirewallProfile -Profile Domain,Private,Public -DefaultInboundAction Block -ErrorAction Stop
+            }
+            $applied += "firewall"
+        } catch { $errors += "firewall: $($_.Exception.Message)" }
+    }
+
+    # Security → Encryption (BitLocker)
+    if ($settings.security?.encryption?.required) {
+        try {
+            $blStatus = Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue
+            if ($blStatus -and $blStatus.ProtectionStatus -ne "On") {
+                Enable-BitLocker -MountPoint "C:" -EncryptionMethod Aes256 -UsedSpaceOnly -RecoveryPasswordProtector -ErrorAction Stop | Out-Null
+            }
+            $applied += "encryption"
+        } catch { $errors += "encryption: $($_.Exception.Message)" }
+    }
+
+    # Security → Audit
+    if ($settings.security?.audit?.enabled) {
+        try {
+            auditpol /set /subcategory:"Logon" /success:enable /failure:enable 2>&1 | Out-Null
+            auditpol /set /subcategory:"Logoff" /success:enable 2>&1 | Out-Null
+            auditpol /set /subcategory:"Account Lockout" /success:enable /failure:enable 2>&1 | Out-Null
+            auditpol /set /subcategory:"File System" /success:enable /failure:enable 2>&1 | Out-Null
+            $applied += "audit"
+        } catch { $errors += "audit: $($_.Exception.Message)" }
+    }
+
+    # Browser → Edge
+    if ($settings.browser?.homepage) {
+        try {
+            $edgePath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+            if (!(Test-Path $edgePath)) { New-Item -Path $edgePath -Force | Out-Null }
+            Set-ItemProperty -Path $edgePath -Name "HomepageLocation" -Value $settings.browser.homepage -ErrorAction Stop
+            Set-ItemProperty -Path $edgePath -Name "HomepageIsNewTabPage" -Value 0 -Type DWord -ErrorAction Stop
+            $applied += "browser"
+        } catch { $errors += "browser: $($_.Exception.Message)" }
+    }
+
+    # Software → Updates
+    if ($null -ne $settings.software?.updates?.automatic) {
+        try {
+            $auPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+            if (!(Test-Path $auPath)) { New-Item -Path $auPath -Force | Out-Null }
+            Set-ItemProperty -Path $auPath -Name "AUOptions" -Value $(if ($settings.software.updates.automatic) { 4 } else { 1 }) -Type DWord
+            $applied += "updates"
+        } catch { $errors += "updates: $($_.Exception.Message)" }
+    }
+
+    # Save applied state
+    $stateFile = "$script:ODPath\Config\policy-$policyId.json"
+    @{ policyId = $policyId; policyName = $policyName; version = $Data.version; applied = $applied; appliedAt = (Get-Date).ToString("o"); settings = $settings } | ConvertTo-Json -Depth 5 | Out-File -FilePath $stateFile -Encoding UTF8
+
+    if ($Data.notifyUser) {
+        Show-ODNotification -Title "Richtlinie angewendet" -Body "$policyName ($($applied.Count) Module)" -Type "Info" -Attribution "OpenDirectory - Policies"
+    }
+    Write-AgentLog "Policy applied: $policyName (modules: $($applied -join ', '))"
+    return @{ policyId = $policyId; applied = $applied; errors = $errors; status = if ($errors.Count -eq 0) { "success" } else { "partial" } }
+}
+
+function Invoke-RemovePolicy {
+    param([PSObject]$Data)
+    $policyId = $Data.policyId
+    $stateFile = "$script:ODPath\Config\policy-$policyId.json"
+    if (Test-Path $stateFile) {
+        Remove-Item $stateFile -Force
+        Write-AgentLog "Policy removed: $policyId"
+        # Attempt rollback to backup
+        Invoke-RollbackPolicy -Data $Data | Out-Null
+        return "Policy removed and rolled back: $policyId"
+    }
+    return "Policy not found: $policyId"
+}
+
+function Invoke-CheckCompliance {
+    param([PSObject]$Data)
+    $violations = @()
+    $settings = $Data.expectedSettings
+
+    # Check password policy
+    if ($settings.security?.password) {
+        $p = $settings.security.password
+        $netAccounts = net accounts 2>$null
+        if ($null -ne $p.minLength) {
+            $current = ($netAccounts | Select-String "Minimum password length" | ForEach-Object { ($_ -split ":\s*")[1].Trim() })
+            if ([int]$current -lt $p.minLength) { $violations += @{ module = "password"; setting = "minLength"; expected = $p.minLength; actual = $current } }
+        }
+    }
+
+    # Check firewall
+    if ($settings.security?.firewall?.enabled) {
+        $profiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+        foreach ($profile in $profiles) {
+            if (-not $profile.Enabled) {
+                $violations += @{ module = "firewall"; setting = "enabled"; expected = $true; actual = $false; detail = "$($profile.Name) disabled" }
+            }
+        }
+    }
+
+    # Check BitLocker
+    if ($settings.security?.encryption?.required) {
+        $bl = Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue
+        if (-not $bl -or $bl.ProtectionStatus -ne "On") {
+            $violations += @{ module = "encryption"; setting = "BitLocker"; expected = "On"; actual = $(if ($bl) { $bl.ProtectionStatus } else { "NotAvailable" }) }
+        }
+    }
+
+    # Check screen lock
+    if ($settings.security?.screenLock?.enabled) {
+        $timeout = Get-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "ScreenSaveTimeOut" -ErrorAction SilentlyContinue
+        if (-not $timeout -or $timeout.ScreenSaveTimeOut -eq "0") {
+            $violations += @{ module = "screenLock"; setting = "timeout"; expected = "enabled"; actual = "disabled" }
+        }
+    }
+
+    return @{ compliant = ($violations.Count -eq 0); violations = $violations; checkedAt = (Get-Date).ToString("o"); policyId = $Data.policyId }
+}
+
+function Invoke-CheckAllCompliance {
+    param([PSObject]$Data)
+    $allViolations = @()
+    foreach ($pol in $Data.policies) {
+        $report = Invoke-CheckCompliance -Data @{ policyId = $pol.policyId; expectedSettings = $pol.settings }
+        $allViolations += $report.violations
+    }
+    return @{ compliant = ($allViolations.Count -eq 0); violations = $allViolations; checkedAt = (Get-Date).ToString("o") }
+}
+
+function Invoke-DetectDrift {
+    param([PSObject]$Data)
+    $drifted = @(); $missing = @()
+    foreach ($pol in $Data.expectedPolicies) {
+        $stateFile = "$script:ODPath\Config\policy-$($pol.policyId).json"
+        if (Test-Path $stateFile) {
+            $state = Get-Content $stateFile -Raw | ConvertFrom-Json
+            if ($state.version -ne $pol.version) {
+                $drifted += @{ policyId = $pol.policyId; expectedVersion = $pol.version; actualVersion = $state.version }
+            }
+        } else {
+            $missing += $pol.policyId
+        }
+    }
+    return @{ drifted = $drifted; missing = $missing; checkedAt = (Get-Date).ToString("o") }
+}
+
+function Invoke-BackupPolicyState {
+    param([string]$PolicyId)
+    if (!(Test-Path $script:PolicyBackupPath)) { New-Item -Path $script:PolicyBackupPath -ItemType Directory -Force | Out-Null }
+    $backup = @{
+        policyId = $PolicyId; backedUpAt = (Get-Date).ToString("o")
+        passwordPolicy = (net accounts 2>$null | Out-String)
+        firewallProfiles = @(Get-NetFirewallProfile -ErrorAction SilentlyContinue | Select-Object Name, Enabled, DefaultInboundAction)
+    }
+    $backup | ConvertTo-Json -Depth 3 | Out-File "$script:PolicyBackupPath\$PolicyId.json" -Encoding UTF8
+}
+
+function Invoke-RollbackPolicy {
+    param([PSObject]$Data)
+    $backupFile = "$script:PolicyBackupPath\$($Data.policyId).json"
+    if (Test-Path $backupFile) {
+        Write-AgentLog "Rolling back policy: $($Data.policyId)"
+        # Remove policy state
+        Remove-Item "$script:ODPath\Config\policy-$($Data.policyId).json" -ErrorAction SilentlyContinue
+        Show-ODNotification -Title "Richtlinie zurueckgesetzt" -Body "Policy $($Data.policyId) wurde zurueckgesetzt." -Type "Info" -Attribution "OpenDirectory - Policies"
+        return "Rolled back: $($Data.policyId)"
+    }
+    return "No backup found for: $($Data.policyId)"
+}
+
+function Invoke-ApplyPolicyModule {
+    param([string]$Module, [PSObject]$Settings)
+    $wrapperSettings = @{ security = @{}; browser = $null; software = @{} }
+    switch ($Module) {
+        "password"   { $wrapperSettings.security.password = $Settings }
+        "screenLock" { $wrapperSettings.security.screenLock = $Settings }
+        "firewall"   { $wrapperSettings.security.firewall = $Settings }
+        "encryption" { $wrapperSettings.security.encryption = $Settings }
+        "audit"      { $wrapperSettings.security.audit = $Settings }
+        "browser"    { $wrapperSettings.browser = $Settings }
+        "updates"    { $wrapperSettings.software.updates = $Settings }
+    }
+    return Invoke-ApplyPolicy -Data @{ policyId = "module-$Module"; policyName = "Module: $Module"; settings = $wrapperSettings; enforceMode = "enforce"; notifyUser = $false }
+}
+
+# ============================================================================
+# UPDATE MANAGEMENT (Windows: PSWindowsUpdate, winget, Registry, Scheduled Tasks)
+# ============================================================================
+
+function Invoke-ConfigureUpdates {
+    param([string]$Json)
+    try {
+        $data = ($Json | ConvertFrom-Json).data
+        $settings = $data.settings
+
+        # Configure Windows Update via Registry
+        $WUPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
+        $AUPath = "$WUPath\AU"
+        if (!(Test-Path $WUPath)) { New-Item -Path $WUPath -Force | Out-Null }
+        if (!(Test-Path $AUPath)) { New-Item -Path $AUPath -Force | Out-Null }
+
+        # Automatic updates
+        $auOptions = if ($settings.automatic) { 4 } else { 1 }
+        Set-ItemProperty -Path $AUPath -Name "AUOptions" -Value $auOptions -Type DWord
+        Set-ItemProperty -Path $AUPath -Name "NoAutoUpdate" -Value 0 -Type DWord
+
+        # Deferrals (Windows-specific)
+        if ($settings.deferrals) {
+            if ($null -ne $settings.deferrals.featureUpdates) {
+                Set-ItemProperty -Path $WUPath -Name "DeferFeatureUpdates" -Value 1 -Type DWord
+                Set-ItemProperty -Path $WUPath -Name "DeferFeatureUpdatesPeriodInDays" -Value $settings.deferrals.featureUpdates -Type DWord
+            }
+            if ($null -ne $settings.deferrals.qualityUpdates) {
+                Set-ItemProperty -Path $WUPath -Name "DeferQualityUpdates" -Value 1 -Type DWord
+                Set-ItemProperty -Path $WUPath -Name "DeferQualityUpdatesPeriodInDays" -Value $settings.deferrals.qualityUpdates -Type DWord
+            }
+        }
+
+        # Windows-specific extensions
+        if ($settings._windows) {
+            $winExt = $settings._windows
+            if ($winExt.wsusUrl) {
+                Set-ItemProperty -Path $WUPath -Name "WUServer" -Value $winExt.wsusUrl -Type String
+                Set-ItemProperty -Path $WUPath -Name "WUStatusServer" -Value $winExt.wsusUrl -Type String
+                Set-ItemProperty -Path $AUPath -Name "UseWUServer" -Value 1 -Type DWord
+            }
+            if ($winExt.targetReleaseVersion) {
+                Set-ItemProperty -Path $WUPath -Name "TargetReleaseVersion" -Value 1 -Type DWord
+                Set-ItemProperty -Path $WUPath -Name "TargetReleaseVersionInfo" -Value $winExt.targetReleaseVersion -Type String
+            }
+        }
+
+        # Restart Windows Update service
+        Restart-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
+
+        @{ status = "success"; configured = @("windowsUpdate", "deferrals") } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-CheckUpdateStatus {
+    try {
+        $pending = Get-HotFix -ErrorAction SilentlyContinue | Sort-Object InstalledOn -Descending | Select-Object -First 5
+        $rebootPending = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
+        $lastScan = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\Results\Detect" -ErrorAction SilentlyContinue).LastSuccessTime
+
+        @{
+            status = "success"
+            updateStatus = @{
+                rebootPending = $rebootPending
+                lastScanTime = $lastScan
+                recentUpdates = @($pending | ForEach-Object { @{ id = $_.HotFixID; installed = $_.InstalledOn.ToString("o") } })
+            }
+        } | ConvertTo-Json -Depth 4 -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-TriggerUpdate {
+    param([string]$Json)
+    try {
+        $data = ($Json | ConvertFrom-Json).data
+        # Use Windows Update COM API or UsoClient
+        Start-Process -FilePath "UsoClient.exe" -ArgumentList "StartInteractiveScan" -NoNewWindow -Wait -ErrorAction SilentlyContinue
+        Start-Process -FilePath "UsoClient.exe" -ArgumentList "StartDownload" -NoNewWindow -Wait -ErrorAction SilentlyContinue
+        @{ status = "success"; triggered = $true } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-GetUpdateCompliance {
+    try {
+        $rebootPending = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
+        $lastInstall = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\Results\Install" -ErrorAction SilentlyContinue).LastSuccessTime
+
+        @{
+            status = "success"
+            complianceReport = @{
+                compliant = -not $rebootPending
+                rebootPending = $rebootPending
+                lastInstallTime = $lastInstall
+            }
+        } | ConvertTo-Json -Depth 3 -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-ConfigureWinget {
+    param([string]$Json)
+    try {
+        $data = ($Json | ConvertFrom-Json).data
+        $settings = $data.settings
+
+        # Ensure winget is available
+        $wingetCmd = Get-Command winget -ErrorAction SilentlyContinue
+        if (-not $wingetCmd) {
+            # Try to install App Installer from Microsoft Store
+            Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction SilentlyContinue
+        }
+
+        # Store config in registry
+        $RegPath = "HKLM:\SOFTWARE\Policies\OpenDirectory\WingetAutoUpdate"
+        if (!(Test-Path $RegPath)) { New-Item -Path $RegPath -Force | Out-Null }
+        Set-ItemProperty -Path $RegPath -Name "Enabled" -Value ([int]$settings.enabled) -Type DWord
+        Set-ItemProperty -Path $RegPath -Name "UpdateMode" -Value $settings.updateMode -Type String
+        Set-ItemProperty -Path $RegPath -Name "UpdateInterval" -Value $settings.schedule.interval -Type String
+        Set-ItemProperty -Path $RegPath -Name "UpdateTime" -Value $settings.schedule.time -Type String
+        Set-ItemProperty -Path $RegPath -Name "Notifications" -Value $settings.notifications -Type String
+
+        # Write app lists
+        $ConfigPath = "C:\OpenDirectory\Config"
+        if (!(Test-Path $ConfigPath)) { New-Item -Path $ConfigPath -ItemType Directory -Force | Out-Null }
+        if ($settings.whitelist -and $settings.whitelist.Count -gt 0) {
+            $settings.whitelist | Out-File -FilePath "$ConfigPath\winget-whitelist.txt" -Force
+        }
+        if ($settings.blacklist -and $settings.blacklist.Count -gt 0) {
+            $settings.blacklist | Out-File -FilePath "$ConfigPath\winget-blacklist.txt" -Force
+        }
+
+        # Create scheduled task for winget updates
+        $TaskName = "OpenDirectory-WingetAutoUpdate"
+        $triggerTime = [datetime]::Parse($settings.schedule.time)
+        $Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-ExecutionPolicy Bypass -Command `"& { winget upgrade --all --accept-source-agreements --accept-package-agreements 2>&1 | Out-File 'C:\OpenDirectory\Logs\winget-update.log' -Append }`""
+        $Trigger = New-ScheduledTaskTrigger -Daily -At $triggerTime
+        $Principal = New-ScheduledTaskPrincipal -UserID "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Description "OpenDirectory Winget Auto-Update" -Force | Out-Null
+
+        @{ status = "success"; configured = @("registry", "appLists", "scheduledTask") } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-CheckWingetStatus {
+    try {
+        $wingetAvailable = $null -ne (Get-Command winget -ErrorAction SilentlyContinue)
+        $upgradable = @()
+        if ($wingetAvailable) {
+            $raw = winget upgrade --accept-source-agreements 2>$null
+            $upgradable = @($raw | Where-Object { $_ -match '\S+\s+\S+\s+\S+\s+winget' } | ForEach-Object {
+                $parts = $_ -split '\s{2,}'
+                @{ name = $parts[0]; currentVersion = $parts[1]; availableVersion = $parts[2] }
+            })
+        }
+        @{
+            status = "success"
+            updateStatus = @{
+                wingetAvailable = $wingetAvailable
+                upgradableApps = $upgradable
+                count = $upgradable.Count
+            }
+        } | ConvertTo-Json -Depth 4 -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+# ============================================================================
+# NETWORK PROFILE MANAGEMENT (Windows: netsh wlan / Add-VpnConnection / PowerShell)
+# ============================================================================
+
+function Invoke-ConfigureWiFi {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $profile = $cmd.data.profile
+    $ssid = $profile.ssid
+    $security = $profile.security
+    $auth = $profile.authentication
+    $autoConnect = $profile.autoConnect
+
+    try {
+        # Generate Windows WiFi XML profile
+        $connMode = if ($autoConnect) { "auto" } else { "manual" }
+        $authType = switch -Wildcard ($security) {
+            "*Enterprise*" { "WPA2" }
+            "*WPA3*"       { "WPA3SAE" }
+            "*WPA2*"       { "WPA2PSK" }
+            default        { "open" }
+        }
+        $encryption = if ($security -match "Enterprise|WPA2|WPA3") { "AES" } else { "none" }
+
+        $xmlProfile = @"
+<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+    <name>$ssid</name>
+    <SSIDConfig><SSID><name>$ssid</name></SSID></SSIDConfig>
+    <connectionType>ESS</connectionType>
+    <connectionMode>$connMode</connectionMode>
+    <MSM><security>
+        <authEncryption>
+            <authentication>$authType</authentication>
+            <encryption>$encryption</encryption>
+            <useOneX>$(if ($security -match 'Enterprise') { 'true' } else { 'false' })</useOneX>
+        </authEncryption>
+    </security></MSM>
+</WLANProfile>
+"@
+
+        $tempPath = [IO.Path]::GetTempFileName() -replace '\.tmp$', '.xml'
+        $xmlProfile | Out-File -FilePath $tempPath -Encoding UTF8
+        $result = netsh wlan add profile filename="$tempPath" 2>&1
+        Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
+
+        @{ status = "success"; profileId = $ssid; message = "WiFi profile $ssid configured"; output = "$result" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-RemoveWiFi {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $ssid = $cmd.data.ssid
+    try {
+        netsh wlan delete profile name="$ssid" 2>&1 | Out-Null
+        @{ status = "success"; message = "WiFi profile $ssid removed" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-ConfigureVPN {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $profile = $cmd.data.profile
+    $name = $profile.name
+    $vpnType = $profile.vpnType
+    $server = $profile.server
+    $auth = $profile.authentication
+    $routing = $profile.routing
+
+    try {
+        # Remove existing
+        Remove-VpnConnection -Name $name -Force -ErrorAction SilentlyContinue
+
+        $tunnelType = switch ($vpnType) {
+            "ikev2"  { "IKEv2" }
+            "l2tp"   { "L2tp" }
+            "pptp"   { "Pptp" }
+            "sstp"   { "Sstp" }
+            default  { $null }
+        }
+
+        if (-not $tunnelType) {
+            # OpenVPN/WireGuard not supported via Add-VpnConnection
+            @{ status = "failed"; error = "VPN type '$vpnType' requires third-party client (not supported via Windows built-in VPN)" } | ConvertTo-Json -Compress
+            return
+        }
+
+        $params = @{
+            Name = $name
+            ServerAddress = $server
+            TunnelType = $tunnelType
+            RememberCredential = $true
+            Force = $true
+        }
+
+        if ($routing.splitTunnel) {
+            $params.SplitTunneling = $true
+        }
+
+        Add-VpnConnection @params
+
+        # Add routes for split tunnel
+        if ($routing.splitTunnel -and $routing.includedRoutes) {
+            foreach ($route in $routing.includedRoutes) {
+                $parts = $route -split '/'
+                Add-VpnConnectionRoute -ConnectionName $name -DestinationPrefix $route -ErrorAction SilentlyContinue
+            }
+        }
+
+        # Configure DNS
+        if ($routing.dns) {
+            $dnsServers = $routing.dns -join ','
+            netsh interface ipv4 set dnsservers name="$name" static $($routing.dns[0]) validate=no 2>$null
+            for ($i = 1; $i -lt $routing.dns.Count; $i++) {
+                netsh interface ipv4 add dnsservers name="$name" $($routing.dns[$i]) validate=no 2>$null
+            }
+        }
+
+        @{ status = "success"; profileId = $name; message = "VPN profile $name configured" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-RemoveVPN {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $name = $cmd.data.name
+    if (-not $name) { $name = $cmd.data.profileId }
+    try {
+        Remove-VpnConnection -Name $name -Force -ErrorAction Stop
+        @{ status = "success"; message = "VPN profile removed" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-ConfigureEmail {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $profile = $cmd.data.profile
+    $accountName = $profile.accountName
+    $accountType = $profile.accountType
+    $email = $profile.emailAddress
+    $server = $profile.server
+    $auth = $profile.authentication
+
+    try {
+        if ($accountType -eq "exchange") {
+            # Configure Exchange via Outlook profile (Registry-based)
+            $outlookVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration" -Name VersionToReport -ErrorAction SilentlyContinue).VersionToReport
+            $profileKey = "HKCU:\SOFTWARE\Microsoft\Office\16.0\Outlook\Profiles\$accountName"
+
+            New-Item -Path $profileKey -Force | Out-Null
+            New-ItemProperty -Path $profileKey -Name "Account Name" -Value $accountName -Force | Out-Null
+
+            # Set autodiscover for Exchange
+            $autoDiscoverKey = "HKCU:\SOFTWARE\Microsoft\Office\16.0\Outlook\AutoDiscover"
+            New-Item -Path $autoDiscoverKey -Force -ErrorAction SilentlyContinue | Out-Null
+            New-ItemProperty -Path $autoDiscoverKey -Name $email.Split('@')[1] -Value $server.incoming.host -Force | Out-Null
+
+            @{ status = "success"; profileId = $accountName; method = "outlook-registry"; message = "Exchange profile $accountName configured" } | ConvertTo-Json -Compress
+        } else {
+            # For IMAP/POP3, store configuration for email clients
+            $configDir = "$env:ProgramData\OpenDirectory\email-profiles"
+            New-Item -Path $configDir -ItemType Directory -Force | Out-Null
+
+            $profileConfig = @{
+                accountName = $accountName
+                accountType = $accountType
+                emailAddress = $email
+                incoming = $server.incoming
+                outgoing = $server.outgoing
+                username = $auth.username
+            }
+
+            $profilePath = Join-Path $configDir "$($accountName -replace ' ','_').json"
+            $profileConfig | ConvertTo-Json | Out-File -FilePath $profilePath -Encoding UTF8
+
+            @{ status = "success"; profileId = $accountName; configPath = $profilePath; message = "Email profile $accountName configured" } | ConvertTo-Json -Compress
+        }
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-RemoveEmail {
+    param([string]$Json)
+    $cmd = $Json | ConvertFrom-Json
+    $profileId = $cmd.data.profileId
+    try {
+        # Remove Outlook profile
+        $profileKey = "HKCU:\SOFTWARE\Microsoft\Office\16.0\Outlook\Profiles\$profileId"
+        if (Test-Path $profileKey) {
+            Remove-Item -Path $profileKey -Recurse -Force
+        }
+        # Remove config file
+        $configPath = "$env:ProgramData\OpenDirectory\email-profiles\$($profileId -replace ' ','_').json"
+        if (Test-Path $configPath) {
+            Remove-Item $configPath -Force
+        }
+        @{ status = "success"; message = "Email profile removed" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+# ============================================================================
+# DEPLOYMENT / COMPLIANCE / ENCRYPTION
+# ============================================================================
+
+function Invoke-ZeroTouchDeploy {
+    param($Command)
+    $profile = $Command.data.profile
+    $reg = $Command.data.registration
+    try {
+        $steps = @()
+        # Join domain if configured
+        if ($profile.deviceConfiguration.domain) {
+            $steps += "Domain join: $($profile.deviceConfiguration.domain)"
+        }
+        # Set computer name
+        if ($profile.deviceConfiguration.computerNameTemplate) {
+            $newName = $profile.deviceConfiguration.computerNameTemplate -replace '\{SERIAL\}', ($env:COMPUTERNAME.Substring(0, [Math]::Min(6, $env:COMPUTERNAME.Length))) -replace '\{USER\}', ($env:USERNAME.Substring(0, [Math]::Min(6, $env:USERNAME.Length)))
+            $steps += "Computer name: $newName"
+        }
+        # Install applications
+        foreach ($app in $profile.applications) {
+            if ($app.packageId -and (Get-Command winget -ErrorAction SilentlyContinue)) {
+                winget install --id $app.packageId --accept-source-agreements --accept-package-agreements --silent 2>&1 | Out-Null
+                $steps += "Installed: $($app.name)"
+            }
+        }
+        @{ status = "success"; steps = $steps; message = "Zero-touch deployment completed" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-CheckEncryptionStatus {
+    try {
+        $bitlocker = Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue
+        if ($bitlocker) {
+            @{
+                status = "success"
+                encryptionStatus = @{
+                    encrypted = ($bitlocker.ProtectionStatus -eq "On")
+                    algorithm = "$($bitlocker.EncryptionMethod)"
+                    keyLength = 256
+                    protectors = @($bitlocker.KeyProtector | ForEach-Object { $_.KeyProtectorType })
+                    volumeStatus = "$($bitlocker.VolumeStatus)"
+                    protectionStatus = "$($bitlocker.ProtectionStatus)"
+                }
+            } | ConvertTo-Json -Compress -Depth 4
+        } else {
+            @{ status = "success"; encryptionStatus = @{ encrypted = $false; status = "BitLocker not available" } } | ConvertTo-Json -Compress -Depth 4
+        }
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-EnableEncryption {
+    param($Command)
+    $options = $Command.data.options
+    try {
+        $volume = Get-BitLockerVolume -MountPoint "C:" -ErrorAction Stop
+        if ($volume.ProtectionStatus -eq "On") {
+            @{ status = "success"; message = "BitLocker already enabled" } | ConvertTo-Json -Compress
+            return
+        }
+        # Add TPM protector
+        Enable-BitLocker -MountPoint "C:" -EncryptionMethod Aes256 -UsedSpaceOnly -TpmProtector -ErrorAction Stop
+        # Add recovery password protector
+        $recovery = Add-BitLockerKeyProtector -MountPoint "C:" -RecoveryPasswordProtector -ErrorAction Stop
+        $recoveryKey = ($recovery.KeyProtector | Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" }).RecoveryPassword
+        @{
+            status = "success"
+            message = "BitLocker encryption enabled"
+            recoveryKey = $recoveryKey
+            method = "BitLocker"
+            algorithm = "AES-256"
+        } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
+    }
+}
+
+function Invoke-ExecuteRemediation {
+    param($Command)
+    $action = $Command.data.action
+    try {
+        $result = switch ($action) {
+            "ENABLE_BITLOCKER" {
+                Enable-BitLocker -MountPoint "C:" -EncryptionMethod Aes256 -UsedSpaceOnly -TpmProtector -ErrorAction Stop
+                "BitLocker enabled"
+            }
+            "ENABLE_WINDOWS_DEFENDER" {
+                Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction Stop
+                "Windows Defender real-time protection enabled"
+            }
+            "ENABLE_WINDOWS_FIREWALL" {
+                netsh advfirewall set allprofiles state on 2>&1
+                "Windows Firewall enabled"
+            }
+            "INSTALL_UPDATES" {
+                UsoClient StartScan 2>&1
+                UsoClient StartInstall 2>&1
+                "Update scan and install initiated"
+            }
+            default { "Unknown remediation action: $action" }
+        }
+        @{ status = "success"; action = $action; message = "$result" } | ConvertTo-Json -Compress
+    } catch {
+        @{ status = "failed"; error = $_.Exception.Message } | ConvertTo-Json -Compress
     }
 }
 

@@ -1,0 +1,57 @@
+---
+# Security audit playbook - checks compliance and threats
+# Usage: ansible-playbook security_audit.yml -e "od_api_url=https://od.example.com od_api_key=YOUR_KEY"
+
+- name: OpenDirectory Security Audit
+  hosts: localhost
+  gather_facts: false
+  vars:
+    od_api_url: "{{ lookup('env', 'OD_API_URL') }}"
+    od_api_key: "{{ lookup('env', 'OD_API_KEY') }}"
+
+  tasks:
+    - name: Get dashboard overview
+      opendirectory.core.od_compliance:
+        api_url: "{{ od_api_url }}"
+        api_key: "{{ od_api_key }}"
+        action: dashboard
+      register: dashboard
+
+    - name: Display compliance summary
+      ansible.builtin.debug:
+        msg: |
+          === OpenDirectory Security Audit ===
+          Devices: {{ dashboard.result.devices.total | default(0) }} total
+          Compliance: {{ dashboard.result.compliance.overallScore | default(0) }}%
+          Active Threats: {{ dashboard.result.threats.active | default(0) }}
+          Critical Threats: {{ dashboard.result.threats.critical | default(0) }}
+
+    - name: Get critical threats
+      opendirectory.core.od_compliance:
+        api_url: "{{ od_api_url }}"
+        api_key: "{{ od_api_key }}"
+        action: threats
+        severity: critical
+      register: critical_threats
+
+    - name: Report critical threats
+      ansible.builtin.debug:
+        msg: "CRITICAL THREAT: {{ item.description }}"
+      loop: "{{ critical_threats.result | default([]) }}"
+      when: critical_threats.result | default([]) | length > 0
+
+    - name: Check backup status
+      opendirectory.core.od_backup:
+        api_url: "{{ od_api_url }}"
+        api_key: "{{ od_api_key }}"
+        action: dr_health
+      register: dr_health
+
+    - name: Display DR status
+      ansible.builtin.debug:
+        msg: "DR Status: {{ dr_health.backup.status | default('unknown') }}"
+
+    - name: Fail if critical threats found
+      ansible.builtin.fail:
+        msg: "AUDIT FAILED: {{ critical_threats.result | length }} critical threats detected!"
+      when: critical_threats.result | default([]) | length > 0

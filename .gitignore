@@ -257,6 +257,9 @@ ansible.cfg
 packaged.yaml
 samconfig.toml
 
+# OpenDirectory installation state
+.od-config
+
 # Custom OpenDirectory specific
 /services/*/node_modules/
 /services/*/dist/

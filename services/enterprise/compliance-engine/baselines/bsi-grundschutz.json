@@ -1,0 +1,70 @@
+{
+  "id": "bsi-grundschutz",
+  "name": "BSI IT-Grundschutz Kompendium",
+  "framework": "bsi",
+  "platform": "all",
+  "version": "2023.1",
+  "description": "BSI IT-Grundschutz baseline for German federal information security standards",
+  "checks": [
+    {
+      "id": "SYS.2.1.A3", "title": "Aktivierung von Authentisierungsmechanismen (Authentication mechanisms enabled)",
+      "category": "SYS.2.1 Allgemeiner Client", "severity": "critical",
+      "check": { "type": "policy", "setting": "PasswordRequired", "expected": true },
+      "remediation": { "type": "policy_set", "setting": "PasswordRequired", "value": true }
+    },
+    {
+      "id": "SYS.2.1.A4", "title": "Regelmäßige Datensicherung (Regular backups)",
+      "category": "SYS.2.1 Allgemeiner Client", "severity": "high",
+      "check": { "type": "system", "setting": "BackupConfigured", "expected": true },
+      "remediation": { "type": "manual", "description": "Configure automated backup schedule and verify backup integrity" }
+    },
+    {
+      "id": "SYS.2.1.A6", "title": "Einsatz von Virenschutzprogrammen (Antivirus deployment)",
+      "category": "SYS.2.1 Allgemeiner Client", "severity": "critical",
+      "check": { "type": "system", "setting": "AntivirusEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Install and configure centrally managed antivirus solution" }
+    },
+    {
+      "id": "SYS.2.1.A8", "title": "Absicherung des Bootvorgangs (Secure Boot)",
+      "category": "SYS.2.1 Allgemeiner Client", "severity": "high",
+      "check": { "type": "system", "setting": "SecureBoot", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable Secure Boot in UEFI/BIOS settings" }
+    },
+    {
+      "id": "OPS.1.1.3.A2", "title": "Festlegung von Verantwortlichkeiten und Regeln für Patch-Management (Patch management)",
+      "category": "OPS.1.1.3 Patch- und Änderungsmanagement", "severity": "high",
+      "check": { "type": "system", "setting": "AutoUpdateEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable and configure automated patch management" }
+    },
+    {
+      "id": "NET.3.1.A1", "title": "Einsatz einer Firewall (Firewall deployment)",
+      "category": "NET.3.1 Router und Switches", "severity": "critical",
+      "check": { "type": "system", "setting": "FirewallEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable and configure host-based firewall with deny-by-default policy" }
+    },
+    {
+      "id": "CON.1.A1", "title": "Verschlüsselung von Datenträgern (Disk encryption)",
+      "category": "CON.1 Kryptokonzept", "severity": "high",
+      "check": { "type": "system", "setting": "DiskEncryption", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable full-disk encryption with approved algorithms (AES-256)" }
+    },
+    {
+      "id": "SYS.2.1.A10", "title": "Bildschirmsperre konfigurieren (Screen lock configuration)",
+      "category": "SYS.2.1 Allgemeiner Client", "severity": "medium",
+      "check": { "type": "policy", "setting": "ScreenLockTimeout", "operator": "<=", "value": 600 },
+      "remediation": { "type": "policy_set", "setting": "ScreenLockTimeout", "value": 300 }
+    },
+    {
+      "id": "ORP.4.A1", "title": "Regelung für die Einrichtung von Benutzern und Benutzergruppen (User account management)",
+      "category": "ORP.4 Identitäts- und Berechtigungsmanagement", "severity": "high",
+      "check": { "type": "policy", "setting": "AdminAccountCount", "operator": "<=", "value": 5 },
+      "remediation": { "type": "manual", "description": "Review and reduce administrative accounts to minimum required" }
+    },
+    {
+      "id": "APP.1.1.A3", "title": "Sichere Konfiguration von Office-Produkten (Secure Office configuration)",
+      "category": "APP.1.1 Office-Produkte", "severity": "medium",
+      "check": { "type": "policy", "setting": "OfficeMacrosDisabled", "expected": true },
+      "remediation": { "type": "policy_set", "setting": "OfficeMacrosDisabled", "value": true }
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "id": "iso27001-annex-a",
+  "name": "ISO 27001:2022 Annex A Technical Controls",
+  "framework": "iso27001",
+  "platform": "all",
+  "version": "2022.1",
+  "description": "Technical controls from ISO/IEC 27001:2022 Annex A mapped to device compliance checks",
+  "checks": [
+    {
+      "id": "A.5.17", "title": "Authentication information - password complexity enforced",
+      "category": "A.5 Organizational Controls", "severity": "high",
+      "check": { "type": "policy", "setting": "PasswordComplexityEnabled", "expected": true },
+      "remediation": { "type": "policy_set", "setting": "PasswordComplexityEnabled", "value": true }
+    },
+    {
+      "id": "A.8.1", "title": "User endpoint devices - managed and secured",
+      "category": "A.8 Technological Controls", "severity": "high",
+      "check": { "type": "system", "setting": "DeviceManaged", "expected": true },
+      "remediation": { "type": "manual", "description": "Enroll device in MDM/UEM solution" }
+    },
+    {
+      "id": "A.8.5", "title": "Secure authentication - MFA enabled",
+      "category": "A.8 Technological Controls", "severity": "critical",
+      "check": { "type": "policy", "setting": "MultiFactorAuthEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable and enforce multi-factor authentication" }
+    },
+    {
+      "id": "A.8.7", "title": "Protection against malware",
+      "category": "A.8 Technological Controls", "severity": "critical",
+      "check": { "type": "system", "setting": "AntivirusEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Install and enable antimalware solution with real-time protection" }
+    },
+    {
+      "id": "A.8.8", "title": "Management of technical vulnerabilities - patching",
+      "category": "A.8 Technological Controls", "severity": "high",
+      "check": { "type": "system", "setting": "AutoUpdateEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable automatic security patch deployment" }
+    },
+    {
+      "id": "A.8.9", "title": "Configuration management - baseline enforced",
+      "category": "A.8 Technological Controls", "severity": "high",
+      "check": { "type": "system", "setting": "BaselineConfigured", "expected": true },
+      "remediation": { "type": "manual", "description": "Apply and enforce security configuration baseline" }
+    },
+    {
+      "id": "A.8.15", "title": "Logging - audit trail enabled",
+      "category": "A.8 Technological Controls", "severity": "high",
+      "check": { "type": "service", "name": "auditd", "property": "status", "expected": "running" },
+      "remediation": { "type": "command", "script": "systemctl enable auditd && systemctl start auditd" }
+    },
+    {
+      "id": "A.8.20", "title": "Networks security - firewall enabled",
+      "category": "A.8 Technological Controls", "severity": "critical",
+      "check": { "type": "system", "setting": "FirewallEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable and configure host-based firewall" }
+    },
+    {
+      "id": "A.8.24", "title": "Use of cryptography - encryption at rest",
+      "category": "A.8 Technological Controls", "severity": "critical",
+      "check": { "type": "system", "setting": "DiskEncryption", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable full-disk encryption on all endpoints" }
+    },
+    {
+      "id": "A.8.25", "title": "Secure development lifecycle - code signing",
+      "category": "A.8 Technological Controls", "severity": "medium",
+      "check": { "type": "policy", "setting": "OnlySignedSoftware", "expected": true },
+      "remediation": { "type": "policy_set", "setting": "OnlySignedSoftware", "value": true }
+    },
+    {
+      "id": "A.8.12", "title": "Data leakage prevention",
+      "category": "A.8 Technological Controls", "severity": "high",
+      "check": { "type": "policy", "setting": "DLPEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Configure and enable data loss prevention policies" }
+    }
+  ]
+}

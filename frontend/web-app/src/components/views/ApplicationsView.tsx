@@ -21,6 +21,8 @@ import {
   EllipsisVerticalIcon
 } from '@heroicons/react/24/outline';
 import { configApi, gatewayApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 import toast from 'react-hot-toast';
 
 interface Application {
@@ -38,6 +40,7 @@ interface Application {
 }
 
 export default function ApplicationsView() {
+  const { isSimple } = useUiMode();
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -172,6 +175,69 @@ export default function ApplicationsView() {
     );
   }
 
+  // ── Simple Mode ──
+  if (isSimple) {
+    const healthyApps = applications.filter(a => a.status === 'healthy');
+    const unhealthyApps = applications.filter(a => a.status === 'unhealthy');
+    const enabledApps = applications.filter(a => a.enabled);
+
+    return (
+      <SimpleViewLayout
+        hero={{
+          status: unhealthyApps.length === 0 && enabledApps.length > 0 ? 'ok' : 'critical',
+          title: unhealthyApps.length === 0 ? 'All Applications Healthy' : `${unhealthyApps.length} Application${unhealthyApps.length > 1 ? 's' : ''} Unhealthy`,
+          subtitle: `${enabledApps.length} of ${applications.length} applications enabled`,
+        }}
+        stats={[
+          { value: applications.length, label: 'Total', color: 'text-blue-600' },
+          { value: healthyApps.length, label: 'Healthy', color: 'text-green-600' },
+          { value: unhealthyApps.length, label: 'Unhealthy', color: unhealthyApps.length > 0 ? 'text-red-600' : 'text-gray-600' },
+          { value: enabledApps.length, label: 'Enabled', color: 'text-purple-600' },
+        ]}
+        sections={[{
+          title: 'Needs Attention',
+          items: unhealthyApps.map(app => {
+            const colors = getColorClasses(app.color);
+            return {
+              key: app.id,
+              icon: <div className={`w-8 h-8 ${colors.bg} rounded-lg flex items-center justify-center`}><app.icon className={`w-5 h-5 ${colors.text}`} /></div>,
+              title: app.name,
+              subtitle: `${app.category} · Port ${app.port}`,
+              trailing: <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700">unhealthy</span>,
+            };
+          }),
+        }]}
+      >
+        {/* Running Apps grid - custom content */}
+        {enabledApps.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Running Applications</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {enabledApps.slice(0, 6).map(app => {
+                const colors = getColorClasses(app.color);
+                return (
+                  <div key={app.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                    <div className={`w-8 h-8 ${colors.bg} rounded-lg flex items-center justify-center`}>
+                      <app.icon className={`w-4 h-4 ${colors.text}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{app.name}</p>
+                      <div className={`flex items-center gap-1 ${getStatusColor(app.status)}`}>
+                        {getStatusIcon(app.status)}
+                        <span className="text-xs capitalize">{app.status}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </SimpleViewLayout>
+    );
+  }
+
+  // ── Expert Mode ──
   return (
     <div className="p-6 space-y-6">
       {/* Header */}

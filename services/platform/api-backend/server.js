@@ -110,7 +110,7 @@ app.post('/api/devices/:id/refresh', async (req, res) => {
       await ssh.connect({
         host: CT2001_HOST,
         username: 'root',
-        password: 'your_password', // In production, use SSH keys
+        password: process.env.SSH_PASSWORD || '', // In production, use SSH keys
         port: 22
       });
 
@@ -154,7 +154,7 @@ app.post('/api/devices/:id/apps/install', async (req, res) => {
       await ssh.connect({
         host: CT2001_HOST,
         username: 'root',
-        password: 'your_password',
+        password: process.env.SSH_PASSWORD || '',
         port: 22
       });
 
@@ -229,7 +229,7 @@ app.delete('/api/devices/:id/apps/:appId', async (req, res) => {
       await ssh.connect({
         host: CT2001_HOST,
         username: 'root',
-        password: 'your_password',
+        password: process.env.SSH_PASSWORD || '',
         port: 22
       });
 
@@ -341,6 +341,71 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// System Resources API
+const os = require('os');
+
+app.get('/api/system/resources', (req, res) => {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+
+  res.json({
+    success: true,
+    data: {
+      ram: {
+        totalMB: Math.round(totalMem / 1024 / 1024),
+        usedMB: Math.round(usedMem / 1024 / 1024),
+        freeMB: Math.round(freeMem / 1024 / 1024),
+        usagePercent: Math.round((usedMem / totalMem) * 100),
+      },
+      cpu: {
+        cores: os.cpus().length,
+        model: os.cpus()[0]?.model || 'Unknown',
+      },
+      uptime: os.uptime(),
+      platform: os.platform(),
+      hostname: os.hostname(),
+    }
+  });
+});
+
+// Setup Wizard APIs
+let setupConfig = null;
+
+app.get('/api/config/setup-status', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      isFirstRun: setupConfig === null,
+      config: setupConfig,
+    }
+  });
+});
+
+app.get('/api/config/wizard/available-modules', (req, res) => {
+  res.json({
+    success: true,
+    data: [
+      { id: 'network', name: 'Netzwerk', ram: '192 MB', profile: 'network' },
+      { id: 'printers', name: 'Drucker', ram: '192 MB', profile: 'printers' },
+      { id: 'monitoring', name: 'Monitoring', ram: '448 MB', profile: 'monitoring' },
+      { id: 'security', name: 'Security', ram: '320 MB', profile: 'security' },
+      { id: 'lifecycle', name: 'Lifecycle', ram: '448 MB', profile: 'lifecycle' },
+    ]
+  });
+});
+
+app.post('/api/config/wizard/setup', (req, res) => {
+  const { orgName, modules, devices, completedAt } = req.body;
+  setupConfig = { orgName, modules, devices, completedAt };
+  console.log('Setup wizard completed:', setupConfig);
+  res.json({
+    success: true,
+    message: 'Setup completed',
+    data: setupConfig,
+  });
+});
+
 // Policy Management APIs
 app.get('/api/policies', (req, res) => {
   res.json({
@@ -371,6 +436,88 @@ app.get('/api/policies', (req, res) => {
         }
       }
     ]
+  });
+});
+
+// ── Device Enrollment APIs ──────────────────────────────────────────
+const crypto = require('crypto');
+
+// In-memory enrollment token store
+const enrollmentTokens = {};
+
+// Generate enrollment token
+app.post('/api/devices/enroll/token', (req, res) => {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+  enrollmentTokens[token] = {
+    token,
+    createdAt: new Date().toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    used: false,
+  };
+  res.json({
+    success: true,
+    data: { token, expiresAt: expiresAt.toISOString() },
+  });
+});
+
+// Enroll a device using a token
+app.post('/api/devices/enroll', (req, res) => {
+  const { token, hostname, platform, os: deviceOs, osVersion } = req.body;
+
+  if (!token || !enrollmentTokens[token]) {
+    return res.status(401).json({ success: false, error: 'Invalid enrollment token' });
+  }
+  const tokenData = enrollmentTokens[token];
+  if (tokenData.used || new Date(tokenData.expiresAt) < new Date()) {
+    return res.status(401).json({ success: false, error: 'Token expired or already used' });
+  }
+
+  // Mark token as used
+  tokenData.used = true;
+
+  const deviceId = `DEV-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  const newDevice = {
+    id: deviceId,
+    name: hostname || `Device-${deviceId}`,
+    platform: platform || 'unknown',
+    os: deviceOs || 'Unknown',
+    osVersion: osVersion || '',
+    status: 'online',
+    enrolledAt: new Date().toISOString(),
+    lastSeen: new Date().toISOString(),
+  };
+
+  // Add to device store
+  deviceStore[deviceId] = newDevice;
+
+  res.json({
+    success: true,
+    data: { deviceId, message: 'Device enrolled successfully', device: newDevice },
+  });
+});
+
+// Discover printers on the network (mock)
+app.get('/api/printers/discover', (req, res) => {
+  res.json({
+    success: true,
+    data: [
+      { name: 'HP LaserJet Pro M404n', ip: '192.168.1.200', protocol: 'ipp', status: 'online' },
+      { name: 'Brother HL-L2350DW', ip: '192.168.1.201', protocol: 'lpd', status: 'online' },
+    ],
+  });
+});
+
+// Add printer manually
+app.post('/api/printers', (req, res) => {
+  const { name, ip, protocol } = req.body;
+  if (!name || !ip) {
+    return res.status(400).json({ success: false, error: 'Name and IP are required' });
+  }
+  const printerId = `PRT-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  res.json({
+    success: true,
+    data: { id: printerId, name, ip, protocol: protocol || 'ipp', status: 'online' },
   });
 });
 
@@ -423,7 +570,7 @@ setInterval(async () => {
         await ssh.connect({
           host: CT2001_HOST,
           username: 'root',
-          password: 'your_password',
+          password: process.env.SSH_PASSWORD || '',
           port: 22,
           readyTimeout: 5000
         });

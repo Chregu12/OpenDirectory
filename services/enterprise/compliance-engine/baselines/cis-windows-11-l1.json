@@ -1,0 +1,68 @@
+{
+  "id": "cis-win11-l1",
+  "name": "CIS Microsoft Windows 11 Enterprise Level 1",
+  "framework": "cis",
+  "platform": "windows",
+  "version": "1.0.0",
+  "checks": [
+    {
+      "id": "1.1.1", "title": "Ensure 'Enforce password history' >= 24",
+      "category": "Account Policies/Password Policy", "severity": "high",
+      "check": { "type": "registry", "path": "HKLM\\SYSTEM\\CurrentControlSet\\Services\\Netlogon\\Parameters", "key": "PasswordHistorySize", "operator": ">=", "value": 24 },
+      "remediation": { "type": "registry_set", "path": "HKLM\\SYSTEM\\CurrentControlSet\\Services\\Netlogon\\Parameters", "key": "PasswordHistorySize", "value": 24 }
+    },
+    {
+      "id": "1.1.2", "title": "Ensure 'Maximum password age' <= 365",
+      "category": "Account Policies/Password Policy", "severity": "high",
+      "check": { "type": "registry", "key": "MaximumPasswordAge", "operator": "<=", "value": 365 },
+      "remediation": { "type": "policy_set", "setting": "MaximumPasswordAge", "value": 90 }
+    },
+    {
+      "id": "1.1.3", "title": "Ensure 'Minimum password length' >= 14",
+      "category": "Account Policies/Password Policy", "severity": "high",
+      "check": { "type": "registry", "key": "MinimumPasswordLength", "operator": ">=", "value": 14 },
+      "remediation": { "type": "policy_set", "setting": "MinimumPasswordLength", "value": 14 }
+    },
+    {
+      "id": "2.1.1", "title": "Ensure 'Account lockout threshold' <= 5",
+      "category": "Account Policies/Account Lockout", "severity": "high",
+      "check": { "type": "policy", "setting": "LockoutBadCount", "operator": "<=", "value": 5 },
+      "remediation": { "type": "policy_set", "setting": "LockoutBadCount", "value": 5 }
+    },
+    {
+      "id": "9.1.1", "title": "Ensure Windows Firewall Domain Profile is enabled",
+      "category": "Windows Firewall", "severity": "critical",
+      "check": { "type": "firewall", "profile": "Domain", "setting": "Enabled", "expected": true },
+      "remediation": { "type": "powershell", "script": "Set-NetFirewallProfile -Profile Domain -Enabled True" }
+    },
+    {
+      "id": "9.2.1", "title": "Ensure Windows Firewall Private Profile is enabled",
+      "category": "Windows Firewall", "severity": "critical",
+      "check": { "type": "firewall", "profile": "Private", "setting": "Enabled", "expected": true },
+      "remediation": { "type": "powershell", "script": "Set-NetFirewallProfile -Profile Private -Enabled True" }
+    },
+    {
+      "id": "18.1.1", "title": "Ensure BitLocker is enabled on OS drive",
+      "category": "Encryption", "severity": "critical",
+      "check": { "type": "bitlocker", "drive": "C:", "expected": "On" },
+      "remediation": { "type": "powershell", "script": "Enable-BitLocker -MountPoint 'C:' -EncryptionMethod XtsAes256 -UsedSpaceOnly" }
+    },
+    {
+      "id": "18.2.1", "title": "Ensure Windows Defender Real-Time Protection is enabled",
+      "category": "Antivirus", "severity": "critical",
+      "check": { "type": "defender", "setting": "RealTimeProtection", "expected": true },
+      "remediation": { "type": "powershell", "script": "Set-MpPreference -DisableRealtimeMonitoring $false" }
+    },
+    {
+      "id": "18.3.1", "title": "Ensure Secure Boot is enabled",
+      "category": "System Security", "severity": "high",
+      "check": { "type": "system", "setting": "SecureBoot", "expected": true }
+    },
+    {
+      "id": "18.4.1", "title": "Ensure UAC is enabled",
+      "category": "System Security", "severity": "high",
+      "check": { "type": "registry", "path": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", "key": "EnableLUA", "operator": "==", "value": 1 },
+      "remediation": { "type": "registry_set", "path": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", "key": "EnableLUA", "value": 1 }
+    }
+  ]
+}

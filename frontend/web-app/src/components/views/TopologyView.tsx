@@ -17,6 +17,8 @@ import {
   XCircleIcon
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 
 interface ServiceNode {
   id: string;
@@ -31,6 +33,7 @@ interface ServiceNode {
 }
 
 export default function TopologyView() {
+  const { isSimple } = useUiMode();
   const [services, setServices] = useState<ServiceNode[]>([]);
   const [selectedService, setSelectedService] = useState<ServiceNode | null>(null);
   const [loading, setLoading] = useState(true);
@@ -195,6 +198,46 @@ export default function TopologyView() {
     );
   }
 
+  // ── Simple Mode ──
+  if (isSimple) {
+    const healthyServices = services.filter(s => s.status === 'healthy');
+    const unhealthyServices = services.filter(s => s.status === 'unhealthy');
+    const unknownServices = services.filter(s => s.status === 'unknown');
+
+    return (
+      <SimpleViewLayout
+        hero={{
+          status: unhealthyServices.length === 0 ? 'ok' : 'critical',
+          title: unhealthyServices.length === 0 ? 'All Services Connected' : `${unhealthyServices.length} Service${unhealthyServices.length > 1 ? 's' : ''} Down`,
+          subtitle: `${healthyServices.length} of ${services.length} services healthy`,
+        }}
+        stats={[
+          { value: services.length, label: 'Total Services', color: 'text-blue-600' },
+          { value: healthyServices.length, label: 'Healthy', color: 'text-green-600' },
+          { value: unhealthyServices.length, label: 'Unhealthy', color: unhealthyServices.length > 0 ? 'text-red-600' : 'text-gray-600' },
+          { value: unknownServices.length, label: 'Unknown', color: 'text-yellow-600' },
+        ]}
+        sections={[{
+          title: 'Services',
+          maxItems: 20,
+          items: services.map(service => ({
+            key: service.id,
+            icon: <div className={`w-8 h-8 ${getNodeColor(service)} rounded-lg flex items-center justify-center`}><service.icon className="w-4 h-4 text-white" /></div>,
+            title: service.name,
+            subtitle: `${service.type}${service.port ? ` · :${service.port}` : ''}`,
+            trailing: (
+              <div className={`flex items-center gap-1.5 ${getStatusColor(service.status)}`}>
+                {getStatusIcon(service.status)}
+                <span className="text-xs font-medium capitalize">{service.status}</span>
+              </div>
+            ),
+          })),
+        }]}
+      />
+    );
+  }
+
+  // ── Expert Mode ──
   return (
     <div className="p-6 space-y-6">
       {/* Header */}

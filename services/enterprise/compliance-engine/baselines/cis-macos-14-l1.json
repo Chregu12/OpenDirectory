@@ -1,0 +1,69 @@
+{
+  "id": "cis-macos14-l1",
+  "name": "CIS Apple macOS 14 Sonoma Level 1",
+  "framework": "cis",
+  "platform": "macos",
+  "version": "1.0.0",
+  "checks": [
+    {
+      "id": "1.1", "title": "Ensure FileVault is enabled",
+      "category": "Disk Encryption", "severity": "critical",
+      "check": { "type": "command", "command": "fdesetup status", "expected": "FileVault is On." },
+      "remediation": { "type": "command", "script": "sudo fdesetup enable" }
+    },
+    {
+      "id": "1.2", "title": "Ensure Gatekeeper is enabled",
+      "category": "System Integrity", "severity": "critical",
+      "check": { "type": "command", "command": "spctl --status", "expected": "assessments enabled" },
+      "remediation": { "type": "command", "script": "sudo spctl --master-enable" }
+    },
+    {
+      "id": "1.3", "title": "Ensure System Integrity Protection (SIP) is enabled",
+      "category": "System Integrity", "severity": "critical",
+      "check": { "type": "command", "command": "csrutil status", "expected": "enabled" },
+      "remediation": { "type": "manual", "description": "Boot into Recovery Mode and run: csrutil enable" }
+    },
+    {
+      "id": "2.1", "title": "Ensure macOS Firewall is enabled",
+      "category": "Network Security", "severity": "high",
+      "check": { "type": "plist", "domain": "/Library/Preferences/com.apple.alf", "key": "globalstate", "operator": ">=", "value": 1 },
+      "remediation": { "type": "command", "script": "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on" }
+    },
+    {
+      "id": "2.2", "title": "Ensure Firewall Stealth Mode is enabled",
+      "category": "Network Security", "severity": "medium",
+      "check": { "type": "plist", "domain": "/Library/Preferences/com.apple.alf", "key": "stealthenabled", "operator": "==", "value": 1 },
+      "remediation": { "type": "command", "script": "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on" }
+    },
+    {
+      "id": "3.1", "title": "Ensure auto-updates are enabled",
+      "category": "Software Updates", "severity": "high",
+      "check": { "type": "plist", "domain": "/Library/Preferences/com.apple.SoftwareUpdate", "key": "AutomaticCheckEnabled", "operator": "==", "value": 1 },
+      "remediation": { "type": "command", "script": "sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticCheckEnabled -bool true" }
+    },
+    {
+      "id": "3.2", "title": "Ensure automatic download of updates is enabled",
+      "category": "Software Updates", "severity": "medium",
+      "check": { "type": "plist", "domain": "/Library/Preferences/com.apple.SoftwareUpdate", "key": "AutomaticDownload", "operator": "==", "value": 1 },
+      "remediation": { "type": "command", "script": "sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticDownload -bool true" }
+    },
+    {
+      "id": "4.1", "title": "Ensure screen lock after inactivity <= 5 minutes",
+      "category": "Access Control", "severity": "high",
+      "check": { "type": "plist", "domain": "com.apple.screensaver", "key": "idleTime", "operator": "<=", "value": 300 },
+      "remediation": { "type": "command", "script": "defaults write com.apple.screensaver idleTime -int 300" }
+    },
+    {
+      "id": "5.1", "title": "Ensure SSH is disabled for non-admin users",
+      "category": "Remote Access", "severity": "high",
+      "check": { "type": "service", "name": "ssh", "property": "status", "expected": "disabled" },
+      "remediation": { "type": "command", "script": "sudo systemsetup -setremotelogin off" }
+    },
+    {
+      "id": "6.1", "title": "Ensure password is required to wake from sleep",
+      "category": "Access Control", "severity": "high",
+      "check": { "type": "plist", "domain": "com.apple.screensaver", "key": "askForPassword", "operator": "==", "value": 1 },
+      "remediation": { "type": "command", "script": "defaults write com.apple.screensaver askForPassword -int 1" }
+    }
+  ]
+}

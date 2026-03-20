@@ -1,0 +1,65 @@
+{
+  "id": "tpl-security-baseline",
+  "name": "CIS Level 1 Security Baseline",
+  "description": "Cross-platform CIS Level 1 security baseline. Enforces password policy, account lockout, screen lock, firewall, encryption, and core hardening settings applicable to Windows, macOS, and Linux.",
+  "type": "security",
+  "platform": "all",
+  "version": "1.0.0",
+  "settings": {
+    "password": {
+      "minLength": 14,
+      "maxAge": 60,
+      "minAge": 1,
+      "history": 24,
+      "complexity": true,
+      "requireDigit": true,
+      "requireUppercase": true,
+      "requireLowercase": true,
+      "requireSymbol": true,
+      "maxRepeat": 3,
+      "dictionaryCheck": true,
+      "warnAge": 14
+    },
+    "lockout": {
+      "threshold": 5,
+      "duration": 30,
+      "window": 30
+    },
+    "screenLock": {
+      "timeout": 15,
+      "requirePassword": true
+    },
+    "firewall": {
+      "enabled": true,
+      "defaultInbound": "block",
+      "defaultOutbound": "allow"
+    },
+    "encryption": {
+      "required": true,
+      "algorithm": "AES-256"
+    },
+    "antivirus": {
+      "enabled": true,
+      "realTimeProtection": true
+    },
+    "updates": {
+      "autoInstall": true,
+      "maxDeferDays": 7
+    },
+    "audit": {
+      "enabled": true,
+      "accountLogon": "success,failure",
+      "logon": "success,failure",
+      "policyChange": "success,failure"
+    },
+    "ssh": {
+      "permitRootLogin": "no",
+      "passwordAuth": false,
+      "maxAuthTries": 3
+    },
+    "remoteDesktop": {
+      "enabled": false,
+      "nla": true
+    }
+  }
+}

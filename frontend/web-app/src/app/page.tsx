@@ -21,7 +21,9 @@ import PrometheusIntegration from '@/components/integrations/PrometheusIntegrati
 import VaultIntegration from '@/components/integrations/VaultIntegration';
 import NetworkInfrastructureIntegration from '@/components/integrations/NetworkInfrastructureIntegration';
 import ServicesDashboard from '@/components/dashboard/ServicesDashboard';
-import { healthApi } from '@/lib/api';
+import SetupWizard from '@/components/setup/SetupWizard';
+import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
+import { healthApi, configApi } from '@/lib/api';
 
 interface ServiceHealth {
   name: string;
@@ -33,6 +35,42 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [serviceHealth, setServiceHealth] = useState<ServiceHealth[]>([]);
   const [healthLoading, setHealthLoading] = useState(true);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [showEnrollmentWizard, setShowEnrollmentWizard] = useState(false);
+  const [setupChecked, setSetupChecked] = useState(false);
+
+  // Check if first-run setup wizard should be shown
+  useEffect(() => {
+    const checkSetupStatus = async () => {
+      // Skip if already completed locally
+      if (typeof window !== 'undefined' && localStorage.getItem('od_setup_completed')) {
+        setSetupChecked(true);
+        return;
+      }
+      try {
+        const response = await configApi.getSetupStatus();
+        if (response.data?.data?.isFirstRun) {
+          setShowSetupWizard(true);
+        }
+      } catch {
+        // Backend not available — check localStorage only
+        if (typeof window !== 'undefined' && !localStorage.getItem('od_setup_completed')) {
+          setShowSetupWizard(true);
+        }
+      } finally {
+        setSetupChecked(true);
+      }
+    };
+    checkSetupStatus();
+  }, []);
+
+  const handleSetupComplete = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('od_setup_completed', 'true');
+    }
+    setShowSetupWizard(false);
+    setShowEnrollmentWizard(true);
+  };
 
   useEffect(() => {
     fetchServiceHealth();
@@ -76,6 +114,16 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Toaster position="top-right" />
+
+      {/* First-run Setup Wizard */}
+      {showSetupWizard && setupChecked && (
+        <SetupWizard onComplete={handleSetupComplete} />
+      )}
+
+      {/* Device Enrollment Wizard */}
+      {showEnrollmentWizard && (
+        <DeviceEnrollmentWizard onClose={() => setShowEnrollmentWizard(false)} />
+      )}
       
       {/* Header */}
       <header className="bg-white shadow">

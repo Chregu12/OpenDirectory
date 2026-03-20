@@ -20,14 +20,16 @@ const EventEmitter = require('events');
 const config = require('../config');
 
 class WiFiProfileService extends EventEmitter {
-    constructor(certificateService, options = {}) {
+    constructor(certificateService, options = {}, networkProfileAgentService = null) {
         super();
-        
+
         this.certificateService = certificateService;
         this.config = {
             ...config.network.wifi,
             ...options
         };
+
+        this.networkProfileAgentService = networkProfileAgentService || options.networkProfileAgentService || null;
 
         this.logger = winston.createLogger({
             level: config.logging.level,
@@ -56,6 +58,8 @@ class WiFiProfileService extends EventEmitter {
             linux: this.generateLinuxProfile.bind(this)
         };
 
+        // Agent-based deployment (preferred) — set via constructor or setNetworkProfileAgentService()
+
         // Metrics
         this.metrics = {
             profilesCreated: 0,
@@ -66,6 +70,11 @@ class WiFiProfileService extends EventEmitter {
         };
 
         this.init();
+    }
+
+    setNetworkProfileAgentService(service) {
+        this.networkProfileAgentService = service;
+        this.logger.info('WiFi Profile Service: Agent-based deployment enabled');
     }
 
     async init() {
@@ -922,7 +931,22 @@ method=auto
     }
 
     async deployToDevice(device, platformProfile) {
-        // Integration with MDM or other deployment mechanisms
+        // Prefer agent-based deployment
+        if (this.networkProfileAgentService && device.deviceId) {
+            try {
+                return this.networkProfileAgentService.configureWiFi(device.deviceId, {
+                    ...platformProfile,
+                    ssid: platformProfile.ssid || platformProfile.profile?.ssid,
+                    security: platformProfile.security || platformProfile.profile?.security,
+                    authentication: platformProfile.authentication || platformProfile.profile?.authentication,
+                    certificates: platformProfile.certificates || platformProfile.profile?.certificates
+                });
+            } catch (error) {
+                this.logger.warn(`Agent dispatch failed for ${device.deviceId}, falling back to legacy:`, error.message);
+            }
+        }
+
+        // Legacy: MDM or download-based deployment
         if (config.mdm.enabled) {
             return await this.deployViaMDM(device, platformProfile);
         } else {

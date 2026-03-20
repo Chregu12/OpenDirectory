@@ -1,0 +1,23 @@
+---
+# Baseline Security Role
+# Applies security baseline policy and verifies compliance
+
+- name: Apply security baseline policy
+  opendirectory.core.od_policy:
+    api_url: "{{ od_api_url }}"
+    api_key: "{{ od_api_key }}"
+    name: "{{ security_baseline_name }}"
+    policy_type: security
+    settings:
+      firewall_enabled: "{{ firewall_enabled }}"
+      encryption_required: "{{ encryption_required }}"
+      min_password_length: "{{ min_password_length }}"
+      screen_lock_timeout: "{{ screen_lock_timeout }}"
+      auto_update_enabled: "{{ auto_update_enabled }}"
+    targets: "{{ security_targets }}"
+    state: present
+  register: policy_result
+
+- name: Display policy result
+  ansible.builtin.debug:
+    msg: "Security baseline policy applied: {{ policy_result.policy.name | default('unknown') }}"

@@ -3,9 +3,10 @@ const logger = require('../utils/logger');
 const AuditLogger = require('../audit/AuditLogger');
 
 class MacOSUpdateService extends EventEmitter {
-    constructor() {
+    constructor(updateAgentService) {
         super();
         this.auditLogger = new AuditLogger();
+        this.updateAgentService = updateAgentService; // Generic agent dispatch
         this.updatePolicies = new Map();
         this.deferralSettings = new Map();
         this.maintenanceSchedules = new Map();
@@ -44,12 +45,43 @@ class MacOSUpdateService extends EventEmitter {
 
             this.updatePolicies.set(deviceId, updatePolicy);
 
-            // Generate configuration script for macOS
-            const configScript = this.generateMacOSConfigScript(updatePolicy);
+            // Dispatch to agent via WebSocket (agent handles softwareupdate/defaults enforcement)
+            let agentResult = null;
+            if (this.updateAgentService) {
+                agentResult = this.updateAgentService.configureUpdates(deviceId, {
+                    id: `macos-policy-${deviceId}`,
+                    automatic: updatePolicy.automaticCheckEnabled,
+                    schedule: {
+                        interval: 'Daily',
+                        time: updatePolicy.maintenanceWindowStart
+                    },
+                    maintenanceWindow: {
+                        start: updatePolicy.maintenanceWindowStart,
+                        end: updatePolicy.maintenanceWindowEnd
+                    },
+                    deferrals: {
+                        securityUpdates: updatePolicy.criticalUpdateInstallDelay,
+                        featureUpdates: updatePolicy.majorOSUpdateDelay,
+                        qualityUpdates: updatePolicy.nonCriticalUpdateDelay
+                    },
+                    rebootPolicy: updatePolicy.forceRestartDelay > 0 ? 'scheduled' : 'user-choice',
+                    _macos: {
+                        automaticDownload: updatePolicy.automaticDownload,
+                        automaticInstallOSUpdates: updatePolicy.automaticInstallOSUpdates,
+                        automaticInstallAppUpdates: updatePolicy.automaticInstallAppUpdates,
+                        automaticInstallSecurityUpdates: updatePolicy.automaticInstallSecurityUpdates,
+                        catalogURL: updatePolicy.catalogURL,
+                        requireAdminToInstall: updatePolicy.requireAdminToInstall,
+                        userDeferralLimit: updatePolicy.userDeferralLimit
+                    },
+                    notifyUser: true
+                });
+            }
 
             await this.auditLogger.log('macos_update_policy_configured', {
                 deviceId,
                 policy: updatePolicy,
+                agentDispatched: !!agentResult,
                 timestamp: new Date().toISOString()
             });
 
@@ -58,7 +90,7 @@ class MacOSUpdateService extends EventEmitter {
             return {
                 success: true,
                 policyId: `macos-policy-${deviceId}`,
-                script: configScript,
+                agentResult,
                 policy: updatePolicy
             };
 

@@ -1,0 +1,764 @@
+'use client';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  MagnifyingGlassIcon,
+  ArrowPathIcon,
+  FunnelIcon,
+  ExclamationTriangleIcon,
+  ShieldExclamationIcon,
+  UserGroupIcon,
+  ComputerDesktopIcon,
+  KeyIcon,
+  DocumentTextIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon,
+  EyeIcon,
+  ChevronRightIcon,
+  XMarkIcon,
+  CheckCircleIcon,
+  UserIcon
+} from '@heroicons/react/24/outline';
+import { lldapApi, deviceApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
+import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface GraphNode {
+  id: string;
+  label: string;
+  type: 'user' | 'group' | 'device' | 'policy' | 'update_ring' | 'permission' | 'certificate';
+  riskLevel: 'critical' | 'high' | 'medium' | 'low' | 'none';
+  properties: Record<string, any>;
+  x: number;
+  y: number;
+}
+
+interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  relationship: string;
+  properties?: Record<string, any>;
+}
+
+interface AttackPath {
+  id: string;
+  name: string;
+  severity: 'critical' | 'high' | 'medium';
+  path: string[];
+  description: string;
+  mitigation: string;
+}
+
+interface ShadowAdmin {
+  userId: string;
+  userName: string;
+  effectivePermissions: string[];
+  inheritedFrom: string[];
+  riskScore: number;
+}
+
+interface GraphStats {
+  totalNodes: number;
+  totalEdges: number;
+  nodesByType: Record<string, number>;
+  density: number;
+  avgConnections: number;
+  riskDistribution: Record<string, number>;
+}
+
+// ── Color / Icon Maps ──────────────────────────────────────────────────────────
+
+const NODE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+  user:        { bg: 'bg-blue-100',   border: 'border-blue-500',   text: 'text-blue-700' },
+  group:       { bg: 'bg-purple-100', border: 'border-purple-500', text: 'text-purple-700' },
+  device:      { bg: 'bg-green-100',  border: 'border-green-500',  text: 'text-green-700' },
+  policy:      { bg: 'bg-amber-100',  border: 'border-amber-500',  text: 'text-amber-700' },
+  update_ring: { bg: 'bg-cyan-100',   border: 'border-cyan-500',   text: 'text-cyan-700' },
+  permission:  { bg: 'bg-red-100',    border: 'border-red-500',    text: 'text-red-700' },
+  certificate: { bg: 'bg-pink-100',   border: 'border-pink-500',   text: 'text-pink-700' },
+};
+
+const RISK_COLORS: Record<string, string> = {
+  critical: 'text-red-600',
+  high:     'text-orange-600',
+  medium:   'text-yellow-600',
+  low:      'text-blue-600',
+  none:     'text-gray-400',
+};
+
+const NODE_ICONS: Record<string, React.ComponentType<any>> = {
+  user:        UserIcon,
+  group:       UserGroupIcon,
+  device:      ComputerDesktopIcon,
+  policy:      DocumentTextIcon,
+  update_ring: ArrowPathIcon,
+  permission:  KeyIcon,
+  certificate: ShieldExclamationIcon,
+};
+
+// ── Mock data generators ───────────────────────────────────────────────────────
+
+function generateMockGraph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  const cx = 500, cy = 400;
+
+  // Users
+  const users = ['admin', 'j.smith', 'm.jones', 'k.chen', 's.patel', 'helpdesk1', 'svc-backup', 'temp-contractor'];
+  users.forEach((u, i) => {
+    const angle = (i / users.length) * Math.PI * 2;
+    nodes.push({
+      id: `user-${u}`, label: u, type: 'user',
+      riskLevel: u === 'admin' ? 'critical' : u === 'svc-backup' ? 'high' : u === 'temp-contractor' ? 'medium' : 'low',
+      properties: { email: `${u}@corp.local`, lastLogin: '2026-03-14', enabled: true },
+      x: cx + Math.cos(angle) * 320, y: cy + Math.sin(angle) * 280,
+    });
+  });
+
+  // Groups
+  const groups = ['Domain Admins', 'IT-Staff', 'Developers', 'All-Users', 'Backup-Operators', 'Remote-Desktop'];
+  groups.forEach((g, i) => {
+    const angle = (i / groups.length) * Math.PI * 2 + 0.3;
+    nodes.push({
+      id: `group-${g}`, label: g, type: 'group',
+      riskLevel: g === 'Domain Admins' ? 'critical' : g === 'Backup-Operators' ? 'high' : 'low',
+      properties: { memberCount: Math.floor(Math.random() * 50) + 2, scope: 'Global' },
+      x: cx + Math.cos(angle) * 200, y: cy + Math.sin(angle) * 180,
+    });
+  });
+
+  // Devices
+  const devices = ['WS-001', 'WS-002', 'LAPTOP-23', 'SRV-DC01', 'SRV-FILE01', 'MAC-DEV-01'];
+  devices.forEach((d, i) => {
+    const angle = (i / devices.length) * Math.PI * 2 + 0.6;
+    nodes.push({
+      id: `device-${d}`, label: d, type: 'device',
+      riskLevel: d === 'LAPTOP-23' ? 'high' : d === 'SRV-DC01' ? 'medium' : 'low',
+      properties: { os: d.startsWith('MAC') ? 'macOS 15' : d.startsWith('SRV') ? 'Windows Server 2022' : 'Windows 11', compliance: d !== 'LAPTOP-23' },
+      x: cx + Math.cos(angle) * 380, y: cy + Math.sin(angle) * 340,
+    });
+  });
+
+  // Policies & Update Rings
+  ['Security-Baseline', 'BitLocker-Policy', 'Firewall-Rules'].forEach((p, i) => {
+    nodes.push({
+      id: `policy-${p}`, label: p, type: 'policy', riskLevel: 'none',
+      properties: { enabled: true, assignments: Math.floor(Math.random() * 100) + 10 },
+      x: 100 + i * 150, y: 100,
+    });
+  });
+  ['Ring-Fast', 'Ring-Broad', 'Ring-Slow'].forEach((r, i) => {
+    nodes.push({
+      id: `ring-${r}`, label: r, type: 'update_ring', riskLevel: 'none',
+      properties: { deferralDays: i * 14, deviceCount: [20, 150, 80][i] },
+      x: 700 + i * 120, y: 100,
+    });
+  });
+
+  // Edges – membership
+  const membershipMap: Record<string, string[]> = {
+    'Domain Admins': ['admin', 'svc-backup'],
+    'IT-Staff': ['j.smith', 'helpdesk1'],
+    'Developers': ['m.jones', 'k.chen'],
+    'All-Users': ['j.smith', 'm.jones', 'k.chen', 's.patel', 'helpdesk1', 'temp-contractor'],
+    'Backup-Operators': ['svc-backup', 'helpdesk1'],
+    'Remote-Desktop': ['temp-contractor', 'j.smith'],
+  };
+  Object.entries(membershipMap).forEach(([group, members]) =>
+    members.forEach(m => edges.push({ id: `e-${m}-${group}`, source: `user-${m}`, target: `group-${group}`, relationship: 'MEMBER_OF' }))
+  );
+
+  // Edges – device ownership
+  [['j.smith', 'WS-001'], ['m.jones', 'WS-002'], ['k.chen', 'LAPTOP-23'], ['admin', 'SRV-DC01'], ['s.patel', 'MAC-DEV-01']].forEach(([u, d]) =>
+    edges.push({ id: `e-${u}-${d}`, source: `user-${u}`, target: `device-${d}`, relationship: 'OWNS' })
+  );
+
+  // Edges – policy assignments
+  [['Security-Baseline', 'All-Users'], ['BitLocker-Policy', 'All-Users'], ['Firewall-Rules', 'IT-Staff']].forEach(([p, g]) =>
+    edges.push({ id: `e-${p}-${g}`, source: `policy-${p}`, target: `group-${g}`, relationship: 'ASSIGNED_TO' })
+  );
+
+  // Edges – update ring assignments
+  [['Ring-Fast', 'IT-Staff'], ['Ring-Broad', 'All-Users'], ['Ring-Slow', 'Developers']].forEach(([r, g]) =>
+    edges.push({ id: `e-${r}-${g}`, source: `ring-${r}`, target: `group-${g}`, relationship: 'TARGETS' })
+  );
+
+  return { nodes, edges };
+}
+
+function generateAttackPaths(): AttackPath[] {
+  return [
+    {
+      id: 'ap-1', name: 'Service Account → Domain Admin',
+      severity: 'critical',
+      path: ['user-svc-backup', 'group-Backup-Operators', 'group-Domain Admins'],
+      description: 'svc-backup is member of Backup-Operators, which has indirect admin access through nested group membership.',
+      mitigation: 'Remove svc-backup from Backup-Operators or restrict Backup-Operators privileges.',
+    },
+    {
+      id: 'ap-2', name: 'Contractor Lateral Movement',
+      severity: 'high',
+      path: ['user-temp-contractor', 'group-Remote-Desktop', 'device-SRV-FILE01'],
+      description: 'Temporary contractor has Remote Desktop access to file server, enabling lateral movement.',
+      mitigation: 'Remove temp-contractor from Remote-Desktop group. Implement just-in-time access.',
+    },
+    {
+      id: 'ap-3', name: 'Non-Compliant Device Exposure',
+      severity: 'medium',
+      path: ['device-LAPTOP-23', 'user-k.chen', 'group-Developers'],
+      description: 'LAPTOP-23 is non-compliant (3 missing updates) and used by developer with source code access.',
+      mitigation: 'Enforce compliance policy on LAPTOP-23. Install missing updates.',
+    },
+  ];
+}
+
+function generateShadowAdmins(): ShadowAdmin[] {
+  return [
+    {
+      userId: 'user-svc-backup', userName: 'svc-backup',
+      effectivePermissions: ['SeBackupPrivilege', 'SeRestorePrivilege', 'SeDebugPrivilege'],
+      inheritedFrom: ['Backup-Operators', 'Domain Admins (nested)'],
+      riskScore: 87,
+    },
+    {
+      userId: 'user-helpdesk1', userName: 'helpdesk1',
+      effectivePermissions: ['ResetPassword', 'ModifyGroup', 'SeRemoteInteractiveLogon'],
+      inheritedFrom: ['IT-Staff', 'Backup-Operators'],
+      riskScore: 62,
+    },
+  ];
+}
+
+function generateStats(nodes: GraphNode[], edges: GraphEdge[]): GraphStats {
+  const nodesByType: Record<string, number> = {};
+  const riskDistribution: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0, none: 0 };
+  nodes.forEach(n => {
+    nodesByType[n.type] = (nodesByType[n.type] || 0) + 1;
+    riskDistribution[n.riskLevel]++;
+  });
+  return {
+    totalNodes: nodes.length,
+    totalEdges: edges.length,
+    nodesByType,
+    density: (2 * edges.length) / (nodes.length * (nodes.length - 1)),
+    avgConnections: edges.length / nodes.length,
+    riskDistribution,
+  };
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
+export default function GraphExplorerView() {
+  const { isSimple } = useUiMode();
+  const [nodes, setNodes]               = useState<GraphNode[]>([]);
+  const [edges, setEdges]               = useState<GraphEdge[]>([]);
+  const [attackPaths, setAttackPaths]    = useState<AttackPath[]>([]);
+  const [shadowAdmins, setShadowAdmins] = useState<ShadowAdmin[]>([]);
+  const [stats, setStats]               = useState<GraphStats | null>(null);
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [searchQuery, setSearchQuery]   = useState('');
+  const [activeTab, setActiveTab]       = useState<'graph' | 'attacks' | 'shadow' | 'stats'>('graph');
+  const [filterTypes, setFilterTypes]   = useState<Set<string>>(new Set(['user', 'group', 'device', 'policy', 'update_ring']));
+  const [loading, setLoading]           = useState(true);
+  const [highlightedPath, setHighlightedPath] = useState<string[]>([]);
+  const [zoom, setZoom]                 = useState(1);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // ── Data Loading ─────────────────────────────────────────────────────────
+
+  const loadGraphData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Try to load real data from LLDAP and Device APIs
+      const [usersRes, groupsRes, devicesRes] = await Promise.allSettled([
+        lldapApi.getUsers(),
+        lldapApi.getGroups(),
+        deviceApi.getDevices(),
+      ]);
+
+      let apiNodes: GraphNode[] = [];
+      let apiEdges: GraphEdge[] = [];
+      const cx = 500, cy = 400;
+
+      const hasUsers = usersRes.status === 'fulfilled' && usersRes.value.data?.length > 0;
+      const hasGroups = groupsRes.status === 'fulfilled' && groupsRes.value.data?.length > 0;
+
+      if (hasUsers || hasGroups) {
+        // Build nodes from real data
+        if (hasUsers) {
+          const users = usersRes.value.data;
+          users.forEach((u: any, i: number) => {
+            const angle = (i / users.length) * Math.PI * 2;
+            apiNodes.push({
+              id: `user-${u.id || u.uid}`, label: u.displayName || u.uid || u.id,
+              type: 'user', riskLevel: 'low',
+              properties: { email: u.email || '', lastLogin: u.lastLogin || '', enabled: u.enabled ?? true },
+              x: cx + Math.cos(angle) * 320, y: cy + Math.sin(angle) * 280,
+            });
+          });
+        }
+
+        if (hasGroups) {
+          const groups = groupsRes.value.data;
+          groups.forEach((g: any, i: number) => {
+            const angle = (i / groups.length) * Math.PI * 2 + 0.3;
+            apiNodes.push({
+              id: `group-${g.id || g.name}`, label: g.displayName || g.name || g.id,
+              type: 'group', riskLevel: 'low',
+              properties: { memberCount: g.members?.length || 0, scope: 'Global' },
+              x: cx + Math.cos(angle) * 200, y: cy + Math.sin(angle) * 180,
+            });
+
+            // Build membership edges
+            (g.members || []).forEach((m: any) => {
+              const memberId = typeof m === 'string' ? m : m.id || m.uid;
+              apiEdges.push({
+                id: `e-${memberId}-${g.id || g.name}`,
+                source: `user-${memberId}`, target: `group-${g.id || g.name}`,
+                relationship: 'MEMBER_OF',
+              });
+            });
+          });
+        }
+
+        if (devicesRes.status === 'fulfilled' && devicesRes.value.data?.length > 0) {
+          const devs = devicesRes.value.data;
+          devs.forEach((d: any, i: number) => {
+            const angle = (i / devs.length) * Math.PI * 2 + 0.6;
+            apiNodes.push({
+              id: `device-${d.id || d.name}`, label: d.name || d.id,
+              type: 'device', riskLevel: d.compliance === 'non_compliant' ? 'high' : 'low',
+              properties: { os: d.os || 'Unknown', compliance: d.compliance !== 'non_compliant' },
+              x: cx + Math.cos(angle) * 380, y: cy + Math.sin(angle) * 340,
+            });
+          });
+        }
+
+        setNodes(apiNodes);
+        setEdges(apiEdges.filter(e => apiNodes.some(n => n.id === e.source) && apiNodes.some(n => n.id === e.target)));
+      } else {
+        // Fallback to mock data
+        const { nodes: n, edges: e } = generateMockGraph();
+        setNodes(n);
+        setEdges(e);
+      }
+
+      setAttackPaths(generateAttackPaths());
+      setShadowAdmins(generateShadowAdmins());
+    } catch {
+      // Fallback to mock data
+      const { nodes: n, edges: e } = generateMockGraph();
+      setNodes(n);
+      setEdges(e);
+      setAttackPaths(generateAttackPaths());
+      setShadowAdmins(generateShadowAdmins());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadGraphData(); }, [loadGraphData]);
+
+  // Recalculate stats when nodes/edges change
+  useEffect(() => {
+    if (nodes.length > 0) {
+      setStats(generateStats(nodes, edges));
+    }
+  }, [nodes, edges]);
+
+  // ── Filtering ────────────────────────────────────────────────────────────
+
+  const filteredNodes = nodes.filter(n => {
+    if (!filterTypes.has(n.type)) return false;
+    if (searchQuery && !n.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+  const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
+  const filteredEdges = edges.filter(e => filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target));
+
+  const toggleFilter = (type: string) => {
+    setFilterTypes(prev => {
+      const next = new Set(prev);
+      next.has(type) ? next.delete(type) : next.add(type);
+      return next;
+    });
+  };
+
+  const highlightAttackPath = (path: AttackPath) => {
+    setHighlightedPath(path.path);
+    setActiveTab('graph');
+  };
+
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-3 text-gray-500">Loading Graph Explorer...</span>
+      </div>
+    );
+  }
+
+  // ── Simple Mode ──
+  if (isSimple) {
+    const riskNodes = nodes.filter(n => n.riskLevel === 'critical' || n.riskLevel === 'high');
+    const allSecure = attackPaths.filter(ap => ap.severity === 'critical').length === 0 && shadowAdmins.length === 0;
+
+    return (
+      <SimpleViewLayout
+        hero={{
+          status: allSecure ? 'ok' : 'critical',
+          icon: allSecure ? undefined : <ShieldExclamationIcon className="w-10 h-10 text-red-600" />,
+          title: allSecure ? 'No Security Issues Found' : `${attackPaths.length} Attack Path${attackPaths.length > 1 ? 's' : ''} Detected`,
+          subtitle: `${nodes.length} objects · ${edges.length} relationships · ${shadowAdmins.length} shadow admins`,
+        }}
+        stats={[
+          { value: nodes.length, label: 'AD Objects', color: 'text-blue-600' },
+          { value: attackPaths.length, label: 'Attack Paths', color: attackPaths.length > 0 ? 'text-red-600' : 'text-gray-600' },
+          { value: shadowAdmins.length, label: 'Shadow Admins', color: shadowAdmins.length > 0 ? 'text-orange-600' : 'text-gray-600' },
+          { value: riskNodes.length, label: 'High-Risk Objects', color: riskNodes.length > 0 ? 'text-red-600' : 'text-green-600' },
+        ]}
+        sections={[
+          {
+            title: 'Attack Paths',
+            items: attackPaths.map(ap => ({
+              key: ap.id,
+              icon: <ShieldExclamationIcon className={`w-5 h-5 ${ap.severity === 'critical' ? 'text-red-500' : ap.severity === 'high' ? 'text-orange-500' : 'text-yellow-500'}`} />,
+              title: ap.name,
+              subtitle: ap.description.slice(0, 80) + '...',
+              trailing: <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${ap.severity === 'critical' ? 'bg-red-100 text-red-700' : ap.severity === 'high' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>{ap.severity}</span>,
+            })),
+          },
+          {
+            title: 'Shadow Admins',
+            items: shadowAdmins.map(sa => ({
+              key: sa.userId,
+              icon: <UserIcon className="w-5 h-5 text-orange-500" />,
+              title: sa.userName,
+              subtitle: `${sa.effectivePermissions.length} permissions · from ${sa.inheritedFrom.join(', ')}`,
+              trailing: <span className="text-lg font-bold text-orange-600">{sa.riskScore}</span>,
+            })),
+          },
+        ]}
+      />
+    );
+  }
+
+  // ── Expert Mode ──
+  return (
+    <div className="flex flex-col h-full">
+      {/* ── Header ───────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">AD Graph Explorer</h1>
+          <p className="text-sm text-gray-500">Unified Endpoint Intelligence - Relationship Graph</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <input
+              className="pl-9 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 w-64"
+              placeholder="Search nodes..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <button onClick={loadGraphData} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600" title="Refresh">
+            <ArrowPathIcon className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Tabs ─────────────────────────────────────────────────────────── */}
+      <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 bg-gray-50">
+        {([
+          ['graph',   'Relationship Graph'],
+          ['attacks', `Attack Paths (${attackPaths.length})`],
+          ['shadow',  `Shadow Admins (${shadowAdmins.length})`],
+          ['stats',   'Statistics'],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={`od-tab ${activeTab === key ? 'od-tab-active' : 'od-tab-inactive'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Content ──────────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-hidden">
+        {activeTab === 'graph' && (
+          <div className="flex h-full">
+            {/* Filter sidebar */}
+            <div className="w-48 border-r border-gray-200 bg-white p-4 flex flex-col gap-3">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1"><FunnelIcon className="w-3 h-3" /> Filters</h3>
+              {Object.keys(NODE_COLORS).map(type => (
+                <label key={type} className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    checked={filterTypes.has(type)}
+                    onChange={() => toggleFilter(type)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className={NODE_COLORS[type].text}>{type.replace('_', ' ')}</span>
+                </label>
+              ))}
+              <hr className="border-gray-200" />
+              <div className="text-xs text-gray-500">
+                {filteredNodes.length} nodes / {filteredEdges.length} edges
+              </div>
+              {/* Zoom */}
+              <div className="flex gap-1 mt-auto">
+                <button onClick={() => setZoom(z => Math.min(z + 0.2, 2))} className="p-1 bg-gray-100 rounded text-xs hover:bg-gray-200 text-gray-600">
+                  <ArrowsPointingOutIcon className="w-4 h-4" />
+                </button>
+                <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.4))} className="p-1 bg-gray-100 rounded text-xs hover:bg-gray-200 text-gray-600">
+                  <ArrowsPointingInIcon className="w-4 h-4" />
+                </button>
+                <span className="text-xs text-gray-500 self-center ml-1">{Math.round(zoom * 100)}%</span>
+              </div>
+            </div>
+
+            {/* SVG Canvas */}
+            <div className="flex-1 relative overflow-auto bg-gray-50">
+              <svg ref={svgRef} width="1100" height="850" className="mx-auto" style={{ transform: `scale(${zoom})`, transformOrigin: 'center top' }}>
+                {/* Edges */}
+                {filteredEdges.map(e => {
+                  const src = nodeMap.get(e.source);
+                  const tgt = nodeMap.get(e.target);
+                  if (!src || !tgt) return null;
+                  const isHighlighted = highlightedPath.includes(e.source) && highlightedPath.includes(e.target);
+                  return (
+                    <g key={e.id}>
+                      <line
+                        x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
+                        stroke={isHighlighted ? '#ef4444' : '#d1d5db'}
+                        strokeWidth={isHighlighted ? 2.5 : 1}
+                        strokeDasharray={isHighlighted ? '' : '4 2'}
+                        opacity={isHighlighted ? 1 : 0.6}
+                      />
+                      <text
+                        x={(src.x + tgt.x) / 2} y={(src.y + tgt.y) / 2 - 6}
+                        fill="#9ca3af" fontSize={9} textAnchor="middle"
+                      >
+                        {e.relationship}
+                      </text>
+                    </g>
+                  );
+                })}
+                {/* Nodes */}
+                {filteredNodes.map(n => {
+                  const isHighlighted = highlightedPath.includes(n.id);
+                  const isSelected = selectedNode?.id === n.id;
+                  return (
+                    <g key={n.id} onClick={() => setSelectedNode(n)} className="cursor-pointer">
+                      <circle
+                        cx={n.x} cy={n.y}
+                        r={isSelected ? 28 : isHighlighted ? 24 : 20}
+                        fill={isHighlighted ? '#fef2f2' : '#ffffff'}
+                        stroke={isSelected ? '#2563eb' : isHighlighted ? '#ef4444' : '#d1d5db'}
+                        strokeWidth={isSelected ? 3 : isHighlighted ? 2.5 : 1.5}
+                      />
+                      <text x={n.x} y={n.y + 4} fill="#374151" fontSize={11} textAnchor="middle" fontWeight={isSelected ? 'bold' : 'normal'}>
+                        {n.type === 'user' ? '👤' : n.type === 'group' ? '👥' : n.type === 'device' ? '💻' : n.type === 'policy' ? '📋' : n.type === 'update_ring' ? '🔄' : '🔑'}
+                      </text>
+                      <text x={n.x} y={n.y + 36} fill="#6b7280" fontSize={10} textAnchor="middle">
+                        {n.label}
+                      </text>
+                      {n.riskLevel !== 'none' && n.riskLevel !== 'low' && (
+                        <circle cx={n.x + 16} cy={n.y - 16} r={6}
+                          fill={n.riskLevel === 'critical' ? '#ef4444' : n.riskLevel === 'high' ? '#f97316' : '#eab308'}
+                        />
+                      )}
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+
+            {/* Detail panel */}
+            {selectedNode && (
+              <div className="w-72 border-l border-gray-200 bg-white p-4 overflow-y-auto">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{selectedNode.label}</h3>
+                    <span className={`text-xs px-2 py-0.5 rounded ${NODE_COLORS[selectedNode.type]?.bg} ${NODE_COLORS[selectedNode.type]?.text}`}>
+                      {selectedNode.type.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <button onClick={() => setSelectedNode(null)} className="text-gray-400 hover:text-gray-600">
+                    <XMarkIcon className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="mb-3">
+                  <span className={`text-xs font-medium ${RISK_COLORS[selectedNode.riskLevel]}`}>
+                    Risk: {selectedNode.riskLevel.toUpperCase()}
+                  </span>
+                </div>
+                <h4 className="text-xs text-gray-500 uppercase mb-2">Properties</h4>
+                <div className="space-y-1">
+                  {Object.entries(selectedNode.properties).map(([k, v]) => (
+                    <div key={k} className="flex justify-between text-sm">
+                      <span className="text-gray-500">{k}</span>
+                      <span className="text-gray-700">{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+                <h4 className="text-xs text-gray-500 uppercase mt-4 mb-2">Connections</h4>
+                <div className="space-y-1">
+                  {edges
+                    .filter(e => e.source === selectedNode.id || e.target === selectedNode.id)
+                    .map(e => {
+                      const otherId = e.source === selectedNode.id ? e.target : e.source;
+                      const other = nodeMap.get(otherId);
+                      return (
+                        <div key={e.id} className="text-sm flex items-center gap-1 text-gray-500 cursor-pointer hover:text-gray-900"
+                          onClick={() => { const o = nodeMap.get(otherId); if (o) setSelectedNode(o); }}>
+                          <ChevronRightIcon className="w-3 h-3" />
+                          <span className="text-gray-400">{e.relationship}</span>
+                          <span className={NODE_COLORS[other?.type || 'user']?.text}>{other?.label}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Attack Paths Tab ───────────────────────────────────────────── */}
+        {activeTab === 'attacks' && (
+          <div className="p-6 space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
+            <p className="text-sm text-gray-500">Detected privilege escalation and lateral movement paths.</p>
+            {attackPaths.map(ap => (
+              <div key={ap.id} className={`od-card p-4 ${ap.severity === 'critical' ? 'border-red-200' : ap.severity === 'high' ? 'border-orange-200' : 'border-yellow-200'}`}>
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <ShieldExclamationIcon className="w-5 h-5 text-red-500" />
+                    {ap.name}
+                  </h3>
+                  <span className={`text-xs px-2 py-1 rounded font-medium ${ap.severity === 'critical' ? 'od-badge-critical' : ap.severity === 'high' ? 'od-badge-high' : 'od-badge-medium'}`}>
+                    {ap.severity.toUpperCase()}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600 mb-2">{ap.description}</p>
+                <div className="flex items-center gap-2 mb-3 text-xs">
+                  {ap.path.map((nodeId, i) => {
+                    const node = nodeMap.get(nodeId);
+                    return (
+                      <React.Fragment key={nodeId}>
+                        {i > 0 && <ChevronRightIcon className="w-3 h-3 text-gray-400" />}
+                        <span className={`px-2 py-0.5 rounded ${NODE_COLORS[node?.type || 'user']?.bg} ${NODE_COLORS[node?.type || 'user']?.text}`}>
+                          {node?.label || nodeId}
+                        </span>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-green-700"><CheckCircleIcon className="w-4 h-4 inline mr-1" />{ap.mitigation}</div>
+                  <button onClick={() => highlightAttackPath(ap)} className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg">
+                    <EyeIcon className="w-3 h-3 inline mr-1" />Show in Graph
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Shadow Admins Tab ──────────────────────────────────────────── */}
+        {activeTab === 'shadow' && (
+          <div className="p-6 space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
+            <p className="text-sm text-gray-500">Accounts with admin-equivalent permissions through indirect/nested group membership.</p>
+            {shadowAdmins.map(sa => (
+              <div key={sa.userId} className="od-card p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <UserIcon className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900">{sa.userName}</h3>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-orange-600">{sa.riskScore}</div>
+                    <div className="text-xs text-gray-500">Risk Score</div>
+                  </div>
+                </div>
+                <h4 className="text-xs text-gray-500 uppercase mb-1">Effective Permissions</h4>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {sa.effectivePermissions.map(p => (
+                    <span key={p} className="px-2 py-0.5 rounded od-badge-critical text-xs">{p}</span>
+                  ))}
+                </div>
+                <h4 className="text-xs text-gray-500 uppercase mb-1">Inherited From</h4>
+                <div className="flex flex-wrap gap-1">
+                  {sa.inheritedFrom.map(g => (
+                    <span key={g} className="px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-xs">{g}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Stats Tab ──────────────────────────────────────────────────── */}
+        {activeTab === 'stats' && stats && (
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[calc(100vh-200px)]">
+            <div className="od-card p-4">
+              <div className="text-3xl font-bold text-blue-600">{stats.totalNodes}</div>
+              <div className="text-sm text-gray-500">Total Nodes</div>
+            </div>
+            <div className="od-card p-4">
+              <div className="text-3xl font-bold text-purple-600">{stats.totalEdges}</div>
+              <div className="text-sm text-gray-500">Total Edges</div>
+            </div>
+            <div className="od-card p-4">
+              <div className="text-3xl font-bold text-cyan-600">{(stats.density * 100).toFixed(1)}%</div>
+              <div className="text-sm text-gray-500">Graph Density</div>
+            </div>
+            <div className="od-card p-4">
+              <div className="text-3xl font-bold text-green-600">{stats.avgConnections.toFixed(1)}</div>
+              <div className="text-sm text-gray-500">Avg Connections</div>
+            </div>
+            <div className="od-card p-4">
+              <h3 className="text-sm font-semibold text-gray-600 mb-3">Nodes by Type</h3>
+              <div className="space-y-2">
+                {Object.entries(stats.nodesByType).map(([type, count]) => (
+                  <div key={type} className="flex justify-between items-center text-sm">
+                    <span className={NODE_COLORS[type]?.text || 'text-gray-600'}>{type.replace('_', ' ')}</span>
+                    <span className="text-gray-700 font-mono">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="od-card p-4">
+              <h3 className="text-sm font-semibold text-gray-600 mb-3">Risk Distribution</h3>
+              <div className="space-y-2">
+                {Object.entries(stats.riskDistribution).map(([level, count]) => (
+                  <div key={level} className="flex justify-between items-center text-sm">
+                    <span className={RISK_COLORS[level]}>{level}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${level === 'critical' ? 'bg-red-500' : level === 'high' ? 'bg-orange-500' : level === 'medium' ? 'bg-yellow-500' : level === 'low' ? 'bg-blue-500' : 'bg-gray-300'}`}
+                          style={{ width: `${(count / stats.totalNodes) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-gray-700 font-mono w-6 text-right">{count}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

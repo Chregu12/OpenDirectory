@@ -1,0 +1,29 @@
+{
+  "id": "tpl-encryption-enforcement",
+  "name": "Full Disk Encryption Enforcement",
+  "description": "Mandates full-disk encryption on all platforms: BitLocker on Windows, FileVault on macOS, and LUKS on Linux. Requires recovery key escrow to the directory server.",
+  "type": "encryption",
+  "platform": "all",
+  "version": "1.0.0",
+  "settings": {
+    "encryption": {
+      "required": true,
+      "algorithm": "AES-256",
+      "requireTPM": true,
+      "allowUSBKey": false,
+      "method": "XtsAes256",
+      "recoveryPassword": true,
+      "recoveryKey": true,
+      "institutionalKey": false,
+      "deferAtLogin": false,
+      "maxBypassAttempts": 0,
+      "showRecoveryKey": true,
+      "escrowDescription": "OpenDirectory Server",
+      "escrowServer": "https://opendirectory.local/api/escrow",
+      "cipher": "aes-xts-plain64",
+      "keySize": 512,
+      "hash": "sha256",
+      "iterTime": 5000
+    }
+  }
+}

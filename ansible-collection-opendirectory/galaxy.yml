@@ -1,0 +1,23 @@
+namespace: opendirectory
+name: core
+version: 1.0.0
+readme: README.md
+authors:
+  - OpenDirectory Team
+description: Ansible collection for OpenDirectory device management platform
+license:
+  - MIT
+tags:
+  - opendirectory
+  - device-management
+  - mdm
+  - compliance
+  - security
+repository: https://github.com/Chregu12/OpenDirectory
+documentation: https://github.com/Chregu12/OpenDirectory/wiki
+homepage: https://github.com/Chregu12/OpenDirectory
+issues: https://github.com/Chregu12/OpenDirectory/issues
+build_ignore:
+  - '*.pyc'
+  - '__pycache__'
+  - '.git'

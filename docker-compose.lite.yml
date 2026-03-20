@@ -1,0 +1,632 @@
+# OpenDirectory - Modular Edition
+# Ziel: <= 4 GB RAM | Module per Docker Profiles aktivierbar
+#
+# Kern (~2.0 GB):  PostgreSQL + Redis + LLDAP + Identity + Auth + Device + Policy + API + Frontend
+# Module (optional, je ~128-256 MB):
+#   - network:    DNS/DHCP/SMB/NFS Netzwerk-Infrastruktur
+#   - printers:   Drucker-Management mit CUPS
+#   - monitoring:  Grafana + Prometheus
+#   - security:   Security Scanner + Auto-Remediation
+#   - lifecycle:  Device Lifecycle + Graph Explorer + Policy Simulator
+#
+# Beispiele:
+#   Nur Kern:              docker compose -f docker-compose.lite.yml up -d
+#   Kern + Netzwerk:       docker compose -f docker-compose.lite.yml --profile network up -d
+#   Kern + Drucker + Netz: docker compose -f docker-compose.lite.yml --profile network --profile printers up -d
+#   Alles:                 docker compose -f docker-compose.lite.yml --profile network --profile printers --profile monitoring --profile security --profile lifecycle up -d
+#
+# Oder via Wizard:         ./quick-setup.sh
+
+version: '3.9'
+
+services:
+  # =====================================================
+  # KERN - Immer aktiv (~2.0 GB RAM)
+  # =====================================================
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: od-postgres
+    environment:
+      POSTGRES_USER: opendirectory
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      POSTGRES_MULTIPLE_DATABASES: identity,auth,policy,audit,printers,network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - opendirectory
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opendirectory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: od-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env} --maxmemory 64mb --maxmemory-policy allkeys-lru --save ""
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - opendirectory
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 96M
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:6
+    container_name: od-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: opendirectory
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}
+      MONGO_INITDB_DATABASE: devices
+    command: mongod --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - opendirectory
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: unless-stopped
+
+  lldap:
+    image: nitnelave/lldap:stable
+    container_name: od-lldap
+    environment:
+      - LLDAP_JWT_SECRET=${LLDAP_JWT_SECRET:?LLDAP_JWT_SECRET must be set in .env}
+      - LLDAP_LDAP_BASE_DN=dc=opendirectory,dc=local
+      - LLDAP_LDAP_USER_DN=admin
+      - LLDAP_LDAP_USER_PASS=${LLDAP_ADMIN_PASSWORD:?LLDAP_ADMIN_PASSWORD must be set in .env}
+    volumes:
+      - lldap-data:/data
+    ports:
+      - "3890:3890"
+      - "17170:17170"
+    networks:
+      - opendirectory
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    restart: unless-stopped
+
+  identity-service:
+    build:
+      context: ./services/core/identity-service
+      dockerfile: Dockerfile
+    container_name: od-identity-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=--max-old-space-size=128
+      - PORT=3001
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/identity
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - "3001:3001"
+    networks:
+      - opendirectory
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./services/core/authentication-service
+      dockerfile: Dockerfile
+    container_name: od-auth-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=--max-old-space-size=128
+      - PORT=3002
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/auth
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - LDAP_URL=ldap://lldap:3890
+    ports:
+      - "3002:3002"
+    networks:
+      - opendirectory
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+    restart: unless-stopped
+
+  device-service:
+    build:
+      context: ./services/core/device-service
+      dockerfile: Dockerfile
+    container_name: od-device-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=--max-old-space-size=128
+      - PORT=3003
+      - MONGODB_URL=mongodb://opendirectory:${MONGO_PASSWORD}@mongodb:27017/devices
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - "3003:3003"
+    networks:
+      - opendirectory
+    depends_on:
+      - mongodb
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+    restart: unless-stopped
+
+  policy-service:
+    build:
+      context: ./services/core/policy-service
+      dockerfile: Dockerfile
+    container_name: od-policy-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=--max-old-space-size=128
+      - PORT=3004
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/policy
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - "3004:3004"
+    networks:
+      - opendirectory
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ./services/platform/api-gateway
+      dockerfile: Dockerfile
+    container_name: od-api-gateway
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=--max-old-space-size=128
+      - API_GATEWAY_PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - LOG_LEVEL=warn
+    ports:
+      - "3010:3000"
+      - "3011:3001"
+    networks:
+      - opendirectory
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    restart: unless-stopped
+
+  api-backend:
+    build:
+      context: ./services/platform/api-backend
+      dockerfile: Dockerfile
+    container_name: od-api-backend
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=--max-old-space-size=128
+      - PORT=8080
+      - CORS_ORIGIN=http://localhost:3000
+      - JWT_SECRET=${JWT_SECRET}
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/identity
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - "8080:8080"
+    networks:
+      - opendirectory
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      identity-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      device-service:
+        condition: service_started
+      policy-service:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+    restart: unless-stopped
+
+  web-app:
+    build:
+      context: ./frontend/web-app
+      dockerfile: Dockerfile
+    container_name: od-web-app
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8080
+    ports:
+      - "3000:3000"
+    networks:
+      - opendirectory
+    depends_on:
+      - api-backend
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped
+
+  # =====================================================
+  # MODUL: network (~256 MB)
+  # DNS, DHCP, SMB/NFS File Shares, Network Discovery
+  # =====================================================
+
+  network-infrastructure:
+    build:
+      context: ./services/core/network-infrastructure
+      dockerfile: Dockerfile
+    container_name: od-network-infrastructure
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=--max-old-space-size=128
+      - PORT=3007
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/network
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - ENABLE_DNS_SERVER=${ENABLE_DNS_SERVER:-true}
+      - ENABLE_DHCP_SERVER=${ENABLE_DHCP_SERVER:-true}
+      - ENABLE_FILE_SHARES=${ENABLE_FILE_SHARES:-true}
+      - ENABLE_NETWORK_DISCOVERY=${ENABLE_NETWORK_DISCOVERY:-true}
+      - ENABLE_NETWORK_MONITORING=false
+      - BIND_CONFIG_PATH=/etc/bind
+      - DHCP_CONFIG_PATH=/etc/dhcp
+      - SAMBA_CONFIG_PATH=/etc/samba
+    ports:
+      - "3007:3007"
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "67:67/udp"
+      - "68:68/udp"
+      - "139:139"
+      - "445:445"
+      - "2049:2049"
+    networks:
+      - opendirectory
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - network-dns-config:/etc/bind
+      - network-dhcp-config:/etc/dhcp
+      - network-samba-config:/etc/samba
+      - network-shares:/srv/shares
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+    restart: unless-stopped
+    profiles:
+      - network
+
+  # =====================================================
+  # MODUL: printers (~192 MB)
+  # Drucker-Management mit CUPS, Auto-Discovery, Scanner
+  # =====================================================
+
+  printer-service:
+    build:
+      context: ./services/core/printer-service
+      dockerfile: Dockerfile
+    container_name: od-printer-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=--max-old-space-size=128
+      - PORT=3006
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/printers
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - CUPS_HOST=localhost
+      - CUPS_PORT=631
+      - ENABLE_DISCOVERY=true
+      - ENABLE_SCANNING=true
+    ports:
+      - "3006:3006"
+      - "631:631"
+    networks:
+      - opendirectory
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - printer-spool:/var/spool/cups
+      - printer-config:/etc/cups
+    privileged: true
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+    restart: unless-stopped
+    profiles:
+      - printers
+
+  # =====================================================
+  # MODUL: monitoring (~384 MB)
+  # Grafana Dashboards + Prometheus Metrics
+  # =====================================================
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: od-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=redis-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3500:3000"
+    networks:
+      - opendirectory
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: od-prometheus
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.size=1GB'
+      - '--storage.tsdb.retention.time=7d'
+    ports:
+      - "9090:9090"
+    networks:
+      - opendirectory
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # =====================================================
+  # MODUL: security (~320 MB)
+  # Security Scanner (CIS/NIST/STIG) + Auto-Remediation
+  # =====================================================
+
+  security-scanner:
+    build:
+      context: ./services/enterprise/security-scanner
+    container_name: od-security-scanner
+    environment:
+      PORT: 3902
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=128
+      DEVICE_SERVICE_URL: http://device-service:3003
+      AUTH_SERVICE_URL: http://auth-service:3002
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - "3902:3902"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3902/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - security
+
+  auto-remediation:
+    build:
+      context: ./services/enterprise/auto-remediation
+    container_name: od-auto-remediation
+    environment:
+      PORT: 3904
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=128
+      DEVICE_SERVICE_URL: http://device-service:3003
+      SECURITY_SCANNER_URL: http://security-scanner:3902
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - "3904:3904"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+      - security-scanner
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3904/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - security
+
+  # =====================================================
+  # MODUL: lifecycle (~448 MB)
+  # Device Lifecycle, Graph Explorer, Policy Simulator
+  # =====================================================
+
+  device-lifecycle:
+    build:
+      context: ./services/enterprise/device-lifecycle
+    container_name: od-device-lifecycle
+    environment:
+      PORT: 3903
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=128
+      DEVICE_SERVICE_URL: http://device-service:3003
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - "3903:3903"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3903/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - lifecycle
+
+  graph-explorer:
+    build:
+      context: ./services/enterprise/graph-explorer
+    container_name: od-graph-explorer
+    environment:
+      PORT: 3900
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=128
+      DEVICE_SERVICE_URL: http://device-service:3003
+      AUTH_SERVICE_URL: http://auth-service:3002
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - "3900:3900"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3900/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - lifecycle
+
+  policy-simulator:
+    build:
+      context: ./services/enterprise/policy-simulator
+    container_name: od-policy-simulator
+    environment:
+      PORT: 3901
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=128
+      DEVICE_SERVICE_URL: http://device-service:3003
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - "3901:3901"
+    networks:
+      - opendirectory
+    depends_on:
+      - redis
+      - device-service
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3901/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - lifecycle
+
+# =====================================================
+# Networks & Volumes
+# =====================================================
+
+networks:
+  opendirectory:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  mongo-data:
+  lldap-data:
+  printer-spool:
+  printer-config:
+  network-dns-config:
+  network-dhcp-config:
+  network-samba-config:
+  network-shares:
+  grafana-data:
+  prometheus-data:

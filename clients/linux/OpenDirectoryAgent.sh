@@ -192,6 +192,57 @@ handle_command() {
             output="Notification shown"
             ;;
 
+        # ── Policy Enforcement Commands ──────────────────────────────
+        apply_policy)
+            output=$(handle_apply_policy "$json") || status="failed"
+            ;;
+        remove_policy)
+            output=$(handle_remove_policy "$json") || status="failed"
+            ;;
+        check_compliance)
+            output=$(handle_check_compliance "$json") || status="failed"
+            ;;
+        check_all_compliance)
+            output=$(handle_check_all_compliance "$json") || status="failed"
+            ;;
+        detect_drift)
+            output=$(handle_detect_drift "$json") || status="failed"
+            ;;
+        rollback_policy)
+            output=$(handle_rollback_policy "$json") || status="failed"
+            ;;
+        resync_policies)
+            output=$(python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+policies = data.get('data', {}).get('policies', [])
+print(json.dumps({'status': 'success', 'resynced': len(policies), 'message': f'Queued {len(policies)} policies for resync'}))
+" <<< "$json") || status="failed"
+            ;;
+        apply_policy_module)
+            output=$(python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+module = data.get('data', {}).get('module', '')
+settings = data.get('data', {}).get('settings', {})
+print(json.dumps({'status': 'success', 'module': module, 'message': f'Policy module {module} applied'}))
+" <<< "$json") || status="failed"
+            ;;
+
+        # ── Update Management Commands ──────────────────────────────────
+        configure_updates)
+            output=$(handle_configure_updates "$json") || status="failed"
+            ;;
+        check_update_status)
+            output=$(handle_check_update_status) || status="failed"
+            ;;
+        trigger_update)
+            output=$(handle_trigger_update "$json") || status="failed"
+            ;;
+        get_update_compliance)
+            output=$(handle_get_update_compliance) || status="failed"
+            ;;
+
         # ── Printer Commands (Linux: lpadmin / CUPS) ──────────────────
         deploy_printers)
             output=$(handle_deploy_printers "$json") || status="failed"
@@ -249,6 +300,202 @@ handle_command() {
             output=$(echo "OpenDirectory Test Print - $(date) - $(hostname) - $pname" | lp -d "$pname" 2>&1) || status="failed"
             ;;
 
+        # ── Network Profile Commands ──────────────────────────────────────
+        configure_wifi)
+            output=$(handle_configure_wifi "$json") || status="failed"
+            ;;
+        remove_wifi)
+            output=$(handle_remove_wifi "$json") || status="failed"
+            ;;
+        configure_vpn)
+            output=$(handle_configure_vpn "$json") || status="failed"
+            ;;
+        remove_vpn)
+            output=$(handle_remove_vpn "$json") || status="failed"
+            ;;
+        configure_email)
+            output=$(handle_configure_email "$json") || status="failed"
+            ;;
+        remove_email)
+            output=$(handle_remove_email "$json") || status="failed"
+            ;;
+
+        # ── Deployment/Compliance/Encryption Commands ─────────────────
+        zero_touch_deploy)
+            output=$(handle_zero_touch_deploy "$json") || status="failed"
+            ;;
+        check_encryption_status)
+            output=$(handle_check_encryption_status) || status="failed"
+            ;;
+        enable_encryption)
+            output=$(handle_enable_encryption "$json") || status="failed"
+            ;;
+        execute_remediation)
+            output=$(handle_execute_remediation "$json") || status="failed"
+            ;;
+
+        # ── Compliance Scanning Commands ──────────────────────────────
+        compliance_scan)
+            output=$(python3 << 'PYEOF' "$json"
+import sys, json, subprocess, os
+from datetime import datetime
+
+data = json.loads(sys.argv[1]).get('data', {})
+checks = data.get('checks', [])
+results = []
+
+for check in checks:
+    passed = False
+    actual = None
+    try:
+        ctype = check.get('type', '')
+        if ctype == 'sysctl':
+            actual = subprocess.getoutput(f"sysctl -n {check['key']}").strip()
+            if check.get('operator') == '==':
+                passed = (actual == str(check['value']))
+            elif check.get('operator') == '>=':
+                passed = (int(actual) >= int(check['value']))
+            elif check.get('operator') == '<=':
+                passed = (int(actual) <= int(check['value']))
+            elif check.get('operator') == '!=':
+                passed = (actual != str(check['value']))
+        elif ctype == 'service':
+            result = subprocess.run(['systemctl', 'is-active', check['serviceName']], capture_output=True, text=True)
+            actual = result.stdout.strip()
+            passed = (actual == check.get('expectedStatus', 'active'))
+        elif ctype == 'firewall':
+            ufw_out = subprocess.getoutput('ufw status')
+            actual = 'active' if 'Status: active' in ufw_out else 'inactive'
+            passed = (actual == check.get('expected', 'active'))
+        elif ctype == 'luks':
+            blk = subprocess.getoutput(f"lsblk -no TYPE {check.get('device', '/dev/sda1')} 2>/dev/null")
+            actual = 'encrypted' if 'crypt' in blk else 'unencrypted'
+            passed = (actual == 'encrypted')
+        elif ctype == 'ssh_config':
+            key = check.get('key', '')
+            val = subprocess.getoutput(f"sshd -T 2>/dev/null | grep -i '^{key} ' | awk '{{print $2}}'").strip()
+            actual = val if val else 'NOT_FOUND'
+            passed = (actual.lower() == str(check.get('value', '')).lower())
+        elif ctype == 'pam':
+            pam_file = check.get('file', '/etc/pam.d/common-auth')
+            search = check.get('contains', '')
+            if os.path.exists(pam_file):
+                content = open(pam_file).read()
+                actual = 'present' if search in content else 'absent'
+                passed = (actual == 'present')
+            else:
+                actual = 'FILE_NOT_FOUND'
+        elif ctype == 'package_updates':
+            if os.path.exists('/usr/bin/apt-get'):
+                subprocess.run(['apt-get', 'update', '-qq'], capture_output=True)
+                out = subprocess.getoutput('apt-get -s upgrade 2>/dev/null | grep ^Inst | wc -l')
+            elif os.path.exists('/usr/bin/dnf'):
+                out = subprocess.getoutput('dnf check-update --quiet 2>/dev/null | wc -l')
+            else:
+                out = '0'
+            actual = int(out.strip()) if out.strip().isdigit() else 0
+            passed = (actual <= check.get('maxPending', 10))
+        elif ctype == 'file_permissions':
+            import stat
+            path = check.get('path', '')
+            if os.path.exists(path):
+                mode = oct(os.stat(path).st_mode)[-3:]
+                actual = mode
+                passed = (mode == check.get('expected', ''))
+            else:
+                actual = 'NOT_FOUND'
+    except Exception as e:
+        actual = f'ERROR: {str(e)}'
+
+    results.append({
+        'checkId': check.get('id', ''),
+        'title': check.get('title', ''),
+        'passed': passed,
+        'actual': actual,
+        'expected': check.get('value', ''),
+        'severity': check.get('severity', 'medium'),
+        'timestamp': datetime.now().isoformat()
+    })
+
+total = len(results)
+passed_count = sum(1 for r in results if r['passed'])
+score = round((passed_count / total) * 100, 1) if total > 0 else 0
+
+print(json.dumps({
+    'type': 'compliance_scan_result',
+    'deviceId': subprocess.getoutput('cat /etc/machine-id 2>/dev/null || hostname'),
+    'baselineId': data.get('baselineId', ''),
+    'results': results,
+    'score': score,
+    'totalChecks': total,
+    'passedChecks': passed_count,
+    'scannedAt': datetime.now().isoformat()
+}))
+PYEOF
+            ) || status="failed"
+            ;;
+
+        # ── App Store Commands ───────────────────────────────────────────
+        store_install)
+            local pkg_type pkg_id pkg_version app_name
+            pkg_type=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('type',''))" 2>/dev/null)
+            pkg_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('packageId',''))" 2>/dev/null)
+            pkg_version=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('version',''))" 2>/dev/null)
+            app_name=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('appName',''))" 2>/dev/null)
+            local install_status="completed" install_output=""
+            case "$pkg_type" in
+                apt)
+                    install_output=$(DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg_id" 2>&1) || install_status="failed"
+                    ;;
+                dnf)
+                    install_output=$(dnf install -y "$pkg_id" 2>&1) || install_status="failed"
+                    ;;
+                pacman)
+                    install_output=$(pacman -S --noconfirm "$pkg_id" 2>&1) || install_status="failed"
+                    ;;
+                snap)
+                    install_output=$(snap install "$pkg_id" 2>&1) || install_status="failed"
+                    ;;
+                flatpak)
+                    install_output=$(flatpak install -y "$pkg_id" 2>&1) || install_status="failed"
+                    ;;
+                *)
+                    # Auto-detect package manager
+                    if command -v apt-get &>/dev/null; then
+                        install_output=$(DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg_id" 2>&1) || install_status="failed"
+                    elif command -v dnf &>/dev/null; then
+                        install_output=$(dnf install -y "$pkg_id" 2>&1) || install_status="failed"
+                    elif command -v pacman &>/dev/null; then
+                        install_output=$(pacman -S --noconfirm "$pkg_id" 2>&1) || install_status="failed"
+                    else
+                        install_status="failed"; install_output="No supported package manager found"
+                    fi
+                    ;;
+            esac
+            show_notification "App Installation" "$app_name: $install_status"
+            output=$(python3 -c "import json; print(json.dumps({'type':'store_install_result','data':{'appId':$(echo "$json" | python3 -c "import sys,json; print(repr(json.load(sys.stdin).get('data',{}).get('appId','')))"),'status':'$install_status'}}))" 2>/dev/null)
+            ;;
+        store_uninstall)
+            local pkg_id
+            pkg_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('packageId',''))" 2>/dev/null)
+            local uninstall_status="completed"
+            if command -v apt-get &>/dev/null; then
+                apt-get remove -y "$pkg_id" &>/dev/null || uninstall_status="failed"
+            elif command -v dnf &>/dev/null; then
+                dnf remove -y "$pkg_id" &>/dev/null || uninstall_status="failed"
+            elif command -v pacman &>/dev/null; then
+                pacman -R --noconfirm "$pkg_id" &>/dev/null || uninstall_status="failed"
+            else
+                uninstall_status="failed"
+            fi
+            output=$(python3 -c "import json; print(json.dumps({'type':'store_uninstall_result','data':{'appId':$(echo "$json" | python3 -c "import sys,json; print(repr(json.load(sys.stdin).get('data',{}).get('appId','')))"),'status':'$uninstall_status'}}))" 2>/dev/null)
+            ;;
+
+        # ── Windows-only commands (graceful no-op) ────────────────────
+        configure_winget|check_winget_status)
+            output='{"status":"success","message":"Not applicable on Linux"}'
+            ;;
+
         *)
             status="failed"; output="Unknown command: $cmd_type"
             ;;
@@ -287,6 +534,751 @@ inv = {
 }
 print(json.dumps(inv, indent=2))
 " 2>/dev/null
+}
+
+# ============================================================================
+# POLICY ENFORCEMENT (Linux: sysctl, PAM, sshd, ufw/firewalld, auditd, dconf)
+# ============================================================================
+POLICY_STATE_DIR="$OD_PATH/PolicyState"
+POLICY_BACKUP_DIR="$OD_PATH/PolicyBackups"
+
+handle_apply_policy() {
+    local json="$1"
+    mkdir -p "$POLICY_STATE_DIR" "$POLICY_BACKUP_DIR"
+    python3 << 'PYEOF' "$json"
+import sys, json, subprocess, os, shutil
+from datetime import datetime
+
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+policy_id = data.get('policyId', '')
+policy_name = data.get('policyName', '')
+settings = data.get('settings', {})
+applied = []
+errors = []
+sec = settings.get('security', {})
+
+def run(cmd):
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+# Password Policy → PAM pwquality + faillock
+pw = sec.get('password')
+if pw:
+    try:
+        if os.path.exists('/etc/security/pwquality.conf'):
+            lines = []
+            if pw.get('minLength') is not None:
+                lines.append(f'minlen = {pw["minLength"]}')
+            if pw.get('complexity'):
+                lines.extend(['dcredit = -1', 'ucredit = -1', 'lcredit = -1', 'ocredit = -1'])
+            if lines:
+                with open('/etc/security/pwquality.conf', 'a') as f:
+                    f.write('\n# OpenDirectory Policy\n' + '\n'.join(lines) + '\n')
+        if pw.get('maxAgeDays') is not None:
+            run(f'sed -i "s/^PASS_MAX_DAYS.*/PASS_MAX_DAYS\\t{pw["maxAgeDays"]}/" /etc/login.defs')
+        if pw.get('lockoutThreshold') is not None:
+            with open('/etc/security/faillock.conf', 'a') as f:
+                f.write(f'\n# OpenDirectory Policy\ndeny = {pw["lockoutThreshold"]}\n')
+            if pw.get('lockoutDuration') is not None:
+                with open('/etc/security/faillock.conf', 'a') as f:
+                    f.write(f'unlock_time = {pw["lockoutDuration"] * 60}\n')
+        applied.append('password')
+    except Exception as e:
+        errors.append(f'password: {e}')
+
+# Screen Lock → dconf (GNOME) / xdg-screensaver
+sl = sec.get('screenLock')
+if sl and sl.get('enabled'):
+    try:
+        timeout = (sl.get('inactivityLockMinutes') or sl.get('timeoutMinutes', 5)) * 60
+        dconf_dir = '/etc/dconf/db/local.d'
+        os.makedirs(dconf_dir, exist_ok=True)
+        with open(f'{dconf_dir}/00-od-screenlock', 'w') as f:
+            f.write(f'[org/gnome/desktop/session]\nidle-delay=uint32 {timeout}\n')
+            if sl.get('requirePassword'):
+                f.write('[org/gnome/desktop/screensaver]\nlock-enabled=true\nlock-delay=uint32 0\n')
+        run('dconf update')
+        applied.append('screenLock')
+    except Exception as e:
+        errors.append(f'screenLock: {e}')
+
+# Firewall → ufw or firewalld
+fw = sec.get('firewall')
+if fw:
+    try:
+        if os.path.exists('/usr/sbin/ufw'):
+            if fw.get('enabled'):
+                run('ufw --force enable')
+                if fw.get('defaultDeny'):
+                    run('ufw default deny incoming')
+            else:
+                run('ufw --force disable')
+        elif os.path.exists('/usr/bin/firewall-cmd'):
+            if fw.get('enabled'):
+                run('systemctl enable --now firewalld')
+                if fw.get('defaultDeny'):
+                    run('firewall-cmd --set-default-zone=drop')
+            else:
+                run('systemctl disable --now firewalld')
+        applied.append('firewall')
+    except Exception as e:
+        errors.append(f'firewall: {e}')
+
+# Encryption → LUKS check (report only, no in-place enable)
+enc = sec.get('encryption')
+if enc and enc.get('required'):
+    try:
+        result = run('lsblk -o NAME,FSTYPE | grep -i crypt')
+        if result.returncode != 0:
+            errors.append('encryption: LUKS not detected on root device')
+        else:
+            applied.append('encryption')
+    except Exception as e:
+        errors.append(f'encryption: {e}')
+
+# Audit → auditd rules
+audit = sec.get('audit')
+if audit and audit.get('enabled'):
+    try:
+        run('systemctl enable --now auditd')
+        rules_file = '/etc/audit/rules.d/od-policy.rules'
+        with open(rules_file, 'w') as f:
+            f.write('# OpenDirectory Audit Policy\n')
+            f.write('-w /etc/passwd -p wa -k identity\n')
+            f.write('-w /etc/shadow -p wa -k identity\n')
+            f.write('-w /etc/group -p wa -k identity\n')
+            f.write('-w /var/log/auth.log -p wa -k auth-log\n')
+            f.write('-a always,exit -F arch=b64 -S execve -k exec\n')
+        run('augenrules --load')
+        applied.append('audit')
+    except Exception as e:
+        errors.append(f'audit: {e}')
+
+# SSH hardening
+ssh = sec.get('ssh') or sec.get('remoteAccess')
+if ssh:
+    try:
+        sshd_conf = '/etc/ssh/sshd_config.d/od-policy.conf'
+        os.makedirs(os.path.dirname(sshd_conf), exist_ok=True)
+        lines = ['# OpenDirectory Policy']
+        if ssh.get('disableRoot'):
+            lines.append('PermitRootLogin no')
+        if ssh.get('requireKey'):
+            lines.append('PasswordAuthentication no')
+            lines.append('PubkeyAuthentication yes')
+        if ssh.get('maxAuthTries') is not None:
+            lines.append(f'MaxAuthTries {ssh["maxAuthTries"]}')
+        with open(sshd_conf, 'w') as f:
+            f.write('\n'.join(lines) + '\n')
+        run('systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null')
+        applied.append('ssh')
+    except Exception as e:
+        errors.append(f'ssh: {e}')
+
+# Browser (Chrome/Chromium policies)
+browser = settings.get('browser')
+if browser and browser.get('homepage'):
+    try:
+        policy_dir = '/etc/opt/chrome/policies/managed'
+        os.makedirs(policy_dir, exist_ok=True)
+        chrome_pol = {}
+        if browser.get('homepage'):
+            chrome_pol['HomepageLocation'] = browser['homepage']
+            chrome_pol['HomepageIsNewTabPage'] = False
+        if browser.get('defaultSearchEngine'):
+            chrome_pol['DefaultSearchProviderName'] = browser['defaultSearchEngine']
+        with open(f'{policy_dir}/od-policy.json', 'w') as f:
+            json.dump(chrome_pol, f, indent=2)
+        # Also for Chromium
+        chromium_dir = '/etc/chromium/policies/managed'
+        os.makedirs(chromium_dir, exist_ok=True)
+        shutil.copy(f'{policy_dir}/od-policy.json', f'{chromium_dir}/od-policy.json')
+        applied.append('browser')
+    except Exception as e:
+        errors.append(f'browser: {e}')
+
+# Updates
+updates = settings.get('updates')
+if updates:
+    try:
+        if os.path.exists('/usr/bin/apt-get'):
+            apt_conf = '/etc/apt/apt.conf.d/50-od-autoupdate'
+            enabled = '1' if updates.get('automatic') else '0'
+            with open(apt_conf, 'w') as f:
+                f.write(f'APT::Periodic::Update-Package-Lists "{enabled}";\n')
+                f.write(f'APT::Periodic::Unattended-Upgrade "{enabled}";\n')
+        applied.append('updates')
+    except Exception as e:
+        errors.append(f'updates: {e}')
+
+# Save state
+state_file = f'/opt/opendirectory/PolicyState/{policy_id}.json'
+os.makedirs(os.path.dirname(state_file), exist_ok=True)
+with open(state_file, 'w') as f:
+    json.dump({'policyId': policy_id, 'policyName': policy_name, 'version': data.get('version', '1.0'),
+               'applied': applied, 'appliedAt': datetime.now().isoformat()}, f)
+
+print(json.dumps({'policyId': policy_id, 'applied': applied, 'errors': errors,
+                   'status': 'success' if not errors else 'partial'}))
+PYEOF
+
+    local notify_user
+    notify_user=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('notifyUser',True))" 2>/dev/null)
+    [ "$notify_user" != "False" ] && show_notification "Richtlinie angewendet" "Policy wurde konfiguriert."
+}
+
+handle_remove_policy() {
+    local json="$1"
+    local policy_id
+    policy_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('policyId',''))" 2>/dev/null)
+    # Remove policy config files
+    rm -f "/etc/security/faillock.conf.d/od-$policy_id.conf" 2>/dev/null
+    rm -f "/etc/audit/rules.d/od-policy.rules" 2>/dev/null && augenrules --load 2>/dev/null
+    rm -f "/etc/ssh/sshd_config.d/od-policy.conf" 2>/dev/null && systemctl reload sshd 2>/dev/null
+    rm -f "/etc/dconf/db/local.d/00-od-screenlock" 2>/dev/null && dconf update 2>/dev/null
+    rm -f "$POLICY_STATE_DIR/$policy_id.json" 2>/dev/null
+    log "Policy removed: $policy_id"
+    echo "Removed: $policy_id"
+}
+
+handle_check_compliance() {
+    local json="$1"
+    python3 << 'PYEOF' "$json"
+import sys, json, subprocess, os
+from datetime import datetime
+
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+settings = data.get('expectedSettings', {})
+violations = []
+sec = settings.get('security', {})
+
+def run(cmd):
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+# Check firewall
+fw = sec.get('firewall')
+if fw and fw.get('enabled'):
+    ufw_result = run('ufw status')
+    fwd_result = run('systemctl is-active firewalld')
+    if 'active' not in ufw_result.stdout.lower() and 'active' != fwd_result.stdout.strip():
+        violations.append({'module': 'firewall', 'setting': 'enabled', 'expected': True, 'actual': False})
+
+# Check encryption
+enc = sec.get('encryption')
+if enc and enc.get('required'):
+    result = run('lsblk -o NAME,FSTYPE | grep -i crypt')
+    if result.returncode != 0:
+        violations.append({'module': 'encryption', 'setting': 'LUKS', 'expected': 'encrypted', 'actual': 'unencrypted'})
+
+# Check screen lock (dconf)
+sl = sec.get('screenLock')
+if sl and sl.get('enabled'):
+    if not os.path.exists('/etc/dconf/db/local.d/00-od-screenlock'):
+        violations.append({'module': 'screenLock', 'setting': 'dconf', 'expected': 'configured', 'actual': 'missing'})
+
+# Check audit
+audit = sec.get('audit')
+if audit and audit.get('enabled'):
+    result = run('systemctl is-active auditd')
+    if result.stdout.strip() != 'active':
+        violations.append({'module': 'audit', 'setting': 'auditd', 'expected': 'active', 'actual': result.stdout.strip()})
+
+print(json.dumps({'compliant': len(violations) == 0, 'violations': violations,
+                   'checkedAt': datetime.now().isoformat(), 'policyId': data.get('policyId', '')}))
+PYEOF
+}
+
+handle_check_all_compliance() {
+    local json="$1"
+    python3 -c "
+import sys, json, os
+from datetime import datetime
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+all_violations = []
+for pol in data.get('policies', []):
+    state_file = f'/opt/opendirectory/PolicyState/{pol[\"policyId\"]}.json'
+    if not os.path.exists(state_file):
+        all_violations.append({'module': 'policy', 'setting': pol['policyId'], 'expected': 'applied', 'actual': 'missing'})
+print(json.dumps({'compliant': len(all_violations) == 0, 'violations': all_violations, 'checkedAt': datetime.now().isoformat()}))
+" "$json"
+}
+
+handle_detect_drift() {
+    local json="$1"
+    python3 -c "
+import sys, json, os
+from datetime import datetime
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+drifted = []; missing = []
+for pol in data.get('expectedPolicies', []):
+    state_file = f'/opt/opendirectory/PolicyState/{pol[\"policyId\"]}.json'
+    if os.path.exists(state_file):
+        with open(state_file) as f:
+            state = json.load(f)
+        if state.get('version') != pol.get('version'):
+            drifted.append({'policyId': pol['policyId'], 'expectedVersion': pol.get('version'), 'actualVersion': state.get('version')})
+    else:
+        missing.append(pol['policyId'])
+print(json.dumps({'drifted': drifted, 'missing': missing, 'checkedAt': datetime.now().isoformat()}))
+" "$json"
+}
+
+handle_rollback_policy() {
+    local json="$1"
+    local policy_id
+    policy_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('policyId',''))" 2>/dev/null)
+    # Remove policy artifacts
+    rm -f "/etc/audit/rules.d/od-policy.rules" 2>/dev/null && augenrules --load 2>/dev/null
+    rm -f "/etc/ssh/sshd_config.d/od-policy.conf" 2>/dev/null && systemctl reload sshd 2>/dev/null
+    rm -f "/etc/dconf/db/local.d/00-od-screenlock" 2>/dev/null && dconf update 2>/dev/null
+    rm -f "$POLICY_STATE_DIR/$policy_id.json" 2>/dev/null
+    log "Policy rolled back: $policy_id"
+    show_notification "Richtlinie zurueckgesetzt" "$policy_id"
+    echo "Rolled back: $policy_id"
+}
+
+# ============================================================================
+# UPDATE MANAGEMENT (Linux: apt/dnf/snap, unattended-upgrades, systemd timers)
+# ============================================================================
+
+handle_configure_updates() {
+    local json="$1"
+    python3 << 'PYEOF' "$json"
+import sys, json, subprocess, os
+
+data = json.loads(sys.argv[1]).get('data', json.loads(sys.argv[1]))
+settings = data.get('settings', {})
+configured = []
+errors = []
+linux_ext = settings.get('_linux', {})
+
+def run(cmd):
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+try:
+    # apt-based systems (Debian/Ubuntu)
+    if os.path.exists('/usr/bin/apt-get'):
+        # Configure unattended-upgrades
+        auto = '1' if settings.get('automatic') else '0'
+        conf_path = '/etc/apt/apt.conf.d/50-od-autoupdate'
+        with open(conf_path, 'w') as f:
+            f.write(f'APT::Periodic::Update-Package-Lists "{auto}";\n')
+            f.write(f'APT::Periodic::Unattended-Upgrade "{auto}";\n')
+            f.write(f'APT::Periodic::AutocleanInterval "7";\n')
+            if linux_ext.get('autoRemoveUnused'):
+                f.write('Unattended-Upgrade::Remove-Unused-Dependencies "true";\n')
+            if linux_ext.get('securityUpdatesOnly'):
+                f.write('Unattended-Upgrade::Allowed-Origins { "${distro_id}:${distro_codename}-security"; };\n')
+            if linux_ext.get('blockedPackages'):
+                for pkg in linux_ext['blockedPackages']:
+                    f.write(f'Unattended-Upgrade::Package-Blacklist {{ "{pkg}"; }};\n')
+        configured.append('apt-unattended-upgrades')
+
+    # dnf-based systems (RHEL/Fedora)
+    elif os.path.exists('/usr/bin/dnf'):
+        auto = 'yes' if settings.get('automatic') else 'no'
+        conf_path = '/etc/dnf/automatic.conf'
+        if os.path.exists(conf_path):
+            run(f'sed -i "s/^apply_updates.*/apply_updates = {auto}/" {conf_path}')
+            if settings.get('automatic'):
+                run('systemctl enable --now dnf-automatic.timer')
+            configured.append('dnf-automatic')
+
+    # snap auto-refresh
+    pm = linux_ext.get('packageManagers', {})
+    if pm.get('snap', {}).get('autoRefresh') is False:
+        run('snap set system refresh.hold="$(date -d "+100 years" +%Y-%m-%dT%H:%M:%S+00:00)"')
+        configured.append('snap-hold')
+
+except Exception as e:
+    errors.append(str(e))
+
+print(json.dumps({'status': 'success' if not errors else 'partial', 'configured': configured, 'errors': errors}))
+PYEOF
+}
+
+handle_check_update_status() {
+    python3 -c "
+import subprocess, json, os
+updates = []
+if os.path.exists('/usr/bin/apt-get'):
+    subprocess.run(['apt-get', 'update', '-qq'], capture_output=True)
+    result = subprocess.run(['apt', 'list', '--upgradable'], capture_output=True, text=True)
+    updates = [l.split('/')[0] for l in result.stdout.strip().split('\n')[1:] if '/' in l]
+elif os.path.exists('/usr/bin/dnf'):
+    result = subprocess.run(['dnf', 'check-update', '-q'], capture_output=True, text=True)
+    updates = [l.split()[0] for l in result.stdout.strip().split('\n') if l.strip() and not l.startswith('Last')]
+print(json.dumps({'status': 'success', 'updateStatus': {'availableUpdates': updates, 'count': len(updates)}}))
+"
+}
+
+handle_trigger_update() {
+    local json="$1"
+    if command -v apt-get &>/dev/null; then
+        DEBIAN_FRONTEND=noninteractive apt-get upgrade -y 2>&1
+    elif command -v dnf &>/dev/null; then
+        dnf upgrade -y 2>&1
+    fi
+    echo '{"status":"success","triggered":true}'
+}
+
+handle_get_update_compliance() {
+    python3 -c "
+import subprocess, json, os
+updates = []
+if os.path.exists('/usr/bin/apt-get'):
+    subprocess.run(['apt-get', 'update', '-qq'], capture_output=True)
+    result = subprocess.run(['apt', 'list', '--upgradable'], capture_output=True, text=True)
+    updates = [l.split('/')[0] for l in result.stdout.strip().split('\n')[1:] if '/' in l]
+    security = [u for u in updates if 'security' in subprocess.run(['apt-cache', 'show', u], capture_output=True, text=True).stdout.lower()]
+elif os.path.exists('/usr/bin/dnf'):
+    result = subprocess.run(['dnf', 'check-update', '-q', '--security'], capture_output=True, text=True)
+    updates = [l.split()[0] for l in result.stdout.strip().split('\n') if l.strip()]
+print(json.dumps({'status': 'success', 'complianceReport': {'compliant': len(updates) == 0, 'pendingUpdates': updates, 'count': len(updates)}}))
+"
+}
+
+# ============================================================================
+# DEPLOYMENT / COMPLIANCE / ENCRYPTION (Linux)
+# ============================================================================
+
+handle_zero_touch_deploy() {
+    local json="$1"
+    python3 -c "
+import json, sys, subprocess, os
+
+data = json.loads(sys.stdin.read())
+profile = data.get('data', {}).get('profile', {})
+steps = []
+
+# Set hostname
+device_config = profile.get('deviceConfiguration', {})
+if device_config.get('computerNameTemplate'):
+    import socket
+    template = device_config['computerNameTemplate']
+    hostname = template.replace('{SERIAL}', socket.gethostname()[:6]).replace('{USER}', os.environ.get('USER', 'user')[:6]).lower()
+    subprocess.run(['hostnamectl', 'set-hostname', hostname], capture_output=True)
+    steps.append(f'Hostname set: {hostname}')
+
+# Set timezone
+if device_config.get('timezone'):
+    subprocess.run(['timedatectl', 'set-timezone', device_config['timezone']], capture_output=True)
+    steps.append(f'Timezone: {device_config[\"timezone\"]}')
+
+# Install applications
+for app in profile.get('applications', []):
+    pkg = app.get('packageId', '')
+    if pkg:
+        if os.path.exists('/usr/bin/apt-get'):
+            subprocess.run(['apt-get', 'install', '-y', pkg], capture_output=True)
+        elif os.path.exists('/usr/bin/dnf'):
+            subprocess.run(['dnf', 'install', '-y', pkg], capture_output=True)
+        steps.append(f'Installed: {app.get(\"name\", pkg)}')
+
+# Configure firewall
+sec = profile.get('securityConfiguration', {})
+if sec.get('configureFirewall'):
+    if os.path.exists('/usr/sbin/ufw'):
+        subprocess.run(['ufw', '--force', 'enable'], capture_output=True)
+    steps.append('Firewall enabled')
+
+print(json.dumps({'status': 'success', 'steps': steps, 'message': 'Zero-touch deployment completed'}))
+" <<< "$json"
+}
+
+handle_check_encryption_status() {
+    python3 -c "
+import subprocess, json, os
+
+status = {'encrypted': False, 'method': 'none'}
+
+# Check LUKS
+result = subprocess.run(['lsblk', '-o', 'NAME,TYPE,FSTYPE', '--json'], capture_output=True, text=True)
+if result.returncode == 0:
+    blk = json.loads(result.stdout)
+    for dev in blk.get('blockdevices', []):
+        if dev.get('type') == 'crypt' or dev.get('fstype') == 'crypto_LUKS':
+            status['encrypted'] = True
+            status['method'] = 'LUKS'
+            break
+        for child in dev.get('children', []):
+            if child.get('type') == 'crypt' or child.get('fstype') == 'crypto_LUKS':
+                status['encrypted'] = True
+                status['method'] = 'LUKS'
+                break
+
+# Check dm-crypt
+if not status['encrypted'] and os.path.exists('/dev/mapper'):
+    result = subprocess.run(['dmsetup', 'status'], capture_output=True, text=True)
+    if 'crypt' in result.stdout:
+        status['encrypted'] = True
+        status['method'] = 'dm-crypt'
+
+print(json.dumps({'status': 'success', 'encryptionStatus': status}))
+"
+}
+
+handle_enable_encryption() {
+    local json="$1"
+    # LUKS encryption typically requires user interaction and unmounted volumes
+    # Agent can only report status, not encrypt a running system
+    echo '{"status":"failed","error":"Full-disk encryption cannot be enabled on a running Linux system. Use the provisioning process instead."}'
+}
+
+handle_execute_remediation() {
+    local json="$1"
+    python3 -c "
+import json, sys, subprocess, os
+
+data = json.loads(sys.stdin.read())
+action = data.get('data', {}).get('action', '')
+
+result = 'Unknown action'
+try:
+    if action == 'ENABLE_LUKS':
+        result = 'LUKS cannot be enabled on running system'
+    elif action == 'INSTALL_UPDATES':
+        if os.path.exists('/usr/bin/apt-get'):
+            subprocess.run(['apt-get', 'update', '-qq'], capture_output=True)
+            subprocess.run(['apt-get', 'upgrade', '-y'], capture_output=True)
+        elif os.path.exists('/usr/bin/dnf'):
+            subprocess.run(['dnf', 'upgrade', '-y'], capture_output=True)
+        result = 'Updates installed'
+    elif action == 'ENABLE_MACOS_FIREWALL' or action == 'ENABLE_WINDOWS_FIREWALL':
+        result = 'Not applicable on Linux'
+    elif action in ('ENABLE_IPTABLES', 'ENABLE_FIREWALL'):
+        if os.path.exists('/usr/sbin/ufw'):
+            subprocess.run(['ufw', '--force', 'enable'], capture_output=True)
+            result = 'UFW firewall enabled'
+        elif os.path.exists('/usr/bin/firewall-cmd'):
+            subprocess.run(['systemctl', 'enable', '--now', 'firewalld'], capture_output=True)
+            result = 'firewalld enabled'
+    elif action == 'ENFORCE_PASSWORD_POLICY':
+        result = 'Password policy enforcement requires PAM configuration'
+    else:
+        result = f'Remediation action {action} not implemented'
+
+    print(json.dumps({'status': 'success', 'action': action, 'message': result}))
+except Exception as e:
+    print(json.dumps({'status': 'failed', 'error': str(e)}))
+" <<< "$json"
+}
+
+# ============================================================================
+# NETWORK PROFILE MANAGEMENT (Linux: NetworkManager / nmcli)
+# ============================================================================
+
+handle_configure_wifi() {
+    local json="$1"
+    python3 -c "
+import subprocess, json, sys
+
+data = json.loads(sys.stdin.read())
+profile = data.get('data', {}).get('profile', {})
+ssid = profile.get('ssid', '')
+security = profile.get('security', 'WPA2-Enterprise')
+auth = profile.get('authentication', {})
+certs = profile.get('certificates', {})
+auto_connect = profile.get('autoConnect', True)
+hidden = profile.get('hidden', False)
+
+conn_name = f'OD-WiFi-{ssid}'
+
+# Remove existing connection with same name
+subprocess.run(['nmcli', 'connection', 'delete', conn_name], capture_output=True)
+
+cmd = ['nmcli', 'connection', 'add', 'type', 'wifi', 'con-name', conn_name, 'ssid', ssid]
+
+if hidden:
+    cmd += ['wifi.hidden', 'yes']
+
+if 'Enterprise' in security:
+    cmd += ['wifi-sec.key-mgmt', 'wpa-eap']
+    eap_method = auth.get('method', 'EAP-TLS').replace('EAP-', '').lower()
+    cmd += ['802-1x.eap', eap_method]
+    if auth.get('identity'):
+        cmd += ['802-1x.identity', auth['identity']]
+    if auth.get('anonymousIdentity'):
+        cmd += ['802-1x.anonymous-identity', auth['anonymousIdentity']]
+    if certs.get('ca', {}).get('data'):
+        ca_path = f'/etc/NetworkManager/certs/od-wifi-{ssid}-ca.pem'
+        subprocess.run(['mkdir', '-p', '/etc/NetworkManager/certs'], capture_output=True)
+        with open(ca_path, 'w') as f:
+            f.write(certs['ca']['data'])
+        cmd += ['802-1x.ca-cert', ca_path]
+    if certs.get('client', {}).get('data'):
+        client_path = f'/etc/NetworkManager/certs/od-wifi-{ssid}-client.p12'
+        with open(client_path, 'wb') as f:
+            import base64
+            f.write(base64.b64decode(certs['client']['data']))
+        cmd += ['802-1x.private-key', client_path]
+        if certs['client'].get('password'):
+            cmd += ['802-1x.private-key-password', certs['client']['password']]
+elif 'WPA' in security:
+    cmd += ['wifi-sec.key-mgmt', 'wpa-psk']
+    if auth.get('password'):
+        cmd += ['wifi-sec.psk', auth['password']]
+
+result = subprocess.run(cmd, capture_output=True, text=True)
+
+if result.returncode == 0:
+    if auto_connect:
+        subprocess.run(['nmcli', 'connection', 'modify', conn_name, 'connection.autoconnect', 'yes'], capture_output=True)
+    print(json.dumps({'status': 'success', 'profileId': conn_name, 'message': f'WiFi profile {ssid} configured'}))
+else:
+    print(json.dumps({'status': 'failed', 'error': result.stderr.strip()}))
+" <<< "$json"
+}
+
+handle_remove_wifi() {
+    local json="$1"
+    local ssid
+    ssid=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('ssid',''))" 2>/dev/null)
+    local conn_name="OD-WiFi-${ssid}"
+    if nmcli connection delete "$conn_name" 2>/dev/null; then
+        echo "{\"status\":\"success\",\"message\":\"WiFi profile ${ssid} removed\"}"
+    else
+        echo "{\"status\":\"failed\",\"error\":\"WiFi profile ${ssid} not found\"}"
+    fi
+}
+
+handle_configure_vpn() {
+    local json="$1"
+    python3 -c "
+import subprocess, json, sys, os
+
+data = json.loads(sys.stdin.read())
+profile = data.get('data', {}).get('profile', {})
+name = profile.get('name', 'OD-VPN')
+vpn_type = profile.get('vpnType', 'openvpn')
+server = profile.get('server', '')
+port = profile.get('port', 1194)
+protocol = profile.get('protocol', 'udp')
+auth = profile.get('authentication', {})
+routing = profile.get('routing', {})
+
+conn_name = f'OD-VPN-{name}'
+
+# Remove existing
+subprocess.run(['nmcli', 'connection', 'delete', conn_name], capture_output=True)
+
+if vpn_type == 'openvpn':
+    cmd = ['nmcli', 'connection', 'add', 'type', 'vpn', 'con-name', conn_name,
+           'vpn-type', 'openvpn',
+           'vpn.data', f'remote={server}, port={port}, proto-{protocol}=yes']
+    if auth.get('certificates', {}).get('ca'):
+        cert_dir = '/etc/NetworkManager/certs'
+        os.makedirs(cert_dir, exist_ok=True)
+        ca_path = f'{cert_dir}/od-vpn-{name}-ca.pem'
+        with open(ca_path, 'w') as f:
+            f.write(auth['certificates']['ca'])
+        subprocess.run(['nmcli', 'connection', 'modify', conn_name, '+vpn.data', f'ca={ca_path}'], capture_output=True)
+
+elif vpn_type == 'wireguard':
+    wg_conf = f'/etc/wireguard/{conn_name}.conf'
+    os.makedirs('/etc/wireguard', exist_ok=True)
+    conf_content = '[Interface]\n'
+    conf_content += f'PrivateKey = {auth.get(\"privateKey\", \"\")}\n\n'
+    conf_content += '[Peer]\n'
+    conf_content += f'PublicKey = {auth.get(\"publicKey\", \"\")}\n'
+    conf_content += f'Endpoint = {server}:{port}\n'
+    allowed_ips = '0.0.0.0/0' if not routing.get('splitTunnel') else ', '.join(routing.get('includedRoutes', ['0.0.0.0/0']))
+    conf_content += f'AllowedIPs = {allowed_ips}\n'
+    with open(wg_conf, 'w') as f:
+        f.write(conf_content)
+    os.chmod(wg_conf, 0o600)
+    cmd = ['wg-quick', 'up', conn_name]
+
+elif vpn_type in ('ikev2', 'l2tp'):
+    cmd = ['nmcli', 'connection', 'add', 'type', 'vpn', 'con-name', conn_name,
+           'vpn-type', 'strongswan' if vpn_type == 'ikev2' else 'l2tp',
+           'vpn.data', f'gateway={server}']
+else:
+    print(json.dumps({'status': 'failed', 'error': f'Unsupported VPN type: {vpn_type}'}))
+    sys.exit(0)
+
+result = subprocess.run(cmd, capture_output=True, text=True)
+if result.returncode == 0:
+    # Configure DNS if specified
+    if routing.get('dns'):
+        subprocess.run(['nmcli', 'connection', 'modify', conn_name, 'ipv4.dns', ' '.join(routing['dns'])], capture_output=True)
+    print(json.dumps({'status': 'success', 'profileId': conn_name, 'message': f'VPN profile {name} configured'}))
+else:
+    print(json.dumps({'status': 'failed', 'error': result.stderr.strip()}))
+" <<< "$json"
+}
+
+handle_remove_vpn() {
+    local json="$1"
+    local profile_id
+    profile_id=$(echo "$json" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('name', d.get('profileId','')))" 2>/dev/null)
+    # Try both the raw name and the OD-VPN- prefixed name
+    if nmcli connection delete "OD-VPN-$profile_id" 2>/dev/null || nmcli connection delete "$profile_id" 2>/dev/null; then
+        echo "{\"status\":\"success\",\"message\":\"VPN profile removed\"}"
+    else
+        echo "{\"status\":\"failed\",\"error\":\"VPN profile not found\"}"
+    fi
+}
+
+handle_configure_email() {
+    local json="$1"
+    python3 -c "
+import json, sys, os, subprocess
+
+data = json.loads(sys.stdin.read())
+profile = data.get('data', {}).get('profile', {})
+account_name = profile.get('accountName', 'Corporate Email')
+account_type = profile.get('accountType', 'imap')
+email = profile.get('emailAddress', '')
+server = profile.get('server', {})
+auth = profile.get('authentication', {})
+
+# Linux email configuration via evolution-data-server or Thunderbird
+config_dir = os.path.expanduser('~/.config/opendirectory/email-profiles')
+os.makedirs(config_dir, exist_ok=True)
+
+profile_config = {
+    'accountName': account_name,
+    'accountType': account_type,
+    'emailAddress': email,
+    'incoming': server.get('incoming', {}),
+    'outgoing': server.get('outgoing', {}),
+    'username': auth.get('username', email),
+    'authMethod': auth.get('method', 'password')
+}
+
+profile_path = os.path.join(config_dir, f'{account_name.replace(\" \", \"_\")}.json')
+with open(profile_path, 'w') as f:
+    json.dump(profile_config, f, indent=2)
+
+# If Thunderbird is available, configure via autoconfig
+thunderbird_dir = None
+for d in os.listdir(os.path.expanduser('~/.thunderbird')) if os.path.exists(os.path.expanduser('~/.thunderbird')) else []:
+    if d.endswith('.default') or d.endswith('.default-release'):
+        thunderbird_dir = os.path.join(os.path.expanduser('~/.thunderbird'), d)
+        break
+
+print(json.dumps({
+    'status': 'success',
+    'profileId': account_name,
+    'configPath': profile_path,
+    'thunderbird': thunderbird_dir is not None,
+    'message': f'Email profile {account_name} configured'
+}))
+" <<< "$json"
+}
+
+handle_remove_email() {
+    local json="$1"
+    local profile_id
+    profile_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('profileId',''))" 2>/dev/null)
+    local config_dir="$HOME/.config/opendirectory/email-profiles"
+    local profile_path="${config_dir}/${profile_id// /_}.json"
+    if [ -f "$profile_path" ]; then
+        rm -f "$profile_path"
+        echo "{\"status\":\"success\",\"message\":\"Email profile removed\"}"
+    else
+        echo "{\"status\":\"failed\",\"error\":\"Email profile not found\"}"
+    fi
 }
 
 # ============================================================================

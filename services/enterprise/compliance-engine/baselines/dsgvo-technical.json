@@ -1,0 +1,82 @@
+{
+  "id": "dsgvo-technical",
+  "name": "DSGVO/GDPR Technical Measures (Art. 25 & 32)",
+  "framework": "dsgvo",
+  "platform": "all",
+  "version": "1.0.0",
+  "description": "Technical and organizational measures required by the EU General Data Protection Regulation (DSGVO/GDPR)",
+  "checks": [
+    {
+      "id": "art32.1a", "title": "Pseudonymisation and encryption of personal data",
+      "category": "Art. 32 Security of Processing", "severity": "critical",
+      "check": { "type": "system", "setting": "DiskEncryption", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable full-disk encryption to protect personal data at rest" }
+    },
+    {
+      "id": "art32.1b", "title": "Ensure confidentiality of processing systems - access control",
+      "category": "Art. 32 Security of Processing", "severity": "critical",
+      "check": { "type": "policy", "setting": "PasswordRequired", "expected": true },
+      "remediation": { "type": "policy_set", "setting": "PasswordRequired", "value": true }
+    },
+    {
+      "id": "art32.1b.2", "title": "Ensure confidentiality - screen lock configured",
+      "category": "Art. 32 Security of Processing", "severity": "high",
+      "check": { "type": "policy", "setting": "ScreenLockTimeout", "operator": "<=", "value": 300 },
+      "remediation": { "type": "policy_set", "setting": "ScreenLockTimeout", "value": 300 }
+    },
+    {
+      "id": "art32.1c", "title": "Ensure availability and resilience - backup configured",
+      "category": "Art. 32 Security of Processing", "severity": "high",
+      "check": { "type": "system", "setting": "BackupConfigured", "expected": true },
+      "remediation": { "type": "manual", "description": "Configure automated backup with encryption for personal data" }
+    },
+    {
+      "id": "art32.1d", "title": "Regular testing and evaluation of security measures",
+      "category": "Art. 32 Security of Processing", "severity": "high",
+      "check": { "type": "system", "setting": "LastSecurityAudit", "expected": true },
+      "remediation": { "type": "manual", "description": "Conduct regular security assessments and penetration tests" }
+    },
+    {
+      "id": "art25.1", "title": "Data protection by design - minimum data collection settings",
+      "category": "Art. 25 Data Protection by Design", "severity": "high",
+      "check": { "type": "policy", "setting": "TelemetryMinimized", "expected": true },
+      "remediation": { "type": "manual", "description": "Configure system telemetry to minimum required level" }
+    },
+    {
+      "id": "art25.2", "title": "Data protection by default - privacy settings enforced",
+      "category": "Art. 25 Data Protection by Default", "severity": "high",
+      "check": { "type": "policy", "setting": "PrivacySettingsEnforced", "expected": true },
+      "remediation": { "type": "manual", "description": "Enforce privacy-protective default settings via group policy" }
+    },
+    {
+      "id": "art32.net", "title": "Network security - encrypted communications",
+      "category": "Art. 32 Security of Processing", "severity": "critical",
+      "check": { "type": "policy", "setting": "TLSMinVersion", "operator": ">=", "value": "1.2" },
+      "remediation": { "type": "manual", "description": "Enforce TLS 1.2 minimum for all network communications" }
+    },
+    {
+      "id": "art32.fw", "title": "Network security - firewall enabled",
+      "category": "Art. 32 Security of Processing", "severity": "high",
+      "check": { "type": "system", "setting": "FirewallEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable and configure host-based firewall" }
+    },
+    {
+      "id": "art32.av", "title": "Protection against malicious software",
+      "category": "Art. 32 Security of Processing", "severity": "high",
+      "check": { "type": "system", "setting": "AntivirusEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Install and maintain up-to-date antivirus/antimalware protection" }
+    },
+    {
+      "id": "art32.log", "title": "Audit logging for personal data access",
+      "category": "Art. 32 Security of Processing", "severity": "high",
+      "check": { "type": "service", "name": "auditd", "property": "status", "expected": "running" },
+      "remediation": { "type": "command", "script": "systemctl enable auditd && systemctl start auditd" }
+    },
+    {
+      "id": "art32.patch", "title": "Timely security updates to protect personal data",
+      "category": "Art. 32 Security of Processing", "severity": "high",
+      "check": { "type": "system", "setting": "AutoUpdateEnabled", "expected": true },
+      "remediation": { "type": "manual", "description": "Enable automatic security updates" }
+    }
+  ]
+}
