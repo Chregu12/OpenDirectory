@@ -17,7 +17,9 @@ export interface HeroConfig {
 export interface StatCard {
   value: string | number;
   label: string;
-  color?: string; // tailwind text color class, e.g. 'text-blue-600'
+  color?: string;
+  icon?: React.ReactNode;
+  trend?: { value: string; direction: 'up' | 'down' | 'stable' };
 }
 
 export interface ListItem {
@@ -26,6 +28,7 @@ export interface ListItem {
   title: string;
   subtitle?: string;
   trailing?: React.ReactNode;
+  onClick?: () => void;
 }
 
 export interface ListSection {
@@ -50,33 +53,143 @@ export interface SimpleViewLayoutProps {
   children?: React.ReactNode;
 }
 
-// ── Hero Status Styles ─────────────────────────────────────────────────────────
+// ── Status colors (subtle, white-based) ─────────────────────────────────────
 
-const HERO_STYLES: Record<HeroStatus, { bg: string; iconBg: string; title: string }> = {
-  ok: {
-    bg: 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200',
-    iconBg: 'bg-green-200',
-    title: 'text-green-900',
-  },
-  warning: {
-    bg: 'bg-gradient-to-br from-orange-50 to-amber-100 border border-orange-200',
-    iconBg: 'bg-orange-200',
-    title: 'text-orange-900',
-  },
-  critical: {
-    bg: 'bg-gradient-to-br from-red-50 to-red-100 border border-red-200',
-    iconBg: 'bg-red-200',
-    title: 'text-red-900',
-  },
+const STATUS_DOT: Record<HeroStatus, string> = {
+  ok: 'bg-emerald-400',
+  warning: 'bg-amber-400',
+  critical: 'bg-red-400',
 };
 
-const DEFAULT_HERO_ICONS: Record<HeroStatus, React.ReactNode> = {
-  ok: <CheckCircleIcon className="w-10 h-10 text-green-600" />,
-  warning: <ExclamationTriangleIcon className="w-10 h-10 text-orange-600" />,
-  critical: <XCircleIcon className="w-10 h-10 text-red-600" />,
+const STATUS_TEXT: Record<HeroStatus, string> = {
+  ok: 'text-emerald-600',
+  warning: 'text-amber-600',
+  critical: 'text-red-600',
 };
 
-// ── Component ──────────────────────────────────────────────────────────────────
+const STATUS_ICON_COLOR: Record<HeroStatus, string> = {
+  ok: 'text-emerald-500',
+  warning: 'text-amber-500',
+  critical: 'text-red-500',
+};
+
+const DEFAULT_ICONS: Record<HeroStatus, React.ReactNode> = {
+  ok: <CheckCircleIcon className="w-6 h-6 text-emerald-500" />,
+  warning: <ExclamationTriangleIcon className="w-6 h-6 text-amber-500" />,
+  critical: <XCircleIcon className="w-6 h-6 text-red-500" />,
+};
+
+// ── Reusable Sub-Components ─────────────────────────────────────────────────
+
+/** Compact status banner – white card with dot indicator */
+export function StatusBanner({ config }: { config: HeroConfig }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-6 py-5 flex items-center gap-4">
+      <div className="flex-shrink-0">
+        {config.icon || DEFAULT_ICONS[config.status]}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${STATUS_DOT[config.status]}`} />
+          <h2 className={`text-[15px] font-semibold ${STATUS_TEXT[config.status]}`}>
+            {config.title}
+          </h2>
+        </div>
+        <p className="text-[13px] text-gray-400 mt-0.5">{config.subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Stat grid – clean white cards with optional icon and trend */
+export function StatGrid({ stats }: { stats: StatCard[] }) {
+  if (stats.length === 0) return null;
+
+  const cols = stats.length <= 2 ? 'md:grid-cols-2' : stats.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-4';
+
+  return (
+    <div className={`grid grid-cols-2 ${cols} gap-3`}>
+      {stats.map((stat, i) => (
+        <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[13px] font-medium text-gray-400">{stat.label}</p>
+            {stat.icon && <span className="text-gray-300">{stat.icon}</span>}
+          </div>
+          <p className={`text-2xl font-semibold ${stat.color || 'text-gray-900'}`}>{stat.value}</p>
+          {stat.trend && (
+            <p className={`text-[12px] mt-1 ${
+              stat.trend.direction === 'up' ? 'text-emerald-500' :
+              stat.trend.direction === 'down' ? 'text-red-500' :
+              'text-gray-400'
+            }`}>
+              {stat.trend.direction === 'up' ? '↑' : stat.trend.direction === 'down' ? '↓' : '–'} {stat.trend.value}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Info card – white card with title and list of items */
+export function InfoCard({ title, items, maxItems = 5 }: { title: string; items: ListItem[]; maxItems?: number }) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="px-5 py-3.5 border-b border-gray-100">
+        <h3 className="text-[14px] font-semibold text-gray-900">{title}</h3>
+      </div>
+      <div className="p-1.5">
+        {items.slice(0, maxItems).map(item => (
+          <div
+            key={item.key}
+            onClick={item.onClick}
+            className={`flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+              item.onClick ? 'hover:bg-gray-50 cursor-pointer' : ''
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              {item.icon}
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-gray-900 truncate">{item.title}</p>
+                {item.subtitle && <p className="text-[11px] text-gray-400 truncate">{item.subtitle}</p>}
+              </div>
+            </div>
+            {item.trailing}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Action bar – row of buttons */
+export function ActionBar({ actions }: { actions: QuickAction[] }) {
+  if (actions.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {actions.map((action, i) => (
+        <button
+          key={i}
+          onClick={action.onClick}
+          disabled={action.disabled}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium rounded-lg transition-colors ${
+            action.variant === 'secondary'
+              ? 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 shadow-sm'
+              : 'text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 shadow-sm'
+          }`}
+        >
+          {action.icon}
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Main Layout ─────────────────────────────────────────────────────────────
 
 export default function SimpleViewLayout({
   hero,
@@ -85,79 +198,18 @@ export default function SimpleViewLayout({
   actions,
   children,
 }: SimpleViewLayoutProps) {
-  const heroStyle = HERO_STYLES[hero.status];
-
   return (
-    <div className="p-6 space-y-6">
-      {/* Status Hero */}
-      <div className={`rounded-2xl p-8 text-center ${heroStyle.bg}`}>
-        <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${heroStyle.iconBg}`}>
-          {hero.icon || DEFAULT_HERO_ICONS[hero.status]}
-        </div>
-        <h1 className={`text-2xl font-bold mb-1 ${heroStyle.title}`}>
-          {hero.title}
-        </h1>
-        <p className="text-sm text-gray-600">{hero.subtitle}</p>
-      </div>
+    <div className="p-6 space-y-4">
+      <StatusBanner config={hero} />
+      <StatGrid stats={stats} />
 
-      {/* Compact Stats */}
-      {stats.length > 0 && (
-        <div className={`grid grid-cols-2 ${stats.length > 2 ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-4`}>
-          {stats.map((stat, i) => (
-            <div key={i} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
-              <p className={`text-2xl font-bold ${stat.color || 'text-gray-900'}`}>{stat.value}</p>
-              <p className="text-xs text-gray-500 mt-1">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* List Sections */}
-      {sections?.map((section, si) => (
-        section.items.length > 0 && (
-          <div key={si} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">{section.title}</h3>
-            <div className="space-y-2">
-              {section.items.slice(0, section.maxItems || 5).map(item => (
-                <div key={item.key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    {item.icon}
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{item.title}</p>
-                      {item.subtitle && <p className="text-xs text-gray-500">{item.subtitle}</p>}
-                    </div>
-                  </div>
-                  {item.trailing}
-                </div>
-              ))}
-            </div>
-          </div>
-        )
+      {sections?.map((section, i) => (
+        <InfoCard key={i} title={section.title} items={section.items} maxItems={section.maxItems} />
       ))}
 
-      {/* Extra content slot */}
       {children}
 
-      {/* Quick Actions */}
-      {actions && actions.length > 0 && (
-        <div className="flex justify-center gap-3">
-          {actions.map((action, i) => (
-            <button
-              key={i}
-              onClick={action.onClick}
-              disabled={action.disabled}
-              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium rounded-xl transition-colors shadow-sm ${
-                action.variant === 'secondary'
-                  ? 'text-gray-700 bg-white border border-gray-200 hover:bg-gray-50'
-                  : 'text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50'
-              }`}
-            >
-              {action.icon}
-              {action.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {actions && actions.length > 0 && <ActionBar actions={actions} />}
     </div>
   );
 }
