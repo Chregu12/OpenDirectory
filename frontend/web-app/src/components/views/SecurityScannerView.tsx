@@ -189,7 +189,11 @@ const sevText = (s: string) =>
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function SecurityScannerView() {
+interface SecurityScannerViewProps {
+  onOpenWizard?: () => void;
+}
+
+export default function SecurityScannerView({ onOpenWizard }: SecurityScannerViewProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'findings' | 'trends'>('overview');
   const [scanning, setScanning] = useState(false);
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
@@ -262,11 +266,18 @@ export default function SecurityScannerView() {
           </h1>
           <p className="text-sm text-gray-500">CIS, NIST, DISA STIG compliance benchmarking</p>
         </div>
-        <button onClick={startScan} disabled={scanning}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg text-sm text-white flex items-center gap-2 shadow-sm">
-          {scanning ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PlayIcon className="w-4 h-4" />}
-          {scanning ? 'Scanning...' : 'Run Scan'}
-        </button>
+        <div className="flex items-center gap-3">
+          {onOpenWizard && (
+            <button onClick={onOpenWizard} className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium transition-colors">
+              Security-Assistent
+            </button>
+          )}
+          <button onClick={startScan} disabled={scanning}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg text-sm text-white flex items-center gap-2 shadow-sm">
+            {scanning ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PlayIcon className="w-4 h-4" />}
+            {scanning ? 'Scanning...' : 'Run Scan'}
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}

@@ -868,7 +868,11 @@ function ArtifactViewer({ compiled, policyId }: { compiled: CompiledResult; poli
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
-export default function PoliciesView() {
+interface PoliciesViewProps {
+  onOpenWizard?: () => void;
+}
+
+export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
   const [policies,   setPolicies]   = useState<Policy[]>([]);
   const [templates,  setTemplates]  = useState<PolicyTemplate[]>([]);
   const [loading,    setLoading]    = useState(true);
@@ -1118,13 +1122,20 @@ export default function PoliciesView() {
               Intent-basierte Richtlinien → Windows GPO · Linux-Configs · macOS Profiles
             </p>
           </div>
-          <button
-            onClick={() => openWizard()}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Neue Policy
-          </button>
+          <div className="flex items-center gap-3">
+            {onOpenWizard && (
+              <button onClick={onOpenWizard} className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-medium transition-colors">
+                Policy-Assistent
+              </button>
+            )}
+            <button
+              onClick={() => openWizard()}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Neue Policy
+            </button>
+          </div>
         </div>
 
         {/* Architecture Banner */}

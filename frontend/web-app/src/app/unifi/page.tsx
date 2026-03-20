@@ -12,6 +12,9 @@ import PolicySimulatorView from '@/components/views/PolicySimulatorView';
 import SecurityScannerView from '@/components/views/SecurityScannerView';
 import AntivirusView from '@/components/views/AntivirusView';
 import MonitoringView from '@/components/views/MonitoringView';
+import BackupView from '@/components/views/BackupView';
+import AppStoreView from '@/components/views/AppStoreView';
+import ComplianceView from '@/components/views/ComplianceView';
 import ServicesDashboard from '@/components/dashboard/ServicesDashboard';
 import SetupWizard from '@/components/setup/SetupWizard';
 import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
@@ -243,13 +246,19 @@ export default function UnifiApp() {
       case 'policy-simulator':
         return <PolicySimulatorView />;
       case 'security-scanner':
-        return <SecurityScannerView />;
+        return <SecurityScannerView onOpenWizard={() => setShowSecurityWizard(true)} />;
       case 'antivirus':
-        return <AntivirusView />;
+        return <AntivirusView onOpenWizard={() => setShowSecurityWizard(true)} />;
+      case 'compliance':
+        return <ComplianceView onOpenWizard={() => setShowSecurityWizard(true)} />;
       case 'policies':
-        return <PoliciesView />;
+        return <PoliciesView onOpenWizard={() => setShowPolicyWizard(true)} />;
       case 'monitoring':
-        return <MonitoringView />;
+        return <MonitoringView onOpenWizard={() => setShowMonitoringWizard(true)} />;
+      case 'backup':
+        return <BackupView onOpenWizard={() => setShowBackupWizard(true)} />;
+      case 'app-store':
+        return <AppStoreView onOpenWizard={() => setShowAppDeployWizard(true)} />;
       case 'wizards':
         return (
           <WizardsView

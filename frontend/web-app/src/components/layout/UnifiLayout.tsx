@@ -20,7 +20,10 @@ import {
   DocumentTextIcon,
   ArrowPathRoundedSquareIcon,
   WrenchScrewdriverIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  CloudArrowUpIcon,
+  Square3Stack3DIcon,
+  ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi } from '@/lib/api';
 
@@ -52,12 +55,15 @@ export default function UnifiLayout({ children, activeView, onViewChange }: Layo
     { id: 'topology', name: 'Network', icon: RectangleGroupIcon },
     { id: 'devices', name: 'Devices', icon: ComputerDesktopIcon },
     { id: 'applications', name: 'Applications', icon: CubeIcon },
+    { id: 'app-store', name: 'App Store', icon: Square3Stack3DIcon },
+    { id: 'policies', name: 'Policies', icon: DocumentTextIcon },
+    { id: 'security-scanner', name: 'Security', icon: ShieldExclamationIcon },
+    { id: 'antivirus', name: 'Antivirus', icon: ShieldCheckIcon },
+    { id: 'compliance', name: 'Compliance', icon: ClipboardDocumentCheckIcon },
+    { id: 'monitoring', name: 'Monitoring', icon: ChartBarIcon },
+    { id: 'backup', name: 'Backup', icon: CloudArrowUpIcon },
     { id: 'graph-explorer', name: 'Graph Explorer', icon: ShareIcon },
     { id: 'policy-simulator', name: 'Policy Simulator', icon: BeakerIcon },
-    { id: 'security-scanner', name: 'Security Scanner', icon: ShieldExclamationIcon },
-    { id: 'antivirus', name: 'Antivirus (ClamAV)', icon: ShieldCheckIcon },
-    { id: 'policies', name: 'Policies', icon: DocumentTextIcon },
-    { id: 'monitoring', name: 'Insights', icon: ChartBarIcon },
     { id: 'wizards', name: 'Assistenten', icon: WrenchScrewdriverIcon },
     { id: 'settings', name: 'Settings', icon: Cog6ToothIcon },
   ];

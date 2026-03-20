@@ -678,6 +678,30 @@ export const appStoreApi = {
     api.get('/api/store/stats'),
 };
 
+// Compliance API
+export const complianceApi = {
+  getStatus: () =>
+    api.get('/api/compliance/dashboard'),
+
+  getBaselines: () =>
+    api.get('/api/compliance/baselines'),
+
+  getWaivers: () =>
+    api.get('/api/compliance/waivers'),
+
+  deleteWaiver: (waiverId: string) =>
+    api.delete(`/api/compliance/waivers/${waiverId}`),
+
+  triggerScan: (deviceId: string) =>
+    api.post(`/api/compliance/evaluate/${deviceId}`),
+
+  generateReport: (options: any) =>
+    api.post('/api/compliance/reports/generate', options),
+
+  getFleetScore: () =>
+    api.get('/api/compliance/score/fleet'),
+};
+
 // Policy API
 export const policyApi = {
   getPolicies: (params?: { type?: string; status?: string; platform?: string; page?: number; limit?: number }) =>

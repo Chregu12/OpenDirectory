@@ -175,7 +175,11 @@ const platformIcon = (p: string) =>
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function AntivirusView() {
+interface AntivirusViewProps {
+  onOpenWizard?: () => void;
+}
+
+export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'devices' | 'scans' | 'threats' | 'quarantine' | 'signatures'>('dashboard');
   const [scanning, setScanning] = useState(false);
   const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
@@ -258,6 +262,11 @@ export default function AntivirusView() {
             <SignalIcon className="w-3 h-3 inline mr-1" />
             Signatures: {stats.signatureVersion}
           </span>
+          {onOpenWizard && (
+            <button onClick={onOpenWizard} className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium transition-colors">
+              Security-Assistent
+            </button>
+          )}
           <button onClick={startFleetScan} disabled={scanning}
             className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg text-sm text-white flex items-center gap-2 shadow-sm">
             {scanning ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PlayIcon className="w-4 h-4" />}

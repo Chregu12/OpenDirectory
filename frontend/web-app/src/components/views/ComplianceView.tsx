@@ -64,7 +64,11 @@ interface TrendPoint {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function ComplianceView() {
+interface ComplianceViewProps {
+  onOpenWizard?: () => void;
+}
+
+export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
   const [loading, setLoading] = useState(true);
   const [fleetScore, setFleetScore] = useState(0);
   const [baselines, setBaselines] = useState<BaselineStatus[]>([]);
@@ -213,6 +217,11 @@ export default function ComplianceView() {
           <p className="text-sm text-gray-500 mt-1">Monitor device compliance across your fleet</p>
         </div>
         <div className="flex items-center gap-3">
+          {onOpenWizard && (
+            <button onClick={onOpenWizard} className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium transition-colors">
+              Security-Assistent
+            </button>
+          )}
           <button onClick={handleExportReport} className="flex items-center gap-2 px-3 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
             <DocumentArrowDownIcon className="w-4 h-4" /> Export
           </button>

@@ -102,7 +102,11 @@ const cpuTimeseries = generateTimeseries();
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function MonitoringView() {
+interface MonitoringViewProps {
+  onOpenWizard?: () => void;
+}
+
+export default function MonitoringView({ onOpenWizard }: MonitoringViewProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'alerts' | 'services' | 'metrics'>('overview');
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [metrics, setMetrics] = useState<SystemMetric[]>([]);
@@ -205,6 +209,11 @@ export default function MonitoringView() {
             <span className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-sm flex items-center gap-1">
               <BellAlertIcon className="w-4 h-4" /> {unacknowledgedAlerts} active alerts
             </span>
+          )}
+          {onOpenWizard && (
+            <button onClick={onOpenWizard} className="px-3 py-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-sm font-medium transition-colors">
+              Setup-Assistent
+            </button>
           )}
           <button className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600" title="Refresh">
             <ArrowPathIcon className="w-5 h-5" />

@@ -141,7 +141,11 @@ function getCategoryColor(category: string) {
 }
 
 // --- Component ---
-export default function AppStoreView() {
+interface AppStoreViewProps {
+  onOpenWizard?: () => void;
+}
+
+export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   const [apps, setApps] = useState<StoreApp[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([]);
   const [stats, setStats] = useState<StoreStats | null>(null);
@@ -333,6 +337,13 @@ export default function AppStoreView() {
           </p>
         </div>
 
+        <div className="flex items-center gap-3">
+          {onOpenWizard && (
+            <button onClick={onOpenWizard} className="px-3 py-1.5 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 text-sm font-medium transition-colors">
+              Verteilungs-Assistent
+            </button>
+          )}
+        </div>
         {/* Stats badges */}
         {stats && (
           <div className="flex items-center space-x-4 text-sm">
