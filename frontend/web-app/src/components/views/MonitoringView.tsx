@@ -2,525 +2,563 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  ChartBarIcon,
-  ArrowPathIcon,
   CheckCircleIcon,
   XCircleIcon,
   ExclamationTriangleIcon,
-  BellAlertIcon,
-  CpuChipIcon,
+  ArrowPathIcon,
   ServerIcon,
-  ClockIcon,
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
-  SignalIcon,
-  EyeIcon,
-  BoltIcon
+  CpuChipIcon,
+  ChartBarIcon,
+  CircleStackIcon,
+  ComputerDesktopIcon,
 } from '@heroicons/react/24/outline';
-import { monitoringApi, prometheusApi, healthApi, gatewayApi } from '@/lib/api';
-import { useUiMode } from '@/lib/ui-mode';
-import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+} from 'recharts';
+import { healthApi, prometheusApi, grafanaApi, deviceApi } from '@/lib/api';
+import toast from 'react-hot-toast';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface SystemMetric {
-  name: string;
-  value: number;
-  unit: string;
-  trend: 'up' | 'down' | 'stable';
-  trendValue: string;
-  status: 'healthy' | 'warning' | 'critical';
-}
-
-interface Alert {
-  id: string;
-  severity: 'critical' | 'warning' | 'info';
-  title: string;
-  description: string;
-  source: string;
-  timestamp: string;
-  acknowledged: boolean;
-}
-
-interface ServiceMetric {
+interface ServiceHealth {
   name: string;
   status: 'healthy' | 'unhealthy' | 'unknown';
-  responseTime: number;
-  uptime: string;
-  requests: number;
-  errors: number;
   lastCheck: string;
+  responseTime?: number;
 }
 
-interface TimeseriesPoint {
+interface KPI {
+  label: string;
+  value: string;
+  icon: React.ComponentType<any>;
+  color: string;
+  bg: string;
+}
+
+interface MetricPoint {
   time: string;
   value: number;
 }
 
-// ── Mock Data ──────────────────────────────────────────────────────────────────
+type MetricKey = 'cpu_usage' | 'memory_usage' | 'request_rate' | 'error_rate';
 
-const mockMetrics: SystemMetric[] = [
-  { name: 'CPU Usage', value: 34, unit: '%', trend: 'down', trendValue: '-2.1%', status: 'healthy' },
-  { name: 'Memory Usage', value: 67, unit: '%', trend: 'up', trendValue: '+1.8%', status: 'healthy' },
-  { name: 'Disk I/O', value: 12, unit: 'MB/s', trend: 'stable', trendValue: '0%', status: 'healthy' },
-  { name: 'Network Throughput', value: 245, unit: 'Mbps', trend: 'up', trendValue: '+15%', status: 'healthy' },
-  { name: 'Active Connections', value: 1842, unit: '', trend: 'up', trendValue: '+124', status: 'healthy' },
-  { name: 'API Latency (p95)', value: 42, unit: 'ms', trend: 'down', trendValue: '-8ms', status: 'healthy' },
+const METRIC_OPTIONS: { key: MetricKey; label: string; color: string; unit: string }[] = [
+  { key: 'cpu_usage',    label: 'CPU Usage',    color: '#8b5cf6', unit: '%' },
+  { key: 'memory_usage', label: 'Memory Usage', color: '#10b981', unit: '%' },
+  { key: 'request_rate', label: 'Request Rate', color: '#f59e0b', unit: 'req/s' },
+  { key: 'error_rate',   label: 'Error Rate',   color: '#ef4444', unit: '%' },
 ];
 
-const mockAlerts: Alert[] = [
-  { id: 'a-1', severity: 'critical', title: 'High memory usage on SRV-WEB02', description: 'Memory usage exceeded 90% threshold for more than 5 minutes.', source: 'Prometheus', timestamp: '2026-03-16T08:45:00Z', acknowledged: false },
-  { id: 'a-2', severity: 'warning', title: 'Certificate expiring in 14 days', description: 'TLS certificate for api.corp.local expires on 2026-03-30.', source: 'Certificate Monitor', timestamp: '2026-03-16T06:00:00Z', acknowledged: false },
-  { id: 'a-3', severity: 'warning', title: 'Disk space below 20% on SRV-FILE01', description: 'Volume /data has 18% free space remaining (52 GB of 280 GB).', source: 'Prometheus', timestamp: '2026-03-16T04:30:00Z', acknowledged: true },
-  { id: 'a-4', severity: 'info', title: 'Backup completed successfully', description: 'Full system backup completed in 2h 14m. 1.2 TB backed up.', source: 'Backup System', timestamp: '2026-03-16T03:00:00Z', acknowledged: true },
-  { id: 'a-5', severity: 'warning', title: 'LLDAP service restarted', description: 'LLDAP service was automatically restarted after health check failure.', source: 'Service Monitor', timestamp: '2026-03-15T22:15:00Z', acknowledged: true },
-  { id: 'a-6', severity: 'info', title: 'Signature database updated', description: 'ClamAV signatures updated to version 27180.', source: 'Antivirus', timestamp: '2026-03-15T18:00:00Z', acknowledged: true },
-];
-
-const mockServices: ServiceMetric[] = [
-  { name: 'API Gateway', status: 'healthy', responseTime: 12, uptime: '99.99%', requests: 45230, errors: 3, lastCheck: '2026-03-16T09:00:00Z' },
-  { name: 'LLDAP (User Directory)', status: 'healthy', responseTime: 8, uptime: '99.95%', requests: 12400, errors: 0, lastCheck: '2026-03-16T09:00:00Z' },
-  { name: 'Device Service', status: 'healthy', responseTime: 15, uptime: '99.98%', requests: 8900, errors: 2, lastCheck: '2026-03-16T09:00:00Z' },
-  { name: 'Network Infrastructure', status: 'healthy', responseTime: 22, uptime: '99.97%', requests: 3200, errors: 0, lastCheck: '2026-03-16T09:00:00Z' },
-  { name: 'Prometheus', status: 'healthy', responseTime: 5, uptime: '100%', requests: 89000, errors: 0, lastCheck: '2026-03-16T09:00:00Z' },
-  { name: 'Grafana', status: 'healthy', responseTime: 35, uptime: '99.90%', requests: 1200, errors: 1, lastCheck: '2026-03-16T09:00:00Z' },
-  { name: 'Vault', status: 'healthy', responseTime: 18, uptime: '100%', requests: 560, errors: 0, lastCheck: '2026-03-16T09:00:00Z' },
-  { name: 'Printer Service', status: 'unknown', responseTime: 0, uptime: 'N/A', requests: 0, errors: 0, lastCheck: '2026-03-16T09:00:00Z' },
-];
-
-const generateTimeseries = (): TimeseriesPoint[] => {
-  const points: TimeseriesPoint[] = [];
-  const now = Date.now();
-  for (let i = 23; i >= 0; i--) {
-    points.push({
-      time: new Date(now - i * 3600000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
-      value: 25 + Math.random() * 30 + (i < 8 ? 15 : 0),
-    });
-  }
-  return points;
-};
-
-const cpuTimeseries = generateTimeseries();
-
-// ── Component ──────────────────────────────────────────────────────────────────
-
-interface MonitoringViewProps {
-  onOpenWizard?: () => void;
+interface DeviceMetric {
+  id: string;
+  name: string;
+  platform: string;
+  status: 'online' | 'offline';
+  cpu: number;
+  mem: number;
+  disk: number;
 }
 
-export default function MonitoringView({ onOpenWizard }: MonitoringViewProps) {
-  const { isSimple } = useUiMode();
-  const [activeTab, setActiveTab] = useState<'overview' | 'alerts' | 'services' | 'metrics'>('overview');
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [metrics, setMetrics] = useState<SystemMetric[]>([]);
-  const [services, setServices] = useState<ServiceMetric[]>([]);
-  const [loading, setLoading] = useState(true);
+function UsageBar({ value, warn = 70, crit = 90 }: { value: number; warn?: number; crit?: number }) {
+  const color = value === 0 ? 'bg-gray-200' : value >= crit ? 'bg-red-500' : value >= warn ? 'bg-yellow-400' : 'bg-green-500';
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${value}%` }} />
+      </div>
+      <span className="text-xs text-gray-500 w-8 text-right">{value > 0 ? `${value}%` : '—'}</span>
+    </div>
+  );
+}
 
-  useEffect(() => { loadMonitoringData(); }, []);
+const parsePromValue = (result: any[], ipHint: string): number => {
+  const match = result.find((r: any) => r.metric?.instance?.startsWith(ipHint));
+  if (!match) return 0;
+  return parseFloat(match.value?.[1]) || 0;
+};
 
-  const loadMonitoringData = async () => {
-    setLoading(true);
-    try {
-      const [alertsRes, statusRes, servicesRes] = await Promise.allSettled([
-        monitoringApi.getAlerts(),
-        monitoringApi.getSystemStatus(),
-        gatewayApi.getServices(),
-      ]);
+function ClientMetricsTable() {
+  const [devices, setDevices] = useState<DeviceMetric[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(true);
+  const [noDevices, setNoDevices] = useState(false);
 
-      // Alerts
-      if (alertsRes.status === 'fulfilled' && alertsRes.value.data?.length > 0) {
-        setAlerts(alertsRes.value.data.map((a: any) => ({
-          id: a.id,
-          severity: a.severity || 'info',
-          title: a.title || a.message || 'Alert',
-          description: a.description || '',
-          source: a.source || 'System',
-          timestamp: a.timestamp || new Date().toISOString(),
-          acknowledged: a.acknowledged ?? false,
-        })));
-      } else {
-        setAlerts(mockAlerts);
-      }
+  useEffect(() => {
+    let cancelled = false;
 
-      // Metrics from system status
-      if (statusRes.status === 'fulfilled' && statusRes.value.data) {
-        const s = statusRes.value.data;
-        if (s.cpu !== undefined || s.memory !== undefined) {
-          setMetrics([
-            { name: 'CPU Usage', value: s.cpu ?? 0, unit: '%', trend: 'stable', trendValue: '0%', status: (s.cpu ?? 0) > 80 ? 'critical' : 'healthy' },
-            { name: 'Memory Usage', value: s.memory ?? 0, unit: '%', trend: 'stable', trendValue: '0%', status: (s.memory ?? 0) > 80 ? 'warning' : 'healthy' },
-            ...mockMetrics.slice(2),
-          ]);
-        } else {
-          setMetrics(mockMetrics);
+    const load = async () => {
+      setLoadingDevices(true);
+      setNoDevices(false);
+
+      // Fetch devices
+      let rawDevices: any[] = [];
+      try {
+        const res = await deviceApi.getDevices();
+        rawDevices = res.data?.data ?? [];
+      } catch {
+        if (!cancelled) {
+          setDevices([]);
+          setNoDevices(true);
+          setLoadingDevices(false);
         }
-      } else {
-        setMetrics(mockMetrics);
+        return;
       }
 
-      // Services
-      if (servicesRes.status === 'fulfilled' && servicesRes.value.data?.length > 0) {
-        setServices(servicesRes.value.data.map((s: any) => ({
-          name: s.name || 'Unknown',
-          status: s.status || 'unknown',
-          responseTime: s.responseTime || 0,
-          uptime: s.uptime || 'N/A',
-          requests: s.requests || 0,
-          errors: s.errors || 0,
-          lastCheck: s.lastCheck || new Date().toISOString(),
-        })));
-      } else {
-        setServices(mockServices);
+      if (rawDevices.length === 0) {
+        if (!cancelled) {
+          setDevices([]);
+          setNoDevices(true);
+          setLoadingDevices(false);
+        }
+        return;
       }
-    } catch {
-      setAlerts(mockAlerts);
-      setMetrics(mockMetrics);
-      setServices(mockServices);
+
+      // Build initial metrics with zeros
+      const metrics: DeviceMetric[] = rawDevices.map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        platform: d.platform ?? 'unknown',
+        status: d.status === 'online' ? 'online' : 'offline',
+        cpu: 0,
+        mem: 0,
+        disk: 0,
+      }));
+
+      // Fetch Prometheus metrics for all three signals in parallel
+      let cpuResult: any[] = [];
+      let memResult: any[] = [];
+      let diskResult: any[] = [];
+
+      try {
+        const [cpuRes, memRes, diskRes] = await Promise.all([
+          prometheusApi.query('100 - avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100'),
+          prometheusApi.query('(1 - avg by(instance) (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100'),
+          prometheusApi.query('(1 - avg by(instance) (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100'),
+        ]);
+        cpuResult  = cpuRes.data?.data?.result  ?? [];
+        memResult  = memRes.data?.data?.result  ?? [];
+        diskResult = diskRes.data?.data?.result ?? [];
+      } catch {
+        // Prometheus unavailable — leave all metrics as 0
+      }
+
+      // Merge Prometheus values by IP prefix for online devices
+      const merged = metrics.map((m, i) => {
+        const raw = rawDevices[i];
+        if (m.status !== 'online' || !raw.ip_address) return m;
+        const ip = raw.ip_address as string;
+        return {
+          ...m,
+          cpu:  Math.round(parsePromValue(cpuResult,  ip)),
+          mem:  Math.round(parsePromValue(memResult,  ip)),
+          disk: Math.round(parsePromValue(diskResult, ip)),
+        };
+      });
+
+      if (!cancelled) {
+        setDevices(merged);
+        setLoadingDevices(false);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const onlineCount = devices.filter(d => d.status === 'online').length;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <ComputerDesktopIcon className="w-4 h-4 text-gray-500" />
+        <h2 className="text-sm font-semibold text-gray-700">Client Device Metrics</h2>
+        {!loadingDevices && !noDevices && (
+          <span className="ml-auto text-xs text-gray-400">{onlineCount}/{devices.length} online</span>
+        )}
+      </div>
+
+      {loadingDevices ? (
+        <p className="text-sm text-gray-500">Loading device metrics…</p>
+      ) : noDevices ? (
+        <p className="text-sm text-gray-500">No devices found</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-2 pr-4">Device</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-2 pr-4 w-20">Status</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-2 pr-4">CPU</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-2 pr-4">Memory</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-2">Disk</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {devices.map(dev => (
+                <tr key={dev.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="py-2.5 pr-4">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dev.status === 'online' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                      <span className="text-sm font-medium text-gray-800">{dev.name}</span>
+                      <span className="text-xs text-gray-400 capitalize">{dev.platform}</span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 pr-4">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                      dev.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {dev.status}
+                    </span>
+                  </td>
+                  <td className="py-2.5 pr-4 min-w-[120px]"><UsageBar value={dev.cpu} /></td>
+                  <td className="py-2.5 pr-4 min-w-[120px]"><UsageBar value={dev.mem} warn={80} /></td>
+                  <td className="py-2.5 min-w-[120px]"><UsageBar value={dev.disk} warn={75} crit={90} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function MonitoringView() {
+  const [services, setServices] = useState<ServiceHealth[]>([]);
+  const [kpis, setKpis] = useState<KPI[]>([]);
+  const [metricsData, setMetricsData] = useState<Record<MetricKey, MetricPoint[]>>({
+    cpu_usage: [], memory_usage: [], request_rate: [], error_rate: [],
+  });
+  const [selectedMetric, setSelectedMetric] = useState<MetricKey>('cpu_usage');
+  const [timeRange, setTimeRange] = useState('1h');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [grafanaDashboards, setGrafanaDashboards] = useState<any[]>([]);
+
+  useEffect(() => {
+    loadAll();
+    const interval = setInterval(loadAll, 30000);
+    return () => clearInterval(interval);
+  }, [timeRange]);
+
+  const loadAll = async () => {
+    try {
+      await Promise.all([loadHealth(), loadMetrics(), loadGrafana()]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const unacknowledgedAlerts = alerts.filter(a => !a.acknowledged).length;
-
-  const acknowledgeAlert = (alertId: string) => {
-    setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, acknowledged: true } : a));
+  const loadHealth = async () => {
+    try {
+      const res = await healthApi.getOverallHealth();
+      setServices(res.data.services || []);
+    } catch {}
   };
 
-  const alertSeverityBadge = (s: string) =>
-    s === 'critical' ? 'od-badge-critical' :
-    s === 'warning' ? 'od-badge-medium' :
-    'od-badge-info';
+  const parseRange = (r: string) => {
+    const unit = r.slice(-1);
+    const val = parseInt(r.slice(0, -1));
+    if (unit === 'm') return val * 60;
+    if (unit === 'h') return val * 3600;
+    if (unit === 'd') return val * 86400;
+    return 3600;
+  };
 
-  const alertSeverityIcon = (s: string) =>
-    s === 'critical' ? <XCircleIcon className="w-5 h-5 text-red-500" /> :
-    s === 'warning' ? <ExclamationTriangleIcon className="w-5 h-5 text-yellow-500" /> :
-    <CheckCircleIcon className="w-5 h-5 text-blue-500" />;
+  const loadMetrics = async () => {
+    try {
+      // KPIs
+      const kpiRes = await prometheusApi.getKPIs(timeRange);
+      const k = kpiRes.data.kpis || {};
+      setKpis([
+        {
+          label: 'Service Uptime',
+          value: k.serviceUptime?.data?.result?.[0]?.value?.[1]
+            ? `${parseFloat(k.serviceUptime.data.result[0].value[1]).toFixed(1)}%`
+            : 'N/A',
+          icon: ServerIcon,
+          color: 'text-green-600',
+          bg: 'bg-green-50',
+        },
+        {
+          label: 'Total Requests',
+          value: k.totalRequests?.data?.result?.[0]?.value?.[1]
+            ? parseInt(k.totalRequests.data.result[0].value[1]).toLocaleString()
+            : 'N/A',
+          icon: ChartBarIcon,
+          color: 'text-blue-600',
+          bg: 'bg-blue-50',
+        },
+        {
+          label: 'Error Rate',
+          value: k.errorRate?.data?.result?.[0]?.value?.[1]
+            ? `${parseFloat(k.errorRate.data.result[0].value[1]).toFixed(2)}%`
+            : 'N/A',
+          icon: CircleStackIcon,
+          color: 'text-red-600',
+          bg: 'bg-red-50',
+        },
+        {
+          label: 'Avg Response',
+          value: k.avgResponseTime?.data?.result?.[0]?.value?.[1]
+            ? `${(parseFloat(k.avgResponseTime.data.result[0].value[1]) * 1000).toFixed(0)}ms`
+            : 'N/A',
+          icon: CpuChipIcon,
+          color: 'text-purple-600',
+          bg: 'bg-purple-50',
+        },
+        {
+          label: 'Active Users',
+          value: k.activeUsers?.data?.result?.[0]?.value?.[1]
+            ? parseInt(k.activeUsers.data.result[0].value[1]).toLocaleString()
+            : 'N/A',
+          icon: ServerIcon,
+          color: 'text-indigo-600',
+          bg: 'bg-indigo-50',
+        },
+        {
+          label: 'Devices',
+          value: k.connectedDevices?.data?.result?.[0]?.value?.[1]
+            ? parseInt(k.connectedDevices.data.result[0].value[1]).toLocaleString()
+            : 'N/A',
+          icon: CpuChipIcon,
+          color: 'text-teal-600',
+          bg: 'bg-teal-50',
+        },
+      ]);
 
-  if (isSimple) {
-    const healthyCount = services.filter(s => s.status === 'healthy').length;
-    const unhealthyCount = services.filter(s => s.status === 'unhealthy').length;
-    const hasCriticalAlerts = alerts.some(a => a.severity === 'critical' && !a.acknowledged);
+      // Time series
+      const queries: Record<MetricKey, string> = {
+        cpu_usage:    '100 - avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100',
+        memory_usage: '(1 - avg(node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100',
+        request_rate: 'sum(rate(http_requests_total[5m]))',
+        error_rate:   'sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100',
+      };
+      const now = Math.floor(Date.now() / 1000);
+      const start = now - parseRange(timeRange);
 
+      const results = await Promise.all(
+        (Object.entries(queries) as [MetricKey, string][]).map(async ([key, q]) => {
+          try {
+            const r = await prometheusApi.getTimeseries(q, start, now, '30s');
+            return {
+              key,
+              data: (r.data.data?.[0]?.values || []).map((pt: any) => ({
+                time: new Date(pt.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+                value: parseFloat(pt.value) || 0,
+              })),
+            };
+          } catch {
+            return { key, data: [] };
+          }
+        })
+      );
+
+      const map: Record<MetricKey, MetricPoint[]> = { cpu_usage: [], memory_usage: [], request_rate: [], error_rate: [] };
+      results.forEach(({ key, data }) => { map[key] = data; });
+      setMetricsData(map);
+    } catch {}
+  };
+
+  const loadGrafana = async () => {
+    try {
+      const res = await grafanaApi.getOpenDirectoryDashboards();
+      setGrafanaDashboards(res.data.dashboards || []);
+    } catch {}
+  };
+
+  const refresh = () => {
+    setRefreshing(true);
+    loadAll();
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'healthy':   return <CheckCircleIcon className="h-4 w-4 text-green-500" />;
+      case 'unhealthy': return <XCircleIcon className="h-4 w-4 text-red-500" />;
+      default:          return <ExclamationTriangleIcon className="h-4 w-4 text-yellow-500" />;
+    }
+  };
+
+  const healthyCount = services.filter(s => s.status === 'healthy').length;
+  const currentMetric = METRIC_OPTIONS.find(m => m.key === selectedMetric)!;
+  const chartData = metricsData[selectedMetric];
+
+  if (loading) {
     return (
-      <SimpleViewLayout
-        hero={{
-          status: hasCriticalAlerts || unhealthyCount > 0 ? 'critical' : unacknowledgedAlerts > 0 ? 'warning' : 'ok',
-          icon: <ChartBarIcon className="w-10 h-10 text-purple-600" />,
-          title: hasCriticalAlerts
-            ? `${unacknowledgedAlerts} Active Alert${unacknowledgedAlerts > 1 ? 's' : ''}`
-            : unacknowledgedAlerts > 0
-            ? `${unacknowledgedAlerts} Warning${unacknowledgedAlerts > 1 ? 's' : ''}`
-            : 'All Systems Healthy',
-          subtitle: `${healthyCount} of ${services.length} services running`,
-        }}
-        stats={[
-          { value: healthyCount, label: 'Healthy', color: 'text-green-600' },
-          { value: unhealthyCount, label: 'Unhealthy', color: 'text-red-600' },
-          { value: unacknowledgedAlerts, label: 'Alerts', color: unacknowledgedAlerts > 0 ? 'text-red-600' : 'text-gray-600' },
-          { value: `${Math.round(services.reduce((acc, s) => acc + s.responseTime, 0) / (services.filter(s => s.responseTime > 0).length || 1))}ms`, label: 'Avg Response', color: 'text-blue-600' },
-        ]}
-        sections={alerts.length > 0 ? [{
-          title: 'Recent Alerts',
-          maxItems: 4,
-          items: alerts.slice(0, 4).map(a => ({
-            key: a.id,
-            icon: alertSeverityIcon(a.severity),
-            title: a.title,
-            subtitle: `${a.source} - ${new Date(a.timestamp).toLocaleString('de-DE')}`,
-            trailing: (
-              <span className={`px-2 py-0.5 rounded text-xs ${alertSeverityBadge(a.severity)}`}>{a.severity}</span>
-            ),
-          })),
-        }] : []}
-      >
-        {/* CPU Timeline Chart */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-          <h3 className="text-sm font-semibold text-gray-600 mb-4">CPU Usage (Last 24h)</h3>
-          <div className="flex items-end gap-1 h-32">
-            {cpuTimeseries.map((p, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div className="w-full relative" style={{ height: `${p.value * 1.2}px` }}>
-                  <div className={`absolute bottom-0 w-full rounded-t ${p.value > 60 ? 'bg-orange-500' : p.value > 40 ? 'bg-blue-500' : 'bg-green-500'}`}
-                    style={{ height: '100%' }} />
-                </div>
-              </div>
-            ))}
+      <div className="p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => <div key={i} className="h-20 bg-gray-200 rounded-xl" />)}
           </div>
-          <div className="flex justify-between mt-2 text-xs text-gray-400">
-            <span>{cpuTimeseries[0]?.time}</span>
-            <span>{cpuTimeseries[Math.floor(cpuTimeseries.length / 2)]?.time}</span>
-            <span>{cpuTimeseries[cpuTimeseries.length - 1]?.time}</span>
-          </div>
+          <div className="h-64 bg-gray-200 rounded-xl" />
         </div>
-      </SimpleViewLayout>
+      </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-            <ChartBarIcon className="w-6 h-6 text-purple-600" /> Insights & Analytics
-          </h1>
-          <p className="text-sm text-gray-500">System monitoring, alerts, and performance metrics</p>
+          <h1 className="text-2xl font-semibold text-gray-900">Monitoring</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {healthyCount}/{services.length} services healthy
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          {unacknowledgedAlerts > 0 && (
-            <span className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-sm flex items-center gap-1">
-              <BellAlertIcon className="w-4 h-4" /> {unacknowledgedAlerts} active alerts
-            </span>
-          )}
-          {onOpenWizard && (
-            <button onClick={onOpenWizard} className="px-3 py-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-sm font-medium transition-colors">
-              Setup-Assistent
-            </button>
-          )}
-          <button className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600" title="Refresh">
-            <ArrowPathIcon className="w-5 h-5" />
+          <select
+            value={timeRange}
+            onChange={e => setTimeRange(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="15m">Last 15 min</option>
+            <option value="1h">Last hour</option>
+            <option value="3h">Last 3 hours</option>
+            <option value="6h">Last 6 hours</option>
+            <option value="24h">Last 24 hours</option>
+          </select>
+          <button
+            onClick={refresh}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+          >
+            <ArrowPathIcon className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 bg-gray-50">
-        {([
-          ['overview', 'Overview'],
-          ['alerts', `Alerts (${unacknowledgedAlerts})`],
-          ['services', `Services (${services.length})`],
-          ['metrics', 'Metrics'],
-        ] as const).map(([key, label]) => (
-          <button key={key} onClick={() => setActiveTab(key)}
-            className={`od-tab ${activeTab === key ? 'od-tab-active' : 'od-tab-inactive'}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-6">
-        {/* ── Overview ───────────────────────────────────────────────────── */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            {/* System Metrics Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {metrics.map(m => (
-                <div key={m.name} className="od-card p-4">
-                  <div className="text-xs text-gray-500 mb-1">{m.name}</div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    {m.value}<span className="text-sm text-gray-400 ml-1">{m.unit}</span>
-                  </div>
-                  <div className="flex items-center text-xs mt-1">
-                    {m.trend === 'up' ? <ArrowTrendingUpIcon className="w-3 h-3 text-green-500 mr-1" /> :
-                     m.trend === 'down' ? <ArrowTrendingDownIcon className="w-3 h-3 text-green-500 mr-1" /> :
-                     <span className="w-3 h-3 mr-1">-</span>}
-                    <span className="text-gray-500">{m.trendValue}</span>
-                  </div>
+      {/* Service health */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">Service Health</h2>
+        {services.length === 0 ? (
+          <p className="text-sm text-gray-500">No service data available</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {services.map(svc => (
+              <div key={svc.name} className="flex items-center justify-between border border-gray-100 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  {getStatusIcon(svc.status)}
+                  <span className="text-sm font-medium text-gray-800 truncate">{svc.name.replace(' Service', '')}</span>
                 </div>
-              ))}
-            </div>
-
-            {/* CPU Timeline Chart */}
-            <div className="od-card p-4">
-              <h3 className="text-sm font-semibold text-gray-600 mb-4">CPU Usage (Last 24h)</h3>
-              <div className="flex items-end gap-1 h-32">
-                {cpuTimeseries.map((p, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div className="w-full relative" style={{ height: `${p.value * 1.2}px` }}>
-                      <div className={`absolute bottom-0 w-full rounded-t ${p.value > 60 ? 'bg-orange-500' : p.value > 40 ? 'bg-blue-500' : 'bg-green-500'}`}
-                        style={{ height: '100%' }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between mt-2 text-xs text-gray-400">
-                <span>{cpuTimeseries[0]?.time}</span>
-                <span>{cpuTimeseries[Math.floor(cpuTimeseries.length / 2)]?.time}</span>
-                <span>{cpuTimeseries[cpuTimeseries.length - 1]?.time}</span>
-              </div>
-            </div>
-
-            {/* Recent Alerts */}
-            <div className="od-card p-4">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-sm font-semibold text-gray-600">Recent Alerts</h3>
-                <button onClick={() => setActiveTab('alerts')} className="text-xs text-blue-600 hover:text-blue-700">View all</button>
-              </div>
-              <div className="space-y-2">
-                {alerts.slice(0, 4).map(a => (
-                  <div key={a.id} className={`flex items-start gap-3 p-3 rounded-lg ${a.acknowledged ? 'bg-gray-50' : 'bg-white border border-gray-200'}`}>
-                    {alertSeverityIcon(a.severity)}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900">{a.title}</div>
-                      <div className="text-xs text-gray-500">{a.source} - {new Date(a.timestamp).toLocaleString('de-DE')}</div>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded text-xs ${alertSeverityBadge(a.severity)}`}>{a.severity}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Service Status Summary */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="od-card p-4 text-center">
-                <div className="text-3xl font-bold text-green-600">{services.filter(s => s.status === 'healthy').length}</div>
-                <div className="text-xs text-gray-500">Healthy Services</div>
-              </div>
-              <div className="od-card p-4 text-center">
-                <div className="text-3xl font-bold text-red-600">{services.filter(s => s.status === 'unhealthy').length}</div>
-                <div className="text-xs text-gray-500">Unhealthy</div>
-              </div>
-              <div className="od-card p-4 text-center">
-                <div className="text-3xl font-bold text-yellow-600">{services.filter(s => s.status === 'unknown').length}</div>
-                <div className="text-xs text-gray-500">Unknown</div>
-              </div>
-              <div className="od-card p-4 text-center">
-                <div className="text-3xl font-bold text-blue-600">
-                  {Math.round(services.reduce((acc, s) => acc + s.responseTime, 0) / (services.filter(s => s.responseTime > 0).length || 1))}ms
-                </div>
-                <div className="text-xs text-gray-500">Avg Response</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Alerts ─────────────────────────────────────────────────────── */}
-        {activeTab === 'alerts' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-500">{unacknowledgedAlerts} unacknowledged alerts</p>
-              {unacknowledgedAlerts > 0 && (
-                <button onClick={() => setAlerts(prev => prev.map(a => ({ ...a, acknowledged: true })))}
-                  className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg">
-                  Acknowledge All
-                </button>
-              )}
-            </div>
-            {alerts.map(a => (
-              <div key={a.id} className={`od-card p-4 ${!a.acknowledged ? (a.severity === 'critical' ? 'border-red-200' : a.severity === 'warning' ? 'border-yellow-200' : '') : ''}`}>
-                <div className="flex items-start gap-3">
-                  {alertSeverityIcon(a.severity)}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{a.title}</div>
-                        <p className="text-sm text-gray-500 mt-1">{a.description}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded text-xs shrink-0 ml-3 ${alertSeverityBadge(a.severity)}`}>{a.severity}</span>
-                    </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
-                      <span>{a.source}</span>
-                      <span>{new Date(a.timestamp).toLocaleString('de-DE')}</span>
-                      {!a.acknowledged && (
-                        <button onClick={() => acknowledgeAlert(a.id)}
-                          className="text-blue-600 hover:text-blue-700 font-medium">
-                          Acknowledge
-                        </button>
-                      )}
-                      {a.acknowledged && <span className="text-green-600">Acknowledged</span>}
-                    </div>
-                  </div>
-                </div>
+                {svc.responseTime && (
+                  <span className="text-xs text-gray-400 ml-2 shrink-0">{svc.responseTime}ms</span>
+                )}
               </div>
             ))}
           </div>
         )}
+      </div>
 
-        {/* ── Services ───────────────────────────────────────────────────── */}
-        {activeTab === 'services' && (
-          <div className="od-card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-200 bg-gray-50">
-                  <th className="px-4 py-3">Service</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Response Time</th>
-                  <th className="px-4 py-3">Uptime</th>
-                  <th className="px-4 py-3">Requests (24h)</th>
-                  <th className="px-4 py-3">Errors</th>
-                  <th className="px-4 py-3">Last Check</th>
-                </tr>
-              </thead>
-              <tbody>
-                {services.map(s => (
-                  <tr key={s.name} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <ServerIcon className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium text-gray-900">{s.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
-                        s.status === 'healthy' ? 'od-badge-success' :
-                        s.status === 'unhealthy' ? 'od-badge-danger' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>
-                        {s.status === 'healthy' ? <CheckCircleIcon className="w-3 h-3" /> :
-                         s.status === 'unhealthy' ? <XCircleIcon className="w-3 h-3" /> :
-                         <ExclamationTriangleIcon className="w-3 h-3" />}
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`font-mono text-xs ${s.responseTime < 20 ? 'text-green-600' : s.responseTime < 50 ? 'text-yellow-600' : 'text-red-600'}`}>
-                        {s.responseTime > 0 ? `${s.responseTime}ms` : '-'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">{s.uptime}</td>
-                    <td className="px-4 py-3 text-gray-700">{s.requests.toLocaleString()}</td>
-                    <td className="px-4 py-3">
-                      {s.errors > 0
-                        ? <span className="text-red-600 font-medium">{s.errors}</span>
-                        : <span className="text-green-600">0</span>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{new Date(s.lastCheck).toLocaleTimeString('de-DE')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* KPI cards */}
+      {kpis.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {kpis.map((kpi, i) => (
+            <div key={i} className={`${kpi.bg} rounded-xl p-4`}>
+              <div className="flex items-center justify-between mb-1">
+                <p className={`text-xs font-medium ${kpi.color}`}>{kpi.label}</p>
+                <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
+              </div>
+              <p className={`text-2xl font-bold ${kpi.color}`}>{kpi.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Time series chart */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-gray-700">Metrics</h2>
+          <div className="flex gap-2">
+            {METRIC_OPTIONS.map(m => (
+              <button
+                key={m.key}
+                onClick={() => setSelectedMetric(m.key)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                  selectedMetric === m.key
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
-        {/* ── Metrics ────────────────────────────────────────────────────── */}
-        {activeTab === 'metrics' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {metrics.map(m => (
-                <div key={m.name} className="od-card p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-gray-600">{m.name}</h3>
-                    <span className={`text-xs px-2 py-0.5 rounded ${
-                      m.status === 'healthy' ? 'od-badge-success' :
-                      m.status === 'warning' ? 'od-badge-warning' :
-                      'od-badge-danger'
-                    }`}>{m.status}</span>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-gray-900">{m.value}</span>
-                    <span className="text-gray-500">{m.unit}</span>
-                  </div>
-                  <div className="mt-3">
-                    <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full ${m.value > 80 ? 'bg-red-500' : m.value > 60 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                        style={{ width: `${Math.min(m.value, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center text-xs mt-2">
-                    {m.trend === 'up' ? <ArrowTrendingUpIcon className="w-3 h-3 text-green-500 mr-1" /> :
-                     m.trend === 'down' ? <ArrowTrendingDownIcon className="w-3 h-3 text-green-500 mr-1" /> :
-                     null}
-                    <span className="text-gray-500">{m.trendValue} vs last hour</span>
-                  </div>
-                </div>
-              ))}
+        {chartData.length > 0 ? (
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="metricGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor={currentMetric.color} stopOpacity={0.2} />
+                    <stop offset="95%" stopColor={currentMetric.color} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="time" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  label={{ value: currentMetric.unit, angle: -90, position: 'insideLeft', style: { fontSize: 11 } }}
+                />
+                <Tooltip
+                  formatter={(v: any) => [`${typeof v === 'number' ? v.toFixed(2) : v} ${currentMetric.unit}`, currentMetric.label]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke={currentMetric.color}
+                  strokeWidth={2}
+                  fill="url(#metricGrad)"
+                  dot={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="h-56 flex items-center justify-center text-gray-400 text-sm">
+            <div className="text-center">
+              <ChartBarIcon className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+              No metric data available — Prometheus may not be connected
             </div>
           </div>
         )}
       </div>
+
+      {/* Client device metrics */}
+      <ClientMetricsTable />
+
+      {/* Grafana dashboards (if configured) */}
+      {grafanaDashboards.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Grafana Dashboards</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {grafanaDashboards.map(d => (
+              <a
+                key={d.uid}
+                href={`${process.env.NEXT_PUBLIC_GRAFANA_URL}${d.url}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3 hover:bg-gray-50 transition-colors group"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{d.title}</p>
+                  {d.folderTitle && <p className="text-xs text-gray-500 truncate">{d.folderTitle}</p>}
+                </div>
+                <span className="text-xs text-blue-600 group-hover:text-blue-700 ml-2 shrink-0">Open →</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

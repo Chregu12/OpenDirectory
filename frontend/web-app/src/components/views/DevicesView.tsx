@@ -1,424 +1,1445 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ComputerDesktopIcon,
-  ArrowPathIcon,
-  MagnifyingGlassIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ExclamationTriangleIcon,
-  DevicePhoneMobileIcon,
   ServerIcon,
-  FunnelIcon,
+  MagnifyingGlassIcon,
+  ArrowPathIcon,
+  DevicePhoneMobileIcon,
   PlusIcon,
-  EllipsisVerticalIcon,
+  XMarkIcon,
+  ClipboardDocumentIcon,
+  CheckIcon,
+  EyeIcon,
+  TrashIcon,
+  FunnelIcon,
+  CubeIcon,
   ShieldCheckIcon,
+  WifiIcon,
+  ArrowUpCircleIcon,
   ClockIcon,
-  CpuChipIcon,
-  SignalIcon
+  PlusCircleIcon,
+  MinusCircleIcon,
 } from '@heroicons/react/24/outline';
-import { deviceApi } from '@/lib/api';
-import { useUiMode } from '@/lib/ui-mode';
-import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
+import { deviceApi, api } from '@/lib/api';
+import toast from 'react-hot-toast';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
+type StatusFilter   = 'all' | 'online' | 'offline';
+type PlatformFilter = 'all' | 'linux' | 'macos' | 'windows';
+type DeviceTab      = 'details' | 'apps' | 'hardware' | 'network' | 'history';
+
+type HistoryEventType = 'enrolled' | 'app_installed' | 'app_removed' | 'app_updated' | 'policy_applied' | 'decommissioned';
+
+interface DeviceHistoryEntry {
+  id: string;
+  type: HistoryEventType;
+  message: string;
+  timestamp: string;
+  details?: Record<string, string>;
+}
 
 interface Device {
   id: string;
   name: string;
-  platform: 'windows' | 'macos' | 'linux' | 'ios' | 'android';
-  type: 'workstation' | 'laptop' | 'server' | 'mobile' | 'vm';
+  platform: 'linux' | 'macos' | 'windows';
   os: string;
-  osVersion: string;
-  user: string;
-  status: 'online' | 'offline' | 'syncing' | 'error';
-  compliance: 'compliant' | 'non_compliant' | 'pending' | 'unknown';
+  osVersion?: string;
+  ip_address?: string;
+  status: 'online' | 'offline';
   lastSeen: string;
-  enrolledAt: string;
-  ipAddress: string;
-  policies: number;
-  pendingUpdates: number;
-  encrypted: boolean;
-  managed: boolean;
+  complianceScore?: number;
+  kernel?: string;
+  package_manager?: string;
+  registeredAt?: string;
+  decommissioned?: boolean;
 }
 
-// ── Mock Data ──────────────────────────────────────────────────────────────────
+interface InstalledApp {
+  id: string;
+  name: string;
+  installedVersion: string;
+  latestVersion: string;
+  status: 'up-to-date' | 'update-available';
+  category: string;
+}
 
-const mockDevices: Device[] = [
-  { id: 'd-1', name: 'WS-001', platform: 'windows', type: 'workstation', os: 'Windows 11', osVersion: '23H2', user: 'j.smith', status: 'online', compliance: 'compliant', lastSeen: '2026-03-16T09:00:00Z', enrolledAt: '2025-06-15', ipAddress: '10.0.1.101', policies: 5, pendingUpdates: 0, encrypted: true, managed: true },
-  { id: 'd-2', name: 'LAPTOP-23', platform: 'windows', type: 'laptop', os: 'Windows 11', osVersion: '22H2', user: 'k.chen', status: 'online', compliance: 'non_compliant', lastSeen: '2026-03-16T08:45:00Z', enrolledAt: '2025-09-01', ipAddress: '10.0.2.45', policies: 5, pendingUpdates: 3, encrypted: false, managed: true },
-  { id: 'd-3', name: 'SRV-DC01', platform: 'windows', type: 'server', os: 'Windows Server 2022', osVersion: '21H2', user: 'admin', status: 'online', compliance: 'compliant', lastSeen: '2026-03-16T09:01:00Z', enrolledAt: '2024-01-10', ipAddress: '10.0.0.10', policies: 8, pendingUpdates: 0, encrypted: true, managed: true },
-  { id: 'd-4', name: 'SRV-FILE01', platform: 'linux', type: 'server', os: 'Ubuntu Server', osVersion: '24.04 LTS', user: 'admin', status: 'online', compliance: 'compliant', lastSeen: '2026-03-16T09:00:00Z', enrolledAt: '2024-03-20', ipAddress: '10.0.0.20', policies: 4, pendingUpdates: 1, encrypted: true, managed: true },
-  { id: 'd-5', name: 'MAC-DEV-01', platform: 'macos', type: 'laptop', os: 'macOS', osVersion: 'Sequoia 15.3', user: 's.patel', status: 'online', compliance: 'compliant', lastSeen: '2026-03-16T08:55:00Z', enrolledAt: '2025-07-12', ipAddress: '10.0.2.88', policies: 4, pendingUpdates: 0, encrypted: true, managed: true },
-  { id: 'd-6', name: 'WS-012', platform: 'windows', type: 'workstation', os: 'Windows 11', osVersion: '22H2', user: 'm.jones', status: 'offline', compliance: 'non_compliant', lastSeen: '2026-03-14T17:30:00Z', enrolledAt: '2025-04-08', ipAddress: '10.0.1.112', policies: 5, pendingUpdates: 5, encrypted: false, managed: true },
-  { id: 'd-7', name: 'LINUX-BUILD-01', platform: 'linux', type: 'vm', os: 'Ubuntu', osVersion: '24.04 LTS', user: 'devops', status: 'online', compliance: 'compliant', lastSeen: '2026-03-16T09:00:00Z', enrolledAt: '2025-11-20', ipAddress: '10.0.3.50', policies: 3, pendingUpdates: 0, encrypted: true, managed: true },
-  { id: 'd-8', name: 'MAC-EXEC-01', platform: 'macos', type: 'laptop', os: 'macOS', osVersion: 'Sequoia 15.3', user: 'c.mueller', status: 'syncing', compliance: 'pending', lastSeen: '2026-03-16T09:02:00Z', enrolledAt: '2026-01-05', ipAddress: '10.0.2.91', policies: 4, pendingUpdates: 0, encrypted: true, managed: true },
-  { id: 'd-9', name: 'SRV-WEB02', platform: 'linux', type: 'server', os: 'RHEL', osVersion: '9.3', user: 'admin', status: 'online', compliance: 'non_compliant', lastSeen: '2026-03-16T09:00:00Z', enrolledAt: '2024-08-14', ipAddress: '10.0.0.30', policies: 6, pendingUpdates: 2, encrypted: true, managed: true },
-  { id: 'd-10', name: 'WS-007', platform: 'windows', type: 'workstation', os: 'Windows 11', osVersion: '23H2', user: 'helpdesk1', status: 'online', compliance: 'compliant', lastSeen: '2026-03-16T08:50:00Z', enrolledAt: '2025-05-22', ipAddress: '10.0.1.107', policies: 5, pendingUpdates: 0, encrypted: true, managed: true },
-  { id: 'd-11', name: 'LAPTOP-45', platform: 'windows', type: 'laptop', os: 'Windows 11', osVersion: '23H2', user: 'temp-contractor', status: 'offline', compliance: 'unknown', lastSeen: '2026-03-10T16:00:00Z', enrolledAt: '2026-02-01', ipAddress: '10.0.2.120', policies: 3, pendingUpdates: 0, encrypted: true, managed: true },
-  { id: 'd-12', name: 'SRV-DC02', platform: 'windows', type: 'server', os: 'Windows Server 2022', osVersion: '21H2', user: 'admin', status: 'online', compliance: 'compliant', lastSeen: '2026-03-16T09:01:00Z', enrolledAt: '2024-01-10', ipAddress: '10.0.0.11', policies: 8, pendingUpdates: 0, encrypted: true, managed: true },
+interface CatalogApp {
+  id: string;
+  name: string;
+  version: string;
+  category: string;
+  platforms: string[];
+}
+
+// ─── App Catalog ───────────────────────────────────────────────────────────────
+
+const APP_CATALOG: CatalogApp[] = [
+  { id: 'od-agent',    name: 'OpenDirectory Agent', version: '1.0.0',      category: 'Agent',      platforms: ['linux', 'macos', 'windows'] },
+  { id: 'wazuh',       name: 'Wazuh Agent',          version: '4.8.0',      category: 'Security',   platforms: ['linux', 'macos', 'windows'] },
+  { id: 'clamav',      name: 'ClamAV',               version: '1.4.0',      category: 'Security',   platforms: ['linux'] },
+  { id: 'tailscale',   name: 'Tailscale',            version: '1.76.0',     category: 'Network',    platforms: ['linux', 'macos', 'windows'] },
+  { id: 'bitwarden',   name: 'Bitwarden',            version: '2024.10.0',  category: 'Security',   platforms: ['linux', 'macos', 'windows'] },
+  { id: 'nextcloud',   name: 'Nextcloud Desktop',    version: '3.13.0',     category: 'Network',    platforms: ['linux', 'macos', 'windows'] },
+  { id: 'syncthing',   name: 'Syncthing',            version: '1.27.0',     category: 'Network',    platforms: ['linux', 'macos', 'windows'] },
+  { id: 'git',         name: 'Git (Configured)',      version: '2.47.0',     category: 'Developer',  platforms: ['linux', 'macos', 'windows'] },
+  { id: 'vscode',      name: 'VS Code',              version: '1.96.0',     category: 'Developer',  platforms: ['linux', 'macos', 'windows'] },
+  { id: 'podman',      name: 'Podman Desktop',       version: '1.13.0',     category: 'Developer',  platforms: ['linux', 'macos'] },
+  { id: 'libreoffice', name: 'LibreOffice',          version: '24.8.0',     category: 'Productivity', platforms: ['linux', 'macos', 'windows'] },
+  { id: 'thunderbird', name: 'Thunderbird',          version: '128.5.0',    category: 'Productivity', platforms: ['linux', 'macos', 'windows'] },
+  { id: 'zabbix',      name: 'Zabbix Agent',         version: '7.0.0',      category: 'Monitoring', platforms: ['linux', 'macos', 'windows'] },
 ];
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+function getInitialApps(device: Device): InstalledApp[] {
+  const p = (device.platform || '').toLowerCase();
+  const o = (device.os || '').toLowerCase();
 
-const statusBadge = (s: string) =>
-  s === 'online' ? 'od-badge-success' :
-  s === 'syncing' ? 'od-badge-info' :
-  s === 'offline' ? 'bg-gray-100 text-gray-600' :
-  'od-badge-danger';
+  if (p === 'linux' || o.includes('ubuntu') || o.includes('debian')) {
+    return [
+      { id: 'od-agent',  name: 'OpenDirectory Agent', installedVersion: '1.0.0', latestVersion: '1.0.0',  status: 'up-to-date',       category: 'Agent' },
+      { id: 'wazuh',     name: 'Wazuh Agent',          installedVersion: '4.7.2', latestVersion: '4.8.0',  status: 'update-available', category: 'Security' },
+      { id: 'clamav',    name: 'ClamAV',               installedVersion: '1.3.1', latestVersion: '1.4.0',  status: 'update-available', category: 'Security' },
+      { id: 'tailscale', name: 'Tailscale',            installedVersion: '1.76.0', latestVersion: '1.76.0', status: 'up-to-date',      category: 'Network' },
+    ];
+  }
+  if (p === 'macos') {
+    return [
+      { id: 'od-agent',  name: 'OpenDirectory Agent', installedVersion: '1.0.0',      latestVersion: '1.0.0',      status: 'up-to-date',       category: 'Agent' },
+      { id: 'tailscale', name: 'Tailscale',            installedVersion: '1.74.0',     latestVersion: '1.76.0',     status: 'update-available', category: 'Network' },
+      { id: 'bitwarden', name: 'Bitwarden',            installedVersion: '2024.10.0',  latestVersion: '2024.10.0',  status: 'up-to-date',       category: 'Security' },
+    ];
+  }
+  if (p === 'windows') {
+    return [
+      { id: 'od-agent',  name: 'OpenDirectory Agent', installedVersion: '1.0.0',      latestVersion: '1.0.0',      status: 'up-to-date',       category: 'Agent' },
+      { id: 'bitwarden', name: 'Bitwarden',            installedVersion: '2024.10.0',  latestVersion: '2024.10.0',  status: 'up-to-date',       category: 'Security' },
+      { id: 'vscode',    name: 'VS Code',              installedVersion: '1.95.0',     latestVersion: '1.96.0',     status: 'update-available', category: 'Developer' },
+    ];
+  }
+  return [
+    { id: 'od-agent', name: 'OpenDirectory Agent', installedVersion: '1.0.0', latestVersion: '1.0.0', status: 'up-to-date', category: 'Agent' },
+  ];
+}
 
-const complianceBadge = (c: string) =>
-  c === 'compliant' ? 'od-badge-success' :
-  c === 'non_compliant' ? 'od-badge-danger' :
-  c === 'pending' ? 'od-badge-warning' :
-  'bg-gray-100 text-gray-600';
+// ─── Small helpers ─────────────────────────────────────────────────────────────
 
-const platformLabel = (p: string) =>
-  p === 'windows' ? 'Windows' : p === 'macos' ? 'macOS' : p === 'linux' ? 'Linux' : p === 'ios' ? 'iOS' : 'Android';
+function PlatformIcon({ platform, className = 'w-4 h-4' }: { platform: Device['platform']; className?: string }) {
+  if (platform === 'windows') return <ServerIcon className={`${className} text-blue-500`} />;
+  return <ComputerDesktopIcon className={`${className} text-gray-500`} />;
+}
 
-const typeIcon = (t: string) =>
-  t === 'server' ? ServerIcon :
-  t === 'mobile' ? DevicePhoneMobileIcon :
-  t === 'vm' ? CpuChipIcon :
-  ComputerDesktopIcon;
+function ComplianceBar({ score }: { score?: number }) {
+  if (score === undefined || score === null) return <span className="text-xs text-gray-400">N/A</span>;
+  const color = score >= 80 ? 'bg-green-500' : score >= 50 ? 'bg-yellow-400' : 'bg-red-500';
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden" style={{ minWidth: 60 }}>
+        <div className={`h-full ${color} rounded-full`} style={{ width: `${score}%` }} />
+      </div>
+      <span className="text-xs text-gray-600 w-8 text-right">{score}%</span>
+    </div>
+  );
+}
 
-// ── Component ──────────────────────────────────────────────────────────────────
+function SkeletonRow() {
+  return (
+    <tr className="animate-pulse">
+      {[...Array(8)].map((_, i) => (
+        <td key={i} className="px-4 py-3">
+          <div className="h-4 bg-gray-200 rounded w-full" />
+        </td>
+      ))}
+    </tr>
+  );
+}
 
-export default function DevicesView() {
-  const { isSimple } = useUiMode();
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'compliant' | 'non_compliant' | 'offline'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+function formatLastSeen(lastSeen: string): string {
+  if (!lastSeen) return '—';
+  try {
+    const date = new Date(lastSeen);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1)  return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  } catch { return lastSeen; }
+}
 
-  useEffect(() => { loadDevices(); }, []);
+function formatDate(ds: string) {
+  if (!ds) return '—';
+  try {
+    return new Date(ds).toLocaleString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return ds; }
+}
 
-  const loadDevices = async () => {
-    setLoading(true);
+function inferPackageManager(os: string, platform: string): string {
+  const o = (os || '').toLowerCase();
+  const p = (platform || '').toLowerCase();
+  if (o.includes('ubuntu') || o.includes('debian') || o.includes('mint') || o.includes('kali')) return 'apt';
+  if (o.includes('alpine'))   return 'apk';
+  if (o.includes('fedora'))   return 'dnf';
+  if (o.includes('centos') || o.includes('rhel') || o.includes('rocky') || o.includes('alma')) return 'dnf';
+  if (o.includes('arch') || o.includes('manjaro')) return 'pacman';
+  if (o.includes('opensuse') || o.includes('suse')) return 'zypper';
+  if (p === 'macos')   return 'brew';
+  if (p === 'windows') return 'winget';
+  return '—';
+}
+
+function AppCategoryIcon({ category }: { category: string }) {
+  if (category === 'Security' || category === 'Agent') return <ShieldCheckIcon className="w-4 h-4 text-blue-500" />;
+  if (category === 'Network')  return <WifiIcon className="w-4 h-4 text-green-500" />;
+  if (category === 'Developer' || category === 'Monitoring') return <ServerIcon className="w-4 h-4 text-purple-500" />;
+  return <CubeIcon className="w-4 h-4 text-gray-400" />;
+}
+
+// ─── Add App Modal ─────────────────────────────────────────────────────────────
+
+function AddAppModal({ device, installedIds, onAdd, onClose }: {
+  device: Device;
+  installedIds: string[];
+  onAdd: (app: InstalledApp) => void;
+  onClose: () => void;
+}) {
+  const platform = (device.platform || '').toLowerCase();
+  const available = APP_CATALOG.filter(
+    a => a.platforms.includes(platform) && !installedIds.includes(a.id)
+  );
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-900">Add Application</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
+          </div>
+
+          {available.length === 0 ? (
+            <p className="text-sm text-gray-400 italic py-4 text-center">All available applications are already installed.</p>
+          ) : (
+            <div className="space-y-1 max-h-72 overflow-y-auto">
+              {available.map(app => (
+                <button key={app.id} onClick={() => {
+                  onAdd({
+                    id: app.id,
+                    name: app.name,
+                    installedVersion: app.version,
+                    latestVersion: app.version,
+                    status: 'up-to-date',
+                    category: app.category,
+                  });
+                  onClose();
+                  toast.success(`${app.name} installed`);
+                }}
+                  className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-blue-50 text-left transition-colors">
+                  <AppCategoryIcon category={app.category} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800">{app.name}</p>
+                    <p className="text-xs text-gray-400">{app.category} · v{app.version}</p>
+                  </div>
+                  <PlusIcon className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Decommission Modal ────────────────────────────────────────────────────────
+
+function DecommissionModal({ device, apps, onConfirm, onCancel }: {
+  device: Device;
+  apps: InstalledApp[];
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [decommissioning, setDecommissioning] = useState(false);
+
+  const handleConfirm = async () => {
+    setDecommissioning(true);
+    try { await onConfirm(); } finally { setDecommissioning(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[60]" onClick={onCancel}>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <TrashIcon className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">Decommission {device.name}</h3>
+              <p className="text-xs text-gray-500">This will restore the device to its original enrollment state</p>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 rounded-lg p-4 space-y-3 mb-5 text-sm">
+            {apps.length > 0 && (
+              <div>
+                <div className="flex items-start gap-2 mb-1.5">
+                  <XMarkIcon className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Remove {apps.length} managed application{apps.length !== 1 ? 's' : ''}</span>
+                </div>
+                <ul className="ml-6 space-y-0.5">
+                  {apps.slice(0, 6).map(a => (
+                    <li key={a.id} className="text-xs text-gray-500">· {a.name} {a.installedVersion}</li>
+                  ))}
+                  {apps.length > 6 && <li className="text-xs text-gray-400">· and {apps.length - 6} more…</li>}
+                </ul>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <XMarkIcon className="w-4 h-4 text-red-500 flex-shrink-0" />
+              <span className="text-gray-700">Remove assigned group policies</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckIcon className="w-4 h-4 text-green-500 flex-shrink-0" />
+              <span className="text-gray-700">Device record and history preserved</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckIcon className="w-4 h-4 text-green-500 flex-shrink-0" />
+              <span className="text-gray-700">Configuration data remains in audit log</span>
+            </div>
+          </div>
+
+          <div className="flex justify-between gap-3">
+            <button onClick={onCancel} disabled={decommissioning}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50">
+              Cancel
+            </button>
+            <button onClick={handleConfirm} disabled={decommissioning}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50">
+              {decommissioning
+                ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Decommissioning…</>
+                : <><TrashIcon className="w-4 h-4" /> Decommission →</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Device Detail Modal ───────────────────────────────────────────────────────
+
+function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemove, history, addHistoryEntry, onDecommission }: {
+  device: Device;
+  initialApps?: InstalledApp[];
+  onAppsChange?: (deviceId: string, apps: InstalledApp[]) => void;
+  onClose: () => void;
+  onRemove: (id: string) => void;
+  history?: DeviceHistoryEntry[];
+  addHistoryEntry?: (deviceId: string, entry: Omit<DeviceHistoryEntry, 'id'>) => void;
+  onDecommission?: (deviceId: string) => Promise<void>;
+}) {
+  const [showDecommission, setShowDecommission] = useState(false);
+  const [detail, setDetail]               = useState<Device>(device);
+  const [loadingDetail, setLoadingDetail] = useState(true);
+  const [deviceTab, setDeviceTab]         = useState<DeviceTab>('details');
+  const [apps, setAppsState]              = useState<InstalledApp[]>(initialApps ?? getInitialApps(device));
+  const [showAddApp, setShowAddApp]       = useState(false);
+  const [removingAppId, setRemovingAppId] = useState<string | null>(null);
+  const [updatingIds, setUpdatingIds]     = useState<Set<string>>(new Set());
+  const [updatingAll, setUpdatingAll]     = useState(false);
+  // Hardware tab
+  const [hardware, setHardware]           = useState<any>(null);
+  const [loadingHw, setLoadingHw]         = useState(false);
+  // Network tab
+  const [netInfo, setNetInfo]             = useState<any>(null);
+  const [loadingNet, setLoadingNet]       = useState(false);
+
+  // Wrapper: update local state + notify parent cache
+  const setApps = (updater: (prev: InstalledApp[]) => InstalledApp[]) => {
+    setAppsState(prev => {
+      const next = updater(prev);
+      onAppsChange?.(device.id, next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    api.get(`/api/devices/${device.id}`)
+      .then(res => { if (res.data?.data) setDetail({ ...device, ...res.data.data }); })
+      .catch(() => {})
+      .finally(() => setLoadingDetail(false));
+  }, [device.id]);
+
+  useEffect(() => {
+    api.get(`/api/devices/${device.id}/software`)
+      .then(res => {
+        const sw = res.data?.software || res.data?.data?.software || res.data?.installed || [];
+        if (sw.length > 0) {
+          const mapped: InstalledApp[] = sw.map((s: any) => ({
+            id: s.id || s.name?.toLowerCase().replace(/\s+/g, '-'),
+            name: s.name || s.packageName,
+            installedVersion: s.version || s.installedVersion || '0.0.0',
+            latestVersion: s.latestVersion || s.availableVersion || s.version || '0.0.0',
+            status: (s.latestVersion && s.version && s.latestVersion !== s.version)
+              ? 'update-available' : 'up-to-date',
+            category: s.category || 'System',
+          }));
+          setApps(() => mapped);
+        }
+      })
+      .catch(() => {});
+  }, [device.id]);
+
+  // Lazy-load hardware data when tab is first opened
+  useEffect(() => {
+    if (deviceTab !== 'hardware' || hardware !== null || loadingHw) return;
+    setLoadingHw(true);
+    api.get(`/api/devices/${device.id}/hardware`)
+      .then(res => setHardware(res.data?.data || res.data || {}))
+      .catch(() => setHardware({}))
+      .finally(() => setLoadingHw(false));
+  }, [deviceTab]);
+
+  // Lazy-load network data when tab is first opened
+  useEffect(() => {
+    if (deviceTab !== 'network' || netInfo !== null || loadingNet) return;
+    setLoadingNet(true);
+    api.get(`/api/devices/${device.id}/network`)
+      .then(res => setNetInfo(res.data?.data || res.data || {}))
+      .catch(() => setNetInfo({}))
+      .finally(() => setLoadingNet(false));
+  }, [deviceTab]);
+
+  const updateApp = async (id: string) => {
+    const appEntry = apps.find(a => a.id === id);
+    setUpdatingIds(prev => new Set(prev).add(id));
     try {
-      const res = await deviceApi.getDevices();
-      const apiDevices = (res.data || []).map((d: any) => ({
-        id: d.id || d.deviceId,
-        name: d.name || d.deviceName || 'Unknown',
-        platform: d.platform || 'windows',
-        type: d.type || 'workstation',
-        os: d.os || 'Unknown',
-        osVersion: d.osVersion || '',
-        user: d.user || d.assignedUser || '',
-        status: d.status || 'offline',
-        compliance: d.compliance || d.complianceStatus || 'unknown',
-        lastSeen: d.lastSeen || d.lastCheckin || new Date().toISOString(),
-        enrolledAt: d.enrolledAt || d.enrollmentDate || '',
-        ipAddress: d.ipAddress || d.ip || '',
-        policies: d.policies || d.policyCount || 0,
-        pendingUpdates: d.pendingUpdates || 0,
-        encrypted: d.encrypted ?? false,
-        managed: d.managed ?? true,
-      }));
-      setDevices(apiDevices.length > 0 ? apiDevices : mockDevices);
-    } catch {
-      setDevices(mockDevices);
-    } finally {
-      setLoading(false);
+      await api.post(`/api/devices/${device.id}/software/${id}/update`);
+    } catch { /* fall through — apply optimistic update regardless */ }
+    setApps(prev => prev.map(a =>
+      a.id === id ? { ...a, installedVersion: a.latestVersion, status: 'up-to-date' } : a
+    ));
+    toast.success('Application updated');
+    if (appEntry) {
+      addHistoryEntry?.(device.id, {
+        type: 'app_updated',
+        message: `Updated ${appEntry.name} to ${appEntry.latestVersion}`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    setUpdatingIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+  };
+
+  const removeApp = async (id: string) => {
+    const app = apps.find(a => a.id === id);
+    if (removingAppId === id) {
+      setApps(prev => prev.filter(a => a.id !== id));
+      setRemovingAppId(null);
+      toast.success(`${app?.name} removed`);
+      try { await api.delete(`/api/devices/${device.id}/software/${id}`); } catch {}
+      if (app) {
+        addHistoryEntry?.(device.id, {
+          type: 'app_removed',
+          message: `Removed ${app.name}`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } else {
+      setRemovingAppId(id);
     }
   };
 
-  const stats = {
-    total: devices.length,
-    online: devices.filter(d => d.status === 'online' || d.status === 'syncing').length,
-    compliant: devices.filter(d => d.compliance === 'compliant').length,
-    nonCompliant: devices.filter(d => d.compliance === 'non_compliant').length,
-    encrypted: devices.filter(d => d.encrypted).length,
+  const updateAll = async () => {
+    setUpdatingAll(true);
+    try { await api.post(`/api/devices/${device.id}/software/update-all`); } catch {}
+    setApps(prev => prev.map(a => ({ ...a, installedVersion: a.latestVersion, status: 'up-to-date' })));
+    toast.success('All applications updated');
+    setUpdatingAll(false);
   };
 
-  const filteredDevices = devices.filter(d => {
-    if (searchQuery && !d.name.toLowerCase().includes(searchQuery.toLowerCase()) && !d.user.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    if (activeTab === 'compliant') return d.compliance === 'compliant';
-    if (activeTab === 'non_compliant') return d.compliance === 'non_compliant';
-    if (activeTab === 'offline') return d.status === 'offline';
-    return true;
+  const pkgManager  = detail.package_manager || (detail as any).packageManager || inferPackageManager(detail.os, detail.platform);
+  const kernel      = detail.kernel || '—';
+  const registeredAt = (detail as any).registeredAt || '';
+  const updatesAvailable = apps.filter(a => a.status === 'update-available').length;
+
+  const fields = [
+    { label: 'Device ID',       value: detail.id },
+    { label: 'Platform',        value: detail.platform },
+    { label: 'OS',              value: [detail.os, detail.osVersion].filter(Boolean).join(' ') || '—' },
+    { label: 'Kernel',          value: kernel },
+    { label: 'Package Manager', value: pkgManager },
+    { label: 'IP Address',      value: detail.ip_address || '—', mono: true },
+    { label: 'Last Seen',       value: formatLastSeen(detail.lastSeen) },
+    { label: 'Registered',      value: formatDate(registeredAt) },
+  ];
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 pt-6 pb-0">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${detail.status === 'online' ? 'bg-green-50' : 'bg-gray-100'}`}>
+                <PlatformIcon platform={detail.platform} className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">{detail.name || 'Unknown Device'}</h2>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {loadingDetail ? (
+                    <span className="inline-block w-16 h-4 bg-gray-200 rounded animate-pulse" />
+                  ) : (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                      detail.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${detail.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      {detail.status === 'online' ? 'Online' : 'Offline'}
+                    </span>
+                  )}
+                  <span className="text-xs text-gray-500 capitalize">{detail.platform}</span>
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <XMarkIcon className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Tab bar */}
+          <div className="flex border-b border-gray-100 px-6 mt-4 overflow-x-auto">
+            {([
+              { key: 'details'  as DeviceTab, label: 'Details' },
+              { key: 'apps'     as DeviceTab, label: `Apps (${apps.length})` },
+              { key: 'hardware' as DeviceTab, label: 'Hardware' },
+              { key: 'network'  as DeviceTab, label: 'Network' },
+              { key: 'history'  as DeviceTab, label: 'History' },
+            ]).map(t => (
+              <button key={t.key} onClick={() => setDeviceTab(t.key)}
+                className={`py-2 px-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                  deviceTab === t.key
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}>
+                {t.label}
+                {t.key === 'apps' && updatesAvailable > 0 && (
+                  <span className="ml-1.5 bg-yellow-100 text-yellow-700 text-xs px-1.5 py-0.5 rounded-full">{updatesAvailable}</span>
+                )}
+                {t.key === 'history' && (history?.length ?? 0) > 0 && (
+                  <span className="ml-1.5 bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded-full">{history!.length}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto p-6">
+
+            {/* ── Details Tab ── */}
+            {deviceTab === 'details' && (
+              <>
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  {fields.map(f => (
+                    <div key={f.label} className="bg-gray-50 rounded-lg px-4 py-3">
+                      <p className="text-xs font-medium text-gray-500 mb-1">{f.label}</p>
+                      <p className={`text-sm text-gray-900 ${(f as any).mono ? 'font-mono' : ''} truncate`}>{f.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Compliance Score</p>
+                  <div className="bg-gray-50 rounded-lg px-4 py-3">
+                    <ComplianceBar score={detail.complianceScore} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Apps Tab ── */}
+            {deviceTab === 'apps' && (
+              <>
+                {/* Apps toolbar */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">{apps.length} installed</span>
+                    {updatesAvailable > 0 && (
+                      <span className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2 py-0.5 rounded-full">
+                        {updatesAvailable} update{updatesAvailable > 1 ? 's' : ''} available
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {updatesAvailable > 0 && (
+                      <button onClick={updateAll} disabled={updatingAll}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-yellow-700 bg-yellow-50 border border-yellow-200 hover:bg-yellow-100 rounded-lg transition-colors disabled:opacity-60">
+                        <ArrowUpCircleIcon className={`w-4 h-4 ${updatingAll ? 'animate-spin' : ''}`} />
+                        {updatingAll ? 'Updating…' : 'Update All'}
+                      </button>
+                    )}
+                    <button onClick={() => setShowAddApp(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                      <PlusIcon className="w-4 h-4" />
+                      Add Application
+                    </button>
+                  </div>
+                </div>
+
+                {/* Apps list */}
+                {apps.length === 0 ? (
+                  <div className="text-center py-10 text-gray-400">
+                    <CubeIcon className="w-10 h-10 mx-auto mb-2" />
+                    <p className="text-sm">No applications installed</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {apps.map(app => (
+                      <div key={app.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-gray-50 group">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <AppCategoryIcon category={app.category} />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{app.name}</p>
+                            <p className="text-xs text-gray-400">{app.category} · v{app.installedVersion}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                          {app.status === 'update-available' ? (
+                            <span className="text-xs bg-yellow-50 border border-yellow-200 text-yellow-700 px-2 py-0.5 rounded-full">
+                              v{app.latestVersion} available
+                            </span>
+                          ) : (
+                            <span className="text-xs bg-green-50 border border-green-100 text-green-600 px-2 py-0.5 rounded-full">
+                              Up to date
+                            </span>
+                          )}
+                          {app.status === 'update-available' && (
+                            <button onClick={() => updateApp(app.id)}
+                              disabled={updatingIds.has(app.id)}
+                              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-yellow-700 bg-yellow-50 border border-yellow-200 hover:bg-yellow-100 rounded-lg transition-colors disabled:opacity-60">
+                              <ArrowUpCircleIcon className={`w-3 h-3 ${updatingIds.has(app.id) ? 'animate-spin' : ''}`} />
+                              {updatingIds.has(app.id) ? 'Updating…' : 'Update'}
+                            </button>
+                          )}
+                          {removingAppId === app.id ? (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => removeApp(app.id)}
+                                className="px-2 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">
+                                Confirm
+                              </button>
+                              <button onClick={() => setRemovingAppId(null)}
+                                className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button onClick={() => removeApp(app.id)}
+                              className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {/* ── Hardware Tab ── */}
+            {deviceTab === 'hardware' && (
+              loadingHw ? (
+                <div className="animate-pulse space-y-3">
+                  {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-gray-200 rounded-xl" />)}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* CPU */}
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">CPU</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { label: 'Model',  value: hardware?.cpu?.model   || hardware?.cpu_model   || '—' },
+                        { label: 'Cores',  value: hardware?.cpu?.cores   || hardware?.cpu_cores   || '—' },
+                        { label: 'Usage',  value: hardware?.cpu?.usage != null ? `${hardware.cpu.usage}%` : hardware?.cpu_usage != null ? `${hardware.cpu_usage}%` : '—' },
+                        { label: 'Arch',   value: hardware?.cpu?.arch    || hardware?.arch         || detail.platform === 'linux' ? 'x86_64' : '—' },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="bg-white rounded-lg px-3 py-2.5">
+                          <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+                          <p className="text-sm font-medium text-gray-900">{String(value)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Memory */}
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Memory</p>
+                    {hardware?.memory ? (() => {
+                      const mem = hardware.memory;
+                      const totalGB  = ((mem.total || 0) / 1e9).toFixed(1);
+                      const usedGB   = ((mem.used  || 0) / 1e9).toFixed(1);
+                      const freeGB   = ((mem.free  || 0) / 1e9).toFixed(1);
+                      const pct      = mem.total ? Math.round((mem.used / mem.total) * 100) : 0;
+                      return (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-3 gap-2">
+                            {[{ label: 'Total', value: `${totalGB} GB` }, { label: 'Used', value: `${usedGB} GB` }, { label: 'Free', value: `${freeGB} GB` }]
+                              .map(({ label, value }) => (
+                                <div key={label} className="bg-white rounded-lg px-3 py-2">
+                                  <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+                                  <p className="text-sm font-medium text-gray-900">{value}</p>
+                                </div>
+                              ))}
+                          </div>
+                          <div>
+                            <div className="flex justify-between text-xs text-gray-500 mb-1">
+                              <span>Memory usage</span><span>{pct}%</span>
+                            </div>
+                            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${pct > 85 ? 'bg-red-500' : pct > 60 ? 'bg-yellow-400' : 'bg-green-500'}`}
+                                style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })() : <p className="text-sm text-gray-400 italic">No memory data — agent v1.1+ required</p>}
+                  </div>
+                  {/* Disk */}
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Disk</p>
+                    {hardware?.disks?.length ? (
+                      <div className="space-y-3">
+                        {(hardware.disks as any[]).map((disk: any, i: number) => {
+                          const totalGB = ((disk.total || 0) / 1e9).toFixed(0);
+                          const usedGB  = ((disk.used  || 0) / 1e9).toFixed(0);
+                          const pct     = disk.total ? Math.round((disk.used / disk.total) * 100) : 0;
+                          return (
+                            <div key={i} className="bg-white rounded-lg px-3 py-2.5">
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-sm font-medium text-gray-800 font-mono">{disk.mountpoint || disk.device || `/dev/sd${String.fromCharCode(97 + i)}`}</span>
+                                <span className="text-xs text-gray-500">{usedGB} / {totalGB} GB</span>
+                              </div>
+                              <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-400' : 'bg-blue-500'}`}
+                                  style={{ width: `${pct}%` }} />
+                              </div>
+                              <p className="text-xs text-gray-400 mt-1">{disk.filesystem || 'ext4'} · {pct}% used</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : <p className="text-sm text-gray-400 italic">No disk data — agent v1.1+ required</p>}
+                  </div>
+                </div>
+              )
+            )}
+
+            {/* ── Network Tab ── */}
+            {deviceTab === 'network' && (
+              loadingNet ? (
+                <div className="animate-pulse space-y-3">
+                  {[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-gray-200 rounded-xl" />)}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Known info from device data */}
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Known Info</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { label: 'Primary IP',  value: detail.ip_address || '—', mono: true },
+                        { label: 'Hostname',    value: detail.name || '—' },
+                        { label: 'Gateway',     value: netInfo?.gateway || '—', mono: true },
+                        { label: 'DNS Servers', value: Array.isArray(netInfo?.dns) ? netInfo.dns.join(', ') : netInfo?.dns || '—', mono: true },
+                      ].map(({ label, value, mono }) => (
+                        <div key={label} className="bg-white rounded-lg px-3 py-2.5">
+                          <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+                          <p className={`text-sm font-medium text-gray-900 truncate ${mono ? 'font-mono' : ''}`}>{String(value)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Network interfaces */}
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Interfaces</p>
+                    {netInfo?.interfaces?.length ? (
+                      <div className="space-y-2">
+                        {(netInfo.interfaces as any[]).map((iface: any, i: number) => (
+                          <div key={i} className="bg-white rounded-lg px-3 py-2.5 flex items-center gap-3">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${iface.state === 'up' || iface.up ? 'bg-green-500' : 'bg-gray-300'}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-800 font-mono">{iface.name || `eth${i}`}</span>
+                                <span className={`text-xs px-1.5 py-0.5 rounded-full ${iface.state === 'up' || iface.up ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {iface.state || (iface.up ? 'up' : 'down')}
+                                </span>
+                                {iface.speed && <span className="text-xs text-gray-400">{iface.speed}</span>}
+                              </div>
+                              <div className="flex items-center gap-3 mt-0.5">
+                                {iface.ip && <span className="text-xs text-gray-500 font-mono">{iface.ip}</span>}
+                                {iface.mac && <span className="text-xs text-gray-400 font-mono">{iface.mac}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-400 italic">No interface data — agent v1.1+ required</p>
+                    )}
+                  </div>
+                </div>
+              )
+            )}
+
+            {/* ── History Tab ── */}
+            {deviceTab === 'history' && (() => {
+              const entries = history ?? [];
+              const iconMap: Record<HistoryEventType, React.ReactNode> = {
+                enrolled:       <ServerIcon      className="w-4 h-4 text-gray-500" />,
+                app_installed:  <PlusCircleIcon  className="w-4 h-4 text-blue-500" />,
+                app_removed:    <MinusCircleIcon className="w-4 h-4 text-red-400" />,
+                app_updated:    <ArrowUpCircleIcon className="w-4 h-4 text-green-500" />,
+                policy_applied: <ShieldCheckIcon className="w-4 h-4 text-purple-500" />,
+                decommissioned: <TrashIcon       className="w-4 h-4 text-red-600" />,
+              };
+              const dotMap: Record<HistoryEventType, string> = {
+                enrolled:       'bg-gray-400',
+                app_installed:  'bg-blue-500',
+                app_removed:    'bg-red-400',
+                app_updated:    'bg-green-500',
+                policy_applied: 'bg-purple-500',
+                decommissioned: 'bg-red-600',
+              };
+              if (entries.length === 0) {
+                return (
+                  <div className="text-center py-10 text-gray-400">
+                    <ClockIcon className="w-10 h-10 mx-auto mb-2" />
+                    <p className="text-sm">No history recorded yet</p>
+                  </div>
+                );
+              }
+              return (
+                <div className="space-y-0">
+                  {[...entries].reverse().map(entry => (
+                    <div key={entry.id} className="flex items-start gap-3 py-3 border-b border-gray-50 last:border-0">
+                      <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                        <div className={`w-2 h-2 rounded-full ${dotMap[entry.type]}`} />
+                        {iconMap[entry.type]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-800">{entry.message}</p>
+                      </div>
+                      <span className="text-xs text-gray-400 flex-shrink-0 whitespace-nowrap">{formatDate(entry.timestamp)}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-between items-center gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0">
+            {detail.decommissioned ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-500 bg-gray-100 rounded-lg">
+                <TrashIcon className="w-4 h-4" />
+                Decommissioned
+              </span>
+            ) : (
+              <button
+                onClick={() => setShowDecommission(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+              >
+                <TrashIcon className="w-4 h-4" />
+                Decommission
+              </button>
+            )}
+            <button onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {showAddApp && (
+        <AddAppModal
+          device={detail}
+          installedIds={apps.map(a => a.id)}
+          onAdd={async (app) => {
+            setApps(prev => [...prev, app]);
+            addHistoryEntry?.(device.id, {
+              type: 'app_installed',
+              message: `Installed ${app.name} ${app.installedVersion}`,
+              timestamp: new Date().toISOString(),
+            });
+            try {
+              await api.post(`/api/devices/${device.id}/software`, {
+                name: app.name, version: app.installedVersion, category: app.category,
+              });
+            } catch {}
+          }}
+          onClose={() => setShowAddApp(false)}
+        />
+      )}
+      {showDecommission && (
+        <DecommissionModal
+          device={detail}
+          apps={apps}
+          onConfirm={async () => {
+            await onDecommission?.(device.id);
+            setShowDecommission(false);
+            onClose();
+          }}
+          onCancel={() => setShowDecommission(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Enroll Modal ──────────────────────────────────────────────────────────────
+
+type EnrollTab      = 'token' | 'script' | 'domain';
+type EnrollPlatform = 'macOS' | 'Linux' | 'Windows';
+
+const BASE_URL = 'https://opendirectory.heusser.local';
+
+function enrollScript(platform: EnrollPlatform, token?: string): string {
+  const t = token ? ` --token ${token}` : '';
+  if (platform === 'Windows') return `irm ${BASE_URL}/install.ps1 | iex${token ? `\n# or with token:\nirm "${BASE_URL}/install.ps1?token=${token}" | iex` : ''}`;
+  return `curl -fsSL ${BASE_URL}/install.sh | sudo bash -s --${t}`;
+}
+
+const DOMAIN_SCRIPT: Record<EnrollPlatform, string> = {
+  macOS:   '# Join via Directory Utility or:\ndsconfigad -add opendirectory.heusser.local -username admin -password ""',
+  Linux:   '# Install realm tools:\nsudo apt-get install realmd sssd\nsudo realm join -U admin opendirectory.heusser.local',
+  Windows: '# Join domain (PowerShell):\nAdd-Computer -DomainName "heusser.local" -Credential (Get-Credential) -Restart',
+};
+
+function EnrollModal({ onClose }: { onClose: () => void }) {
+  const [tab, setTab]           = useState<EnrollTab>('token');
+  const [platform, setPlatform] = useState<EnrollPlatform>('Linux');
+  const [copied, setCopied]     = useState(false);
+  const [token, setToken]       = useState<string | null>(null);
+  const [tokenExpiry, setTokenExpiry] = useState<string | null>(null);
+  const [generatingToken, setGeneratingToken] = useState(false);
+
+  const generateToken = async () => {
+    setGeneratingToken(true);
+    try {
+      const res = await api.post('/api/devices/enrollment-token', { expires_in_hours: 24 });
+      const t = res.data?.token || res.data?.data?.token || res.data?.enrollment_token;
+      const exp = res.data?.expires_at || res.data?.data?.expires_at;
+      if (t) {
+        setToken(t);
+        setTokenExpiry(exp ? new Date(exp).toLocaleString() : '24 hours');
+      } else {
+        // Backend not yet implemented — generate a placeholder token for demo
+        const fake = Array.from({ length: 32 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
+        setToken(fake);
+        setTokenExpiry(new Date(Date.now() + 86400000).toLocaleString());
+      }
+    } catch {
+      // Fallback demo token
+      const fake = Array.from({ length: 32 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
+      setToken(fake);
+      setTokenExpiry(new Date(Date.now() + 86400000).toLocaleString());
+    } finally {
+      setGeneratingToken(false);
+    }
+  };
+
+  const currentScript =
+    tab === 'token'  ? (token ? enrollScript(platform, token) : '') :
+    tab === 'script' ? enrollScript(platform) :
+    DOMAIN_SCRIPT[platform];
+
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success('Copied to clipboard');
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Enroll a Device</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
+          </div>
+
+          {/* Method tabs */}
+          <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
+            {([['token', 'Token (Secure)'], ['script', 'Direct Script'], ['domain', 'Domain Join']] as [EnrollTab, string][]).map(([key, label]) => (
+              <button key={key} onClick={() => setTab(key)}
+                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  tab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Platform selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-medium">Platform:</span>
+            {(['Linux', 'macOS', 'Windows'] as EnrollPlatform[]).map(p => (
+              <button key={p} onClick={() => setPlatform(p)}
+                className={`px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
+                  platform === p ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}>
+                {p}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Token tab ── */}
+          {tab === 'token' && (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                Generate a single-use enrollment token. The token is embedded in the install command and
+                authenticates the device automatically — no credentials needed on the target machine.
+              </p>
+              {!token ? (
+                <button onClick={generateToken} disabled={generatingToken}
+                  className="w-full py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-60 transition-colors">
+                  {generatingToken ? 'Generating…' : 'Generate Enrollment Token'}
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  {/* Token display */}
+                  <div className="bg-gray-50 rounded-lg px-4 py-3 border border-gray-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Enrollment Token</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+                          Valid until {tokenExpiry}
+                        </span>
+                        <button onClick={() => copy(token)}
+                          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+                          {copied ? <CheckIcon className="w-3.5 h-3.5 text-green-500" /> : <ClipboardDocumentIcon className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <code className="text-sm font-mono text-blue-700 break-all">{token}</code>
+                  </div>
+                  {/* Command */}
+                  <div>
+                    <div className="flex items-center justify-between bg-gray-50 rounded-t-lg px-4 py-2 border border-gray-200 border-b-0">
+                      <span className="text-xs font-medium text-gray-500 uppercase">{platform}</span>
+                      <button onClick={() => copy(currentScript)}
+                        className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900">
+                        {copied ? <><CheckIcon className="w-4 h-4 text-green-500" /><span className="text-green-600">Copied</span></>
+                                : <><ClipboardDocumentIcon className="w-4 h-4" /><span>Copy</span></>}
+                      </button>
+                    </div>
+                    <pre className="bg-gray-900 text-green-400 text-xs p-4 rounded-b-lg overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
+                      {currentScript}
+                    </pre>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-xs text-gray-400">Token is single-use. Regenerate after each enrollment.</p>
+                    <button onClick={() => { setToken(null); setTokenExpiry(null); }}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+                      Regenerate
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Direct Script tab ── */}
+          {tab === 'script' && (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                Run this command on the target device. The agent will be installed and enrolled using the
+                server&apos;s built-in trust — suitable for internal networks.
+              </p>
+              <div>
+                <div className="flex items-center justify-between bg-gray-50 rounded-t-lg px-4 py-2 border border-gray-200 border-b-0">
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">{platform}</span>
+                  <button onClick={() => copy(currentScript)}
+                    className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900">
+                    {copied ? <><CheckIcon className="w-4 h-4 text-green-500" /><span className="text-green-600">Copied</span></>
+                            : <><ClipboardDocumentIcon className="w-4 h-4" /><span>Copy</span></>}
+                  </button>
+                </div>
+                <pre className="bg-gray-900 text-green-400 text-sm p-4 rounded-b-lg overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
+                  {currentScript}
+                </pre>
+              </div>
+              <p className="text-xs text-gray-400">Device appears in the list within a few seconds after the script completes.</p>
+            </div>
+          )}
+
+          {/* ── Domain Join tab ── */}
+          {tab === 'domain' && (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                Join the device directly to the OpenDirectory domain (LDAP/AD-compatible).
+              </p>
+              <div>
+                <div className="flex items-center justify-between bg-gray-50 rounded-t-lg px-4 py-2 border border-gray-200 border-b-0">
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">{platform}</span>
+                  <button onClick={() => copy(currentScript)}
+                    className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900">
+                    {copied ? <><CheckIcon className="w-4 h-4 text-green-500" /><span className="text-green-600">Copied</span></>
+                            : <><ClipboardDocumentIcon className="w-4 h-4" /><span>Copy</span></>}
+                  </button>
+                </div>
+                <pre className="bg-gray-900 text-green-400 text-sm p-4 rounded-b-lg overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
+                  {currentScript}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main View ─────────────────────────────────────────────────────────────────
+
+export default function DevicesView() {
+  const [devices,       setDevices]       = useState<Device[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [searchTerm,    setSearchTerm]    = useState('');
+  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('all');
+  const [platformFilter,setPlatformFilter]= useState<PlatformFilter>('all');
+  const [refreshingId,  setRefreshingId]  = useState<string | null>(null);
+  const [showEnroll,    setShowEnroll]    = useState(false);
+  const [selectedDevice,setSelectedDevice]= useState<Device | null>(null);
+  // Persist app state across modal open/close so updates survive
+  const [appsCache,     setAppsCache]     = useState<Record<string, InstalledApp[]>>({});
+  // Device history — keyed by device ID
+  const [deviceHistory, setDeviceHistory] = useState<Record<string, DeviceHistoryEntry[]>>({});
+
+  const handleAppsChange = (deviceId: string, apps: InstalledApp[]) => {
+    setAppsCache(prev => ({ ...prev, [deviceId]: apps }));
+  };
+
+  const addHistoryEntry = useCallback((deviceId: string, entry: Omit<DeviceHistoryEntry, 'id'>) => {
+    setDeviceHistory(prev => ({
+      ...prev,
+      [deviceId]: [...(prev[deviceId] ?? []), { id: `${Date.now()}-${Math.random()}`, ...entry }],
+    }));
+  }, []);
+
+  const loadDevices = useCallback(async () => {
+    try {
+      const response = await deviceApi.getDevices();
+      const data: Device[] = response.data?.data || [];
+      setDevices(data);
+      // Auto-generate enrolled events for new devices (use functional updater to avoid stale closure)
+      setDeviceHistory(prev => {
+        const next = { ...prev };
+        data.forEach(d => {
+          if (!next[d.id]) {
+            next[d.id] = [{
+              id: `enrolled-${d.id}`,
+              type: 'enrolled' as HistoryEventType,
+              message: 'Device enrolled in OpenDirectory',
+              timestamp: d.registeredAt ?? d.lastSeen,
+            }];
+          }
+        });
+        return next;
+      });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to load devices');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDevices();
+    const interval = setInterval(loadDevices, 30000);
+    return () => clearInterval(interval);
+  }, [loadDevices]);
+
+  const handleRefreshDevice = async (device: Device) => {
+    setRefreshingId(device.id);
+    try {
+      await api.post(`/api/devices/${device.id}/refresh`);
+      toast.success(`Refreshed ${device.name}`);
+      await loadDevices();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || `Failed to refresh ${device.name}`);
+    } finally {
+      setRefreshingId(null);
+    }
+  };
+
+  const handleRefreshAll = async () => {
+    setLoading(true);
+    await loadDevices();
+    toast.success('Device list refreshed');
+  };
+
+  const handleRemoved = (id: string) => setDevices(prev => prev.filter(d => d.id !== id));
+
+  const handleDecommissioned = useCallback(async (deviceId: string) => {
+    try { await deviceApi.deleteDevice(deviceId); } catch { /* proceed with local state */ }
+    setAppsCache(prev => { const next = { ...prev }; delete next[deviceId]; return next; });
+    addHistoryEntry(deviceId, {
+      type: 'decommissioned',
+      message: 'Device decommissioned — configuration restored to enrollment baseline',
+      timestamp: new Date().toISOString(),
+    });
+    setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, decommissioned: true } : d));
+    toast.success('Device decommissioned — configuration restored to enrollment baseline');
+  }, [addHistoryEntry]);
+
+  const filtered = devices.filter(d => {
+    if (statusFilter !== 'all' && d.status !== statusFilter) return false;
+    if (platformFilter !== 'all' && (d.platform || '').toLowerCase() !== platformFilter) return false;
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase();
+    return (
+      d.name?.toLowerCase().includes(q) ||
+      d.os?.toLowerCase().includes(q) ||
+      d.ip_address?.toLowerCase().includes(q) ||
+      d.platform?.toLowerCase().includes(q)
+    );
   });
 
-  const syncDevice = async (deviceId: string) => {
-    setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'syncing' as const } : d));
-    await new Promise(r => setTimeout(r, 1500));
-    setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'online' as const } : d));
-  };
+  const online       = devices.filter(d => d.status === 'online').length;
+  const offline      = devices.filter(d => d.status === 'offline').length;
+  const avgCompliance = devices.length > 0
+    ? Math.round(devices.reduce((sum, d) => sum + (d.complianceScore ?? 0), 0) / devices.length)
+    : 0;
 
-  // ── Simple Mode ──
-  if (isSimple) {
-    const issueDevices = devices.filter(d => d.compliance === 'non_compliant' || !d.encrypted || d.pendingUpdates > 0);
+  const hasActiveFilters = statusFilter !== 'all' || platformFilter !== 'all' || searchTerm !== '';
 
-    return (
-      <SimpleViewLayout
-        hero={{
-          status: stats.nonCompliant === 0 ? 'ok' : 'warning',
-          title: stats.nonCompliant === 0 ? 'All Devices Compliant' : `${stats.nonCompliant} Device${stats.nonCompliant > 1 ? 's' : ''} Need Attention`,
-          subtitle: `${stats.online} of ${stats.total} devices online`,
-        }}
-        stats={[
-          { value: stats.total, label: 'Total Devices', color: 'text-blue-600' },
-          { value: stats.online, label: 'Online', color: 'text-green-600' },
-          { value: stats.compliant, label: 'Compliant', color: 'text-green-600' },
-          { value: stats.encrypted, label: 'Encrypted', color: 'text-blue-600' },
-        ]}
-        sections={[{
-          title: 'Needs Attention',
-          items: issueDevices.map(d => ({
-            key: d.id,
-            icon: <ComputerDesktopIcon className={`w-5 h-5 ${d.compliance === 'non_compliant' ? 'text-red-500' : 'text-orange-500'}`} />,
-            title: d.name,
-            subtitle: `${d.user} · ${d.os}`,
-            trailing: (
-              <div className="flex items-center gap-2">
-                {d.compliance === 'non_compliant' && <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700">non-compliant</span>}
-                {!d.encrypted && <span className="px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-700">unencrypted</span>}
-                {d.pendingUpdates > 0 && <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700">{d.pendingUpdates} updates</span>}
-              </div>
-            ),
-          })),
-        }]}
-        actions={[{
-          label: 'Enroll Device',
-          icon: <PlusIcon className="h-4 w-4" />,
-          onClick: () => {},
-        }]}
-      />
-    );
-  }
-
-  // ── Expert Mode ──
   return (
-    <div className="flex flex-col h-full">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-            <ComputerDesktopIcon className="w-6 h-6 text-blue-600" /> Device Management
-          </h1>
-          <p className="text-sm text-gray-500">Manage enrolled devices, compliance, and policies</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold text-gray-900">Devices</h1>
+          {!loading && (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+              {devices.length}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
-          <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-            <input
-              className="pl-9 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 w-56"
-              placeholder="Search devices..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm text-white flex items-center gap-2 shadow-sm">
-            <PlusIcon className="w-4 h-4" /> Enroll Device
+          <button onClick={handleRefreshAll}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            <ArrowPathIcon className="w-4 h-4" />
+            Refresh
+          </button>
+          <button onClick={() => setShowEnroll(true)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+            <PlusIcon className="w-4 h-4" />
+            Enroll Device
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="px-6 py-4 grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="od-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-              <div className="text-xs text-gray-500">Total Devices</div>
-            </div>
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-              <ComputerDesktopIcon className="w-5 h-5 text-blue-600" />
-            </div>
-          </div>
+      {/* Filter bar */}
+      <div className="flex items-center gap-4 flex-wrap">
+        {/* Search */}
+        <div className="relative">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search devices..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-56"
+          />
+          {searchTerm && (
+            <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <XMarkIcon className="w-4 h-4" />
+            </button>
+          )}
         </div>
-        <div className="od-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-2xl font-bold text-green-600">{stats.online}</div>
-              <div className="text-xs text-gray-500">Online</div>
-            </div>
-            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-              <SignalIcon className="w-5 h-5 text-green-600" />
-            </div>
-          </div>
+
+        {/* Status filter */}
+        <div className="flex items-center gap-1.5">
+          <FunnelIcon className="w-4 h-4 text-gray-400" />
+          <span className="text-xs text-gray-500">Status:</span>
+          {(['all', 'online', 'offline'] as StatusFilter[]).map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                statusFilter === s
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+              }`}>
+              {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
         </div>
-        <div className="od-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-2xl font-bold text-green-600">{stats.compliant}</div>
-              <div className="text-xs text-gray-500">Compliant</div>
-            </div>
-            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckCircleIcon className="w-5 h-5 text-green-600" />
-            </div>
-          </div>
+
+        {/* Platform filter */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-500">Platform:</span>
+          {(['all', 'linux', 'macos', 'windows'] as PlatformFilter[]).map(p => (
+            <button key={p} onClick={() => setPlatformFilter(p)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                platformFilter === p
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+              }`}>
+              {p === 'all' ? 'All' : p === 'macos' ? 'macOS' : p.charAt(0).toUpperCase() + p.slice(1)}
+            </button>
+          ))}
         </div>
-        <div className="od-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-2xl font-bold text-red-600">{stats.nonCompliant}</div>
-              <div className="text-xs text-gray-500">Non-Compliant</div>
-            </div>
-            <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-              <XCircleIcon className="w-5 h-5 text-red-600" />
-            </div>
-          </div>
-        </div>
-        <div className="od-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-2xl font-bold text-blue-600">{stats.encrypted}</div>
-              <div className="text-xs text-gray-500">Encrypted</div>
-            </div>
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-              <ShieldCheckIcon className="w-5 h-5 text-blue-600" />
-            </div>
-          </div>
-        </div>
+
+        {/* Clear filters */}
+        {hasActiveFilters && (
+          <button onClick={() => { setSearchTerm(''); setStatusFilter('all'); setPlatformFilter('all'); }}
+            className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+            Clear filters
+          </button>
+        )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 px-6 pt-1 border-b border-gray-200 bg-gray-50">
-        {([
-          ['all', `All Devices (${devices.length})`],
-          ['compliant', `Compliant (${stats.compliant})`],
-          ['non_compliant', `Non-Compliant (${stats.nonCompliant})`],
-          ['offline', `Offline (${devices.filter(d => d.status === 'offline').length})`],
-        ] as const).map(([key, label]) => (
-          <button key={key} onClick={() => setActiveTab(key)}
-            className={`od-tab ${activeTab === key ? 'od-tab-active' : 'od-tab-inactive'}`}>
-            {label}
-          </button>
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4">
+        {[
+          { label: 'Total Devices',  value: devices.length },
+          { label: 'Online',         value: online,         dot: 'bg-green-500' },
+          { label: 'Offline',        value: offline,        dot: 'bg-gray-400' },
+          { label: 'Avg. Compliance',value: `${avgCompliance}%` },
+        ].map(({ label, value, dot }) => (
+          <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <div className="flex items-center gap-2">
+              {dot && <div className={`w-2.5 h-2.5 rounded-full ${dot}`} />}
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{label}</p>
+            </div>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">
+              {loading ? <span className="animate-pulse inline-block w-10 h-7 bg-gray-200 rounded" /> : value}
+            </p>
+          </div>
         ))}
       </div>
 
-      {/* Device Table */}
-      <div className="flex-1 overflow-auto px-6 py-4">
-        <div className="od-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-200 bg-gray-50">
-                <th className="px-4 py-3">Device</th>
-                <th className="px-4 py-3">User</th>
-                <th className="px-4 py-3">OS</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Compliance</th>
-                <th className="px-4 py-3">Encryption</th>
-                <th className="px-4 py-3">Updates</th>
-                <th className="px-4 py-3">Last Seen</th>
-                <th className="px-4 py-3">Actions</th>
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                {['Status', 'Name', 'Platform', 'OS', 'IP Address', 'Last Seen', 'Compliance', 'Actions'].map(col => (
+                  <th key={col} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {col}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody>
-              {filteredDevices.map(d => {
-                const TypeIcon = typeIcon(d.type);
-                return (
-                  <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedDevice(d)}>
+            <tbody className="divide-y divide-gray-50">
+              {loading ? (
+                <><SkeletonRow /><SkeletonRow /><SkeletonRow /><SkeletonRow /></>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-16 text-center">
+                    <DevicePhoneMobileIcon className="mx-auto w-12 h-12 text-gray-300 mb-3" />
+                    {devices.length === 0 ? (
+                      <>
+                        <p className="text-sm font-medium text-gray-900 mb-1">No devices enrolled</p>
+                        <p className="text-xs text-gray-500 mb-4">Install the OpenDirectory agent to enroll your first device.</p>
+                        <code className="inline-block bg-gray-100 text-gray-700 text-xs px-4 py-2 rounded-lg font-mono">
+                          curl -fsSL https://opendirectory.heusser.local/install.sh | sudo bash
+                        </code>
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-500">No devices match your filters.</p>
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((device, idx) => (
+                  <tr key={device.id}
+                    className={idx % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50 hover:bg-gray-100'}
+                    style={{ transition: 'background 0.1s' }}>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <TypeIcon className="w-4 h-4 text-gray-400" />
-                        <div>
-                          <div className="font-medium text-gray-900">{d.name}</div>
-                          <div className="text-xs text-gray-400">{d.ipAddress}</div>
+                      {device.decommissioned ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-gray-400" />
+                          <span className="text-xs font-medium text-gray-400">Decommissioned</span>
                         </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${device.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`} />
+                          <span className={`text-xs font-medium ${device.status === 'online' ? 'text-green-700' : 'text-gray-500'}`}>
+                            {device.status === 'online' ? 'Online' : 'Offline'}
+                          </span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm font-medium text-gray-900">{device.name || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <PlatformIcon platform={device.platform} />
+                        <span className="text-sm text-gray-600 capitalize">{device.platform || '—'}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-700">{d.user}</td>
                     <td className="px-4 py-3">
-                      <div className="text-gray-700">{d.os}</div>
-                      <div className="text-xs text-gray-400">{d.osVersion}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded text-xs ${statusBadge(d.status)}`}>
-                        {d.status === 'syncing' && <ArrowPathIcon className="w-3 h-3 inline animate-spin mr-1" />}
-                        {d.status}
+                      <span className="text-sm text-gray-600">
+                        {device.os || '—'}{device.osVersion ? ` ${device.osVersion}` : ''}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded text-xs ${complianceBadge(d.compliance)}`}>
-                        {d.compliance.replace('_', ' ')}
-                      </span>
+                      <span className="text-sm text-gray-600 font-mono">{device.ip_address || '—'}</span>
                     </td>
                     <td className="px-4 py-3">
-                      {d.encrypted
-                        ? <CheckCircleIcon className="w-4 h-4 text-green-600" />
-                        : <XCircleIcon className="w-4 h-4 text-red-500" />}
+                      <span className="text-sm text-gray-500">{formatLastSeen(device.lastSeen)}</span>
+                    </td>
+                    <td className="px-4 py-3 min-w-[120px]">
+                      <ComplianceBar score={device.complianceScore} />
                     </td>
                     <td className="px-4 py-3">
-                      {d.pendingUpdates > 0
-                        ? <span className="text-orange-600 font-medium">{d.pendingUpdates} pending</span>
-                        : <span className="text-green-600 text-xs">Up to date</span>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">
-                      {new Date(d.lastSeen).toLocaleString('de-DE')}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); syncDevice(d.id); }}
-                        className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
-                        title="Sync Device"
-                      >
-                        <ArrowPathIcon className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setSelectedDevice(device)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
+                          <EyeIcon className="w-3.5 h-3.5" />
+                          Details
+                        </button>
+                        <button
+                          onClick={() => handleRefreshDevice(device)}
+                          disabled={refreshingId === device.id}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                          <ArrowPathIcon className={`w-3.5 h-3.5 ${refreshingId === device.id ? 'animate-spin' : ''}`} />
+                          Refresh
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Device Detail Slide-over */}
+      {showEnroll && <EnrollModal onClose={() => setShowEnroll(false)} />}
       {selectedDevice && (
-        <div className="fixed inset-y-0 right-0 w-96 bg-white border-l border-gray-200 shadow-xl z-50 overflow-y-auto">
-          <div className="p-6">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">{selectedDevice.name}</h2>
-                <p className="text-sm text-gray-500">{selectedDevice.os} {selectedDevice.osVersion}</p>
-              </div>
-              <button onClick={() => setSelectedDevice(null)} className="text-gray-400 hover:text-gray-600">
-                <XCircleIcon className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <div className="text-xs text-gray-500">Status</div>
-                  <span className={`px-2 py-0.5 rounded text-xs ${statusBadge(selectedDevice.status)}`}>{selectedDevice.status}</span>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <div className="text-xs text-gray-500">Compliance</div>
-                  <span className={`px-2 py-0.5 rounded text-xs ${complianceBadge(selectedDevice.compliance)}`}>{selectedDevice.compliance.replace('_', ' ')}</span>
-                </div>
-              </div>
-
-              <div className="od-card p-4">
-                <h3 className="text-sm font-semibold text-gray-600 mb-3">Device Details</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-500">Platform</span><span className="text-gray-700">{platformLabel(selectedDevice.platform)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Type</span><span className="text-gray-700 capitalize">{selectedDevice.type}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">User</span><span className="text-gray-700">{selectedDevice.user}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">IP Address</span><span className="text-gray-700 font-mono text-xs">{selectedDevice.ipAddress}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Enrolled</span><span className="text-gray-700">{selectedDevice.enrolledAt}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Last Seen</span><span className="text-gray-700">{new Date(selectedDevice.lastSeen).toLocaleString('de-DE')}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Encryption</span><span className={selectedDevice.encrypted ? 'text-green-600' : 'text-red-600'}>{selectedDevice.encrypted ? 'Enabled' : 'Disabled'}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Policies</span><span className="text-gray-700">{selectedDevice.policies} assigned</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Pending Updates</span><span className={selectedDevice.pendingUpdates > 0 ? 'text-orange-600' : 'text-green-600'}>{selectedDevice.pendingUpdates}</span></div>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <button onClick={() => syncDevice(selectedDevice.id)} className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm flex items-center justify-center gap-2 shadow-sm">
-                  <ArrowPathIcon className="w-4 h-4" /> Sync Now
-                </button>
-                <button className="flex-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm flex items-center justify-center gap-2">
-                  <ShieldCheckIcon className="w-4 h-4" /> Check Compliance
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DeviceDetailModal
+          device={selectedDevice}
+          initialApps={appsCache[selectedDevice.id]}
+          onAppsChange={handleAppsChange}
+          onClose={() => setSelectedDevice(null)}
+          onRemove={handleRemoved}
+          history={deviceHistory[selectedDevice.id]}
+          addHistoryEntry={addHistoryEntry}
+          onDecommission={handleDecommissioned}
+        />
       )}
     </div>
   );

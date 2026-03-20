@@ -2,380 +2,277 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  RectangleGroupIcon,
   ServerIcon,
-  CloudIcon,
-  ComputerDesktopIcon,
   ShieldCheckIcon,
-  CpuChipIcon,
-  WifiIcon,
-  PrinterIcon,
-  ChartBarIcon,
   Cog6ToothIcon,
+  ChartBarIcon,
+  WifiIcon,
+  ComputerDesktopIcon,
+  CloudIcon,
+  PrinterIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  XCircleIcon
+  XCircleIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
-import { gatewayApi, healthApi } from '@/lib/api';
-import { useUiMode } from '@/lib/ui-mode';
-import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
+import { healthApi, gatewayApi } from '@/lib/api';
 
-interface ServiceNode {
+type Status = 'healthy' | 'unhealthy' | 'unknown';
+
+interface Node {
   id: string;
   name: string;
   type: 'gateway' | 'core' | 'module' | 'external';
-  status: 'healthy' | 'unhealthy' | 'unknown';
+  status: Status;
   port?: number;
   connections: string[];
-  position: { x: number; y: number };
+  x: number; // 0–800
+  y: number; // 0–600
   icon: React.ComponentType<any>;
   color: string;
 }
 
+// Static topology — always shown regardless of API availability
+const BASE_NODES: Omit<Node, 'status'>[] = [
+  // Gateway – centre
+  { id: 'gateway',      name: 'API Gateway',     type: 'gateway',  connections: [],                         x: 400, y: 280, icon: ServerIcon,          color: '#3b82f6' },
+  // Core services – top arc
+  { id: 'auth',         name: 'Auth',            type: 'core',     connections: ['gateway'],                x: 200, y: 100, icon: ShieldCheckIcon,      color: '#10b981' },
+  { id: 'config',       name: 'Config',          type: 'core',     connections: ['gateway'],                x: 400, y:  80, icon: Cog6ToothIcon,         color: '#8b5cf6' },
+  { id: 'health',       name: 'Health',          type: 'core',     connections: ['gateway'],                x: 600, y: 100, icon: ChartBarIcon,          color: '#ef4444' },
+  // Module services – sides
+  { id: 'network',      name: 'Network',         type: 'module',   connections: ['gateway'],                x:  80, y: 280, icon: WifiIcon,             color: '#06b6d4' },
+  { id: 'devices',      name: 'Devices',         type: 'module',   connections: ['gateway'],                x: 720, y: 280, icon: ComputerDesktopIcon,  color: '#6366f1' },
+  { id: 'printer',      name: 'Printer',         type: 'module',   connections: ['gateway'],                x: 720, y: 420, icon: PrinterIcon,          color: '#6b7280' },
+  // External services – bottom arc
+  { id: 'lldap',        name: 'LLDAP',           type: 'external', connections: ['gateway', 'auth'],        x: 160, y: 480, icon: CloudIcon,            color: '#f59e0b' },
+  { id: 'grafana',      name: 'Grafana',         type: 'external', connections: ['gateway'],                x: 340, y: 500, icon: ChartBarIcon,         color: '#f97316' },
+  { id: 'prometheus',   name: 'Prometheus',      type: 'external', connections: ['gateway', 'grafana'],     x: 520, y: 480, icon: ChartBarIcon,         color: '#ef4444' },
+  { id: 'vault',        name: 'Vault',           type: 'external', connections: ['gateway'],                x:  80, y: 430, icon: ShieldCheckIcon,      color: '#eab308' },
+];
+
+const STATUS_COLOR: Record<Status, string> = {
+  healthy:  '#10b981',
+  unhealthy:'#ef4444',
+  unknown:  '#f59e0b',
+};
+
+const TYPE_SIZE: Record<Node['type'], number> = {
+  gateway: 36,
+  core:    26,
+  module:  22,
+  external:20,
+};
+
 export default function TopologyView() {
-  const { isSimple } = useUiMode();
-  const [services, setServices] = useState<ServiceNode[]>([]);
-  const [selectedService, setSelectedService] = useState<ServiceNode | null>(null);
+  const [nodes, setNodes] = useState<Node[]>(
+    BASE_NODES.map(n => ({ ...n, status: 'unknown' as Status }))
+  );
+  const [selected, setSelected] = useState<Node | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    loadTopologyData();
-    const interval = setInterval(loadTopologyData, 15000);
+    loadStatus();
+    const interval = setInterval(loadStatus, 15000);
     return () => clearInterval(interval);
   }, []);
 
-  const loadTopologyData = async () => {
+  const loadStatus = async () => {
     try {
-      const [servicesRes, routesRes] = await Promise.all([
-        gatewayApi.getServices(),
-        gatewayApi.getRoutes()
-      ]);
+      // Try health endpoint for service statuses
+      const statusMap: Record<string, Status> = { gateway: 'healthy' };
 
-      const serviceData = servicesRes.data || [];
-      const routes = routesRes.data || [];
-
-      // Create topology nodes
-      const nodes: ServiceNode[] = [];
-
-      // API Gateway (center)
-      nodes.push({
-        id: 'gateway',
-        name: 'API Gateway',
-        type: 'gateway',
-        status: 'healthy',
-        port: 8080,
-        connections: [],
-        position: { x: 400, y: 300 },
-        icon: ServerIcon,
-        color: 'blue'
-      });
-
-      // Core Services
-      const coreServices = [
-        { name: 'authentication-service', icon: ShieldCheckIcon, color: 'green' },
-        { name: 'configuration-service', icon: Cog6ToothIcon, color: 'purple' },
-        { name: 'health-service', icon: ChartBarIcon, color: 'red' }
-      ];
-
-      coreServices.forEach((core, index) => {
-        const service = serviceData.find((s: any) => s.name === core.name);
-        nodes.push({
-          id: core.name,
-          name: core.name.replace('-service', ''),
-          type: 'core',
-          status: service?.status || 'unknown',
-          port: service?.port,
-          connections: ['gateway'],
-          position: { 
-            x: 200 + (index * 150), 
-            y: 150 
-          },
-          icon: core.icon,
-          color: core.color
+      try {
+        const healthRes = await healthApi.getOverallHealth();
+        const services: { name: string; status: Status }[] = healthRes.data.services || [];
+        services.forEach(s => {
+          const id = s.name.toLowerCase().replace(/[\s-]service$/i, '').replace(/\s+/g, '-');
+          statusMap[id] = s.status;
         });
-      });
+      } catch {}
 
-      // Module Services
-      const moduleServices = [
-        { name: 'network-infrastructure', icon: WifiIcon, color: 'blue' },
-        { name: 'device-management', icon: ComputerDesktopIcon, color: 'indigo' },
-        { name: 'security-suite', icon: ShieldCheckIcon, color: 'red' },
-        { name: 'printer-service', icon: PrinterIcon, color: 'gray' },
-        { name: 'monitoring-analytics', icon: ChartBarIcon, color: 'green' },
-        { name: 'container-orchestration', icon: CpuChipIcon, color: 'purple' }
-      ];
-
-      moduleServices.forEach((module, index) => {
-        const service = serviceData.find((s: any) => s.name === module.name);
-        const angle = (index * 60) * (Math.PI / 180); // 60 degrees apart
-        const radius = 200;
-        
-        nodes.push({
-          id: module.name,
-          name: module.name.replace('-', ' '),
-          type: 'module',
-          status: service?.status || 'unknown',
-          port: service?.port,
-          connections: ['gateway'],
-          position: { 
-            x: 400 + Math.cos(angle) * radius, 
-            y: 300 + Math.sin(angle) * radius 
-          },
-          icon: module.icon,
-          color: module.color
+      try {
+        const gatewayRes = await gatewayApi.getServices();
+        const services: { name: string; status: Status }[] = gatewayRes.data || [];
+        services.forEach(s => {
+          const id = s.name.toLowerCase().replace(/[\s-]service$/i, '').replace(/\s+/g, '-');
+          statusMap[id] = s.status;
         });
-      });
+      } catch {}
 
-      // External Services
-      const externalServices = [
-        { name: 'lldap', icon: CloudIcon, color: 'yellow' },
-        { name: 'grafana', icon: ChartBarIcon, color: 'orange' },
-        { name: 'prometheus', icon: ChartBarIcon, color: 'red' }
-      ];
-
-      externalServices.forEach((external, index) => {
-        nodes.push({
-          id: external.name,
-          name: external.name.toUpperCase(),
-          type: 'external',
-          status: 'healthy',
-          connections: ['gateway'],
-          position: { 
-            x: 600 + (index * 100), 
-            y: 450 
-          },
-          icon: external.icon,
-          color: external.color
-        });
-      });
-
-      setServices(nodes);
-    } catch (error) {
-      console.error('Failed to load topology data:', error);
-    } finally {
+      setNodes(BASE_NODES.map(n => ({
+        ...n,
+        status: statusMap[n.id] ?? 'unknown',
+      })));
+    } catch {}
+    finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy': return 'text-green-500';
-      case 'unhealthy': return 'text-red-500';
-      default: return 'text-yellow-500';
-    }
+  const refresh = () => { setRefreshing(true); loadStatus(); };
+
+  // SVG viewport: 800 × 600
+  const W = 800, H = 600;
+
+  const getStatusIcon = (status: Status) => {
+    if (status === 'healthy')   return <CheckCircleIcon className="w-4 h-4 text-green-500" />;
+    if (status === 'unhealthy') return <XCircleIcon className="w-4 h-4 text-red-500" />;
+    return <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500" />;
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'healthy': return <CheckCircleIcon className="w-4 h-4" />;
-      case 'unhealthy': return <XCircleIcon className="w-4 h-4" />;
-      default: return <ExclamationTriangleIcon className="w-4 h-4" />;
-    }
-  };
-
-  const getNodeColor = (node: ServiceNode) => {
-    const colors = {
-      blue: 'bg-blue-500',
-      green: 'bg-green-500',
-      red: 'bg-red-500',
-      purple: 'bg-purple-500',
-      indigo: 'bg-indigo-500',
-      gray: 'bg-gray-500',
-      yellow: 'bg-yellow-500',
-      orange: 'bg-orange-500'
-    };
-    return colors[node.color as keyof typeof colors] || 'bg-gray-500';
-  };
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-64 mb-8"></div>
-          <div className="h-96 bg-gray-200 rounded"></div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Simple Mode ──
-  if (isSimple) {
-    const healthyServices = services.filter(s => s.status === 'healthy');
-    const unhealthyServices = services.filter(s => s.status === 'unhealthy');
-    const unknownServices = services.filter(s => s.status === 'unknown');
-
-    return (
-      <SimpleViewLayout
-        hero={{
-          status: unhealthyServices.length === 0 ? 'ok' : 'critical',
-          title: unhealthyServices.length === 0 ? 'All Services Connected' : `${unhealthyServices.length} Service${unhealthyServices.length > 1 ? 's' : ''} Down`,
-          subtitle: `${healthyServices.length} of ${services.length} services healthy`,
-        }}
-        stats={[
-          { value: services.length, label: 'Total Services', color: 'text-blue-600' },
-          { value: healthyServices.length, label: 'Healthy', color: 'text-green-600' },
-          { value: unhealthyServices.length, label: 'Unhealthy', color: unhealthyServices.length > 0 ? 'text-red-600' : 'text-gray-600' },
-          { value: unknownServices.length, label: 'Unknown', color: 'text-yellow-600' },
-        ]}
-        sections={[{
-          title: 'Services',
-          maxItems: 20,
-          items: services.map(service => ({
-            key: service.id,
-            icon: <div className={`w-8 h-8 ${getNodeColor(service)} rounded-lg flex items-center justify-center`}><service.icon className="w-4 h-4 text-white" /></div>,
-            title: service.name,
-            subtitle: `${service.type}${service.port ? ` · :${service.port}` : ''}`,
-            trailing: (
-              <div className={`flex items-center gap-1.5 ${getStatusColor(service.status)}`}>
-                {getStatusIcon(service.status)}
-                <span className="text-xs font-medium capitalize">{service.status}</span>
-              </div>
-            ),
-          })),
-        }]}
-      />
-    );
-  }
-
-  // ── Expert Mode ──
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Network Topology</h1>
-          <p className="text-sm text-gray-500 mt-1">Interactive view of your service architecture</p>
+          <p className="text-sm text-gray-500 mt-1">Service architecture overview</p>
         </div>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2 text-sm">
-            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-            <span>Healthy</span>
-            <div className="w-3 h-3 bg-yellow-500 rounded-full ml-4"></div>
-            <span>Warning</span>
-            <div className="w-3 h-3 bg-red-500 rounded-full ml-4"></div>
-            <span>Critical</span>
+        <div className="flex items-center gap-4">
+          {/* Legend */}
+          <div className="flex items-center gap-4 text-xs text-gray-600">
+            {(['healthy', 'unknown', 'unhealthy'] as Status[]).map(s => (
+              <span key={s} className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: STATUS_COLOR[s] }} />
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </span>
+            ))}
           </div>
+          <button
+            onClick={refresh}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+          >
+            <ArrowPathIcon className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
       </div>
 
-      {/* Topology Canvas */}
+      {/* Canvas */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="relative h-96 lg:h-[600px] bg-gradient-to-br from-gray-50 to-gray-100">
-          {/* SVG for connections */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none">
-            {services.map((service) => 
-              service.connections.map((connectionId) => {
-                const targetService = services.find(s => s.id === connectionId);
-                if (!targetService) return null;
-                
-                return (
-                  <line
-                    key={`${service.id}-${connectionId}`}
-                    x1={service.position.x}
-                    y1={service.position.y}
-                    x2={targetService.position.x}
-                    y2={targetService.position.y}
-                    stroke="#d1d5db"
-                    strokeWidth="2"
-                    strokeDasharray={service.type === 'external' ? '5,5' : 'none'}
-                    opacity="0.6"
-                  />
-                );
-              })
-            )}
-          </svg>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="w-full"
+          style={{ height: 520 }}
+        >
+          {/* Grid background */}
+          <defs>
+            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#f3f4f6" strokeWidth="1"/>
+            </pattern>
+          </defs>
+          <rect width={W} height={H} fill="url(#grid)" />
 
-          {/* Service Nodes */}
-          {services.map((service) => (
-            <div
-              key={service.id}
-              className={`absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all duration-200 hover:scale-105 ${
-                selectedService?.id === service.id ? 'scale-110 z-10' : 'z-0'
-              }`}
-              style={{
-                left: `${(service.position.x / 800) * 100}%`,
-                top: `${(service.position.y / 600) * 100}%`,
-              }}
-              onClick={() => setSelectedService(service)}
-            >
-              <div className={`relative w-16 h-16 ${getNodeColor(service)} rounded-xl shadow-lg flex items-center justify-center ${
-                service.type === 'gateway' ? 'w-20 h-20' : ''
-              } ${selectedService?.id === service.id ? 'ring-4 ring-blue-300' : ''}`}>
-                <service.icon className="w-8 h-8 text-white" />
-                
-                {/* Status indicator */}
-                <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center ${getStatusColor(service.status).replace('text-', 'bg-')}`}>
-                  <div className="w-2 h-2 bg-white rounded-full"></div>
-                </div>
-              </div>
+          {/* Connection lines */}
+          {nodes.map(node =>
+            node.connections.map(targetId => {
+              const target = nodes.find(n => n.id === targetId);
+              if (!target) return null;
+              const isExt = node.type === 'external' || target.type === 'external';
+              return (
+                <line
+                  key={`${node.id}→${targetId}`}
+                  x1={node.x} y1={node.y}
+                  x2={target.x} y2={target.y}
+                  stroke={isExt ? '#d1d5db' : '#93c5fd'}
+                  strokeWidth={isExt ? 1.5 : 2}
+                  strokeDasharray={isExt ? '6 4' : undefined}
+                  opacity={0.7}
+                />
+              );
+            })
+          )}
 
-              {/* Service Label */}
-              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 text-center">
-                <p className="text-xs font-medium text-gray-900 whitespace-nowrap">
-                  {service.name}
-                </p>
-                {service.port && (
-                  <p className="text-xs text-gray-500">:{service.port}</p>
+          {/* Nodes */}
+          {nodes.map(node => {
+            const r = TYPE_SIZE[node.type];
+            const isSelected = selected?.id === node.id;
+            return (
+              <g
+                key={node.id}
+                transform={`translate(${node.x},${node.y})`}
+                onClick={() => setSelected(isSelected ? null : node)}
+                style={{ cursor: 'pointer' }}
+              >
+                {/* Outer ring when selected */}
+                {isSelected && (
+                  <circle r={r + 8} fill="none" stroke="#3b82f6" strokeWidth="2" opacity="0.5" />
                 )}
-              </div>
-            </div>
-          ))}
-        </div>
+                {/* Node circle */}
+                <circle
+                  r={r}
+                  fill={node.color}
+                  opacity={loading ? 0.5 : 1}
+                />
+                {/* Status dot */}
+                <circle
+                  cx={r * 0.7}
+                  cy={-(r * 0.7)}
+                  r={5}
+                  fill={STATUS_COLOR[node.status]}
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+                {/* Label */}
+                <text
+                  y={r + 14}
+                  textAnchor="middle"
+                  fontSize={10}
+                  fontWeight={node.type === 'gateway' ? 700 : 500}
+                  fill="#374151"
+                >
+                  {node.name}
+                </text>
+                {node.port && (
+                  <text y={r + 25} textAnchor="middle" fontSize={9} fill="#9ca3af">
+                    :{node.port}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
       </div>
 
-      {/* Service Details Panel */}
-      {selectedService && (
+      {/* Detail panel */}
+      {selected && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <div className={`w-10 h-10 ${getNodeColor(selectedService)} rounded-lg flex items-center justify-center`}>
-                <selectedService.icon className="w-6 h-6 text-white" />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: selected.color + '20' }}>
+                <selected.icon className="w-6 h-6" style={{ color: selected.color }} />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">{selectedService.name}</h3>
-                <p className="text-sm text-gray-500 capitalize">{selectedService.type} Service</p>
+                <h3 className="text-lg font-semibold text-gray-900">{selected.name}</h3>
+                <p className="text-sm text-gray-500 capitalize">{selected.type} service</p>
               </div>
             </div>
-            <div className={`flex items-center space-x-2 ${getStatusColor(selectedService.status)}`}>
-              {getStatusIcon(selectedService.status)}
-              <span className="text-sm font-medium capitalize">{selectedService.status}</span>
+            <div className="flex items-center gap-2">
+              {getStatusIcon(selected.status)}
+              <span className="text-sm font-medium capitalize text-gray-700">{selected.status}</span>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-3 gap-6 text-sm">
             <div>
-              <h4 className="text-sm font-medium text-gray-900 mb-2">Connection Info</h4>
-              <div className="space-y-2 text-sm text-gray-600">
-                {selectedService.port && (
-                  <p>Port: <span className="font-mono">{selectedService.port}</span></p>
-                )}
-                <p>Connections: <span className="font-medium">{selectedService.connections.length}</span></p>
-                <p>Type: <span className="font-medium capitalize">{selectedService.type}</span></p>
-              </div>
+              <p className="text-gray-500 mb-1">Type</p>
+              <p className="font-medium text-gray-900 capitalize">{selected.type}</p>
             </div>
-
             <div>
-              <h4 className="text-sm font-medium text-gray-900 mb-2">Health Status</h4>
-              <div className="space-y-2 text-sm text-gray-600">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${selectedService.status === 'healthy' ? 'bg-green-500' : selectedService.status === 'unhealthy' ? 'bg-red-500' : 'bg-yellow-500'}`}></div>
-                  <span className="capitalize">{selectedService.status}</span>
-                </div>
-                <p>Last check: <span className="font-medium">Just now</span></p>
-                <p>Response time: <span className="font-medium">45ms</span></p>
-              </div>
+              <p className="text-gray-500 mb-1">Connections</p>
+              <p className="font-medium text-gray-900">{selected.connections.length} upstream</p>
             </div>
-
             <div>
-              <h4 className="text-sm font-medium text-gray-900 mb-2">Quick Actions</h4>
-              <div className="space-y-2">
-                <button className="w-full text-left px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
-                  View Logs
-                </button>
-                <button className="w-full text-left px-3 py-2 text-sm bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
-                  Health Check
-                </button>
-              </div>
+              <p className="text-gray-500 mb-1">Status</p>
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                selected.status === 'healthy'   ? 'bg-green-100 text-green-800' :
+                selected.status === 'unhealthy' ? 'bg-red-100 text-red-800'   :
+                                                  'bg-yellow-100 text-yellow-800'
+              }`}>
+                {selected.status}
+              </span>
             </div>
           </div>
         </div>

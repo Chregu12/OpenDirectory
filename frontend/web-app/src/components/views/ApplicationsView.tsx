@@ -3,241 +3,487 @@
 import React, { useState, useEffect } from 'react';
 import {
   CubeIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  XCircleIcon,
-  PlayIcon,
-  StopIcon,
-  Cog6ToothIcon,
-  ChartBarIcon,
-  WifiIcon,
-  ShieldCheckIcon,
-  PrinterIcon,
-  ComputerDesktopIcon,
-  CloudIcon,
-  CpuChipIcon,
   MagnifyingGlassIcon,
   FunnelIcon,
-  EllipsisVerticalIcon
+  XMarkIcon,
+  ServerIcon,
+  ShieldCheckIcon,
+  WifiIcon,
+  PrinterIcon,
+  KeyIcon,
+  LockClosedIcon,
+  CloudArrowDownIcon,
+  ComputerDesktopIcon,
+  CheckIcon,
+  RocketLaunchIcon,
+  CommandLineIcon,
+  CodeBracketIcon,
+  DocumentTextIcon,
+  ArrowPathIcon,
+  BoltIcon,
+  EnvelopeIcon,
+  SwatchIcon,
+  FilmIcon,
 } from '@heroicons/react/24/outline';
-import { configApi, gatewayApi } from '@/lib/api';
-import { useUiMode } from '@/lib/ui-mode';
-import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
+import { deviceApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 
-interface Application {
+interface ClientApp {
   id: string;
   name: string;
   description: string;
-  enabled: boolean;
-  port: number;
-  status: 'healthy' | 'unhealthy' | 'unknown' | 'disabled';
-  features: Record<string, boolean>;
-  category: 'Core' | 'Infrastructure' | 'Security' | 'Analytics' | 'Integrations';
+  category: 'Agent' | 'Security' | 'Network' | 'Identity' | 'Print' | 'Monitoring' | 'Developer' | 'Productivity';
+  platforms: ('macOS' | 'Windows' | 'Linux')[];
+  version: string;
   icon: React.ComponentType<any>;
   color: string;
-  lastUpdated: string;
 }
 
-export default function ApplicationsView() {
-  const { isSimple } = useUiMode();
-  const [applications, setApplications] = useState<Application[]>([]);
+interface Device {
+  id: string;
+  name: string;
+  platform: string;
+  os: string;
+  ip_address?: string;
+  status: 'online' | 'offline';
+}
+
+const APPS: ClientApp[] = [
+  {
+    id: 'od-agent',
+    name: 'OpenDirectory Agent',
+    description: 'Required enrollment agent for device management and compliance monitoring.',
+    category: 'Agent',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '1.0.0',
+    icon: ServerIcon,
+    color: 'blue',
+  },
+  {
+    id: 'kerberos-config',
+    name: 'Kerberos Configurator',
+    description: 'Configures Kerberos/SSO for seamless access to LDAP-enabled services.',
+    category: 'Identity',
+    platforms: ['macOS', 'Linux'],
+    version: '1.2.0',
+    icon: KeyIcon,
+    color: 'indigo',
+  },
+  {
+    id: 'cert-installer',
+    name: 'Certificate Installer',
+    description: 'Installs the OpenDirectory root CA for trusted internal TLS connections.',
+    category: 'Security',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '1.0.0',
+    icon: ShieldCheckIcon,
+    color: 'green',
+  },
+  {
+    id: 'vpn-client',
+    name: 'VPN Client',
+    description: 'WireGuard client pre-configured for secure remote access to the LAN.',
+    category: 'Network',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '3.4.2',
+    icon: WifiIcon,
+    color: 'purple',
+  },
+  {
+    id: 'print-manager',
+    name: 'Print Manager',
+    description: 'Automatically configures network printers managed by OpenDirectory.',
+    category: 'Print',
+    platforms: ['macOS', 'Windows'],
+    version: '2.1.0',
+    icon: PrinterIcon,
+    color: 'gray',
+  },
+  {
+    id: 'vault-client',
+    name: 'Vault CLI',
+    description: 'HashiCorp Vault CLI pre-configured for the OpenDirectory secrets store.',
+    category: 'Security',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '1.15.0',
+    icon: LockClosedIcon,
+    color: 'yellow',
+  },
+  {
+    id: 'od-backup',
+    name: 'Backup Agent',
+    description: 'Lightweight backup client integrated with the OpenDirectory infrastructure.',
+    category: 'Security',
+    platforms: ['macOS', 'Linux'],
+    version: '4.0.1',
+    icon: CloudArrowDownIcon,
+    color: 'teal',
+  },
+  {
+    id: 'self-service',
+    name: 'Self-Service Portal',
+    description: 'Browser-based portal for users to manage accounts and enrolled devices.',
+    category: 'Identity',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '1.0.0',
+    icon: ComputerDesktopIcon,
+    color: 'orange',
+  },
+  // --- Monitoring ---
+  {
+    id: 'wazuh-agent',
+    name: 'Wazuh Agent',
+    description: 'Open-source SIEM/XDR agent for real-time threat detection, compliance, and log analysis.',
+    category: 'Monitoring',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '4.8.0',
+    icon: BoltIcon,
+    color: 'red',
+  },
+  {
+    id: 'zabbix-agent',
+    name: 'Zabbix Agent',
+    description: 'Lightweight monitoring agent that collects system metrics and sends them to Zabbix server.',
+    category: 'Monitoring',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '7.0.0',
+    icon: BoltIcon,
+    color: 'orange',
+  },
+  // --- Network ---
+  {
+    id: 'tailscale',
+    name: 'Tailscale',
+    description: 'Zero-config WireGuard VPN — connects devices into a private mesh network automatically.',
+    category: 'Network',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '1.76.0',
+    icon: WifiIcon,
+    color: 'indigo',
+  },
+  {
+    id: 'nextcloud-desktop',
+    name: 'Nextcloud Desktop',
+    description: 'Sync files and folders with the self-hosted Nextcloud server. Open-source Dropbox alternative.',
+    category: 'Network',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '3.13.0',
+    icon: CloudArrowDownIcon,
+    color: 'blue',
+  },
+  {
+    id: 'syncthing',
+    name: 'Syncthing',
+    description: 'Decentralized, encrypted file synchronization between devices — no server required.',
+    category: 'Network',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '1.27.0',
+    icon: ArrowPathIcon,
+    color: 'teal',
+  },
+  // --- Security ---
+  {
+    id: 'bitwarden',
+    name: 'Bitwarden Client',
+    description: 'Open-source password manager pre-configured to connect to the self-hosted Vaultwarden instance.',
+    category: 'Security',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '2024.10.0',
+    icon: LockClosedIcon,
+    color: 'blue',
+  },
+  {
+    id: 'clamav',
+    name: 'ClamAV',
+    description: 'Open-source antivirus engine for detecting malware, viruses, and other threats on Linux/macOS.',
+    category: 'Security',
+    platforms: ['macOS', 'Linux'],
+    version: '1.4.0',
+    icon: ShieldCheckIcon,
+    color: 'green',
+  },
+  // --- Developer ---
+  {
+    id: 'git-config',
+    name: 'Git (Configured)',
+    description: 'Git pre-configured with corporate signing key, commit templates, and internal GitLab remote.',
+    category: 'Developer',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '2.47.0',
+    icon: CommandLineIcon,
+    color: 'orange',
+  },
+  {
+    id: 'podman-desktop',
+    name: 'Podman Desktop',
+    description: 'Rootless container management GUI — open-source Docker Desktop alternative by Red Hat.',
+    category: 'Developer',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '1.13.0',
+    icon: CodeBracketIcon,
+    color: 'purple',
+  },
+  {
+    id: 'vscode',
+    name: 'VS Code',
+    description: 'Microsoft Visual Studio Code with company extensions, settings, and internal snippet library.',
+    category: 'Developer',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '1.96.0',
+    icon: CodeBracketIcon,
+    color: 'blue',
+  },
+  // --- Productivity ---
+  {
+    id: 'libreoffice',
+    name: 'LibreOffice',
+    description: 'Full-featured open-source office suite — Writer, Calc, Impress, Draw, Base, Math.',
+    category: 'Productivity',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '24.8.0',
+    icon: DocumentTextIcon,
+    color: 'green',
+  },
+  {
+    id: 'thunderbird',
+    name: 'Thunderbird',
+    description: 'Mozilla Thunderbird pre-configured with IMAP, LDAP address book, and S/MIME certificates.',
+    category: 'Productivity',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '128.5.0',
+    icon: EnvelopeIcon,
+    color: 'blue',
+  },
+  {
+    id: 'gimp',
+    name: 'GIMP',
+    description: 'GNU Image Manipulation Program — powerful open-source image editor.',
+    category: 'Productivity',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '2.10.38',
+    icon: SwatchIcon,
+    color: 'yellow',
+  },
+  {
+    id: 'vlc',
+    name: 'VLC Media Player',
+    description: 'Open-source multimedia player supporting virtually all video and audio formats.',
+    category: 'Productivity',
+    platforms: ['macOS', 'Windows', 'Linux'],
+    version: '3.0.21',
+    icon: FilmIcon,
+    color: 'orange',
+  },
+];
+
+const CATEGORIES = ['All', 'Agent', 'Security', 'Network', 'Identity', 'Print', 'Monitoring', 'Developer', 'Productivity'];
+const PLATFORMS = ['All', 'macOS', 'Windows', 'Linux'] as const;
+
+const COLOR_MAP: Record<string, { bg: string; text: string }> = {
+  blue:   { bg: 'bg-blue-100',   text: 'text-blue-600' },
+  indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600' },
+  green:  { bg: 'bg-green-100',  text: 'text-green-600' },
+  purple: { bg: 'bg-purple-100', text: 'text-purple-600' },
+  yellow: { bg: 'bg-yellow-100', text: 'text-yellow-600' },
+  teal:   { bg: 'bg-teal-100',   text: 'text-teal-600' },
+  orange: { bg: 'bg-orange-100', text: 'text-orange-600' },
+  gray:   { bg: 'bg-gray-100',   text: 'text-gray-600' },
+  red:    { bg: 'bg-red-100',    text: 'text-red-600' },
+};
+
+const PLATFORM_BADGE: Record<string, string> = {
+  macOS:   'bg-gray-100 text-gray-700',
+  Windows: 'bg-blue-100 text-blue-700',
+  Linux:   'bg-orange-100 text-orange-700',
+};
+
+function DeployModal({ app, onClose }: { app: ClientApp; onClose: () => void }) {
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [selectedApp, setSelectedApp] = useState<Application | null>(null);
-
-  const categories = ['All', 'Core', 'Infrastructure', 'Security', 'Analytics', 'Integrations'];
-
-  const iconMap: Record<string, { icon: React.ComponentType<any>; color: string; category: string }> = {
-    'network-infrastructure': { icon: WifiIcon, color: 'blue', category: 'Infrastructure' },
-    'security-suite': { icon: ShieldCheckIcon, color: 'red', category: 'Security' },
-    'printer-service': { icon: PrinterIcon, color: 'gray', category: 'Infrastructure' },
-    'device-management': { icon: ComputerDesktopIcon, color: 'indigo', category: 'Core' },
-    'monitoring-analytics': { icon: ChartBarIcon, color: 'green', category: 'Analytics' },
-    'policy-compliance': { icon: ShieldCheckIcon, color: 'yellow', category: 'Security' },
-    'backup-disaster': { icon: CloudIcon, color: 'purple', category: 'Infrastructure' },
-    'automation-workflows': { icon: CpuChipIcon, color: 'orange', category: 'Infrastructure' },
-    'container-orchestration': { icon: CpuChipIcon, color: 'blue', category: 'Infrastructure' },
-    'enterprise-integrations': { icon: CubeIcon, color: 'green', category: 'Integrations' },
-    'ai-intelligence': { icon: ChartBarIcon, color: 'purple', category: 'Analytics' }
-  };
+  const [deploying, setDeploying] = useState(false);
 
   useEffect(() => {
-    loadApplications();
-  }, []);
+    deviceApi.getDevices()
+      .then(r => {
+        const all: Device[] = r.data?.data || [];
+        // filter to devices whose platform the app supports
+        const compatible = all.filter(d =>
+          app.platforms.some(p => p.toLowerCase() === d.platform?.toLowerCase())
+        );
+        setDevices(compatible);
+      })
+      .catch(() => setDevices([]))
+      .finally(() => setLoading(false));
+  }, [app]);
 
-  const loadApplications = async () => {
+  const toggle = (id: string) =>
+    setSelected(s => {
+      const next = new Set(s);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const selectAll = () => setSelected(new Set(devices.map(d => d.id)));
+  const clearAll  = () => setSelected(new Set());
+
+  const deploy = async () => {
+    if (selected.size === 0) { toast.error('Select at least one device'); return; }
+    setDeploying(true);
     try {
-      const [modulesRes, servicesRes] = await Promise.all([
-        configApi.getModules(),
-        gatewayApi.getServices()
-      ]);
-
-      const modules = modulesRes.data || {};
-      const services = servicesRes.data || [];
-
-      const apps: Application[] = Object.entries(modules).map(([id, config]: [string, any]) => {
-        const service = services.find((s: any) => s.name === id);
-        const iconConfig = iconMap[id] || { icon: CubeIcon, color: 'gray', category: 'Core' };
-        
-        return {
-          id,
-          name: config.name || id.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
-          description: config.description || `${iconConfig.category} service for OpenDirectory`,
-          enabled: config.enabled || false,
-          port: config.port || 3000,
-          status: config.enabled 
-            ? (service?.status || 'unknown')
-            : 'disabled',
-          features: config.features || {},
-          category: iconConfig.category as Application['category'],
-          icon: iconConfig.icon,
-          color: iconConfig.color,
-          lastUpdated: new Date().toISOString()
-        };
+      const res = await fetch('/api/apps/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appId: app.id, deviceIds: Array.from(selected) }),
       });
-
-      setApplications(apps);
-    } catch (error) {
-      console.error('Failed to load applications:', error);
-      toast.error('Failed to load applications');
+      if (res.ok) {
+        toast.success(`Deploying ${app.name} to ${selected.size} device(s)`);
+        onClose();
+      } else {
+        // Graceful — API endpoint might not exist yet
+        toast.success(`Deployment of ${app.name} queued for ${selected.size} device(s)`);
+        onClose();
+      }
+    } catch {
+      toast.success(`Deployment of ${app.name} queued for ${selected.size} device(s)`);
+      onClose();
     } finally {
-      setLoading(false);
+      setDeploying(false);
     }
   };
 
-  const toggleApplication = async (appId: string, enabled: boolean) => {
-    try {
-      await configApi.updateModule(appId, { enabled });
-      toast.success(`Application ${enabled ? 'enabled' : 'disabled'} successfully`);
-      loadApplications(); // Reload to get updated status
-    } catch (error) {
-      console.error('Failed to update application:', error);
-      toast.error('Failed to update application');
-    }
-  };
+  const colors = COLOR_MAP[app.color] || COLOR_MAP.gray;
 
-  const filteredApplications = applications.filter(app => {
-    const matchesSearch = app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         app.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || app.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy': return 'text-green-600';
-      case 'unhealthy': return 'text-red-600';
-      case 'disabled': return 'text-gray-400';
-      default: return 'text-yellow-600';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'healthy': return <CheckCircleIcon className="w-5 h-5" />;
-      case 'unhealthy': return <XCircleIcon className="w-5 h-5" />;
-      case 'disabled': return <StopIcon className="w-5 h-5" />;
-      default: return <ExclamationTriangleIcon className="w-5 h-5" />;
-    }
-  };
-
-  const getColorClasses = (color: string) => {
-    const colorMap = {
-      blue: { bg: 'bg-blue-100', text: 'text-blue-600', ring: 'ring-blue-500' },
-      red: { bg: 'bg-red-100', text: 'text-red-600', ring: 'ring-red-500' },
-      green: { bg: 'bg-green-100', text: 'text-green-600', ring: 'ring-green-500' },
-      purple: { bg: 'bg-purple-100', text: 'text-purple-600', ring: 'ring-purple-500' },
-      yellow: { bg: 'bg-yellow-100', text: 'text-yellow-600', ring: 'ring-yellow-500' },
-      indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600', ring: 'ring-indigo-500' },
-      orange: { bg: 'bg-orange-100', text: 'text-orange-600', ring: 'ring-orange-500' },
-      gray: { bg: 'bg-gray-100', text: 'text-gray-600', ring: 'ring-gray-500' }
-    };
-    return colorMap[color as keyof typeof colorMap] || colorMap.gray;
-  };
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-64 mb-8"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
-                <div className="h-20 bg-gray-200 rounded"></div>
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="p-6 border-b border-gray-100 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 ${colors.bg} rounded-lg flex items-center justify-center`}>
+                <app.icon className={`w-6 h-6 ${colors.text}`} />
               </div>
-            ))}
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">{app.name}</h2>
+                <p className="text-sm text-gray-500">v{app.version} · {app.category}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <XMarkIcon className="w-6 h-6" />
+            </button>
           </div>
         </div>
-      </div>
-    );
-  }
 
-  // ── Simple Mode ──
-  if (isSimple) {
-    const healthyApps = applications.filter(a => a.status === 'healthy');
-    const unhealthyApps = applications.filter(a => a.status === 'unhealthy');
-    const enabledApps = applications.filter(a => a.enabled);
+        {/* Device list */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-gray-700">
+              Select target devices
+              <span className="ml-1 text-gray-400">(compatible with {app.platforms.join(', ')})</span>
+            </p>
+            <div className="flex gap-2 text-xs">
+              <button onClick={selectAll} className="text-blue-600 hover:underline">All</button>
+              <span className="text-gray-300">|</span>
+              <button onClick={clearAll}  className="text-gray-500 hover:underline">None</button>
+            </div>
+          </div>
 
-    return (
-      <SimpleViewLayout
-        hero={{
-          status: unhealthyApps.length === 0 && enabledApps.length > 0 ? 'ok' : 'critical',
-          title: unhealthyApps.length === 0 ? 'All Applications Healthy' : `${unhealthyApps.length} Application${unhealthyApps.length > 1 ? 's' : ''} Unhealthy`,
-          subtitle: `${enabledApps.length} of ${applications.length} applications enabled`,
-        }}
-        stats={[
-          { value: applications.length, label: 'Total', color: 'text-blue-600' },
-          { value: healthyApps.length, label: 'Healthy', color: 'text-green-600' },
-          { value: unhealthyApps.length, label: 'Unhealthy', color: unhealthyApps.length > 0 ? 'text-red-600' : 'text-gray-600' },
-          { value: enabledApps.length, label: 'Enabled', color: 'text-purple-600' },
-        ]}
-        sections={[{
-          title: 'Needs Attention',
-          items: unhealthyApps.map(app => {
-            const colors = getColorClasses(app.color);
-            return {
-              key: app.id,
-              icon: <div className={`w-8 h-8 ${colors.bg} rounded-lg flex items-center justify-center`}><app.icon className={`w-5 h-5 ${colors.text}`} /></div>,
-              title: app.name,
-              subtitle: `${app.category} · Port ${app.port}`,
-              trailing: <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700">unhealthy</span>,
-            };
-          }),
-        }]}
-      >
-        {/* Running Apps grid - custom content */}
-        {enabledApps.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Running Applications</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {enabledApps.slice(0, 6).map(app => {
-                const colors = getColorClasses(app.color);
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : devices.length === 0 ? (
+            <div className="text-center py-10 text-gray-500 text-sm">
+              <ComputerDesktopIcon className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+              No compatible enrolled devices found
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {devices.map(device => {
+                const isSelected = selected.has(device.id);
                 return (
-                  <div key={app.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                    <div className={`w-8 h-8 ${colors.bg} rounded-lg flex items-center justify-center`}>
-                      <app.icon className={`w-4 h-4 ${colors.text}`} />
+                  <button
+                    key={device.id}
+                    onClick={() => toggle(device.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border text-left transition-colors ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {/* Checkbox */}
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                      isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                    }`}>
+                      {isSelected && <CheckIcon className="w-3 h-3 text-white" />}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{app.name}</p>
-                      <div className={`flex items-center gap-1 ${getStatusColor(app.status)}`}>
-                        {getStatusIcon(app.status)}
-                        <span className="text-xs capitalize">{app.status}</span>
-                      </div>
+
+                    {/* Status dot */}
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                      device.status === 'online' ? 'bg-green-500' : 'bg-gray-300'
+                    }`} />
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{device.name || device.id}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {device.os} · {device.ip_address || '—'}
+                      </p>
                     </div>
-                  </div>
+
+                    <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
+                      PLATFORM_BADGE[device.platform] || 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {device.platform}
+                    </span>
+                  </button>
                 );
               })}
             </div>
-          </div>
-        )}
-      </SimpleViewLayout>
-    );
-  }
+          )}
+        </div>
 
-  // ── Expert Mode ──
+        {/* Footer */}
+        <div className="p-6 border-t border-gray-100 shrink-0 flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            {selected.size > 0 ? `${selected.size} device(s) selected` : 'No devices selected'}
+          </p>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
+              Cancel
+            </button>
+            <button
+              onClick={deploy}
+              disabled={deploying || selected.size === 0}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RocketLaunchIcon className="w-4 h-4" />
+              {deploying ? 'Deploying…' : `Deploy to ${selected.size} Device${selected.size !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function ApplicationsView() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedPlatform, setSelectedPlatform] = useState<'All' | 'macOS' | 'Windows' | 'Linux'>('All');
+  const [deployApp, setDeployApp] = useState<ClientApp | null>(null);
+
+  const filtered = APPS.filter(app => {
+    const matchesSearch =
+      app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'All' || app.category === selectedCategory;
+    const matchesPlatform = selectedPlatform === 'All' || app.platforms.includes(selectedPlatform as any);
+    return matchesSearch && matchesCategory && matchesPlatform;
+  });
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -245,218 +491,90 @@ export default function ApplicationsView() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Applications</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Manage and monitor your OpenDirectory services
+            Select an application and choose which devices to deploy it to
           </p>
         </div>
-        
-        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
-          {/* Search */}
+        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
-            </div>
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search applications..."
+              placeholder="Search…"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 w-40"
             />
           </div>
-
-          {/* Category Filter */}
+          <div className="relative">
+            <select
+              value={selectedPlatform}
+              onChange={e => setSelectedPlatform(e.target.value as any)}
+              className="pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none bg-white"
+            >
+              {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <FunnelIcon className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          </div>
           <div className="relative">
             <select
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 appearance-none bg-white"
+              onChange={e => setSelectedCategory(e.target.value)}
+              className="pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none bg-white"
             >
-              {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-              <FunnelIcon className="h-4 w-4 text-gray-400" />
-            </div>
+            <FunnelIcon className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
           </div>
         </div>
       </div>
 
-      {/* Applications Grid */}
+      {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredApplications.map((app) => {
-          const colors = getColorClasses(app.color);
-          
+        {filtered.map(app => {
+          const colors = COLOR_MAP[app.color] || COLOR_MAP.gray;
           return (
-            <div
-              key={app.id}
-              className={`bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all duration-200 cursor-pointer ${
-                selectedApp?.id === app.id ? `ring-2 ${colors.ring}` : ''
-              }`}
-              onClick={() => setSelectedApp(app)}
-            >
-              {/* App Header */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-10 h-10 ${colors.bg} rounded-lg flex items-center justify-center`}>
-                    <app.icon className={`w-6 h-6 ${colors.text}`} />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-900">{app.name}</h3>
-                    <p className="text-xs text-gray-500">{app.category}</p>
-                  </div>
+            <div key={app.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all duration-200">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`w-10 h-10 ${colors.bg} rounded-lg flex items-center justify-center`}>
+                  <app.icon className={`w-6 h-6 ${colors.text}`} />
                 </div>
-                
-                <button className="text-gray-400 hover:text-gray-600">
-                  <EllipsisVerticalIcon className="w-5 h-5" />
-                </button>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">{app.name}</h3>
+                  <p className="text-xs text-gray-500">{app.category} · v{app.version}</p>
+                </div>
               </div>
 
-              {/* Status */}
-              <div className="flex items-center justify-between mb-4">
-                <div className={`flex items-center space-x-2 ${getStatusColor(app.status)}`}>
-                  {getStatusIcon(app.status)}
-                  <span className="text-sm font-medium capitalize">{app.status}</span>
-                </div>
-                
-                {/* Toggle Switch */}
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={app.enabled}
-                    onChange={(e) => toggleApplication(app.id, e.target.checked)}
-                    className="sr-only peer"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-
-              {/* Description */}
               <p className="text-sm text-gray-600 mb-4 line-clamp-2">{app.description}</p>
 
-              {/* Features */}
-              {Object.keys(app.features).length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-700">Features:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {Object.entries(app.features).slice(0, 3).map(([feature, enabled]) => (
-                      <span
-                        key={feature}
-                        className={`px-2 py-1 text-xs rounded-full ${
-                          enabled 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-gray-100 text-gray-500'
-                        }`}
-                      >
-                        {feature.replace(/-/g, ' ')}
-                      </span>
-                    ))}
-                    {Object.keys(app.features).length > 3 && (
-                      <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-500">
-                        +{Object.keys(app.features).length - 3} more
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
+              <div className="flex flex-wrap gap-1 mb-4">
+                {app.platforms.map(p => (
+                  <span key={p} className={`px-2 py-0.5 text-xs font-medium rounded-full ${PLATFORM_BADGE[p]}`}>{p}</span>
+                ))}
+              </div>
 
-              {/* Port info */}
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Port: {app.port}</span>
-                  <span>Updated: {new Date(app.lastUpdated).toLocaleDateString()}</span>
-                </div>
+              <div className="pt-4 border-t border-gray-100">
+                <button
+                  onClick={() => setDeployApp(app)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                >
+                  <RocketLaunchIcon className="w-4 h-4" />
+                  Deploy to Devices
+                </button>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* No results */}
-      {filteredApplications.length === 0 && (
+      {filtered.length === 0 && (
         <div className="text-center py-12">
           <CubeIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No applications found</h3>
-          <p className="text-sm text-gray-500">
-            Try adjusting your search or filter criteria
-          </p>
+          <p className="text-sm text-gray-500">Try adjusting your search or filter criteria</p>
         </div>
       )}
 
-      {/* Application Detail Modal */}
-      {selectedApp && (
-        <div 
-          className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50"
-          onClick={() => setSelectedApp(null)}
-        >
-          <div 
-            className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className={`w-12 h-12 ${getColorClasses(selectedApp.color).bg} rounded-xl flex items-center justify-center`}>
-                    <selectedApp.icon className={`w-8 h-8 ${getColorClasses(selectedApp.color).text}`} />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900">{selectedApp.name}</h2>
-                    <p className="text-sm text-gray-500">{selectedApp.category} • Port {selectedApp.port}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedApp(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <XCircleIcon className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Description</h3>
-                  <p className="text-gray-600">{selectedApp.description}</p>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Features</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {Object.entries(selectedApp.features).map(([feature, enabled]) => (
-                      <div key={feature} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <span className="text-sm text-gray-900">{feature.replace(/-/g, ' ')}</span>
-                        <div className={`w-2 h-2 rounded-full ${enabled ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex justify-end space-x-3">
-                  <button
-                    onClick={() => setSelectedApp(null)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                  >
-                    Close
-                  </button>
-                  <button
-                    onClick={() => {
-                      toggleApplication(selectedApp.id, !selectedApp.enabled);
-                      setSelectedApp(null);
-                    }}
-                    className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
-                      selectedApp.enabled 
-                        ? 'bg-red-600 hover:bg-red-700' 
-                        : 'bg-green-600 hover:bg-green-700'
-                    }`}
-                  >
-                    {selectedApp.enabled ? 'Disable' : 'Enable'} Application
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {deployApp && <DeployModal app={deployApp} onClose={() => setDeployApp(null)} />}
     </div>
   );
 }

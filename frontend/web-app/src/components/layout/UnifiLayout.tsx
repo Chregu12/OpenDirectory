@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import {
   HomeIcon,
@@ -14,258 +14,190 @@ import {
   MagnifyingGlassIcon,
   Bars3Icon,
   XMarkIcon,
-  ShareIcon,
-  BeakerIcon,
-  ShieldExclamationIcon,
+  UserGroupIcon,
+  WifiIcon,
+  PrinterIcon,
   DocumentTextIcon,
-  WrenchScrewdriverIcon,
-  ShieldCheckIcon,
-  CloudArrowUpIcon,
-  Square3Stack3DIcon,
-  ClipboardDocumentCheckIcon,
+  LockClosedIcon,
+  ShieldExclamationIcon,
 } from '@heroicons/react/24/outline';
-import { gatewayApi, healthApi } from '@/lib/api';
-import { useUiMode } from '@/lib/ui-mode';
 
 interface LayoutProps {
   children: React.ReactNode;
   activeView: string;
   onViewChange: (view: string) => void;
+  enabledModules?: string[];
 }
 
-interface SystemStats {
-  services: number;
-  healthyServices: number;
-  modules: number;
-  uptime: string;
-}
+type NavItem =
+  | { type: 'item'; id: string; name: string; icon: React.ComponentType<{ className?: string }> }
+  | { type: 'divider'; label: string };
 
-export default function UnifiLayout({ children, activeView, onViewChange }: LayoutProps) {
-  const { isExpert, toggleMode } = useUiMode();
+// Nav items that require a specific module to be enabled
+const NAV_REQUIRED_MODULE: Record<string, string> = {
+  monitoring:     'monitoring-analytics',
+  secrets:        'secrets-management',
+  devices:        'device-management',
+  printers:       'device-management',
+  infrastructure: 'network-infrastructure',
+  security:       'security-suite',
+};
+
+export default function UnifiLayout({ children, activeView, onViewChange, enabledModules }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [systemStats, setSystemStats] = useState<SystemStats>({
-    services: 0,
-    healthyServices: 0,
-    modules: 0,
-    uptime: '0h'
-  });
-  const [notifications, setNotifications] = useState<number>(0);
+  const [notifications] = useState<number>(0);
 
-  const allNavigationItems = [
-    { id: 'dashboard', name: 'Dashboard', icon: HomeIcon, simple: true },
-    { id: 'topology', name: 'Network', icon: RectangleGroupIcon, simple: false },
-    { id: 'devices', name: 'Devices', icon: ComputerDesktopIcon, simple: true },
-    { id: 'applications', name: 'Applications', icon: CubeIcon, simple: false },
-    { id: 'app-store', name: 'App Store', icon: Square3Stack3DIcon, simple: true },
-    { id: 'policies', name: 'Policies', icon: DocumentTextIcon, simple: true },
-    { id: 'security-scanner', name: 'Security', icon: ShieldExclamationIcon, simple: true },
-    { id: 'antivirus', name: 'Antivirus', icon: ShieldCheckIcon, simple: true },
-    { id: 'compliance', name: 'Compliance', icon: ClipboardDocumentCheckIcon, simple: false },
-    { id: 'monitoring', name: 'Monitoring', icon: ChartBarIcon, simple: true },
-    { id: 'backup', name: 'Backup', icon: CloudArrowUpIcon, simple: true },
-    { id: 'graph-explorer', name: 'Graph Explorer', icon: ShareIcon, simple: false },
-    { id: 'policy-simulator', name: 'Policy Simulator', icon: BeakerIcon, simple: false },
-    { id: 'wizards', name: 'Assistenten', icon: WrenchScrewdriverIcon, simple: false },
-    { id: 'settings', name: 'Settings', icon: Cog6ToothIcon, simple: true },
+  const ALL_NAV_ITEMS: NavItem[] = [
+    { type: 'item', id: 'dashboard',      name: 'Dashboard',      icon: HomeIcon },
+    { type: 'item', id: 'devices',        name: 'Devices',         icon: ComputerDesktopIcon },
+    { type: 'item', id: 'printers',       name: 'Printers',        icon: PrinterIcon },
+    { type: 'item', id: 'topology',       name: 'Network',         icon: RectangleGroupIcon },
+    { type: 'item', id: 'infrastructure', name: 'Infrastructure',  icon: WifiIcon },
+    { type: 'item', id: 'users',          name: 'Users',           icon: UserGroupIcon },
+    { type: 'item', id: 'applications',   name: 'Applications',    icon: CubeIcon },
+    { type: 'item', id: 'monitoring',     name: 'Monitoring',      icon: ChartBarIcon },
+    { type: 'divider', label: 'Governance' },
+    { type: 'item', id: 'policies',       name: 'Policies',        icon: DocumentTextIcon },
+    { type: 'item', id: 'security',       name: 'Security',        icon: ShieldExclamationIcon },
+    { type: 'item', id: 'secrets',        name: 'Secrets',         icon: LockClosedIcon },
+    { type: 'divider', label: '' },
+    { type: 'item', id: 'settings',       name: 'Settings',        icon: Cog6ToothIcon },
   ];
 
-  const navigationItems = isExpert
-    ? allNavigationItems
-    : allNavigationItems.filter(item => item.simple);
-
-  useEffect(() => {
-    loadSystemStats();
-    const interval = setInterval(loadSystemStats, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadSystemStats = async () => {
-    try {
-      const [servicesRes, healthRes] = await Promise.all([
-        gatewayApi.getServices(),
-        healthApi.getDetailedHealth()
-      ]);
-
-      const services = servicesRes.data || [];
-      const healthyCount = services.filter((s: any) => s.status === 'healthy').length;
-      const uptime = healthRes.data?.gateway?.uptime
-        ? Math.floor(healthRes.data.gateway.uptime / 3600) + 'h'
-        : '0h';
-
-      setSystemStats({
-        services: services.length,
-        healthyServices: healthyCount,
-        modules: healthRes.data?.modules?.length || 0,
-        uptime
-      });
-    } catch (error) {
-      console.error('Failed to load system stats:', error);
-    }
-  };
-
-  const healthPercent = systemStats.services > 0
-    ? (systemStats.healthyServices / systemStats.services) * 100
-    : 0;
+  // Hide nav items whose controlling module is disabled
+  const navigationItems = ALL_NAV_ITEMS.filter(item => {
+    if (item.type === 'divider') return true;
+    const required = NAV_REQUIRED_MODULE[item.id];
+    if (!required) return true;                          // no module gate → always show
+    if (!enabledModules || enabledModules.length === 0) return true; // not loaded yet → show all
+    return enabledModules.includes(required);
+  });
 
   return (
-    <div className="min-h-screen bg-[#f4f5f7] flex">
+    /* Full viewport height, no scroll on the outer shell */
+    <div className="h-screen bg-gray-50 flex overflow-hidden">
       <Toaster
         position="top-right"
         toastOptions={{
           duration: 4000,
-          style: {
-            background: '#ffffff',
-            color: '#111827',
-            borderRadius: '10px',
-            border: 'none',
-            boxShadow: '0 4px 12px rgb(0 0 0 / 0.08), 0 1px 3px rgb(0 0 0 / 0.04)'
-          }
+          style: { background: '#1f2937', color: '#ffffff', borderRadius: '8px' },
         }}
       />
 
-      {/* ── Sidebar (White - UniFi Style) ── */}
-      <div className={`${sidebarOpen ? 'block' : 'hidden'} fixed inset-0 z-50 lg:relative lg:block lg:inset-auto lg:z-auto`}>
-        {/* Mobile overlay */}
+      {/* Mobile overlay */}
+      {sidebarOpen && (
         <div
-          className={`${sidebarOpen ? 'opacity-100' : 'opacity-0'} fixed inset-0 bg-black/20 backdrop-blur-sm lg:hidden transition-opacity`}
+          className="fixed inset-0 bg-gray-600 bg-opacity-50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
+      )}
 
-        <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:relative inset-y-0 left-0 z-50 w-[240px] bg-white transform transition-transform duration-300 ease-in-out lg:transform-none flex flex-col shadow-[1px_0_0_0_#e5e7eb]`}>
-
-          {/* Logo Area */}
-          <div className="flex items-center h-14 px-5">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-7 h-7 bg-blue-500 rounded-md flex items-center justify-center">
-                <span className="text-white font-bold text-[11px]">OD</span>
-              </div>
-              <span className="text-[15px] font-semibold text-gray-900 tracking-tight">OpenDirectory</span>
+      {/* Sidebar — flex column so the version text is pushed to the bottom */}
+      <div
+        className={`
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:translate-x-0
+          fixed lg:relative inset-y-0 left-0 z-50
+          w-64 bg-white border-r border-gray-200
+          flex flex-col
+          transform transition-transform duration-300 ease-in-out lg:transform-none
+          h-full
+        `}
+      >
+        {/* Logo */}
+        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 shrink-0">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">OD</span>
             </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden ml-auto text-gray-400 hover:text-gray-600"
-            >
-              <XMarkIcon className="w-5 h-5" />
-            </button>
+            <span className="text-xl font-semibold text-gray-900">OpenDirectory</span>
           </div>
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-gray-400 hover:text-gray-600">
+            <XMarkIcon className="w-6 h-6" />
+          </button>
+        </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 mt-1 px-3 overflow-y-auto">
-            <div className="space-y-0.5">
-              {navigationItems.map((item) => {
-                const isActive = activeView === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      onViewChange(item.id);
-                      setSidebarOpen(false);
-                    }}
-                    className={`group flex items-center w-full px-2.5 py-[9px] text-[13px] font-medium rounded-md transition-all duration-100 ${
-                      isActive
-                        ? 'bg-[#f0f1f3] text-blue-600'
-                        : 'text-gray-500 hover:text-gray-900 hover:bg-[#f7f8f9]'
-                    }`}
-                  >
-                    <item.icon className={`mr-2.5 h-[18px] w-[18px] flex-shrink-0 transition-colors duration-100 ${
-                      isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
-                    }`} />
-                    {item.name}
-                  </button>
+        {/* Navigation — grows to fill space */}
+        <nav className="flex-1 mt-6 px-3 overflow-y-auto">
+          <div className="space-y-0.5">
+            {navigationItems.map((item, idx) => {
+              if (item.type === 'divider') {
+                return item.label ? (
+                  <div key={`divider-${idx}`} className="px-3 pt-5 pb-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                      {item.label}
+                    </span>
+                  </div>
+                ) : (
+                  <hr key={`divider-${idx}`} className="border-gray-100 mx-3 my-2" />
                 );
-              })}
-            </div>
-          </nav>
-
-          {/* System Stats Footer */}
-          <div className="px-4 py-3 border-t border-gray-100">
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] text-gray-400 font-medium">Services</span>
-                <div className="flex items-center space-x-1.5">
-                  <div className={`w-1.5 h-1.5 rounded-full ${healthPercent === 100 ? 'bg-emerald-400' : healthPercent > 50 ? 'bg-amber-400' : 'bg-red-400'}`} />
-                  <span className="text-[11px] font-medium text-gray-600">{systemStats.healthyServices}/{systemStats.services}</span>
-                </div>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-[3px]">
-                <div
-                  className={`h-[3px] rounded-full transition-all duration-500 ${healthPercent === 100 ? 'bg-emerald-400' : healthPercent > 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                  style={{ width: `${healthPercent}%` }}
-                />
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] text-gray-400 font-medium">Uptime</span>
-                <span className="text-[11px] text-gray-500">{systemStats.uptime}</span>
-              </div>
-            </div>
+              }
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => { onViewChange(item.id); setSidebarOpen(false); }}
+                  className={`${
+                    activeView === item.id
+                      ? 'bg-blue-50 border-r-2 border-blue-600 text-blue-700'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                  } group flex items-center px-3 py-2 text-sm font-medium rounded-l-lg w-full text-left transition-colors duration-150`}
+                >
+                  <item.icon className={`${
+                    activeView === item.id ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+                  } mr-3 h-5 w-5 transition-colors duration-150`} />
+                  {item.name}
+                </button>
+              );
+            })}
           </div>
+        </nav>
+
+        {/* Version — pinned at the bottom inside flex column */}
+        <div className="shrink-0 border-t border-gray-100 p-4">
+          <p className="text-xs text-gray-400 text-center">OpenDirectory v1.0</p>
         </div>
       </div>
 
-      {/* ── Main Content ── */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header */}
-        <header className="bg-white h-14 flex items-center justify-between px-5 shadow-[0_1px_0_0_#e5e7eb] flex-shrink-0 z-10">
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden text-gray-400 hover:text-gray-600"
-            >
-              <Bars3Icon className="w-5 h-5" />
+      {/* Main content — flex column, fills remaining width, scrolls independently */}
+      <div className="flex-1 flex flex-col min-w-0 h-full">
+        {/* Top header */}
+        <header className="shrink-0 bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6">
+          <div className="flex items-center space-x-4">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden text-gray-400 hover:text-gray-600">
+              <Bars3Icon className="w-6 h-6" />
             </button>
-
-            {/* Search Bar */}
             <div className="hidden sm:block relative">
-              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
               </div>
               <input
                 type="text"
-                placeholder="Search..."
-                className="block w-52 pl-8 pr-3 py-1.5 border-0 rounded-md bg-[#f4f5f7] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white text-[13px] transition-all"
+                placeholder="Search services, devices..."
+                className="block w-64 pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-gray-50 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
               />
             </div>
           </div>
 
-          <div className="flex items-center space-x-1">
-            {/* Notifications */}
-            <button className="relative p-2 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-50 transition-colors">
-              <BellIcon className="w-[18px] h-[18px]" />
+          <div className="flex items-center space-x-4">
+            <button className="relative text-gray-400 hover:text-gray-600">
+              <BellIcon className="w-6 h-6" />
               {notifications > 0 && (
-                <span className="absolute top-1 right-1 bg-red-500 text-white text-[9px] rounded-full w-3.5 h-3.5 flex items-center justify-center font-semibold">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                   {notifications}
                 </span>
               )}
             </button>
-
-            {/* Simple / Expert Mode Toggle */}
-            <button
-              onClick={toggleMode}
-              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium transition-all duration-150 hover:bg-gray-50"
-              title={isExpert ? 'Switch to Simple Mode' : 'Switch to Expert Mode'}
-            >
-              <span className="text-gray-400">{isExpert ? 'Expert' : 'Simple'}</span>
-              <div className={`relative w-7 h-[16px] rounded-full transition-colors duration-200 ${isExpert ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                <div className={`absolute top-[2px] w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200 ${isExpert ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
-              </div>
-            </button>
-
-            {/* Divider */}
-            <div className="h-5 w-px bg-gray-200 mx-1" />
-
-            {/* User Menu */}
-            <button className="flex items-center space-x-2 px-2 py-1.5 rounded-md hover:bg-gray-50 transition-colors">
+            <div className="flex items-center space-x-3">
               <div className="hidden sm:block text-right">
-                <p className="text-[12px] font-medium text-gray-700 leading-tight">Admin</p>
+                <p className="text-sm font-medium text-gray-700">Admin User</p>
+                <p className="text-xs text-gray-500">System Administrator</p>
               </div>
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center ring-2 ring-white">
-                <span className="text-white text-[10px] font-semibold">A</span>
-              </div>
-            </button>
+              <UserCircleIcon className="w-8 h-8 text-gray-400" />
+            </div>
           </div>
         </header>
 
-        {/* Page Content */}
+        {/* Page content — scrolls independently */}
         <main className="flex-1 overflow-auto">
           {children}
         </main>
