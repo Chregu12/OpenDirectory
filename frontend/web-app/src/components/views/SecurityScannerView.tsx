@@ -18,6 +18,7 @@ import {
   ChevronUpIcon
 } from '@heroicons/react/24/outline';
 import { securityApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -194,6 +195,7 @@ interface SecurityScannerViewProps {
 }
 
 export default function SecurityScannerView({ onOpenWizard }: SecurityScannerViewProps) {
+  const { isSimple } = useUiMode();
   const [activeTab, setActiveTab] = useState<'overview' | 'findings' | 'trends'>('overview');
   const [scanning, setScanning] = useState(false);
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
@@ -255,6 +257,71 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
     network: ShieldExclamationIcon,
     identity: KeyIcon,
   };
+
+  if (isSimple) {
+    return (
+      <div className="flex flex-col h-full">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              <ShieldExclamationIcon className="w-6 h-6 text-red-600" /> Security Exposure Scanner
+            </h1>
+            <p className="text-sm text-gray-500">CIS, NIST, DISA STIG compliance benchmarking</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {onOpenWizard && (
+              <button onClick={onOpenWizard} className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium transition-colors">
+                Security-Assistent
+              </button>
+            )}
+            <button onClick={startScan} disabled={scanning}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg text-sm text-white flex items-center gap-2 shadow-sm">
+              {scanning ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PlayIcon className="w-4 h-4" />}
+              {scanning ? 'Scanning...' : 'Run Scan'}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="space-y-6">
+            {/* Risk score + severity cards */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="od-card p-5 col-span-1 text-center">
+                <div className={`text-5xl font-bold ${scanResult.overallRiskScore > 70 ? 'text-red-600' : scanResult.overallRiskScore > 50 ? 'text-orange-600' : 'text-green-600'}`}>
+                  {scanResult.overallRiskScore}
+                </div>
+                <div className="text-sm text-gray-500 mt-1">Risk Score</div>
+                <div className="text-xs text-gray-400 mt-1">Last scan: {new Date(scanResult.timestamp).toLocaleDateString()}</div>
+              </div>
+              {Object.entries(scanResult.bySeverity).map(([sev, count]) => (
+                <div key={sev} className="od-card p-4">
+                  <div className={`text-3xl font-bold ${sevText(sev)}`}>
+                    {count}
+                  </div>
+                  <div className="text-sm text-gray-500 capitalize">{sev}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Top critical findings */}
+            <div className="od-card p-4 border-red-200">
+              <h3 className="text-sm font-semibold text-red-600 mb-3">Critical Findings Requiring Immediate Action</h3>
+              {scanResult.findings.filter(f => f.severity === 'critical').map(f => (
+                <div key={f.id} className="flex items-start gap-3 mb-3 last:mb-0">
+                  <XCircleIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-medium text-sm text-gray-900">{f.title}</div>
+                    <div className="text-xs text-gray-500">{f.description}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">

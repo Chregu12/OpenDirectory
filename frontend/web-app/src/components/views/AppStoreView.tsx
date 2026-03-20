@@ -30,6 +30,7 @@ import {
   ServerIcon,
 } from '@heroicons/react/24/outline';
 import { appStoreApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
 import toast from 'react-hot-toast';
 
 // --- Types ---
@@ -146,6 +147,7 @@ interface AppStoreViewProps {
 }
 
 export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
+  const { isSimple } = useUiMode();
   const [apps, setApps] = useState<StoreApp[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([]);
   const [stats, setStats] = useState<StoreStats | null>(null);
@@ -326,6 +328,96 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
     );
   }
 
+  // ── Simple Mode: Clean app grid, no tabs, just browse & install ──
+  if (isSimple) {
+    return (
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">App Store</h1>
+            <p className="text-sm text-gray-500 mt-1">Install apps for your devices</p>
+          </div>
+          {stats && (
+            <div className="flex items-center space-x-4 text-sm">
+              <span className="text-gray-500">{stats.apps.total} Apps</span>
+              <span className="text-green-600">{stats.installations.installed} Installed</span>
+            </div>
+          )}
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            placeholder="Search apps..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+          />
+        </div>
+
+        {/* App Grid - simplified cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredApps.map((app) => {
+            const color = getCategoryColor(app.category);
+            const Icon = getCategoryIcon(app.category);
+            const installed = isInstalled(app.id);
+            const isInstalling2 = installingApps.has(app.id);
+            const installStatus = getInstallStatus(app.id);
+
+            return (
+              <div key={app.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-all">
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className={`w-10 h-10 ${color.bg} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                    <Icon className={`w-5 h-5 ${color.text}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold text-gray-900 truncate">{app.display_name}</h3>
+                    <p className="text-xs text-gray-500">v{app.version}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-600 mb-3 line-clamp-2">{app.description}</p>
+                <button
+                  onClick={() => {
+                    if (installed) handleUninstall(app);
+                    else handleInstall(app);
+                  }}
+                  disabled={isInstalling2 || installStatus === 'installing' || installStatus === 'downloading'}
+                  className={`w-full py-2 rounded-lg text-xs font-medium transition-colors ${
+                    installed
+                      ? 'bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600'
+                      : isInstalling2 || installStatus === 'installing'
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {installed ? 'Installed' : isInstalling2 ? 'Installing...' : 'Install'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {filteredApps.length === 0 && (
+          <div className="text-center py-12">
+            <MagnifyingGlassIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-sm text-gray-500">No apps found</p>
+            {apps.length === 0 && (
+              <button onClick={handleSeedApps} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+                Seed Default Apps
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Expert Mode: Full UI with all tabs ──
   return (
     <div className="p-6 space-y-6">
       {/* Header */}

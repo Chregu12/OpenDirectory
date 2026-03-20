@@ -26,6 +26,7 @@ import {
   ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -41,6 +42,7 @@ interface SystemStats {
 }
 
 export default function UnifiLayout({ children, activeView, onViewChange }: LayoutProps) {
+  const { mode, isExpert, toggleMode } = useUiMode();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [systemStats, setSystemStats] = useState<SystemStats>({
     services: 0,
@@ -50,23 +52,27 @@ export default function UnifiLayout({ children, activeView, onViewChange }: Layo
   });
   const [notifications, setNotifications] = useState<number>(0);
 
-  const navigationItems = [
-    { id: 'dashboard', name: 'Dashboard', icon: HomeIcon },
-    { id: 'topology', name: 'Network', icon: RectangleGroupIcon },
-    { id: 'devices', name: 'Devices', icon: ComputerDesktopIcon },
-    { id: 'applications', name: 'Applications', icon: CubeIcon },
-    { id: 'app-store', name: 'App Store', icon: Square3Stack3DIcon },
-    { id: 'policies', name: 'Policies', icon: DocumentTextIcon },
-    { id: 'security-scanner', name: 'Security', icon: ShieldExclamationIcon },
-    { id: 'antivirus', name: 'Antivirus', icon: ShieldCheckIcon },
-    { id: 'compliance', name: 'Compliance', icon: ClipboardDocumentCheckIcon },
-    { id: 'monitoring', name: 'Monitoring', icon: ChartBarIcon },
-    { id: 'backup', name: 'Backup', icon: CloudArrowUpIcon },
-    { id: 'graph-explorer', name: 'Graph Explorer', icon: ShareIcon },
-    { id: 'policy-simulator', name: 'Policy Simulator', icon: BeakerIcon },
-    { id: 'wizards', name: 'Assistenten', icon: WrenchScrewdriverIcon },
-    { id: 'settings', name: 'Settings', icon: Cog6ToothIcon },
+  const allNavigationItems = [
+    { id: 'dashboard', name: 'Dashboard', icon: HomeIcon, simple: true },
+    { id: 'topology', name: 'Network', icon: RectangleGroupIcon, simple: false },
+    { id: 'devices', name: 'Devices', icon: ComputerDesktopIcon, simple: true },
+    { id: 'applications', name: 'Applications', icon: CubeIcon, simple: false },
+    { id: 'app-store', name: 'App Store', icon: Square3Stack3DIcon, simple: true },
+    { id: 'policies', name: 'Policies', icon: DocumentTextIcon, simple: true },
+    { id: 'security-scanner', name: 'Security', icon: ShieldExclamationIcon, simple: true },
+    { id: 'antivirus', name: 'Antivirus', icon: ShieldCheckIcon, simple: true },
+    { id: 'compliance', name: 'Compliance', icon: ClipboardDocumentCheckIcon, simple: false },
+    { id: 'monitoring', name: 'Monitoring', icon: ChartBarIcon, simple: true },
+    { id: 'backup', name: 'Backup', icon: CloudArrowUpIcon, simple: true },
+    { id: 'graph-explorer', name: 'Graph Explorer', icon: ShareIcon, simple: false },
+    { id: 'policy-simulator', name: 'Policy Simulator', icon: BeakerIcon, simple: false },
+    { id: 'wizards', name: 'Assistenten', icon: WrenchScrewdriverIcon, simple: false },
+    { id: 'settings', name: 'Settings', icon: Cog6ToothIcon, simple: true },
   ];
+
+  const navigationItems = isExpert
+    ? allNavigationItems
+    : allNavigationItems.filter(item => item.simple);
 
   useEffect(() => {
     loadSystemStats();
@@ -218,6 +224,22 @@ export default function UnifiLayout({ children, activeView, onViewChange }: Layo
                   {notifications}
                 </span>
               )}
+            </button>
+
+            {/* Simple / Expert Mode Toggle */}
+            <button
+              onClick={toggleMode}
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                isExpert
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title={isExpert ? 'Switch to Simple Mode' : 'Switch to Expert Mode'}
+            >
+              <span>{isExpert ? 'Expert' : 'Simple'}</span>
+              <div className={`relative w-8 h-4 rounded-full transition-colors duration-200 ${isExpert ? 'bg-blue-400' : 'bg-gray-300'}`}>
+                <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200 ${isExpert ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </div>
             </button>
 
             {/* User Menu */}

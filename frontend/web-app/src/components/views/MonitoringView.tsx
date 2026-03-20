@@ -18,6 +18,7 @@ import {
   BoltIcon
 } from '@heroicons/react/24/outline';
 import { monitoringApi, prometheusApi, healthApi, gatewayApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -107,6 +108,7 @@ interface MonitoringViewProps {
 }
 
 export default function MonitoringView({ onOpenWizard }: MonitoringViewProps) {
+  const { isSimple } = useUiMode();
   const [activeTab, setActiveTab] = useState<'overview' | 'alerts' | 'services' | 'metrics'>('overview');
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [metrics, setMetrics] = useState<SystemMetric[]>([]);
@@ -193,6 +195,89 @@ export default function MonitoringView({ onOpenWizard }: MonitoringViewProps) {
     s === 'critical' ? <XCircleIcon className="w-5 h-5 text-red-500" /> :
     s === 'warning' ? <ExclamationTriangleIcon className="w-5 h-5 text-yellow-500" /> :
     <CheckCircleIcon className="w-5 h-5 text-blue-500" />;
+
+  if (isSimple) {
+    return (
+      <div className="flex flex-col h-full">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              <ChartBarIcon className="w-6 h-6 text-purple-600" /> Insights & Analytics
+            </h1>
+            <p className="text-sm text-gray-500">System monitoring, alerts, and performance metrics</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {unacknowledgedAlerts > 0 && (
+              <span className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-sm flex items-center gap-1">
+                <BellAlertIcon className="w-4 h-4" /> {unacknowledgedAlerts} active alerts
+              </span>
+            )}
+            <button className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600" title="Refresh">
+              <ArrowPathIcon className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {metrics.map(m => (
+              <div key={m.name} className="od-card p-4">
+                <div className="text-xs text-gray-500 mb-1">{m.name}</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {m.value}<span className="text-sm text-gray-400 ml-1">{m.unit}</span>
+                </div>
+                <div className="flex items-center text-xs mt-1">
+                  {m.trend === 'up' ? <ArrowTrendingUpIcon className="w-3 h-3 text-green-500 mr-1" /> :
+                   m.trend === 'down' ? <ArrowTrendingDownIcon className="w-3 h-3 text-green-500 mr-1" /> :
+                   <span className="w-3 h-3 mr-1">-</span>}
+                  <span className="text-gray-500">{m.trendValue}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* CPU Timeline Chart */}
+          <div className="od-card p-4">
+            <h3 className="text-sm font-semibold text-gray-600 mb-4">CPU Usage (Last 24h)</h3>
+            <div className="flex items-end gap-1 h-32">
+              {cpuTimeseries.map((p, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <div className="w-full relative" style={{ height: `${p.value * 1.2}px` }}>
+                    <div className={`absolute bottom-0 w-full rounded-t ${p.value > 60 ? 'bg-orange-500' : p.value > 40 ? 'bg-blue-500' : 'bg-green-500'}`}
+                      style={{ height: '100%' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between mt-2 text-xs text-gray-400">
+              <span>{cpuTimeseries[0]?.time}</span>
+              <span>{cpuTimeseries[Math.floor(cpuTimeseries.length / 2)]?.time}</span>
+              <span>{cpuTimeseries[cpuTimeseries.length - 1]?.time}</span>
+            </div>
+          </div>
+
+          {/* Recent Alerts (max 4) */}
+          <div className="od-card p-4">
+            <h3 className="text-sm font-semibold text-gray-600 mb-3">Recent Alerts</h3>
+            <div className="space-y-2">
+              {alerts.slice(0, 4).map(a => (
+                <div key={a.id} className={`flex items-start gap-3 p-3 rounded-lg ${a.acknowledged ? 'bg-gray-50' : 'bg-white border border-gray-200'}`}>
+                  {alertSeverityIcon(a.severity)}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900">{a.title}</div>
+                    <div className="text-xs text-gray-500">{a.source} - {new Date(a.timestamp).toLocaleString('de-DE')}</div>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-xs ${alertSeverityBadge(a.severity)}`}>{a.severity}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">

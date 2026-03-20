@@ -27,6 +27,7 @@ import BackupRecoveryWizard from '@/components/setup/BackupRecoveryWizard';
 import AppDeploymentWizard from '@/components/setup/AppDeploymentWizard';
 import PolicyCreationWizard from '@/components/setup/PolicyCreationWizard';
 import { configApi } from '@/lib/api';
+import { UiModeProvider } from '@/lib/ui-mode';
 
 const SettingsView = () => (
   <div className="p-6">
@@ -280,6 +281,7 @@ export default function UnifiApp() {
   };
 
   return (
+    <UiModeProvider>
     <UnifiLayout activeView={activeView} onViewChange={setActiveView}>
       {/* First-run Setup Wizard */}
       {showSetupWizard && setupChecked && (
@@ -321,5 +323,6 @@ export default function UnifiApp() {
 
       {renderActiveView()}
     </UnifiLayout>
+    </UiModeProvider>
   );
 }

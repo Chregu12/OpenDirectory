@@ -20,6 +20,7 @@ import {
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { complianceApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ interface ComplianceViewProps {
 }
 
 export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
+  const { isSimple } = useUiMode();
   const [loading, setLoading] = useState(true);
   const [fleetScore, setFleetScore] = useState(0);
   const [baselines, setBaselines] = useState<BaselineStatus[]>([]);
@@ -208,6 +210,94 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
     return <div className="flex items-center justify-center h-96"><ArrowPathIcon className="w-8 h-8 animate-spin text-blue-500" /></div>;
   }
 
+  // ── Simple Mode ──
+  if (isSimple) {
+    const totalViolations = violations.reduce((s, v) => s + v.count, 0);
+    const criticalCount = violations.find(v => v.severity === 'critical')?.count || 0;
+    const compliantDevices = devices.filter(d => d.status === 'compliant').length;
+    const scoreOk = fleetScore >= 80;
+
+    return (
+      <div className="p-6 space-y-6">
+        {/* Score Hero */}
+        <div className={`rounded-2xl p-8 text-center ${
+          scoreOk
+            ? 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200'
+            : 'bg-gradient-to-br from-red-50 to-red-100 border border-red-200'
+        }`}>
+          <div className="relative w-24 h-24 mx-auto mb-4">
+            <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 36 36">
+              <path className="text-gray-200" stroke="currentColor" strokeWidth="3" fill="none" d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path className={scoreOk ? 'text-green-500' : 'text-red-500'} stroke="currentColor" strokeWidth="3" strokeDasharray={`${fleetScore}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className={`text-2xl font-bold ${scoreOk ? 'text-green-700' : 'text-red-700'}`}>{fleetScore.toFixed(0)}%</span>
+            </div>
+          </div>
+          <h1 className={`text-xl font-bold mb-1 ${scoreOk ? 'text-green-900' : 'text-red-900'}`}>
+            {scoreOk ? 'Fleet Compliant' : 'Attention Required'}
+          </h1>
+          <p className="text-sm text-gray-600">
+            {compliantDevices} of {devices.length} devices compliant
+          </p>
+        </div>
+
+        {/* Compact Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-blue-600">{devices.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Devices</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-green-600">{baselines.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Baselines</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className={`text-2xl font-bold ${criticalCount > 0 ? 'text-red-600' : 'text-gray-600'}`}>{totalViolations}</p>
+            <p className="text-xs text-gray-500 mt-1">Violations</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-amber-600">{waivers.filter(w => w.status === 'active').length}</p>
+            <p className="text-xs text-gray-500 mt-1">Waivers</p>
+          </div>
+        </div>
+
+        {/* Critical violations only */}
+        {criticalCount > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-red-200 p-5">
+            <h3 className="text-sm font-semibold text-red-800 mb-3">Critical Violations</h3>
+            <div className="space-y-2">
+              {violations
+                .filter(v => v.severity === 'critical')
+                .flatMap(v => v.items)
+                .map(item => (
+                  <div key={item.checkId} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                    <span className="text-sm text-red-900">{item.title}</span>
+                    <span className="text-xs text-red-600">{item.affectedDevices} device{item.affectedDevices !== 1 ? 's' : ''}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Trend */}
+        {trendData.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">30-Day Trend</h3>
+            <div className="flex items-end gap-0.5 h-16">
+              {trendData.map((point, i) => (
+                <div key={i} className="flex-1 group relative">
+                  <div className={`w-full rounded-t ${getScoreBg(point.score)} opacity-70`} style={{ height: `${(point.score / 100) * 64}px` }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Expert Mode ──
   return (
     <div className="p-6 space-y-6">
       {/* Header */}

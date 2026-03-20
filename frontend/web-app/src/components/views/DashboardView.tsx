@@ -11,10 +11,10 @@ import {
   ShieldCheckIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
-  PlusCircleIcon,
   ComputerDesktopIcon
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi, configApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
 
 interface DashboardStats {
   totalServices: number;
@@ -39,6 +39,7 @@ interface DashboardViewProps {
 }
 
 export default function DashboardView({ onAddDevice }: DashboardViewProps) {
+  const { isSimple } = useUiMode();
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     totalServices: 0,
     healthyServices: 0,
@@ -49,13 +50,13 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
     enabledModules: 0,
     totalModules: 0
   });
-  
+
   const [recentServices, setRecentServices] = useState<ServiceHealth[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadDashboardData();
-    const interval = setInterval(loadDashboardData, 10000); // Every 10 seconds
+    const interval = setInterval(loadDashboardData, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -83,7 +84,7 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
       const minutes = Math.floor((uptime % 3600) / 60);
 
       const memoryUsage = healthData?.gateway?.memory;
-      const memoryPercent = memoryUsage 
+      const memoryPercent = memoryUsage
         ? Math.round((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100)
         : 0;
 
@@ -98,25 +99,16 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
         totalModules: totalCount
       });
 
-      // Get recent services (last 5)
       const sortedServices = services
         .sort((a: any, b: any) => new Date(b.lastCheck || 0).getTime() - new Date(a.lastCheck || 0).getTime())
         .slice(0, 5);
-      
+
       setRecentServices(sortedServices);
 
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy': return 'text-green-600';
-      case 'unhealthy': return 'text-red-600';
-      default: return 'text-yellow-600';
     }
   };
 
@@ -146,6 +138,125 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
     );
   }
 
+  const allHealthy = dashboardStats.criticalServices === 0 && dashboardStats.warningServices === 0;
+  const hasCritical = dashboardStats.criticalServices > 0;
+  const unhealthyServices = recentServices.filter(s => s.status !== 'healthy');
+
+  // ── Simple Mode: UniFi-style "everything is OK" dashboard ──
+  if (isSimple) {
+    return (
+      <div className="p-6 space-y-6">
+        {/* Big Status Hero */}
+        <div className={`rounded-2xl p-8 text-center ${
+          hasCritical
+            ? 'bg-gradient-to-br from-red-50 to-red-100 border border-red-200'
+            : allHealthy
+            ? 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200'
+            : 'bg-gradient-to-br from-yellow-50 to-amber-100 border border-yellow-200'
+        }`}>
+          <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${
+            hasCritical ? 'bg-red-200' : allHealthy ? 'bg-green-200' : 'bg-yellow-200'
+          }`}>
+            {hasCritical ? (
+              <XCircleIcon className="w-10 h-10 text-red-600" />
+            ) : allHealthy ? (
+              <CheckCircleIcon className="w-10 h-10 text-green-600" />
+            ) : (
+              <ExclamationTriangleIcon className="w-10 h-10 text-yellow-600" />
+            )}
+          </div>
+          <h1 className={`text-2xl font-bold mb-1 ${
+            hasCritical ? 'text-red-900' : allHealthy ? 'text-green-900' : 'text-yellow-900'
+          }`}>
+            {hasCritical
+              ? `${dashboardStats.criticalServices} Service${dashboardStats.criticalServices > 1 ? 's' : ''} Down`
+              : allHealthy
+              ? 'All Systems Operational'
+              : `${dashboardStats.warningServices} Warning${dashboardStats.warningServices > 1 ? 's' : ''}`
+            }
+          </h1>
+          <p className="text-sm text-gray-600">
+            {dashboardStats.healthyServices} of {dashboardStats.totalServices} services running
+          </p>
+          <div className="flex items-center justify-center mt-3 space-x-1 text-xs text-gray-500">
+            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+            <span>Live</span>
+            <span className="mx-1">·</span>
+            <span>Uptime {dashboardStats.uptime}</span>
+          </div>
+        </div>
+
+        {/* Compact Stats Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-green-600">{dashboardStats.healthyServices}</p>
+            <p className="text-xs text-gray-500 mt-1">Healthy</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-blue-600">{dashboardStats.enabledModules}</p>
+            <p className="text-xs text-gray-500 mt-1">Modules</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-purple-600">{dashboardStats.memoryUsage}</p>
+            <p className="text-xs text-gray-500 mt-1">Memory</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-gray-700">{dashboardStats.uptime}</p>
+            <p className="text-xs text-gray-500 mt-1">Uptime</p>
+          </div>
+        </div>
+
+        {/* Only show issues if there are any */}
+        {unhealthyServices.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Attention Required</h3>
+            <div className="space-y-3">
+              {unhealthyServices.map((service, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center">
+                    {getStatusIcon(service.status)}
+                    <span className="ml-3 text-sm font-medium text-gray-900">{service.name}</span>
+                  </div>
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    service.status === 'unhealthy' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {service.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quick Actions - simplified */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {onAddDevice && (
+            <button
+              onClick={onAddDevice}
+              className="flex flex-col items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-blue-300 hover:shadow-md transition-all"
+            >
+              <ComputerDesktopIcon className="w-6 h-6 text-blue-600 mb-2" />
+              <span className="text-xs font-medium text-gray-700">Add Device</span>
+            </button>
+          )}
+          <button className="flex flex-col items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-green-300 hover:shadow-md transition-all">
+            <ShieldCheckIcon className="w-6 h-6 text-green-600 mb-2" />
+            <span className="text-xs font-medium text-gray-700">Security</span>
+          </button>
+          <button className="flex flex-col items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-purple-300 hover:shadow-md transition-all">
+            <ChartBarIcon className="w-6 h-6 text-purple-600 mb-2" />
+            <span className="text-xs font-medium text-gray-700">Analytics</span>
+          </button>
+          <button className="flex flex-col items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-gray-300 hover:shadow-md transition-all">
+            <CpuChipIcon className="w-6 h-6 text-gray-600 mb-2" />
+            <span className="text-xs font-medium text-gray-700">Services</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Expert Mode: Full detailed dashboard ──
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -211,10 +322,10 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
           </div>
           <div className="mt-4">
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                style={{ 
-                  width: `${dashboardStats.totalModules > 0 ? (dashboardStats.enabledModules / dashboardStats.totalModules) * 100 : 0}%` 
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{
+                  width: `${dashboardStats.totalModules > 0 ? (dashboardStats.enabledModules / dashboardStats.totalModules) * 100 : 0}%`
                 }}
               ></div>
             </div>
@@ -294,8 +405,8 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
                   </div>
                   <div className="text-right">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      service.status === 'healthy' 
-                        ? 'bg-green-100 text-green-800' 
+                      service.status === 'healthy'
+                        ? 'bg-green-100 text-green-800'
                         : service.status === 'unhealthy'
                         ? 'bg-red-100 text-red-800'
                         : 'bg-yellow-100 text-yellow-800'
@@ -324,7 +435,7 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
                 <CpuChipIcon className="w-5 h-5 text-blue-600 mr-3" />
                 <span className="text-sm font-medium text-gray-900">Manage Services</span>
               </div>
-              <span className="text-xs text-blue-600">→</span>
+              <span className="text-xs text-blue-600">&rarr;</span>
             </button>
 
             <button className="w-full flex items-center justify-between p-3 text-left bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
@@ -332,7 +443,7 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
                 <ShieldCheckIcon className="w-5 h-5 text-green-600 mr-3" />
                 <span className="text-sm font-medium text-gray-900">Security Status</span>
               </div>
-              <span className="text-xs text-green-600">→</span>
+              <span className="text-xs text-green-600">&rarr;</span>
             </button>
 
             <button className="w-full flex items-center justify-between p-3 text-left bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors">
@@ -340,7 +451,7 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
                 <ChartBarIcon className="w-5 h-5 text-purple-600 mr-3" />
                 <span className="text-sm font-medium text-gray-900">View Analytics</span>
               </div>
-              <span className="text-xs text-purple-600">→</span>
+              <span className="text-xs text-purple-600">&rarr;</span>
             </button>
 
             {onAddDevice && (
@@ -352,7 +463,7 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
                   <ComputerDesktopIcon className="w-5 h-5 text-orange-600 mr-3" />
                   <span className="text-sm font-medium text-gray-900">Add Device</span>
                 </div>
-                <span className="text-xs text-orange-600">→</span>
+                <span className="text-xs text-orange-600">&rarr;</span>
               </button>
             )}
 
@@ -361,7 +472,7 @@ export default function DashboardView({ onAddDevice }: DashboardViewProps) {
                 <CloudIcon className="w-5 h-5 text-gray-600 mr-3" />
                 <span className="text-sm font-medium text-gray-900">System Logs</span>
               </div>
-              <span className="text-xs text-gray-600">→</span>
+              <span className="text-xs text-gray-600">&rarr;</span>
             </button>
           </div>
         </div>

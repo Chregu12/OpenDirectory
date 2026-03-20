@@ -22,6 +22,7 @@ import {
   ArchiveBoxIcon
 } from '@heroicons/react/24/outline';
 import { securityApi, deviceApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -180,6 +181,7 @@ interface AntivirusViewProps {
 }
 
 export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
+  const { isSimple } = useUiMode();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'devices' | 'scans' | 'threats' | 'quarantine' | 'signatures'>('dashboard');
   const [scanning, setScanning] = useState(false);
   const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
@@ -247,6 +249,137 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
     ? threats
     : threats.filter(t => t.severity === severityFilter);
 
+  // ── Simple Mode ──
+  if (isSimple) {
+    const allProtected = stats.atRiskDevices === 0;
+    const activeScans = scans.filter(s => s.status === 'scanning');
+    const recentThreats = threats.slice(0, 3);
+
+    return (
+      <div className="p-6 space-y-6">
+        {/* Status Hero */}
+        <div className={`rounded-2xl p-8 text-center ${
+          stats.atRiskDevices > 0
+            ? 'bg-gradient-to-br from-red-50 to-red-100 border border-red-200'
+            : 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200'
+        }`}>
+          <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${
+            allProtected ? 'bg-green-200' : 'bg-red-200'
+          }`}>
+            {allProtected ? (
+              <ShieldCheckIcon className="w-10 h-10 text-green-600" />
+            ) : (
+              <ExclamationTriangleIcon className="w-10 h-10 text-red-600" />
+            )}
+          </div>
+          <h1 className={`text-2xl font-bold mb-1 ${allProtected ? 'text-green-900' : 'text-red-900'}`}>
+            {allProtected ? 'All Devices Protected' : `${stats.atRiskDevices} Device${stats.atRiskDevices > 1 ? 's' : ''} at Risk`}
+          </h1>
+          <p className="text-sm text-gray-600">
+            {stats.protectedDevices} of {stats.totalDevices} devices protected
+          </p>
+          {scanning && (
+            <div className="flex items-center justify-center mt-3 text-sm text-blue-600">
+              <ArrowPathIcon className="w-4 h-4 animate-spin mr-2" />
+              Scanning fleet...
+            </div>
+          )}
+        </div>
+
+        {/* Compact Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-green-600">{stats.protectedDevices}</p>
+            <p className="text-xs text-gray-500 mt-1">Protected</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-blue-600">{stats.totalScansToday}</p>
+            <p className="text-xs text-gray-500 mt-1">Scans Today</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className={`text-2xl font-bold ${stats.totalThreatsToday > 0 ? 'text-red-600' : 'text-gray-600'}`}>{stats.totalThreatsToday}</p>
+            <p className="text-xs text-gray-500 mt-1">Threats Today</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-amber-600">{stats.totalQuarantined}</p>
+            <p className="text-xs text-gray-500 mt-1">Quarantined</p>
+          </div>
+        </div>
+
+        {/* Active scans */}
+        {activeScans.length > 0 && (
+          <div className="bg-blue-50 rounded-xl border border-blue-200 p-5">
+            <h3 className="text-sm font-semibold text-blue-800 mb-3">Active Scans</h3>
+            {activeScans.map(scan => (
+              <div key={scan.id} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ArrowPathIcon className="w-4 h-4 text-blue-600 animate-spin" />
+                  <span className="text-sm text-blue-900">{scan.deviceName}</span>
+                  <span className="text-xs text-blue-600">{scan.scanType}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-24 bg-blue-200 rounded-full h-2">
+                    <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${scan.progress}%` }} />
+                  </div>
+                  <span className="text-xs text-blue-700">{scan.progress}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Recent threats */}
+        {recentThreats.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Recent Threats</h3>
+            <div className="space-y-2">
+              {recentThreats.map(threat => (
+                <div key={threat.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <BugAntIcon className={`w-5 h-5 ${threat.severity === 'critical' ? 'text-red-500' : threat.severity === 'high' ? 'text-orange-500' : 'text-yellow-500'}`} />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{threat.name}</p>
+                      <p className="text-xs text-gray-500">{threat.deviceName} · {threat.type}</p>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                    threat.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                    threat.severity === 'high' ? 'bg-orange-100 text-orange-700' :
+                    threat.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-blue-100 text-blue-700'
+                  }`}>
+                    {threat.action}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quick Action */}
+        <div className="flex justify-center gap-3">
+          <button
+            onClick={startFleetScan}
+            disabled={scanning}
+            className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+          >
+            <PlayIcon className="h-4 w-4" />
+            {scanning ? 'Scanning...' : 'Fleet Scan'}
+          </button>
+          {onOpenWizard && (
+            <button
+              onClick={onOpenWizard}
+              className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              Security Setup
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Expert Mode ──
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
