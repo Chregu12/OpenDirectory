@@ -324,6 +324,19 @@ export const lldapApi = {
   
   getStatus: () =>
     api.get('/api/lldap/status'),
+
+  // User & Group CRUD
+  createUser: (userData: { email: string; displayName: string; firstName: string; lastName: string; password: string; groups?: string[] }) =>
+    api.post('/api/lldap/users', userData),
+
+  createUsers: (users: Array<{ email: string; displayName: string; firstName: string; lastName: string; password: string; groups?: string[] }>) =>
+    api.post('/api/lldap/users/bulk', { users }),
+
+  createGroup: (groupData: { name: string; description?: string }) =>
+    api.post('/api/lldap/groups', groupData),
+
+  updateGroupMembers: (groupId: string, members: string[]) =>
+    api.put(`/api/lldap/groups/${groupId}/members`, { members }),
 };
 
 export const prometheusApi = {

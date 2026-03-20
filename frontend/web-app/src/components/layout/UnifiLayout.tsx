@@ -58,6 +58,7 @@ export default function UnifiLayout({ children, activeView, onViewChange }: Layo
     { id: 'antivirus', name: 'Antivirus (ClamAV)', icon: ShieldCheckIcon },
     { id: 'policies', name: 'Policies', icon: DocumentTextIcon },
     { id: 'monitoring', name: 'Insights', icon: ChartBarIcon },
+    { id: 'wizards', name: 'Assistenten', icon: WrenchScrewdriverIcon },
     { id: 'settings', name: 'Settings', icon: Cog6ToothIcon },
   ];
 
