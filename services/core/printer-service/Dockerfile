@@ -4,18 +4,10 @@ FROM node:18-alpine
 RUN apk add --no-cache \
     cups \
     cups-client \
-    cups-filters \
-    cups-pdf \
     ghostscript \
     sane \
-    sane-backends \
     imagemagick \
-    tesseract-ocr \
-    tesseract-ocr-data-eng \
     avahi \
-    avahi-tools \
-    mdns-scan \
-    net-snmp-tools \
     openssl \
     && rm -rf /var/cache/apk/*
 
@@ -26,7 +18,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm install --only=production --legacy-peer-deps
 
 # Copy application files
 COPY . .

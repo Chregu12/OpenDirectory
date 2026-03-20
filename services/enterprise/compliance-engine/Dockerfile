@@ -5,7 +5,7 @@ RUN apk add --no-cache tini
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --only=production --legacy-peer-deps
 
 COPY . .
 

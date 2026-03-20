@@ -19,7 +19,7 @@ RUN addgroup -g 1001 -S appuser && \
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production && \
+RUN npm install --only=production --legacy-peer-deps && \
     npm cache clean --force
 
 # Copy application code

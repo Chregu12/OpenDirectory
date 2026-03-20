@@ -324,33 +324,11 @@ services:
       - SAMBA_CONFIG_PATH=/etc/samba
     ports:
       - "3007:3007"
-      - "53:53/tcp"     # DNS
-      - "53:53/udp"     # DNS
-      - "67:67/udp"     # DHCP
-      - "68:68/udp"     # DHCP
-      - "139:139"       # SMB
-      - "445:445"       # SMB
-      - "2049:2049"     # NFS
     networks:
       - opendirectory
     depends_on:
       - postgres
       - redis
-    volumes:
-      - ./services/core/network-infrastructure:/app
-      - /app/node_modules
-      - network-dns-config:/etc/bind
-      - network-dhcp-config:/etc/dhcp
-      - network-samba-config:/etc/samba
-      - network-shares:/srv/shares
-      - network-logs:/var/log/network
-    privileged: true  # Required for network service binding
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-      - SYS_ADMIN
-    sysctls:
-      - net.ipv4.ip_forward=1
 
   # ===================
   # Frontend

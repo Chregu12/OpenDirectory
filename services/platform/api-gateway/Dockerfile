@@ -17,11 +17,11 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
 
 # Copy application code
 COPY src/ ./src/
-COPY config/ ./config/ 2>/dev/null || true
+RUN mkdir -p config
 
 # Create logs directory
 RUN mkdir -p logs && chown -R gateway:nodejs logs

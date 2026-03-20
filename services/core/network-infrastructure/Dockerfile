@@ -4,7 +4,7 @@ FROM node:18-alpine
 RUN apk add --no-cache \
     bind \
     bind-tools \
-    dhcp \
+    dhcpcd \
     samba \
     samba-common-tools \
     nfs-utils \
@@ -22,7 +22,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install Node.js dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
 
 # Copy application code
 COPY . .

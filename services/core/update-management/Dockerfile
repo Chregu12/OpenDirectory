@@ -21,11 +21,11 @@ COPY --chown=opendirectory:nodejs package*.json ./
 
 # Install dependencies
 FROM base AS deps
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
 
 # Development stage
 FROM base AS dev
-RUN npm ci
+RUN npm install --legacy-peer-deps
 COPY --chown=opendirectory:nodejs . .
 USER opendirectory
 EXPOSE 3000
@@ -33,7 +33,7 @@ CMD ["dumb-init", "npm", "run", "dev"]
 
 # Production build
 FROM base AS build
-RUN npm ci
+RUN npm install --legacy-peer-deps
 COPY . .
 RUN npm run build 2>/dev/null || echo "No build step defined"
 
