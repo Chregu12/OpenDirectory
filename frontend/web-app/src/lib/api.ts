@@ -285,21 +285,27 @@ export const systemApi = {
 export const monitoringApi = {
   getSystemStatus: () =>
     api.get('/api/monitoring/status'),
-  
+
   getMetrics: (period?: string) =>
     api.get('/api/monitoring/metrics', { params: { period } }),
-  
+
   getAlerts: (severity?: string) =>
     api.get('/api/monitoring/alerts', { params: { severity } }),
-  
+
   acknowledgeAlert: (alertId: string) =>
     api.post(`/api/monitoring/alerts/${alertId}/acknowledge`),
-  
+
   getAnalytics: () =>
     api.get('/api/monitoring/analytics'),
-  
+
   getPredictions: () =>
     api.get('/api/monitoring/predictions'),
+
+  configureAlerts: (rules: any) =>
+    api.post('/api/monitoring/alerts/configure', rules),
+
+  configureNotifications: (channels: any) =>
+    api.post('/api/monitoring/notifications', channels),
 };
 
 // Service-specific API functions (Legacy - now proxied through gateway)
@@ -478,36 +484,90 @@ export const gatewayApi = {
 export const securityApi = {
   getThreatIntel: () =>
     api.get('/api/security/threats'),
-  
+
   getPAMSessions: () =>
     api.get('/api/security/pam/sessions'),
-  
+
   getDLPPolicies: () =>
     api.get('/api/security/dlp/policies'),
-  
+
+  createDLPPolicy: (policy: any) =>
+    api.post('/api/security/dlp/policies', policy),
+
   getSecurityAlerts: () =>
     api.get('/api/security/alerts'),
-  
+
   getComplianceStatus: () =>
     api.get('/api/security/compliance'),
+
+  // Antivirus / ClamAV
+  scanAntivirus: (config: { type: string; targets?: string[] }) =>
+    api.post('/api/antivirus/scan', config),
+
+  scheduleAntivirusScan: (schedule: any) =>
+    api.post('/api/antivirus/schedule', schedule),
+
+  getAntivirusSchedules: () =>
+    api.get('/api/antivirus/schedules'),
+
+  updateSignatures: () =>
+    api.post('/api/antivirus/signatures/update'),
+
+  getAntivirusStats: () =>
+    api.get('/api/antivirus/statistics'),
+
+  getAntivirusDashboard: () =>
+    api.get('/api/antivirus/dashboard'),
+
+  // Compliance
+  getComplianceFrameworks: () =>
+    api.get('/api/compliance/frameworks'),
+
+  createComplianceBaseline: (baseline: any) =>
+    api.post('/api/compliance/baselines', baseline),
+
+  getComplianceBaselines: () =>
+    api.get('/api/compliance/baselines'),
+
+  evaluateCompliance: (deviceId: string) =>
+    api.post(`/api/compliance/evaluate/${deviceId}`),
+
+  getFleetComplianceScore: () =>
+    api.get('/api/compliance/score/fleet'),
+
+  // Security setup wizard
+  runSecuritySetup: (config: any) =>
+    api.post('/api/security/setup', config),
 };
 
 // Backup & DR API
 export const backupApi = {
   getBackups: () =>
     api.get('/api/backup/backups'),
-  
+
   createBackup: (backupData: any) =>
     api.post('/api/backup/backups', backupData),
-  
+
   restoreBackup: (backupId: string) =>
     api.post(`/api/backup/backups/${backupId}/restore`),
-  
+
   getBackupStatus: () =>
     api.get('/api/backup/status'),
-  
+
   getDRStatus: () =>
     api.get('/api/dr/status'),
+
+  configureSchedule: (schedule: any) =>
+    api.post('/api/backup/schedule', schedule),
+
+  configureStorage: (storage: any) =>
+    api.post('/api/backup/storage', storage),
+
+  validateBackup: (backupId: string) =>
+    api.post(`/api/backup/backups/${backupId}/validate`),
+
+  getRecoveryPoints: () =>
+    api.get('/api/backup/recovery-points'),
 };
 
 // Automation API
@@ -616,6 +676,48 @@ export const appStoreApi = {
 
   getStats: () =>
     api.get('/api/store/stats'),
+};
+
+// Policy API
+export const policyApi = {
+  getPolicies: (params?: { type?: string; status?: string; platform?: string; page?: number; limit?: number }) =>
+    api.get('/api/policies', { params }),
+
+  getPolicy: (id: string) =>
+    api.get(`/api/policies/${id}`),
+
+  createPolicy: (data: any) =>
+    api.post('/api/policies', data),
+
+  updatePolicy: (id: string, data: any) =>
+    api.put(`/api/policies/${id}`, data),
+
+  deletePolicy: (id: string) =>
+    api.delete(`/api/policies/${id}`),
+
+  getTemplates: () =>
+    api.get('/api/policies/templates'),
+
+  createFromTemplate: (data: any) =>
+    api.post('/api/policies/from-template', data),
+
+  assignPolicy: (id: string, targets: any) =>
+    api.post(`/api/policies/${id}/assign`, targets),
+
+  linkPolicy: (id: string, link: any) =>
+    api.post(`/api/policies/${id}/link`, link),
+
+  activatePolicy: (id: string) =>
+    api.post(`/api/policies/${id}/activate`),
+
+  deactivatePolicy: (id: string) =>
+    api.post(`/api/policies/${id}/deactivate`),
+
+  getConflicts: () =>
+    api.get('/api/policies/conflicts'),
+
+  compilePolicy: (id: string, platform: string) =>
+    api.post(`/api/policies/${id}/compile/${platform}`),
 };
 
 // Utility functions
