@@ -16,6 +16,7 @@ import {
   DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import { securityApi, deviceApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -139,6 +140,7 @@ const timelineBadge = (type: string) =>
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function PolicySimulatorView() {
+  const { isSimple } = useUiMode();
   const [activeTab, setActiveTab] = useState<'simulate' | 'drift' | 'timeline' | 'conflicts'>('simulate');
   const [simulating, setSimulating] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState('Update Ring A');
@@ -184,6 +186,114 @@ export default function PolicySimulatorView() {
     }
   }, []);
 
+  // ── Simple Mode ──
+  if (isSimple) {
+    const criticalDrift = drift.filter(d => d.severity === 'critical');
+    const highDrift = drift.filter(d => d.severity === 'high');
+    const allGood = criticalDrift.length === 0 && conflicts.length === 0;
+
+    return (
+      <div className="p-6 space-y-6">
+        {/* Status Hero */}
+        <div className={`rounded-2xl p-8 text-center ${
+          allGood
+            ? 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200'
+            : 'bg-gradient-to-br from-orange-50 to-amber-100 border border-orange-200'
+        }`}>
+          <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${
+            allGood ? 'bg-green-200' : 'bg-orange-200'
+          }`}>
+            {allGood ? (
+              <CheckCircleIcon className="w-10 h-10 text-green-600" />
+            ) : (
+              <ExclamationTriangleIcon className="w-10 h-10 text-orange-600" />
+            )}
+          </div>
+          <h1 className={`text-2xl font-bold mb-1 ${allGood ? 'text-green-900' : 'text-orange-900'}`}>
+            {allGood ? 'Policies Consistent' : `${drift.length} Drift Issue${drift.length > 1 ? 's' : ''} Detected`}
+          </h1>
+          <p className="text-sm text-gray-600">
+            {drift.length} drift items · {conflicts.length} conflicts · {results.length} simulations
+          </p>
+        </div>
+
+        {/* Compact Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className={`text-2xl font-bold ${drift.length > 0 ? 'text-red-600' : 'text-green-600'}`}>{drift.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Drift Items</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className={`text-2xl font-bold ${criticalDrift.length > 0 ? 'text-red-600' : 'text-gray-600'}`}>{criticalDrift.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Critical Drift</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className={`text-2xl font-bold ${conflicts.length > 0 ? 'text-yellow-600' : 'text-gray-600'}`}>{conflicts.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Conflicts</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-purple-600">{results.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Simulations</p>
+          </div>
+        </div>
+
+        {/* Critical drift */}
+        {drift.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Configuration Drift</h3>
+            <div className="space-y-2">
+              {drift.slice(0, 5).map(d => (
+                <div key={`${d.deviceId}-${d.policyName}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <ComputerDesktopIcon className={`w-5 h-5 ${d.severity === 'critical' ? 'text-red-500' : d.severity === 'high' ? 'text-orange-500' : 'text-yellow-500'}`} />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{d.deviceName}</p>
+                      <p className="text-xs text-gray-500">{d.policyName}: {d.actualState}</p>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${sevBadge(d.severity)}`}>{d.severity}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Conflicts */}
+        {conflicts.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Policy Conflicts</h3>
+            <div className="space-y-2">
+              {conflicts.map((c, i) => (
+                <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <ExclamationTriangleIcon className="w-5 h-5 text-yellow-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{c.conflictType}</p>
+                      <p className="text-xs text-gray-500">{c.policies.join(' vs ')}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quick Actions */}
+        <div className="flex justify-center gap-3">
+          <button
+            onClick={runSimulation}
+            disabled={simulating}
+            className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-purple-600 rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors shadow-sm"
+          >
+            {simulating ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <PlayIcon className="h-4 w-4" />}
+            {simulating ? 'Simulating...' : 'Run Simulation'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Expert Mode ──
   return (
     <div className="flex flex-col h-full">
       {/* Header */}

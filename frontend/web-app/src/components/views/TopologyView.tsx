@@ -17,6 +17,7 @@ import {
   XCircleIcon
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
 
 interface ServiceNode {
   id: string;
@@ -31,6 +32,7 @@ interface ServiceNode {
 }
 
 export default function TopologyView() {
+  const { isSimple } = useUiMode();
   const [services, setServices] = useState<ServiceNode[]>([]);
   const [selectedService, setSelectedService] = useState<ServiceNode | null>(null);
   const [loading, setLoading] = useState(true);
@@ -195,6 +197,86 @@ export default function TopologyView() {
     );
   }
 
+  // ── Simple Mode ──
+  if (isSimple) {
+    const healthyServices = services.filter(s => s.status === 'healthy');
+    const unhealthyServices = services.filter(s => s.status === 'unhealthy');
+    const unknownServices = services.filter(s => s.status === 'unknown');
+    const allHealthy = unhealthyServices.length === 0;
+
+    return (
+      <div className="p-6 space-y-6">
+        {/* Status Hero */}
+        <div className={`rounded-2xl p-8 text-center ${
+          allHealthy
+            ? 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200'
+            : 'bg-gradient-to-br from-red-50 to-red-100 border border-red-200'
+        }`}>
+          <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${
+            allHealthy ? 'bg-green-200' : 'bg-red-200'
+          }`}>
+            {allHealthy ? (
+              <CheckCircleIcon className="w-10 h-10 text-green-600" />
+            ) : (
+              <XCircleIcon className="w-10 h-10 text-red-600" />
+            )}
+          </div>
+          <h1 className={`text-2xl font-bold mb-1 ${allHealthy ? 'text-green-900' : 'text-red-900'}`}>
+            {allHealthy ? 'All Services Connected' : `${unhealthyServices.length} Service${unhealthyServices.length > 1 ? 's' : ''} Down`}
+          </h1>
+          <p className="text-sm text-gray-600">
+            {healthyServices.length} of {services.length} services healthy
+          </p>
+        </div>
+
+        {/* Compact Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-blue-600">{services.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Total Services</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-green-600">{healthyServices.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Healthy</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className={`text-2xl font-bold ${unhealthyServices.length > 0 ? 'text-red-600' : 'text-gray-600'}`}>{unhealthyServices.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Unhealthy</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-yellow-600">{unknownServices.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Unknown</p>
+          </div>
+        </div>
+
+        {/* Service list */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Services</h3>
+          <div className="space-y-2">
+            {services.map(service => (
+              <div key={service.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 ${getNodeColor(service)} rounded-lg flex items-center justify-center`}>
+                    <service.icon className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{service.name}</p>
+                    <p className="text-xs text-gray-500 capitalize">{service.type}{service.port ? ` · :${service.port}` : ''}</p>
+                  </div>
+                </div>
+                <div className={`flex items-center gap-1.5 ${getStatusColor(service.status)}`}>
+                  {getStatusIcon(service.status)}
+                  <span className="text-xs font-medium capitalize">{service.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Expert Mode ──
   return (
     <div className="p-6 space-y-6">
       {/* Header */}

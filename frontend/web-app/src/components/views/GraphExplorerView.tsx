@@ -20,6 +20,7 @@ import {
   UserIcon
 } from '@heroicons/react/24/outline';
 import { lldapApi, deviceApi } from '@/lib/api';
+import { useUiMode } from '@/lib/ui-mode';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -250,6 +251,7 @@ function generateStats(nodes: GraphNode[], edges: GraphEdge[]): GraphStats {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function GraphExplorerView() {
+  const { isSimple } = useUiMode();
   const [nodes, setNodes]               = useState<GraphNode[]>([]);
   const [edges, setEdges]               = useState<GraphEdge[]>([]);
   const [attackPaths, setAttackPaths]    = useState<AttackPath[]>([]);
@@ -400,6 +402,110 @@ export default function GraphExplorerView() {
     );
   }
 
+  // ── Simple Mode ──
+  if (isSimple) {
+    const criticalPaths = attackPaths.filter(ap => ap.severity === 'critical');
+    const highPaths = attackPaths.filter(ap => ap.severity === 'high');
+    const riskNodes = nodes.filter(n => n.riskLevel === 'critical' || n.riskLevel === 'high');
+    const allSecure = criticalPaths.length === 0 && shadowAdmins.length === 0;
+
+    return (
+      <div className="p-6 space-y-6">
+        {/* Status Hero */}
+        <div className={`rounded-2xl p-8 text-center ${
+          allSecure
+            ? 'bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200'
+            : 'bg-gradient-to-br from-red-50 to-red-100 border border-red-200'
+        }`}>
+          <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${
+            allSecure ? 'bg-green-200' : 'bg-red-200'
+          }`}>
+            {allSecure ? (
+              <CheckCircleIcon className="w-10 h-10 text-green-600" />
+            ) : (
+              <ShieldExclamationIcon className="w-10 h-10 text-red-600" />
+            )}
+          </div>
+          <h1 className={`text-2xl font-bold mb-1 ${allSecure ? 'text-green-900' : 'text-red-900'}`}>
+            {allSecure ? 'No Security Issues Found' : `${attackPaths.length} Attack Path${attackPaths.length > 1 ? 's' : ''} Detected`}
+          </h1>
+          <p className="text-sm text-gray-600">
+            {nodes.length} objects · {edges.length} relationships · {shadowAdmins.length} shadow admins
+          </p>
+        </div>
+
+        {/* Compact Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className="text-2xl font-bold text-blue-600">{nodes.length}</p>
+            <p className="text-xs text-gray-500 mt-1">AD Objects</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className={`text-2xl font-bold ${attackPaths.length > 0 ? 'text-red-600' : 'text-gray-600'}`}>{attackPaths.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Attack Paths</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className={`text-2xl font-bold ${shadowAdmins.length > 0 ? 'text-orange-600' : 'text-gray-600'}`}>{shadowAdmins.length}</p>
+            <p className="text-xs text-gray-500 mt-1">Shadow Admins</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <p className={`text-2xl font-bold ${riskNodes.length > 0 ? 'text-red-600' : 'text-green-600'}`}>{riskNodes.length}</p>
+            <p className="text-xs text-gray-500 mt-1">High-Risk Objects</p>
+          </div>
+        </div>
+
+        {/* Attack Paths Summary */}
+        {attackPaths.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Attack Paths</h3>
+            <div className="space-y-2">
+              {attackPaths.map(ap => (
+                <div key={ap.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <ShieldExclamationIcon className={`w-5 h-5 ${ap.severity === 'critical' ? 'text-red-500' : ap.severity === 'high' ? 'text-orange-500' : 'text-yellow-500'}`} />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{ap.name}</p>
+                      <p className="text-xs text-gray-500">{ap.description.slice(0, 80)}...</p>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                    ap.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                    ap.severity === 'high' ? 'bg-orange-100 text-orange-700' :
+                    'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    {ap.severity}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Shadow Admins */}
+        {shadowAdmins.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Shadow Admins</h3>
+            <div className="space-y-2">
+              {shadowAdmins.map(sa => (
+                <div key={sa.userId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <UserIcon className="w-5 h-5 text-orange-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{sa.userName}</p>
+                      <p className="text-xs text-gray-500">{sa.effectivePermissions.length} permissions · from {sa.inheritedFrom.join(', ')}</p>
+                    </div>
+                  </div>
+                  <span className="text-lg font-bold text-orange-600">{sa.riskScore}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Expert Mode ──
   return (
     <div className="flex flex-col h-full">
       {/* ── Header ───────────────────────────────────────────────────────── */}
