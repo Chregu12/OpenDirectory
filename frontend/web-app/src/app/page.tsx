@@ -22,6 +22,7 @@ import VaultIntegration from '@/components/integrations/VaultIntegration';
 import NetworkInfrastructureIntegration from '@/components/integrations/NetworkInfrastructureIntegration';
 import ServicesDashboard from '@/components/dashboard/ServicesDashboard';
 import SetupWizard from '@/components/setup/SetupWizard';
+import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
 import { healthApi, configApi } from '@/lib/api';
 
 interface ServiceHealth {
@@ -35,6 +36,7 @@ export default function Dashboard() {
   const [serviceHealth, setServiceHealth] = useState<ServiceHealth[]>([]);
   const [healthLoading, setHealthLoading] = useState(true);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [showEnrollmentWizard, setShowEnrollmentWizard] = useState(false);
   const [setupChecked, setSetupChecked] = useState(false);
 
   // Check if first-run setup wizard should be shown
@@ -67,6 +69,7 @@ export default function Dashboard() {
       localStorage.setItem('od_setup_completed', 'true');
     }
     setShowSetupWizard(false);
+    setShowEnrollmentWizard(true);
   };
 
   useEffect(() => {
@@ -115,6 +118,11 @@ export default function Dashboard() {
       {/* First-run Setup Wizard */}
       {showSetupWizard && setupChecked && (
         <SetupWizard onComplete={handleSetupComplete} />
+      )}
+
+      {/* Device Enrollment Wizard */}
+      {showEnrollmentWizard && (
+        <DeviceEnrollmentWizard onClose={() => setShowEnrollmentWizard(false)} />
       )}
       
       {/* Header */}

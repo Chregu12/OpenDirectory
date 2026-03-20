@@ -439,6 +439,88 @@ app.get('/api/policies', (req, res) => {
   });
 });
 
+// ── Device Enrollment APIs ──────────────────────────────────────────
+const crypto = require('crypto');
+
+// In-memory enrollment token store
+const enrollmentTokens = {};
+
+// Generate enrollment token
+app.post('/api/devices/enroll/token', (req, res) => {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+  enrollmentTokens[token] = {
+    token,
+    createdAt: new Date().toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    used: false,
+  };
+  res.json({
+    success: true,
+    data: { token, expiresAt: expiresAt.toISOString() },
+  });
+});
+
+// Enroll a device using a token
+app.post('/api/devices/enroll', (req, res) => {
+  const { token, hostname, platform, os: deviceOs, osVersion } = req.body;
+
+  if (!token || !enrollmentTokens[token]) {
+    return res.status(401).json({ success: false, error: 'Invalid enrollment token' });
+  }
+  const tokenData = enrollmentTokens[token];
+  if (tokenData.used || new Date(tokenData.expiresAt) < new Date()) {
+    return res.status(401).json({ success: false, error: 'Token expired or already used' });
+  }
+
+  // Mark token as used
+  tokenData.used = true;
+
+  const deviceId = `DEV-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  const newDevice = {
+    id: deviceId,
+    name: hostname || `Device-${deviceId}`,
+    platform: platform || 'unknown',
+    os: deviceOs || 'Unknown',
+    osVersion: osVersion || '',
+    status: 'online',
+    enrolledAt: new Date().toISOString(),
+    lastSeen: new Date().toISOString(),
+  };
+
+  // Add to device store
+  deviceStore[deviceId] = newDevice;
+
+  res.json({
+    success: true,
+    data: { deviceId, message: 'Device enrolled successfully', device: newDevice },
+  });
+});
+
+// Discover printers on the network (mock)
+app.get('/api/printers/discover', (req, res) => {
+  res.json({
+    success: true,
+    data: [
+      { name: 'HP LaserJet Pro M404n', ip: '192.168.1.200', protocol: 'ipp', status: 'online' },
+      { name: 'Brother HL-L2350DW', ip: '192.168.1.201', protocol: 'lpd', status: 'online' },
+    ],
+  });
+});
+
+// Add printer manually
+app.post('/api/printers', (req, res) => {
+  const { name, ip, protocol } = req.body;
+  if (!name || !ip) {
+    return res.status(400).json({ success: false, error: 'Name and IP are required' });
+  }
+  const printerId = `PRT-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  res.json({
+    success: true,
+    data: { id: printerId, name, ip, protocol: protocol || 'ipp', status: 'online' },
+  });
+});
+
 // Network Infrastructure routes moved to network-infrastructure module
 // Access these endpoints through the API Gateway at http://localhost:8080/api/network/*
 

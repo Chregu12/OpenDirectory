@@ -176,6 +176,9 @@ export const deviceApi = {
   
   enrollDevice: (enrollmentData: any) =>
     api.post('/api/devices/enroll', enrollmentData),
+
+  generateEnrollmentToken: () =>
+    api.post('/api/devices/enroll/token', {}),
   
   updateDevice: (deviceId: string, updates: any) =>
     api.put(`/api/devices/${deviceId}`, updates),

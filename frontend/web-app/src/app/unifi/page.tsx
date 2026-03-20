@@ -14,6 +14,7 @@ import AntivirusView from '@/components/views/AntivirusView';
 import MonitoringView from '@/components/views/MonitoringView';
 import ServicesDashboard from '@/components/dashboard/ServicesDashboard';
 import SetupWizard from '@/components/setup/SetupWizard';
+import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
 import { configApi } from '@/lib/api';
 
 const SettingsView = () => (
@@ -25,6 +26,7 @@ const SettingsView = () => (
 export default function UnifiApp() {
   const [activeView, setActiveView] = useState('dashboard');
   const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [showEnrollmentWizard, setShowEnrollmentWizard] = useState(false);
   const [setupChecked, setSetupChecked] = useState(false);
 
   // Check if first-run setup wizard should be shown
@@ -55,12 +57,14 @@ export default function UnifiApp() {
       localStorage.setItem('od_setup_completed', 'true');
     }
     setShowSetupWizard(false);
+    // After setup wizard → launch enrollment wizard
+    setShowEnrollmentWizard(true);
   };
 
   const renderActiveView = () => {
     switch (activeView) {
       case 'dashboard':
-        return <DashboardView />;
+        return <DashboardView onAddDevice={() => setShowEnrollmentWizard(true)} />;
       case 'topology':
         return <TopologyView />;
       case 'devices':
@@ -82,7 +86,7 @@ export default function UnifiApp() {
       case 'settings':
         return <SettingsView />;
       default:
-        return <DashboardView />;
+        return <DashboardView onAddDevice={() => setShowEnrollmentWizard(true)} />;
     }
   };
 
@@ -92,6 +96,12 @@ export default function UnifiApp() {
       {showSetupWizard && setupChecked && (
         <SetupWizard onComplete={handleSetupComplete} />
       )}
+
+      {/* Device Enrollment Wizard */}
+      {showEnrollmentWizard && (
+        <DeviceEnrollmentWizard onClose={() => setShowEnrollmentWizard(false)} />
+      )}
+
       {renderActiveView()}
     </UnifiLayout>
   );

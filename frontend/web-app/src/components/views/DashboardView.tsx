@@ -10,7 +10,9 @@ import {
   CloudIcon,
   ShieldCheckIcon,
   ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon
+  ArrowTrendingDownIcon,
+  PlusCircleIcon,
+  ComputerDesktopIcon
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi, configApi } from '@/lib/api';
 
@@ -32,7 +34,11 @@ interface ServiceHealth {
   lastCheck: string;
 }
 
-export default function DashboardView() {
+interface DashboardViewProps {
+  onAddDevice?: () => void;
+}
+
+export default function DashboardView({ onAddDevice }: DashboardViewProps) {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     totalServices: 0,
     healthyServices: 0,
@@ -336,6 +342,19 @@ export default function DashboardView() {
               </div>
               <span className="text-xs text-purple-600">→</span>
             </button>
+
+            {onAddDevice && (
+              <button
+                onClick={onAddDevice}
+                className="w-full flex items-center justify-between p-3 text-left bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
+              >
+                <div className="flex items-center">
+                  <ComputerDesktopIcon className="w-5 h-5 text-orange-600 mr-3" />
+                  <span className="text-sm font-medium text-gray-900">Add Device</span>
+                </div>
+                <span className="text-xs text-orange-600">→</span>
+              </button>
+            )}
 
             <button className="w-full flex items-center justify-between p-3 text-left bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
               <div className="flex items-center">
