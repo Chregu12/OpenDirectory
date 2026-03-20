@@ -8,17 +8,17 @@ import {
   PrinterIcon,
   CheckIcon,
   ClipboardDocumentIcon,
-  ArrowRightIcon,
-  ArrowLeftIcon,
   PlusIcon,
-  XMarkIcon,
   CommandLineIcon,
 } from '@heroicons/react/24/outline';
 import { deviceApi } from '@/lib/api';
 import toast from 'react-hot-toast';
+import WizardLayout from '@/components/shared/WizardLayout';
 
 type Platform = 'windows' | 'macos' | 'linux' | 'printer';
-type WizardStep = 'select' | 'instructions' | 'verify';
+type WizardStep = 1 | 2;
+
+const STEPS = [{ n: 1 as const, label: 'Plattform' }, { n: 2 as const, label: 'Einrichten' }];
 
 interface DeviceEnrollmentWizardProps {
   onClose: () => void;
@@ -305,7 +305,7 @@ curl -X POST ${serverUrl}/api/printers/discover \\
 }
 
 export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: DeviceEnrollmentWizardProps) {
-  const [step, setStep] = useState<WizardStep>(initialPlatform ? 'instructions' : 'select');
+  const [step, setStep] = useState<WizardStep>(initialPlatform ? 2 : 1);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(initialPlatform || null);
   const [token, setToken] = useState<EnrollmentToken | null>(null);
   const [loadingToken, setLoadingToken] = useState(false);
@@ -336,141 +336,110 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
 
   const handlePlatformSelect = (platform: Platform) => {
     setSelectedPlatform(platform);
-    setStep('instructions');
+    setStep(2);
   };
 
   const handleAddAnother = () => {
     setSelectedPlatform(null);
-    setStep('select');
+    setStep(1);
     setEnrolledCount(prev => prev + 1);
   };
 
   const platformInfo = PLATFORMS.find(p => p.id === selectedPlatform);
 
+  const title = step === 1 ? 'Gerät hinzufügen' : (platformInfo?.icon + ' ' + platformInfo?.name + ' einrichten');
+  const subtitle = enrolledCount > 0 ? `${enrolledCount} Gerät(e) bereits hinzugefügt` : 'Registriere deine Geräte bei OpenDirectory';
+
   return (
-    <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-green-600 to-green-700 px-8 pt-5 pb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-white text-xl font-bold">
-              {step === 'select' ? 'Gerät hinzufügen' : platformInfo?.icon + ' ' + platformInfo?.name + ' einrichten'}
-            </h2>
-            <p className="text-green-200 text-sm">
-              {enrolledCount > 0 ? `${enrolledCount} Gerät(e) bereits hinzugefügt` : 'Registriere deine Geräte bei OpenDirectory'}
-            </p>
+    <WizardLayout
+      color="green"
+      title={title}
+      subtitle={subtitle}
+      icon={<ComputerDesktopIcon className="h-8 w-8" />}
+      steps={STEPS}
+      currentStep={step}
+      onStepChange={(s) => setStep(s as WizardStep)}
+      onClose={onClose}
+      onComplete={onClose}
+      completeLabel="Fertig"
+      maxWidth="max-w-2xl"
+    >
+      {/* Step: Platform selection */}
+      {step === 1 && (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">Welche Art von Gerät möchtest du hinzufügen?</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            {PLATFORMS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => handlePlatformSelect(p.id)}
+                className="text-left rounded-xl border-2 border-gray-200 p-5 hover:border-green-500 hover:bg-green-50 transition-all group"
+              >
+                <span className="text-3xl block mb-2">{p.icon}</span>
+                <span className="font-medium text-gray-900 group-hover:text-green-700">{p.name}</span>
+                <p className="text-xs text-gray-500 mt-1">{p.description}</p>
+              </button>
+            ))}
           </div>
-          <button
-            onClick={onClose}
-            className="text-green-200 hover:text-white p-1 rounded-lg hover:bg-green-500/30 transition-colors"
-          >
-            <XMarkIcon className="h-6 w-6" />
-          </button>
         </div>
+      )}
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-8 py-6">
-
-          {/* Step: Platform selection */}
-          {step === 'select' && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-500">Welche Art von Gerät möchtest du hinzufügen?</p>
-
-              <div className="grid grid-cols-2 gap-3">
-                {PLATFORMS.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => handlePlatformSelect(p.id)}
-                    className="text-left rounded-xl border-2 border-gray-200 p-5 hover:border-green-500 hover:bg-green-50 transition-all group"
-                  >
-                    <span className="text-3xl block mb-2">{p.icon}</span>
-                    <span className="font-medium text-gray-900 group-hover:text-green-700">{p.name}</span>
-                    <p className="text-xs text-gray-500 mt-1">{p.description}</p>
-                  </button>
-                ))}
+      {/* Step: Instructions */}
+      {step === 2 && selectedPlatform && (
+        <div className="space-y-5">
+          {/* Token display */}
+          {selectedPlatform !== 'printer' && (
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-gray-500">Enrollment-Token</span>
+                {token && (
+                  <span className="text-xs text-gray-400">
+                    Gültig bis {new Date(token.expiresAt).toLocaleString()}
+                  </span>
+                )}
               </div>
-            </div>
-          )}
-
-          {/* Step: Instructions */}
-          {step === 'instructions' && selectedPlatform && (
-            <div className="space-y-5">
-              {/* Token display */}
-              {selectedPlatform !== 'printer' && (
-                <div className="bg-gray-50 rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-gray-500">Enrollment-Token</span>
-                    {token && (
-                      <span className="text-xs text-gray-400">
-                        Gültig bis {new Date(token.expiresAt).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                  {loadingToken ? (
-                    <div className="h-8 bg-gray-200 rounded animate-pulse" />
-                  ) : token ? (
-                    <div className="flex items-center space-x-2">
-                      <code className="flex-1 text-sm font-mono bg-white px-3 py-2 rounded border border-gray-200 select-all">
-                        {token.token}
-                      </code>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(token.token);
-                          toast.success('Token kopiert');
-                        }}
-                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                      >
-                        <ClipboardDocumentIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-red-500">Token konnte nicht generiert werden</p>
-                  )}
+              {loadingToken ? (
+                <div className="h-8 bg-gray-200 rounded animate-pulse" />
+              ) : token ? (
+                <div className="flex items-center space-x-2">
+                  <code className="flex-1 text-sm font-mono bg-white px-3 py-2 rounded border border-gray-200 select-all">
+                    {token.token}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(token.token);
+                      toast.success('Token kopiert');
+                    }}
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                  >
+                    <ClipboardDocumentIcon className="h-4 w-4" />
+                  </button>
                 </div>
+              ) : (
+                <p className="text-sm text-red-500">Token konnte nicht generiert werden</p>
               )}
-
-              {/* Platform-specific instructions */}
-              <EnrollmentInstructions
-                platform={selectedPlatform}
-                token={token?.token || 'TOKEN'}
-              />
             </div>
           )}
-        </div>
 
-        {/* Footer */}
-        <div className="border-t border-gray-200 px-8 py-4 flex items-center justify-between bg-gray-50">
-          <div>
-            {step === 'instructions' && (
-              <button
-                onClick={() => { setStep('select'); setSelectedPlatform(null); }}
-                className="flex items-center px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
-              >
-                <ArrowLeftIcon className="h-4 w-4 mr-1" />
-                Andere Plattform
-              </button>
-            )}
-          </div>
+          {/* Platform-specific instructions */}
+          <EnrollmentInstructions
+            platform={selectedPlatform}
+            token={token?.token || 'TOKEN'}
+          />
 
-          <div className="flex items-center space-x-3">
-            {step === 'instructions' && (
-              <button
-                onClick={handleAddAnother}
-                className="flex items-center px-4 py-2.5 border border-green-600 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50"
-              >
-                <PlusIcon className="h-4 w-4 mr-1" />
-                Weiteres Gerät
-              </button>
-            )}
+          {/* Add another device button - moved from footer */}
+          <div className="flex justify-center pt-4 border-t border-gray-200">
             <button
-              onClick={onClose}
-              className="flex items-center px-6 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+              onClick={handleAddAnother}
+              className="flex items-center px-4 py-2.5 border border-green-600 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50"
             >
-              {step === 'instructions' ? 'Fertig' : 'Schließen'}
+              <PlusIcon className="h-4 w-4 mr-1" />
+              Weiteres Gerät hinzufügen
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </WizardLayout>
   );
 }
