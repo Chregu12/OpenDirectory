@@ -57,23 +57,8 @@ app.use(express.json());
 const ssh = new NodeSSH();
 const CT2001_HOST = '192.168.1.51';
 
-// In-memory data store (in production, use a database)
-const deviceStore = {
-  'CT2001': {
-    id: 'CT2001',
-    name: 'Ubuntu-CT2001',
-    platform: 'linux',
-    os: 'Ubuntu',
-    osVersion: '25.10',
-    status: 'online',
-    groupId: 'servers',
-    ip_address: '192.168.1.51',
-    complianceScore: 85,
-    lastSeen: new Date(),
-    description: 'Proxmox LXC Container with LDAP integration',
-    installedApps: []
-  }
-};
+// In-memory device store — populated via enrollment
+const deviceStore = {};
 
 const userStore = [
   {
