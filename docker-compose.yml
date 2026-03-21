@@ -349,10 +349,8 @@ services:
       - opendirectory
     depends_on:
       - api-backend
-    volumes:
-      - ./frontend/web-app:/app
-      - /app/node_modules
-      - /app/.next
+    # No source mounts — the Dockerfile builds the app into the image.
+    # Mounting the source would override the built .next and serve stale content.
 
 
   # ===================
