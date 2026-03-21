@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Toaster } from 'react-hot-toast';
 import {
   HomeIcon,
@@ -20,6 +21,7 @@ import {
   DocumentTextIcon,
   LockClosedIcon,
   ShieldExclamationIcon,
+  ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 
 interface LayoutProps {
@@ -27,6 +29,7 @@ interface LayoutProps {
   activeView: string;
   onViewChange: (view: string) => void;
   enabledModules?: string[];
+  currentUser?: { name: string; role: string } | null;
 }
 
 type NavItem =
@@ -43,9 +46,16 @@ const NAV_REQUIRED_MODULE: Record<string, string> = {
   security:       'security-suite',
 };
 
-export default function UnifiLayout({ children, activeView, onViewChange, enabledModules }: LayoutProps) {
+export default function UnifiLayout({ children, activeView, onViewChange, enabledModules, currentUser }: LayoutProps) {
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifications] = useState<number>(0);
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+    router.push('/login');
+  };
 
   const ALL_NAV_ITEMS: NavItem[] = [
     { type: 'item', id: 'dashboard',      name: 'Dashboard',      icon: HomeIcon },
@@ -189,10 +199,17 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
             </button>
             <div className="flex items-center space-x-3">
               <div className="hidden sm:block text-right">
-                <p className="text-sm font-medium text-gray-700">Admin User</p>
-                <p className="text-xs text-gray-500">System Administrator</p>
+                <p className="text-sm font-medium text-gray-700">{currentUser?.name ?? '—'}</p>
+                <p className="text-xs text-gray-500">{currentUser?.role ?? ''}</p>
               </div>
               <UserCircleIcon className="w-8 h-8 text-gray-400" />
+              <button
+                onClick={handleLogout}
+                title="Sign out"
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <ArrowRightOnRectangleIcon className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </header>

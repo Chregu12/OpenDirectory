@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import UnifiLayout from '@/components/layout/UnifiLayout';
 import DashboardView from '@/components/views/DashboardView';
@@ -16,7 +17,6 @@ import PolicyView from '@/components/views/PolicyView';
 import SecurityView from '@/components/views/SecurityView';
 import PrintersView from '@/components/views/PrintersView';
 
-// Maps integration-service module IDs → nav item IDs they control visibility for
 const MODULE_NAV_MAP: Record<string, string> = {
   'monitoring-analytics':   'monitoring',
   'secrets-management':     'secrets',
@@ -26,30 +26,36 @@ const MODULE_NAV_MAP: Record<string, string> = {
 };
 
 export default function App() {
-  const [activeView,    setActiveView]    = useState('dashboard');
-  // Start with all optional modules enabled so nothing flickers hidden on load
+  const router = useRouter();
+  const [activeView,     setActiveView]     = useState('dashboard');
   const [enabledModules, setEnabledModules] = useState<string[]>(Object.keys(MODULE_NAV_MAP));
+  const [currentUser,    setCurrentUser]    = useState<{ name: string; role: string } | null>(null);
+  const [authChecked,    setAuthChecked]    = useState(false);
 
-  // Fetch real module state from the integration service
   useEffect(() => {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('auth_user') : null;
+    if (!stored) { router.push('/login'); return; }
+    try { setCurrentUser(JSON.parse(stored)); } catch { router.push('/login'); return; }
+    setAuthChecked(true);
+  }, [router]);
+
+  useEffect(() => {
+    if (!authChecked) return;
     api.get('/api/config/modules')
       .then(res => {
         const data = res.data as Record<string, { enabled: boolean }>;
         const enabled = Object.entries(data).filter(([, v]) => v.enabled).map(([k]) => k);
         setEnabledModules(enabled);
       })
-      .catch(() => { /* keep defaults on error */ });
-  }, []);
+      .catch(() => {});
+  }, [authChecked]);
 
   const handleModuleChange = (moduleId: string, enabled: boolean) => {
     setEnabledModules(prev =>
       enabled ? [...prev, moduleId] : prev.filter(m => m !== moduleId)
     );
-    // If the user is currently on a view that just got hidden, go to dashboard
     const navId = MODULE_NAV_MAP[moduleId];
-    if (!enabled && navId && activeView === navId) {
-      setActiveView('dashboard');
-    }
+    if (!enabled && navId && activeView === navId) setActiveView('dashboard');
   };
 
   const renderActiveView = () => {
@@ -75,8 +81,15 @@ export default function App() {
     }
   };
 
+  if (!authChecked) return null;
+
   return (
-    <UnifiLayout activeView={activeView} onViewChange={setActiveView} enabledModules={enabledModules}>
+    <UnifiLayout
+      activeView={activeView}
+      onViewChange={setActiveView}
+      enabledModules={enabledModules}
+      currentUser={currentUser}
+    >
       {renderActiveView()}
     </UnifiLayout>
   );

@@ -3,6 +3,43 @@ const cors = require('cors');
 const { NodeSSH } = require('node-ssh');
 const WebSocket = require('ws');
 const http = require('http');
+const crypto = require('crypto');
+
+// ── Auth helpers (no extra npm deps — uses built-in crypto) ─────────────────
+const JWT_SECRET = process.env.JWT_SECRET || 'opendirectory-dev-secret';
+
+function hashPassword(password) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(password).digest('hex');
+}
+
+function signToken(payload) {
+  const header  = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const body    = Buffer.from(JSON.stringify({ ...payload, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 })).toString('base64url');
+  const sig     = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  return `${header}.${body}.${sig}`;
+}
+
+function verifyToken(token) {
+  try {
+    const [header, body, sig] = token.split('.');
+    const expected = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+    if (expected !== sig) return null;
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch { return null; }
+}
+
+function authMiddleware(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return res.status(401).json({ success: false, error: 'Unauthorized' });
+  const payload = verifyToken(token);
+  if (!payload) return res.status(401).json({ success: false, error: 'Invalid or expired token' });
+  req.user = payload;
+  next();
+}
+// ────────────────────────────────────────────────────────────────────────────
 
 // Network Infrastructure services moved to module
 // Access via API Gateway at /api/network/*
@@ -44,12 +81,16 @@ const userStore = [
     name: 'Administrator',
     username: 'admin',
     email: 'admin@opendirectory.local',
+    role: 'System Administrator',
     active: true,
     groups: ['admin'],
+    passwordHash: null, // set below after hashPassword is defined
     lastLogin: new Date(),
     created: new Date('2024-01-01')
   }
 ];
+// Set default admin password (admin!)
+userStore[0].passwordHash = hashPassword('admin!');
 
 // WebSocket connections
 const clients = new Set();
@@ -79,6 +120,105 @@ function broadcast(message) {
     }
   });
 }
+
+// ── Auth Routes ─────────────────────────────────────────────────────────────
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password)
+    return res.status(400).json({ success: false, error: 'Username and password required' });
+
+  const user = userStore.find(u => (u.username === username || u.email === username) && u.active);
+  if (!user || user.passwordHash !== hashPassword(password))
+    return res.status(401).json({ success: false, error: 'Invalid username or password' });
+
+  user.lastLogin = new Date();
+  const token = signToken({ id: user.id, username: user.username, name: user.name, role: user.role, groups: user.groups });
+  const { passwordHash, ...safeUser } = user;
+  res.json({ success: true, data: { token, user: safeUser } });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  // Tokens are stateless; client just discards it
+  res.json({ success: true, message: 'Logged out' });
+});
+
+app.get('/api/auth/profile', authMiddleware, (req, res) => {
+  const user = userStore.find(u => u.id === req.user.id);
+  if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+  const { passwordHash, ...safeUser } = user;
+  res.json({ success: true, data: safeUser });
+});
+
+app.put('/api/auth/profile', authMiddleware, (req, res) => {
+  const user = userStore.find(u => u.id === req.user.id);
+  if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+  const { name, email } = req.body;
+  if (name)  user.name  = name;
+  if (email) user.email = email;
+  const { passwordHash, ...safeUser } = user;
+  res.json({ success: true, data: safeUser });
+});
+
+app.post('/api/auth/change-password', authMiddleware, (req, res) => {
+  const user = userStore.find(u => u.id === req.user.id);
+  if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+  const { currentPassword, newPassword } = req.body || {};
+  if (user.passwordHash !== hashPassword(currentPassword))
+    return res.status(400).json({ success: false, error: 'Current password is incorrect' });
+  user.passwordHash = hashPassword(newPassword);
+  res.json({ success: true, message: 'Password changed' });
+});
+// ────────────────────────────────────────────────────────────────────────────
+
+// Users API — list + create + update + delete
+app.get('/api/users', (req, res) => {
+  res.json({ success: true, data: userStore.map(({ passwordHash, ...u }) => u) });
+});
+
+app.post('/api/users', (req, res) => {
+  const { username, name, email, password, role, groups } = req.body || {};
+  if (!username || !password)
+    return res.status(400).json({ success: false, error: 'username and password are required' });
+  if (userStore.find(u => u.username === username))
+    return res.status(409).json({ success: false, error: 'Username already exists' });
+  const user = {
+    id: 'user_' + Date.now(),
+    username, name: name || username,
+    email: email || `${username}@opendirectory.local`,
+    role: role || 'User',
+    active: true,
+    groups: groups || ['user'],
+    passwordHash: hashPassword(password),
+    lastLogin: null,
+    created: new Date(),
+  };
+  userStore.push(user);
+  const { passwordHash, ...safeUser } = user;
+  res.status(201).json({ success: true, data: safeUser });
+});
+
+app.put('/api/users/:id', (req, res) => {
+  const user = userStore.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+  const { name, email, role, groups, active, password } = req.body || {};
+  if (name   !== undefined) user.name   = name;
+  if (email  !== undefined) user.email  = email;
+  if (role   !== undefined) user.role   = role;
+  if (groups !== undefined) user.groups = groups;
+  if (active !== undefined) user.active = active;
+  if (password) user.passwordHash = hashPassword(password);
+  const { passwordHash, ...safeUser } = user;
+  res.json({ success: true, data: safeUser });
+});
+
+app.delete('/api/users/:id', (req, res) => {
+  const idx = userStore.findIndex(u => u.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ success: false, error: 'User not found' });
+  if (userStore[idx].id === 'admin')
+    return res.status(400).json({ success: false, error: 'Cannot delete the default admin user' });
+  userStore.splice(idx, 1);
+  res.json({ success: true, message: 'User deleted' });
+});
 
 // Device Management APIs
 app.get('/api/devices', (req, res) => {
@@ -279,14 +419,6 @@ app.delete('/api/devices/:id/apps/:appId', async (req, res) => {
   }
 });
 
-// User Management APIs
-app.get('/api/users', (req, res) => {
-  res.json({
-    success: true,
-    data: userStore
-  });
-});
-
 app.post('/api/users/sync', async (req, res) => {
   try {
     // In production, sync with LLDAP
@@ -440,7 +572,7 @@ app.get('/api/policies', (req, res) => {
 });
 
 // ── Device Enrollment APIs ──────────────────────────────────────────
-const crypto = require('crypto');
+// (crypto already required at top)
 
 // In-memory enrollment token store
 const enrollmentTokens = {};
