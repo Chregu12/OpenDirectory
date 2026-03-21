@@ -1,2 +1,5 @@
 import { redirect } from 'next/navigation';
-export default function UnifiPage() { redirect('/'); }
+
+export default function UnifiRedirect() {
+  redirect('/');
+}
