@@ -250,6 +250,8 @@ services:
       - PORT=4000
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/integration
       - LLDAP_URL=http://lldap:17170
+      - LLDAP_ADMIN_USER=admin
+      - LLDAP_ADMIN_PASSWORD=${LLDAP_ADMIN_PASSWORD:-changeme}
       - GRAFANA_URL=${GRAFANA_URL:-http://grafana:3000}
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://prometheus:9090}
       - VAULT_URL=${VAULT_URL:-http://vault:8200}

@@ -72,12 +72,8 @@ router.put('/users/:userId', async (req: Request, res: Response) => {
 router.delete('/users/:userId', async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    const success = await lldapService.deleteUser(userId);
-    if (success) {
-      res.status(204).send();
-    } else {
-      res.status(500).json({ error: 'Failed to delete user' });
-    }
+    await lldapService.deleteUser(userId);
+    res.status(204).send();
   } catch (error) {
     logger.error(`Failed to delete user ${req.params.userId}:`, error);
     res.status(500).json({ error: 'Failed to delete user' });
@@ -130,12 +126,8 @@ router.post('/groups/:groupId/members', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'userId is required' });
     }
 
-    const success = await lldapService.addUserToGroup(userId, groupId);
-    if (success) {
-      res.status(200).json({ message: 'User added to group successfully' });
-    } else {
-      res.status(500).json({ error: 'Failed to add user to group' });
-    }
+    await lldapService.addUserToGroup(userId, groupId);
+    res.status(200).json({ message: 'User added to group successfully' });
   } catch (error) {
     logger.error(`Failed to add user to group ${req.params.groupId}:`, error);
     res.status(500).json({ error: 'Failed to add user to group' });
@@ -145,12 +137,8 @@ router.post('/groups/:groupId/members', async (req: Request, res: Response) => {
 router.delete('/groups/:groupId/members/:userId', async (req: Request, res: Response) => {
   try {
     const { groupId, userId } = req.params;
-    const success = await lldapService.removeUserFromGroup(userId, groupId);
-    if (success) {
-      res.status(204).send();
-    } else {
-      res.status(500).json({ error: 'Failed to remove user from group' });
-    }
+    await lldapService.removeUserFromGroup(userId, groupId);
+    res.status(204).send();
   } catch (error) {
     logger.error(`Failed to remove user from group ${req.params.groupId}:`, error);
     res.status(500).json({ error: 'Failed to remove user from group' });
