@@ -131,6 +131,48 @@ router.get('/vault', async (req, res) => {
   }
 });
 
+// Detailed health (same as main health endpoint)
+router.get('/detailed', async (req, res) => {
+  try {
+    const [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus] = await Promise.allSettled([
+      lldapService.getServiceStatus(),
+      grafanaService.getServiceStatus(),
+      prometheusService.getServiceStatus(),
+      vaultService.getServiceStatus(),
+    ]);
+    const services = [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus]
+      .filter(r => r.status === 'fulfilled')
+      .map(r => (r as PromiseFulfilledResult<any>).value);
+    const healthy = services.filter(s => s.status === 'healthy').length;
+    res.json({
+      status: healthy === services.length ? 'healthy' : healthy > 0 ? 'degraded' : 'unhealthy',
+      services,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({ status: 'error', error: String(error) });
+  }
+});
+
+// Generic per-service health check
+router.get('/service/:name', async (req, res) => {
+  const { name } = req.params;
+  const serviceMap: Record<string, () => Promise<any>> = {
+    lldap:      () => lldapService.getServiceStatus(),
+    grafana:    () => grafanaService.getServiceStatus(),
+    prometheus: () => prometheusService.getServiceStatus(),
+    vault:      () => vaultService.getServiceStatus(),
+  };
+  const fn = serviceMap[name.toLowerCase()];
+  if (!fn) return res.status(404).json({ error: 'Service not found' });
+  try {
+    const status = await fn();
+    res.status(status.status === 'healthy' ? 200 : 503).json(status);
+  } catch (error) {
+    res.status(500).json({ name, status: 'error', error: String(error) });
+  }
+});
+
 // Liveness probe (for Kubernetes)
 router.get('/live', (req, res) => {
   res.status(200).json({

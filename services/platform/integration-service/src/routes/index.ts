@@ -4,6 +4,8 @@ import grafanaRoutes from './grafana';
 import prometheusRoutes from './prometheus';
 import vaultRoutes from './vault';
 import healthRoutes from './health';
+import configRoutes from './config';
+import servicesRoutes from './services';
 
 const router = Router();
 
@@ -15,6 +17,8 @@ router.use('/api/lldap', lldapRoutes);
 router.use('/api/grafana', grafanaRoutes);
 router.use('/api/prometheus', prometheusRoutes);
 router.use('/api/vault', vaultRoutes);
+router.use('/api/config', configRoutes);
+router.use('/api/services', servicesRoutes);
 
 // Root endpoint
 router.get('/', (req, res) => {

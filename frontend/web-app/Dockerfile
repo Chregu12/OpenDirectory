@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Integration service URL is used server-side in next.config.js rewrites at build time.
 # It points to the k8s cluster-internal service - never exposed to the browser.
-ARG INTEGRATION_SERVICE_URL=http://working-integration-service:3005
+ARG INTEGRATION_SERVICE_URL=http://integration-service:4000
 ENV INTEGRATION_SERVICE_URL=$INTEGRATION_SERVICE_URL
 
 # Copy package files
