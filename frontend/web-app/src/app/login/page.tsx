@@ -20,7 +20,7 @@ export default function LoginPage() {
       const { token, user } = (res.data as any).data;
       localStorage.setItem('auth_token', token);
       localStorage.setItem('auth_user', JSON.stringify(user));
-      router.push('/');
+      router.push('/dashboard');
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Login failed');
     } finally {
