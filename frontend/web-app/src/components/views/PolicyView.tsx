@@ -133,6 +133,46 @@ interface SystemServices {
   services: ServiceEntry[];
 }
 
+interface KerberosSettings {
+  enabled: boolean;
+  ticketLifetime: number;    // hours
+  renewalLifetime: number;   // days
+  enforce: boolean;
+}
+
+interface UserRightsSettings {
+  enabled: boolean;
+  allowLocalLogon: string[];
+  allowRemoteDesktop: string[];
+  denyLogon: string[];
+}
+
+interface WindowsUpdateSettings {
+  enabled: boolean;
+  updateEnabled: boolean;
+  deferFeatureUpdatesDays: number;
+  wsusServer: string;
+}
+
+interface AdminTemplatesSettings {
+  computer: {
+    enabled: boolean;
+    disableGuestAccount: boolean;
+    restrictCmdAccess: boolean;
+    disableRegistryEdit: boolean;
+    networkShareRestriction: boolean;
+  };
+  user: {
+    enabled: boolean;
+    browserHomepage: string;
+    browserSearchEngine: string;
+    blockCloudStorage: boolean;
+    desktopWallpaperPath: string;
+    disableTaskManager: boolean;
+    hideControlPanel: boolean;
+  };
+}
+
 interface GPO {
   id: string;
   name: string;
@@ -151,6 +191,10 @@ interface GPO {
   securityOptions: SecurityOptions;
   firewall: FirewallSettings;
   systemServices: SystemServices;
+  kerberos: KerberosSettings;
+  userRights: UserRightsSettings;
+  windowsUpdate: WindowsUpdateSettings;
+  adminTemplates: AdminTemplatesSettings;
 }
 
 interface OU {
@@ -164,6 +208,16 @@ interface OU {
 // ─── Initial Data ──────────────────────────────────────────────────────────────
 
 const AD_DOMAIN = process.env.NEXT_PUBLIC_AD_DOMAIN || '';
+
+const DEFAULT_NEW_FIELDS = {
+  kerberos:       { enabled: false, ticketLifetime: 10, renewalLifetime: 7, enforce: false },
+  userRights:     { enabled: false, allowLocalLogon: [], allowRemoteDesktop: [], denyLogon: [] },
+  windowsUpdate:  { enabled: false, updateEnabled: true, deferFeatureUpdatesDays: 0, wsusServer: '' },
+  adminTemplates: {
+    computer: { enabled: false, disableGuestAccount: false, restrictCmdAccess: false, disableRegistryEdit: false, networkShareRestriction: false },
+    user:     { enabled: false, browserHomepage: '', browserSearchEngine: '', blockCloudStorage: false, desktopWallpaperPath: '', disableTaskManager: false, hideControlPanel: false },
+  },
+};
 
 function buildFallbackOuTree(domain: string): OU[] {
   return [
@@ -238,6 +292,7 @@ const FALLBACK_GPOS: GPO[] = [
     },
     firewall: { enabled: false, defaultInbound: 'deny', defaultOutbound: 'allow', rules: [] },
     systemServices: { enabled: false, services: [] },
+    ...DEFAULT_NEW_FIELDS,
   },
   {
     id: 'gpo-server-hardening',
@@ -282,6 +337,7 @@ const FALLBACK_GPOS: GPO[] = [
         { id: 'svc5', name: 'avahi-daemon', displayName: 'Avahi mDNS', startupType: 'disabled' },
       ],
     },
+    ...DEFAULT_NEW_FIELDS,
   },
   {
     id: 'gpo-workstation-standard',
@@ -314,6 +370,7 @@ const FALLBACK_GPOS: GPO[] = [
     },
     firewall: { enabled: false, defaultInbound: 'deny', defaultOutbound: 'allow', rules: [] },
     systemServices: { enabled: false, services: [] },
+    ...DEFAULT_NEW_FIELDS,
   },
   {
     id: 'gpo-dev-tools',
@@ -349,6 +406,7 @@ const FALLBACK_GPOS: GPO[] = [
         { id: 'svc1', name: 'docker', displayName: 'Docker Engine', startupType: 'enabled' },
       ],
     },
+    ...DEFAULT_NEW_FIELDS,
   },
   {
     id: 'gpo-admin-mfa',
@@ -380,6 +438,7 @@ const FALLBACK_GPOS: GPO[] = [
     },
     firewall: { enabled: false, defaultInbound: 'deny', defaultOutbound: 'allow', rules: [] },
     systemServices: { enabled: false, services: [] },
+    ...DEFAULT_NEW_FIELDS,
   },
 ];
 
@@ -462,6 +521,42 @@ function normalizeGPO(raw: any): GPO {
       enabled:  raw.systemServices?.enabled  ?? false,
       services: raw.systemServices?.services ?? [],
     },
+    kerberos: {
+      enabled:         raw.kerberos?.enabled         ?? false,
+      ticketLifetime:  raw.kerberos?.ticketLifetime   ?? 10,
+      renewalLifetime: raw.kerberos?.renewalLifetime  ?? 7,
+      enforce:         raw.kerberos?.enforce          ?? false,
+    },
+    userRights: {
+      enabled:            raw.userRights?.enabled            ?? false,
+      allowLocalLogon:    raw.userRights?.allowLocalLogon    ?? [],
+      allowRemoteDesktop: raw.userRights?.allowRemoteDesktop ?? [],
+      denyLogon:          raw.userRights?.denyLogon          ?? [],
+    },
+    windowsUpdate: {
+      enabled:                 raw.windowsUpdate?.enabled                 ?? false,
+      updateEnabled:           raw.windowsUpdate?.updateEnabled           ?? true,
+      deferFeatureUpdatesDays: raw.windowsUpdate?.deferFeatureUpdatesDays ?? 0,
+      wsusServer:              raw.windowsUpdate?.wsusServer              ?? '',
+    },
+    adminTemplates: {
+      computer: {
+        enabled:                  raw.adminTemplates?.computer?.enabled                  ?? false,
+        disableGuestAccount:      raw.adminTemplates?.computer?.disableGuestAccount      ?? false,
+        restrictCmdAccess:        raw.adminTemplates?.computer?.restrictCmdAccess        ?? false,
+        disableRegistryEdit:      raw.adminTemplates?.computer?.disableRegistryEdit      ?? false,
+        networkShareRestriction:  raw.adminTemplates?.computer?.networkShareRestriction  ?? false,
+      },
+      user: {
+        enabled:              raw.adminTemplates?.user?.enabled              ?? false,
+        browserHomepage:      raw.adminTemplates?.user?.browserHomepage      ?? '',
+        browserSearchEngine:  raw.adminTemplates?.user?.browserSearchEngine  ?? '',
+        blockCloudStorage:    raw.adminTemplates?.user?.blockCloudStorage    ?? false,
+        desktopWallpaperPath: raw.adminTemplates?.user?.desktopWallpaperPath ?? '',
+        disableTaskManager:   raw.adminTemplates?.user?.disableTaskManager   ?? false,
+        hideControlPanel:     raw.adminTemplates?.user?.hideControlPanel     ?? false,
+      },
+    },
   };
 }
 
@@ -484,6 +579,10 @@ function countSettings(gpo: GPO): number {
   if (gpo.securityOptions?.enabled) n += 1;
   n += gpo.firewall?.rules?.length ?? 0;
   n += gpo.systemServices?.services?.filter(s => s.startupType !== 'manual').length ?? 0;
+  if (gpo.kerberos?.enabled) n++;
+  if (gpo.userRights?.enabled) n += (gpo.userRights.allowLocalLogon.length + gpo.userRights.allowRemoteDesktop.length + gpo.userRights.denyLogon.length);
+  if (gpo.windowsUpdate?.enabled) n++;
+  if (gpo.adminTemplates?.computer?.enabled || gpo.adminTemplates?.user?.enabled) n++;
   return n;
 }
 
@@ -620,19 +719,34 @@ function BoolRow({ label, value }: { label: string; value: boolean }) {
 
 // ─── GPO Settings Editor ───────────────────────────────────────────────────────
 
-type EditTab = 'password' | 'device' | 'software' | 'scripts' | 'access' | 'audit' | 'security' | 'firewall' | 'services';
+type EditTab =
+  // Computerkonfiguration
+  | 'cc_kontorichtlinien'
+  | 'cc_lokalerichtlinien'
+  | 'cc_firewall'
+  | 'cc_dienste'
+  | 'cc_skripte'
+  | 'cc_software'
+  | 'cc_adm_vorlagen'
+  // Benutzerkonfiguration
+  | 'uc_skripte'
+  | 'uc_zugriffssteuerung'
+  | 'uc_adm_vorlagen';
 
 function GPOEditModal({ gpo, onClose, onSave }: {
   gpo: GPO;
   onClose: () => void;
   onSave: (updated: GPO) => void;
 }) {
-  const [tab, setTab] = useState<EditTab>('password');
+  const [tab, setTab] = useState<EditTab>('cc_kontorichtlinien');
   const [draft, setDraft] = useState<GPO>(JSON.parse(JSON.stringify(gpo)));
   const [newPkg, setNewPkg] = useState({ name: '', version: '', action: 'install' as 'install' | 'uninstall' });
   const [scriptInputs, setScriptInputs] = useState({ startup: '', shutdown: '', logon: '', logoff: '' });
   const [allowedInput, setAllowedInput] = useState('');
   const [deniedInput, setDeniedInput] = useState('');
+  const [localLogonInput, setLocalLogonInput] = useState('');
+  const [rdpInput, setRdpInput] = useState('');
+  const [denyLogonInput, setDenyLogonInput] = useState('');
 
   // New tab state
   const [sshGroupInput, setSshGroupInput] = useState('');
@@ -653,6 +767,16 @@ function GPOEditModal({ gpo, onClose, onSave }: {
     setDraft(d => ({ ...d, securityOptions: { ...d.securityOptions, ...u } }));
   const setFirewall = (u: Partial<FirewallSettings>) =>
     setDraft(d => ({ ...d, firewall: { ...d.firewall, ...u } }));
+  const setKerberos = (u: Partial<KerberosSettings>) =>
+    setDraft(d => ({ ...d, kerberos: { ...d.kerberos, ...u } }));
+  const setUserRights = (u: Partial<UserRightsSettings>) =>
+    setDraft(d => ({ ...d, userRights: { ...d.userRights, ...u } }));
+  const setWindowsUpdate = (u: Partial<WindowsUpdateSettings>) =>
+    setDraft(d => ({ ...d, windowsUpdate: { ...d.windowsUpdate, ...u } }));
+  const setAdmComputer = (u: Partial<AdminTemplatesSettings['computer']>) =>
+    setDraft(d => ({ ...d, adminTemplates: { ...d.adminTemplates, computer: { ...d.adminTemplates.computer, ...u } } }));
+  const setAdmUser = (u: Partial<AdminTemplatesSettings['user']>) =>
+    setDraft(d => ({ ...d, adminTemplates: { ...d.adminTemplates, user: { ...d.adminTemplates.user, ...u } } }));
 
   const addPackage = () => {
     if (!newPkg.name.trim()) return;
@@ -690,16 +814,19 @@ function GPOEditModal({ gpo, onClose, onSave }: {
     onClose();
   };
 
-  const editTabs: { key: EditTab; label: string }[] = [
-    { key: 'password', label: 'Password Policy' },
-    { key: 'device',   label: 'Device Compliance' },
-    { key: 'software', label: 'Software' },
-    { key: 'scripts',  label: 'Scripts' },
-    { key: 'access',   label: 'Access Control' },
-    { key: 'audit',    label: 'Audit Policy' },
-    { key: 'security', label: 'Security Options' },
-    { key: 'firewall', label: 'Firewall Rules' },
-    { key: 'services', label: 'System Services' },
+  const CC_TABS: { key: EditTab; label: string }[] = [
+    { key: 'cc_kontorichtlinien',  label: 'Kontorichtlinien' },
+    { key: 'cc_lokalerichtlinien', label: 'Lokale Richtlinien' },
+    { key: 'cc_firewall',          label: 'Windows-Firewall' },
+    { key: 'cc_dienste',           label: 'Systemdienste' },
+    { key: 'cc_skripte',           label: 'Skripte (Computer)' },
+    { key: 'cc_software',          label: 'Software' },
+    { key: 'cc_adm_vorlagen',      label: 'Admin-Vorlagen' },
+  ];
+  const UC_TABS: { key: EditTab; label: string }[] = [
+    { key: 'uc_skripte',           label: 'Skripte (Benutzer)' },
+    { key: 'uc_zugriffssteuerung', label: 'Zugriffssteuerung' },
+    { key: 'uc_adm_vorlagen',      label: 'Admin-Vorlagen' },
   ];
 
   // Default Linux services list
@@ -765,11 +892,27 @@ function GPOEditModal({ gpo, onClose, onSave }: {
         {/* Two-column body: left nav + right content */}
         <div className="flex flex-1 overflow-hidden">
 
-          {/* Left sidebar nav */}
-          <nav className="w-44 flex-shrink-0 border-r border-gray-100 overflow-y-auto py-2">
-            {editTabs.map(t => (
+          {/* Left sidebar nav — AD-style grouped */}
+          <nav className="w-52 flex-shrink-0 border-r border-gray-100 overflow-y-auto py-2">
+            <div className="px-3 pt-2 pb-1">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Computerkonfiguration</span>
+            </div>
+            {CC_TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={`w-full text-left px-4 py-2 text-sm font-medium transition-colors ${
+                className={`w-full text-left px-4 py-1.5 text-sm font-medium transition-colors ${
+                  tab === t.key
+                    ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+            <div className="px-3 pt-3 pb-1">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Benutzerkonfiguration</span>
+            </div>
+            {UC_TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className={`w-full text-left px-4 py-1.5 text-sm font-medium transition-colors ${
                   tab === t.key
                     ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -782,22 +925,50 @@ function GPOEditModal({ gpo, onClose, onSave }: {
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
 
-          {/* ── Password Policy ── */}
-          {tab === 'password' && (
-            <div className="space-y-4">
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                <span className="text-sm font-medium text-gray-700">Password Policy Active</span>
-                <input type="checkbox" checked={draft.password.enabled}
-                  onChange={e => setPassword({ enabled: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-600" />
-              </label>
-              <div className={`space-y-3 ${!draft.password.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          {/* ── cc_kontorichtlinien: Kennwort + Kontosperrung + Kerberos ── */}
+          {tab === 'cc_kontorichtlinien' && (
+            <div className="space-y-5">
+              {/* Kennwortrichtlinie */}
+              <div>
+                <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer mb-3">
+                  <span className="text-sm font-medium text-gray-700">Kennwortrichtlinie aktiv</span>
+                  <input type="checkbox" checked={draft.password.enabled}
+                    onChange={e => setPassword({ enabled: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600" />
+                </label>
+                <div className={`space-y-3 ${!draft.password.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Kennwortrichtlinie</p>
+                  {([
+                    { label: 'Minimale Kennwortlänge',      key: 'minLength',  suffix: 'Zeichen', min: 1,  max: 128 },
+                    { label: 'Kennwortchronik',              key: 'history',    suffix: 'gespeicherte', min: 0, max: 24 },
+                    { label: 'Maximales Kennwortalter',      key: 'expiryDays', suffix: 'Tage (0 = nie)', min: 0, max: 365 },
+                  ] as { label: string; key: keyof PasswordSettings; suffix: string; min: number; max: number }[]).map(({ label, key, suffix, min, max }) => (
+                    <div key={String(key)} className="flex items-center justify-between py-1">
+                      <span className="text-sm text-gray-700">{label}</span>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min={min} max={max}
+                          value={draft.password[key] as number}
+                          onChange={e => setPassword({ [key]: parseInt(e.target.value) || 0 })}
+                          className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        <span className="text-xs text-gray-400 w-36">{suffix}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <label className="flex items-center justify-between py-1 cursor-pointer">
+                    <span className="text-sm text-gray-700">Kennwortkomplexität erzwingen</span>
+                    <input type="checkbox" checked={draft.password.complexity}
+                      onChange={e => setPassword({ complexity: e.target.checked })}
+                      className="w-4 h-4 rounded text-blue-600" />
+                  </label>
+                </div>
+              </div>
+
+              {/* Kontosperrungsrichtlinie */}
+              <div className={`border-t border-gray-100 pt-4 space-y-3 ${!draft.password.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Kontosperrungsrichtlinie</p>
                 {([
-                  { label: 'Minimum Password Length',     key: 'minLength',       suffix: 'characters', min: 1,  max: 128 },
-                  { label: 'Password History',            key: 'history',         suffix: 'remembered', min: 0,  max: 24 },
-                  { label: 'Maximum Password Age',        key: 'expiryDays',      suffix: 'days (0 = never)', min: 0, max: 365 },
-                  { label: 'Account Lockout Threshold',   key: 'lockoutAttempts', suffix: 'attempts (0 = never)', min: 0, max: 20 },
-                  { label: 'Lockout Duration',            key: 'lockoutDuration', suffix: 'minutes', min: 0, max: 1440 },
+                  { label: 'Kontosperrungsschwelle',  key: 'lockoutAttempts', suffix: 'Versuche (0 = nie)', min: 0, max: 20 },
+                  { label: 'Sperrdauer',              key: 'lockoutDuration', suffix: 'Minuten', min: 0, max: 1440 },
                 ] as { label: string; key: keyof PasswordSettings; suffix: string; min: number; max: number }[]).map(({ label, key, suffix, min, max }) => (
                   <div key={String(key)} className="flex items-center justify-between py-1">
                     <span className="text-sm text-gray-700">{label}</span>
@@ -810,62 +981,47 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                     </div>
                   </div>
                 ))}
-                <label className="flex items-center justify-between py-1 cursor-pointer">
-                  <span className="text-sm text-gray-700">Enforce Password Complexity</span>
-                  <input type="checkbox" checked={draft.password.complexity}
-                    onChange={e => setPassword({ complexity: e.target.checked })}
+              </div>
+
+              {/* Kerberos-Richtlinie */}
+              <div className="border-t border-gray-100 pt-4">
+                <label className="flex items-center justify-between mb-3 cursor-pointer">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Kerberos-Richtlinie</p>
+                  <input type="checkbox" checked={draft.kerberos.enabled}
+                    onChange={e => setKerberos({ enabled: e.target.checked })}
                     className="w-4 h-4 rounded text-blue-600" />
                 </label>
-              </div>
-            </div>
-          )}
-
-          {/* ── Device Compliance ── */}
-          {tab === 'device' && (
-            <div className="space-y-4">
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                <span className="text-sm font-medium text-gray-700">Device Compliance Active</span>
-                <input type="checkbox" checked={draft.device.enabled}
-                  onChange={e => setDevice({ enabled: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-600" />
-              </label>
-              <div className={`space-y-3 ${!draft.device.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                {([
-                  { label: 'Require Disk Encryption',  key: 'requireEncryption' },
-                  { label: 'Require Screen Lock / PIN',key: 'requireScreenLock' },
-                  { label: 'Require Antivirus / EDR',  key: 'requireAV' },
-                ] as { label: string; key: keyof DeviceSettings }[]).map(({ label, key }) => (
-                  <label key={String(key)} className="flex items-center justify-between py-1 cursor-pointer">
-                    <span className="text-sm text-gray-700">{label}</span>
-                    <input type="checkbox" checked={draft.device[key] as boolean}
-                      onChange={e => setDevice({ [key]: e.target.checked })}
+                <div className={`space-y-3 ${!draft.kerberos.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                  {([
+                    { label: 'Ticket-Lebensdauer',          key: 'ticketLifetime',  suffix: 'Stunden', min: 1, max: 24 },
+                    { label: 'Max. Ticketverlängerung',     key: 'renewalLifetime', suffix: 'Tage',    min: 1, max: 30 },
+                  ] as { label: string; key: 'ticketLifetime' | 'renewalLifetime'; suffix: string; min: number; max: number }[]).map(({ label, key, suffix, min, max }) => (
+                    <div key={key} className="flex items-center justify-between py-1">
+                      <span className="text-sm text-gray-700">{label}</span>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min={min} max={max}
+                          value={draft.kerberos[key]}
+                          onChange={e => setKerberos({ [key]: parseInt(e.target.value) || min })}
+                          className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        <span className="text-xs text-gray-400 w-20">{suffix}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <label className="flex items-center justify-between py-1 cursor-pointer">
+                    <span className="text-sm text-gray-700">Nur Kerberos-Authentifizierung</span>
+                    <input type="checkbox" checked={draft.kerberos.enforce}
+                      onChange={e => setKerberos({ enforce: e.target.checked })}
                       className="w-4 h-4 rounded text-blue-600" />
                   </label>
-                ))}
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Minimum OS Version</label>
-                  <input value={draft.device.minOsVersion}
-                    onChange={e => setDevice({ minOsVersion: e.target.value })}
-                    placeholder="e.g. Ubuntu 22.04"
-                    className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-700 mb-2">Supported Platforms</p>
-                  <div className="flex items-center gap-2">
-                    {(['Windows', 'Linux', 'macOS'] as const).map(p => (
-                      <span key={p} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full border border-blue-100">
-                        {p}
-                      </span>
-                    ))}
-                    <span className="text-xs text-gray-400 ml-1">Policy applies to all platforms</span>
-                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── Software ── */}
-          {tab === 'software' && (
+          {/* device tab removed — content merged into cc_software */}
+
+          {/* ── cc_software: Softwareverteilung + Gerätekonformität + Windows Update ── */}
+          {tab === 'cc_software' && (
             <div className="space-y-4">
               <div className="space-y-1.5">
                 {draft.software.packages.length === 0 && (
@@ -917,55 +1073,125 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                   </select>
                   <button onClick={addPackage}
                     className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">
-                    Add
+                    Hinzufügen
                   </button>
+                </div>
+              </div>
+
+              {/* Gerätekonformität */}
+              <div className="border-t border-gray-100 pt-4">
+                <label className="flex items-center justify-between mb-3 cursor-pointer">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Gerätekonformität</p>
+                  <input type="checkbox" checked={draft.device.enabled}
+                    onChange={e => setDevice({ enabled: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600" />
+                </label>
+                <div className={`space-y-3 ${!draft.device.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                  {([
+                    { label: 'Datenträgerverschlüsselung voraussetzen (BitLocker/FileVault/LUKS)', key: 'requireEncryption' },
+                    { label: 'Bildschirmsperre / PIN voraussetzen', key: 'requireScreenLock' },
+                    { label: 'Antivirensoftware / EDR voraussetzen',  key: 'requireAV' },
+                  ] as { label: string; key: keyof DeviceSettings }[]).map(({ label, key }) => (
+                    <label key={String(key)} className="flex items-center justify-between py-1 cursor-pointer">
+                      <span className="text-sm text-gray-700">{label}</span>
+                      <input type="checkbox" checked={draft.device[key] as boolean}
+                        onChange={e => setDevice({ [key]: e.target.checked })}
+                        className="w-4 h-4 rounded text-blue-600" />
+                    </label>
+                  ))}
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">Minimale Betriebssystemversion</label>
+                    <input value={draft.device.minOsVersion}
+                      onChange={e => setDevice({ minOsVersion: e.target.value })}
+                      placeholder="z.B. Windows 11 22H2 / Ubuntu 22.04"
+                      className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Windows Update / WSUS */}
+              <div className="border-t border-gray-100 pt-4">
+                <label className="flex items-center justify-between mb-3 cursor-pointer">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Windows Update / WSUS</p>
+                  <input type="checkbox" checked={draft.windowsUpdate.enabled}
+                    onChange={e => setWindowsUpdate({ enabled: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600" />
+                </label>
+                <div className={`space-y-3 ${!draft.windowsUpdate.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <label className="flex items-center justify-between py-1 cursor-pointer">
+                    <span className="text-sm text-gray-700">Automatische Updates aktivieren</span>
+                    <input type="checkbox" checked={draft.windowsUpdate.updateEnabled}
+                      onChange={e => setWindowsUpdate({ updateEnabled: e.target.checked })}
+                      className="w-4 h-4 rounded text-blue-600" />
+                  </label>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-sm text-gray-700">Feature-Updates verzögern</span>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min={0} max={365} value={draft.windowsUpdate.deferFeatureUpdatesDays}
+                        onChange={e => setWindowsUpdate({ deferFeatureUpdatesDays: parseInt(e.target.value) || 0 })}
+                        className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      <span className="text-xs text-gray-400 w-20">Tage (0–365)</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">WSUS-Server</label>
+                    <input value={draft.windowsUpdate.wsusServer}
+                      onChange={e => setWindowsUpdate({ wsusServer: e.target.value })}
+                      placeholder={AD_DOMAIN ? `http://wsus.${AD_DOMAIN}` : 'http://wsus.example.local'}
+                      className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── Scripts ── */}
-          {tab === 'scripts' && (
-            <div className="space-y-5">
-              {(['startup', 'shutdown', 'logon', 'logoff'] as const).map(type => (
-                <div key={type}>
-                  <p className="text-sm font-medium text-gray-700 mb-2 capitalize">{type} Scripts</p>
-                  <div className="space-y-1 mb-2">
-                    {draft.scripts[type].length === 0 && (
-                      <p className="text-xs text-gray-400 italic px-1">No scripts</p>
-                    )}
-                    {draft.scripts[type].map(s => (
-                      <div key={s} className="flex items-center justify-between px-3 py-1.5 bg-gray-50 rounded text-sm group">
-                        <span className="font-mono text-xs text-gray-700">{s}</span>
-                        <button onClick={() => removeScript(type, s)} className="text-gray-300 hover:text-red-500 group-hover:text-gray-400">
-                          <XMarkIcon className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
+          {/* ── cc_skripte / uc_skripte ── */}
+          {(tab === 'cc_skripte' || tab === 'uc_skripte') && (() => {
+            const types: (keyof ScriptSettings)[] = tab === 'cc_skripte' ? ['startup', 'shutdown'] : ['logon', 'logoff'];
+            const labels: Record<string, string> = {
+              startup: 'Beim Start (Startup)', shutdown: 'Beim Herunterfahren (Shutdown)',
+              logon: 'Bei der Anmeldung (Logon)', logoff: 'Bei der Abmeldung (Logoff)',
+            };
+            return (
+              <div className="space-y-5">
+                {types.map(type => (
+                  <div key={type}>
+                    <p className="text-sm font-medium text-gray-700 mb-2">{labels[type]}</p>
+                    <div className="space-y-1 mb-2">
+                      {draft.scripts[type].length === 0 && <p className="text-xs text-gray-400 italic px-1">Keine Skripte konfiguriert</p>}
+                      {draft.scripts[type].map(s => (
+                        <div key={s} className="flex items-center justify-between px-3 py-1.5 bg-gray-50 rounded text-sm group">
+                          <span className="font-mono text-xs text-gray-700">{s}</span>
+                          <button onClick={() => removeScript(type, s)} className="text-gray-300 hover:text-red-500 group-hover:text-gray-400">
+                            <XMarkIcon className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input value={scriptInputs[type]}
+                        onChange={e => setScriptInputs(s => ({ ...s, [type]: e.target.value }))}
+                        onKeyDown={e => { if (e.key === 'Enter') addScript(type); }}
+                        placeholder={type === 'startup' || type === 'shutdown' ? `${type}-script.sh` : `${type}-script.ps1`}
+                        className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      <button onClick={() => addScript(type)} disabled={!scriptInputs[type].trim()}
+                        className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40">
+                        Hinzufügen
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <input value={scriptInputs[type]}
-                      onChange={e => setScriptInputs(s => ({ ...s, [type]: e.target.value }))}
-                      onKeyDown={e => { if (e.key === 'Enter') addScript(type); }}
-                      placeholder={`${type}-script.sh`}
-                      className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                    <button onClick={() => addScript(type)} disabled={!scriptInputs[type].trim()}
-                      className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40">
-                      Add
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            );
+          })()}
 
-          {/* ── Access Control ── */}
-          {tab === 'access' && (
+          {/* ── uc_zugriffssteuerung ── */}
+          {tab === 'uc_zugriffssteuerung' && (
             <div className="space-y-4">
               <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Require Multi-Factor Authentication</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Users must verify with a second factor</p>
+                  <p className="text-sm font-medium text-gray-700">Multi-Faktor-Authentifizierung voraussetzen</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Benutzer müssen sich mit einem zweiten Faktor verifizieren</p>
                 </div>
                 <input type="checkbox" checked={draft.access.mfaRequired}
                   onChange={e => setDraft(d => ({ ...d, access: { ...d.access, mfaRequired: e.target.checked } }))}
@@ -974,7 +1200,7 @@ function GPOEditModal({ gpo, onClose, onSave }: {
 
               {/* Allowed groups */}
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Allowed Groups</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">Erlaubte Gruppen</p>
                 <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
                   {draft.access.allowed.map(g => (
                     <span key={g} className="flex items-center gap-1 bg-green-50 border border-green-200 text-green-700 text-xs px-2.5 py-1 rounded-full">
@@ -989,18 +1215,18 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                 <div className="flex items-center gap-2">
                   <input value={allowedInput} onChange={e => setAllowedInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addAllowed(); }}
-                    placeholder="Group name or * for all"
+                    placeholder="Gruppenname oder * für alle"
                     className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   <button onClick={addAllowed} disabled={!allowedInput.trim()}
                     className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-40">
-                    Allow
+                    Erlauben
                   </button>
                 </div>
               </div>
 
               {/* Denied groups */}
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Denied Groups</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">Verweigerte Gruppen</p>
                 <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
                   {draft.access.denied.map(g => (
                     <span key={g} className="flex items-center gap-1 bg-red-50 border border-red-200 text-red-700 text-xs px-2.5 py-1 rounded-full">
@@ -1015,37 +1241,37 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                 <div className="flex items-center gap-2">
                   <input value={deniedInput} onChange={e => setDeniedInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addDenied(); }}
-                    placeholder="Group name to deny"
+                    placeholder="Gruppenname zum Verweigern"
                     className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   <button onClick={addDenied} disabled={!deniedInput.trim()}
                     className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-40">
-                    Deny
+                    Verweigern
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── Audit Policy ── */}
-          {tab === 'audit' && (
+          {/* ── cc_lokalerichtlinien: Überwachung + Benutzerrechte + Sicherheitsoptionen ── */}
+          {tab === 'cc_lokalerichtlinien' && (
             <div className="space-y-4">
               <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                <span className="text-sm font-medium text-gray-700">Audit Policy Active</span>
+                <span className="text-sm font-medium text-gray-700">Überwachungsrichtlinie aktiv</span>
                 <input type="checkbox" checked={draft.audit.enabled}
                   onChange={e => setAudit({ enabled: e.target.checked })}
                   className="w-4 h-4 rounded text-blue-600" />
               </label>
               <div className={`space-y-3 ${!draft.audit.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Audit Event Types</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Überwachungsrichtlinie</p>
                 {([
-                  { label: 'Logon / Logoff Events',       key: 'logonEvents' },
-                  { label: 'Account Management',           key: 'accountManagement' },
-                  { label: 'Policy Change',                key: 'policyChange' },
-                  { label: 'Privilege Use',                key: 'privilegeUse' },
-                  { label: 'Object Access',                key: 'objectAccess' },
-                  { label: 'Process Tracking',             key: 'processTracking' },
-                  { label: 'Directory Service Access',     key: 'directoryAccess' },
-                  { label: 'System Events',                key: 'systemEvents' },
+                  { label: 'Anmelde-/Abmeldeereignisse',        key: 'logonEvents' },
+                  { label: 'Kontoverwaltung',                   key: 'accountManagement' },
+                  { label: 'Richtlinienänderung',               key: 'policyChange' },
+                  { label: 'Berechtigungsverwendung',           key: 'privilegeUse' },
+                  { label: 'Objektzugriff',                     key: 'objectAccess' },
+                  { label: 'Prozessverfolgung',                 key: 'processTracking' },
+                  { label: 'Verzeichnisdienstzugriff',          key: 'directoryAccess' },
+                  { label: 'Systemereignisse',                  key: 'systemEvents' },
                 ] as { label: string; key: keyof AuditSettings }[]).map(({ label, key }) => (
                   <label key={String(key)} className="flex items-center justify-between py-1 cursor-pointer">
                     <span className="text-sm text-gray-700">{label}</span>
@@ -1056,7 +1282,7 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                 ))}
                 <div className="border-t border-gray-100 pt-3 space-y-3">
                   <div className="flex items-center justify-between py-1">
-                    <span className="text-sm text-gray-700">Log Size (MB)</span>
+                    <span className="text-sm text-gray-700">Protokollgrösse (MB)</span>
                     <div className="flex items-center gap-2">
                       <input type="number" min={10} max={4096} value={draft.audit.logSize}
                         onChange={e => setAudit({ logSize: parseInt(e.target.value) || 100 })}
@@ -1065,201 +1291,238 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                     </div>
                   </div>
                   <div className="flex items-center justify-between py-1">
-                    <span className="text-sm text-gray-700">Retention (days)</span>
+                    <span className="text-sm text-gray-700">Aufbewahrung (Tage)</span>
                     <div className="flex items-center gap-2">
                       <input type="number" min={0} max={365} value={draft.audit.retentionDays}
                         onChange={e => setAudit({ retentionDays: parseInt(e.target.value) || 0 })}
                         className="w-24 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                      <span className="text-xs text-gray-400 w-20">days (0 = never)</span>
+                      <span className="text-xs text-gray-400 w-20">Tage (0 = nie)</span>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* ── Security Options ── */}
-          {tab === 'security' && (
-            <div className="space-y-5">
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                <span className="text-sm font-medium text-gray-700">Security Options Active</span>
-                <input type="checkbox" checked={draft.securityOptions.enabled}
-                  onChange={e => setSecOpts({ enabled: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-600" />
-              </label>
-              <div className={`space-y-5 ${!draft.securityOptions.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-
-                {/* SSH Hardening */}
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">SSH Hardening</p>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between py-1">
-                      <span className="text-sm text-gray-700">Max Auth Tries</span>
+              {/* Zuweisen von Benutzerrechten */}
+              <div className="border-t border-gray-100 pt-4">
+                <label className="flex items-center justify-between mb-3 cursor-pointer">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Zuweisen von Benutzerrechten</p>
+                  <input type="checkbox" checked={draft.userRights.enabled}
+                    onChange={e => setUserRights({ enabled: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600" />
+                </label>
+                <div className={`space-y-4 ${!draft.userRights.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                  {([
+                    { label: 'Lokale Anmeldung erlauben',  field: 'allowLocalLogon' as const, input: localLogonInput, setInput: setLocalLogonInput, color: 'green' },
+                    { label: 'Remote-Desktop erlauben',     field: 'allowRemoteDesktop' as const, input: rdpInput, setInput: setRdpInput, color: 'blue' },
+                    { label: 'Anmeldung verweigern',        field: 'denyLogon' as const, input: denyLogonInput, setInput: setDenyLogonInput, color: 'red' },
+                  ]).map(({ label, field, input, setInput, color }) => (
+                    <div key={field}>
+                      <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
+                      <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
+                        {draft.userRights[field].map(g => (
+                          <span key={g} className={`flex items-center gap-1 bg-${color}-50 border border-${color}-200 text-${color}-700 text-xs px-2.5 py-1 rounded-full`}>
+                            {g}
+                            <button onClick={() => setUserRights({ [field]: draft.userRights[field].filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
+                              <XMarkIcon className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                        {draft.userRights[field].length === 0 && <p className="text-xs text-gray-400 italic">Keine</p>}
+                      </div>
                       <div className="flex items-center gap-2">
-                        <input type="number" min={1} max={10} value={draft.securityOptions.sshMaxAuthTries}
-                          onChange={e => setSecOpts({ sshMaxAuthTries: parseInt(e.target.value) || 3 })}
-                          className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <span className="text-xs text-gray-400 w-16">attempts</span>
+                        <input value={input} onChange={e => setInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter' && input.trim()) { setUserRights({ [field]: [...draft.userRights[field], input.trim()] }); setInput(''); } }}
+                          placeholder="Gruppenname"
+                          className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        <button onClick={() => { if (!input.trim()) return; setUserRights({ [field]: [...draft.userRights[field], input.trim()] }); setInput(''); }}
+                          disabled={!input.trim()}
+                          className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40">
+                          Hinzufügen
+                        </button>
                       </div>
                     </div>
-                    <label className="flex items-center justify-between py-1 cursor-pointer">
-                      <span className="text-sm text-gray-700">Permit Root Login</span>
-                      <input type="checkbox" checked={draft.securityOptions.sshPermitRootLogin}
-                        onChange={e => setSecOpts({ sshPermitRootLogin: e.target.checked })}
-                        className="w-4 h-4 rounded text-blue-600" />
-                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sicherheitsoptionen */}
+              <div className="border-t border-gray-100 pt-4">
+                <label className="flex items-center justify-between mb-3 cursor-pointer">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Sicherheitsoptionen</p>
+                  <input type="checkbox" checked={draft.securityOptions.enabled}
+                    onChange={e => setSecOpts({ enabled: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600" />
+                </label>
+                <div className={`space-y-5 ${!draft.securityOptions.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                  {/* SSH Hardening */}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">SSH-Härtung (Linux)</p>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-sm text-gray-700">Max. Authentifizierungsversuche</span>
+                        <div className="flex items-center gap-2">
+                          <input type="number" min={1} max={10} value={draft.securityOptions.sshMaxAuthTries}
+                            onChange={e => setSecOpts({ sshMaxAuthTries: parseInt(e.target.value) || 3 })}
+                            className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                          <span className="text-xs text-gray-400 w-16">Versuche</span>
+                        </div>
+                      </div>
+                      <label className="flex items-center justify-between py-1 cursor-pointer">
+                        <span className="text-sm text-gray-700">Root-Anmeldung erlauben</span>
+                        <input type="checkbox" checked={draft.securityOptions.sshPermitRootLogin}
+                          onChange={e => setSecOpts({ sshPermitRootLogin: e.target.checked })}
+                          className="w-4 h-4 rounded text-blue-600" />
+                      </label>
+                      <label className="flex items-center justify-between py-1 cursor-pointer">
+                        <div>
+                          <span className="text-sm text-gray-700">Passwort-Authentifizierung</span>
+                          <p className="text-xs text-gray-400">Deaktivieren erzwingt Schlüssel-Authentifizierung</p>
+                        </div>
+                        <input type="checkbox" checked={draft.securityOptions.sshPasswordAuth}
+                          onChange={e => setSecOpts({ sshPasswordAuth: e.target.checked })}
+                          className="w-4 h-4 rounded text-blue-600" />
+                      </label>
+                      <div>
+                        <p className="text-sm text-gray-700 mb-2">SSH erlaubte Gruppen</p>
+                        <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
+                          {draft.securityOptions.sshAllowGroups.map(g => (
+                            <span key={g} className="flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs px-2.5 py-1 rounded-full">
+                              {g}
+                              <button onClick={() => setSecOpts({ sshAllowGroups: draft.securityOptions.sshAllowGroups.filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
+                                <XMarkIcon className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                          {draft.securityOptions.sshAllowGroups.length === 0 && <p className="text-xs text-gray-400 italic">Keine (alle Gruppen erlaubt)</p>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input value={sshGroupInput} onChange={e => setSshGroupInput(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && sshGroupInput.trim()) { setSecOpts({ sshAllowGroups: [...draft.securityOptions.sshAllowGroups, sshGroupInput.trim()] }); setSshGroupInput(''); } }}
+                            placeholder="Gruppenname"
+                            className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                          <button onClick={() => { if (!sshGroupInput.trim()) return; setSecOpts({ sshAllowGroups: [...draft.securityOptions.sshAllowGroups, sshGroupInput.trim()] }); setSshGroupInput(''); }}
+                            disabled={!sshGroupInput.trim()}
+                            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40">
+                            Hinzufügen
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Interaktive Anmeldung */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Interaktive Anmeldung</p>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-sm text-gray-700">Inaktivitäts-Timeout (Bildschirmsperre)</span>
+                        <div className="flex items-center gap-2">
+                          <input type="number" min={0} max={480} value={draft.securityOptions.sessionTimeout}
+                            onChange={e => setSecOpts({ sessionTimeout: parseInt(e.target.value) || 0 })}
+                            className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                          <span className="text-xs text-gray-400 w-24">Min. (0 = nie)</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-700 mb-1">Anmelde-Banner / MOTD</label>
+                        <textarea value={draft.securityOptions.loginBannerText}
+                          onChange={e => setSecOpts({ loginBannerText: e.target.value })}
+                          rows={3}
+                          placeholder="Authorized users only. All activity is monitored."
+                          className="w-full border border-gray-200 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none" />
+                      </div>
+                    </div>
+                  </div>
+                  {/* Gerätekontrolle */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Gerätekontrolle</p>
                     <label className="flex items-center justify-between py-1 cursor-pointer">
                       <div>
-                        <span className="text-sm text-gray-700">Allow Password Auth</span>
-                        <p className="text-xs text-gray-400">Uncheck to enforce key-only authentication</p>
+                        <span className="text-sm text-gray-700">USB-Speichergeräte blockieren</span>
+                        <p className="text-xs text-gray-400">Verhindert das Einhängen von Wechseldatenträgern</p>
                       </div>
-                      <input type="checkbox" checked={draft.securityOptions.sshPasswordAuth}
-                        onChange={e => setSecOpts({ sshPasswordAuth: e.target.checked })}
+                      <input type="checkbox" checked={draft.securityOptions.blockUsbStorage}
+                        onChange={e => setSecOpts({ blockUsbStorage: e.target.checked })}
                         className="w-4 h-4 rounded text-blue-600" />
                     </label>
-                    <div>
-                      <p className="text-sm text-gray-700 mb-2">SSH Allowed Groups</p>
-                      <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
-                        {draft.securityOptions.sshAllowGroups.map(g => (
-                          <span key={g} className="flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs px-2.5 py-1 rounded-full">
-                            {g}
-                            <button onClick={() => setSecOpts({ sshAllowGroups: draft.securityOptions.sshAllowGroups.filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
-                              <XMarkIcon className="w-3 h-3" />
-                            </button>
-                          </span>
-                        ))}
-                        {draft.securityOptions.sshAllowGroups.length === 0 && <p className="text-xs text-gray-400 italic">None (all groups allowed)</p>}
+                  </div>
+                  {/* Sudo-Richtlinie */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sudo-Richtlinie (Linux)</p>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-sm text-gray-700 mb-2">NOPASSWD-Gruppen</p>
+                        <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
+                          {draft.securityOptions.sudoNoPassword.map(g => (
+                            <span key={g} className="flex items-center gap-1 bg-orange-50 border border-orange-200 text-orange-700 text-xs px-2.5 py-1 rounded-full">
+                              {g}
+                              <button onClick={() => setSecOpts({ sudoNoPassword: draft.securityOptions.sudoNoPassword.filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
+                                <XMarkIcon className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                          {draft.securityOptions.sudoNoPassword.length === 0 && <p className="text-xs text-gray-400 italic">Keine</p>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input value={sudoNoPwdInput} onChange={e => setSudoNoPwdInput(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && sudoNoPwdInput.trim()) { setSecOpts({ sudoNoPassword: [...draft.securityOptions.sudoNoPassword, sudoNoPwdInput.trim()] }); setSudoNoPwdInput(''); } }}
+                            placeholder="Gruppenname"
+                            className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                          <button onClick={() => { if (!sudoNoPwdInput.trim()) return; setSecOpts({ sudoNoPassword: [...draft.securityOptions.sudoNoPassword, sudoNoPwdInput.trim()] }); setSudoNoPwdInput(''); }}
+                            disabled={!sudoNoPwdInput.trim()}
+                            className="px-3 py-1.5 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-40">
+                            Hinzufügen
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input value={sshGroupInput} onChange={e => setSshGroupInput(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter' && sshGroupInput.trim()) { setSecOpts({ sshAllowGroups: [...draft.securityOptions.sshAllowGroups, sshGroupInput.trim()] }); setSshGroupInput(''); } }}
-                          placeholder="Group name"
-                          className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <button onClick={() => { if (!sshGroupInput.trim()) return; setSecOpts({ sshAllowGroups: [...draft.securityOptions.sshAllowGroups, sshGroupInput.trim()] }); setSshGroupInput(''); }}
-                          disabled={!sshGroupInput.trim()}
-                          className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40">
-                          Add
-                        </button>
+                      <div>
+                        <p className="text-sm text-gray-700 mb-2">Passwort-Gruppen (sudo mit PW)</p>
+                        <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
+                          {draft.securityOptions.sudoWithPassword.map(g => (
+                            <span key={g} className="flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-700 text-xs px-2.5 py-1 rounded-full">
+                              {g}
+                              <button onClick={() => setSecOpts({ sudoWithPassword: draft.securityOptions.sudoWithPassword.filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
+                                <XMarkIcon className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                          {draft.securityOptions.sudoWithPassword.length === 0 && <p className="text-xs text-gray-400 italic">Keine</p>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input value={sudoWithPwdInput} onChange={e => setSudoWithPwdInput(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && sudoWithPwdInput.trim()) { setSecOpts({ sudoWithPassword: [...draft.securityOptions.sudoWithPassword, sudoWithPwdInput.trim()] }); setSudoWithPwdInput(''); } }}
+                            placeholder="Gruppenname"
+                            className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                          <button onClick={() => { if (!sudoWithPwdInput.trim()) return; setSecOpts({ sudoWithPassword: [...draft.securityOptions.sudoWithPassword, sudoWithPwdInput.trim()] }); setSudoWithPwdInput(''); }}
+                            disabled={!sudoWithPwdInput.trim()}
+                            className="px-3 py-1.5 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-40">
+                            Hinzufügen
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Session & Banner */}
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Session &amp; Banner</p>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between py-1">
-                      <span className="text-sm text-gray-700">Session Timeout</span>
-                      <div className="flex items-center gap-2">
-                        <input type="number" min={0} max={480} value={draft.securityOptions.sessionTimeout}
-                          onChange={e => setSecOpts({ sessionTimeout: parseInt(e.target.value) || 0 })}
-                          className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <span className="text-xs text-gray-400 w-24">min (0 = never)</span>
-                      </div>
-                    </div>
+                  {/* Zeitsynchronisation */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Zeitsynchronisation</p>
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1">Login Banner / MOTD</label>
-                      <textarea value={draft.securityOptions.loginBannerText}
-                        onChange={e => setSecOpts({ loginBannerText: e.target.value })}
-                        rows={3}
-                        placeholder="Authorized users only. All activity is monitored."
-                        className="w-full border border-gray-200 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none" />
+                      <label className="block text-sm text-gray-700 mb-1">NTP-Server</label>
+                      <input value={draft.securityOptions.ntpServer}
+                        onChange={e => setSecOpts({ ntpServer: e.target.value })}
+                        placeholder={AD_DOMAIN ? `ntp.${AD_DOMAIN}` : 'e.g. ntp.example.local'}
+                        className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                     </div>
-                  </div>
-                </div>
-
-                {/* Device Control */}
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Device Control</p>
-                  <label className="flex items-center justify-between py-1 cursor-pointer">
-                    <div>
-                      <span className="text-sm text-gray-700">Block USB Storage Devices</span>
-                      <p className="text-xs text-gray-400">Prevent mounting of removable USB drives</p>
-                    </div>
-                    <input type="checkbox" checked={draft.securityOptions.blockUsbStorage}
-                      onChange={e => setSecOpts({ blockUsbStorage: e.target.checked })}
-                      className="w-4 h-4 rounded text-blue-600" />
-                  </label>
-                </div>
-
-                {/* Sudo Policy */}
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sudo Policy</p>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm text-gray-700 mb-2">NOPASSWD Groups</p>
-                      <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
-                        {draft.securityOptions.sudoNoPassword.map(g => (
-                          <span key={g} className="flex items-center gap-1 bg-orange-50 border border-orange-200 text-orange-700 text-xs px-2.5 py-1 rounded-full">
-                            {g}
-                            <button onClick={() => setSecOpts({ sudoNoPassword: draft.securityOptions.sudoNoPassword.filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
-                              <XMarkIcon className="w-3 h-3" />
-                            </button>
-                          </span>
-                        ))}
-                        {draft.securityOptions.sudoNoPassword.length === 0 && <p className="text-xs text-gray-400 italic">None</p>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input value={sudoNoPwdInput} onChange={e => setSudoNoPwdInput(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter' && sudoNoPwdInput.trim()) { setSecOpts({ sudoNoPassword: [...draft.securityOptions.sudoNoPassword, sudoNoPwdInput.trim()] }); setSudoNoPwdInput(''); } }}
-                          placeholder="Group name"
-                          className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <button onClick={() => { if (!sudoNoPwdInput.trim()) return; setSecOpts({ sudoNoPassword: [...draft.securityOptions.sudoNoPassword, sudoNoPwdInput.trim()] }); setSudoNoPwdInput(''); }}
-                          disabled={!sudoNoPwdInput.trim()}
-                          className="px-3 py-1.5 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-40">
-                          Add
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-700 mb-2">Password Required Groups</p>
-                      <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
-                        {draft.securityOptions.sudoWithPassword.map(g => (
-                          <span key={g} className="flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-700 text-xs px-2.5 py-1 rounded-full">
-                            {g}
-                            <button onClick={() => setSecOpts({ sudoWithPassword: draft.securityOptions.sudoWithPassword.filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
-                              <XMarkIcon className="w-3 h-3" />
-                            </button>
-                          </span>
-                        ))}
-                        {draft.securityOptions.sudoWithPassword.length === 0 && <p className="text-xs text-gray-400 italic">None</p>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input value={sudoWithPwdInput} onChange={e => setSudoWithPwdInput(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter' && sudoWithPwdInput.trim()) { setSecOpts({ sudoWithPassword: [...draft.securityOptions.sudoWithPassword, sudoWithPwdInput.trim()] }); setSudoWithPwdInput(''); } }}
-                          placeholder="Group name"
-                          className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <button onClick={() => { if (!sudoWithPwdInput.trim()) return; setSecOpts({ sudoWithPassword: [...draft.securityOptions.sudoWithPassword, sudoWithPwdInput.trim()] }); setSudoWithPwdInput(''); }}
-                          disabled={!sudoWithPwdInput.trim()}
-                          className="px-3 py-1.5 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-40">
-                          Add
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Time Sync */}
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Time Sync</p>
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">NTP Server</label>
-                    <input value={draft.securityOptions.ntpServer}
-                      onChange={e => setSecOpts({ ntpServer: e.target.value })}
-                      placeholder={AD_DOMAIN ? `ntp.${AD_DOMAIN}` : 'e.g. ntp.example.local'}
-                      className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── Firewall Rules ── */}
-          {tab === 'firewall' && (
+
+          {/* ── cc_firewall ── */}
+          {tab === 'cc_firewall' && (
             <div className="space-y-4">
               <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                <span className="text-sm font-medium text-gray-700">Firewall Rules Active</span>
+                <span className="text-sm font-medium text-gray-700">Windows-Firewall aktiv</span>
                 <input type="checkbox" checked={draft.firewall.enabled}
                   onChange={e => setFirewall({ enabled: e.target.checked })}
                   className="w-4 h-4 rounded text-blue-600" />
@@ -1356,11 +1619,11 @@ function GPOEditModal({ gpo, onClose, onSave }: {
             </div>
           )}
 
-          {/* ── System Services ── */}
-          {tab === 'services' && (
+          {/* ── cc_dienste ── */}
+          {tab === 'cc_dienste' && (
             <div className="space-y-4">
               <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                <span className="text-sm font-medium text-gray-700">System Services Active</span>
+                <span className="text-sm font-medium text-gray-700">Systemdienste aktiv</span>
                 <input type="checkbox" checked={draft.systemServices.enabled}
                   onChange={e => setDraft(d => ({ ...d, systemServices: { ...d.systemServices, enabled: e.target.checked } }))}
                   className="w-4 h-4 rounded text-blue-600" />
@@ -1430,6 +1693,112 @@ function GPOEditModal({ gpo, onClose, onSave }: {
               </div>
             </div>
           )}
+
+          {/* ── cc_adm_vorlagen: Administrative Vorlagen (Computer) ── */}
+          {tab === 'cc_adm_vorlagen' && (
+            <div className="space-y-4">
+              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Admin-Vorlagen (Computer) aktiv</span>
+                  <p className="text-xs text-gray-400 mt-0.5">Systemweite Einschränkungen und Härtung</p>
+                </div>
+                <input type="checkbox" checked={draft.adminTemplates.computer.enabled}
+                  onChange={e => setAdmComputer({ enabled: e.target.checked })}
+                  className="w-4 h-4 rounded text-blue-600" />
+              </label>
+              <div className={`space-y-3 ${!draft.adminTemplates.computer.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Systemeinschränkungen</p>
+                {([
+                  { label: 'Gastkonto deaktivieren',                     key: 'disableGuestAccount' as const },
+                  { label: 'Zugriff auf Eingabeaufforderung einschränken', key: 'restrictCmdAccess' as const },
+                  { label: 'Registrierungseditor deaktivieren',           key: 'disableRegistryEdit' as const },
+                  { label: 'Netzwerkfreigabe-Einschränkungen',            key: 'networkShareRestriction' as const },
+                ]).map(({ label, key }) => (
+                  <label key={key} className="flex items-center justify-between py-1 cursor-pointer">
+                    <span className="text-sm text-gray-700">{label}</span>
+                    <input type="checkbox" checked={draft.adminTemplates.computer[key]}
+                      onChange={e => setAdmComputer({ [key]: e.target.checked })}
+                      className="w-4 h-4 rounded text-blue-600" />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── uc_adm_vorlagen: Administrative Vorlagen (Benutzer) ── */}
+          {tab === 'uc_adm_vorlagen' && (
+            <div className="space-y-4">
+              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Admin-Vorlagen (Benutzer) aktiv</span>
+                  <p className="text-xs text-gray-400 mt-0.5">Browser, Desktop und Cloud-Einschränkungen</p>
+                </div>
+                <input type="checkbox" checked={draft.adminTemplates.user.enabled}
+                  onChange={e => setAdmUser({ enabled: e.target.checked })}
+                  className="w-4 h-4 rounded text-blue-600" />
+              </label>
+              <div className={`space-y-5 ${!draft.adminTemplates.user.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                {/* Browser */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Browser-Einstellungen</p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-1">Startseite (erzwungen)</label>
+                      <input value={draft.adminTemplates.user.browserHomepage}
+                        onChange={e => setAdmUser({ browserHomepage: e.target.value })}
+                        placeholder={AD_DOMAIN ? `https://${AD_DOMAIN}` : 'https://intranet.example.local'}
+                        className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-1">Standardsuchmaschine</label>
+                      <input value={draft.adminTemplates.user.browserSearchEngine}
+                        onChange={e => setAdmUser({ browserSearchEngine: e.target.value })}
+                        placeholder="https://search.example.local"
+                        className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                </div>
+                {/* Desktop */}
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Desktop-Richtlinien</p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-1">Hintergrundbilder-Pfad (UNC)</label>
+                      <input value={draft.adminTemplates.user.desktopWallpaperPath}
+                        onChange={e => setAdmUser({ desktopWallpaperPath: e.target.value })}
+                        placeholder="\\server\share\wallpaper.jpg"
+                        className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    </div>
+                    {([
+                      { label: 'Task-Manager deaktivieren',    key: 'disableTaskManager' as const },
+                      { label: 'Systemsteuerung ausblenden',   key: 'hideControlPanel' as const },
+                    ]).map(({ label, key }) => (
+                      <label key={key} className="flex items-center justify-between py-1 cursor-pointer">
+                        <span className="text-sm text-gray-700">{label}</span>
+                        <input type="checkbox" checked={draft.adminTemplates.user[key] as boolean}
+                          onChange={e => setAdmUser({ [key]: e.target.checked })}
+                          className="w-4 h-4 rounded text-blue-600" />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {/* Cloud Storage */}
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Cloud-Speicher</p>
+                  <label className="flex items-center justify-between py-1 cursor-pointer">
+                    <div>
+                      <span className="text-sm text-gray-700">Cloud-Speicher blockieren</span>
+                      <p className="text-xs text-gray-400">OneDrive, Dropbox, Google Drive, iCloud</p>
+                    </div>
+                    <input type="checkbox" checked={draft.adminTemplates.user.blockCloudStorage}
+                      onChange={e => setAdmUser({ blockCloudStorage: e.target.checked })}
+                      className="w-4 h-4 rounded text-blue-600" />
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
         </div>{/* end two-column body */}
 
@@ -1629,6 +1998,7 @@ function blankGPO(name: string, desc: string, linkedOU: string): GPO {
     securityOptions: { enabled: false, sshMaxAuthTries: 3, sshPermitRootLogin: false, sshPasswordAuth: false, sshAllowGroups: [], sessionTimeout: 30, loginBannerText: '', blockUsbStorage: false, sudoNoPassword: [], sudoWithPassword: [], ntpServer: '' },
     firewall: { enabled: false, defaultInbound: 'deny', defaultOutbound: 'allow', rules: [] },
     systemServices: { enabled: false, services: [] },
+    ...DEFAULT_NEW_FIELDS,
   };
 }
 
