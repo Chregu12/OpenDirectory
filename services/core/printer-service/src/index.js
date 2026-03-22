@@ -347,24 +347,33 @@ app.post('/api/printer/jobs', async (req, res) => {
     const ip = printer.address || printer.ip_address;
     if (!ip) return res.status(400).json({ error: 'Printer has no IP address stored' });
 
-    // Build a minimal single-page PDF test page
-    const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595, 842]); // A4
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-    page.drawText('OpenDirectory', { x: 50, y: 780, size: 28, font: bold, color: rgb(0.15, 0.35, 0.75) });
-    page.drawText('Test Page', { x: 50, y: 748, size: 18, font, color: rgb(0.3, 0.3, 0.3) });
-    page.drawLine({ start: { x: 50, y: 738 }, end: { x: 545, y: 738 }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
-    page.drawText(`Printer: ${printer.name}`, { x: 50, y: 710, size: 12, font });
-    page.drawText(`Address: ${ip}`, { x: 50, y: 690, size: 12, font });
-    page.drawText(`Sent by: ${user_name}`, { x: 50, y: 670, size: 12, font });
-    page.drawText(`Document: ${document_name}`, { x: 50, y: 650, size: 12, font });
-    page.drawText(`Time: ${new Date().toLocaleString('de-CH')}`, { x: 50, y: 630, size: 12, font });
-    page.drawText('If you can read this, the printer connection is working correctly.', { x: 50, y: 590, size: 11, font, color: rgb(0.4, 0.4, 0.4) });
-
-    const pdfBytes = await pdfDoc.save();
+    // Build a PCL5 test page (supported by all HP printers)
+    const ESC = '\x1B';
+    const now = new Date().toLocaleString('de-CH');
+    const lines = [
+      '================================================',
+      '   OpenDirectory  -  Test Page',
+      '================================================',
+      '',
+      `  Printer  : ${printer.name}`,
+      `  Address  : ${ip}`,
+      `  Document : ${document_name}`,
+      `  Sent by  : ${user_name}`,
+      `  Time     : ${now}`,
+      '',
+      '------------------------------------------------',
+      '  If you can read this, the printer',
+      '  connection is working correctly.',
+      '------------------------------------------------',
+    ];
+    let pcl = ESC + 'E';            // Reset printer
+    pcl += ESC + '&l0O';            // Portrait
+    pcl += ESC + '(0U';             // US ASCII symbol set
+    pcl += ESC + '(s0p10h12v0s0b3T'; // Courier 12pt fixed
+    pcl += ESC + '&a5R' + ESC + '&a5C'; // Start at row 5, col 5
+    lines.forEach(line => { pcl += line + '\r\n'; });
+    pcl += ESC + 'E';               // Reset + eject page
+    const jobData = Buffer.from(pcl, 'latin1');
 
     // Send via IPP Print-Job request
     const ipp = require('ipp');
@@ -375,17 +384,17 @@ app.post('/api/printer/jobs', async (req, res) => {
       'operation-attributes-tag': {
         'requesting-user-name': user_name,
         'job-name': document_name,
-        'document-format': 'application/pdf',
+        'document-format': 'application/vnd.hp-PCL',
       },
-      data: Buffer.from(pdfBytes),
+      data: jobData,
     };
 
     await new Promise((resolve, reject) => {
       ippPrinter.execute('Print-Job', ippMsg, (err, response) => {
         if (err) return reject(err);
-        const status = response?.['status-code'];
-        if (status && status !== 'successful-ok' && status !== 'successful-ok-ignored-or-substituted-attributes') {
-          return reject(new Error(`IPP status: ${status}`));
+        const status = response?.statusCode || response?.['status-code'];
+        if (status && !String(status).startsWith('successful')) {
+          return reject(new Error(`IPP error: ${status}`));
         }
         resolve(response);
       });

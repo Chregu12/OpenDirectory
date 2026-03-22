@@ -1315,7 +1315,7 @@ export default function PrintersView() {
   const TABS: { id: PrinterTab; label: string; count?: number }[] = [
     { id: 'printers', label: 'Printers',   count: printers.length },
     { id: 'scanners', label: 'Scanners',   count: scanners.length },
-    { id: 'jobs',     label: 'Print Jobs', count: jobs.filter(j => j.status === 'pending' || j.status === 'printing').length },
+    { id: 'jobs',     label: 'Print Jobs', count: jobs.length },
     { id: 'quotas',   label: 'Quotas',     count: quotas.length },
   ];
 
