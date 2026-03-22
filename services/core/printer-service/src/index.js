@@ -473,6 +473,48 @@ app.post('/api/printer/test-scan', async (req, res) => {
   }
 });
 
+// GET /api/printer/scanners — return printers that have eSCL scan capability
+app.get('/api/printer/scanners', async (req, res) => {
+  try {
+    const allPrinters = await printerManager.listPrinters();
+    if (allPrinters.length === 0) return res.json({ data: [] });
+
+    const http = require('http');
+    const checkEscl = (ip) => new Promise(resolve => {
+      const req2 = http.get(
+        { host: ip, port: 80, path: '/eSCL/ScannerCapabilities', timeout: 2000 },
+        r => { resolve(r.statusCode === 200); r.resume(); }
+      );
+      req2.on('error', () => resolve(false));
+      req2.on('timeout', () => { req2.destroy(); resolve(false); });
+    });
+
+    const results = await Promise.all(
+      allPrinters.map(async p => {
+        const ip = p.address || p.ip_address || p.ip;
+        if (!ip) return null;
+        const hasEscl = p.isMultifunction || p.is_multifunction || await checkEscl(ip);
+        if (!hasEscl) return null;
+        return {
+          id:      p.id,
+          name:    p.name,
+          ip,
+          model:   p.model,
+          status:  p.status || 'online',
+          formats: p.scanFormats?.length ? p.scanFormats
+                 : p.scan_formats?.length ? p.scan_formats
+                 : ['PDF', 'JPEG'],
+        };
+      })
+    );
+
+    res.json({ data: results.filter(Boolean) });
+  } catch (error) {
+    logger.error('List scanners (frontend) error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/printer/jobs — return job log for the frontend
 app.get('/api/printer/jobs', (req, res) => {
   const { printer } = req.query;
