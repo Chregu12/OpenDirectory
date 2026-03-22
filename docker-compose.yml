@@ -284,6 +284,7 @@ services:
       - ENABLE_SCANNING=true
     ports:
       - "3006:3006"
+      - "631:631"
     networks:
       - opendirectory
     depends_on:

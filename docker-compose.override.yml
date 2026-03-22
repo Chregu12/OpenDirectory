@@ -14,8 +14,11 @@ services:
     volumes: []
 
   # node:18-alpine sets ENTRYPOINT ["node"], override to run the shell startup script
+  # Port 631 conflicts with macOS built-in CUPS — suppress it on macOS
   printer-service:
     entrypoint: ["sh", "/app/start.sh"]
+    ports:
+      - "3006:3006"
 
   api-backend:
     depends_on:

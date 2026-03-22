@@ -202,16 +202,20 @@ class PrinterManager extends EventEmitter {
   async removePrinter(id) {
     try {
       const printer = await this.getPrinter(id);
-      
-      // Remove from CUPS
-      await this.cups.removePrinter(printer.name);
-      
+
+      // Remove from CUPS (optional — may not be available on all platforms)
+      try {
+        await this.cups.removePrinter(printer.name);
+      } catch (cupsErr) {
+        this.logger.warn(`CUPS unavailable, removing printer from DB only: ${cupsErr.message}`);
+      }
+
       // Remove from database
       await this.db.query('DELETE FROM printers WHERE id = $1', [id]);
-      
+
       this.printers.delete(id);
       this.emit('printer:removed', { id, name: printer.name });
-      
+
       this.logger.info(`Removed printer: ${printer.name}`);
       return true;
     } catch (error) {
