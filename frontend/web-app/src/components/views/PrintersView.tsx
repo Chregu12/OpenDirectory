@@ -1288,12 +1288,13 @@ export default function PrintersView() {
     try {
       await printerApi.submitPrintJob({ printer_name: printer.name, document_name: 'Test Page', user_name: 'admin', pages: 1 });
       toast.success(`Test page sent to ${printer.name}`);
-      await loadJobs();
     } catch {
       toast.error('Could not send test page — printer service unavailable');
     } finally {
       setTestingPage(null);
     }
+    // Refresh job list independently — don't let this fail silently affect the success toast
+    loadJobs().catch(() => {});
   };
 
   const handleScanFromPrinter = (printer: Printer) => {
