@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { calculateRam, MODULES, CORE_RAM_MB } from '@/lib/modules';
-import { systemApi } from '@/lib/api';
+
 
 interface RamMeterProps {
   /** Currently enabled module IDs */
@@ -32,21 +32,8 @@ export default function RamMeter({
   const [systemRamMB, setSystemRamMB] = useState(propSystemRam || 0);
   const ram = calculateRam(enabledModules);
 
-  // Try to fetch actual system RAM from backend
   useEffect(() => {
-    if (propSystemRam) return;
-    const fetchSystemRam = async () => {
-      try {
-        const response = await systemApi.getResources();
-        if (response.data?.data?.ram?.totalMB) {
-          setSystemRamMB(response.data.data.ram.totalMB);
-        }
-      } catch {
-        // Default to 4GB if we can't detect
-        setSystemRamMB(4096);
-      }
-    };
-    fetchSystemRam();
+    if (!propSystemRam) setSystemRamMB(4096);
   }, [propSystemRam]);
 
   const usagePercent = systemRamMB > 0 ? Math.min(100, (ram.totalMB / systemRamMB) * 100) : 0;
