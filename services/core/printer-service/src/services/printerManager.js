@@ -418,20 +418,35 @@ class PrinterManager extends EventEmitter {
       
       return printer;
     } catch (error) {
-      this.logger.error(`Status check error for ${printerId}:`, error);
-      
-      // Mark as offline
-      await this.db.query(`
-        UPDATE printers 
-        SET status = 'offline', status_message = $1
-        WHERE id = $2
-      `, [error.message, printerId]);
-      
-      this.emit('printer:status', {
-        printerId,
-        status: 'offline',
-        message: error.message
-      });
+      this.logger.warn(`CUPS unavailable for ${printerId}, falling back to direct probe: ${error.message}`);
+
+      // CUPS not available — probe the printer directly via TCP to determine real status
+      try {
+        const printer = await this.getPrinter(printerId);
+        const host = printer.address;
+        const port = printer.port || 631;
+        // Try multiple ports — HP printers in sleep mode respond on 80 but not 631
+        const probePorts = [80, 9100, port];
+        const tryPort = (p) => new Promise(resolve => {
+          const net = require('net');
+          const socket = net.createConnection({ host, port: p, timeout: 4000 });
+          socket.on('connect', () => { socket.destroy(); resolve(true); });
+          socket.on('error',   () => resolve(false));
+          socket.on('timeout', () => { socket.destroy(); resolve(false); });
+        });
+        let reachable = false;
+        for (const p of probePorts) {
+          if (await tryPort(p)) { reachable = true; break; }
+        }
+
+        const newStatus = reachable ? 'online' : 'offline';
+        await this.db.query(`
+          UPDATE printers SET status = $1, status_message = $2 WHERE id = $3
+        `, [newStatus, reachable ? null : 'Unreachable', printerId]);
+        this.emit('printer:status', { printerId, status: newStatus });
+      } catch (probeErr) {
+        this.logger.error(`Direct probe failed for ${printerId}:`, probeErr);
+      }
     }
   }
 

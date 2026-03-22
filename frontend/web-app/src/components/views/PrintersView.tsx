@@ -715,6 +715,17 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
   });
   const [scanning, setScanning] = useState(false);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(defaultProfile?.id ?? null);
+  const [scanShares, setScanShares] = useState<{ id: string; name: string; path: string; server: string; protocol: string }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/network/shares')
+      .then(r => r.ok ? r.json() : { shares: [] })
+      .then(data => {
+        const shares = (data.shares ?? []).filter((s: any) => s.purpose?.includes('scan'));
+        setScanShares(shares);
+      })
+      .catch(() => {});
+  }, []);
 
   const applyProfile = (p: ScanProfile) => {
     setForm({ resolution: p.resolution, color: p.color, format: p.format, destination: p.destination });
@@ -811,12 +822,29 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Zielordner oder E-Mail *</label>
-            <input
-              value={form.destination}
-              onChange={e => { setForm(f => ({ ...f, destination: e.target.value })); setActiveProfileId(null); }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="/scans/dokumente  oder  user@example.com"
-            />
+            {scanShares.length > 0 ? (
+              <select
+                value={form.destination}
+                onChange={e => { setForm(f => ({ ...f, destination: e.target.value })); setActiveProfileId(null); }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">— Share auswählen oder Pfad eingeben —</option>
+                {scanShares.map(s => {
+                  const path = s.protocol === 'SMB' ? `\\\\${s.server}\\${s.path}` : s.protocol === 'NFS' ? `${s.server}:${s.path}` : s.path;
+                  return <option key={s.id} value={path}>{s.name} ({path})</option>;
+                })}
+                <option value="__custom__">Eigenen Pfad eingeben…</option>
+              </select>
+            ) : null}
+            {(scanShares.length === 0 || form.destination === '__custom__') && (
+              <input
+                value={form.destination === '__custom__' ? '' : form.destination}
+                onChange={e => { setForm(f => ({ ...f, destination: e.target.value })); setActiveProfileId(null); }}
+                className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${scanShares.length > 0 ? 'mt-2' : ''}`}
+                placeholder="/scans/dokumente  oder  user@example.com"
+                autoFocus={form.destination === '__custom__'}
+              />
+            )}
           </div>
           <div className="flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose}
@@ -1188,6 +1216,7 @@ export default function PrintersView() {
   const [testingScan, setTestingScan]   = useState<string | null>(null);
   const [editingQuota, setEditingQuota] = useState<{ userId: string; value: string } | null>(null);
   const [printServerInfo, setPrintServerInfo] = useState<Printer | null>(null);
+  const [jobPeriod, setJobPeriod] = useState<'today' | 'week' | 'all'>('all');
   const jobTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load ──────────────────────────────────────────────────────────────────
@@ -1345,7 +1374,29 @@ export default function PrintersView() {
     );
   }
 
-  const displayedJobs = filterPrinter ? jobs.filter(j => j.printer === filterPrinter) : jobs;
+  const displayedJobs = (() => {
+    let list = jobs;
+    if (filterPrinter) list = list.filter(j => j.printer === filterPrinter);
+    if (jobPeriod !== 'all') {
+      const cutoff = new Date();
+      if (jobPeriod === 'today') cutoff.setHours(0, 0, 0, 0);
+      else cutoff.setDate(cutoff.getDate() - 7);
+      list = list.filter(j => new Date(j.submitted) >= cutoff);
+    }
+    return list;
+  })();
+
+  // Per-user stats (from filtered jobs)
+  const userStats = (() => {
+    const map: Record<string, { pages: number; jobs: number }> = {};
+    for (const j of displayedJobs) {
+      const u = j.user || 'Unbekannt';
+      if (!map[u]) map[u] = { pages: 0, jobs: 0 };
+      map[u].pages += j.pages || 0;
+      map[u].jobs  += 1;
+    }
+    return Object.entries(map).sort((a, b) => b[1].pages - a[1].pages);
+  })();
 
   return (
     <div className="p-6 space-y-6">
@@ -1564,27 +1615,75 @@ export default function PrintersView() {
 
       {/* ── PRINT JOBS TAB ─────────────────────────────────────────────────── */}
       {activeTab === 'jobs' && (
-        <div className="space-y-3">
-          {filterPrinter && (
-            <div className="flex items-center gap-2 text-sm text-gray-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-              <span>Filtered to: <strong>{filterPrinter}</strong></span>
-              <button onClick={() => setFilterPrinter(null)} className="ml-auto text-xs text-blue-600 hover:underline">
-                Clear filter
-              </button>
+        <div className="space-y-4">
+
+          {/* Filter bar */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Time period */}
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
+              {(['today', 'week', 'all'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setJobPeriod(p)}
+                  className={`px-3 py-1.5 transition-colors ${jobPeriod === p ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                >
+                  {p === 'today' ? 'Heute' : p === 'week' ? 'Diese Woche' : 'Alle'}
+                </button>
+              ))}
+            </div>
+
+            {/* Printer filter chip */}
+            {filterPrinter && (
+              <div className="flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5">
+                <span>{filterPrinter}</span>
+                <button onClick={() => setFilterPrinter(null)} className="text-blue-400 hover:text-blue-600">
+                  <XMarkIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            <span className="ml-auto text-xs text-gray-400">{displayedJobs.length} Aufträge · Auto-refresh 15s</span>
+          </div>
+
+          {/* Per-user stats */}
+          {userStats.length > 0 && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Druckvolumen nach Benutzer</p>
+              <div className="flex flex-wrap gap-3">
+                {userStats.map(([user, { pages, jobs: jCount }]) => {
+                  const maxPages = userStats[0][1].pages || 1;
+                  const pct = Math.round((pages / maxPages) * 100);
+                  return (
+                    <div key={user} className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 min-w-[160px]">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-800 truncate">{user}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                            <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-500 whitespace-nowrap">{pages} S. · {jCount} Job{jCount !== 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
+
+          {/* Jobs table */}
           {displayedJobs.length === 0
             ? <EmptyState
                 icon={PrinterIcon}
-                title="No print jobs"
-                description={filterPrinter ? `No jobs found for ${filterPrinter}.` : 'No print jobs in the queue.'}
+                title="Keine Druckaufträge"
+                description={filterPrinter ? `Keine Aufträge für ${filterPrinter} im gewählten Zeitraum.` : 'Noch keine Druckaufträge im Verlauf.'}
               />
             : (
               <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      {['Document', 'User', 'Printer', 'Pages', 'Submitted', 'Status', 'Actions'].map(h => (
+                      {['Dokument', 'Benutzer', 'Drucker', 'Seiten', 'Zeit', 'Status', ''].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
@@ -1593,9 +1692,14 @@ export default function PrintersView() {
                     {displayedJobs.map(job => (
                       <tr key={job.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium text-gray-900 max-w-[200px] truncate">{job.documentName}</td>
-                        <td className="px-4 py-3 text-gray-600">{job.user}</td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {job.user
+                            ? <span className="inline-flex items-center gap-1">{job.user}</span>
+                            : <span className="text-gray-400 italic">Unbekannt</span>
+                          }
+                        </td>
                         <td className="px-4 py-3 text-gray-600">{job.printer}</td>
-                        <td className="px-4 py-3 text-gray-600">{job.pages}</td>
+                        <td className="px-4 py-3 text-gray-600">{job.pages ?? '—'}</td>
                         <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{fmtDate(job.submitted)}</td>
                         <td className="px-4 py-3"><JobStatusBadge status={job.status} /></td>
                         <td className="px-4 py-3">
@@ -1604,7 +1708,7 @@ export default function PrintersView() {
                               onClick={() => handleCancelJob(job.id)}
                               className="px-2 py-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 rounded-lg"
                             >
-                              Cancel
+                              Abbrechen
                             </button>
                           )}
                         </td>
@@ -1615,7 +1719,6 @@ export default function PrintersView() {
               </div>
             )
           }
-          <p className="text-xs text-gray-400 text-right">Auto-refreshes every 15 seconds</p>
         </div>
       )}
 

@@ -74,6 +74,7 @@ interface FileShare {
   allowed_groups: string[];
   allowed_users: string[];
   created_at: string;
+  purpose?: ('scan' | 'apps')[];
 }
 
 interface LdapGroup { id: string; displayName: string; members: string[] }
@@ -223,12 +224,15 @@ export default function NetworkInfrastructureIntegration() {
     // access control
     allowedGroups: string[];
     allowedUsers: string[];
+    // purpose tagging
+    purpose: ('scan' | 'apps')[];
   }>({
     protocol: 'SMB', name: '', server: '', path: '', permissions: 'rw',
     username: '', password: '', driveLetter: 'Z',
     bucket: '', region: 'eu-west-1', endpoint: '', accessKey: '', secretKey: '',
     nfsOptions: 'rw,async',
     allowedGroups: [], allowedUsers: [],
+    purpose: [],
   });
 
   const [networkDevices, setNetworkDevices] = useState<NetworkDevice[]>([]);
@@ -285,7 +289,7 @@ export default function NetworkInfrastructureIntegration() {
 
   const openWizard = async () => {
     setWizardStep(1);
-    setWizardShare({ protocol: 'SMB', name: '', server: '', path: '', permissions: 'rw', username: '', password: '', driveLetter: 'Z', bucket: '', region: 'eu-west-1', endpoint: '', accessKey: '', secretKey: '', nfsOptions: 'rw,async', allowedGroups: [], allowedUsers: [] });
+    setWizardShare({ protocol: 'SMB', name: '', server: '', path: '', permissions: 'rw', username: '', password: '', driveLetter: 'Z', bucket: '', region: 'eu-west-1', endpoint: '', accessKey: '', secretKey: '', nfsOptions: 'rw,async', allowedGroups: [], allowedUsers: [], purpose: [] });
     setShowWizardPw(false);
     // Prefetch groups/users for step 3
     try {
@@ -347,6 +351,7 @@ export default function NetworkInfrastructureIntegration() {
         drive_letter:    w.protocol === 'SMB' ? (w.driveLetter || '') : '',
         allowed_groups:  w.allowedGroups,
         allowed_users:   w.allowedUsers,
+        purpose:         w.purpose,
       };
       const r = await fetch('/api/network/shares', {
         method: 'POST',
@@ -591,6 +596,12 @@ export default function NetworkInfrastructureIntegration() {
                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
                           <LockClosedIcon className="h-3 w-3" /> Vault
                         </span>
+                      )}
+                      {share.purpose?.includes('scan') && (
+                        <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-teal-100 text-teal-700">Scan</span>
+                      )}
+                      {share.purpose?.includes('apps') && (
+                        <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-sky-100 text-sky-700">Apps</span>
                       )}
                     </div>
 
@@ -932,6 +943,51 @@ export default function NetworkInfrastructureIntegration() {
                       )}
                     </>
                   )}
+
+                  {/* Purpose tagging */}
+                  <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+                    <p className="text-xs font-medium text-gray-700">Verwendungszweck <span className="text-gray-400 font-normal">(optional)</span></p>
+                    <div className="flex gap-2">
+                      {([
+                        { id: 'scan' as const, label: 'Scan-Ziel', desc: 'Zielordner für Scanner', color: 'teal' as const },
+                        { id: 'apps' as const, label: 'App-Verteilung', desc: 'Software-Pakete, Benutzer lesen', color: 'sky' as const },
+                      ]).map(({ id, label, desc, color }) => {
+                        const sel = wizardShare.purpose.includes(id);
+                        const toggle = () => {
+                          setWizardShare(s => {
+                            const next = sel ? s.purpose.filter(p => p !== id) : [...s.purpose, id];
+                            // auto-set read-only when apps is selected
+                            return { ...s, purpose: next, permissions: next.includes('apps') ? 'ro' : s.permissions };
+                          });
+                        };
+                        return (
+                          <button key={id} type="button" onClick={toggle}
+                            className={`flex-1 flex items-start gap-2 p-2.5 rounded-lg border text-left transition-all ${
+                              sel
+                                ? color === 'teal' ? 'border-teal-400 bg-teal-50' : 'border-sky-400 bg-sky-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}>
+                            <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                              sel
+                                ? color === 'teal' ? 'bg-teal-600' : 'bg-sky-600'
+                                : 'border border-gray-300'
+                            }`}>
+                              {sel && <CheckIcon className="h-3 w-3 text-white" />}
+                            </div>
+                            <div>
+                              <p className={`text-xs font-medium ${sel ? (color === 'teal' ? 'text-teal-800' : 'text-sky-800') : 'text-gray-700'}`}>{label}</p>
+                              <p className="text-xs text-gray-400">{desc}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {wizardShare.purpose.includes('apps') && (
+                      <p className="text-xs text-sky-600 bg-sky-50 rounded px-2 py-1">
+                        App-Verteilung setzt Berechtigung auf «Nur Lesen»
+                      </p>
+                    )}
+                  </div>
 
                   {/* S3 */}
                   {wizardShare.protocol === 'S3' && (
