@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   PrinterIcon,
   ChartBarIcon,
@@ -49,6 +49,37 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const [orgName, setOrgName] = useState('');
   const [deviceCounts, setDeviceCounts] = useState({ windows: 5, macos: 5, linux: 3 });
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Load existing config on mount
+  useEffect(() => {
+    const load = async () => {
+      // Restore orgName + deviceCounts from last saved setup
+      try {
+        const saved = localStorage.getItem('od_setup_completed');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.orgName) setOrgName(parsed.orgName);
+          if (parsed.devices) setDeviceCounts(parsed.devices);
+        }
+      } catch {}
+
+      // Load currently enabled modules from the API
+      try {
+        const res = await configApi.getModules();
+        const modulesMap: Record<string, any> = res.data || {};
+        const enabledIds = Object.entries(modulesMap)
+          .filter(([, cfg]: [string, any]) => cfg.enabled)
+          .map(([id]) => id)
+          // Only include IDs that exist in the MODULE_REGISTRY (optional modules)
+          .filter(id => MODULE_REGISTRY.some(m => m.id === id));
+        if (enabledIds.length > 0) setSelectedModules(enabledIds);
+      } catch {}
+
+      setLoading(false);
+    };
+    load();
+  }, []);
 
   const toggleModule = (id: string) => {
     setSelectedModules(prev =>
@@ -87,10 +118,21 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-2xl shadow-xl p-8 flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">Konfiguration laden…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <WizardLayout
       title="OpenDirectory Setup"
-      subtitle="Erstmalige Konfiguration"
+      subtitle="Konfiguration bearbeiten"
       color="blue"
       steps={STEPS}
       currentStep={step}
