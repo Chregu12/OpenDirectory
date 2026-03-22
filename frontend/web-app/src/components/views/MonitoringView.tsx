@@ -24,7 +24,7 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
-import { healthApi, prometheusApi, grafanaApi, deviceApi } from '@/lib/api';
+import { healthApi, prometheusApi, grafanaApi, deviceApi, lldapApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 import MonitoringAlertingWizard from '@/components/setup/MonitoringAlertingWizard';
 
@@ -276,60 +276,66 @@ export default function MonitoringView() {
 
   const loadMetrics = async () => {
     try {
-      // KPIs
-      const kpiRes = await prometheusApi.getKPIs(timeRange);
-      const k = kpiRes.data.kpis || {};
+      // KPIs from Prometheus + real API counts in parallel
+      const [kpiRes, usersRes, devicesRes] = await Promise.allSettled([
+        prometheusApi.getKPIs(timeRange),
+        lldapApi.getUsers(),
+        deviceApi.getDevices(),
+      ]);
+
+      const k = kpiRes.status === 'fulfilled' ? (kpiRes.value.data.kpis || {}) : {};
+
+      const pct = (key: string) => {
+        const v = k[key]?.data?.result?.[0]?.value?.[1];
+        return v != null ? `${parseFloat(v).toFixed(1)}%` : 'N/A';
+      };
+
+      const userCount = usersRes.status === 'fulfilled'
+        ? (usersRes.value.data?.data?.length ?? usersRes.value.data?.users?.length ?? 'N/A')
+        : 'N/A';
+      const deviceCount = devicesRes.status === 'fulfilled'
+        ? (devicesRes.value.data?.data?.length ?? 'N/A')
+        : 'N/A';
+
       setKpis([
         {
           label: 'Service Uptime',
-          value: k.serviceUptime?.data?.result?.[0]?.value?.[1]
-            ? `${parseFloat(k.serviceUptime.data.result[0].value[1]).toFixed(1)}%`
-            : 'N/A',
+          value: pct('serviceUptime'),
           icon: ServerIcon,
           color: 'text-green-600',
           bg: 'bg-green-50',
         },
         {
-          label: 'Total Requests',
-          value: k.totalRequests?.data?.result?.[0]?.value?.[1]
-            ? parseInt(k.totalRequests.data.result[0].value[1]).toLocaleString()
-            : 'N/A',
-          icon: ChartBarIcon,
+          label: 'CPU Usage',
+          value: pct('cpuUsage'),
+          icon: CpuChipIcon,
           color: 'text-blue-600',
           bg: 'bg-blue-50',
         },
         {
-          label: 'Error Rate',
-          value: k.errorRate?.data?.result?.[0]?.value?.[1]
-            ? `${parseFloat(k.errorRate.data.result[0].value[1]).toFixed(2)}%`
-            : 'N/A',
+          label: 'Memory Usage',
+          value: pct('memoryUsage'),
           icon: CircleStackIcon,
-          color: 'text-red-600',
-          bg: 'bg-red-50',
-        },
-        {
-          label: 'Avg Response',
-          value: k.avgResponseTime?.data?.result?.[0]?.value?.[1]
-            ? `${(parseFloat(k.avgResponseTime.data.result[0].value[1]) * 1000).toFixed(0)}ms`
-            : 'N/A',
-          icon: CpuChipIcon,
           color: 'text-purple-600',
           bg: 'bg-purple-50',
         },
         {
-          label: 'Active Users',
-          value: k.activeUsers?.data?.result?.[0]?.value?.[1]
-            ? parseInt(k.activeUsers.data.result[0].value[1]).toLocaleString()
-            : 'N/A',
+          label: 'Disk Usage',
+          value: pct('diskUsage'),
+          icon: ChartBarIcon,
+          color: 'text-orange-600',
+          bg: 'bg-orange-50',
+        },
+        {
+          label: 'Users',
+          value: typeof userCount === 'number' ? userCount.toLocaleString() : String(userCount),
           icon: ServerIcon,
           color: 'text-indigo-600',
           bg: 'bg-indigo-50',
         },
         {
           label: 'Devices',
-          value: k.connectedDevices?.data?.result?.[0]?.value?.[1]
-            ? parseInt(k.connectedDevices.data.result[0].value[1]).toLocaleString()
-            : 'N/A',
+          value: typeof deviceCount === 'number' ? deviceCount.toLocaleString() : String(deviceCount),
           icon: CpuChipIcon,
           color: 'text-teal-600',
           bg: 'bg-teal-50',

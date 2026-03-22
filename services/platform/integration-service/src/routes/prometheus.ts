@@ -173,27 +173,18 @@ router.get('/kpis', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as string) || '1h';
     
+    const [serviceUptime, cpuUsage, memoryUsage, diskUsage] = await Promise.all([
+      prometheusService.query('avg(up) * 100'),
+      prometheusService.query('100 - avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100'),
+      prometheusService.query('(1 - avg(node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100'),
+      prometheusService.query('100 - (sum(node_filesystem_free_bytes{fstype=~"ext4|xfs|btrfs|vfat"}) / sum(node_filesystem_size_bytes{fstype=~"ext4|xfs|btrfs|vfat"}) * 100)'),
+    ]);
+
     const kpis = {
-      // Service availability
-      serviceUptime: await prometheusService.query('avg(up{job=~".*-service"}) * 100'),
-      
-      // Request metrics
-      totalRequests: await prometheusService.query(`sum(increase(http_requests_total[${timeRange}]))`),
-      errorRate: await prometheusService.query('sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100'),
-      avgResponseTime: await prometheusService.query('histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))'),
-      
-      // Authentication metrics
-      activeUsers: await prometheusService.query('sum(auth_sessions_active)'),
-      authFailureRate: await prometheusService.query('sum(rate(auth_failures_total[5m])) / sum(rate(auth_attempts_total[5m])) * 100'),
-      
-      // System resources
-      memoryUsage: await prometheusService.query('(1 - avg(node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100'),
-      cpuUsage: await prometheusService.query('100 - avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100'),
-      diskUsage: await prometheusService.query('100 - avg(node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100'),
-      
-      // Device metrics
-      connectedDevices: await prometheusService.query('sum(device_connections_active)'),
-      deviceRegistrations: await prometheusService.query(`sum(increase(device_registrations_total[${timeRange}]))`),
+      serviceUptime,
+      cpuUsage,
+      memoryUsage,
+      diskUsage,
     };
 
     res.json({
