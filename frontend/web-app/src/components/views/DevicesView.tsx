@@ -22,6 +22,7 @@ import {
   ClockIcon,
   PlusCircleIcon,
   MinusCircleIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { deviceApi, api } from '@/lib/api';
 import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
@@ -910,8 +911,8 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
 type EnrollTab      = 'token' | 'script' | 'domain';
 type EnrollPlatform = 'macOS' | 'Linux' | 'Windows';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://opendirectory.heusser.local';
-const AD_DOMAIN = process.env.NEXT_PUBLIC_AD_DOMAIN || 'heusser.local';
+const BASE_URL  = process.env.NEXT_PUBLIC_APP_URL  || 'https://opendirectory.heusser.local';
+const AD_DOMAIN = process.env.NEXT_PUBLIC_AD_DOMAIN || '';
 
 function enrollScript(platform: EnrollPlatform, token?: string): string {
   const t = token ? ` --token ${token}` : '';
@@ -1092,22 +1093,47 @@ function EnrollModal({ onClose }: { onClose: () => void }) {
           {/* ── Domain Join tab ── */}
           {tab === 'domain' && (
             <div className="space-y-3">
-              <p className="text-sm text-gray-600">
-                Join the device directly to the OpenDirectory domain (LDAP/AD-compatible).
-              </p>
-              <div>
-                <div className="flex items-center justify-between bg-gray-50 rounded-t-lg px-4 py-2 border border-gray-200 border-b-0">
-                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">{platform}</span>
-                  <button onClick={() => copy(currentScript)}
-                    className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900">
-                    {copied ? <><CheckIcon className="w-4 h-4 text-green-500" /><span className="text-green-600">Copied</span></>
-                            : <><ClipboardDocumentIcon className="w-4 h-4" /><span>Copy</span></>}
-                  </button>
+              {!AD_DOMAIN ? (
+                /* No domain configured yet */
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-amber-800">Keine Domain konfiguriert</p>
+                      <p className="text-xs text-amber-700">
+                        Um Geräte per Domain-Join einzubinden, muss zuerst eine Active-Directory-Domain eingerichtet werden.
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href="/infrastructure"
+                    onClick={onClose}
+                    className="flex items-center justify-center gap-2 w-full rounded-md bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 px-4 transition-colors"
+                  >
+                    <ServerIcon className="w-4 h-4" />
+                    Domain jetzt einrichten →
+                  </a>
                 </div>
-                <pre className="bg-gray-900 text-green-400 text-sm p-4 rounded-b-lg overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
-                  {currentScript}
-                </pre>
-              </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600">
+                    Gerät direkt in die Domain <span className="font-mono font-semibold text-gray-800">{AD_DOMAIN}</span> einbinden.
+                  </p>
+                  <div>
+                    <div className="flex items-center justify-between bg-gray-50 rounded-t-lg px-4 py-2 border border-gray-200 border-b-0">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">{platform}</span>
+                      <button onClick={() => copy(currentScript)}
+                        className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900">
+                        {copied ? <><CheckIcon className="w-4 h-4 text-green-500" /><span className="text-green-600">Copied</span></>
+                                : <><ClipboardDocumentIcon className="w-4 h-4" /><span>Copy</span></>}
+                      </button>
+                    </div>
+                    <pre className="bg-gray-900 text-green-400 text-sm p-4 rounded-b-lg overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
+                      {currentScript}
+                    </pre>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
