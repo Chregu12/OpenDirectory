@@ -350,7 +350,7 @@ export default function DashboardView() {
       // Prometheus resources
       prometheusApi.query('100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
       prometheusApi.query('100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100)'),
-      prometheusApi.query('100 - (node_filesystem_free_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100)'),
+      prometheusApi.query('100 - (sum(node_filesystem_free_bytes{fstype=~"ext4|xfs|btrfs|vfat"}) / sum(node_filesystem_size_bytes{fstype=~"ext4|xfs|btrfs|vfat"}) * 100)'),
       // Activity feed (may 404)
       fetch('/api/audit/events').then(r => { if (!r.ok) throw new Error('no audit'); return r.json(); }),
     ]);
