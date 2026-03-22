@@ -252,7 +252,7 @@ class ScannerService extends EventEmitter {
     const scanners = [];
     
     try {
-      const mdns = require('mdns');
+      let mdns; try { mdns = require('mdns'); } catch (_) { return scanners; }
       const browser = mdns.createBrowser(mdns.tcp('uscan'));
       
       return new Promise((resolve) => {

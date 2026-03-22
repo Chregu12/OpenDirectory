@@ -12,7 +12,7 @@ const PrinterManager = require('./services/printerManager');
 const PrintJobQueue = require('./services/printQueue');
 const ScannerService = require('./services/scanner');
 const PermissionManager = require('./services/permissions');
-const PrinterDeployment = require('./services/deployment');
+let PrinterDeployment; try { PrinterDeployment = require('./services/deployment'); } catch (e) { PrinterDeployment = class { generateConfig() { return ''; } deployPrinters() { return []; } }; }
 const PrinterAgentService = require('./services/PrinterAgentService');
 const QuotaManager = require('./services/quota');
 const PrintAnalytics = require('./services/analytics');
@@ -160,6 +160,76 @@ app.get('/api/printers', async (req, res) => {
     res.json({ success: true, printers });
   } catch (error) {
     logger.error('List printers error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ── Frontend-compatible routes (called via /api/printer/* gateway prefix) ────
+
+// Map frontend field names (ip, model, isMultifunction, scanFormats) to service fields
+function mapFrontendPayload(body) {
+  const { ip, ipAddress, name, model, protocol, driver, location, isMultifunction, scanFormats, description } = body;
+  const address = ip || ipAddress || body.address;
+  const proto = (protocol || 'IPP').toLowerCase();
+  return {
+    name:            name,
+    displayName:     name,
+    address,
+    protocol:        proto,
+    port:            proto === 'ipp' ? 631 : proto === 'lpd' ? 515 : 9100,
+    driver:          driver || 'everywhere',
+    model:           model || '',
+    description:     description || model || '',
+    location:        location || '',
+    isMultifunction: !!isMultifunction,
+    scanFormats:     scanFormats || [],
+  };
+}
+
+function mapToFrontend(p) {
+  return {
+    id:              p.id,
+    name:            p.display_name || p.name,
+    ip:              p.address,
+    model:           p.model || '',
+    protocol:        (p.protocol || 'IPP').toUpperCase(),
+    status:          p.status === 'idle' || p.status === 'online' ? 'online' : p.status === 'offline' ? 'offline' : 'online',
+    queueDepth:      p.queue_depth || 0,
+    location:        p.location || '',
+    isMultifunction: p.is_multifunction || false,
+    scanFormats:     p.scan_formats || [],
+  };
+}
+
+app.get('/api/printer/printers', async (req, res) => {
+  try {
+    const printers = await printerManager.listPrinters();
+    res.json(printers.map(mapToFrontend));
+  } catch (error) {
+    logger.error('List printers (frontend) error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/printer/printers', async (req, res) => {
+  try {
+    const config = mapFrontendPayload(req.body);
+    if (!config.name)    return res.status(400).json({ error: 'Printer name is required' });
+    if (!config.address) return res.status(400).json({ error: 'IP address is required' });
+    const printer = await printerManager.addPrinter(config);
+    res.json(mapToFrontend(printer));
+  } catch (error) {
+    logger.error('Add printer (frontend) error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/printer/printers/:id', async (req, res) => {
+  try {
+    await printerManager.removePrinter(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Delete printer (frontend) error:', error);
     res.status(500).json({ error: error.message });
   }
 });

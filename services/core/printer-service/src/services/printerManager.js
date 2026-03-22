@@ -102,15 +102,19 @@ class PrinterManager extends EventEmitter {
         config.uri = this.buildPrinterURI(config);
       }
       
-      // Add to CUPS
-      const cupsResult = await this.cups.addPrinter({
-        name: config.name,
-        uri: config.uri,
-        driver: config.driver,
-        description: config.description,
-        location: config.location
-      });
-      
+      // Add to CUPS (optional — skip gracefully if CUPS is unavailable)
+      try {
+        await this.cups.addPrinter({
+          name: config.name,
+          uri: config.uri,
+          driver: config.driver,
+          description: config.description,
+          location: config.location
+        });
+      } catch (cupsErr) {
+        this.logger.warn(`CUPS unavailable, storing printer without CUPS registration: ${cupsErr.message}`);
+      }
+
       // Save to database
       const result = await this.db.query(`
         INSERT INTO printers (

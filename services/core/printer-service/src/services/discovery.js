@@ -1,5 +1,7 @@
-const mdns = require('mdns');
-const { Client: SNMPClient } = require('snmp-native');
+let mdns = null;
+try { mdns = require('mdns'); } catch (_) {}
+let SNMPClient = null;
+try { SNMPClient = require('snmp-native').Client; } catch (_) {}
 const ssdp = require('node-ssdp').Client;
 const net = require('net');
 const dgram = require('dgram');
@@ -62,6 +64,7 @@ class PrinterDiscoveryService {
   }
 
   async discoverMDNS(timeout) {
+    if (!mdns) return [];
     return new Promise((resolve) => {
       const printers = [];
       const browser = mdns.createBrowser(mdns.tcp('ipp'));
@@ -145,6 +148,7 @@ class PrinterDiscoveryService {
   }
 
   async discoverSNMP(subnet, timeout) {
+    if (!SNMPClient) return [];
     const printers = [];
     const ips = this.generateIPRange(subnet);
     

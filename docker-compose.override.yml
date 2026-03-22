@@ -1,0 +1,25 @@
+# macOS override: stub out services with missing npm packages or incompatible ports
+
+services:
+  # Disabled: node-samba-client doesn't exist on npm + port 53 conflict
+  network-infrastructure:
+    image: alpine:latest
+    build: !reset null
+    entrypoint: ["sh", "-c", "echo 'network-infrastructure disabled on macOS'; sleep infinity"]
+    ports: []
+    cap_add: []
+    sysctls: []
+    privileged: false
+    depends_on: []
+    volumes: []
+
+  # node:18-alpine sets ENTRYPOINT ["node"], override to run the shell startup script
+  printer-service:
+    entrypoint: ["sh", "/app/start.sh"]
+
+  api-backend:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

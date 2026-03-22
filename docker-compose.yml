@@ -284,7 +284,6 @@ services:
       - ENABLE_SCANNING=true
     ports:
       - "3006:3006"
-      - "631:631"  # CUPS admin interface
     networks:
       - opendirectory
     depends_on:
