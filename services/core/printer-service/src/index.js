@@ -21,6 +21,13 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// Lightweight in-memory job log (survives restarts via DB if needed later)
+const jobLog = [];
+function addJobLog(entry) {
+  jobLog.unshift({ id: require('uuid').v4(), submitted: new Date().toISOString(), ...entry });
+  if (jobLog.length > 200) jobLog.length = 200; // cap at 200 entries
+}
+
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -384,12 +391,35 @@ app.post('/api/printer/jobs', async (req, res) => {
       });
     });
 
+    addJobLog({
+      printer: printer.name,
+      documentName: document_name,
+      user: user_name,
+      pages: req.body.pages || 1,
+      status: 'completed',
+    });
     logger.info(`Test page sent to ${printer.name} (${ip}) by ${user_name}`);
     res.json({ success: true, message: `Test page sent to ${printer.name}` });
   } catch (error) {
+    addJobLog({
+      printer: req.body.printer_name,
+      documentName: req.body.document_name || 'Test Page',
+      user: req.body.user_name || 'admin',
+      pages: req.body.pages || 1,
+      status: 'failed',
+    });
     logger.error('Print job error:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// GET /api/printer/jobs — return job log for the frontend
+app.get('/api/printer/jobs', (req, res) => {
+  const { printer } = req.query;
+  const filtered = printer
+    ? jobLog.filter(j => j.printer === printer)
+    : jobLog;
+  res.json({ data: filtered });
 });
 
 app.get('/api/printers/:id', async (req, res) => {
