@@ -198,28 +198,23 @@ function AddPrinterWizard({ onClose, onAdded }: {
     setProbeResult(null);
     setManualMode(false);
     try {
-      const res = await printerApi.discoverPrinters();
-      const list: ProbeResult[] = Array.isArray(res.data) ? res.data
-        : Array.isArray(res.data?.printers) ? res.data.printers
-        : [];
-      const match = list.find((p: ProbeResult) => p.ip === trimmed) ?? list[0] ?? null;
-      if (match) {
-        const result: ProbeResult = { ...match, ip: trimmed };
-        setProbeResult(result);
-        setSelectedProtocol(result.protocols?.[0] ?? 'IPP');
-        if (result.model) setPrinterName(result.model.replace(/\s+/g, '-'));
-        const detected = isLikelyMultifunction(result.vendor, result.model);
-        setIsMultifunction(detected);
-        setAutoDetectedMF(detected);
-        await loadDrivers(result.vendor, result.model);
-        setStep(2);
+      const res = await printerApi.probePrinter(trimmed);
+      const result: ProbeResult = res.data;
+      setProbeResult(result);
+      setSelectedProtocol(result.protocols?.[0] ?? 'IPP');
+      if (result.model) setPrinterName(result.model.replace(/\s+/g, '-'));
+      const detected = isLikelyMultifunction(result.vendor, result.model);
+      setIsMultifunction(detected);
+      setAutoDetectedMF(detected);
+      await loadDrivers(result.vendor, result.model);
+      setStep(2);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 404) {
+        setProbeError('No printer found at that address. Check the IP and make sure the printer is on.');
       } else {
-        setProbeError('No printer was detected at that address. Check the IP or enter the details manually below.');
-        setManualMode(true);
+        setProbeError('Auto-detection unavailable. Enter the make and model manually to continue.');
       }
-    } catch {
-      // Printer service unavailable — offer manual entry
-      setProbeError('Auto-detection unavailable. Enter the make and model manually to continue.');
       setManualMode(true);
     } finally {
       setProbing(false);

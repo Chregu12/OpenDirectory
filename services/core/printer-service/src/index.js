@@ -164,6 +164,95 @@ app.get('/api/printers', async (req, res) => {
   }
 });
 
+// ── Probe a specific IP for printer info ─────────────────────────────────────
+
+const net = require('net');
+const ipp = (() => { try { return require('ipp'); } catch (_) { return null; } })();
+
+function tcpProbe(host, port, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(timeoutMs);
+    socket.on('connect', () => { socket.destroy(); resolve(true); });
+    socket.on('timeout', () => { socket.destroy(); resolve(false); });
+    socket.on('error', () => { socket.destroy(); resolve(false); });
+    socket.connect(port, host);
+  });
+}
+
+async function ippGetAttributes(host, port) {
+  if (!ipp) return null;
+  return new Promise((resolve) => {
+    try {
+      const printer = new ipp.Printer(`http://${host}:${port}/ipp/print`);
+      printer.execute('Get-Printer-Attributes', {
+        'operation-attributes-tag': { 'requested-attributes': ['printer-make-and-model', 'printer-info', 'document-format-supported'] },
+      }, (err, res) => {
+        if (err || !res) return resolve(null);
+        const attrs = res?.['printer-attributes-tag'] ?? {};
+        resolve({
+          model: attrs['printer-make-and-model'] ?? attrs['printer-info'] ?? null,
+          formats: attrs['document-format-supported'] ?? [],
+        });
+      });
+      setTimeout(() => resolve(null), 4000);
+    } catch (_) { resolve(null); }
+  });
+}
+
+app.post('/api/printer/probe', async (req, res) => {
+  const { ip } = req.body;
+  if (!ip) return res.status(400).json({ error: 'ip is required' });
+
+  // Try common printer ports in parallel
+  const [ipp631, ipp443, raw9100, http80] = await Promise.all([
+    tcpProbe(ip, 631),
+    tcpProbe(ip, 443),
+    tcpProbe(ip, 9100),
+    tcpProbe(ip, 80),
+  ]);
+
+  if (!ipp631 && !ipp443 && !raw9100 && !http80) {
+    return res.status(404).json({ error: 'No printer found at that address' });
+  }
+
+  // Detect protocols available
+  const protocols = [];
+  if (ipp631 || ipp443) protocols.push('IPP');
+  if (raw9100)          protocols.push('RAW');
+  if (http80)           protocols.push('HTTP');
+
+  // Try to get make/model via IPP if port 631 is open
+  let model = null;
+  let vendor = null;
+  if (ipp631) {
+    const attrs = await ippGetAttributes(ip, 631);
+    if (attrs?.model) {
+      model = attrs.model;
+      // Extract vendor from first word of model
+      vendor = model.split(/\s+/)[0];
+    }
+  }
+
+  res.json({
+    ip,
+    vendor: vendor ?? 'Unknown',
+    model:  model  ?? null,
+    protocols,
+    openPorts: { ipp: ipp631, ippSecure: ipp443, raw: raw9100, http: http80 },
+  });
+});
+
+// Alias: /api/printer/discover → run a quick IPP scan (returns [] on macOS; use /probe for targeted checks)
+app.post('/api/printer/discover', async (req, res) => {
+  try {
+    const printers = await discovery.discoverPrinters('ipp', req.body?.subnet, 8000);
+    res.json({ success: true, printers });
+  } catch (error) {
+    res.json({ success: true, printers: [] });
+  }
+});
+
 // ── Frontend-compatible routes (called via /api/printer/* gateway prefix) ────
 
 // Map frontend field names (ip, model, isMultifunction, scanFormats) to service fields
