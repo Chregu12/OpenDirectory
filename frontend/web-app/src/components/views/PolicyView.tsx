@@ -163,44 +163,48 @@ interface OU {
 
 // ─── Initial Data ──────────────────────────────────────────────────────────────
 
-const FALLBACK_OU_TREE: OU[] = [
-  {
-    id: 'ou-root',
-    name: 'opendirectory.heusser.local',
-    icon: 'domain',
-    linkedGPOs: ['gpo-default-domain'],
-    children: [
-      {
-        id: 'ou-servers',
-        name: 'Servers',
-        icon: 'ou',
-        linkedGPOs: ['gpo-server-hardening'],
-        children: [],
-      },
-      {
-        id: 'ou-workstations',
-        name: 'Workstations',
-        icon: 'ou',
-        linkedGPOs: ['gpo-workstation-standard', 'gpo-dev-tools'],
-        children: [],
-      },
-      {
-        id: 'ou-users',
-        name: 'Users',
-        icon: 'ou',
-        linkedGPOs: [],
-        children: [],
-      },
-      {
-        id: 'ou-admins',
-        name: 'Admins',
-        icon: 'group',
-        linkedGPOs: ['gpo-admin-mfa'],
-        children: [],
-      },
-    ],
-  },
-];
+const AD_DOMAIN = process.env.NEXT_PUBLIC_AD_DOMAIN || '';
+
+function buildFallbackOuTree(domain: string): OU[] {
+  return [
+    {
+      id: 'ou-root',
+      name: domain || 'Domain',
+      icon: 'domain',
+      linkedGPOs: ['gpo-default-domain'],
+      children: [
+        {
+          id: 'ou-servers',
+          name: 'Servers',
+          icon: 'ou',
+          linkedGPOs: ['gpo-server-hardening'],
+          children: [],
+        },
+        {
+          id: 'ou-workstations',
+          name: 'Workstations',
+          icon: 'ou',
+          linkedGPOs: ['gpo-workstation-standard', 'gpo-dev-tools'],
+          children: [],
+        },
+        {
+          id: 'ou-users',
+          name: 'Users',
+          icon: 'ou',
+          linkedGPOs: [],
+          children: [],
+        },
+        {
+          id: 'ou-admins',
+          name: 'Admins',
+          icon: 'group',
+          linkedGPOs: ['gpo-admin-mfa'],
+          children: [],
+        },
+      ],
+    },
+  ];
+}
 
 // ─── Default AD-equivalent GPOs ────────────────────────────────────────────────
 
@@ -1243,7 +1247,7 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                     <label className="block text-sm text-gray-700 mb-1">NTP Server</label>
                     <input value={draft.securityOptions.ntpServer}
                       onChange={e => setSecOpts({ ntpServer: e.target.value })}
-                      placeholder="e.g. ntp.heusser.local"
+                      placeholder={AD_DOMAIN ? `ntp.${AD_DOMAIN}` : 'e.g. ntp.example.local'}
                       className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   </div>
                 </div>
@@ -2402,7 +2406,10 @@ function RSoPModal({ gpos, ouTree, onClose }: {
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Resultant Set of Policy (RSoP)</h2>
-            <p className="text-sm text-gray-500">Simulate effective policy for a target OU</p>
+            <p className="text-sm text-gray-500">
+              Effektive Richtlinien für eine Ziel-OU simulieren
+              {AD_DOMAIN && <span className="ml-1 font-mono text-gray-400 text-xs">({AD_DOMAIN})</span>}
+            </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <XMarkIcon className="w-6 h-6" />
@@ -2514,7 +2521,7 @@ function RSoPModal({ gpos, ouTree, onClose }: {
 
 export default function PolicyView() {
   const [gpos, setGPOs]         = useState<GPO[]>([]);
-  const [ouTree, setOuTree]     = useState<OU[]>(FALLBACK_OU_TREE);
+  const [ouTree, setOuTree]     = useState<OU[]>(() => buildFallbackOuTree(AD_DOMAIN));
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
   const [selectedGPO, setSelectedGPO] = useState<GPO | null>(null);
@@ -2541,7 +2548,7 @@ export default function PolicyView() {
       if (Array.isArray(ouData) && ouData.length > 0) {
         setOuTree(ouData);
       }
-      // else: ouTree stays as FALLBACK_OU_TREE
+      // else: ouTree stays as fallback built from AD_DOMAIN
     }).finally(() => setLoading(false));
   }, []);
 

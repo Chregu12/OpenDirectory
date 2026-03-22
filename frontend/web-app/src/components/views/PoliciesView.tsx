@@ -34,6 +34,8 @@ import toast from 'react-hot-toast';
 import { useUiMode } from '@/lib/ui-mode';
 import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 
+const AD_DOMAIN = process.env.NEXT_PUBLIC_AD_DOMAIN || '';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface PolicyTemplate {
   id: string;
@@ -497,7 +499,7 @@ function SettingsEditor({
           <h4 className="text-sm font-medium text-gray-700">Browser-Einstellungen</h4>
           <label className="ml-auto flex items-center gap-1.5 text-xs text-gray-500">
             <input type="checkbox" checked={!!settings.browser}
-              onChange={e => onChange({ ...settings, browser: e.target.checked ? { homepage: 'https://opendirectory.heusser.local' } : undefined })}
+              onChange={e => onChange({ ...settings, browser: e.target.checked ? { homepage: AD_DOMAIN ? `https://${AD_DOMAIN}` : '' } : undefined })}
               className="h-3.5 w-3.5 rounded" />
             Aktivieren
           </label>
@@ -506,7 +508,7 @@ function SettingsEditor({
           <div className="p-4 grid grid-cols-1 gap-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Startseite (Homepage)</label>
-              <input type="url" placeholder="https://opendirectory.heusser.local"
+              <input type="url" placeholder={AD_DOMAIN ? `https://${AD_DOMAIN}` : 'https://intranet.example.local'}
                 value={String(get('browser', 'homepage') ?? '')}
                 onChange={e => set('browser', 'homepage', e.target.value)}
                 className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
