@@ -323,6 +323,75 @@ app.delete('/api/printer/printers/:id', async (req, res) => {
   }
 });
 
+// Submit a print job / test page via IPP directly to the printer
+app.post('/api/printer/jobs', async (req, res) => {
+  try {
+    const { printer_name, document_name = 'Test Page', user_name = 'admin' } = req.body;
+    if (!printer_name) return res.status(400).json({ error: 'printer_name is required' });
+
+    // Look up printer by name from printerManager
+    const allPrinters = await printerManager.listPrinters();
+    const printer = allPrinters.find(p =>
+      p.name === printer_name || p.address === printer_name || p.id === printer_name
+    );
+    if (!printer) {
+      return res.status(404).json({ error: `Printer "${printer_name}" not found` });
+    }
+    const ip = printer.address || printer.ip_address;
+    if (!ip) return res.status(400).json({ error: 'Printer has no IP address stored' });
+
+    // Build a minimal single-page PDF test page
+    const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595, 842]); // A4
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    page.drawText('OpenDirectory', { x: 50, y: 780, size: 28, font: bold, color: rgb(0.15, 0.35, 0.75) });
+    page.drawText('Test Page', { x: 50, y: 748, size: 18, font, color: rgb(0.3, 0.3, 0.3) });
+    page.drawLine({ start: { x: 50, y: 738 }, end: { x: 545, y: 738 }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
+    page.drawText(`Printer: ${printer.name}`, { x: 50, y: 710, size: 12, font });
+    page.drawText(`Address: ${ip}`, { x: 50, y: 690, size: 12, font });
+    page.drawText(`Sent by: ${user_name}`, { x: 50, y: 670, size: 12, font });
+    page.drawText(`Document: ${document_name}`, { x: 50, y: 650, size: 12, font });
+    page.drawText(`Time: ${new Date().toLocaleString('de-CH')}`, { x: 50, y: 630, size: 12, font });
+    page.drawText('If you can read this, the printer connection is working correctly.', { x: 50, y: 590, size: 11, font, color: rgb(0.4, 0.4, 0.4) });
+
+    const pdfBytes = await pdfDoc.save();
+
+    // Send via IPP Print-Job request
+    const ipp = require('ipp');
+    const printerUrl = `http://${ip}:631/ipp/print`;
+    const ippPrinter = ipp.Printer(printerUrl);
+
+    const ippMsg = {
+      'operation-attributes-tag': {
+        'requesting-user-name': user_name,
+        'job-name': document_name,
+        'document-format': 'application/pdf',
+      },
+      data: Buffer.from(pdfBytes),
+    };
+
+    await new Promise((resolve, reject) => {
+      ippPrinter.execute('Print-Job', ippMsg, (err, response) => {
+        if (err) return reject(err);
+        const status = response?.['status-code'];
+        if (status && status !== 'successful-ok' && status !== 'successful-ok-ignored-or-substituted-attributes') {
+          return reject(new Error(`IPP status: ${status}`));
+        }
+        resolve(response);
+      });
+    });
+
+    logger.info(`Test page sent to ${printer.name} (${ip}) by ${user_name}`);
+    res.json({ success: true, message: `Test page sent to ${printer.name}` });
+  } catch (error) {
+    logger.error('Print job error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/printers/:id', async (req, res) => {
   try {
     const printer = await printerManager.getPrinter(req.params.id);
