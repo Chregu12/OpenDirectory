@@ -493,14 +493,15 @@ app.get('/api/printer/scanners', async (req, res) => {
       allPrinters.map(async p => {
         const ip = p.address || p.ip_address || p.ip;
         if (!ip) return null;
-        const hasEscl = p.isMultifunction || p.is_multifunction || await checkEscl(ip);
+        const esclOnline = await checkEscl(ip);
+        const hasEscl = p.isMultifunction || p.is_multifunction || esclOnline;
         if (!hasEscl) return null;
         return {
           id:      p.id,
           name:    p.name,
           ip,
           model:   p.model,
-          status:  p.status || 'online',
+          status:  esclOnline ? 'online' : 'offline',
           formats: p.scanFormats?.length ? p.scanFormats
                  : p.scan_formats?.length ? p.scan_formats
                  : ['PDF', 'JPEG'],
