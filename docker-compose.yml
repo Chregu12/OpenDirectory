@@ -343,6 +343,8 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8080
       - NEXT_PUBLIC_WS_URL=ws://localhost:8080
+      - NEXT_PUBLIC_AD_DOMAIN=${AD_DOMAIN:-heusser.local}
+      - NEXT_PUBLIC_APP_URL=${APP_URL:-https://opendirectory.heusser.local}
       - INTEGRATION_SERVICE_URL=http://integration-service:4000
       - PRINTER_SERVICE_URL=http://printer-service:3006
       - APP_STORE_URL=http://app-store:3906

@@ -910,7 +910,8 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
 type EnrollTab      = 'token' | 'script' | 'domain';
 type EnrollPlatform = 'macOS' | 'Linux' | 'Windows';
 
-const BASE_URL = 'https://opendirectory.heusser.local';
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://opendirectory.heusser.local';
+const AD_DOMAIN = process.env.NEXT_PUBLIC_AD_DOMAIN || 'heusser.local';
 
 function enrollScript(platform: EnrollPlatform, token?: string): string {
   const t = token ? ` --token ${token}` : '';
@@ -918,11 +919,16 @@ function enrollScript(platform: EnrollPlatform, token?: string): string {
   return `curl -fsSL ${BASE_URL}/install.sh | sudo bash -s --${t}`;
 }
 
-const DOMAIN_SCRIPT: Record<EnrollPlatform, string> = {
-  macOS:   '# Join via Directory Utility or:\ndsconfigad -add opendirectory.heusser.local -username admin -password ""',
-  Linux:   '# Install realm tools:\nsudo apt-get install realmd sssd\nsudo realm join -U admin opendirectory.heusser.local',
-  Windows: '# Join domain (PowerShell):\nAdd-Computer -DomainName "heusser.local" -Credential (Get-Credential) -Restart',
-};
+function domainScript(platform: EnrollPlatform, domain: string): string {
+  switch (platform) {
+    case 'Windows':
+      return `# Join domain (PowerShell):\nAdd-Computer -DomainName "${domain}" -Credential (Get-Credential) -Restart`;
+    case 'macOS':
+      return `# Join via Directory Utility or:\ndsconfigad -add ${domain} -username admin -password ""`;
+    case 'Linux':
+      return `# Install realm tools:\nsudo apt-get install realmd sssd\nsudo realm join -U admin ${domain}`;
+  }
+}
 
 function EnrollModal({ onClose }: { onClose: () => void }) {
   const [tab, setTab]           = useState<EnrollTab>('token');
@@ -960,7 +966,7 @@ function EnrollModal({ onClose }: { onClose: () => void }) {
   const currentScript =
     tab === 'token'  ? (token ? enrollScript(platform, token) : '') :
     tab === 'script' ? enrollScript(platform) :
-    DOMAIN_SCRIPT[platform];
+    domainScript(platform, AD_DOMAIN);
 
   const copy = (text: string) => {
     navigator.clipboard.writeText(text);
