@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   ComputerDesktopIcon,
   ServerIcon,
+  SparklesIcon,
   MagnifyingGlassIcon,
   ArrowPathIcon,
   DevicePhoneMobileIcon,
@@ -23,6 +24,7 @@ import {
   MinusCircleIcon,
 } from '@heroicons/react/24/outline';
 import { deviceApi, api } from '@/lib/api';
+import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
 import toast from 'react-hot-toast';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -1118,6 +1120,7 @@ export default function DevicesView() {
   const [platformFilter,setPlatformFilter]= useState<PlatformFilter>('all');
   const [refreshingId,  setRefreshingId]  = useState<string | null>(null);
   const [showEnroll,    setShowEnroll]    = useState(false);
+  const [showEnrollWizard, setShowEnrollWizard] = useState(false);
   const [selectedDevice,setSelectedDevice]= useState<Device | null>(null);
   // Persist app state across modal open/close so updates survive
   const [appsCache,     setAppsCache]     = useState<Record<string, InstalledApp[]>>({});
@@ -1239,6 +1242,11 @@ export default function DevicesView() {
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             <ArrowPathIcon className="w-4 h-4" />
             Refresh
+          </button>
+          <button onClick={() => setShowEnrollWizard(true)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors">
+            <SparklesIcon className="w-4 h-4" />
+            Enrollment Wizard
           </button>
           <button onClick={() => setShowEnroll(true)}
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
@@ -1440,6 +1448,9 @@ export default function DevicesView() {
           addHistoryEntry={addHistoryEntry}
           onDecommission={handleDecommissioned}
         />
+      )}
+      {showEnrollWizard && (
+        <DeviceEnrollmentWizard onClose={() => setShowEnrollWizard(false)} />
       )}
     </div>
   );

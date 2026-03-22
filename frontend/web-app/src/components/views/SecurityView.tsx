@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheckIcon,
   ShieldExclamationIcon,
+  SparklesIcon,
   ExclamationTriangleIcon,
   BugAntIcon,
   ServerIcon,
@@ -14,6 +15,7 @@ import {
   LinkIcon,
 } from '@heroicons/react/24/outline';
 import { securityApi, deviceApi } from '@/lib/api';
+import SecuritySetupWizard from '@/components/setup/SecuritySetupWizard';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -470,6 +472,7 @@ export default function SecurityView() {
   const [agents, setAgents]         = useState<Agent[]>([]);
   const [compliance, setCompliance] = useState<Compliance[]>([]);
   const [loading, setLoading]       = useState(true);
+  const [showWizard, setShowWizard] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -552,15 +555,24 @@ export default function SecurityView() {
             </p>
           </div>
         </div>
-        <a
-          href="https://siem.heusser.local"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors"
-        >
-          <LinkIcon className="w-4 h-4" />
-          Open Wazuh
-        </a>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowWizard(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+          >
+            <SparklesIcon className="w-4 h-4" />
+            Security Wizard
+          </button>
+          <a
+            href="https://siem.heusser.local"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors"
+          >
+            <LinkIcon className="w-4 h-4" />
+            Open Wazuh
+          </a>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -599,6 +611,7 @@ export default function SecurityView() {
           )}
         </div>
       </div>
+      {showWizard && <SecuritySetupWizard onClose={() => setShowWizard(false)} />}
     </div>
   );
 }

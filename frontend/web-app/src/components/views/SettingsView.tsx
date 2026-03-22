@@ -16,9 +16,11 @@ import {
   CloudIcon,
   InformationCircleIcon,
   XMarkIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi, configApi } from '@/lib/api';
 import toast from 'react-hot-toast';
+import SetupWizard from '@/components/setup/SetupWizard';
 
 interface Service {
   name: string;
@@ -130,6 +132,7 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
   // Double-confirmation state
   const [pendingDisable, setPendingDisable] = useState<Module | null>(null);
   const [confirmStep, setConfirmStep]       = useState<1 | 2>(1);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -408,6 +411,23 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
           {/* ── System Tab ── */}
           {activeTab === 'system' && (
             <div className="space-y-6">
+              {/* Setup Wizard */}
+              <div className="border border-purple-200 bg-purple-50 rounded-lg p-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-purple-900">Initial Setup Wizard</h3>
+                  <p className="text-xs text-purple-700 mt-0.5">
+                    Configure modules, users, and services for a fresh OpenDirectory installation.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowSetupWizard(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors shrink-0 ml-4"
+                >
+                  <SparklesIcon className="w-4 h-4" />
+                  Open Setup Wizard
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="border border-gray-200 rounded-lg p-4">
                   <h3 className="text-sm font-medium text-gray-900 mb-3">Gateway</h3>
@@ -456,6 +476,7 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
           onCancel={() => { setPendingDisable(null); setConfirmStep(1); }}
         />
       )}
+      {showSetupWizard && <SetupWizard onComplete={() => setShowSetupWizard(false)} />}
     </>
   );
 }

@@ -54,8 +54,8 @@ export const API_CONFIG = {
   port: process.env.PORT || 3005,
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
   rateLimit: {
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 300, // 300 requests per minute per IP (UI polls multiple endpoints)
   },
   timeout: 30000, // 30 seconds
   retries: 3,

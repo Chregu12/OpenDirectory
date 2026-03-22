@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { policyApi, api } from '@/lib/api';
 import {
   ShieldCheckIcon,
+  SparklesIcon,
   FolderIcon,
   FolderOpenIcon,
   DocumentTextIcon,
@@ -30,6 +31,7 @@ import {
   CalculatorIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import PolicyCreationWizard from '@/components/setup/PolicyCreationWizard';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -2517,6 +2519,7 @@ export default function PolicyView() {
   const [error, setError]       = useState<string | null>(null);
   const [selectedGPO, setSelectedGPO] = useState<GPO | null>(null);
   const [showNewGPO, setShowNewGPO] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const [editingGPO, setEditingGPO] = useState<GPO | null>(null);
   const [listTab, setListTab] = useState<'tree' | 'all'>('tree');
   const [showRSoP, setShowRSoP] = useState(false);
@@ -2621,6 +2624,13 @@ export default function PolicyView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowWizard(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+          >
+            <SparklesIcon className="w-4 h-4" />
+            Policy Wizard
+          </button>
           <button
             onClick={() => setShowRSoP(true)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors"
@@ -2728,6 +2738,7 @@ export default function PolicyView() {
       {showRSoP && (
         <RSoPModal gpos={gpos} ouTree={ouTree} onClose={() => setShowRSoP(false)} />
       )}
+      {showWizard && <PolicyCreationWizard onClose={() => setShowWizard(false)} />}
     </div>
   );
 }

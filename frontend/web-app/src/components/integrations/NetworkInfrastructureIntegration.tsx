@@ -13,6 +13,7 @@ import {
   ComputerDesktopIcon,
   LockClosedIcon,
   EyeIcon,
+  SparklesIcon,
   EyeSlashIcon,
   XMarkIcon,
   CheckIcon,
@@ -28,6 +29,7 @@ import {
 
 type NewDevice = { ip: string; hostname: string; mac: string; vendor: string; type: string };
 import toast from 'react-hot-toast';
+import NetworkConfigWizard from '@/components/setup/NetworkConfigWizard';
 
 interface NetworkDevice {
   ip: string;
@@ -182,6 +184,7 @@ function AutoMountSetup() {
 export default function NetworkInfrastructureIntegration() {
   const [activeTab, setActiveTab] = useState<TabId>('dns');
   const [loading, setLoading]     = useState(false);
+  const [showNetworkWizard, setShowNetworkWizard] = useState(false);
 
   const [dnsRecords, setDnsRecords]   = useState<DNSRecord[]>([]);
   const [newDNSRecord, setNewDNSRecord] = useState<Partial<DNSRecord>>({ type: 'A', ttl: 300 });
@@ -438,7 +441,16 @@ export default function NetworkInfrastructureIntegration() {
             <WifiIcon className="h-6 w-6 text-blue-600" />
             <h2 className="text-lg font-medium text-gray-900">Network Infrastructure</h2>
           </div>
-          <div className="text-sm text-gray-500">{statSummary}</div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500">{statSummary}</span>
+            <button
+              onClick={() => setShowNetworkWizard(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 rounded-lg transition-colors"
+            >
+              <SparklesIcon className="w-4 h-4" />
+              Network Wizard
+            </button>
+          </div>
         </div>
         <nav className="flex space-x-8 px-6" aria-label="Tabs">
           {tabs.map((tab) => (
@@ -1078,6 +1090,7 @@ export default function NetworkInfrastructureIntegration() {
           </div>
         </div>
       )}
+      {showNetworkWizard && <NetworkConfigWizard onClose={() => setShowNetworkWizard(false)} />}
     </div>
   );
 }

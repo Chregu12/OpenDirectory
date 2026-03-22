@@ -13,9 +13,11 @@ import {
   CheckCircleIcon,
   DocumentArrowUpIcon,
   ArrowPathIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { lldapApi, api, formatError } from '@/lib/api';
 import toast from 'react-hot-toast';
+import UserManagementWizard from '@/components/setup/UserManagementWizard';
 
 interface User {
   id: string;
@@ -525,6 +527,8 @@ export default function LLDAPIntegration() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('users');
 
+  const [showWizard, setShowWizard] = useState(false);
+
   // modals
   const [showAddUser, setShowAddUser] = useState(false);
   const [editUser, setEditUser] = useState<User | undefined>();
@@ -639,6 +643,13 @@ export default function LLDAPIntegration() {
               <button onClick={fetchData} disabled={refreshing}
                 className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
                 <ArrowPathIcon className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={() => setShowWizard(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+              >
+                <SparklesIcon className="w-4 h-4" />
+                User Wizard
               </button>
               <button
                 onClick={() => setShowImport(true)}
@@ -901,6 +912,7 @@ export default function LLDAPIntegration() {
           }}
         />
       )}
+      {showWizard && <UserManagementWizard onClose={() => setShowWizard(false)} />}
     </div>
   );
 }

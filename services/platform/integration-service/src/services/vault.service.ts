@@ -335,13 +335,14 @@ export class VaultService {
       
       return {
         name: SERVICES.vault.name,
-        status: 'unknown',
+        status: 'unhealthy',
         lastCheck,
+        details: { error: 'Vault is unreachable or not running' },
       };
     } catch (error) {
       return {
         name: SERVICES.vault.name,
-        status: 'unknown',
+        status: 'unhealthy',
         lastCheck,
         details: { error: error instanceof Error ? error.message : 'Unknown error' },
       };

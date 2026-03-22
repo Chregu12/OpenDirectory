@@ -6,6 +6,7 @@ import {
   PlusIcon,
   XMarkIcon,
   TrashIcon,
+  SparklesIcon,
   MagnifyingGlassIcon,
   ArrowPathIcon,
   CheckCircleIcon,
@@ -21,6 +22,7 @@ import {
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { printerApi } from '@/lib/api';
 import toast from 'react-hot-toast';
+import PrinterSetupWizard from '@/components/setup/PrinterSetupWizard';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1183,6 +1185,7 @@ export default function PrintersView() {
   const [loading,   setLoading]     = useState(true);
   const [discovering, setDiscovering] = useState(false);
   const [showAddPrinter, setShowAddPrinter] = useState(false);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [scanTarget, setScanTarget] = useState<Scanner | null>(null);
   const [scannerSettingsTarget, setScannerSettingsTarget] = useState<Scanner | null>(null);
   const [filterPrinter, setFilterPrinter] = useState<string | null>(null);
@@ -1341,6 +1344,13 @@ export default function PrintersView() {
         </div>
         {activeTab === 'printers' && (
           <div className="flex gap-2">
+            <button
+              onClick={() => setShowSetupWizard(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+            >
+              <SparklesIcon className="w-4 h-4" />
+              Setup Wizard
+            </button>
             <button
               onClick={handleDiscover}
               disabled={discovering}
@@ -1678,6 +1688,7 @@ export default function PrintersView() {
           }}
         />
       )}
+      {showSetupWizard && <PrinterSetupWizard onClose={() => setShowSetupWizard(false)} />}
     </div>
   );
 }

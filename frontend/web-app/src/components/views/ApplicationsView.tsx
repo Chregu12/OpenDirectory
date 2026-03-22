@@ -7,6 +7,7 @@ import {
   FunnelIcon,
   XMarkIcon,
   ServerIcon,
+  SparklesIcon,
   ShieldCheckIcon,
   WifiIcon,
   PrinterIcon,
@@ -27,6 +28,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { deviceApi } from '@/lib/api';
 import toast from 'react-hot-toast';
+import AppDeploymentWizard from '@/components/setup/AppDeploymentWizard';
 
 interface ClientApp {
   id: string;
@@ -474,6 +476,7 @@ export default function ApplicationsView() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPlatform, setSelectedPlatform] = useState<'All' | 'macOS' | 'Windows' | 'Linux'>('All');
   const [deployApp, setDeployApp] = useState<ClientApp | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
 
   const filtered = APPS.filter(app => {
     const matchesSearch =
@@ -495,6 +498,13 @@ export default function ApplicationsView() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+          <button
+            onClick={() => setShowWizard(true)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+          >
+            <SparklesIcon className="h-4 w-4" />
+            Deployment Wizard
+          </button>
           <div className="relative">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
@@ -575,6 +585,7 @@ export default function ApplicationsView() {
       )}
 
       {deployApp && <DeployModal app={deployApp} onClose={() => setDeployApp(null)} />}
+      {showWizard && <AppDeploymentWizard onClose={() => setShowWizard(false)} />}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   UsersIcon,
   ComputerDesktopIcon,
+  SparklesIcon,
   ServerIcon,
   ShieldCheckIcon,
   ChartBarIcon,
@@ -29,6 +30,7 @@ import {
   configApi,
   policyApi,
 } from '@/lib/api';
+import BackupRecoveryWizard from '@/components/setup/BackupRecoveryWizard';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -283,6 +285,7 @@ function ProgressBar({ value, colorClass, height = 'h-2' }: ProgressBarProps) {
 export default function DashboardView() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [showBackupWizard, setShowBackupWizard] = useState(false);
 
   const [kpi, setKpi] = useState<KpiData>({
     totalUsers: null,
@@ -625,14 +628,23 @@ export default function DashboardView() {
             Real-time status of your OpenDirectory infrastructure
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-500 shrink-0">
-          <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span>Auto-refresh every 30s</span>
-          <span className="text-gray-300 mx-1">|</span>
-          <span>
-            Last updated{' '}
-            {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setShowBackupWizard(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg transition-colors"
+          >
+            <SparklesIcon className="w-4 h-4" />
+            Backup Wizard
+          </button>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span>Auto-refresh every 30s</span>
+            <span className="text-gray-300 mx-1">|</span>
+            <span>
+              Last updated{' '}
+              {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -1112,6 +1124,7 @@ export default function DashboardView() {
           </div>
         </div>
       </div>
+      {showBackupWizard && <BackupRecoveryWizard onClose={() => setShowBackupWizard(false)} />}
     </div>
   );
 }

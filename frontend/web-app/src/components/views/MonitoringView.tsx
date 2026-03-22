@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import {
   CheckCircleIcon,
   XCircleIcon,
+  SparklesIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
   ServerIcon,
@@ -25,6 +26,7 @@ import {
 } from 'recharts';
 import { healthApi, prometheusApi, grafanaApi, deviceApi } from '@/lib/api';
 import toast from 'react-hot-toast';
+import MonitoringAlertingWizard from '@/components/setup/MonitoringAlertingWizard';
 
 interface ServiceHealth {
   name: string;
@@ -239,6 +241,7 @@ export default function MonitoringView() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [grafanaDashboards, setGrafanaDashboards] = useState<any[]>([]);
+  const [showWizard, setShowWizard] = useState(false);
 
   useEffect(() => {
     loadAll();
@@ -426,6 +429,13 @@ export default function MonitoringView() {
             <option value="24h">Last 24 hours</option>
           </select>
           <button
+            onClick={() => setShowWizard(true)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+          >
+            <SparklesIcon className="w-4 h-4" />
+            Monitoring Wizard
+          </button>
+          <button
             onClick={refresh}
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
           >
@@ -559,6 +569,7 @@ export default function MonitoringView() {
           </div>
         </div>
       )}
+      {showWizard && <MonitoringAlertingWizard onClose={() => setShowWizard(false)} />}
     </div>
   );
 }
