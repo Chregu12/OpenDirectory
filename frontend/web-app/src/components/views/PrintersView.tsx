@@ -1184,7 +1184,8 @@ export default function PrintersView() {
   const [scanTarget, setScanTarget] = useState<Scanner | null>(null);
   const [scannerSettingsTarget, setScannerSettingsTarget] = useState<Scanner | null>(null);
   const [filterPrinter, setFilterPrinter] = useState<string | null>(null);
-  const [testingPage, setTestingPage] = useState<string | null>(null);
+  const [testingPage, setTestingPage]   = useState<string | null>(null);
+  const [testingScan, setTestingScan]   = useState<string | null>(null);
   const [editingQuota, setEditingQuota] = useState<{ userId: string; value: string } | null>(null);
   const [printServerInfo, setPrintServerInfo] = useState<Printer | null>(null);
   const jobTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1295,6 +1296,23 @@ export default function PrintersView() {
     }
     // Refresh job list independently — don't let this fail silently affect the success toast
     loadJobs().catch(() => {});
+  };
+
+  const handleTestScan = async (sc: Scanner) => {
+    setTestingScan(sc.id);
+    try {
+      const res = await printerApi.testScan(sc.ip, sc.name);
+      const caps = res.data.capabilities;
+      const modes = caps.colorModes?.join(', ') || '—';
+      toast.success(
+        `Scanner OK — ${caps.makeAndModel || sc.model}\nModes: ${modes}`,
+        { duration: 5000 }
+      );
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? 'Test Scan fehlgeschlagen');
+    } finally {
+      setTestingScan(null);
+    }
   };
 
   const handleScanFromPrinter = (printer: Printer) => {
@@ -1519,6 +1537,13 @@ export default function PrintersView() {
                             className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40"
                           >
                             Scan
+                          </button>
+                          <button
+                            onClick={() => handleTestScan(sc)}
+                            disabled={testingScan === sc.id || sc.status !== 'online'}
+                            className="px-3 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            {testingScan === sc.id ? '…' : 'Test Scan'}
                           </button>
                           <button
                             onClick={() => setScannerSettingsTarget(sc)}

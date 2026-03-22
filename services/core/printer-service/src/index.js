@@ -422,6 +422,57 @@ app.post('/api/printer/jobs', async (req, res) => {
   }
 });
 
+// POST /api/printer/test-scan — verify scanner reachability via eSCL
+app.post('/api/printer/test-scan', async (req, res) => {
+  try {
+    const { ip, name } = req.body;
+    if (!ip) return res.status(400).json({ error: 'ip is required' });
+
+    // Fetch eSCL capabilities (port 80 preferred, fallback 8080)
+    const fetchEscl = (port) => new Promise((resolve, reject) => {
+      const http = require('http');
+      const req2 = http.get(
+        { host: ip, port, path: '/eSCL/ScannerCapabilities', timeout: 4000 },
+        (r) => {
+          if (r.statusCode !== 200) return reject(new Error(`HTTP ${r.statusCode}`));
+          let data = '';
+          r.on('data', d => data += d);
+          r.on('end', () => resolve(data));
+        }
+      );
+      req2.on('error', reject);
+      req2.on('timeout', () => { req2.destroy(); reject(new Error('timeout')); });
+    });
+
+    let xml = null;
+    for (const port of [80, 8080]) {
+      try { xml = await fetchEscl(port); break; } catch (_) {}
+    }
+    if (!xml) return res.status(503).json({ error: 'Scanner eSCL not reachable' });
+
+    // Parse key fields from XML (no xml parser needed — simple regex)
+    const get = (tag) => (xml.match(new RegExp(tag + '>([^<]+)<'))||[])[1]?.trim() || null;
+    const getAll = (tag) => [...xml.matchAll(new RegExp(tag + '>([^<]+)<', 'g'))]
+      .map(m => m[1].trim()).filter(Boolean);
+
+    const capabilities = {
+      makeAndModel: get('MakeAndModel'),
+      manufacturer: get('Manufacturer'),
+      serialNumber: get('SerialNumber'),
+      colorModes:   [...new Set(getAll('ColorMode'))],
+      formats:      [...new Set(getAll('DocumentFormat'))],
+      maxWidthPx:   get('MaxWidth'),
+      maxHeightPx:  get('MaxHeight'),
+    };
+
+    logger.info(`Test scan OK: ${name || ip} — ${capabilities.makeAndModel}`);
+    res.json({ success: true, ip, capabilities });
+  } catch (error) {
+    logger.error('Test scan error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/printer/jobs — return job log for the frontend
 app.get('/api/printer/jobs', (req, res) => {
   const { printer } = req.query;

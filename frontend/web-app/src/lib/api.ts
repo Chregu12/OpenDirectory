@@ -254,7 +254,10 @@ export const printerApi = {
 
   probePrinter: (ip: string) =>
     api.post('/api/printer/probe', { ip }),
-  
+
+  testScan: (ip: string, name?: string) =>
+    api.post('/api/printer/test-scan', { ip, name }),
+
   // Scanner functions
   getScanners: () =>
     api.get('/api/printer/scanners'),
