@@ -148,6 +148,11 @@ router.get('/detailed', async (req, res) => {
       status: healthy === services.length ? 'healthy' : healthy > 0 ? 'degraded' : 'unhealthy',
       services,
       timestamp: new Date().toISOString(),
+      gateway: {
+        uptime: process.uptime(),
+        version: process.env.npm_package_version ?? '1.0.0',
+        environment: process.env.NODE_ENV ?? 'production',
+      },
     });
   } catch (error) {
     res.status(500).json({ status: 'error', error: String(error) });

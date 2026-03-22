@@ -323,6 +323,7 @@ export default function DashboardView() {
     // -----------------------------------------------------------------------
     const [
       lldapUsersRes,
+      lldapGroupsRes,
       devicesRes,
       gatewayServicesRes,
       securityAlertsRes,
@@ -338,6 +339,7 @@ export default function DashboardView() {
       auditRes,
     ] = await Promise.allSettled([
       lldapApi.getUsers(),
+      lldapApi.getGroups(),
       deviceApi.getDevices(),
       gatewayApi.getServices(),
       securityApi.getSecurityAlerts(),
@@ -360,9 +362,13 @@ export default function DashboardView() {
     let totalGroups: number | null = null;
     if (lldapUsersRes.status === 'fulfilled') {
       const d = lldapUsersRes.value?.data;
-      // getUsers() returns an array or { users: [...] }
       const arr: any[] = Array.isArray(d) ? d : (d?.users ?? d?.data ?? []);
-      totalUsers = arr.length > 0 ? arr.length : null;
+      totalUsers = arr.length > 0 ? arr.length : 0;
+    }
+    if (lldapGroupsRes.status === 'fulfilled') {
+      const d = lldapGroupsRes.value?.data;
+      const arr: any[] = Array.isArray(d) ? d : (d?.groups ?? d?.data ?? []);
+      totalGroups = arr.length;
     }
 
     // -----------------------------------------------------------------------
@@ -478,10 +484,31 @@ export default function DashboardView() {
     });
 
     // -----------------------------------------------------------------------
-    // Service Cards — derived from /health/detailed (one call, no individual endpoint needed)
+    // Service Cards — built from /api/services (real health checks) +
+    //                 gateway overall status from /health/detailed
     // -----------------------------------------------------------------------
     const detailedData = detailedHealthRes.status === 'fulfilled' ? detailedHealthRes.value?.data : null;
-    const cards: ServiceCard[] = [
+
+    // /api/services returns an array: [{ id, name, status, port, responseTime, lastCheck }]
+    const apiServices: any[] = gatewayServicesRes.status === 'fulfilled'
+      ? (Array.isArray(gatewayServicesRes.value?.data)
+          ? gatewayServicesRes.value.data
+          : gatewayServicesRes.value?.data?.services ?? [])
+      : [];
+
+    // Index by id for fast lookup
+    const svcById: Record<string, any> = {};
+    for (const s of apiServices) {
+      if (s.id) svcById[s.id] = s;
+    }
+
+    // Gateway overall status from health endpoint
+    const gatewayStatus: ServiceStatus =
+      detailedData?.status === 'healthy' ? 'healthy' :
+      detailedData?.status === 'degraded' ? 'degraded' :
+      detailedData?.status === 'unhealthy' ? 'unhealthy' : 'unknown';
+
+    const SERVICE_DEFS = [
       { id: 'gateway',                label: 'OpenDirectory Gateway' },
       { id: 'lldap',                  label: 'LLDAP Directory' },
       { id: 'grafana',                label: 'Grafana' },
@@ -489,12 +516,27 @@ export default function DashboardView() {
       { id: 'vault',                  label: 'HashiCorp Vault' },
       { id: 'network-infrastructure', label: 'Network Infrastructure' },
       { id: 'wazuh',                  label: 'Wazuh Security' },
-    ].map(({ id, label }) => ({
-      id,
-      label,
-      status: extractServiceStatus(detailedData, id),
-      checkedAt: now,
-    }));
+    ];
+
+    const cards: ServiceCard[] = SERVICE_DEFS.map(({ id, label }) => {
+      if (id === 'gateway') {
+        return { id, label, status: gatewayStatus, checkedAt: now };
+      }
+      const svc = svcById[id];
+      if (!svc) return { id, label, status: 'unknown' as ServiceStatus, checkedAt: now };
+      const s = (svc.status ?? '').toLowerCase();
+      const status: ServiceStatus =
+        s === 'healthy' ? 'healthy' :
+        s === 'unhealthy' ? 'unhealthy' :
+        s === 'degraded' ? 'degraded' : 'unknown';
+      return {
+        id,
+        label,
+        status,
+        responseTime: svc.responseTime ?? undefined,
+        checkedAt: svc.lastCheck ? new Date(svc.lastCheck) : now,
+      };
+    });
 
     setServiceCards(cards);
 
