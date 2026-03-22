@@ -598,10 +598,10 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                   <h3 className="text-sm font-medium text-gray-900 mb-3">About OpenDirectory</h3>
                   <dl className="space-y-2">
                     {[
-                      { label: 'Version',   value: '1.0.0' },
-                      { label: 'Platform',  value: 'Kubernetes / k3s' },
-                      { label: 'Namespace', value: 'opendirectory' },
-                      { label: 'Host',      value: 'opendirectory.heusser.local' },
+                      { label: 'Version',   value: healthData?.gateway?.version || '1.0.0' },
+                      { label: 'Platform',  value: process.env.NEXT_PUBLIC_DEPLOY_PLATFORM || 'Docker Compose' },
+                      { label: 'Namespace', value: process.env.NEXT_PUBLIC_DEPLOY_NAMESPACE || 'opendirectory' },
+                      { label: 'Host',      value: typeof window !== 'undefined' ? window.location.hostname : '—' },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex justify-between text-sm">
                         <dt className="text-gray-500">{label}</dt>
