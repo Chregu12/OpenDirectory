@@ -218,6 +218,8 @@ async function initDB() {
       drive_letter     TEXT DEFAULT '',
       allowed_groups   JSONB DEFAULT '[]',
       allowed_users    JSONB DEFAULT '[]',
+      purpose          JSONB DEFAULT '[]',
+      description      TEXT DEFAULT '',
       created_at       TIMESTAMPTZ DEFAULT NOW()
     );
   `);
@@ -260,6 +262,7 @@ async function initDB() {
   )`);
   // Network shares: add missing columns for edit support
   await db.query(`ALTER TABLE network_shares ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''`);
+  await db.query(`ALTER TABLE network_shares ADD COLUMN IF NOT EXISTS purpose JSONB DEFAULT '[]'`);
   // Policy-as-Code extensions
   await db.query(`ALTER TABLE policies ADD COLUMN IF NOT EXISTS intent_json    JSONB  DEFAULT '{}'`);
   await db.query(`ALTER TABLE policies ADD COLUMN IF NOT EXISTS compiled_json  JSONB  DEFAULT NULL`);
@@ -1029,16 +1032,17 @@ app.get('/api/network/shares', async (req, res) => {
 });
 
 app.post('/api/network/shares', async (req, res) => {
-  const { name, protocol, server, path, permissions, enabled, username, has_credentials, drive_letter, allowed_groups, allowed_users } = req.body;
+  const { name, protocol, server, path, permissions, enabled, username, has_credentials, drive_letter, allowed_groups, allowed_users, purpose } = req.body;
   if (!name || !protocol) return res.status(400).json({ error: 'name and protocol required' });
   const id = genId();
   try {
     await db.query(
-      `INSERT INTO network_shares (id, name, protocol, server, path, permissions, enabled, username, has_credentials, drive_letter, allowed_groups, allowed_users)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      `INSERT INTO network_shares (id, name, protocol, server, path, permissions, enabled, username, has_credentials, drive_letter, allowed_groups, allowed_users, purpose)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [id, name, protocol, server || '', path || '', permissions || 'rw', enabled !== false,
        username || '', has_credentials || false, drive_letter || '',
-       JSON.stringify(allowed_groups || []), JSON.stringify(allowed_users || [])]
+       JSON.stringify(allowed_groups || []), JSON.stringify(allowed_users || []),
+       JSON.stringify(purpose || [])]
     );
     res.json({ id, success: true });
   } catch (err) {

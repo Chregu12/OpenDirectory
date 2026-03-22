@@ -1093,8 +1093,12 @@ function TargetTypeIcon({ type }: { type: string }) {
 
 // --- Share App Modal ---
 
-const PLATFORMS = ['windows', 'macos', 'linux'] as const;
-type Platform = typeof PLATFORMS[number];
+interface ScannedFile {
+  name: string;
+  relativePath: string;
+  platforms: string[];
+  suggestedName: string;
+}
 
 function ShareAppModal({
   categories,
@@ -1106,18 +1110,14 @@ function ShareAppModal({
   onSaved: () => void;
 }) {
   const [shares, setShares] = useState<{ id: string; name: string; server: string; path: string; protocol: string }[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    display_name: '',
-    description: '',
-    version: '1.0.0',
-    category: categories[0]?.name || 'utilities',
-    publisher: '',
-    selectedPlatforms: ['windows'] as Platform[],
-    shareId: '',
-    // per-platform installer path within the share
-    paths: { windows: '', macos: '', linux: '' } as Record<Platform, string>,
-  });
+  const [selectedShareId, setSelectedShareId] = useState('');
+  const [scanning, setScanning]   = useState(false);
+  const [scanError, setScanError] = useState('');
+  const [files, setFiles]         = useState<ScannedFile[]>([]);
+  const [selected, setSelected]   = useState<Set<string>>(new Set());
+  const [saving, setSaving]       = useState(false);
+  // per-file metadata overrides
+  const [meta, setMeta] = useState<Record<string, { display_name: string; version: string; category: string }>>({});
 
   useEffect(() => {
     fetch('/api/network/shares')
@@ -1126,208 +1126,207 @@ function ShareAppModal({
       .catch(() => {});
   }, []);
 
-  const selectedShare = shares.find(s => s.id === form.shareId);
-
-  const togglePlatform = (p: Platform) =>
-    setForm(f => ({
-      ...f,
-      selectedPlatforms: f.selectedPlatforms.includes(p)
-        ? f.selectedPlatforms.filter(x => x !== p)
-        : [...f.selectedPlatforms, p],
-    }));
-
-  const sharePath = (p: Platform) => {
-    if (!selectedShare) return '';
-    const base = selectedShare.protocol === 'SMB'
-      ? `\\\\${selectedShare.server}\\${selectedShare.path}`
-      : `${selectedShare.server}:${selectedShare.path}`;
-    const rel = form.paths[p];
-    if (!rel) return base;
-    return selectedShare.protocol === 'SMB'
-      ? `${base}\\${rel.replace(/\//g, '\\')}`
-      : `${base}/${rel}`;
-  };
-
-  const handleSubmit = async () => {
-    if (!form.display_name.trim()) { toast.error('Name erforderlich'); return; }
-    if (!form.shareId) { toast.error('File Share auswählen'); return; }
-    if (form.selectedPlatforms.length === 0) { toast.error('Mind. eine Plattform wählen'); return; }
-
-    setSaving(true);
+  const handleScan = async () => {
+    if (!selectedShareId) return;
+    setScanning(true); setScanError(''); setFiles([]); setSelected(new Set());
     try {
-      const name = form.display_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-      const packages: Record<string, any> = {};
-      for (const p of form.selectedPlatforms) {
-        packages[p] = {
-          type: 'share',
-          share_id: form.shareId,
-          share_name: selectedShare?.name,
-          path: form.paths[p] || '',
-          full_path: sharePath(p),
-        };
+      const res = await appStoreApi.scanShare(selectedShareId);
+      const found: ScannedFile[] = res.data.files || [];
+      setFiles(found);
+      // pre-select all, init meta
+      setSelected(new Set(found.map(f => f.relativePath)));
+      const initMeta: typeof meta = {};
+      for (const f of found) {
+        initMeta[f.relativePath] = { display_name: f.suggestedName, version: '1.0.0', category: categories[0]?.name || 'utilities' };
       }
-      await appStoreApi.createApp({
-        name,
-        display_name: form.display_name,
-        description: form.description,
-        version: form.version,
-        category: form.category,
-        publisher: form.publisher,
-        platforms: form.selectedPlatforms,
-        packages,
-        metadata: { source: 'share', share_id: form.shareId },
-      });
-      toast.success(`«${form.display_name}» zum Katalog hinzugefügt`);
-      onSaved();
+      setMeta(initMeta);
+      if (res.data.error) setScanError(res.data.error);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Fehler beim Speichern');
+      setScanError(err?.response?.data?.error || 'Scan fehlgeschlagen');
     } finally {
-      setSaving(false);
+      setScanning(false);
     }
   };
 
+  const toggleFile = (path: string) =>
+    setSelected(s => { const n = new Set(s); n.has(path) ? n.delete(path) : n.add(path); return n; });
+
+  const updateMeta = (path: string, field: string, value: string) =>
+    setMeta(m => ({ ...m, [path]: { ...m[path], [field]: value } }));
+
+  const handleImport = async () => {
+    const toImport = files.filter(f => selected.has(f.relativePath));
+    if (toImport.length === 0) { toast.error('Mind. eine Datei auswählen'); return; }
+    setSaving(true);
+    let count = 0;
+    for (const f of toImport) {
+      const m = meta[f.relativePath] || { display_name: f.suggestedName, version: '1.0.0', category: categories[0]?.name || 'utilities' };
+      const name = m.display_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const packages: Record<string, any> = {};
+      for (const p of f.platforms) {
+        packages[p] = { type: 'share', share_id: selectedShareId, path: f.relativePath };
+      }
+      try {
+        await appStoreApi.createApp({
+          name,
+          display_name: m.display_name,
+          version: m.version,
+          category: m.category,
+          platforms: f.platforms,
+          packages,
+          metadata: { source: 'share', share_id: selectedShareId, original_file: f.name },
+        });
+        count++;
+      } catch {}
+    }
+    setSaving(false);
+    toast.success(`${count} App${count !== 1 ? 's' : ''} importiert`);
+    onSaved();
+  };
+
+  const selectedShare = shares.find(s => s.id === selectedShareId);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <ServerIcon className="h-5 w-5 text-purple-600" />
-            <h2 className="text-base font-semibold text-gray-900">App aus File Share</h2>
+            <h2 className="text-base font-semibold text-gray-900">Apps aus File Share importieren</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <XMarkIcon className="h-5 w-5" />
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="h-5 w-5" /></button>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
 
-          {/* Share picker */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              File Share <span className="text-gray-400">(nur «Apps»-Shares werden angezeigt)</span>
-            </label>
-            {shares.length === 0 ? (
-              <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                Keine File Shares mit Zweck «App-Verteilung» gefunden. Zuerst unter Infrastruktur einen Share als «Apps» markieren.
+          {/* Share picker + scan button */}
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                File Share <span className="text-gray-400">(nur «Apps»-Shares)</span>
+              </label>
+              {shares.length === 0 ? (
+                <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Kein Share mit Zweck «App-Verteilung» gefunden. Unter Infrastruktur → File Shares einen Share als «Apps» markieren.
+                </div>
+              ) : (
+                <select
+                  value={selectedShareId}
+                  onChange={e => { setSelectedShareId(e.target.value); setFiles([]); setScanError(''); }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                >
+                  <option value="">— Share auswählen —</option>
+                  {shares.map(s => <option key={s.id} value={s.id}>{s.name} ({s.protocol} · {s.server})</option>)}
+                </select>
+              )}
+            </div>
+            <button
+              onClick={handleScan}
+              disabled={!selectedShareId || scanning}
+              className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-40 whitespace-nowrap"
+            >
+              {scanning ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <MagnifyingGlassIcon className="h-4 w-4" />}
+              {scanning ? 'Scanne…' : 'Share scannen'}
+            </button>
+          </div>
+
+          {selectedShare && (
+            <p className="text-xs text-gray-400 font-mono">
+              {selectedShare.protocol === 'SMB' ? `\\\\${selectedShare.server}\\${selectedShare.path}` : `${selectedShare.server}:${selectedShare.path}`}
+            </p>
+          )}
+
+          {scanError && (
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              {scanError}
+            </div>
+          )}
+
+          {/* Found files */}
+          {files.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-gray-700">{files.length} Installer gefunden — auswählen zum Importieren</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelected(new Set(files.map(f => f.relativePath)))} className="text-xs text-purple-600 hover:underline">Alle</button>
+                  <button onClick={() => setSelected(new Set())} className="text-xs text-gray-400 hover:underline">Keine</button>
+                </div>
               </div>
-            ) : (
-              <select
-                value={form.shareId}
-                onChange={e => setForm(f => ({ ...f, shareId: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
-              >
-                <option value="">— Share auswählen —</option>
-                {shares.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.protocol})</option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* App info */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">App-Name *</label>
-              <input
-                value={form.display_name}
-                onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))}
-                placeholder="z.B. Adobe Reader"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Version</label>
-              <input
-                value={form.version}
-                onChange={e => setForm(f => ({ ...f, version: e.target.value }))}
-                placeholder="1.0.0"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Hersteller</label>
-              <input
-                value={form.publisher}
-                onChange={e => setForm(f => ({ ...f, publisher: e.target.value }))}
-                placeholder="z.B. Adobe"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Kategorie</label>
-              <select
-                value={form.category}
-                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
-              >
-                {categories.map(c => <option key={c.id} value={c.name}>{c.display_name}</option>)}
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Beschreibung</label>
-              <textarea
-                value={form.description}
-                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                rows={2}
-                placeholder="Kurzbeschreibung der App"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
-              />
-            </div>
-          </div>
-
-          {/* Platforms + paths */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">Plattformen &amp; Installer-Pfad im Share</label>
-            <div className="space-y-2">
-              {PLATFORMS.map(p => {
-                const sel = form.selectedPlatforms.includes(p);
-                const label = p === 'windows' ? 'Windows' : p === 'macos' ? 'macOS' : 'Linux';
-                const ext   = p === 'windows' ? 'setup.exe' : p === 'macos' ? 'app.dmg' : 'install.sh';
-                return (
-                  <div key={p} className={`border rounded-lg p-3 transition-colors ${sel ? 'border-purple-300 bg-purple-50' : 'border-gray-200'}`}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <button
-                        type="button"
-                        onClick={() => togglePlatform(p)}
-                        className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${sel ? 'bg-purple-600' : 'border border-gray-300'}`}
-                      >
-                        {sel && <ChevronRightIcon className="h-2.5 w-2.5 text-white" />}
-                      </button>
-                      <span className={`text-xs font-medium ${sel ? 'text-purple-800' : 'text-gray-600'}`}>{label}</span>
-                    </div>
-                    {sel && (
-                      <div>
-                        <input
-                          value={form.paths[p]}
-                          onChange={e => setForm(f => ({ ...f, paths: { ...f.paths, [p]: e.target.value } }))}
-                          placeholder={`Pfad im Share, z.B. installers/${ext}`}
-                          className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-purple-400 bg-white"
-                        />
-                        {selectedShare && form.paths[p] && (
-                          <p className="text-xs text-gray-400 mt-1 font-mono truncate">{sharePath(p)}</p>
-                        )}
+              <div className="space-y-2">
+                {files.map(f => {
+                  const sel = selected.has(f.relativePath);
+                  const m = meta[f.relativePath] || { display_name: f.suggestedName, version: '1.0.0', category: categories[0]?.name || 'utilities' };
+                  return (
+                    <div key={f.relativePath} className={`border rounded-lg p-3 transition-colors ${sel ? 'border-purple-300 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}>
+                      <div className="flex items-start gap-2">
+                        <button
+                          onClick={() => toggleFile(f.relativePath)}
+                          className={`w-4 h-4 rounded mt-0.5 flex-shrink-0 flex items-center justify-center ${sel ? 'bg-purple-600' : 'border border-gray-300 bg-white'}`}
+                        >
+                          {sel && <CheckCircleIcon className="h-3 w-3 text-white" />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-mono text-gray-600 truncate">{f.relativePath}</p>
+                          <div className="flex gap-1 mt-1">
+                            {f.platforms.map(p => (
+                              <span key={p} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${p === 'windows' ? 'bg-blue-100 text-blue-700' : p === 'macos' ? 'bg-gray-100 text-gray-700' : 'bg-orange-100 text-orange-700'}`}>{p}</span>
+                            ))}
+                          </div>
+                          {sel && (
+                            <div className="grid grid-cols-3 gap-2 mt-2">
+                              <div className="col-span-1">
+                                <input
+                                  value={m.display_name}
+                                  onChange={e => updateMeta(f.relativePath, 'display_name', e.target.value)}
+                                  placeholder="App-Name"
+                                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400 bg-white"
+                                />
+                              </div>
+                              <div>
+                                <input
+                                  value={m.version}
+                                  onChange={e => updateMeta(f.relativePath, 'version', e.target.value)}
+                                  placeholder="Version"
+                                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400 bg-white"
+                                />
+                              </div>
+                              <div>
+                                <select
+                                  value={m.category}
+                                  onChange={e => updateMeta(f.relativePath, 'category', e.target.value)}
+                                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400 bg-white"
+                                >
+                                  {categories.map(c => <option key={c.id} value={c.name}>{c.display_name}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
+
+          {!scanning && files.length === 0 && selectedShareId && !scanError && (
+            <p className="text-xs text-gray-400 text-center py-4">Share scannen um Installer-Dateien zu finden</p>
+          )}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
           <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">Abbrechen</button>
           <button
-            onClick={handleSubmit}
-            disabled={saving || !form.shareId || !form.display_name.trim()}
+            onClick={handleImport}
+            disabled={saving || selected.size === 0}
             className="flex items-center gap-1.5 bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {saving ? 'Speichern…' : 'App hinzufügen'}
+            {saving ? 'Importiere…' : `${selected.size} App${selected.size !== 1 ? 's' : ''} importieren`}
             {!saving && <ChevronRightIcon className="h-4 w-4" />}
           </button>
         </div>

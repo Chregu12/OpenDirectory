@@ -401,6 +401,115 @@ app.get('/api/store/stats', async (req, res) => {
 });
 
 // ========================================================================
+// Share Scan — list installer files on an apps-purpose SMB/NFS share
+// ========================================================================
+
+const INSTALLER_EXTENSIONS = ['.exe', '.msi', '.msix', '.dmg', '.pkg', '.app.zip', '.deb', '.rpm', '.sh', '.run', '.appimage'];
+
+function guessplatform(filename) {
+  const f = filename.toLowerCase();
+  const platforms = [];
+  if (f.endsWith('.exe') || f.endsWith('.msi') || f.endsWith('.msix')) platforms.push('windows');
+  if (f.endsWith('.dmg') || f.endsWith('.pkg')) platforms.push('macos');
+  if (f.endsWith('.deb') || f.endsWith('.rpm') || f.endsWith('.sh') || f.endsWith('.run') || f.endsWith('.appimage')) platforms.push('linux');
+  if (platforms.length === 0) platforms.push('windows', 'macos', 'linux');
+  return platforms;
+}
+
+function guessAppName(filename) {
+  return filename
+    .replace(/\.(exe|msi|msix|dmg|pkg|deb|rpm|sh|run|appimage|zip)$/i, '')
+    .replace(/[-_.]v?\d[\d.]+.*$/i, '')
+    .replace(/[-_.]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+async function scanShareFiles(share) {
+  const { execFile } = require('child_process');
+  const { promisify } = require('util');
+  const execFileAsync = promisify(execFile);
+
+  const files = [];
+
+  if (share.protocol === 'SMB') {
+    // Use smbclient to list files recursively
+    const server = share.server;
+    const sharePath = share.path.startsWith('/') ? share.path.slice(1) : share.path;
+    const uncShare = `//${server}/${sharePath}`;
+    const args = [uncShare, '-N', '-c', 'recurse; ls'];
+    if (share.username) args.push('-U', share.username);
+
+    try {
+      const { stdout } = await execFileAsync('smbclient', args, { timeout: 15000 });
+      const lines = stdout.split('\n');
+      let currentDir = '';
+      for (const line of lines) {
+        const dirMatch = line.match(/^\s*\\(.+)$/);
+        if (dirMatch) { currentDir = dirMatch[1].replace(/\\/g, '/'); continue; }
+        const fileMatch = line.match(/^\s{2}(.+?)\s+[AHRS]*\s+\d+\s+\w/);
+        if (fileMatch) {
+          const name = fileMatch[1].trim();
+          const ext = '.' + name.split('.').pop().toLowerCase();
+          if (INSTALLER_EXTENSIONS.includes(ext)) {
+            const relativePath = currentDir ? `${currentDir}/${name}` : name;
+            files.push({ name, relativePath, platforms: guessplatform(name), suggestedName: guessAppName(name) });
+          }
+        }
+      }
+    } catch (e) {
+      // smbclient not available or unreachable — return empty list with error
+      return { files: [], error: `smbclient: ${e.message.split('\n')[0]}` };
+    }
+  } else if (share.protocol === 'NFS') {
+    // Try direct filesystem listing (only works if share is already mounted in container)
+    const fs = require('fs');
+    const mountPath = `/mnt/nfs/${share.name}`;
+    try {
+      const walk = (dir, base = '') => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const e of entries) {
+          if (e.isDirectory()) walk(`${dir}/${e.name}`, base ? `${base}/${e.name}` : e.name);
+          else {
+            const ext = '.' + e.name.split('.').pop().toLowerCase();
+            if (INSTALLER_EXTENSIONS.includes(ext)) {
+              const relativePath = base ? `${base}/${e.name}` : e.name;
+              files.push({ name: e.name, relativePath, platforms: guessplatform(e.name), suggestedName: guessAppName(e.name) });
+            }
+          }
+        }
+      };
+      walk(mountPath);
+    } catch {
+      return { files: [], error: 'NFS share nicht erreichbar (nicht gemountet)' };
+    }
+  }
+
+  return { files };
+}
+
+// POST /api/store/shares/:id/scan — scan an apps-purpose share for installer files
+app.post('/api/store/shares/:shareId/scan', async (req, res) => {
+  try {
+    const { shareId } = req.params;
+
+    // Fetch share details from integration-service
+    const integrationUrl = process.env.INTEGRATION_SERVICE_URL || 'http://integration-service:4000';
+    const shareRes = await fetch(`${integrationUrl}/api/network/shares`).then(r => r.json());
+    const share = (shareRes.shares || []).find(s => s.id === shareId);
+
+    if (!share) return res.status(404).json({ error: 'Share not found' });
+    if (!share.purpose?.includes('apps')) return res.status(400).json({ error: 'Share is not marked as apps-purpose' });
+
+    const result = await scanShareFiles(share);
+    res.json({ shareId, shareName: share.name, ...result });
+  } catch (err) {
+    logger.error('Share scan error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================================================
 // Startup
 // ========================================================================
 

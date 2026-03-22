@@ -618,6 +618,9 @@ export const appStoreApi = {
   createApp: (data: any) =>
     api.post('/api/store/catalog', data),
 
+  scanShare: (shareId: string) =>
+    api.post(`/api/store/shares/${shareId}/scan`),
+
   deleteApp: (appId: string) =>
     api.delete(`/api/store/catalog/${appId}`),
 

@@ -3,7 +3,7 @@ FROM node:18-alpine
 LABEL maintainer="OpenDirectory Team"
 LABEL description="Enterprise App Store with domain-aware catalog and push installation"
 
-RUN apk add --no-cache tini curl
+RUN apk add --no-cache tini curl samba-client
 
 WORKDIR /app
 
