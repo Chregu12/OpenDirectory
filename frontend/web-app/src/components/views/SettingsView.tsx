@@ -238,9 +238,14 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
     id === 'authentication-service' || id === 'configuration-service';
 
   const healthyServices = services.filter(s => s.status === 'healthy').length;
-  const uptime = healthData?.gateway?.uptime
-    ? Math.floor(healthData.gateway.uptime / 3600) + 'h'
-    : 'N/A';
+  const uptime = (() => {
+    const secs = healthData?.gateway?.uptime;
+    if (!secs) return 'N/A';
+    if (secs < 60)   return `${Math.floor(secs)}s`;
+    if (secs < 3600) return `${Math.floor(secs / 60)}m`;
+    if (secs < 86400) return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+    return `${Math.floor(secs / 86400)}d ${Math.floor((secs % 86400) / 3600)}h`;
+  })();
 
   const tabs: { key: TabId; label: string; icon: React.ComponentType<any> }[] = [
     { key: 'services', label: 'Services',  icon: CpuChipIcon },
@@ -572,23 +577,6 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
           {/* ── System Tab ── */}
           {activeTab === 'system' && (
             <div className="space-y-6">
-              {/* Setup Wizard */}
-              <div className="border border-purple-200 bg-purple-50 rounded-lg p-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-medium text-purple-900">Initial Setup Wizard</h3>
-                  <p className="text-xs text-purple-700 mt-0.5">
-                    Configure modules, users, and services for a fresh OpenDirectory installation.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowSetupWizard(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors shrink-0 ml-4"
-                >
-                  <SparklesIcon className="w-4 h-4" />
-                  Open Setup Wizard
-                </button>
-              </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="border border-gray-200 rounded-lg p-4">
                   <h3 className="text-sm font-medium text-gray-900 mb-3">Gateway</h3>
