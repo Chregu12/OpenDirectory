@@ -17,10 +17,17 @@ import {
   InformationCircleIcon,
   XMarkIcon,
   SparklesIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline';
 import { gatewayApi, healthApi, configApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 import SetupWizard from '@/components/setup/SetupWizard';
+import MonitoringAlertingWizard from '@/components/setup/MonitoringAlertingWizard';
+import SecuritySetupWizard from '@/components/setup/SecuritySetupWizard';
+import NetworkConfigWizard from '@/components/setup/NetworkConfigWizard';
+import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
+import UserManagementWizard from '@/components/setup/UserManagementWizard';
+import PrinterSetupWizard from '@/components/setup/PrinterSetupWizard';
 
 interface Service {
   name: string;
@@ -45,7 +52,7 @@ interface Props {
   onModuleChange?: (moduleId: string, enabled: boolean) => void;
 }
 
-type TabId = 'services' | 'system';
+type TabId = 'services' | 'setup' | 'system';
 
 // Modules that have a sidebar nav item and can be hidden
 const HAS_NAV_ITEM = new Set([
@@ -132,7 +139,15 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
   // Double-confirmation state
   const [pendingDisable, setPendingDisable] = useState<Module | null>(null);
   const [confirmStep, setConfirmStep]       = useState<1 | 2>(1);
-  const [showSetupWizard, setShowSetupWizard] = useState(false);
+
+  // Wizard visibility state
+  const [showSetupWizard, setShowSetupWizard]           = useState(false);
+  const [showMonitoringWizard, setShowMonitoringWizard] = useState(false);
+  const [showSecurityWizard, setShowSecurityWizard]     = useState(false);
+  const [showNetworkWizard, setShowNetworkWizard]       = useState(false);
+  const [showDeviceWizard, setShowDeviceWizard]         = useState(false);
+  const [showUserWizard, setShowUserWizard]             = useState(false);
+  const [showPrinterWizard, setShowPrinterWizard]       = useState(false);
 
   useEffect(() => {
     loadData();
@@ -229,6 +244,7 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
 
   const tabs: { key: TabId; label: string; icon: React.ComponentType<any> }[] = [
     { key: 'services', label: 'Services',  icon: CpuChipIcon },
+    { key: 'setup',    label: 'Setup',     icon: SparklesIcon },
     { key: 'system',   label: 'System',    icon: InformationCircleIcon },
   ];
 
@@ -408,6 +424,151 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
             </div>
           )}
 
+          {/* ── Setup Tab ── */}
+          {activeTab === 'setup' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-sm font-medium text-gray-700">Setup & Configuration Wizards</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Verwende die Wizards um Module und Dienste nachträglich zu konfigurieren.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Initial Setup */}
+                <div className="border-2 border-blue-200 bg-blue-50 rounded-xl p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                      <SparklesIcon className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-gray-900">Initial Setup Wizard</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">Module aktivieren, Gerätezahlen anpassen, Organisationsname ändern.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowSetupWizard(true)}
+                    className="mt-4 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                  >
+                    <SparklesIcon className="w-4 h-4" /> Setup öffnen
+                  </button>
+                </div>
+
+                {/* User Management */}
+                <div className="border border-gray-200 rounded-xl p-5 hover:border-indigo-200 hover:bg-indigo-50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                      <PlayIcon className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-gray-900">User Management</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">Benutzer und Gruppen anlegen, LDAP-Einstellungen konfigurieren.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowUserWizard(true)}
+                    className="mt-4 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200 rounded-lg transition-colors"
+                  >
+                    <PlayIcon className="w-4 h-4" /> Wizard starten
+                  </button>
+                </div>
+
+                {/* Device Enrollment */}
+                <div className="border border-gray-200 rounded-xl p-5 hover:border-teal-200 hover:bg-teal-50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
+                      <ComputerDesktopIcon className="w-5 h-5 text-teal-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-gray-900">Device Enrollment</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">Geräte registrieren, Enrollment-Profile und Richtlinien einrichten.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowDeviceWizard(true)}
+                    className="mt-4 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-teal-700 bg-teal-100 hover:bg-teal-200 rounded-lg transition-colors"
+                  >
+                    <PlayIcon className="w-4 h-4" /> Wizard starten
+                  </button>
+                </div>
+
+                {/* Monitoring */}
+                <div className="border border-gray-200 rounded-xl p-5 hover:border-purple-200 hover:bg-purple-50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                      <ChartBarIcon className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-gray-900">Monitoring & Alerting</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">Grafana-Dashboards, Prometheus-Alerts und Benachrichtigungen einrichten.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowMonitoringWizard(true)}
+                    className="mt-4 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-lg transition-colors"
+                  >
+                    <PlayIcon className="w-4 h-4" /> Wizard starten
+                  </button>
+                </div>
+
+                {/* Security */}
+                <div className="border border-gray-200 rounded-xl p-5 hover:border-red-200 hover:bg-red-50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+                      <ShieldCheckIcon className="w-5 h-5 text-red-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-gray-900">Security Setup</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">Wazuh, Vault, MFA und Sicherheitsrichtlinien konfigurieren.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowSecurityWizard(true)}
+                    className="mt-4 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
+                  >
+                    <PlayIcon className="w-4 h-4" /> Wizard starten
+                  </button>
+                </div>
+
+                {/* Network */}
+                <div className="border border-gray-200 rounded-xl p-5 hover:border-cyan-200 hover:bg-cyan-50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-cyan-100 flex items-center justify-center flex-shrink-0">
+                      <WifiIcon className="w-5 h-5 text-cyan-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-gray-900">Network Configuration</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">DNS, DHCP, VLANs und Netzwerkinfrastruktur einrichten.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowNetworkWizard(true)}
+                    className="mt-4 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-cyan-700 bg-cyan-100 hover:bg-cyan-200 rounded-lg transition-colors"
+                  >
+                    <PlayIcon className="w-4 h-4" /> Wizard starten
+                  </button>
+                </div>
+
+                {/* Printer */}
+                <div className="border border-gray-200 rounded-xl p-5 hover:border-orange-200 hover:bg-orange-50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
+                      <PrinterIcon className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-gray-900">Printer Setup</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">Drucker hinzufügen, Protokolle konfigurieren und Treiber installieren.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowPrinterWizard(true)}
+                    className="mt-4 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition-colors"
+                  >
+                    <PlayIcon className="w-4 h-4" /> Wizard starten
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── System Tab ── */}
           {activeTab === 'system' && (
             <div className="space-y-6">
@@ -476,7 +637,13 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
           onCancel={() => { setPendingDisable(null); setConfirmStep(1); }}
         />
       )}
-      {showSetupWizard && <SetupWizard onComplete={() => setShowSetupWizard(false)} />}
+      {showSetupWizard      && <SetupWizard              onComplete={() => setShowSetupWizard(false)} />}
+      {showMonitoringWizard && <MonitoringAlertingWizard  onClose={() => setShowMonitoringWizard(false)} />}
+      {showSecurityWizard   && <SecuritySetupWizard       onClose={() => setShowSecurityWizard(false)} />}
+      {showNetworkWizard    && <NetworkConfigWizard        onClose={() => setShowNetworkWizard(false)} />}
+      {showDeviceWizard     && <DeviceEnrollmentWizard    onClose={() => setShowDeviceWizard(false)} />}
+      {showUserWizard       && <UserManagementWizard      onClose={() => setShowUserWizard(false)} />}
+      {showPrinterWizard    && <PrinterSetupWizard        onClose={() => setShowPrinterWizard(false)} />}
     </>
   );
 }
