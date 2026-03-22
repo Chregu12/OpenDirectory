@@ -3,20 +3,26 @@ import { LLDAPService } from '../services/lldap.service';
 import { GrafanaService } from '../services/grafana.service';
 import { PrometheusService } from '../services/prometheus.service';
 import { VaultService } from '../services/vault.service';
+import { NetworkInfrastructureService } from '../services/network-infrastructure.service';
+import { WazuhService } from '../services/wazuh.service';
 import { SERVICES } from '../config/services';
 
 const router = Router();
 
-const lldapService      = new LLDAPService();
-const grafanaService    = new GrafanaService();
-const prometheusService = new PrometheusService();
-const vaultService      = new VaultService();
+const lldapService                 = new LLDAPService();
+const grafanaService               = new GrafanaService();
+const prometheusService            = new PrometheusService();
+const vaultService                 = new VaultService();
+const networkInfrastructureService = new NetworkInfrastructureService();
+const wazuhService                 = new WazuhService();
 
 const SERVICE_CHECKS: Record<string, { name: string; fn: () => Promise<any> }> = {
-  lldap:      { name: 'LLDAP',      fn: () => lldapService.getServiceStatus() },
-  grafana:    { name: 'Grafana',    fn: () => grafanaService.getServiceStatus() },
-  prometheus: { name: 'Prometheus', fn: () => prometheusService.getServiceStatus() },
-  vault:      { name: 'Vault',      fn: () => vaultService.getServiceStatus() },
+  lldap:                  { name: 'LLDAP',                  fn: () => lldapService.getServiceStatus() },
+  grafana:                { name: 'Grafana',                fn: () => grafanaService.getServiceStatus() },
+  prometheus:             { name: 'Prometheus',             fn: () => prometheusService.getServiceStatus() },
+  vault:                  { name: 'HashiCorp Vault',        fn: () => vaultService.getServiceStatus() },
+  'network-infrastructure': { name: 'Network Infrastructure', fn: () => networkInfrastructureService.getServiceStatus() },
+  wazuh:                  { name: 'Wazuh Security',         fn: () => wazuhService.getServiceStatus() },
 };
 
 router.get('/', async (req: Request, res: Response) => {

@@ -3,14 +3,18 @@ import { LLDAPService } from '../services/lldap.service';
 import { GrafanaService } from '../services/grafana.service';
 import { PrometheusService } from '../services/prometheus.service';
 import { VaultService } from '../services/vault.service';
+import { NetworkInfrastructureService } from '../services/network-infrastructure.service';
+import { WazuhService } from '../services/wazuh.service';
 import { ServiceStatus } from '../types';
 import logger from '../lib/logger';
 
 const router = Router();
-const lldapService = new LLDAPService();
-const grafanaService = new GrafanaService();
-const prometheusService = new PrometheusService();
-const vaultService = new VaultService();
+const lldapService                 = new LLDAPService();
+const grafanaService               = new GrafanaService();
+const prometheusService            = new PrometheusService();
+const vaultService                 = new VaultService();
+const networkInfrastructureService = new NetworkInfrastructureService();
+const wazuhService                 = new WazuhService();
 
 // Overall health check
 router.get('/', async (req, res) => {
@@ -18,19 +22,23 @@ router.get('/', async (req, res) => {
     const startTime = Date.now();
     
     // Check all services in parallel
-    const [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus] = await Promise.allSettled([
+    const [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus, networkStatus, wazuhStatus] = await Promise.allSettled([
       lldapService.getServiceStatus(),
       grafanaService.getServiceStatus(),
       prometheusService.getServiceStatus(),
       vaultService.getServiceStatus(),
+      networkInfrastructureService.getServiceStatus(),
+      wazuhService.getServiceStatus(),
     ]);
 
     const services: ServiceStatus[] = [];
-    
-    if (lldapStatus.status === 'fulfilled') services.push(lldapStatus.value);
-    if (grafanaStatus.status === 'fulfilled') services.push(grafanaStatus.value);
+
+    if (lldapStatus.status === 'fulfilled')    services.push(lldapStatus.value);
+    if (grafanaStatus.status === 'fulfilled')  services.push(grafanaStatus.value);
     if (prometheusStatus.status === 'fulfilled') services.push(prometheusStatus.value);
-    if (vaultStatus.status === 'fulfilled') services.push(vaultStatus.value);
+    if (vaultStatus.status === 'fulfilled')    services.push(vaultStatus.value);
+    if (networkStatus.status === 'fulfilled')  services.push(networkStatus.value);
+    if (wazuhStatus.status === 'fulfilled')    services.push(wazuhStatus.value);
 
     const healthyServices = services.filter(s => s.status === 'healthy').length;
     const totalServices = services.length;
@@ -134,13 +142,15 @@ router.get('/vault', async (req, res) => {
 // Detailed health (same as main health endpoint)
 router.get('/detailed', async (req, res) => {
   try {
-    const [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus] = await Promise.allSettled([
+    const [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus, networkStatus, wazuhStatus] = await Promise.allSettled([
       lldapService.getServiceStatus(),
       grafanaService.getServiceStatus(),
       prometheusService.getServiceStatus(),
       vaultService.getServiceStatus(),
+      networkInfrastructureService.getServiceStatus(),
+      wazuhService.getServiceStatus(),
     ]);
-    const services = [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus]
+    const services = [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus, networkStatus, wazuhStatus]
       .filter(r => r.status === 'fulfilled')
       .map(r => (r as PromiseFulfilledResult<any>).value);
     const healthy = services.filter(s => s.status === 'healthy').length;

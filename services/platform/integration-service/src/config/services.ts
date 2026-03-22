@@ -38,8 +38,8 @@ export const SERVICES: Record<string, ServiceConfig> = {
   },
   vault: {
     name: 'HashiCorp Vault',
-    baseUrl: process.env.VAULT_URL || 'http://localhost:30820',
-    port: 30820,
+    baseUrl: process.env.VAULT_URL || 'http://vault:8200',
+    port: 8200,
     healthEndpoint: '/v1/sys/health',
     authentication: {
       type: 'bearer',
@@ -47,6 +47,20 @@ export const SERVICES: Record<string, ServiceConfig> = {
         token: process.env.VAULT_TOKEN,
       },
     },
+  },
+  'network-infrastructure': {
+    name: 'Network Infrastructure',
+    baseUrl: process.env.NETWORK_INFRA_URL || 'http://network-infrastructure:3007',
+    port: 3007,
+    healthEndpoint: '/health',
+    authentication: { type: 'none' },
+  },
+  wazuh: {
+    name: 'Wazuh Security',
+    baseUrl: process.env.WAZUH_URL || process.env.SECURITY_SCANNER_URL || 'http://security-scanner:3902',
+    port: 3902,
+    healthEndpoint: '/health',
+    authentication: { type: 'none' },
   },
 };
 
