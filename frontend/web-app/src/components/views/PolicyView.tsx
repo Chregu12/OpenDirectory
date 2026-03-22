@@ -829,6 +829,9 @@ function GPOEditModal({ gpo, onClose, onSave }: {
     { key: 'uc_adm_vorlagen',      label: 'Admin-Vorlagen' },
   ];
 
+  const [ccOpen, setCcOpen] = useState(true);
+  const [ucOpen, setUcOpen] = useState(true);
+
   // Default Linux services list
   const DEFAULT_SERVICES: Omit<ServiceEntry, 'startupType'>[] = [
     { id: 'svc-ssh',       name: 'ssh',          displayName: 'OpenSSH Server' },
@@ -894,10 +897,17 @@ function GPOEditModal({ gpo, onClose, onSave }: {
 
           {/* Left sidebar nav — AD-style grouped */}
           <nav className="w-52 flex-shrink-0 border-r border-gray-100 overflow-y-auto py-2">
-            <div className="px-3 pt-2 pb-1">
+            {/* Computerkonfiguration — collapsible */}
+            <button
+              onClick={() => setCcOpen(o => !o)}
+              className="flex items-center gap-1.5 w-full px-3 pt-2 pb-1 text-left hover:bg-gray-50 transition-colors"
+            >
+              {ccOpen
+                ? <ChevronDownIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                : <ChevronRightIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />}
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Computerkonfiguration</span>
-            </div>
-            {CC_TABS.map(t => (
+            </button>
+            {ccOpen && CC_TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`w-full text-left px-4 py-1.5 text-sm font-medium transition-colors ${
                   tab === t.key
@@ -907,10 +917,17 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                 {t.label}
               </button>
             ))}
-            <div className="px-3 pt-3 pb-1">
+            {/* Benutzerkonfiguration — collapsible */}
+            <button
+              onClick={() => setUcOpen(o => !o)}
+              className="flex items-center gap-1.5 w-full px-3 pt-3 pb-1 text-left hover:bg-gray-50 transition-colors"
+            >
+              {ucOpen
+                ? <ChevronDownIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                : <ChevronRightIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />}
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Benutzerkonfiguration</span>
-            </div>
-            {UC_TABS.map(t => (
+            </button>
+            {ucOpen && UC_TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`w-full text-left px-4 py-1.5 text-sm font-medium transition-colors ${
                   tab === t.key
