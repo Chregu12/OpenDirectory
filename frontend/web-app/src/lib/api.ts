@@ -615,6 +615,9 @@ export const appStoreApi = {
   seedCatalog: () =>
     api.post('/api/store/catalog/seed'),
 
+  createApp: (data: any) =>
+    api.post('/api/store/catalog', data),
+
   deleteApp: (appId: string) =>
     api.delete(`/api/store/catalog/${appId}`),
 

@@ -163,6 +163,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignTarget, setAssignTarget] = useState({ target_type: 'domain', target_id: '', target_name: '' });
   const [assignInstallType, setAssignInstallType] = useState('available');
+  const [showShareAppModal, setShowShareAppModal] = useState(false);
 
   // Device ID for demo/self-service - in production this comes from the client agent
   const deviceId = 'self-service';
@@ -539,6 +540,13 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
             >
               <PlusIcon className="w-4 h-4" />
               <span>Seed Default Apps</span>
+            </button>
+            <button
+              onClick={() => setShowShareAppModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+            >
+              <ServerIcon className="w-4 h-4" />
+              <span>App aus File Share</span>
             </button>
           </div>
 
@@ -1037,6 +1045,15 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
           </div>
         </div>
       )}
+
+      {/* Share App Modal */}
+      {showShareAppModal && (
+        <ShareAppModal
+          categories={categories}
+          onClose={() => setShowShareAppModal(false)}
+          onSaved={() => { setShowShareAppModal(false); loadCatalog(); }}
+        />
+      )}
     </div>
   );
 }
@@ -1072,4 +1089,249 @@ function TargetTypeIcon({ type }: { type: string }) {
   };
   const Icon = icons[type] || ServerIcon;
   return <Icon className="w-5 h-5 text-gray-400" />;
+}
+
+// --- Share App Modal ---
+
+const PLATFORMS = ['windows', 'macos', 'linux'] as const;
+type Platform = typeof PLATFORMS[number];
+
+function ShareAppModal({
+  categories,
+  onClose,
+  onSaved,
+}: {
+  categories: StoreCategory[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [shares, setShares] = useState<{ id: string; name: string; server: string; path: string; protocol: string }[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    display_name: '',
+    description: '',
+    version: '1.0.0',
+    category: categories[0]?.name || 'utilities',
+    publisher: '',
+    selectedPlatforms: ['windows'] as Platform[],
+    shareId: '',
+    // per-platform installer path within the share
+    paths: { windows: '', macos: '', linux: '' } as Record<Platform, string>,
+  });
+
+  useEffect(() => {
+    fetch('/api/network/shares')
+      .then(r => r.ok ? r.json() : { shares: [] })
+      .then(d => setShares((d.shares || []).filter((s: any) => s.purpose?.includes('apps'))))
+      .catch(() => {});
+  }, []);
+
+  const selectedShare = shares.find(s => s.id === form.shareId);
+
+  const togglePlatform = (p: Platform) =>
+    setForm(f => ({
+      ...f,
+      selectedPlatforms: f.selectedPlatforms.includes(p)
+        ? f.selectedPlatforms.filter(x => x !== p)
+        : [...f.selectedPlatforms, p],
+    }));
+
+  const sharePath = (p: Platform) => {
+    if (!selectedShare) return '';
+    const base = selectedShare.protocol === 'SMB'
+      ? `\\\\${selectedShare.server}\\${selectedShare.path}`
+      : `${selectedShare.server}:${selectedShare.path}`;
+    const rel = form.paths[p];
+    if (!rel) return base;
+    return selectedShare.protocol === 'SMB'
+      ? `${base}\\${rel.replace(/\//g, '\\')}`
+      : `${base}/${rel}`;
+  };
+
+  const handleSubmit = async () => {
+    if (!form.display_name.trim()) { toast.error('Name erforderlich'); return; }
+    if (!form.shareId) { toast.error('File Share auswählen'); return; }
+    if (form.selectedPlatforms.length === 0) { toast.error('Mind. eine Plattform wählen'); return; }
+
+    setSaving(true);
+    try {
+      const name = form.display_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const packages: Record<string, any> = {};
+      for (const p of form.selectedPlatforms) {
+        packages[p] = {
+          type: 'share',
+          share_id: form.shareId,
+          share_name: selectedShare?.name,
+          path: form.paths[p] || '',
+          full_path: sharePath(p),
+        };
+      }
+      await appStoreApi.createApp({
+        name,
+        display_name: form.display_name,
+        description: form.description,
+        version: form.version,
+        category: form.category,
+        publisher: form.publisher,
+        platforms: form.selectedPlatforms,
+        packages,
+        metadata: { source: 'share', share_id: form.shareId },
+      });
+      toast.success(`«${form.display_name}» zum Katalog hinzugefügt`);
+      onSaved();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Fehler beim Speichern');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <ServerIcon className="h-5 w-5 text-purple-600" />
+            <h2 className="text-base font-semibold text-gray-900">App aus File Share</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+
+          {/* Share picker */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              File Share <span className="text-gray-400">(nur «Apps»-Shares werden angezeigt)</span>
+            </label>
+            {shares.length === 0 ? (
+              <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Keine File Shares mit Zweck «App-Verteilung» gefunden. Zuerst unter Infrastruktur einen Share als «Apps» markieren.
+              </div>
+            ) : (
+              <select
+                value={form.shareId}
+                onChange={e => setForm(f => ({ ...f, shareId: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+              >
+                <option value="">— Share auswählen —</option>
+                {shares.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.protocol})</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* App info */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">App-Name *</label>
+              <input
+                value={form.display_name}
+                onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))}
+                placeholder="z.B. Adobe Reader"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Version</label>
+              <input
+                value={form.version}
+                onChange={e => setForm(f => ({ ...f, version: e.target.value }))}
+                placeholder="1.0.0"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Hersteller</label>
+              <input
+                value={form.publisher}
+                onChange={e => setForm(f => ({ ...f, publisher: e.target.value }))}
+                placeholder="z.B. Adobe"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Kategorie</label>
+              <select
+                value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+              >
+                {categories.map(c => <option key={c.id} value={c.name}>{c.display_name}</option>)}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Beschreibung</label>
+              <textarea
+                value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                rows={2}
+                placeholder="Kurzbeschreibung der App"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+              />
+            </div>
+          </div>
+
+          {/* Platforms + paths */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-2">Plattformen &amp; Installer-Pfad im Share</label>
+            <div className="space-y-2">
+              {PLATFORMS.map(p => {
+                const sel = form.selectedPlatforms.includes(p);
+                const label = p === 'windows' ? 'Windows' : p === 'macos' ? 'macOS' : 'Linux';
+                const ext   = p === 'windows' ? 'setup.exe' : p === 'macos' ? 'app.dmg' : 'install.sh';
+                return (
+                  <div key={p} className={`border rounded-lg p-3 transition-colors ${sel ? 'border-purple-300 bg-purple-50' : 'border-gray-200'}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={() => togglePlatform(p)}
+                        className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${sel ? 'bg-purple-600' : 'border border-gray-300'}`}
+                      >
+                        {sel && <ChevronRightIcon className="h-2.5 w-2.5 text-white" />}
+                      </button>
+                      <span className={`text-xs font-medium ${sel ? 'text-purple-800' : 'text-gray-600'}`}>{label}</span>
+                    </div>
+                    {sel && (
+                      <div>
+                        <input
+                          value={form.paths[p]}
+                          onChange={e => setForm(f => ({ ...f, paths: { ...f.paths, [p]: e.target.value } }))}
+                          placeholder={`Pfad im Share, z.B. installers/${ext}`}
+                          className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-purple-400 bg-white"
+                        />
+                        {selectedShare && form.paths[p] && (
+                          <p className="text-xs text-gray-400 mt-1 font-mono truncate">{sharePath(p)}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+          <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">Abbrechen</button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving || !form.shareId || !form.display_name.trim()}
+            className="flex items-center gap-1.5 bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Speichern…' : 'App hinzufügen'}
+            {!saving && <ChevronRightIcon className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
