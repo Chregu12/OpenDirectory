@@ -8,8 +8,9 @@ const nextConfig = {
   // INTEGRATION_SERVICE_URL is a runtime env var set in the k8s deployment.
   // This way only the frontend is exposed externally - the backend stays internal.
   async rewrites() {
-    const integrationUrl = process.env.INTEGRATION_SERVICE_URL || 'http://integration-service:4000';
-    const apiBackendUrl   = process.env.API_BACKEND_URL        || 'http://api-backend:8080';
+    const integrationUrl  = process.env.INTEGRATION_SERVICE_URL  || 'http://integration-service:4000';
+    const apiBackendUrl   = process.env.API_BACKEND_URL           || 'http://api-backend:8080';
+    const printerUrl      = process.env.PRINTER_SERVICE_URL       || 'http://printer-service:3006';
     return [
       // Health + integration-specific routes → integration-service
       { source: '/health',                  destination: `${integrationUrl}/health` },
@@ -24,6 +25,8 @@ const nextConfig = {
       { source: '/api/config/settings',     destination: `${integrationUrl}/api/config/settings` },
       { source: '/api/services/:path*',     destination: `${integrationUrl}/api/services/:path*` },
       { source: '/api/services',            destination: `${integrationUrl}/api/services` },
+      // Printer service routes → printer-service
+      { source: '/api/printer/:path*',      destination: `${printerUrl}/api/printer/:path*` },
       // Everything else → api-backend
       { source: '/api/:path*',              destination: `${apiBackendUrl}/api/:path*` },
     ];
