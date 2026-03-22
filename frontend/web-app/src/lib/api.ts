@@ -601,4 +601,40 @@ export const policyApi = {
     api.get('/api/policies/ou-tree'),
 };
 
+// App Store API
+export const appStoreApi = {
+  getCatalog: (params?: { search?: string; category?: string }) =>
+    api.get('/api/store/catalog', { params }),
+
+  getCategories: () =>
+    api.get('/api/store/categories'),
+
+  getStats: () =>
+    api.get('/api/store/stats'),
+
+  seedCatalog: () =>
+    api.post('/api/store/catalog/seed'),
+
+  deleteApp: (appId: string) =>
+    api.delete(`/api/store/catalog/${appId}`),
+
+  assignApp: (appId: string, data: any) =>
+    api.post(`/api/store/catalog/${appId}/assign`, data),
+
+  getAssignments: (appId: string) =>
+    api.get(`/api/store/catalog/${appId}/assignments`),
+
+  removeAssignment: (appId: string, assignId: string) =>
+    api.delete(`/api/store/catalog/${appId}/assignments/${assignId}`),
+
+  getInstalled: (deviceId: string) =>
+    api.get(`/api/store/installed/${deviceId}`),
+
+  requestInstall: (data: { appId: string; deviceId: string }) =>
+    api.post('/api/store/install', data),
+
+  requestUninstall: (data: { appId: string; deviceId: string }) =>
+    api.post('/api/store/uninstall', data),
+};
+
 export default api;

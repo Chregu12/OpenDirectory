@@ -11,6 +11,7 @@ const nextConfig = {
     const integrationUrl  = process.env.INTEGRATION_SERVICE_URL  || 'http://integration-service:4000';
     const apiBackendUrl   = process.env.API_BACKEND_URL           || 'http://api-backend:8080';
     const printerUrl      = process.env.PRINTER_SERVICE_URL       || 'http://printer-service:3006';
+    const appStoreUrl     = process.env.APP_STORE_URL             || 'http://app-store:3906';
     return [
       // Health + integration-specific routes → integration-service
       { source: '/health',                  destination: `${integrationUrl}/health` },
@@ -27,6 +28,8 @@ const nextConfig = {
       { source: '/api/services',            destination: `${integrationUrl}/api/services` },
       // Printer service routes → printer-service
       { source: '/api/printer/:path*',      destination: `${printerUrl}/api/printer/:path*` },
+      // App Store routes → app-store service
+      { source: '/api/store/:path*',        destination: `${appStoreUrl}/api/store/:path*` },
       // Everything else → api-backend
       { source: '/api/:path*',              destination: `${apiBackendUrl}/api/:path*` },
     ];

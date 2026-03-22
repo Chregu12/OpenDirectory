@@ -344,6 +344,8 @@ services:
       - NEXT_PUBLIC_API_URL=http://localhost:8080
       - NEXT_PUBLIC_WS_URL=ws://localhost:8080
       - INTEGRATION_SERVICE_URL=http://integration-service:4000
+      - PRINTER_SERVICE_URL=http://printer-service:3006
+      - APP_STORE_URL=http://app-store:3906
     ports:
       - "3000:3000"
     networks:
@@ -351,6 +353,7 @@ services:
     depends_on:
       - api-backend
       - integration-service
+      - app-store
     # No source mounts — the Dockerfile builds the app into the image.
     # Mounting the source would override the built .next and serve stale content.
 
@@ -572,6 +575,36 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3904/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── App Store ──────────────────────────────────────────────────────────────
+  app-store:
+    build:
+      context: ./services/enterprise/app-store
+      dockerfile: Dockerfile
+    container_name: opendirectory-app-store
+    environment:
+      PORT: 3906
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-opendirectory}
+      DB_USER: ${POSTGRES_USER:-opendirectory}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      DEVICE_SERVICE_URL: http://device-service:3003
+      LLDAP_URL: http://lldap:17170
+    ports:
+      - "3906:3906"
+    networks:
+      - opendirectory
+    depends_on:
+      - postgres
+      - device-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3906/health"]
       interval: 30s
       timeout: 10s
       retries: 3
