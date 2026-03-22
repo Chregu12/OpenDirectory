@@ -404,12 +404,31 @@ app.get('/api/store/stats', async (req, res) => {
 // Startup
 // ========================================================================
 
+async function runMigrations() {
+  const fs = require('fs');
+  const path = require('path');
+  const migrationFile = path.join(__dirname, 'db/migrations/001_app_store.sql');
+  try {
+    const sql = fs.readFileSync(migrationFile, 'utf8');
+    await pool.query(sql);
+    logger.info('Database migrations applied');
+  } catch (err) {
+    // Ignore "already exists" errors — tables/indexes may already be present
+    if (!err.message.includes('already exists')) {
+      logger.warn('Migration warning:', { error: err.message });
+    }
+  }
+}
+
 async function start() {
   try {
     // Verify database connection
     const client = await pool.connect();
     logger.info('Database connection established');
     client.release();
+
+    // Run migrations
+    await runMigrations();
 
     // Initialize messaging
     await distributionEngine.initializeMessaging();
