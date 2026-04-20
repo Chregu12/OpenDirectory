@@ -4,6 +4,21 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api';
 
+interface LoginResponse {
+  success: boolean;
+  data: {
+    token: string;
+    user: {
+      id: string;
+      username: string;
+      name: string;
+      email: string;
+      role: string;
+      groups: string[];
+    };
+  };
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState('');
@@ -17,12 +32,15 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await authApi.login({ username, password });
-      const { user } = (res.data as any).data;
+      const { user } = (res.data as LoginResponse).data;
       // Token is stored in httpOnly cookie by the server — do not store in localStorage
       localStorage.setItem('auth_user', JSON.stringify(user));
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Login failed');
+    } catch (err: unknown) {
+      const message = err instanceof Error
+        ? err.message
+        : (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      setError(message || 'Login failed');
     } finally {
       setLoading(false);
     }

@@ -125,13 +125,40 @@ class APIGateway {
 
   initializeWebSocket() {
     this.server = http.createServer(this.app);
-    
-    this.wsServer = new WebSocket.Server({ 
+
+    this.wsServer = new WebSocket.Server({
       server: this.server,
       path: '/ws'
     });
 
     this.wsServer.on('connection', (ws, req) => {
+      // Validate token before allowing the connection
+      const url = new URL(req.url || '/', `http://${req.headers.host}`);
+      const queryToken = url.searchParams.get('token');
+      const cookieHeader = req.headers.cookie || '';
+      const cookieToken = cookieHeader.split(';')
+        .map(c => c.trim())
+        .find(c => c.startsWith('auth_token='))
+        ?.split('=')[1];
+      const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+        ? req.headers.authorization.slice(7)
+        : null;
+      const token = queryToken || cookieToken || bearerToken;
+
+      if (!token) {
+        ws.close(4401, 'Authentication required');
+        return;
+      }
+
+      try {
+        const jwt = require('jsonwebtoken');
+        const jwtSecret = process.env.JWT_SECRET || 'dev-jwt-secret-not-for-production';
+        jwt.verify(token, jwtSecret);
+      } catch {
+        ws.close(4401, 'Invalid or expired token');
+        return;
+      }
+
       logger.info(`WebSocket connection established from ${req.socket.remoteAddress}`);
       
       ws.on('message', (data) => {

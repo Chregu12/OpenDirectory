@@ -98,6 +98,7 @@ services:
       context: ./services/core/identity-service
       dockerfile: Dockerfile
     container_name: od-identity-service
+    restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3001
@@ -109,9 +110,18 @@ services:
     networks:
       - opendirectory
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./services/core/identity-service:/app
       - /app/node_modules
@@ -121,6 +131,7 @@ services:
       context: ./services/core/authentication-service
       dockerfile: Dockerfile
     container_name: od-auth-service
+    restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3002
@@ -133,9 +144,16 @@ services:
     networks:
       - opendirectory
     depends_on:
-      - postgres
-      - redis
-      - lldap
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./services/core/auth-service:/app
       - /app/node_modules
@@ -145,6 +163,7 @@ services:
       context: ./services/core/device-service
       dockerfile: Dockerfile
     container_name: od-device-service
+    restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3003
@@ -159,6 +178,12 @@ services:
       - mongodb
       - redis
       - rabbitmq
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./services/core/device-service:/app
       - /app/node_modules
@@ -168,6 +193,7 @@ services:
       context: ./services/core/policy-service
       dockerfile: Dockerfile
     container_name: od-policy-service
+    restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3004
@@ -178,8 +204,16 @@ services:
     networks:
       - opendirectory
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./services/core/policy-service:/app
       - /app/node_modules
@@ -193,6 +227,7 @@ services:
       context: ./services/platform/api-gateway
       dockerfile: Dockerfile
     container_name: od-api-gateway
+    restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - API_GATEWAY_PORT=3000
@@ -207,7 +242,14 @@ services:
     networks:
       - opendirectory
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./services/platform/api-gateway:/app
       - /app/node_modules
@@ -217,11 +259,16 @@ services:
       context: ./services/platform/api-backend
       dockerfile: Dockerfile
     container_name: od-api-backend
+    restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=8080
       - CORS_ORIGIN=http://localhost:3000
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set in .env}
+      - CT2001_HOST=${CT2001_HOST:-192.168.1.51}
+      - CT2001_USERNAME=${CT2001_USERNAME:-root}
+      - CT2001_PORT=${CT2001_PORT:-22}
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/api
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
     ports:
@@ -229,13 +276,16 @@ services:
     networks:
       - opendirectory
     depends_on:
-      - postgres
-      - redis
-      - identity-service
-      - auth-service
-      - device-service
-      - policy-service
-      - network-infrastructure
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./services/platform/api-backend:/app
       - /app/node_modules
@@ -245,13 +295,14 @@ services:
       context: ./services/platform/integration-service
       dockerfile: Dockerfile
     container_name: od-integration-service
+    restart: unless-stopped
     environment:
       - NODE_ENV=production
       - PORT=4000
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/integration
       - LLDAP_URL=http://lldap:17170
       - LLDAP_ADMIN_USER=admin
-      - LLDAP_ADMIN_PASSWORD=${LLDAP_ADMIN_PASSWORD:-changeme}
+      - LLDAP_ADMIN_PASSWORD=${LLDAP_ADMIN_PASSWORD:?LLDAP_ADMIN_PASSWORD must be set in .env}
       - GRAFANA_URL=${GRAFANA_URL:-http://grafana:3000}
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://prometheus:9090}
       - VAULT_URL=${VAULT_URL:-http://vault:8200}
@@ -260,8 +311,16 @@ services:
     networks:
       - opendirectory
     depends_on:
-      - postgres
-      - lldap
+      postgres:
+        condition: service_healthy
+      lldap:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     # No source mounts — Dockerfile builds TypeScript to dist/ inside image
 
   # ===================
@@ -273,6 +332,7 @@ services:
       context: ./services/core/printer-service
       dockerfile: Dockerfile
     container_name: od-printer-service
+    restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3006
@@ -288,8 +348,16 @@ services:
     networks:
       - opendirectory
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./services/core/printer-service:/app
       - /app/node_modules
@@ -310,6 +378,7 @@ services:
       context: ./services/core/network-infrastructure
       dockerfile: Dockerfile
     container_name: od-network-infrastructure
+    restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3007
@@ -328,8 +397,16 @@ services:
     networks:
       - opendirectory
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3007/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   # ===================
   # Frontend
@@ -340,6 +417,7 @@ services:
       context: ./frontend/web-app
       dockerfile: Dockerfile
     container_name: od-web-app
+    restart: unless-stopped
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8080
       - NEXT_PUBLIC_WS_URL=ws://localhost:8080
@@ -356,8 +434,13 @@ services:
       - api-backend
       - integration-service
       - app-store
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     # No source mounts — the Dockerfile builds the app into the image.
-    # Mounting the source would override the built .next and serve stale content.
 
 
   # ===================
@@ -367,6 +450,7 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: od-grafana
+    restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in .env}
       - GF_INSTALL_PLUGINS=redis-datasource
@@ -376,10 +460,17 @@ services:
       - "3500:3000"
     networks:
       - opendirectory
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   prometheus:
     image: prom/prometheus:latest
     container_name: od-prometheus
+    restart: unless-stopped
     volumes:
       - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
@@ -390,6 +481,11 @@ services:
       - "9090:9090"
     networks:
       - opendirectory
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   node-exporter:
     image: prom/node-exporter:latest

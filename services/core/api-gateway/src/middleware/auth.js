@@ -21,7 +21,6 @@ class AuthenticationMiddleware {
       '/docs',
       '/api-docs',
       '/docs/*',
-      '/ws'
     ];
     this.cache = new Map(); // Simple in-memory cache for token validation
     this.cacheTimeout = 5 * 60 * 1000; // 5 minutes
@@ -140,29 +139,8 @@ class AuthenticationMiddleware {
   }
 
   validateApiKey(apiKey) {
-    // In production, this would query a database
-    // For now, we'll use environment variables
-    const validKeys = {
-      // Development keys
-      'dev-read-only': {
-        name: 'Development Read-Only',
-        isAdmin: false,
-        roles: ['api', 'read'],
-        permissions: ['read']
-      },
-      'dev-full-access': {
-        name: 'Development Full Access',
-        isAdmin: false,
-        roles: ['api', 'read', 'write'],
-        permissions: ['read', 'write']
-      },
-      'admin-key': {
-        name: 'Admin Access',
-        isAdmin: true,
-        roles: ['api', 'admin'],
-        permissions: ['*']
-      },
-      // Environment-based keys
+    // API keys are loaded exclusively from environment variables — no hardcoded keys
+    const envKeys = {
       [process.env.API_KEY_READ_ONLY]: {
         name: 'Read Only API Key',
         isAdmin: false,
@@ -183,7 +161,9 @@ class AuthenticationMiddleware {
       }
     };
 
-    return validKeys[apiKey] || null;
+    // Ignore entries where the env var was not set (key would be "undefined")
+    if (!apiKey || apiKey === 'undefined') return null;
+    return envKeys[apiKey] || null;
   }
 
   extractToken(req) {

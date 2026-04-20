@@ -4,33 +4,31 @@ const { NodeSSH } = require('node-ssh');
 const WebSocket = require('ws');
 const http = require('http');
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
+const jwt    = require('jsonwebtoken');
 
-// ── Auth helpers (no extra npm deps — uses built-in crypto) ─────────────────
+// ── Auth helpers ─────────────────────────────────────────────────────────────
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('JWT_SECRET environment variable is required in production');
 }
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-not-for-production';
+const JWT_SECRET    = process.env.JWT_SECRET || 'dev-jwt-secret-not-for-production';
+const BCRYPT_ROUNDS = 10;
 
-function hashPassword(password) {
-  return crypto.createHmac('sha256', JWT_SECRET).update(password).digest('hex');
+async function hashPassword(password) {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
+}
+
+async function comparePassword(plain, hash) {
+  return bcrypt.compare(plain, hash);
 }
 
 function signToken(payload) {
-  const header  = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const body    = Buffer.from(JSON.stringify({ ...payload, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 })).toString('base64url');
-  const sig     = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
-  return `${header}.${body}.${sig}`;
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
 }
 
 function verifyToken(token) {
-  try {
-    const [header, body, sig] = token.split('.');
-    const expected = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
-    if (expected !== sig) return null;
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
-    return payload;
-  } catch { return null; }
+  try { return jwt.verify(token, JWT_SECRET); }
+  catch { return null; }
 }
 
 function parseCookies(cookieHeader = '') {
@@ -40,7 +38,6 @@ function parseCookies(cookieHeader = '') {
 }
 
 function authMiddleware(req, res, next) {
-  // Accept token from httpOnly cookie (preferred) or Authorization header (API clients)
   const cookies = parseCookies(req.headers.cookie || '');
   const cookieToken = cookies['auth_token'];
   const authHeader = req.headers['authorization'];
@@ -54,9 +51,6 @@ function authMiddleware(req, res, next) {
   next();
 }
 // ────────────────────────────────────────────────────────────────────────────
-
-// Network Infrastructure services moved to module
-// Access via API Gateway at /api/network/*
 
 const app = express();
 const server = http.createServer(app);
@@ -83,11 +77,9 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Network services initialization moved to network-infrastructure module
-
 // SSH connection for Ubuntu container
 const ssh = new NodeSSH();
-const CT2001_HOST = '192.168.1.51';
+const CT2001_HOST = process.env.CT2001_HOST || '192.168.1.51';
 
 // In-memory device store — populated via enrollment
 const deviceStore = {};
@@ -101,7 +93,7 @@ const userStore = [
     role: 'System Administrator',
     active: true,
     groups: ['admin'],
-    passwordHash: null, // set below after hashPassword is defined
+    passwordHash: null, // set below after BCRYPT_ROUNDS is defined
     lastLogin: new Date(),
     created: new Date('2024-01-01')
   }
@@ -110,28 +102,35 @@ const initialAdminPassword = process.env.ADMIN_PASSWORD;
 if (!initialAdminPassword && process.env.NODE_ENV === 'production') {
   throw new Error('ADMIN_PASSWORD environment variable is required in production');
 }
-userStore[0].passwordHash = hashPassword(initialAdminPassword || 'admin!');
+userStore[0].passwordHash = bcrypt.hashSync(initialAdminPassword || 'admin!', BCRYPT_ROUNDS);
 
-// WebSocket connections
+// WebSocket connections — validate token on connect
 const clients = new Set();
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  // Extract token from query param or cookie
+  const url = new URL(req.url || '/', `http://${req.headers.host}`);
+  const queryToken = url.searchParams.get('token');
+  const cookies = parseCookies(req.headers.cookie || '');
+  const token = queryToken || cookies['auth_token'];
+
+  if (!token || !verifyToken(token)) {
+    ws.close(4401, 'Unauthorized');
+    return;
+  }
+
   clients.add(ws);
-  console.log('WebSocket client connected');
 
   ws.on('close', () => {
     clients.delete(ws);
-    console.log('WebSocket client disconnected');
   });
 
-  // Send initial device status
   ws.send(JSON.stringify({
     type: 'device_status',
     data: Object.values(deviceStore)
   }));
 });
 
-// Broadcast to all WebSocket clients
 function broadcast(message) {
   const data = JSON.stringify(message);
   clients.forEach(client => {
@@ -167,7 +166,7 @@ function validateUserBody(body) {
 }
 // ────────────────────────────────────────────────────────────────────────────
 
-// ── Per-username rate limiter (no external dep) ──────────────────────────────
+// ── Per-username rate limiter for login ──────────────────────────────────────
 const loginAttempts = new Map();
 const LOGIN_WINDOW_MS  = 15 * 60 * 1000;
 const LOGIN_MAX        = 5;
@@ -188,17 +187,41 @@ function loginRateLimit(req, res, next) {
   next();
 }
 
-// Periodically clean up expired rate limit records
 setInterval(() => {
   const now = Date.now();
   for (const [key, record] of loginAttempts) {
     if (now > record.resetAt) loginAttempts.delete(key);
   }
 }, LOGIN_WINDOW_MS);
+
+// ── Per-IP rate limiter for write operations (enrollment, user creation) ─────
+const writeAttempts = new Map();
+const WRITE_WINDOW_MS = 60 * 1000; // 1 minute
+const WRITE_MAX       = 20;
+
+function writeRateLimit(req, res, next) {
+  const key = req.ip;
+  const now = Date.now();
+  const record = writeAttempts.get(key) || { count: 0, resetAt: now + WRITE_WINDOW_MS };
+  if (now > record.resetAt) { record.count = 0; record.resetAt = now + WRITE_WINDOW_MS; }
+  record.count += 1;
+  writeAttempts.set(key, record);
+  if (record.count > WRITE_MAX) {
+    return res.status(429).json({ success: false, error: 'Too many requests, please try again later.' });
+  }
+  next();
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of writeAttempts) {
+    if (now > record.resetAt) writeAttempts.delete(key);
+  }
+}, WRITE_WINDOW_MS);
 // ────────────────────────────────────────────────────────────────────────────
 
 // ── Auth Routes ─────────────────────────────────────────────────────────────
-app.post('/api/auth/login', loginRateLimit, (req, res) => {
+app.post('/api/auth/login', loginRateLimit, async (req, res) => {
   const validationError = validateLoginBody(req.body);
   if (validationError)
     return res.status(400).json({ success: false, error: validationError });
@@ -206,23 +229,21 @@ app.post('/api/auth/login', loginRateLimit, (req, res) => {
   const { username, password } = req.body;
 
   const user = userStore.find(u => (u.username === username || u.email === username) && u.active);
-  if (!user || user.passwordHash !== hashPassword(password))
+  if (!user || !(await comparePassword(password, user.passwordHash)))
     return res.status(401).json({ success: false, error: 'Invalid username or password' });
 
   user.lastLogin = new Date();
   const token = signToken({ id: user.id, username: user.username, name: user.name, role: user.role, groups: user.groups });
   const { passwordHash, ...safeUser } = user;
 
-  // Set auth token as httpOnly cookie (XSS-safe)
   res.cookie('auth_token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    maxAge: 24 * 60 * 60 * 1000,
     path: '/',
   });
 
-  // Also return token in body for API clients (CLI tools, mobile apps)
   res.json({ success: true, data: { token, user: safeUser } });
 });
 
@@ -233,38 +254,40 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/profile', authMiddleware, (req, res) => {
   const user = userStore.find(u => u.id === req.user.id);
-  if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+  if (!user) return res.status(401).json({ success: false, error: 'Unauthorized' });
   const { passwordHash, ...safeUser } = user;
   res.json({ success: true, data: safeUser });
 });
 
 app.put('/api/auth/profile', authMiddleware, (req, res) => {
   const user = userStore.find(u => u.id === req.user.id);
-  if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+  if (!user) return res.status(401).json({ success: false, error: 'Unauthorized' });
   const { name, email } = req.body;
-  if (name)  user.name  = name;
-  if (email) user.email = email;
+  if (name && isNonEmptyString(name, 128))  user.name  = name;
+  if (email && isValidEmail(email)) user.email = email;
   const { passwordHash, ...safeUser } = user;
   res.json({ success: true, data: safeUser });
 });
 
-app.post('/api/auth/change-password', authMiddleware, (req, res) => {
+app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
   const user = userStore.find(u => u.id === req.user.id);
-  if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+  if (!user) return res.status(401).json({ success: false, error: 'Unauthorized' });
   const { currentPassword, newPassword } = req.body || {};
-  if (user.passwordHash !== hashPassword(currentPassword))
+  if (!isNonEmptyString(currentPassword, 128) || !isNonEmptyString(newPassword, 128) || newPassword.length < 8)
+    return res.status(400).json({ success: false, error: 'newPassword must be at least 8 characters' });
+  if (!(await comparePassword(currentPassword, user.passwordHash)))
     return res.status(400).json({ success: false, error: 'Current password is incorrect' });
-  user.passwordHash = hashPassword(newPassword);
+  user.passwordHash = await hashPassword(newPassword);
   res.json({ success: true, message: 'Password changed' });
 });
 // ────────────────────────────────────────────────────────────────────────────
 
-// Users API — list + create + update + delete
-app.get('/api/users', (req, res) => {
+// Users API — requires authentication for all operations
+app.get('/api/users', authMiddleware, (req, res) => {
   res.json({ success: true, data: userStore.map(({ passwordHash, ...u }) => u) });
 });
 
-app.post('/api/users', authMiddleware, (req, res) => {
+app.post('/api/users', authMiddleware, writeRateLimit, async (req, res) => {
   const validationError = validateUserBody(req.body);
   if (validationError)
     return res.status(400).json({ success: false, error: validationError });
@@ -279,7 +302,7 @@ app.post('/api/users', authMiddleware, (req, res) => {
     role: role || 'User',
     active: true,
     groups: groups || ['user'],
-    passwordHash: hashPassword(password),
+    passwordHash: await hashPassword(password),
     lastLogin: null,
     created: new Date(),
   };
@@ -288,7 +311,7 @@ app.post('/api/users', authMiddleware, (req, res) => {
   res.status(201).json({ success: true, data: safeUser });
 });
 
-app.put('/api/users/:id', (req, res) => {
+app.put('/api/users/:id', authMiddleware, async (req, res) => {
   const user = userStore.find(u => u.id === req.params.id);
   if (!user) return res.status(404).json({ success: false, error: 'User not found' });
   const { name, email, role, groups, active, password } = req.body || {};
@@ -297,12 +320,12 @@ app.put('/api/users/:id', (req, res) => {
   if (role   !== undefined) user.role   = role;
   if (groups !== undefined) user.groups = groups;
   if (active !== undefined) user.active = active;
-  if (password) user.passwordHash = hashPassword(password);
+  if (password) user.passwordHash = await hashPassword(password);
   const { passwordHash, ...safeUser } = user;
   res.json({ success: true, data: safeUser });
 });
 
-app.delete('/api/users/:id', (req, res) => {
+app.delete('/api/users/:id', authMiddleware, (req, res) => {
   const idx = userStore.findIndex(u => u.id === req.params.id);
   if (idx === -1) return res.status(404).json({ success: false, error: 'User not found' });
   if (userStore[idx].id === 'admin')
@@ -312,14 +335,14 @@ app.delete('/api/users/:id', (req, res) => {
 });
 
 // Device Management APIs
-app.get('/api/devices', (req, res) => {
+app.get('/api/devices', authMiddleware, (req, res) => {
   res.json({
     success: true,
     data: Object.values(deviceStore)
   });
 });
 
-app.get('/api/devices/:id', (req, res) => {
+app.get('/api/devices/:id', authMiddleware, (req, res) => {
   const device = deviceStore[req.params.id];
   if (!device) {
     return res.status(404).json({ success: false, error: 'Device not found' });
@@ -327,28 +350,26 @@ app.get('/api/devices/:id', (req, res) => {
   res.json({ success: true, data: device });
 });
 
-app.post('/api/devices/:id/refresh', async (req, res) => {
+app.post('/api/devices/:id/refresh', authMiddleware, async (req, res) => {
   const deviceId = req.params.id;
   const device = deviceStore[deviceId];
-  
+
   if (!device) {
     return res.status(404).json({ success: false, error: 'Device not found' });
   }
 
   try {
     if (deviceId === 'CT2001') {
-      // Connect to Ubuntu container and get real data
       await ssh.connect({
         host: CT2001_HOST,
-        username: 'root',
-        password: process.env.SSH_PASSWORD || '', // In production, use SSH keys
-        port: 22
+        username: process.env.CT2001_USERNAME || 'root',
+        password: process.env.SSH_PASSWORD || '',
+        port: parseInt(process.env.CT2001_PORT) || 22
       });
 
-      // Get system info
       const uptime = await ssh.execCommand('uptime');
       const apps = await ssh.execCommand('dpkg --get-selections | grep -v deinstall | wc -l');
-      
+
       device.lastSeen = new Date();
       device.status = uptime.stdout ? 'online' : 'offline';
       device.installedAppsCount = parseInt(apps.stdout) || 0;
@@ -357,8 +378,7 @@ app.post('/api/devices/:id/refresh', async (req, res) => {
     }
 
     deviceStore[deviceId] = device;
-    
-    // Broadcast update to WebSocket clients
+
     broadcast({
       type: 'device_updated',
       data: device
@@ -371,7 +391,10 @@ app.post('/api/devices/:id/refresh', async (req, res) => {
   }
 });
 
-app.post('/api/devices/:id/apps/install', async (req, res) => {
+// Whitelist of allowed app IDs to prevent command injection
+const ALLOWED_APP_IDS = new Set(['docker', 'vscode', 'firefox', 'chrome']);
+
+app.post('/api/devices/:id/apps/install', authMiddleware, async (req, res) => {
   const { appId, appName, version } = req.body;
   const deviceId = req.params.id;
   const device = deviceStore[deviceId];
@@ -380,13 +403,17 @@ app.post('/api/devices/:id/apps/install', async (req, res) => {
     return res.status(404).json({ success: false, error: 'Device not found' });
   }
 
+  if (!ALLOWED_APP_IDS.has(appId)) {
+    return res.status(400).json({ success: false, error: `Unknown application. Allowed: ${[...ALLOWED_APP_IDS].join(', ')}` });
+  }
+
   try {
     if (deviceId === 'CT2001') {
       await ssh.connect({
         host: CT2001_HOST,
-        username: 'root',
+        username: process.env.CT2001_USERNAME || 'root',
         password: process.env.SSH_PASSWORD || '',
-        port: 22
+        port: parseInt(process.env.CT2001_PORT) || 22
       });
 
       let installCommand = '';
@@ -403,15 +430,12 @@ app.post('/api/devices/:id/apps/install', async (req, res) => {
         case 'chrome':
           installCommand = 'wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && apt-get update && apt-get install -y google-chrome-stable';
           break;
-        default:
-          installCommand = `apt-get update && apt-get install -y ${appId}`;
       }
 
       const result = await ssh.execCommand(installCommand);
       ssh.dispose();
 
       if (result.code === 0) {
-        // Add to installed apps
         if (!device.installedApps) device.installedApps = [];
         device.installedApps.push({
           app: appId,
@@ -426,15 +450,15 @@ app.post('/api/devices/:id/apps/install', async (req, res) => {
           data: { deviceId, app: { appId, appName, version } }
         });
 
-        res.json({ 
-          success: true, 
+        res.json({
+          success: true,
           message: `${appName} installed successfully on ${device.name}`,
           data: device
         });
       } else {
-        res.status(500).json({ 
-          success: false, 
-          error: `Installation failed: ${result.stderr}` 
+        res.status(500).json({
+          success: false,
+          error: 'Installation failed'
         });
       }
     } else {
@@ -446,7 +470,7 @@ app.post('/api/devices/:id/apps/install', async (req, res) => {
   }
 });
 
-app.delete('/api/devices/:id/apps/:appId', async (req, res) => {
+app.delete('/api/devices/:id/apps/:appId', authMiddleware, async (req, res) => {
   const { appId } = req.params;
   const deviceId = req.params.id;
   const device = deviceStore[deviceId];
@@ -455,13 +479,17 @@ app.delete('/api/devices/:id/apps/:appId', async (req, res) => {
     return res.status(404).json({ success: false, error: 'Device not found' });
   }
 
+  if (!ALLOWED_APP_IDS.has(appId)) {
+    return res.status(400).json({ success: false, error: `Unknown application. Allowed: ${[...ALLOWED_APP_IDS].join(', ')}` });
+  }
+
   try {
     if (deviceId === 'CT2001') {
       await ssh.connect({
         host: CT2001_HOST,
-        username: 'root',
+        username: process.env.CT2001_USERNAME || 'root',
         password: process.env.SSH_PASSWORD || '',
-        port: 22
+        port: parseInt(process.env.CT2001_PORT) || 22
       });
 
       let uninstallCommand = '';
@@ -480,7 +508,6 @@ app.delete('/api/devices/:id/apps/:appId', async (req, res) => {
       ssh.dispose();
 
       if (result.code === 0) {
-        // Remove from installed apps
         if (device.installedApps) {
           device.installedApps = device.installedApps.filter(app => app.app !== appId);
         }
@@ -490,15 +517,15 @@ app.delete('/api/devices/:id/apps/:appId', async (req, res) => {
           data: { deviceId, appId }
         });
 
-        res.json({ 
-          success: true, 
+        res.json({
+          success: true,
           message: `Application ${appId} uninstalled successfully`,
           data: device
         });
       } else {
-        res.status(500).json({ 
-          success: false, 
-          error: `Uninstallation failed: ${result.stderr}` 
+        res.status(500).json({
+          success: false,
+          error: 'Uninstallation failed'
         });
       }
     } else {
@@ -510,32 +537,18 @@ app.delete('/api/devices/:id/apps/:appId', async (req, res) => {
   }
 });
 
-app.post('/api/users/sync', async (req, res) => {
+app.post('/api/users/sync', authMiddleware, async (req, res) => {
   try {
-    // In production, sync with LLDAP
-    // For now, simulate sync
-    const newUser = {
-      id: 'synced_' + Date.now(),
-      name: 'Synced User',
-      username: 'syncuser',
-      email: 'sync@opendirectory.local',
-      active: true,
-      groups: ['user'],
-      lastLogin: null,
-      created: new Date()
-    };
-
-    userStore.push(newUser);
-
+    // Placeholder: in production, sync with LLDAP
     broadcast({
       type: 'users_synced',
-      data: { count: 1, newUsers: [newUser] }
+      data: { count: 0, newUsers: [] }
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Users synced successfully',
-      data: { syncedCount: 1, totalUsers: userStore.length }
+      data: { syncedCount: 0, totalUsers: userStore.length }
     });
   } catch (error) {
     console.error('User sync error:', error);
@@ -543,7 +556,7 @@ app.post('/api/users/sync', async (req, res) => {
   }
 });
 
-// System Health API
+// System Health API (public — used by Docker healthchecks)
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
@@ -567,7 +580,7 @@ app.get('/api/health', (req, res) => {
 // System Resources API
 const os = require('os');
 
-app.get('/api/system/resources', (req, res) => {
+app.get('/api/system/resources', authMiddleware, (req, res) => {
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
   const usedMem = totalMem - freeMem;
@@ -621,7 +634,6 @@ app.get('/api/config/wizard/available-modules', (req, res) => {
 app.post('/api/config/wizard/setup', (req, res) => {
   const { orgName, modules, devices, completedAt } = req.body;
   setupConfig = { orgName, modules, devices, completedAt };
-  console.log('Setup wizard completed:', setupConfig);
   res.json({
     success: true,
     message: 'Setup completed',
@@ -630,7 +642,7 @@ app.post('/api/config/wizard/setup', (req, res) => {
 });
 
 // Policy Management APIs
-app.get('/api/policies', (req, res) => {
+app.get('/api/policies', authMiddleware, (req, res) => {
   res.json({
     success: true,
     data: [
@@ -640,11 +652,7 @@ app.get('/api/policies', (req, res) => {
         description: 'Automatic application updates with version control',
         active: true,
         platforms: ['linux'],
-        rules: {
-          autoUpdate: true,
-          updateWindow: 'maintenance',
-          rollback: true
-        }
+        rules: { autoUpdate: true, updateWindow: 'maintenance', rollback: true }
       },
       {
         id: 'security_updates',
@@ -652,31 +660,25 @@ app.get('/api/policies', (req, res) => {
         description: 'Immediate deployment of security patches',
         active: true,
         platforms: ['windows', 'macos', 'linux'],
-        rules: {
-          immediate: true,
-          critical: true,
-          notification: true
-        }
+        rules: { immediate: true, critical: true, notification: true }
       }
     ]
   });
 });
 
 // ── Device Enrollment APIs ──────────────────────────────────────────
-// (crypto already required at top)
-
-// In-memory enrollment token store
 const enrollmentTokens = {};
 
-// Generate enrollment token
-app.post('/api/devices/enroll/token', (req, res) => {
+// Token generation requires authentication (admin creates tokens for devices)
+app.post('/api/devices/enroll/token', authMiddleware, writeRateLimit, (req, res) => {
   const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   enrollmentTokens[token] = {
     token,
     createdAt: new Date().toISOString(),
     expiresAt: expiresAt.toISOString(),
     used: false,
+    createdBy: req.user.id,
   };
   res.json({
     success: true,
@@ -684,8 +686,8 @@ app.post('/api/devices/enroll/token', (req, res) => {
   });
 });
 
-// Enroll a device using a token
-app.post('/api/devices/enroll', (req, res) => {
+// Device enrollment uses token (no user auth, but token is required)
+app.post('/api/devices/enroll', writeRateLimit, (req, res) => {
   const { token, hostname, platform, os: deviceOs, osVersion } = req.body;
 
   if (!token || !enrollmentTokens[token]) {
@@ -696,22 +698,24 @@ app.post('/api/devices/enroll', (req, res) => {
     return res.status(401).json({ success: false, error: 'Token expired or already used' });
   }
 
-  // Mark token as used
+  if (!isNonEmptyString(hostname, 253)) {
+    return res.status(400).json({ success: false, error: 'hostname is required' });
+  }
+
   tokenData.used = true;
 
   const deviceId = `DEV-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   const newDevice = {
     id: deviceId,
-    name: hostname || `Device-${deviceId}`,
-    platform: platform || 'unknown',
-    os: deviceOs || 'Unknown',
-    osVersion: osVersion || '',
+    name: hostname,
+    platform: isNonEmptyString(platform, 32) ? platform : 'unknown',
+    os: isNonEmptyString(deviceOs, 64) ? deviceOs : 'Unknown',
+    osVersion: isNonEmptyString(osVersion, 32) ? osVersion : '',
     status: 'online',
     enrolledAt: new Date().toISOString(),
     lastSeen: new Date().toISOString(),
   };
 
-  // Add to device store
   deviceStore[deviceId] = newDevice;
 
   res.json({
@@ -720,19 +724,18 @@ app.post('/api/devices/enroll', (req, res) => {
   });
 });
 
-// Discover printers on the network (mock)
-app.get('/api/printers/discover', (req, res) => {
+// Printer discovery (mock data — replace with real discovery in production)
+app.get('/api/printers/discover', authMiddleware, (req, res) => {
   res.json({
     success: true,
     data: [
-      { name: 'HP LaserJet Pro M404n', ip: '192.168.1.200', protocol: 'ipp', status: 'online' },
-      { name: 'Brother HL-L2350DW', ip: '192.168.1.201', protocol: 'lpd', status: 'online' },
+      { name: 'HP LaserJet Pro M404n', ip: process.env.PRINTER1_IP || '192.168.1.200', protocol: 'ipp', status: 'online' },
+      { name: 'Brother HL-L2350DW', ip: process.env.PRINTER2_IP || '192.168.1.201', protocol: 'lpd', status: 'online' },
     ],
   });
 });
 
-// Add printer manually
-app.post('/api/printers', (req, res) => {
+app.post('/api/printers', authMiddleware, (req, res) => {
   const { name, ip, protocol } = req.body;
   if (!name || !ip) {
     return res.status(400).json({ success: false, error: 'Name and IP are required' });
@@ -744,49 +747,15 @@ app.post('/api/printers', (req, res) => {
   });
 });
 
-// Network Infrastructure routes moved to network-infrastructure module
-// Access these endpoints through the API Gateway at http://localhost:8080/api/network/*
-
-
-
-
-// Network Monitoring
-// All network monitoring endpoints have been moved to the network-infrastructure module
-// Access via API Gateway: http://localhost:8080/api/network/monitoring/*
-
-// Export app for testing (must be before server.listen)
+// Export app for testing
 module.exports = { app, server, userStore, hashPassword };
 
 if (require.main === module) {
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`OpenDirectory API Backend running on port ${PORT}`);
-  console.log(`WebSocket server ready for real-time updates`);
-  
-  // Initialize Network Infrastructure Services
-  console.log('Initializing Network Infrastructure Services...');
-  
-  try {
-    // Start DNS server (if enabled)
-    if (process.env.ENABLE_DNS !== 'false') {
-      dnsManager.startDNSServer().catch(err => 
-        console.warn('DNS server not started (may need root privileges):', err.message)
-      );
-    }
-    
-    // Start DHCP server (if enabled)
-    if (process.env.ENABLE_DHCP !== 'false') {
-      dhcpManager.startDHCPServer().catch(err => 
-        console.warn('DHCP server not started (may need root privileges):', err.message)
-      );
-    }
-    
-    // Network monitoring is now handled by the network-infrastructure module
-    
-    console.log('Network Infrastructure Services initialized');
-  } catch (error) {
-    console.warn('Some network services could not be started:', error.message);
-  }
+  console.log(`WebSocket server ready — token authentication required`);
+  // Network services are provided by the network-infrastructure module (port 3007)
 });
 
 // Periodic device health check
@@ -796,9 +765,9 @@ setInterval(async () => {
       try {
         await ssh.connect({
           host: CT2001_HOST,
-          username: 'root',
+          username: process.env.CT2001_USERNAME || 'root',
           password: process.env.SSH_PASSWORD || '',
-          port: 22,
+          port: parseInt(process.env.CT2001_PORT) || 22,
           readyTimeout: 5000
         });
 
@@ -808,31 +777,23 @@ setInterval(async () => {
       } catch (error) {
         device.status = 'offline';
       }
-      
+
       broadcast({
         type: 'device_heartbeat',
         data: { deviceId, status: device.status, lastSeen: device.lastSeen }
       });
     }
   }
-}, 30000); // Check every 30 seconds
+}, 30000);
 
-// Graceful shutdown
 function shutdown(signal) {
   console.log(`Received ${signal}, shutting down gracefully...`);
-
-  // Close WebSocket connections
   clients.forEach(ws => ws.terminate());
-
-  // Dispose SSH connection if open
   try { ssh.dispose(); } catch (_) {}
-
   server.close(() => {
     console.log('HTTP server closed');
     process.exit(0);
   });
-
-  // Force exit after 10 seconds
   setTimeout(() => {
     console.error('Forced shutdown after timeout');
     process.exit(1);
