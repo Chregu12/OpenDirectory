@@ -49,5 +49,11 @@
   },
   "engines": {
     "node": ">=16.0.0"
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "geoip-lite": "<rootDir>/src/__mocks__/geoip-lite.js",
+      "ua-parser-js": "<rootDir>/src/__mocks__/ua-parser-js.js"
+    }
   }
 }

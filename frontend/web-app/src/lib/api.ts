@@ -7,36 +7,18 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
+  withCredentials: true, // Send httpOnly auth cookie automatically
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor for authentication
-api.interceptors.request.use(
-  (config) => {
-    // Add auth token if available
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
 // Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized access
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth_token');
         window.location.href = '/login';
       }
     }

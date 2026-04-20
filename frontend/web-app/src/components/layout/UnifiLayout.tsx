@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { authApi } from '@/lib/api';
 import { Toaster } from 'react-hot-toast';
 import {
   HomeIcon,
@@ -51,8 +52,10 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifications] = useState<number>(0);
 
-  const handleLogout = () => {
-    localStorage.removeItem('auth_token');
+  const handleLogout = async () => {
+    try {
+      await authApi.logout(); // clears httpOnly cookie on server
+    } catch (_) {}
     localStorage.removeItem('auth_user');
     router.push('/login');
   };

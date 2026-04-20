@@ -6,6 +6,8 @@ const RedisStore = require('connect-redis').default;
 const passport = require('passport');
 const rateLimit = require('express-rate-limit');
 
+const { validate } = require('./middleware/validate');
+
 const AuthenticationManager = require('./services/authenticationManager');
 const TokenService = require('./services/tokenService');
 const MFAService = require('./services/mfaService');
@@ -54,14 +56,41 @@ class UnifiedAuthenticationService {
     }));
 
     // Rate limiting per IP
-    const authLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 5, // 5 login attempts
-      message: 'Too many authentication attempts, please try again later.',
+    const authLimiterByIp = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 20,
       standardHeaders: true,
       legacyHeaders: false,
-      skip: (req) => req.ip === '127.0.0.1', // Skip localhost
+      message: 'Too many authentication attempts, please try again later.',
+      keyGenerator: (req) => req.ip,
     });
+
+    // Rate limiting per username — prevents distributed brute-force bypassing IP limits
+    const usernameStore = new Map();
+    const authLimiter = (req, res, next) => {
+      const username = (req.body?.username || '').toLowerCase().trim();
+      if (!username) return authLimiterByIp(req, res, next);
+
+      const key = `auth:${username}`;
+      const now = Date.now();
+      const windowMs = 15 * 60 * 1000;
+      const maxAttempts = 5;
+
+      const record = usernameStore.get(key) || { count: 0, resetAt: now + windowMs };
+      if (now > record.resetAt) {
+        record.count = 0;
+        record.resetAt = now + windowMs;
+      }
+      record.count += 1;
+      usernameStore.set(key, record);
+
+      if (record.count > maxAttempts) {
+        return res.status(429).json({
+          error: 'Too many authentication attempts for this account, please try again later.',
+        });
+      }
+      return authLimiterByIp(req, res, next);
+    };
 
     // Body parsing
     this.app.use(express.json());
@@ -210,10 +239,10 @@ class UnifiedAuthenticationService {
     });
 
     // Authentication endpoints
-    this.app.post('/api/auth/login', this.login.bind(this));
-    this.app.post('/api/auth/logout', this.logout.bind(this));
-    this.app.post('/api/auth/register', this.register.bind(this));
-    this.app.post('/api/auth/refresh', this.refreshToken.bind(this));
+    this.app.post('/api/auth/login',    validate('login'),          this.login.bind(this));
+    this.app.post('/api/auth/logout',   this.logout.bind(this));
+    this.app.post('/api/auth/register', validate('register'),       this.register.bind(this));
+    this.app.post('/api/auth/refresh',  this.refreshToken.bind(this));
     this.app.post('/api/auth/validate', this.validateToken.bind(this));
     
     // MFA endpoints
@@ -236,7 +265,7 @@ class UnifiedAuthenticationService {
     // User management
     this.app.get('/api/auth/profile', this.getProfile.bind(this));
     this.app.put('/api/auth/profile', this.updateProfile.bind(this));
-    this.app.post('/api/auth/change-password', this.changePassword.bind(this));
+    this.app.post('/api/auth/change-password', validate('changePassword'), this.changePassword.bind(this));
     this.app.post('/api/auth/reset-password', this.resetPassword.bind(this));
     
     // SSO endpoints
@@ -964,7 +993,7 @@ class UnifiedAuthenticationService {
   }
 
   start(port = process.env.PORT || 3001) {
-    this.app.listen(port, () => {
+    this.server = this.app.listen(port, () => {
       logger.info(`🔐 Unified Authentication Service started on port ${port}`);
       logger.info(`📊 Health check: http://localhost:${port}/health`);
       logger.info(`🔑 Auth providers: Local, LDAP, JWT, SSO`);
@@ -972,10 +1001,25 @@ class UnifiedAuthenticationService {
       logger.info(`📱 MFA: ${config.mfa.enabled ? 'Enabled' : 'Disabled'}`);
     });
   }
+
+  stop() {
+    if (this.server) this.server.close(() => logger.info('Authentication service stopped'));
+  }
 }
 
 // Start the service
 const authService = new UnifiedAuthenticationService();
 authService.start();
+
+function shutdown(signal) {
+  logger.info(`Received ${signal}, shutting down gracefully`);
+  authService.stop();
+  setTimeout(() => { logger.error('Forced shutdown after timeout'); process.exit(1); }, 10000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
+
+module.exports = UnifiedAuthenticationService;
 
 module.exports = UnifiedAuthenticationService;

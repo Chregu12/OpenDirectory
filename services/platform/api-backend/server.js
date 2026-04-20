@@ -6,7 +6,10 @@ const http = require('http');
 const crypto = require('crypto');
 
 // ── Auth helpers (no extra npm deps — uses built-in crypto) ─────────────────
-const JWT_SECRET = process.env.JWT_SECRET || 'opendirectory-dev-secret';
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('JWT_SECRET environment variable is required in production');
+}
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-not-for-production';
 
 function hashPassword(password) {
   return crypto.createHmac('sha256', JWT_SECRET).update(password).digest('hex');
@@ -30,9 +33,20 @@ function verifyToken(token) {
   } catch { return null; }
 }
 
+function parseCookies(cookieHeader = '') {
+  return Object.fromEntries(
+    cookieHeader.split(';').map(c => c.trim().split('=').map(decodeURIComponent))
+  );
+}
+
 function authMiddleware(req, res, next) {
+  // Accept token from httpOnly cookie (preferred) or Authorization header (API clients)
+  const cookies = parseCookies(req.headers.cookie || '');
+  const cookieToken = cookies['auth_token'];
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const token = cookieToken || headerToken;
+
   if (!token) return res.status(401).json({ success: false, error: 'Unauthorized' });
   const payload = verifyToken(token);
   if (!payload) return res.status(401).json({ success: false, error: 'Invalid or expired token' });
@@ -48,7 +62,25 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-app.use(cors());
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000'];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) {
+      if (process.env.NODE_ENV === 'production') {
+        return callback(new Error('Origin header is required'), false);
+      }
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`Origin ${origin} not allowed by CORS policy`), false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
 
 // Network services initialization moved to network-infrastructure module
@@ -74,8 +106,11 @@ const userStore = [
     created: new Date('2024-01-01')
   }
 ];
-// Set default admin password (admin!)
-userStore[0].passwordHash = hashPassword('admin!');
+const initialAdminPassword = process.env.ADMIN_PASSWORD;
+if (!initialAdminPassword && process.env.NODE_ENV === 'production') {
+  throw new Error('ADMIN_PASSWORD environment variable is required in production');
+}
+userStore[0].passwordHash = hashPassword(initialAdminPassword || 'admin!');
 
 // WebSocket connections
 const clients = new Set();
@@ -106,11 +141,69 @@ function broadcast(message) {
   });
 }
 
+// ── Input validation helpers ─────────────────────────────────────────────────
+function isNonEmptyString(v, maxLen = 255) {
+  return typeof v === 'string' && v.trim().length > 0 && v.length <= maxLen;
+}
+
+function isValidEmail(v) {
+  return typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && v.length <= 254;
+}
+
+function validateLoginBody(body) {
+  const { username, password } = body || {};
+  if (!isNonEmptyString(username, 254)) return 'username is required';
+  if (!isNonEmptyString(password, 128)) return 'password is required';
+  return null;
+}
+
+function validateUserBody(body) {
+  const { username, password } = body || {};
+  if (!isNonEmptyString(username, 64)) return 'username is required (max 64 chars)';
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) return 'username may only contain letters, numbers, underscores and hyphens';
+  if (!isNonEmptyString(password, 128) || password.length < 8) return 'password is required (min 8 chars)';
+  if (body.email && !isValidEmail(body.email)) return 'invalid email address';
+  return null;
+}
+// ────────────────────────────────────────────────────────────────────────────
+
+// ── Per-username rate limiter (no external dep) ──────────────────────────────
+const loginAttempts = new Map();
+const LOGIN_WINDOW_MS  = 15 * 60 * 1000;
+const LOGIN_MAX        = 5;
+
+function loginRateLimit(req, res, next) {
+  const username = (req.body?.username || '').toLowerCase().trim();
+  const key = username || req.ip;
+  const now = Date.now();
+
+  const record = loginAttempts.get(key) || { count: 0, resetAt: now + LOGIN_WINDOW_MS };
+  if (now > record.resetAt) { record.count = 0; record.resetAt = now + LOGIN_WINDOW_MS; }
+  record.count += 1;
+  loginAttempts.set(key, record);
+
+  if (record.count > LOGIN_MAX) {
+    return res.status(429).json({ success: false, error: 'Too many login attempts, please try again later.' });
+  }
+  next();
+}
+
+// Periodically clean up expired rate limit records
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of loginAttempts) {
+    if (now > record.resetAt) loginAttempts.delete(key);
+  }
+}, LOGIN_WINDOW_MS);
+// ────────────────────────────────────────────────────────────────────────────
+
 // ── Auth Routes ─────────────────────────────────────────────────────────────
-app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body || {};
-  if (!username || !password)
-    return res.status(400).json({ success: false, error: 'Username and password required' });
+app.post('/api/auth/login', loginRateLimit, (req, res) => {
+  const validationError = validateLoginBody(req.body);
+  if (validationError)
+    return res.status(400).json({ success: false, error: validationError });
+
+  const { username, password } = req.body;
 
   const user = userStore.find(u => (u.username === username || u.email === username) && u.active);
   if (!user || user.passwordHash !== hashPassword(password))
@@ -119,11 +212,22 @@ app.post('/api/auth/login', (req, res) => {
   user.lastLogin = new Date();
   const token = signToken({ id: user.id, username: user.username, name: user.name, role: user.role, groups: user.groups });
   const { passwordHash, ...safeUser } = user;
+
+  // Set auth token as httpOnly cookie (XSS-safe)
+  res.cookie('auth_token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    path: '/',
+  });
+
+  // Also return token in body for API clients (CLI tools, mobile apps)
   res.json({ success: true, data: { token, user: safeUser } });
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  // Tokens are stateless; client just discards it
+  res.clearCookie('auth_token', { path: '/' });
   res.json({ success: true, message: 'Logged out' });
 });
 
@@ -160,10 +264,12 @@ app.get('/api/users', (req, res) => {
   res.json({ success: true, data: userStore.map(({ passwordHash, ...u }) => u) });
 });
 
-app.post('/api/users', (req, res) => {
-  const { username, name, email, password, role, groups } = req.body || {};
-  if (!username || !password)
-    return res.status(400).json({ success: false, error: 'username and password are required' });
+app.post('/api/users', authMiddleware, (req, res) => {
+  const validationError = validateUserBody(req.body);
+  if (validationError)
+    return res.status(400).json({ success: false, error: validationError });
+
+  const { username, name, email, password, role, groups } = req.body;
   if (userStore.find(u => u.username === username))
     return res.status(409).json({ success: false, error: 'Username already exists' });
   const user = {
@@ -648,6 +754,10 @@ app.post('/api/printers', (req, res) => {
 // All network monitoring endpoints have been moved to the network-infrastructure module
 // Access via API Gateway: http://localhost:8080/api/network/monitoring/*
 
+// Export app for testing (must be before server.listen)
+module.exports = { app, server, userStore, hashPassword };
+
+if (require.main === module) {
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`OpenDirectory API Backend running on port ${PORT}`);
@@ -706,3 +816,29 @@ setInterval(async () => {
     }
   }
 }, 30000); // Check every 30 seconds
+
+// Graceful shutdown
+function shutdown(signal) {
+  console.log(`Received ${signal}, shutting down gracefully...`);
+
+  // Close WebSocket connections
+  clients.forEach(ws => ws.terminate());
+
+  // Dispose SSH connection if open
+  try { ssh.dispose(); } catch (_) {}
+
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
+
+  // Force exit after 10 seconds
+  setTimeout(() => {
+    console.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
+} // end if (require.main === module)

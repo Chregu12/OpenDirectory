@@ -17,8 +17,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await authApi.login({ username, password });
-      const { token, user } = (res.data as any).data;
-      localStorage.setItem('auth_token', token);
+      const { user } = (res.data as any).data;
+      // Token is stored in httpOnly cookie by the server — do not store in localStorage
       localStorage.setItem('auth_user', JSON.stringify(user));
       router.push('/dashboard');
     } catch (err: any) {
@@ -84,7 +84,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Default: admin / admin!
+          OpenDirectory
         </p>
       </div>
     </div>

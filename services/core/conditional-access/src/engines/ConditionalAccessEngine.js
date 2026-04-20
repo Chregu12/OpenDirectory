@@ -7,6 +7,8 @@ const EventEmitter = require('events');
 const crypto = require('crypto');
 const geoip = require('geoip-lite');
 const UAParser = require('ua-parser-js');
+const RiskCalculator = require('./RiskCalculator');
+const ConditionEvaluator = require('./ConditionEvaluator');
 
 class ConditionalAccessEngine extends EventEmitter {
     constructor() {
@@ -16,7 +18,10 @@ class ConditionalAccessEngine extends EventEmitter {
         this.riskAssessments = new Map();
         this.deviceProfiles = new Map();
         this.userContexts = new Map();
-        
+
+        this.riskCalculator = new RiskCalculator();
+        this.conditionEvaluator = new ConditionEvaluator();
+
         // Risk thresholds
         this.riskThresholds = {
             ALLOW: 0.3,
@@ -24,7 +29,7 @@ class ConditionalAccessEngine extends EventEmitter {
             REQUIRE_STEP_UP: 0.7,
             BLOCK: 0.9
         };
-        
+
         // Initialize default policies
         this.initializeDefaultPolicies();
     }
@@ -176,36 +181,7 @@ class ConditionalAccessEngine extends EventEmitter {
      * Calculate comprehensive risk score
      */
     async calculateRiskScore(context) {
-        const riskFactors = {
-            user: await this.calculateUserRisk(context.user),
-            device: await this.calculateDeviceRisk(context.device),
-            network: await this.calculateNetworkRisk(context.network),
-            application: await this.calculateApplicationRisk(context.application),
-            behavioral: await this.calculateBehavioralRisk(context),
-            temporal: await this.calculateTemporalRisk(context)
-        };
-
-        // Calculate weighted risk score
-        const weights = {
-            user: 0.2,
-            device: 0.25,
-            network: 0.2,
-            application: 0.15,
-            behavioral: 0.15,
-            temporal: 0.05
-        };
-
-        let totalRisk = 0;
-        for (const [factor, risk] of Object.entries(riskFactors)) {
-            totalRisk += risk.score * weights[factor];
-        }
-
-        return {
-            totalRisk: Math.min(1.0, Math.max(0.0, totalRisk)),
-            factors: riskFactors,
-            weights,
-            calculatedAt: new Date()
-        };
+        return this.riskCalculator.calculateRiskScore(context);
     }
 
     /**
@@ -521,437 +497,35 @@ class ConditionalAccessEngine extends EventEmitter {
         console.log(`✅ Initialized ${this.policies.size} default conditional access policies`);
     }
 
-    /**
-     * Helper methods for condition evaluation
-     */
-    evaluateUserConditions(conditions, user) {
-        const failed = [];
-        let met = true;
-
-        if (conditions.riskLevel) {
-            if (!conditions.riskLevel.includes(user.riskProfile?.level)) {
-                met = false;
-                failed.push('user_risk_level');
-            }
-        }
-
-        if (conditions.roles) {
-            const hasRequiredRole = conditions.roles.some(role => user.roles.includes(role));
-            if (!hasRequiredRole) {
-                met = false;
-                failed.push('user_roles');
-            }
-        }
-
-        if (conditions.groups) {
-            const hasRequiredGroup = conditions.groups.some(group => user.groups.includes(group));
-            if (!hasRequiredGroup) {
-                met = false;
-                failed.push('user_groups');
-            }
-        }
-
-        return { met, failed };
-    }
-
-    evaluateDeviceConditions(conditions, device) {
-        const failed = [];
-        let met = true;
-
-        if (conditions.compliance) {
-            if (!conditions.compliance.includes(device.compliance?.status)) {
-                met = false;
-                failed.push('device_compliance');
-            }
-        }
-
-        if (conditions.trust) {
-            if (device.trust?.score < conditions.trust.minimum) {
-                met = false;
-                failed.push('device_trust');
-            }
-        }
-
-        if (conditions.encryption) {
-            if (!conditions.encryption.includes(device.encryption?.status)) {
-                met = false;
-                failed.push('device_encryption');
-            }
-        }
-
-        return { met, failed };
-    }
-
-    evaluateLocationConditions(conditions, network) {
-        const failed = [];
-        let met = true;
-
-        if (conditions.countries) {
-            if (conditions.countries.blocked?.includes(network.country)) {
-                met = false;
-                failed.push('blocked_country');
-            }
-            if (conditions.countries.allowed && !conditions.countries.allowed.includes(network.country)) {
-                met = false;
-                failed.push('country_not_allowed');
-            }
-        }
-
-        if (conditions.anonymousNetworks === true) {
-            if (network.vpn || network.tor || network.proxy) {
-                met = false;
-                failed.push('anonymous_network');
-            }
-        }
-
-        if (conditions.ipReputation) {
-            if (network.reputation?.score < conditions.ipReputation.minimum) {
-                met = false;
-                failed.push('poor_ip_reputation');
-            }
-        }
-
-        return { met, failed };
-    }
-
-    evaluateApplicationConditions(conditions, application) {
-        const failed = [];
-        let met = true;
-
-        if (conditions.sensitivity) {
-            if (!conditions.sensitivity.includes(application.sensitivity)) {
-                met = false;
-                failed.push('application_sensitivity');
-            }
-        }
-
-        if (conditions.requiresCompliance && application.requiresCompliance) {
-            met = false;
-            failed.push('application_compliance_required');
-        }
-
-        return { met, failed };
-    }
-
-    evaluateRiskConditions(conditions, riskAssessment) {
-        const failed = [];
-        let met = true;
-
-        if (conditions.maximum && riskAssessment.totalRisk > conditions.maximum) {
-            met = false;
-            failed.push('risk_too_high');
-        }
-
-        if (conditions.minimum && riskAssessment.totalRisk < conditions.minimum) {
-            met = false;
-            failed.push('risk_too_low');
-        }
-
-        return { met, failed };
-    }
-
-    evaluateTimeConditions(conditions, timestamp) {
-        const failed = [];
-        let met = true;
-        const now = new Date(timestamp);
-        const hour = now.getHours();
-        const day = now.getDay(); // 0 = Sunday
-
-        if (conditions.allowedHours) {
-            if (!conditions.allowedHours.includes(hour)) {
-                met = false;
-                failed.push('outside_allowed_hours');
-            }
-        }
-
-        if (conditions.allowedDays) {
-            if (!conditions.allowedDays.includes(day)) {
-                met = false;
-                failed.push('outside_allowed_days');
-            }
-        }
-
-        return { met, failed };
-    }
-
-    /**
-     * Risk calculation methods
-     */
-    async calculateUserRisk(user) {
-        let risk = 0.0;
-        const factors = [];
-
-        // Account status risk
-        if (user.accountStatus === 'SUSPENDED') {
-            risk += 1.0;
-            factors.push('account_suspended');
-        } else if (user.accountStatus === 'LOCKED') {
-            risk += 0.8;
-            factors.push('account_locked');
-        }
-
-        // MFA risk
-        if (!user.mfaEnabled) {
-            risk += 0.3;
-            factors.push('no_mfa');
-        }
-
-        // Risk profile
-        if (user.riskProfile) {
-            switch (user.riskProfile.level) {
-                case 'CRITICAL':
-                    risk += 1.0;
-                    factors.push('critical_risk_profile');
-                    break;
-                case 'HIGH':
-                    risk += 0.8;
-                    factors.push('high_risk_profile');
-                    break;
-                case 'MEDIUM':
-                    risk += 0.4;
-                    factors.push('medium_risk_profile');
-                    break;
-            }
-        }
-
-        // Last login time
-        if (user.lastLogin) {
-            const daysSinceLogin = (Date.now() - new Date(user.lastLogin).getTime()) / (1000 * 60 * 60 * 24);
-            if (daysSinceLogin > 30) {
-                risk += 0.2;
-                factors.push('inactive_account');
-            }
-        }
-
-        return {
-            score: Math.min(1.0, risk),
-            factors
-        };
-    }
-
-    async calculateDeviceRisk(device) {
-        let risk = 0.0;
-        const factors = [];
-
-        // Device compliance
-        if (device.compliance?.status === 'NON_COMPLIANT') {
-            risk += 0.8;
-            factors.push('non_compliant_device');
-        } else if (device.compliance?.status === 'UNKNOWN') {
-            risk += 0.4;
-            factors.push('unknown_compliance');
-        }
-
-        // Device trust
-        if (device.trust?.score < 0.5) {
-            risk += 0.6;
-            factors.push('low_device_trust');
-        }
-
-        // Encryption status
-        if (device.encryption?.status === 'NOT_ENCRYPTED') {
-            risk += 0.4;
-            factors.push('device_not_encrypted');
-        }
-
-        // Unknown device
-        if (device.id === 'unknown') {
-            risk += 0.5;
-            factors.push('unknown_device');
-        }
-
-        // Last seen
-        if (device.lastSeen) {
-            const daysSinceLastSeen = (Date.now() - new Date(device.lastSeen).getTime()) / (1000 * 60 * 60 * 24);
-            if (daysSinceLastSeen > 90) {
-                risk += 0.3;
-                factors.push('device_inactive');
-            }
-        }
-
-        return {
-            score: Math.min(1.0, risk),
-            factors
-        };
-    }
-
-    async calculateNetworkRisk(network) {
-        let risk = 0.0;
-        const factors = [];
-
-        // VPN/Tor/Proxy
-        if (network.tor) {
-            risk += 0.9;
-            factors.push('tor_network');
-        } else if (network.vpn) {
-            risk += 0.3;
-            factors.push('vpn_network');
-        } else if (network.proxy) {
-            risk += 0.2;
-            factors.push('proxy_network');
-        }
-
-        // IP reputation
-        if (network.reputation?.score < 50) {
-            risk += 0.6;
-            factors.push('poor_ip_reputation');
-        }
-
-        // Geographic risk (example: high-risk countries)
-        const highRiskCountries = ['CN', 'RU', 'IR', 'KP'];
-        if (highRiskCountries.includes(network.country)) {
-            risk += 0.4;
-            factors.push('high_risk_country');
-        }
-
-        return {
-            score: Math.min(1.0, risk),
-            factors
-        };
-    }
-
-    async calculateApplicationRisk(application) {
-        let risk = 0.0;
-        const factors = [];
-
-        // Application sensitivity
-        switch (application.sensitivity) {
-            case 'CRITICAL':
-                risk += 0.8;
-                factors.push('critical_application');
-                break;
-            case 'HIGH':
-                risk += 0.6;
-                factors.push('high_value_application');
-                break;
-            case 'MEDIUM':
-                risk += 0.3;
-                factors.push('medium_value_application');
-                break;
-        }
-
-        // Compliance requirements
-        if (application.requiresCompliance) {
-            risk += 0.2;
-            factors.push('compliance_required');
-        }
-
-        return {
-            score: Math.min(1.0, risk),
-            factors
-        };
-    }
-
-    async calculateBehavioralRisk(context) {
-        let risk = 0.0;
-        const factors = [];
-
-        // Multiple concurrent sessions
-        if (context.session.concurrent > 3) {
-            risk += 0.3;
-            factors.push('multiple_sessions');
-        }
-
-        // Unusual time access
-        const hour = context.request.timestamp.getHours();
-        if (hour < 6 || hour > 22) {
-            risk += 0.2;
-            factors.push('unusual_time');
-        }
-
-        // TODO: Add more behavioral analysis
-        // - Typing patterns
-        // - Mouse movement patterns
-        // - Navigation patterns
-
-        return {
-            score: Math.min(1.0, risk),
-            factors
-        };
-    }
-
-    async calculateTemporalRisk(context) {
-        let risk = 0.0;
-        const factors = [];
-
-        // Weekend access
-        const day = context.request.timestamp.getDay();
-        if (day === 0 || day === 6) {
-            risk += 0.1;
-            factors.push('weekend_access');
-        }
-
-        // Holiday access (simplified)
-        // TODO: Implement proper holiday detection
-
-        return {
-            score: Math.min(1.0, risk),
-            factors
-        };
-    }
-
-    /**
-     * Helper methods for external data
-     */
-    async getUserRiskProfile(userId) {
-        // TODO: Integrate with user risk service
-        return { level: 'LOW', score: 0.1 };
-    }
-
-    async getDeviceCompliance(deviceId) {
-        // TODO: Integrate with device compliance service
-        return { status: 'COMPLIANT', lastChecked: new Date() };
-    }
-
-    async getDeviceTrust(deviceId) {
-        // TODO: Integrate with device trust service
-        return { score: 0.8, lastUpdated: new Date() };
-    }
-
-    async getDeviceEncryption(deviceId) {
-        // TODO: Integrate with encryption service
-        return { status: 'ENCRYPTED', type: 'BitLocker' };
-    }
-
-    async getDeviceLastSeen(deviceId) {
-        // TODO: Integrate with device service
-        return new Date();
-    }
-
-    async getISPInfo(ip) {
-        // TODO: Integrate with ISP lookup service
-        return 'Unknown ISP';
-    }
-
-    async isVPN(ip) {
-        // TODO: Integrate with VPN detection service
-        return false;
-    }
-
-    async isTor(ip) {
-        // TODO: Integrate with Tor detection service
-        return false;
-    }
-
-    async isProxy(ip) {
-        // TODO: Integrate with proxy detection service
-        return false;
-    }
-
-    async getIPReputation(ip) {
-        // TODO: Integrate with IP reputation service
-        return { score: 80 };
-    }
-
-    async getApplicationSensitivity(appId) {
-        // TODO: Integrate with application catalog
-        return 'MEDIUM';
-    }
-
-    async getApplicationComplianceRequirement(appId) {
-        // TODO: Integrate with application catalog
-        return false;
-    }
+    // Condition evaluation — delegated to ConditionEvaluator
+    evaluateUserConditions(c, u)       { return this.conditionEvaluator.evaluateUserConditions(c, u); }
+    evaluateDeviceConditions(c, d)     { return this.conditionEvaluator.evaluateDeviceConditions(c, d); }
+    evaluateLocationConditions(c, n)   { return this.conditionEvaluator.evaluateLocationConditions(c, n); }
+    evaluateApplicationConditions(c, a){ return this.conditionEvaluator.evaluateApplicationConditions(c, a); }
+    evaluateRiskConditions(c, r)       { return this.conditionEvaluator.evaluateRiskConditions(c, r); }
+    evaluateTimeConditions(c, t)       { return this.conditionEvaluator.evaluateTimeConditions(c, t); }
+
+    // Risk calculation — delegated to RiskCalculator
+    async calculateUserRisk(u)         { return this.riskCalculator.calculateUserRisk(u); }
+    async calculateDeviceRisk(d)       { return this.riskCalculator.calculateDeviceRisk(d); }
+    async calculateNetworkRisk(n)      { return this.riskCalculator.calculateNetworkRisk(n); }
+    async calculateApplicationRisk(a)  { return this.riskCalculator.calculateApplicationRisk(a); }
+    async calculateBehavioralRisk(ctx) { return this.riskCalculator.calculateBehavioralRisk(ctx); }
+    async calculateTemporalRisk(ctx)   { return this.riskCalculator.calculateTemporalRisk(ctx); }
+
+    // External data stubs — delegated to RiskCalculator (replace with real integrations)
+    async getUserRiskProfile(id)                { return this.riskCalculator.getUserRiskProfile(id); }
+    async getDeviceCompliance(id)               { return this.riskCalculator.getDeviceCompliance(id); }
+    async getDeviceTrust(id)                    { return this.riskCalculator.getDeviceTrust(id); }
+    async getDeviceEncryption(id)               { return this.riskCalculator.getDeviceEncryption(id); }
+    async getDeviceLastSeen(id)                 { return this.riskCalculator.getDeviceLastSeen(id); }
+    async getISPInfo(ip)                        { return this.riskCalculator.getISPInfo(ip); }
+    async isVPN(ip)                             { return this.riskCalculator.isVPN(ip); }
+    async isTor(ip)                             { return this.riskCalculator.isTor(ip); }
+    async isProxy(ip)                           { return this.riskCalculator.isProxy(ip); }
+    async getIPReputation(ip)                   { return this.riskCalculator.getIPReputation(ip); }
+    async getApplicationSensitivity(id)         { return this.riskCalculator.getApplicationSensitivity(id); }
+    async getApplicationComplianceRequirement(id){ return this.riskCalculator.getApplicationComplianceRequirement(id); }
 
     async getExistingSession(userId, deviceId) {
         return this.activeSessions.get(`${userId}:${deviceId}`);
@@ -1001,7 +575,27 @@ class ConditionalAccessEngine extends EventEmitter {
      * Start continuous evaluation of active sessions
      */
     startContinuousEvaluation() {
-        setInterval(async () => {
+        const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+        const MAX_SESSIONS = parseInt(process.env.MAX_ACTIVE_SESSIONS) || 10000;
+
+        this._evaluationInterval = setInterval(async () => {
+            const now = Date.now();
+
+            // Evict expired sessions before evaluation
+            for (const [sessionKey, session] of this.activeSessions) {
+                const age = now - new Date(session.createdAt || 0).getTime();
+                if (age > SESSION_TTL_MS) {
+                    this.activeSessions.delete(sessionKey);
+                    this.emit('sessionExpired', { sessionId: session.id, userId: session.userId });
+                }
+            }
+
+            // Safety valve: if session count exceeds limit, skip evaluation this tick and warn
+            if (this.activeSessions.size > MAX_SESSIONS) {
+                console.warn(`Active session count (${this.activeSessions.size}) exceeds MAX_ACTIVE_SESSIONS (${MAX_SESSIONS}), skipping evaluation tick`);
+                return;
+            }
+
             for (const [sessionKey, session] of this.activeSessions) {
                 try {
                     await this.reevaluateSession(session);
@@ -1012,6 +606,13 @@ class ConditionalAccessEngine extends EventEmitter {
         }, 30000); // Every 30 seconds
 
         console.log('📊 Continuous session evaluation started');
+    }
+
+    stopContinuousEvaluation() {
+        if (this._evaluationInterval) {
+            clearInterval(this._evaluationInterval);
+            this._evaluationInterval = null;
+        }
     }
 
     /**
@@ -1063,6 +664,7 @@ class ConditionalAccessEngine extends EventEmitter {
      */
     async shutdown() {
         console.log('🔐 Shutting down Conditional Access Engine...');
+        this.stopContinuousEvaluation();
         this.removeAllListeners();
         this.policies.clear();
         this.activeSessions.clear();

@@ -19,7 +19,7 @@ const config = {
   // Database Configuration
   database: {
     mongodb: {
-      url: process.env.MONGODB_URL || 'mongodb://opendirectory:changeme@localhost:27017/enterprise-directory',
+      url: process.env.MONGODB_URL || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('MONGODB_URL is required in production'); })() : 'mongodb://opendirectory:dev-password@localhost:27017/enterprise-directory'),
       options: {
         useNewUrlParser: true,
         useUnifiedTopology: true,
@@ -42,7 +42,7 @@ const config = {
 
   // Message Queue Configuration
   rabbitmq: {
-    url: process.env.RABBITMQ_URL || 'amqp://opendirectory:changeme@localhost:5672',
+    url: process.env.RABBITMQ_URL || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('RABBITMQ_URL is required in production'); })() : 'amqp://opendirectory:dev-password@localhost:5672'),
     exchanges: {
       directory: 'od.enterprise-directory',
       events: 'od.directory-events',
@@ -58,7 +58,7 @@ const config = {
     forestFunctionalLevel: process.env.AD_FOREST_LEVEL || '2016',
     domainFunctionalLevel: process.env.AD_DOMAIN_LEVEL || '2016',
     adminUsername: process.env.AD_ADMIN_USER || 'Administrator',
-    adminPassword: process.env.AD_ADMIN_PASSWORD || 'OpenDirectory@2024!',
+    adminPassword: process.env.AD_ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('AD_ADMIN_PASSWORD is required in production'); })() : 'OpenDirectory@dev-only!'),
     baseDN: process.env.AD_BASE_DN || 'DC=opendirectory,DC=local',
     defaultContainer: 'CN=Users,DC=opendirectory,DC=local',
     computerContainer: 'CN=Computers,DC=opendirectory,DC=local'
@@ -70,7 +70,7 @@ const config = {
     securePort: process.env.LDAP_SECURE_PORT || 636,
     baseDN: process.env.LDAP_BASE_DN || 'DC=opendirectory,DC=local',
     bindDN: process.env.LDAP_BIND_DN || 'CN=Administrator,CN=Users,DC=opendirectory,DC=local',
-    bindPassword: process.env.LDAP_BIND_PASSWORD || 'OpenDirectory@2024!',
+    bindPassword: process.env.LDAP_BIND_PASSWORD || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('LDAP_BIND_PASSWORD is required in production'); })() : 'OpenDirectory@dev-only!'),
     enableSSL: process.env.LDAP_SSL === 'true',
     certificatePath: process.env.LDAP_CERT_PATH || './data/certs/ldap.pem',
     privateKeyPath: process.env.LDAP_KEY_PATH || './data/keys/ldap.key',
@@ -87,7 +87,7 @@ const config = {
     realm: process.env.KRB_REALM || 'OPENDIRECTORY.LOCAL',
     kdcPort: process.env.KRB_KDC_PORT || 88,
     adminPort: process.env.KRB_ADMIN_PORT || 464,
-    masterKey: process.env.KRB_MASTER_KEY || 'OpenDirectoryMasterKey@2024',
+    masterKey: process.env.KRB_MASTER_KEY || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('KRB_MASTER_KEY is required in production'); })() : 'OpenDirectoryMasterKey@dev-only'),
     ticketLifetime: process.env.KRB_TICKET_LIFETIME || '10h',
     renewableLifetime: process.env.KRB_RENEWABLE_LIFETIME || '7d',
     forwardable: true,

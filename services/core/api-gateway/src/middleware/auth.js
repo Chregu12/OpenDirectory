@@ -4,7 +4,10 @@ const logger = require('../config/logger');
 
 class AuthenticationMiddleware {
   constructor() {
-    this.jwtSecret = process.env.JWT_SECRET || 'changeme';
+    if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET environment variable is required in production');
+    }
+    this.jwtSecret = process.env.JWT_SECRET || 'dev-jwt-secret-not-for-production';
     this.authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://authentication-service:3002';
     this.publicPaths = [
       '/health',

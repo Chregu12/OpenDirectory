@@ -41,41 +41,32 @@ class APIGateway {
       },
     }));
 
-    // CORS configuration - Allow frontend and authenticated API access
+    // CORS configuration
+    const allowedOrigins = process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+      : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000'];
+
     this.app.use(cors({
       origin: function (origin, callback) {
-        // Allow frontend origins
-        const allowedOrigins = [
-          'http://localhost:3000',              // Local development frontend
-          'http://localhost:3001',              // Alternative dev port
-          'http://127.0.0.1:3000',             // Alternative localhost
-          'https://app.opendirectory.local'     // Production frontend domain
-        ];
-        
-        // Allow requests with no origin (Postman, curl, mobile apps, etc.)
-        // These will need proper authentication via API keys
+        // Reject origin-less requests in production (they are browser-initiated cross-site requests without an Origin header only in edge cases, but tools like curl/Postman should use API keys instead)
         if (!origin) {
+          if (process.env.NODE_ENV === 'production') {
+            return callback(new Error('Origin header is required'), false);
+          }
           return callback(null, true);
         }
-        
-        // Allow any origin in development mode
-        if (process.env.NODE_ENV === 'development') {
+
+        if (allowedOrigins.includes(origin)) {
           return callback(null, true);
         }
-        
-        // Check if origin is in allowed list
-        if (allowedOrigins.indexOf(origin) !== -1) {
-          callback(null, true);
-        } else {
-          // For production, require proper authentication for unknown origins
-          callback(null, true); // Allow but will be caught by auth middleware
-        }
+
+        return callback(new Error(`Origin ${origin} not allowed by CORS policy`), false);
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
       allowedHeaders: [
-        'Content-Type', 
-        'Authorization', 
+        'Content-Type',
+        'Authorization',
         'X-Requested-With',
         'X-API-Key',
         'X-Service-Auth',
@@ -764,19 +755,20 @@ class APIGateway {
   }
 }
 
-// Handle graceful shutdown
-process.on('SIGINT', () => {
-  logger.info('Received SIGINT, shutting down gracefully');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  logger.info('Received SIGTERM, shutting down gracefully');
-  process.exit(0);
-});
-
 // Start the gateway
 const gateway = new APIGateway();
 gateway.start();
+
+function shutdown(signal) {
+  logger.info(`Received ${signal}, shutting down gracefully`);
+  gateway.stop();
+  setTimeout(() => {
+    logger.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+}
+
+process.on('SIGINT',  () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 module.exports = APIGateway;

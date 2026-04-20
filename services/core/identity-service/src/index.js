@@ -123,8 +123,17 @@ app.get('/api/identity/search', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`Identity Service running on port ${PORT}`);
 });
+
+function shutdown(signal) {
+  logger.info(`Received ${signal}, shutting down gracefully`);
+  server.close(() => { logger.info('Identity service stopped'); process.exit(0); });
+  setTimeout(() => { logger.error('Forced shutdown after timeout'); process.exit(1); }, 10000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 module.exports = app;

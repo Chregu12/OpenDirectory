@@ -956,12 +956,24 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 3006;
 server.listen(PORT, () => {
   logger.info(`Printer Service running on port ${PORT}`);
-  
+
   // Start background services
   discovery.startAutoDiscovery();
   printerManager.startMonitoring();
   printQueue.startProcessor();
   quota.startQuotaReset();
 });
+
+function shutdown(signal) {
+  logger.info(`Received ${signal}, shutting down gracefully`);
+  discovery.stopAutoDiscovery?.();
+  printerManager.stopMonitoring?.();
+  printQueue.stopProcessor?.();
+  server.close(() => { logger.info('Printer service stopped'); process.exit(0); });
+  setTimeout(() => { logger.error('Forced shutdown after timeout'); process.exit(1); }, 10000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 module.exports = app;

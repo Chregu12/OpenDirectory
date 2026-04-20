@@ -36,7 +36,7 @@ const config = {
     scep: {
         enabled: process.env.SCEP_ENABLED === 'true',
         endpoint: process.env.SCEP_ENDPOINT || '/scep',
-        challengePassword: process.env.SCEP_CHALLENGE_PASSWORD || 'changeme',
+        challengePassword: process.env.SCEP_CHALLENGE_PASSWORD || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('SCEP_CHALLENGE_PASSWORD is required in production'); })() : 'dev-scep-challenge'),
         encryptionAlgorithm: process.env.SCEP_ENCRYPTION || 'des3',
         hashAlgorithm: process.env.SCEP_HASH || 'sha1',
         keyUsage: process.env.SCEP_KEY_USAGE || 'digitalSignature,keyEncipherment'

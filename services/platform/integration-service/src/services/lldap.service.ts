@@ -4,7 +4,7 @@ import logger from '../lib/logger';
 
 const LLDAP_URL  = process.env.LLDAP_URL            || 'http://lldap:17170';
 const LLDAP_USER = process.env.LLDAP_ADMIN_USER     || 'admin';
-const LLDAP_PASS = process.env.LLDAP_ADMIN_PASSWORD || 'changeme';
+const LLDAP_PASS = process.env.LLDAP_ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('LLDAP_ADMIN_PASSWORD is required in production'); })() : 'dev-lldap-password');
 
 export class LLDAPService {
   private token: string | null = null;

@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const { registerRoutes } = require('./routes/licenseRoutes');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { createServer } = require('http');
@@ -257,81 +258,8 @@ class LicenseManagementService {
       });
     });
 
-    // License Management Routes
-    this.app.get('/api/license/licenses', this.getLicenses.bind(this));
-    this.app.post('/api/license/licenses', this.createLicense.bind(this));
-    this.app.get('/api/license/licenses/:licenseId', this.getLicense.bind(this));
-    this.app.put('/api/license/licenses/:licenseId', this.updateLicense.bind(this));
-    this.app.delete('/api/license/licenses/:licenseId', this.deleteLicense.bind(this));
-    this.app.post('/api/license/licenses/:licenseId/assign', this.assignLicense.bind(this));
-    this.app.post('/api/license/licenses/:licenseId/revoke', this.revokeLicense.bind(this));
-    this.app.post('/api/license/licenses/:licenseId/renew', this.renewLicense.bind(this));
-
-    // License Types Management
-    this.app.get('/api/license/types', this.getLicenseTypes.bind(this));
-    this.app.post('/api/license/types', this.createLicenseType.bind(this));
-    this.app.put('/api/license/types/:typeId', this.updateLicenseType.bind(this));
-    this.app.delete('/api/license/types/:typeId', this.deleteLicenseType.bind(this));
-
-    // Software Management Routes
-    this.app.get('/api/license/software', this.getSoftware.bind(this));
-    this.app.post('/api/license/software', this.createSoftware.bind(this));
-    this.app.get('/api/license/software/:softwareId', this.getSoftwareDetails.bind(this));
-    this.app.put('/api/license/software/:softwareId', this.updateSoftware.bind(this));
-    this.app.delete('/api/license/software/:softwareId', this.deleteSoftware.bind(this));
-
-    // Vendor Management Routes
-    this.app.get('/api/license/vendors', this.getVendors.bind(this));
-    this.app.post('/api/license/vendors', this.createVendor.bind(this));
-    this.app.put('/api/license/vendors/:vendorId', this.updateVendor.bind(this));
-    this.app.delete('/api/license/vendors/:vendorId', this.deleteVendor.bind(this));
-
-    // Usage Tracking Routes
-    this.app.get('/api/license/usage', this.getUsage.bind(this));
-    this.app.post('/api/license/usage/track', this.trackUsage.bind(this));
-    this.app.get('/api/license/usage/:licenseId', this.getLicenseUsage.bind(this));
-    this.app.get('/api/license/usage/software/:softwareId', this.getSoftwareUsage.bind(this));
-
-    // Compliance Monitoring Routes
-    this.app.get('/api/license/compliance/overview', this.getComplianceOverview.bind(this));
-    this.app.post('/api/license/compliance/scan', this.startComplianceScan.bind(this));
-    this.app.get('/api/license/compliance/scans', this.getComplianceScans.bind(this));
-    this.app.get('/api/license/compliance/violations', this.getViolations.bind(this));
-    this.app.post('/api/license/compliance/violations/:violationId/resolve', this.resolveViolation.bind(this));
-    this.app.get('/api/license/compliance/reports', this.getComplianceReports.bind(this));
-
-    // Optimization Routes
-    this.app.get('/api/license/optimization/recommendations', this.getOptimizationRecommendations.bind(this));
-    this.app.post('/api/license/optimization/analyze', this.analyzeOptimization.bind(this));
-    this.app.get('/api/license/optimization/cost-analysis', this.getCostAnalysis.bind(this));
-    this.app.get('/api/license/optimization/utilization', this.getUtilizationAnalysis.bind(this));
-
-    // Asset Management Routes
-    this.app.get('/api/license/assets', this.getAssets.bind(this));
-    this.app.post('/api/license/assets/discovery', this.startAssetDiscovery.bind(this));
-    this.app.get('/api/license/assets/:assetId', this.getAsset.bind(this));
-    this.app.put('/api/license/assets/:assetId', this.updateAsset.bind(this));
-    this.app.post('/api/license/assets/:assetId/retire', this.retireAsset.bind(this));
-
-    // Mobile Integration Routes
-    this.app.get('/api/license/mobile/sync', this.syncMobileLicenses.bind(this));
-    this.app.post('/api/license/mobile/track', this.trackMobileUsage.bind(this));
-    this.app.get('/api/license/mobile/compliance', this.getMobileCompliance.bind(this));
-
-    // Reporting Routes
-    this.app.get('/api/license/reports', this.getReports.bind(this));
-    this.app.post('/api/license/reports/generate', this.generateReport.bind(this));
-    this.app.get('/api/license/reports/:reportId', this.getReport.bind(this));
-    this.app.get('/api/license/reports/:reportId/download', this.downloadReport.bind(this));
-
-    // Dashboard Routes
-    this.app.get('/api/license/dashboard', this.getDashboard.bind(this));
-    this.app.get('/api/license/dashboard/metrics', this.getDashboardMetrics.bind(this));
-    this.app.get('/api/license/dashboard/alerts', this.getDashboardAlerts.bind(this));
-
-    // Audit Routes
-    this.app.get('/api/license/audit/logs', this.getAuditLogs.bind(this));
-    this.app.post('/api/license/audit/export', this.exportAuditLogs.bind(this));
+    // All license routes registered via external router module
+    registerRoutes(this.app, this);
 
     // Error handling
     this.app.use(this.errorHandler.bind(this));

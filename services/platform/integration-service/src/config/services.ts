@@ -10,7 +10,7 @@ export const SERVICES: Record<string, ServiceConfig> = {
       type: 'basic',
       credentials: {
         username: process.env.LLDAP_ADMIN_USER || 'admin',
-        password: process.env.LLDAP_ADMIN_PASSWORD || 'changeme',
+        password: process.env.LLDAP_ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('LLDAP_ADMIN_PASSWORD is required in production'); })() : 'dev-lldap-password'),
       },
     },
   },
@@ -23,7 +23,7 @@ export const SERVICES: Record<string, ServiceConfig> = {
       type: 'basic',
       credentials: {
         username: process.env.GRAFANA_ADMIN_USER || 'admin',
-        password: process.env.GRAFANA_ADMIN_PASSWORD || 'changeme',
+        password: process.env.GRAFANA_ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('GRAFANA_ADMIN_PASSWORD is required in production'); })() : 'dev-grafana-password'),
       },
     },
   },
