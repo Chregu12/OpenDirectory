@@ -773,6 +773,47 @@ app.get('/api/policies/baselines', (req, res) => {
   res.json({ baselines: CIS_BASELINES, total: CIS_BASELINES.length });
 });
 
+// ============================
+// Update Rings
+// ============================
+
+const updateRings = new Map([
+  ['stable', { id: 'stable', name: 'Stable', deferralDays: { windows: 14, macos: 7, linux: 0 }, description: 'Production devices — 2-week deferral', deviceCount: 8, assignedDevices: [] }],
+  ['beta',   { id: 'beta',   name: 'Beta',   deferralDays: { windows: 3,  macos: 3, linux: 0 }, description: 'Early adopters — 3-day deferral', deviceCount: 3, assignedDevices: [] }],
+  ['dev',    { id: 'dev',    name: 'Dev',     deferralDays: { windows: 0,  macos: 0, linux: 0 }, description: 'Developers — no deferral', deviceCount: 2, assignedDevices: [] }],
+]);
+
+app.get('/api/update-rings', (_req, res) => {
+  res.json([...updateRings.values()]);
+});
+
+app.put('/api/update-rings/:id', (req, res) => {
+  const ring = updateRings.get(req.params.id);
+  if (!ring) return res.status(404).json({ error: 'Ring not found' });
+  const { deferralDays, description } = req.body;
+  if (deferralDays) {
+    if (typeof deferralDays.windows === 'number') ring.deferralDays.windows = deferralDays.windows;
+    if (typeof deferralDays.macos === 'number') ring.deferralDays.macos = deferralDays.macos;
+    if (typeof deferralDays.linux === 'number') ring.deferralDays.linux = deferralDays.linux;
+  }
+  if (description) ring.description = description;
+  updateRings.set(req.params.id, ring);
+  res.json(ring);
+});
+
+app.post('/api/update-rings/:id/assign', (req, res) => {
+  const ring = updateRings.get(req.params.id);
+  if (!ring) return res.status(404).json({ error: 'Ring not found' });
+  const { deviceId } = req.body;
+  if (!deviceId) return res.status(400).json({ error: 'deviceId is required' });
+  if (!ring.assignedDevices.includes(deviceId)) {
+    ring.assignedDevices.push(deviceId);
+    ring.deviceCount = ring.assignedDevices.length;
+  }
+  updateRings.set(req.params.id, ring);
+  res.json({ ringId: req.params.id, deviceId, assignedDevices: ring.assignedDevices });
+});
+
 // POST /api/policies/baselines/:id/apply
 app.post('/api/policies/baselines/:id/apply', async (req, res) => {
   const baseline = CIS_BASELINES.find(b => b.id === req.params.id);

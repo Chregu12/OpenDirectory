@@ -231,20 +231,20 @@ Implement in order. Do not skip phases.
 
 **Backend** (`services/core/oauth-provider/`):
 
-- [ ] OIDC discovery endpoint (`/.well-known/openid-configuration`)
-- [ ] JWKS endpoint with real RSA key pair (generate on first start, persist to disk/DB)
-- [ ] Authorization Code flow with PKCE
-- [ ] Token endpoint (access_token, id_token, refresh_token)
-- [ ] UserInfo endpoint (sub, name, email, groups, preferred_username)
-- [ ] Token introspection endpoint
-- [ ] Token revocation endpoint
-- [ ] Client Credentials flow
-- [ ] Device Authorization flow (RFC 8628) — for CLI tools and TVs
-- [ ] SAML 2.0 IdP (metadata XML, SSO endpoint, SLO endpoint, signed assertions)
-- [ ] SCIM 2.0 endpoint (`/scim/v2/Users`, `/scim/v2/Groups`) for SaaS provisioning
-- [ ] OAuth2 client CRUD API (`GET/POST/PUT/DELETE /api/clients`)
-- [ ] Enrollment token API (`GET/POST /api/enrollment/tokens`, `POST /api/enrollment/register`)
-- [ ] Device JWT issuance on enrollment
+- [x] OIDC discovery endpoint (`/.well-known/openid-configuration`)
+- [x] JWKS endpoint with real RSA key pair (generate on first start, persist to disk/DB)
+- [x] Authorization Code flow with PKCE
+- [x] Token endpoint (access_token, id_token, refresh_token)
+- [x] UserInfo endpoint (sub, name, email, groups, preferred_username)
+- [x] Token introspection endpoint
+- [x] Token revocation endpoint
+- [x] Client Credentials flow
+- [x] Device Authorization flow (RFC 8628) — for CLI tools and TVs
+- [x] SAML 2.0 IdP (metadata XML, SSO endpoint, SLO endpoint, signed assertions)
+- [x] SCIM 2.0 endpoint (`/scim/v2/Users`, `/scim/v2/Groups`) for SaaS provisioning
+- [x] OAuth2 client CRUD API (`GET/POST/PUT/DELETE /api/clients`)
+- [x] Enrollment token API (`GET/POST /api/enrollment/tokens`, `POST /api/enrollment/register`)
+- [x] Device JWT issuance on enrollment
 
 **Frontend** (`IdentityProviderView.tsx`):
 
@@ -261,15 +261,15 @@ Implement in order. Do not skip phases.
 
 **Backend** (`services/core/device-service/` + `services/core/oauth-provider/`):
 
-- [ ] `POST /api/enrollment/register` — accepts token + platform + device metadata → issues device cert + JWT
-- [ ] `GET /api/enrollment/tokens` — list tokens per platform with TTL and usage
-- [ ] `POST /api/enrollment/tokens/:platform/rotate` — invalidate + regenerate
-- [ ] `GET /api/enroll/macos/profile.mobileconfig?token=X` — generate signed MDM profile
-- [ ] `GET /api/enroll/windows/agent.ps1?token=X` — generate enrollment PowerShell script
-- [ ] `GET /api/enroll/linux/install.sh?token=X` — generate enrollment bash script
-- [ ] `GET /api/enroll/ios/profile.mobileconfig?token=X` — iOS MDM profile
-- [ ] MDM heartbeat endpoint (`POST /api/devices/:id/heartbeat`) — updates last-seen, triggers policy sync
-- [ ] Auto-quarantine: cron job flags devices offline >30 days, quarantines >60 days
+- [x] `POST /api/enrollment/register` — accepts token + platform + device metadata → issues device cert + JWT
+- [x] `GET /api/enrollment/tokens` — list tokens per platform with TTL and usage
+- [x] `POST /api/enrollment/tokens/:platform/rotate` — invalidate + regenerate
+- [x] `GET /api/enroll/macos/profile.mobileconfig?token=X` — generate signed MDM profile
+- [x] `GET /api/enroll/windows/agent.ps1?token=X` — generate enrollment PowerShell script
+- [x] `GET /api/enroll/linux/install.sh?token=X` — generate enrollment bash script
+- [x] `GET /api/enroll/ios/profile.mobileconfig?token=X` — iOS MDM profile
+- [x] MDM heartbeat endpoint (`POST /api/devices/:id/heartbeat`) — updates last-seen, triggers policy sync
+- [x] Auto-quarantine: cron job flags devices offline >30 days, quarantines >60 days
 
 **Frontend** (`EnrollmentHubView.tsx`):
 
@@ -295,11 +295,11 @@ Implement in order. Do not skip phases.
 
 **Frontend** (`UsersView.tsx` / `LLDAPIntegration.tsx`):
 
-- [ ] User list with OU breadcrumb, group badges, status indicator
-- [ ] Add user wizard (3 steps: identity → role/group → notification)
-- [ ] User detail panel: groups, devices, app assignments, last login, MFA status
-- [ ] OU tree sidebar (collapsible, drag-and-drop user assignment)
-- [ ] Group management: create, members, nested groups, policy assignments
+- [x] User list with OU breadcrumb, group badges, status indicator
+- [x] Add user wizard (3 steps: identity → role/group → notification)
+- [x] User detail panel: groups, devices, app assignments, last login, MFA status
+- [x] OU tree sidebar (collapsible, drag-and-drop user assignment)
+- [x] Group management: create, members, nested groups, policy assignments
 
 ---
 
@@ -334,10 +334,10 @@ Implement in order. Do not skip phases.
   - AWS SSO, Proxmox, Kubernetes (OIDC), Vault, Portainer, Rancher
   - Custom OIDC, Custom SAML
 - [ ] Per-app group mapping: OpenDirectory group → app role (configurable)
-- [ ] SCIM push: when user added to group → automatically provisioned in connected app
-- [ ] SCIM push: when user disabled → automatically deprovisioned in all apps (within 60 seconds)
+- [x] SCIM push: when user added to group → automatically provisioned in connected app
+- [x] SCIM push: when user disabled → automatically deprovisioned in all apps (within 60 seconds)
 - [ ] App permission audit: which users have access to which apps with which role
-- [ ] Token binding: device compliance checked at token issuance (non-compliant device → token denied)
+- [x] Token binding: device compliance checked at token issuance (non-compliant device → token denied)
 
 **Frontend** (`ApplicationsView.tsx`):
 
@@ -361,8 +361,8 @@ Implement in order. Do not skip phases.
   - macOS: `.mobileconfig` profile delivery via MDM
   - Ubuntu: Bash script + `debconf` / `puppet`-style facts via agent
 - [ ] Conflict detection: two policies targeting same setting → flag + block deployment
-- [ ] Update rings: Stable / Beta / Dev per OS, with deferral windows
-- [ ] Security baselines: CIS Level 1 + 2 pre-built for all 3 OS platforms
+- [x] Update rings: Stable / Beta / Dev per OS, with deferral windows
+- [x] Security baselines: CIS Level 1 + 2 pre-built for all 3 OS platforms
 
 **Frontend** (`PoliciesView.tsx`):
 

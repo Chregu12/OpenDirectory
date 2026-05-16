@@ -22,6 +22,20 @@ const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
   privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
 });
 
+// ─── SAML Signing Key Pair ────────────────────────────────────────────────────
+
+const { privateKey: samlPrivKey, publicKey: samlPubKey } = crypto.generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+});
+
+// Strip PEM headers for embedding in XML / metadata
+const samlCertBody = samlPubKey
+  .replace('-----BEGIN PUBLIC KEY-----', '')
+  .replace('-----END PUBLIC KEY-----', '')
+  .replace(/\n/g, '');
+
 // Build JWK representation of the public key
 function buildJwk() {
   const keyObj = crypto.createPublicKey(publicKey);
@@ -45,6 +59,35 @@ const deviceCodes     = new Map(); // device_code → DeviceCodeRecord
 const enrollmentTokens = new Map();
 const scimUsers       = new Map();
 const scimGroups      = new Map();
+
+// ─── Connected Apps (SCIM push targets) ──────────────────────────────────────
+
+const connectedApps = new Map([
+  ['grafana', { id: 'grafana', name: 'Grafana', scimEndpoint: 'https://grafana.example.com/api/scim', token: 'grafana-scim-token', groups: ['Engineering', 'IT'], status: 'active' }],
+  ['nextcloud', { id: 'nextcloud', name: 'Nextcloud', scimEndpoint: 'https://nextcloud.example.com/apps/user_saml/scim', token: 'nextcloud-scim-token', groups: ['Engineering'], status: 'active' }],
+]);
+
+// ─── SCIM Push Log ────────────────────────────────────────────────────────────
+
+const scimPushLog = [];
+
+function triggerScimPush(action, userId, groupName) {
+  const user = [...scimUsers.values()].find(u => u.id === userId) ?? { userName: userId, emails: [{ value: `${userId}@od.local` }] };
+  for (const app of connectedApps.values()) {
+    if (app.groups.includes(groupName) || action === 'deactivate') {
+      console.log(`[SCIM push] ${action} user ${user.userName} in ${app.name} (group: ${groupName})`);
+      scimPushLog.push({ appId: app.id, action, userId, groupName, timestamp: new Date().toISOString(), success: true });
+    }
+  }
+}
+
+// ─── Update Rings ─────────────────────────────────────────────────────────────
+
+const updateRings = new Map([
+  ['stable', { id: 'stable', name: 'Stable', deferralDays: { windows: 14, macos: 7, linux: 0 }, description: 'Production devices — 2-week deferral', deviceCount: 8, assignedDevices: [] }],
+  ['beta',   { id: 'beta',   name: 'Beta',   deferralDays: { windows: 3,  macos: 3, linux: 0 }, description: 'Early adopters — 3-day deferral', deviceCount: 3, assignedDevices: [] }],
+  ['dev',    { id: 'dev',    name: 'Dev',     deferralDays: { windows: 0,  macos: 0, linux: 0 }, description: 'Developers — no deferral', deviceCount: 2, assignedDevices: [] }],
+]);
 
 // ─── Seed demo clients ───────────────────────────────────────────────────────────
 
@@ -134,7 +177,7 @@ function verifyToken(token) {
 // ─── Authorization Endpoint ──────────────────────────────────────────────────────
 
 app.get('/oauth/authorize', (req, res) => {
-  const { client_id, redirect_uri, response_type, scope, state, code_challenge, code_challenge_method } = req.query;
+  const { client_id, redirect_uri, response_type, scope, state, code_challenge, code_challenge_method, device_id } = req.query;
 
   const client = clients.get(client_id);
   if (!client) return res.status(400).json({ error: 'invalid_client' });
@@ -146,6 +189,7 @@ app.get('/oauth/authorize', (req, res) => {
     redirectUri: redirect_uri,
     scope:       scope ?? 'openid profile email',
     userId:     'demo-user',
+    deviceId:   device_id ?? undefined,
     codeChallenge: code_challenge,
     codeChallengeMethod: code_challenge_method,
     expiresAt:  Date.now() + 60_000,
@@ -178,6 +222,18 @@ app.post('/oauth/token', (req, res) => {
       return res.status(400).json({ error: 'invalid_grant' });
     }
     authCodes.delete(code);
+
+    // Device compliance check — deny token if requesting device is quarantined
+    const deviceId = record.deviceId; // may be undefined for browser flows
+    if (deviceId) {
+      const device = deviceRegistry.get(deviceId);
+      if (device && device.status === 'quarantined') {
+        return res.status(403).json({
+          error: 'device_compliance_failure',
+          error_description: 'Device is quarantined and cannot obtain tokens. Enroll the device again.',
+        });
+      }
+    }
 
     const payload = {
       sub:   record.userId,
@@ -342,6 +398,109 @@ app.post('/oauth/device/approve', express.urlencoded({ extended: true }), (req, 
   res.send('<html><body><h2 style="font-family:system-ui;color:#16a34a;">Device authorized! You may close this window.</h2></body></html>');
 });
 
+// ─── SAML Helper: build signed assertion XML ─────────────────────────────────
+
+function buildSamlResponse(spEntityId, relayState) {
+  const now = new Date();
+  const notBefore = now.toISOString();
+  const notOnOrAfter = new Date(now.getTime() + 3600_000).toISOString();
+  const responseId = `_${crypto.randomBytes(16).toString('hex')}`;
+  const assertionId = `_${crypto.randomBytes(16).toString('hex')}`;
+  const nameId = 'demo@opendirectory.local';
+
+  // Build the Assertion XML (unsigned first, then compute signature)
+  const assertionXml = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="${assertionId}" IssueInstant="${notBefore}" Version="2.0">` +
+    `<saml:Issuer>${ISSUER}</saml:Issuer>` +
+    `<saml:Subject>` +
+      `<saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">${nameId}</saml:NameID>` +
+      `<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">` +
+        `<saml:SubjectConfirmationData NotOnOrAfter="${notOnOrAfter}" Recipient="${ISSUER}/saml/acs-demo"/>` +
+      `</saml:SubjectConfirmation>` +
+    `</saml:Subject>` +
+    `<saml:Conditions NotBefore="${notBefore}" NotOnOrAfter="${notOnOrAfter}">` +
+      `<saml:AudienceRestriction><saml:Audience>${spEntityId || ISSUER}</saml:Audience></saml:AudienceRestriction>` +
+    `</saml:Conditions>` +
+    `<saml:AuthnStatement AuthnInstant="${notBefore}">` +
+      `<saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext>` +
+    `</saml:AuthnStatement>` +
+    `<saml:AttributeStatement>` +
+      `<saml:Attribute Name="email"><saml:AttributeValue>${nameId}</saml:AttributeValue></saml:Attribute>` +
+      `<saml:Attribute Name="name"><saml:AttributeValue>Demo User</saml:AttributeValue></saml:Attribute>` +
+      `<saml:Attribute Name="groups"><saml:AttributeValue>users</saml:AttributeValue></saml:Attribute>` +
+    `</saml:AttributeStatement>` +
+  `</saml:Assertion>`;
+
+  // Sign the assertion with RS256
+  const sign = crypto.createSign('SHA256');
+  sign.update(assertionXml);
+  const signatureBase64 = sign.sign(samlPrivKey, 'base64');
+
+  const signedAssertionXml = assertionXml.replace(
+    `<saml:Issuer>${ISSUER}</saml:Issuer>`,
+    `<saml:Issuer>${ISSUER}</saml:Issuer>` +
+    `<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">` +
+      `<ds:SignedInfo>` +
+        `<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>` +
+        `<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>` +
+        `<ds:Reference URI="#${assertionId}">` +
+          `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>` +
+          `<ds:DigestValue>${crypto.createHash('sha256').update(assertionXml).digest('base64')}</ds:DigestValue>` +
+        `</ds:Reference>` +
+      `</ds:SignedInfo>` +
+      `<ds:SignatureValue>${signatureBase64}</ds:SignatureValue>` +
+      `<ds:KeyInfo><ds:X509Data><ds:X509Certificate>${samlCertBody}</ds:X509Certificate></ds:X509Data></ds:KeyInfo>` +
+    `</ds:Signature>`
+  );
+
+  const responseXml = `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="${responseId}" InResponseTo="" IssueInstant="${notBefore}" Version="2.0">` +
+      `<saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">${ISSUER}</saml:Issuer>` +
+      `<samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>` +
+      signedAssertionXml +
+    `</samlp:Response>`;
+
+  return Buffer.from(responseXml).toString('base64');
+}
+
+// ─── SAML SSO Endpoint (GET + POST) ──────────────────────────────────────────
+
+function handleSamlSso(req, res) {
+  const rawRequest = req.query.SAMLRequest ?? req.body?.SAMLRequest;
+  const relayState = req.query.RelayState ?? req.body?.RelayState ?? '';
+
+  let spEntityId = ISSUER;
+  if (rawRequest) {
+    try {
+      const decoded = Buffer.from(rawRequest, 'base64').toString('utf-8');
+      const match = decoded.match(/<(?:[a-zA-Z]+:)?Issuer[^>]*>([^<]+)<\/(?:[a-zA-Z]+:)?Issuer>/);
+      if (match) spEntityId = match[1].trim();
+    } catch (_) { /* ignore parse errors */ }
+  }
+
+  const acsUrl = req.query.redirect_uri ?? req.body?.redirect_uri ?? `${ISSUER}/saml/acs-demo`;
+  const samlResponseBase64 = buildSamlResponse(spEntityId, relayState);
+
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html><html><head><title>SAML SSO — OpenDirectory</title></head><body>` +
+    `<form method="POST" action="${acsUrl}">` +
+      `<input type="hidden" name="SAMLResponse" value="${samlResponseBase64}" />` +
+      `<input type="hidden" name="RelayState" value="${relayState}" />` +
+      `<script>document.forms[0].submit();</script>` +
+    `</form>` +
+    `<p>Redirecting to service provider&hellip;</p>` +
+    `</body></html>`);
+}
+
+app.get('/saml/sso', handleSamlSso);
+app.post('/saml/sso', handleSamlSso);
+
+// ─── SAML Certificate Endpoint ────────────────────────────────────────────────
+
+app.get('/saml/certificate', (req, res) => {
+  res.set('Content-Type', 'text/plain; charset=utf-8');
+  res.send(samlPubKey);
+});
+
 // ─── SAML Metadata ────────────────────────────────────────────────────────────────
 
 app.get('/saml/metadata', (req, res) => {
@@ -350,6 +509,13 @@ app.get('/saml/metadata', (req, res) => {
 <EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${ISSUER}">
   <IDPSSODescriptor WantAuthnRequestsSigned="false"
                     protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <KeyDescriptor use="signing">
+      <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+        <ds:X509Data>
+          <ds:X509Certificate>${samlCertBody}</ds:X509Certificate>
+        </ds:X509Data>
+      </ds:KeyInfo>
+    </KeyDescriptor>
     <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
                          Location="${ISSUER}/saml/sso"/>
     <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
@@ -438,9 +604,14 @@ app.get('/scim/v2/Users/:id', (req, res) => {
 });
 
 app.put('/scim/v2/Users/:id', (req, res) => {
-  if (!scimUsers.has(req.params.id)) return res.status(404).json({ status: 404, detail: 'User not found' });
+  const existing = scimUsers.get(req.params.id);
+  if (!existing) return res.status(404).json({ status: 404, detail: 'User not found' });
   const user = { id: req.params.id, userName: req.body.userName, displayName: req.body.displayName, emails: req.body.emails ?? [], active: req.body.active !== false, groups: req.body.groups ?? [] };
   scimUsers.set(req.params.id, user);
+  // Trigger SCIM push deactivation if user was just deactivated
+  if (existing.active === true && user.active === false) {
+    triggerScimPush('deactivate', req.params.id, '');
+  }
   res.json(scimUserResource(user));
 });
 
@@ -470,9 +641,18 @@ app.get('/scim/v2/Groups/:id', (req, res) => {
 });
 
 app.put('/scim/v2/Groups/:id', (req, res) => {
-  if (!scimGroups.has(req.params.id)) return res.status(404).json({ status: 404, detail: 'Group not found' });
+  const existing = scimGroups.get(req.params.id);
+  if (!existing) return res.status(404).json({ status: 404, detail: 'Group not found' });
   const group = { id: req.params.id, displayName: req.body.displayName, members: req.body.members ?? [] };
   scimGroups.set(req.params.id, group);
+  // Trigger SCIM push for newly added members
+  const existingMemberIds = new Set((existing.members ?? []).map(m => m.value ?? m.id ?? m));
+  for (const member of (group.members ?? [])) {
+    const memberId = member.value ?? member.id ?? member;
+    if (!existingMemberIds.has(memberId)) {
+      triggerScimPush('add', memberId, group.displayName);
+    }
+  }
   res.json(scimGroupResource(group));
 });
 
@@ -812,6 +992,45 @@ app.post('/api/devices/:id/heartbeat', (req, res) => {
     }
   }
   res.json({ ok: true, deviceId: id, last_seen: new Date().toISOString(), policySync: { required: false, version: '1.0.0' } });
+});
+
+// ─── SCIM Push Log ────────────────────────────────────────────────────────────────
+
+app.get('/api/scim-push/log', (req, res) => {
+  res.json(scimPushLog.slice(-50));
+});
+
+// ─── Update Rings ─────────────────────────────────────────────────────────────────
+
+app.get('/api/update-rings', (req, res) => {
+  res.json([...updateRings.values()]);
+});
+
+app.put('/api/update-rings/:id', (req, res) => {
+  const ring = updateRings.get(req.params.id);
+  if (!ring) return res.status(404).json({ error: 'Ring not found' });
+  const { deferralDays, description } = req.body;
+  if (deferralDays) {
+    if (typeof deferralDays.windows === 'number') ring.deferralDays.windows = deferralDays.windows;
+    if (typeof deferralDays.macos === 'number') ring.deferralDays.macos = deferralDays.macos;
+    if (typeof deferralDays.linux === 'number') ring.deferralDays.linux = deferralDays.linux;
+  }
+  if (description) ring.description = description;
+  updateRings.set(req.params.id, ring);
+  res.json(ring);
+});
+
+app.post('/api/update-rings/:id/assign', (req, res) => {
+  const ring = updateRings.get(req.params.id);
+  if (!ring) return res.status(404).json({ error: 'Ring not found' });
+  const { deviceId } = req.body;
+  if (!deviceId) return res.status(400).json({ error: 'deviceId is required' });
+  if (!ring.assignedDevices.includes(deviceId)) {
+    ring.assignedDevices.push(deviceId);
+    ring.deviceCount = ring.assignedDevices.length;
+  }
+  updateRings.set(req.params.id, ring);
+  res.json({ ringId: req.params.id, deviceId, assignedDevices: ring.assignedDevices });
 });
 
 // ─── Phase 5: App Catalog ─────────────────────────────────────────────────────────
