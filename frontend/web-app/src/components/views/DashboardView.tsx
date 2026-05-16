@@ -31,6 +31,19 @@ import {
   policyApi,
 } from '@/lib/api';
 import BackupRecoveryWizard from '@/components/setup/BackupRecoveryWizard';
+import toast from 'react-hot-toast';
+
+// ─── Mock activity events ─────────────────────────────────────────────────────
+const MOCK_ACTIVITY = [
+  { id: '1', type: 'success' as const, message: 'MacBook Pro von alice@firma.local eingeschrieben', time: '14:23' },
+  { id: '2', type: 'info' as const,    message: 'Benutzer bob.dev angemeldet (Berlin, DE)', time: '14:18' },
+  { id: '3', type: 'warning' as const, message: 'Richtlinie "CIS-Ubuntu-L1" aktualisiert', time: '13:55' },
+  { id: '4', type: 'success' as const, message: 'Windows-Laptop von dave@firma.local eingeschrieben', time: '13:40' },
+  { id: '5', type: 'info' as const,    message: 'Grafana SSO-App verbunden', time: '13:12' },
+  { id: '6', type: 'warning' as const, message: 'PIM-Anfrage von Bob Developer genehmigt', time: '12:48' },
+  { id: '7', type: 'success' as const, message: 'Vault-Zertifikat rotiert', time: '12:30' },
+  { id: '8', type: 'info' as const,    message: 'Ubuntu 22.04 Agent-Update abgeschlossen', time: '11:59' },
+];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -665,9 +678,9 @@ export default function DashboardView() {
       {/* ------------------------------------------------------------------ */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">System Overview</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Übersicht</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Real-time status of your OpenDirectory infrastructure
+            Echtzeit-Status deiner OpenDirectory-Infrastruktur
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -688,6 +701,138 @@ export default function DashboardView() {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Quick Stats Row (German, simplified)                                */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+          <p className="text-xs text-gray-500 font-medium">Geräte gesamt</p>
+          <p className="text-3xl font-bold text-gray-900 mt-1">{kpi.totalDevices ?? '—'}</p>
+          <p className="text-xs text-green-600 mt-1">{kpi.onlineDevices ?? 0} online</p>
+        </div>
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+          <p className="text-xs text-gray-500 font-medium">Compliant %</p>
+          <p className="text-3xl font-bold text-gray-900 mt-1">
+            {deviceCompliance && deviceCompliance.total > 0 ? `${Math.round((deviceCompliance.compliant / deviceCompliance.total) * 100)}%` : '—'}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">Konformitatsquote</p>
+        </div>
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+          <p className="text-xs text-gray-500 font-medium">Nutzer aktiv</p>
+          <p className="text-3xl font-bold text-gray-900 mt-1">{kpi.totalUsers ?? '—'}</p>
+          <p className="text-xs text-gray-400 mt-1">{kpi.totalGroups ?? 0} Gruppen</p>
+        </div>
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+          <p className="text-xs text-gray-500 font-medium">Apps verbunden</p>
+          <p className="text-3xl font-bold text-gray-900 mt-1">2</p>
+          <p className="text-xs text-blue-600 mt-1">SSO aktiv</p>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Compliance Donut + Platform bars + Activity feed                    */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Compliance Donut (CSS/SVG) */}
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">Compliance Verteilung</h2>
+          {deviceCompliance && deviceCompliance.total > 0 ? (
+            <div className="flex flex-col items-center">
+              {/* SVG Donut */}
+              <svg viewBox="0 0 120 120" className="w-32 h-32 -rotate-90">
+                {(() => {
+                  const total = deviceCompliance.total;
+                  const slices = [
+                    { val: deviceCompliance.compliant, color: '#22c55e' },
+                    { val: deviceCompliance.atRisk,    color: '#facc15' },
+                    { val: deviceCompliance.nonCompliant, color: '#ef4444' },
+                    { val: deviceCompliance.noData,    color: '#d1d5db' },
+                  ];
+                  const r = 46; const cx = 60; const cy = 60;
+                  const circ = 2 * Math.PI * r;
+                  let offset = 0;
+                  return slices.map((s, i) => {
+                    const pct = s.val / total;
+                    const dash = pct * circ;
+                    const el = (
+                      <circle key={i} cx={cx} cy={cy} r={r}
+                        fill="none" stroke={s.color} strokeWidth="18"
+                        strokeDasharray={`${dash} ${circ - dash}`}
+                        strokeDashoffset={-offset}
+                      />
+                    );
+                    offset += dash;
+                    return el;
+                  });
+                })()}
+                <text x="60" y="64" textAnchor="middle" className="fill-gray-900 font-bold" style={{ fontSize: 18, transform: 'rotate(90deg)', transformOrigin: '60px 60px' }}>
+                  {deviceCompliance.total}
+                </text>
+              </svg>
+              <div className="mt-3 space-y-1 text-xs w-full">
+                {[{ label: 'Konform', count: deviceCompliance.compliant, color: 'bg-green-500' }, { label: 'Gefährdet', count: deviceCompliance.atRisk, color: 'bg-yellow-400' }, { label: 'Nicht konform', count: deviceCompliance.nonCompliant, color: 'bg-red-500' }, { label: 'Keine Daten', count: deviceCompliance.noData, color: 'bg-gray-300' }].map(row => (
+                  <div key={row.label} className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.color}`} /><span className="text-gray-600">{row.label}</span></div>
+                    <span className="font-medium text-gray-700">{row.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-400 text-sm">Keine Gerätedaten</div>
+          )}
+        </div>
+
+        {/* Platform breakdown bars */}
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">Plattform-Verteilung</h2>
+          <div className="space-y-4">
+            {[{ label: 'Windows', count: 8, color: 'bg-blue-500' }, { label: 'macOS', count: 5, color: 'bg-gray-700' }, { label: 'Linux', count: 4, color: 'bg-orange-500' }, { label: 'iOS', count: 3, color: 'bg-purple-500' }].map(p => {
+              const pct = Math.round((p.count / 20) * 100);
+              return (
+                <div key={p.label}>
+                  <div className="flex justify-between text-xs text-gray-600 mb-1"><span>{p.label}</span><span>{p.count} Geräte</span></div>
+                  <div className="w-full bg-gray-100 rounded-full h-2"><div className={`h-2 rounded-full ${p.color}`} style={{ width: `${pct}%` }} /></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Activity Feed */}
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">Letzte Aktivitäten</h2>
+          <div className="space-y-2.5">
+            {MOCK_ACTIVITY.map(evt => (
+              <div key={evt.id} className="flex items-start gap-2 text-xs">
+                <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${evt.type === 'success' ? 'bg-green-500' : evt.type === 'warning' ? 'bg-yellow-400' : 'bg-blue-400'}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-gray-700 leading-snug">{evt.message}</p>
+                  <p className="text-gray-400 mt-0.5">{evt.time}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Quick Actions                                                        */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: 'Gerät anmelden', icon: ComputerDesktopIcon, color: 'text-blue-600 bg-blue-50 hover:bg-blue-100 border-blue-200' },
+          { label: 'Nutzer hinzufügen', icon: UsersIcon, color: 'text-green-600 bg-green-50 hover:bg-green-100 border-green-200' },
+          { label: 'App verbinden', icon: SparklesIcon, color: 'text-purple-600 bg-purple-50 hover:bg-purple-100 border-purple-200' },
+          { label: 'Richtlinie erstellen', icon: DocumentTextIcon, color: 'text-orange-600 bg-orange-50 hover:bg-orange-100 border-orange-200' },
+        ].map(action => (
+          <button key={action.label} onClick={() => toast.success(`${action.label} gestartet`)} className={`flex items-center justify-center gap-2 p-4 border rounded-xl text-sm font-medium transition-colors ${action.color}`}>
+            <action.icon className="w-5 h-5" />
+            {action.label}
+          </button>
+        ))}
       </div>
 
       {/* ------------------------------------------------------------------ */}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api';
 import { Toaster } from 'react-hot-toast';
@@ -25,7 +25,52 @@ import {
   ArrowRightOnRectangleIcon,
   FingerPrintIcon,
   ArrowDownOnSquareStackIcon,
+  KeyIcon,
 } from '@heroicons/react/24/outline';
+
+// ─── Search catalog ───────────────────────────────────────────────────────────
+const SEARCH_ITEMS = [
+  { id: 'dashboard',    name: 'Dashboard',           view: 'dashboard',    type: 'Seite' },
+  { id: 'devices',      name: 'Geräte',              view: 'devices',      type: 'Seite' },
+  { id: 'users',        name: 'Benutzer',            view: 'users',        type: 'Seite' },
+  { id: 'policies',     name: 'Richtlinien',         view: 'policies',     type: 'Seite' },
+  { id: 'applications', name: 'Anwendungen',         view: 'applications', type: 'Seite' },
+  { id: 'security',     name: 'Sicherheit',          view: 'security',     type: 'Seite' },
+  { id: 'identity',     name: 'Identity Provider',   view: 'identity',     type: 'Seite' },
+  { id: 'enrollment',   name: 'Enrollment Hub',      view: 'enrollment',   type: 'Seite' },
+  { id: 'monitoring',   name: 'Monitoring',          view: 'monitoring',   type: 'Seite' },
+  { id: 'secrets',      name: 'Secrets',             view: 'secrets',      type: 'Seite' },
+  { id: 'printers',     name: 'Drucker',             view: 'printers',     type: 'Seite' },
+  { id: 'permissions',  name: 'Berechtigungen',      view: 'permissions',  type: 'Seite' },
+  { id: 'alice-user',   name: 'Alice Admin',         view: 'users',        type: 'Nutzer' },
+  { id: 'bob-user',     name: 'Bob Developer',       view: 'users',        type: 'Nutzer' },
+  { id: 'grafana-app',  name: 'Grafana Dashboard',   view: 'applications', type: 'App' },
+  { id: 'macbook-pro',  name: 'MacBook Pro (alice)', view: 'devices',      type: 'Gerät' },
+];
+
+// ─── Demo notifications ───────────────────────────────────────────────────────
+interface Notification {
+  id: string;
+  title: string;
+  time: string;
+  read: boolean;
+  type: 'enrollment' | 'compliance' | 'pim' | 'security';
+}
+
+const DEMO_NOTIFICATIONS: Notification[] = [
+  { id: 'n1', title: 'MacBook Pro eingeschrieben (alice)', time: 'vor 5 Min.',   read: false, type: 'enrollment' },
+  { id: 'n2', title: 'Compliance-Prüfung fehlgeschlagen', time: 'vor 12 Min.',  read: false, type: 'compliance' },
+  { id: 'n3', title: 'PIM-Anfrage genehmigt: Bob → secrets', time: 'vor 1 Std.', read: false, type: 'pim' },
+  { id: 'n4', title: 'Sicherheitswarnung: Brute-Force-Versuch', time: 'vor 2 Std.', read: false, type: 'security' },
+  { id: 'n5', title: 'Ubuntu-Agent auf server-01 aktualisiert', time: 'vor 3 Std.', read: true, type: 'enrollment' },
+];
+
+const NOTIF_COLOR: Record<Notification['type'], string> = {
+  enrollment: 'bg-blue-400',
+  compliance: 'bg-orange-400',
+  pim:        'bg-purple-400',
+  security:   'bg-red-500',
+};
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -52,7 +97,39 @@ const NAV_REQUIRED_MODULE: Record<string, string> = {
 export default function UnifiLayout({ children, activeView, onViewChange, enabledModules, currentUser }: LayoutProps) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notifications] = useState<number>(0);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>(DEMO_NOTIFICATIONS);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Cmd+K / Ctrl+K → open search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+      if (e.key === 'Escape') {
+        setSearchOpen(false);
+        setNotifOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (searchOpen) setTimeout(() => searchInputRef.current?.focus(), 50);
+  }, [searchOpen]);
+
+  const searchResults = searchQuery.trim().length > 0
+    ? SEARCH_ITEMS.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : [];
+
+  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
   const handleLogout = async () => {
     try {

@@ -739,6 +739,26 @@ services:
       timeout: 10s
       retries: 3
 
+  # ── Least Privilege Service ────────────────────────────────────────────────────
+  least-privilege:
+    build:
+      context: ./services/core/least-privilege
+      dockerfile: Dockerfile
+    container_name: od-least-privilege
+    environment:
+      LEAST_PRIVILEGE_PORT: 3011
+      NODE_ENV: production
+    ports:
+      - "3011:3011"
+    networks:
+      - opendirectory
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 # ===================
 # Networks
 # ===================

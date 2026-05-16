@@ -25,10 +25,216 @@ import {
   EnvelopeIcon,
   SwatchIcon,
   FilmIcon,
+  LinkIcon,
+  CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import { deviceApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 import AppDeploymentWizard from '@/components/setup/AppDeploymentWizard';
+
+// ─── SSO App Catalog Types ────────────────────────────────────────────────────
+
+interface SsoApp {
+  id: string;
+  name: string;
+  logo: string;
+  category: string;
+  protocol: 'oidc' | 'saml' | 'oauth2' | 'scim';
+  description: string;
+  setupSteps: string[];
+  defaultScopes: string[];
+  defaultRedirectUriPattern: string;
+  configTemplate: Record<string, unknown>;
+  documentationUrl: string;
+}
+
+type WizardStep = 1 | 2 | 3 | 4;
+
+const PROTOCOL_BADGE: Record<string, string> = {
+  oidc:   'bg-blue-100 text-blue-700',
+  saml:   'bg-purple-100 text-purple-700',
+  oauth2: 'bg-green-100 text-green-700',
+  scim:   'bg-orange-100 text-orange-700',
+};
+
+// ─── Connection Wizard ────────────────────────────────────────────────────────
+
+function ConnectWizard({ app, onClose, onConnected }: { app: SsoApp; onClose: () => void; onConnected: (appId: string) => void }) {
+  const [step, setStep] = useState<WizardStep>(1);
+  const [appUrl, setAppUrl] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testPassed, setTestPassed] = useState(false);
+
+  const handleTest = async () => {
+    setTesting(true);
+    await new Promise(r => setTimeout(r, 1500)); // simulate
+    setTestPassed(true);
+    setTesting(false);
+    toast.success('Verbindung erfolgreich!');
+    onConnected(app.id);
+    setTimeout(onClose, 1000);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">{app.logo}</span>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">{app.name} verbinden</h2>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PROTOCOL_BADGE[app.protocol] ?? 'bg-gray-100 text-gray-600'}`}>{app.protocol.toUpperCase()}</span>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
+        </div>
+
+        {/* Step indicator */}
+        <div className="px-6 pt-4 flex gap-2">
+          {([1,2,3,4] as WizardStep[]).map(s => (
+            <div key={s} className={`flex-1 h-1.5 rounded-full ${step >= s ? 'bg-blue-600' : 'bg-gray-200'}`} />
+          ))}
+        </div>
+
+        <div className="p-6">
+          {step === 1 && (
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Schritt 1: Protokoll</h3>
+              <p className="text-sm text-gray-600 mb-4">{app.description}</p>
+              <div className="bg-gray-50 rounded-lg p-4 text-sm">
+                <p className="font-medium text-gray-700 mb-1">Authentifizierungsprotokoll:</p>
+                <span className={`px-3 py-1 rounded-full font-semibold text-sm ${PROTOCOL_BADGE[app.protocol] ?? ''}`}>{app.protocol.toUpperCase()}</span>
+                <p className="mt-3 text-gray-600">Scopes: <span className="font-mono text-xs">{app.defaultScopes.join(', ') || 'n/a'}</span></p>
+              </div>
+              <button onClick={() => setStep(2)} className="mt-4 w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Weiter</button>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Schritt 2: App-URL eingeben</h3>
+              <p className="text-sm text-gray-600 mb-3">Gib die URL deiner {app.name}-Installation ein.</p>
+              <input value={appUrl} onChange={e => setAppUrl(e.target.value)} placeholder={app.defaultRedirectUriPattern} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="flex gap-2">
+                <button onClick={() => setStep(1)} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Zurück</button>
+                <button onClick={() => setStep(3)} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Weiter</button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Schritt 3: Konfiguration kopieren</h3>
+              <p className="text-sm text-gray-600 mb-3">Füge diese Konfiguration in {app.name} ein.</p>
+              <div className="bg-gray-900 text-gray-100 rounded-lg p-4 text-xs font-mono overflow-auto max-h-40 mb-4">
+                {JSON.stringify(app.configTemplate, null, 2)}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setStep(2)} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Zurück</button>
+                <button onClick={() => { navigator.clipboard?.writeText(JSON.stringify(app.configTemplate, null, 2)).catch(() => {}); toast.success('Kopiert!'); setStep(4); }} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Kopieren &amp; Weiter</button>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Schritt 4: Verbindung testen</h3>
+              <p className="text-sm text-gray-600 mb-4">Teste die Verbindung zu {app.name}.</p>
+              {testPassed ? (
+                <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-100 rounded-lg p-3 mb-4">
+                  <CheckCircleIcon className="w-5 h-5 shrink-0" />
+                  <span className="text-sm font-medium">Verbindung erfolgreich!</span>
+                </div>
+              ) : null}
+              <div className="flex gap-2">
+                <button onClick={() => setStep(3)} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Zurück</button>
+                <button onClick={handleTest} disabled={testing || testPassed} className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-60">
+                  {testing ? 'Teste…' : testPassed ? 'Verbunden!' : 'Verbindung testen'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SSO App Catalog Tab ──────────────────────────────────────────────────────
+
+function SsoCatalogTab() {
+  const [catalog, setCatalog] = useState<SsoApp[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedApp, setSelectedApp] = useState<SsoApp | null>(null);
+  const [connected, setConnected] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetch('/api/app-catalog')
+      .then(r => r.json())
+      .then((data: SsoApp[]) => { setCatalog(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const handleConnected = (appId: string) => {
+    setConnected(prev => new Set(prev).add(appId));
+  };
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[...Array(8)].map((_, i) => <div key={i} className="h-36 bg-gray-100 rounded-xl animate-pulse" />)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {catalog.map(app => {
+          const isConnected = connected.has(app.id);
+          return (
+            <div key={app.id} className={`bg-white border rounded-xl p-4 hover:shadow-md transition-all ${isConnected ? 'border-green-300 bg-green-50' : 'border-gray-100'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">{app.logo}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{app.name}</p>
+                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${PROTOCOL_BADGE[app.protocol] ?? 'bg-gray-100 text-gray-600'}`}>{app.protocol.toUpperCase()}</span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mb-3 line-clamp-2">{app.description}</p>
+              <button
+                onClick={() => !isConnected && setSelectedApp(app)}
+                className={`w-full py-1.5 text-xs font-medium rounded-lg transition-colors ${isConnected ? 'bg-green-100 text-green-700 cursor-default' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+              >
+                {isConnected ? '✓ Verbunden' : 'Verbinden'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {connected.size > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">Verbundene Apps ({connected.size})</h3>
+          <div className="flex flex-wrap gap-2">
+            {[...connected].map(id => {
+              const a = catalog.find(c => c.id === id);
+              return a ? (
+                <span key={id} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full text-xs font-medium text-green-700">
+                  {a.logo} {a.name}
+                  <CheckCircleIcon className="w-3.5 h-3.5" />
+                </span>
+              ) : null;
+            })}
+          </div>
+        </div>
+      )}
+
+      {selectedApp && <ConnectWizard app={selectedApp} onClose={() => setSelectedApp(null)} onConnected={handleConnected} />}
+    </div>
+  );
+}
 
 interface ClientApp {
   id: string;
@@ -472,6 +678,7 @@ function DeployModal({ app, onClose }: { app: ClientApp; onClose: () => void }) 
 }
 
 export default function ApplicationsView() {
+  const [activeTab, setActiveTab] = useState<'apps' | 'sso'>('apps');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPlatform, setSelectedPlatform] = useState<'All' | 'macOS' | 'Windows' | 'Linux'>('All');
@@ -494,7 +701,7 @@ export default function ApplicationsView() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Applications</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Select an application and choose which devices to deploy it to
+            Deploy apps to devices or connect SSO integrations
           </p>
         </div>
         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
@@ -504,6 +711,13 @@ export default function ApplicationsView() {
           >
             <SparklesIcon className="h-4 w-4" />
             Deployment Wizard
+          </button>
+          <button
+            onClick={() => setActiveTab(activeTab === 'sso' ? 'apps' : 'sso')}
+            className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${activeTab === 'sso' ? 'text-blue-700 bg-blue-50 border-blue-200' : 'text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200'}`}
+          >
+            <LinkIcon className="h-4 w-4" />
+            SSO Apps verbinden
           </button>
           <div className="relative">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -538,50 +752,66 @@ export default function ApplicationsView() {
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filtered.map(app => {
-          const colors = COLOR_MAP[app.color] || COLOR_MAP.gray;
-          return (
-            <div key={app.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all duration-200">
-              <div className="flex items-center gap-3 mb-3">
-                <div className={`w-10 h-10 ${colors.bg} rounded-lg flex items-center justify-center`}>
-                  <app.icon className={`w-6 h-6 ${colors.text}`} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">{app.name}</h3>
-                  <p className="text-xs text-gray-500">{app.category} · v{app.version}</p>
-                </div>
-              </div>
-
-              <p className="text-sm text-gray-600 mb-4 line-clamp-2">{app.description}</p>
-
-              <div className="flex flex-wrap gap-1 mb-4">
-                {app.platforms.map(p => (
-                  <span key={p} className={`px-2 py-0.5 text-xs font-medium rounded-full ${PLATFORM_BADGE[p]}`}>{p}</span>
-                ))}
-              </div>
-
-              <div className="pt-4 border-t border-gray-100">
-                <button
-                  onClick={() => setDeployApp(app)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-                >
-                  <RocketLaunchIcon className="w-4 h-4" />
-                  Deploy to Devices
-                </button>
-              </div>
-            </div>
-          );
-        })}
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="flex gap-6">
+          {([{ id: 'apps', label: 'App-Bibliothek' }, { id: 'sso', label: 'SSO Apps verbinden' }] as const).map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{tab.label}</button>
+          ))}
+        </nav>
       </div>
 
-      {filtered.length === 0 && (
-        <div className="text-center py-12">
-          <CubeIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No applications found</h3>
-          <p className="text-sm text-gray-500">Try adjusting your search or filter criteria</p>
-        </div>
+      {/* SSO Catalog Tab */}
+      {activeTab === 'sso' && <SsoCatalogTab />}
+
+      {/* App Grid */}
+      {activeTab === 'apps' && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filtered.map(app => {
+              const colors = COLOR_MAP[app.color] || COLOR_MAP.gray;
+              return (
+                <div key={app.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all duration-200">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-10 h-10 ${colors.bg} rounded-lg flex items-center justify-center`}>
+                      <app.icon className={`w-6 h-6 ${colors.text}`} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">{app.name}</h3>
+                      <p className="text-xs text-gray-500">{app.category} · v{app.version}</p>
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-gray-600 mb-4 line-clamp-2">{app.description}</p>
+
+                  <div className="flex flex-wrap gap-1 mb-4">
+                    {app.platforms.map(p => (
+                      <span key={p} className={`px-2 py-0.5 text-xs font-medium rounded-full ${PLATFORM_BADGE[p]}`}>{p}</span>
+                    ))}
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-100">
+                    <button
+                      onClick={() => setDeployApp(app)}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                    >
+                      <RocketLaunchIcon className="w-4 h-4" />
+                      Deploy to Devices
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filtered.length === 0 && (
+            <div className="text-center py-12">
+              <CubeIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No applications found</h3>
+              <p className="text-sm text-gray-500">Try adjusting your search or filter criteria</p>
+            </div>
+          )}
+        </>
       )}
 
       {deployApp && <DeployModal app={deployApp} onClose={() => setDeployApp(null)} />}

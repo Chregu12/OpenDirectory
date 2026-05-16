@@ -1022,4 +1022,148 @@ process.on('SIGINT',  () => shutdown('SIGINT'));
 
 module.exports = UnifiedAuthenticationService;
 
-module.exports = UnifiedAuthenticationService;
+// ─── Phase 3: Directory Service API ─────────────────────────────────────────────────
+// Appended in-memory Directory endpoints: OUs, Groups, Password Policies, Service Accounts
+
+(function attachDirectoryApi() {
+  const crypto = require('crypto');
+  const app = authService.app;
+
+  // ─── In-Memory Stores ──────────────────────────────────────────────────────────
+
+  const ous = new Map();
+  const groups = new Map();
+  const groupMembers = new Map(); // groupId -> Set<userId>
+  let passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: true, requireSymbols: true, rotationDays: 90, historyDepth: 10 };
+  const serviceAccounts = new Map();
+
+  // ─── Seed Data ─────────────────────────────────────────────────────────────────
+
+  const ouSeed = [
+    { id: 'ou-engineering', name: 'Engineering', parentId: null, description: 'Engineering department', deleted: false, createdAt: new Date().toISOString() },
+    { id: 'ou-marketing',   name: 'Marketing',   parentId: null, description: 'Marketing department', deleted: false, createdAt: new Date().toISOString() },
+    { id: 'ou-it',          name: 'IT',          parentId: null, description: 'IT Operations', deleted: false, createdAt: new Date().toISOString() },
+  ];
+  ouSeed.forEach(o => ous.set(o.id, o));
+
+  const groupSeed = [
+    { id: 'g-developers', name: 'Developers',    description: 'Software developers', ouId: 'ou-engineering', createdAt: new Date().toISOString() },
+    { id: 'g-devops',     name: 'DevOps',        description: 'DevOps engineers', ouId: 'ou-engineering', createdAt: new Date().toISOString() },
+    { id: 'g-marketing',  name: 'Marketing Team',description: 'Marketing team', ouId: 'ou-marketing', createdAt: new Date().toISOString() },
+  ];
+  groupSeed.forEach(g => { groups.set(g.id, g); groupMembers.set(g.id, new Set()); });
+
+  const saSeed = [
+    { id: 'sa-ci-runner', name: 'ci-runner', description: 'CI/CD pipeline service account', scopes: ['devices:read', 'policies:read'], createdAt: new Date().toISOString(), token: crypto.randomBytes(32).toString('hex') },
+  ];
+  saSeed.forEach(s => serviceAccounts.set(s.id, s));
+
+  // ─── Helper: build OU tree ─────────────────────────────────────────────────────
+
+  function buildTree(parentId = null) {
+    return [...ous.values()].filter(o => !o.deleted && o.parentId === parentId).map(o => ({ ...o, children: buildTree(o.id) }));
+  }
+
+  // ─── OUs ──────────────────────────────────────────────────────────────────────
+
+  app.get('/api/ous', (req, res) => res.json(buildTree()));
+
+  app.post('/api/ous', (req, res) => {
+    const { name, parentId, description } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const id = `ou-${Date.now()}`;
+    const ou = { id, name, parentId: parentId ?? null, description: description ?? '', deleted: false, createdAt: new Date().toISOString() };
+    ous.set(id, ou);
+    res.status(201).json(ou);
+  });
+
+  app.put('/api/ous/:id', (req, res) => {
+    const ou = ous.get(req.params.id);
+    if (!ou || ou.deleted) return res.status(404).json({ error: 'OU not found' });
+    const { name, parentId, description } = req.body;
+    Object.assign(ou, { ...(name && { name }), ...(parentId !== undefined && { parentId }), ...(description !== undefined && { description }) });
+    res.json(ou);
+  });
+
+  app.delete('/api/ous/:id', (req, res) => {
+    const ou = ous.get(req.params.id);
+    if (!ou) return res.status(404).json({ error: 'OU not found' });
+    ou.deleted = true;
+    res.status(204).send();
+  });
+
+  // ─── Groups ───────────────────────────────────────────────────────────────────
+
+  app.get('/api/groups', (req, res) => {
+    const list = [...groups.values()].map(g => ({ ...g, memberCount: (groupMembers.get(g.id) ?? new Set()).size }));
+    res.json(list);
+  });
+
+  app.post('/api/groups', (req, res) => {
+    const { name, description, ouId } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const id = `g-${Date.now()}`;
+    const group = { id, name, description: description ?? '', ouId: ouId ?? null, createdAt: new Date().toISOString() };
+    groups.set(id, group);
+    groupMembers.set(id, new Set());
+    res.status(201).json(group);
+  });
+
+  app.get('/api/groups/:id', (req, res) => {
+    const g = groups.get(req.params.id);
+    if (!g) return res.status(404).json({ error: 'Group not found' });
+    res.json({ ...g, members: [...(groupMembers.get(req.params.id) ?? new Set())] });
+  });
+
+  app.post('/api/groups/:id/members', (req, res) => {
+    if (!groups.has(req.params.id)) return res.status(404).json({ error: 'Group not found' });
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    groupMembers.get(req.params.id).add(userId);
+    res.status(201).json({ groupId: req.params.id, userId });
+  });
+
+  app.delete('/api/groups/:id/members/:userId', (req, res) => {
+    if (!groups.has(req.params.id)) return res.status(404).json({ error: 'Group not found' });
+    groupMembers.get(req.params.id).delete(req.params.userId);
+    res.status(204).send();
+  });
+
+  app.get('/api/groups/:id/apps', (req, res) => {
+    // Mock app assignments
+    res.json({ groupId: req.params.id, apps: [] });
+  });
+
+  // ─── Password Policy ──────────────────────────────────────────────────────────
+
+  app.get('/api/password-policy', (req, res) => res.json(passwordPolicy));
+
+  app.put('/api/password-policy', (req, res) => {
+    const { minLength, requireUppercase, requireNumbers, requireSymbols, rotationDays, historyDepth } = req.body;
+    Object.assign(passwordPolicy, { ...(minLength !== undefined && { minLength }), ...(requireUppercase !== undefined && { requireUppercase }), ...(requireNumbers !== undefined && { requireNumbers }), ...(requireSymbols !== undefined && { requireSymbols }), ...(rotationDays !== undefined && { rotationDays }), ...(historyDepth !== undefined && { historyDepth }) });
+    res.json(passwordPolicy);
+  });
+
+  // ─── Service Accounts ─────────────────────────────────────────────────────────
+
+  app.get('/api/service-accounts', (req, res) => {
+    const list = [...serviceAccounts.values()].map(({ token: _, ...s }) => s);
+    res.json(list);
+  });
+
+  app.post('/api/service-accounts', (req, res) => {
+    const { name, scopes, description } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const id = `sa-${Date.now()}`;
+    const token = crypto.randomBytes(32).toString('hex');
+    const sa = { id, name, description: description ?? '', scopes: scopes ?? [], createdAt: new Date().toISOString(), token };
+    serviceAccounts.set(id, sa);
+    res.status(201).json(sa); // Include token on creation only
+  });
+
+  app.delete('/api/service-accounts/:id', (req, res) => {
+    if (!serviceAccounts.has(req.params.id)) return res.status(404).json({ error: 'Service account not found' });
+    serviceAccounts.delete(req.params.id);
+    res.status(204).send();
+  });
+})();
