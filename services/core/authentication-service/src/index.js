@@ -1058,6 +1058,24 @@ module.exports = UnifiedAuthenticationService;
   ];
   saSeed.forEach(s => serviceAccounts.set(s.id, s));
 
+  // ─── SCIM users reference (from oauth-provider; mirrored here for bulk import) ─
+  // We keep our own map for bulk-imported users
+  const scimUsers = new Map();
+
+  // ─── Auth middleware: require Bearer token on all /api/* except /api/enrollment/* ─
+
+  app.use('/api', (req, res, next) => {
+    // Exclude enrollment endpoints and health
+    if (req.path.startsWith('/enrollment/')) return next();
+    // Exclude auth endpoints (they handle their own auth)
+    if (req.path.startsWith('/auth/')) return next();
+    const authHeader = req.headers['authorization'] ?? '';
+    if (!authHeader || !authHeader.trim()) {
+      return res.status(401).json({ error: 'Authorization: Bearer token required' });
+    }
+    next();
+  });
+
   // ─── Helper: build OU tree ─────────────────────────────────────────────────────
 
   function buildTree(parentId = null) {
@@ -1165,5 +1183,33 @@ module.exports = UnifiedAuthenticationService;
     if (!serviceAccounts.has(req.params.id)) return res.status(404).json({ error: 'Service account not found' });
     serviceAccounts.delete(req.params.id);
     res.status(204).send();
+  });
+
+  // ─── Bulk Import ──────────────────────────────────────────────────────────────
+
+  app.post('/api/users/bulk-import', (req, res) => {
+    const { users } = req.body;
+    if (!Array.isArray(users)) return res.status(400).json({ error: 'users array required' });
+    const errors = [];
+    let created = 0;
+    for (const [i, u] of users.entries()) {
+      if (!u.name || !u.email) {
+        errors.push({ index: i, error: 'name and email required', entry: u });
+        continue;
+      }
+      const id = `user-${Date.now()}-${i}`;
+      scimUsers.set(id, {
+        id,
+        userName: u.email,
+        displayName: u.name,
+        emails: [{ value: u.email, primary: true }],
+        active: true,
+        role: u.role ?? 'user',
+        group: u.group ?? null,
+        createdAt: new Date().toISOString(),
+      });
+      created++;
+    }
+    res.status(207).json({ created, errors });
   });
 })();
