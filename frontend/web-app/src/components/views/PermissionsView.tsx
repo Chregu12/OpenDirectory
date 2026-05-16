@@ -118,9 +118,14 @@ function RiskBar({ score }: { score: number }) {
 
 // ─── Tab 1: Permission Matrix ─────────────────────────────────────────────────
 
-function MatrixTab() {
+function MatrixTab({ onDemoData }: { onDemoData: () => void }) {
   const [matrix, setMatrix] = useState<UserPermRow[]>(DEMO_MATRIX);
   const [editCell, setEditCell] = useState<{ userId: string; resource: string } | null>(null);
+
+  useEffect(() => {
+    // Matrix always starts from demo data; notify parent
+    onDemoData();
+  }, [onDemoData]);
 
   const handleLevelChange = async (userId: string, resourceKey: string, newLevel: PermLevel) => {
     try {
@@ -192,10 +197,11 @@ function MatrixTab() {
 
 // ─── Tab 2: Unused Permissions ────────────────────────────────────────────────
 
-function UnusedTab({ onCountChange }: { onCountChange: (n: number) => void }) {
+function UnusedTab({ onCountChange, onDemoData }: { onCountChange: (n: number) => void; onDemoData: () => void }) {
   const [unused, setUnused] = useState<UnusedPerm[]>(DEMO_UNUSED);
 
   useEffect(() => { onCountChange(unused.length); }, [unused, onCountChange]);
+  useEffect(() => { onDemoData(); }, [onDemoData]);
 
   const revokeOne = async (userId: string, resource: string) => {
     try {
@@ -379,6 +385,7 @@ function PimTab() {
 export default function PermissionsView() {
   const [activeTab, setActiveTab] = useState<'matrix' | 'unused' | 'pim'>('matrix');
   const [unusedCount, setUnusedCount] = useState(3);
+  const [usingDemoData, setUsingDemoData] = useState(false);
 
   const tabs: { id: 'matrix' | 'unused' | 'pim'; label: string; badge?: number }[] = [
     { id: 'matrix',  label: 'Berechtigungsmatrix' },
@@ -388,6 +395,12 @@ export default function PermissionsView() {
 
   return (
     <div className="p-6 space-y-6">
+      {usingDemoData && (
+        <div className="mx-6 mt-4 p-3 bg-yellow-900/50 border border-yellow-600 rounded-lg flex items-center gap-2 text-yellow-300 text-sm">
+          <span className="text-yellow-400">⚠</span>
+          <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
+        </div>
+      )}
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Berechtigungen</h1>
         <p className="text-sm text-gray-500 mt-1">Verwalte Zugriffsrechte, ungenutzte Berechtigungen und privilegierten Zugang</p>
@@ -417,8 +430,8 @@ export default function PermissionsView() {
 
       {/* Tab Content */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-        {activeTab === 'matrix' && <MatrixTab />}
-        {activeTab === 'unused' && <UnusedTab onCountChange={setUnusedCount} />}
+        {activeTab === 'matrix' && <MatrixTab onDemoData={() => setUsingDemoData(true)} />}
+        {activeTab === 'unused' && <UnusedTab onCountChange={setUnusedCount} onDemoData={() => setUsingDemoData(true)} />}
         {activeTab === 'pim' && <PimTab />}
       </div>
     </div>

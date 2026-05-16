@@ -490,7 +490,7 @@ function CreateGroupModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 
 // ─── Tab: Benutzer ────────────────────────────────────────────────────────────
 
-function BenutzerTab({ ouFilter }: { ouFilter: string | null }) {
+function BenutzerTab({ ouFilter, onDemoData }: { ouFilter: string | null; onDemoData: () => void }) {
   const [users, setUsers] = useState<User[]>(DEMO_USERS);
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -498,8 +498,8 @@ function BenutzerTab({ ouFilter }: { ouFilter: string | null }) {
   const [toast, setToast] = useState('');
 
   useEffect(() => {
-    api.get('/api/users').then(r => { if (Array.isArray(r.data)) setUsers(r.data); }).catch(() => {});
-  }, []);
+    api.get('/api/users').then(r => { if (Array.isArray(r.data)) setUsers(r.data); }).catch(() => { onDemoData(); });
+  }, [onDemoData]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -758,6 +758,7 @@ function OUTab({ onFilterByOU }: { onFilterByOU: (ou: string | null) => void }) 
 export default function UsersView() {
   const [activeTab, setActiveTab] = useState<'benutzer' | 'gruppen' | 'ou'>('benutzer');
   const [ouFilter, setOuFilter] = useState<string | null>(null);
+  const [usingDemoData, setUsingDemoData] = useState(false);
 
   const tabs = [
     { id: 'benutzer', label: 'Benutzer' },
@@ -772,6 +773,12 @@ export default function UsersView() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {usingDemoData && (
+        <div className="mx-6 mt-4 p-3 bg-yellow-900/50 border border-yellow-600 rounded-lg flex items-center gap-2 text-yellow-300 text-sm">
+          <span className="text-yellow-400">⚠</span>
+          <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
+        </div>
+      )}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Benutzer & Verzeichnis</h1>
         <p className="text-sm text-gray-500 mt-1">Benutzer, Gruppen und Organisationseinheiten verwalten</p>
@@ -806,7 +813,7 @@ export default function UsersView() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'benutzer' && <BenutzerTab ouFilter={ouFilter} />}
+      {activeTab === 'benutzer' && <BenutzerTab ouFilter={ouFilter} onDemoData={() => setUsingDemoData(true)} />}
       {activeTab === 'gruppen' && <GruppenTab />}
       {activeTab === 'ou' && <OUTab onFilterByOU={handleOUFilter} />}
     </div>

@@ -299,6 +299,7 @@ export default function DashboardView() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [showBackupWizard, setShowBackupWizard] = useState(false);
+  const [usingDemoData, setUsingDemoData] = useState(false);
 
   const [kpi, setKpi] = useState<KpiData>({
     totalUsers: null,
@@ -617,6 +618,8 @@ export default function DashboardView() {
 
     setLastRefresh(now);
     setLoading(false);
+    // MOCK_ACTIVITY and platform bars are always hardcoded demo data
+    setUsingDemoData(true);
   }, []);
 
   useEffect(() => {
@@ -673,6 +676,12 @@ export default function DashboardView() {
 
   return (
     <div className="p-6 space-y-6">
+      {usingDemoData && (
+        <div className="mx-6 mt-4 p-3 bg-yellow-900/50 border border-yellow-600 rounded-lg flex items-center gap-2 text-yellow-300 text-sm">
+          <span className="text-yellow-400">⚠</span>
+          <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
+        </div>
+      )}
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                              */}
       {/* ------------------------------------------------------------------ */}

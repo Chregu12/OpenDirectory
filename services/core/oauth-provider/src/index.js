@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
+const { APP_CATALOG } = require('./appCatalog');
 
 // ─── Config ──────────────────────────────────────────────────────────────────────
 
@@ -71,13 +72,78 @@ const connectedApps = new Map([
 
 const scimPushLog = [];
 
-function triggerScimPush(action, userId, groupName) {
-  const user = [...scimUsers.values()].find(u => u.id === userId) ?? { userName: userId, emails: [{ value: `${userId}@od.local` }] };
-  for (const app of connectedApps.values()) {
-    if (app.groups.includes(groupName) || action === 'deactivate') {
-      console.log(`[SCIM push] ${action} user ${user.userName} in ${app.name} (group: ${groupName})`);
-      scimPushLog.push({ appId: app.id, action, userId, groupName, timestamp: new Date().toISOString(), success: true });
+async function triggerScimPush(action, userId, groupName) {
+  const user = scimUsers.get(userId);
+  if (!user) return;
+
+  const appsToNotify = APP_CATALOG.filter(app => app.scimEnabled && app.scimEndpoint && app.scimToken);
+
+  for (const app of appsToNotify) {
+    const logEntry = { appId: app.id, action, userId, groupName, timestamp: new Date().toISOString(), success: false, error: null };
+    try {
+      let endpoint, method, body;
+
+      if (action === 'add_to_group' || action === 'remove_from_group') {
+        // SCIM patch group membership
+        endpoint = `${app.scimEndpoint}/Groups/${encodeURIComponent(groupName)}`;
+        method = 'PATCH';
+        body = JSON.stringify({
+          schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+          Operations: [{
+            op: action === 'add_to_group' ? 'add' : 'remove',
+            path: 'members',
+            value: [{ value: user.id, display: user.userName }]
+          }]
+        });
+      } else if (action === 'create') {
+        endpoint = `${app.scimEndpoint}/Users`;
+        method = 'POST';
+        body = JSON.stringify({
+          schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+          id: user.id,
+          userName: user.userName,
+          name: user.name || { formatted: user.userName },
+          emails: user.emails || [],
+          active: user.active !== false
+        });
+      } else if (action === 'delete') {
+        endpoint = `${app.scimEndpoint}/Users/${user.id}`;
+        method = 'DELETE';
+        body = null;
+      } else {
+        endpoint = `${app.scimEndpoint}/Users/${user.id}`;
+        method = 'PUT';
+        body = JSON.stringify({
+          schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+          id: user.id,
+          userName: user.userName,
+          name: user.name || { formatted: user.userName },
+          emails: user.emails || [],
+          active: user.active !== false
+        });
+      }
+
+      const fetchOptions = {
+        method,
+        headers: {
+          'Authorization': `Bearer ${app.scimToken}`,
+          'Content-Type': 'application/scim+json',
+          'Accept': 'application/scim+json'
+        }
+      };
+      if (body) fetchOptions.body = body;
+
+      const response = await fetch(endpoint, fetchOptions);
+      logEntry.success = response.ok;
+      if (!response.ok) {
+        logEntry.error = `HTTP ${response.status}`;
+      }
+    } catch (err) {
+      logEntry.error = err.message;
     }
+    scimPushLog.push(logEntry);
+    // Keep only last 500 log entries
+    if (scimPushLog.length > 500) scimPushLog.shift();
   }
 }
 
@@ -610,7 +676,7 @@ app.put('/scim/v2/Users/:id', (req, res) => {
   scimUsers.set(req.params.id, user);
   // Trigger SCIM push deactivation if user was just deactivated
   if (existing.active === true && user.active === false) {
-    triggerScimPush('deactivate', req.params.id, '');
+    triggerScimPush('deactivate', req.params.id, '').catch(err => console.error('[SCIM push error]', err.message));
   }
   res.json(scimUserResource(user));
 });
@@ -1034,8 +1100,6 @@ app.post('/api/update-rings/:id/assign', (req, res) => {
 });
 
 // ─── Phase 5: App Catalog ─────────────────────────────────────────────────────────
-
-const { APP_CATALOG } = require('./appCatalog');
 
 app.get('/api/app-catalog', (req, res) => {
   res.json(APP_CATALOG);
