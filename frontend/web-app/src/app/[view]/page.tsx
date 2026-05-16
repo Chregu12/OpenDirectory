@@ -16,6 +16,8 @@ import SettingsView from '@/components/views/SettingsView';
 import PolicyView from '@/components/views/PolicyView';
 import SecurityView from '@/components/views/SecurityView';
 import PrintersView from '@/components/views/PrintersView';
+import IdentityProviderView from '@/components/views/IdentityProviderView';
+import EnrollmentHubView from '@/components/views/EnrollmentHubView';
 
 const MODULE_NAV_MAP: Record<string, string> = {
   'monitoring-analytics':   'monitoring',
@@ -28,6 +30,7 @@ const MODULE_NAV_MAP: Record<string, string> = {
 const VALID_VIEWS = new Set([
   'dashboard','topology','devices','applications','infrastructure',
   'users','monitoring','secrets','security','printers','policies','settings',
+  'identity','enrollment',
 ]);
 
 export default function ViewPage() {
@@ -83,6 +86,8 @@ export default function ViewPage() {
       case 'security':       return <SecurityView />;
       case 'printers':       return <PrintersView />;
       case 'policies':       return <PolicyView />;
+      case 'identity':       return <IdentityProviderView />;
+      case 'enrollment':     return <EnrollmentHubView />;
       case 'settings':
         return (
           <div className="p-6">

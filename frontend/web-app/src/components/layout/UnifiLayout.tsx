@@ -23,6 +23,8 @@ import {
   LockClosedIcon,
   ShieldExclamationIcon,
   ArrowRightOnRectangleIcon,
+  FingerPrintIcon,
+  ArrowDownOnSquareStackIcon,
 } from '@heroicons/react/24/outline';
 
 interface LayoutProps {
@@ -61,13 +63,18 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
   };
 
   const ALL_NAV_ITEMS: NavItem[] = [
-    { type: 'item', id: 'dashboard',      name: 'Dashboard',      icon: HomeIcon },
+    { type: 'item', id: 'dashboard',      name: 'Dashboard',       icon: HomeIcon },
+    { type: 'divider', label: 'Identity & Enrollment' },
+    { type: 'item', id: 'identity',       name: 'Identity Provider', icon: FingerPrintIcon },
+    { type: 'item', id: 'enrollment',     name: 'Enrollment Hub',  icon: ArrowDownOnSquareStackIcon },
+    { type: 'divider', label: 'Geräte & Apps' },
     { type: 'item', id: 'devices',        name: 'Devices',         icon: ComputerDesktopIcon },
     { type: 'item', id: 'printers',       name: 'Printers',        icon: PrinterIcon },
+    { type: 'item', id: 'applications',   name: 'Applications',    icon: CubeIcon },
+    { type: 'divider', label: 'Infrastruktur' },
     { type: 'item', id: 'topology',       name: 'Network',         icon: RectangleGroupIcon },
     { type: 'item', id: 'infrastructure', name: 'Infrastructure',  icon: WifiIcon },
     { type: 'item', id: 'users',          name: 'Users',           icon: UserGroupIcon },
-    { type: 'item', id: 'applications',   name: 'Applications',    icon: CubeIcon },
     { type: 'item', id: 'monitoring',     name: 'Monitoring',      icon: ChartBarIcon },
     { type: 'divider', label: 'Governance' },
     { type: 'item', id: 'policies',       name: 'Policies',        icon: DocumentTextIcon },
