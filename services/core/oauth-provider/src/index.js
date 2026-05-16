@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { APP_CATALOG } = require('./appCatalog');
+const db = require('./db');
 
 // ─── Config ──────────────────────────────────────────────────────────────────────
 
@@ -716,7 +717,7 @@ app.put('/scim/v2/Groups/:id', (req, res) => {
   for (const member of (group.members ?? [])) {
     const memberId = member.value ?? member.id ?? member;
     if (!existingMemberIds.has(memberId)) {
-      triggerScimPush('add', memberId, group.displayName);
+      triggerScimPush('add', memberId, group.displayName).catch(err => console.error('[SCIM push error]', err.message));
     }
   }
   res.json(scimGroupResource(group));
@@ -1118,15 +1119,42 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'oauth-provider', issuer: ISSUER, clients: clients.size, algorithm: 'RS256' });
 });
 
+// ─── Seed Default Update Rings (DB) ──────────────────────────────────────────────
+
+async function seedDefaultUpdateRings() {
+  try {
+    const existing = await db.query('SELECT COUNT(*) FROM update_rings');
+    if (existing.rows[0].count === '0') {
+      const rings = [
+        { id: 'ring-canary', name: 'Canary', description: 'Early adopters', delay_days: 0, rollout_percent: 5 },
+        { id: 'ring-preview', name: 'Preview', description: 'IT team', delay_days: 3, rollout_percent: 20 },
+        { id: 'ring-broad', name: 'Broad', description: 'General rollout', delay_days: 7, rollout_percent: 100 },
+      ];
+      for (const r of rings) {
+        await db.query(
+          'INSERT INTO update_rings(id,name,description,delay_days,rollout_percent) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING',
+          [r.id, r.name, r.description, r.delay_days, r.rollout_percent]
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('[DB] Could not seed update rings:', err.message);
+  }
+}
+
 // ─── Start ────────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  console.log(`[OpenDirectory OAuth2/OIDC Provider] Listening on port ${PORT}`);
-  console.log(`  Issuer:    ${ISSUER}`);
-  console.log(`  Discovery: ${ISSUER}/.well-known/openid-configuration`);
-  console.log(`  JWKS:      ${ISSUER}/.well-known/jwks.json`);
-  console.log(`  Algorithm: RS256 (RSA-2048)`);
-  console.log(`  Clients:   ${clients.size} pre-configured`);
+db.initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`[oauth-provider] listening on :${PORT}`);
+    // Seed default update rings if DB available
+    if (db.isAvailable()) {
+      seedDefaultUpdateRings();
+    }
+  });
+}).catch(err => {
+  console.error('[oauth-provider] startup error:', err.message);
+  process.exit(1);
 });
 
 module.exports = app;

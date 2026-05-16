@@ -144,14 +144,39 @@ class UnifiedAuthenticationService {
         if (!user) {
           return done(null, false, { message: 'Invalid credentials' });
         }
-        
+
+        // Password policy enforcement at login
+        const policy = _passwordPolicy;
+        if (policy) {
+          const pwd = password;
+          const errors = [];
+          if (policy.minLength && pwd.length < policy.minLength) {
+            errors.push(`Mindestlänge ${policy.minLength} Zeichen erforderlich`);
+          }
+          if (policy.requireUppercase && !/[A-Z]/.test(pwd)) {
+            errors.push('Grossbuchstabe erforderlich');
+          }
+          if (policy.requireLowercase && !/[a-z]/.test(pwd)) {
+            errors.push('Kleinbuchstabe erforderlich');
+          }
+          if (policy.requireNumbers && !/[0-9]/.test(pwd)) {
+            errors.push('Ziffer erforderlich');
+          }
+          if (policy.requireSpecial && !/[^A-Za-z0-9]/.test(pwd)) {
+            errors.push('Sonderzeichen erforderlich');
+          }
+          if (errors.length > 0) {
+            return done(null, false, { message: errors.join('; ') });
+          }
+        }
+
         // Zero-Trust verification
         const trustScore = await this.zeroTrust.evaluateTrust(req, user);
         if (trustScore < config.zeroTrust.minTrustScore) {
           await this.auditService.logFailedAuth(username, req, 'Low trust score');
           return done(null, false, { message: 'Additional verification required' });
         }
-        
+
         return done(null, user);
       } catch (error) {
         logger.error('Local auth error:', error);
@@ -1025,6 +1050,9 @@ module.exports = UnifiedAuthenticationService;
 // ─── Phase 3: Directory Service API ─────────────────────────────────────────────────
 // Appended in-memory Directory endpoints: OUs, Groups, Password Policies, Service Accounts
 
+// Module-level password policy — accessible by passport LocalStrategy
+let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: true, requireSymbols: true, rotationDays: 90, historyDepth: 10 };
+
 (function attachDirectoryApi() {
   const crypto = require('crypto');
   const app = authService.app;
@@ -1034,7 +1062,8 @@ module.exports = UnifiedAuthenticationService;
   const ous = new Map();
   const groups = new Map();
   const groupMembers = new Map(); // groupId -> Set<userId>
-  let passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: true, requireSymbols: true, rotationDays: 90, historyDepth: 10 };
+  // Reference the module-level policy so LocalStrategy can read it
+  let passwordPolicy = _passwordPolicy;
   const serviceAccounts = new Map();
 
   // ─── Seed Data ─────────────────────────────────────────────────────────────────
@@ -1212,5 +1241,27 @@ module.exports = UnifiedAuthenticationService;
       created++;
     }
     res.status(207).json({ created, errors });
+  });
+
+  // ─── Domain Config ────────────────────────────────────────────────────────────
+
+  app.post('/api/config/domain', (req, res) => {
+    const authHeader = req.headers['authorization'] ?? '';
+    if (!authHeader || !authHeader.trim()) {
+      return res.status(401).json({ error: 'Authorization: Bearer token required' });
+    }
+    const { domain, issuer } = req.body;
+    if (!domain) return res.status(400).json({ error: 'domain required' });
+    // Store in memory (production: write to DB/config file)
+    global.__od_domain_config = { domain, issuer, configuredAt: new Date().toISOString() };
+    res.json({ success: true, domain, issuer });
+  });
+
+  app.get('/api/config/domain', (req, res) => {
+    const authHeader = req.headers['authorization'] ?? '';
+    if (!authHeader || !authHeader.trim()) {
+      return res.status(401).json({ error: 'Authorization: Bearer token required' });
+    }
+    res.json(global.__od_domain_config || { domain: null, issuer: null });
   });
 })();

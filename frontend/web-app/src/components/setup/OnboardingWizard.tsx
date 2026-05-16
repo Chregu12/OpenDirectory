@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { api } from '@/lib/api';
 
 type OS = 'macos' | 'windows' | 'ubuntu';
 
@@ -58,6 +59,10 @@ export default function OnboardingWizard() {
   const [selectedOs, setSelectedOs] = useState<OS>('macos');
   const [copied, setCopied] = useState(false);
 
+  // Finish state
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const validateDomain = (v: string) => /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+$/.test(v.trim());
 
   const handleStep1 = () => {
@@ -74,10 +79,38 @@ export default function OnboardingWizard() {
     setStep(3);
   };
 
-  const handleFinish = () => {
-    localStorage.setItem('od_onboarded', 'true');
-    toast.success('OpenDirectory ist bereit!');
-    router.push('/dashboard');
+  const handleFinish = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Step 1: Save domain configuration
+      await api.post('/api/config/domain', {
+        domain: domain,
+        issuer: `https://${domain}`
+      });
+
+      // Step 2: Create admin user
+      await api.post('/api/auth/register', {
+        username: adminEmail,
+        password: adminPass,
+        role: 'admin',
+        name: adminName
+      });
+
+      // Step 3: Generate enrollment token
+      await api.post('/api/enrollment/tokens', {
+        platform: 'all',
+        label: 'Initial Setup Token'
+      });
+
+      localStorage.setItem('od_onboarded', 'true');
+      toast.success('OpenDirectory ist bereit!');
+      window.location.href = '/dashboard';
+    } catch (err: unknown) {
+      const errAny = err as { response?: { data?: { message?: string } } };
+      setError(errAny?.response?.data?.message || 'Fehler beim Einrichten. Bitte versuche es erneut.');
+      setLoading(false);
+    }
   };
 
   const copyCommand = () => {
@@ -188,9 +221,13 @@ export default function OnboardingWizard() {
                 {copied ? 'Kopiert!' : 'Befehl kopieren'}
               </button>
 
+              {error && <p className="text-xs text-red-500 mt-3">{error}</p>}
+
               <div className="flex gap-3 mt-4">
-                <button onClick={() => setStep(2)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Zurück</button>
-                <button onClick={handleFinish} className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">Fertig</button>
+                <button onClick={() => setStep(2)} disabled={loading} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50">Zurück</button>
+                <button onClick={handleFinish} disabled={loading} className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {loading ? 'Wird eingerichtet…' : 'Fertig'}
+                </button>
               </div>
             </>
           )}

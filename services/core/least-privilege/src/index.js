@@ -5,6 +5,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { v4: uuidv4 } = require('uuid');
+const db = require('./db');
 
 const PORT = process.env.LEAST_PRIVILEGE_PORT ?? 3011;
 
@@ -286,10 +287,13 @@ app.get('/health', (req, res) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  console.log(`[OpenDirectory Least Privilege Service] Listening on port ${PORT}`);
-  console.log(`  Users: ${userPermissions.size}`);
-  console.log(`  Resources: ${RESOURCES.join(', ')}`);
+db.initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`[oauth-provider] listening on :${PORT}`);
+  });
+}).catch(err => {
+  console.error('[oauth-provider] startup error:', err.message);
+  process.exit(1);
 });
 
 module.exports = app;
