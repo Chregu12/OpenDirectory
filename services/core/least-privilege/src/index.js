@@ -38,6 +38,16 @@ const pimRequests = new Map();
 // Active elevations
 const activeElevations = new Map();
 
+// Escalation alerts: userId → { userId, adminCount, detectedAt }
+const escalationAlerts = new Map();
+
+// Unused permissions (mocked — same list as GET /api/permissions/unused)
+const unusedPermissions = [
+  { userId: 'user-bob', userName: 'Bob Developer', resource: 'reports', level: 'write', lastUsed: new Date(Date.now() - 95 * 86400_000).toISOString(), daysIdle: 95 },
+  { userId: 'user-carol', userName: 'Carol ReadOnly', resource: 'printers', level: 'read', lastUsed: new Date(Date.now() - 120 * 86400_000).toISOString(), daysIdle: 120 },
+  { userId: 'user-dave', userName: 'Dave Engineer', resource: 'apps', level: 'write', lastUsed: new Date(Date.now() - 180 * 86400_000).toISOString(), daysIdle: 180 },
+];
+
 // ─── Seed Demo Data ───────────────────────────────────────────────────────────
 
 const demoUsers = [
@@ -113,19 +123,27 @@ app.post('/api/permissions/users/:userId/assign', (req, res) => {
     userPermissions.set(req.params.userId, rec);
   }
   rec.overrides[resource] = level;
+
+  // ─── Privilege Escalation Detection ───────────────────────────────────────────
+  const effectivePerms = getEffectivePermissions(req.params.userId);
+  const adminCount = effectivePerms ? RESOURCES.filter(r => effectivePerms[r] === 'admin').length : 0;
+  if (adminCount > 3) {
+    escalationAlerts.set(req.params.userId, {
+      userId: req.params.userId,
+      userName: rec.name,
+      adminCount,
+      detectedAt: new Date().toISOString(),
+    });
+    console.warn(`[escalation-alert] User ${req.params.userId} has admin on ${adminCount} resources`);
+  }
+
   res.json({ userId: req.params.userId, resource, level });
 });
 
 // ─── Unused Permissions ───────────────────────────────────────────────────────
 
 app.get('/api/permissions/unused', (req, res) => {
-  // Mocked — return 3 demo entries
-  const unused = [
-    { userId: 'user-bob', userName: 'Bob Developer', resource: 'reports', level: 'write', lastUsed: new Date(Date.now() - 95 * 86400_000).toISOString(), daysIdle: 95 },
-    { userId: 'user-carol', userName: 'Carol ReadOnly', resource: 'printers', level: 'read', lastUsed: new Date(Date.now() - 120 * 86400_000).toISOString(), daysIdle: 120 },
-    { userId: 'user-dave', userName: 'Dave Engineer', resource: 'apps', level: 'write', lastUsed: new Date(Date.now() - 180 * 86400_000).toISOString(), daysIdle: 180 },
-  ];
-  res.json(unused);
+  res.json(unusedPermissions);
 });
 
 app.post('/api/permissions/revoke-unused', (req, res) => {
@@ -201,6 +219,64 @@ app.get('/api/pim/active', (req, res) => {
     .map(e => ({ ...e, timeRemainingMs: e.expiresAt - now, timeRemainingMinutes: Math.ceil((e.expiresAt - now) / 60_000) }));
   res.json(active);
 });
+
+// ─── Escalation Alerts ───────────────────────────────────────────────────────────
+
+app.get('/api/permissions/escalation-alerts', (req, res) => {
+  res.json([...escalationAlerts.values()]);
+});
+
+// ─── Group Membership Permission Propagation ──────────────────────────────────────
+
+app.post('/api/permissions/groups/:groupId/propagate', (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
+  // Use ROLE_DEFAULTS['user'] as the group template
+  const template = ROLE_DEFAULTS['user'];
+
+  let rec = userPermissions.get(userId);
+  if (!rec) {
+    rec = { id: userId, name: userId, role: 'user', overrides: {} };
+    userPermissions.set(userId, rec);
+  }
+
+  // Propagate all group template permissions to the user (only if higher than current)
+  const levelIndex = l => LEVELS.indexOf(l);
+  for (const [resource, level] of Object.entries(template)) {
+    const currentLevel = rec.overrides[resource] ?? (ROLE_DEFAULTS[rec.role] ?? ROLE_DEFAULTS['read-only'])[resource] ?? 'none';
+    if (levelIndex(level) > levelIndex(currentLevel)) {
+      rec.overrides[resource] = level;
+    }
+  }
+
+  const effective = getEffectivePermissions(userId);
+  res.json({ userId, groupId: req.params.groupId, propagated: template, effectivePermissions: effective });
+});
+
+// ─── Auto-Revoke Cron (runs every 60s — represents a daily job) ──────────────────
+
+setInterval(() => {
+  const GRACE_DAYS = 97; // 90 days idle + 7 day grace
+  let count = 0;
+  for (const entry of unusedPermissions) {
+    if (entry.daysIdle > GRACE_DAYS) {
+      const rec = userPermissions.get(entry.userId);
+      if (rec) {
+        rec.overrides[entry.resource] = 'none';
+        count++;
+      }
+    }
+  }
+  // Remove revoked entries from the array
+  const before = unusedPermissions.length;
+  for (let i = unusedPermissions.length - 1; i >= 0; i--) {
+    if (unusedPermissions[i].daysIdle > GRACE_DAYS) unusedPermissions.splice(i, 1);
+  }
+  if (count > 0) {
+    console.log(`[auto-revoke] Revoked ${count} unused permissions`);
+  }
+}, 60_000);
 
 // ─── Health ───────────────────────────────────────────────────────────────────────
 

@@ -1040,16 +1040,17 @@ module.exports = UnifiedAuthenticationService;
   // ─── Seed Data ─────────────────────────────────────────────────────────────────
 
   const ouSeed = [
-    { id: 'ou-engineering', name: 'Engineering', parentId: null, description: 'Engineering department', deleted: false, createdAt: new Date().toISOString() },
-    { id: 'ou-marketing',   name: 'Marketing',   parentId: null, description: 'Marketing department', deleted: false, createdAt: new Date().toISOString() },
-    { id: 'ou-it',          name: 'IT',          parentId: null, description: 'IT Operations', deleted: false, createdAt: new Date().toISOString() },
+    { id: 'ou-1', name: 'Engineering', parentId: null,  description: 'Engineering department', deleted: false, createdAt: new Date().toISOString() },
+    { id: 'ou-2', name: 'Marketing',   parentId: null,  description: 'Marketing department',   deleted: false, createdAt: new Date().toISOString() },
+    { id: 'ou-3', name: 'IT',          parentId: null,  description: 'IT Operations',           deleted: false, createdAt: new Date().toISOString() },
+    { id: 'ou-4', name: 'Backend',     parentId: 'ou-1',description: 'Backend engineering',    deleted: false, createdAt: new Date().toISOString() },
   ];
   ouSeed.forEach(o => ous.set(o.id, o));
 
   const groupSeed = [
-    { id: 'g-developers', name: 'Developers',    description: 'Software developers', ouId: 'ou-engineering', createdAt: new Date().toISOString() },
-    { id: 'g-devops',     name: 'DevOps',        description: 'DevOps engineers', ouId: 'ou-engineering', createdAt: new Date().toISOString() },
-    { id: 'g-marketing',  name: 'Marketing Team',description: 'Marketing team', ouId: 'ou-marketing', createdAt: new Date().toISOString() },
+    { id: 'g-developers', name: 'Developers',    description: 'Software developers', ouId: 'ou-1', createdAt: new Date().toISOString() },
+    { id: 'g-devops',     name: 'DevOps',        description: 'DevOps engineers',    ouId: 'ou-1', createdAt: new Date().toISOString() },
+    { id: 'g-marketing',  name: 'Marketing Team',description: 'Marketing team',      ouId: 'ou-2', createdAt: new Date().toISOString() },
   ];
   groupSeed.forEach(g => { groups.set(g.id, g); groupMembers.set(g.id, new Set()); });
 

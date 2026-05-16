@@ -482,6 +482,52 @@ app.delete('/scim/v2/Groups/:id', (req, res) => {
   res.status(204).send();
 });
 
+// ─── Device Registry ─────────────────────────────────────────────────────────────
+
+const deviceRegistry = new Map();
+
+// Seed 3 demo devices (lastSeen values: recent, 35 days ago, 65 days ago)
+[
+  { id: 'dev-001', hostname: 'ws-alice-mbp',   platform: 'macos',   enrolledAt: new Date(Date.now() - 10 * 86400_000).toISOString(), lastSeen: new Date(Date.now() - 2 * 86400_000).toISOString(),  status: 'active' },
+  { id: 'dev-002', hostname: 'ws-bob-win11',   platform: 'windows', enrolledAt: new Date(Date.now() - 40 * 86400_000).toISOString(), lastSeen: new Date(Date.now() - 35 * 86400_000).toISOString(), status: 'active' },
+  { id: 'dev-003', hostname: 'srv-ci-ubuntu',  platform: 'linux',   enrolledAt: new Date(Date.now() - 70 * 86400_000).toISOString(), lastSeen: new Date(Date.now() - 65 * 86400_000).toISOString(), status: 'active' },
+].forEach(d => deviceRegistry.set(d.id, d));
+
+// Auto-quarantine cron: runs every 30s (represents a daily check)
+setInterval(() => {
+  const now = Date.now();
+  const DAY_MS = 86400_000;
+  let flagged = 0;
+  let quarantined = 0;
+  for (const device of deviceRegistry.values()) {
+    const lastSeenMs = new Date(device.lastSeen).getTime();
+    const daysSinceLastSeen = (now - lastSeenMs) / DAY_MS;
+    if (daysSinceLastSeen > 60) {
+      device.status = 'quarantined';
+      quarantined++;
+    } else if (daysSinceLastSeen > 30) {
+      device.status = 'flagged';
+      flagged++;
+    }
+  }
+  console.log(`[device-quarantine] flagged=${flagged} quarantined=${quarantined}`);
+}, 30_000);
+
+app.get('/api/devices/registry', (req, res) => {
+  res.json([...deviceRegistry.values()]);
+});
+
+app.put('/api/devices/:id/status', (req, res) => {
+  const device = deviceRegistry.get(req.params.id);
+  if (!device) return res.status(404).json({ error: 'Device not found' });
+  const { status } = req.body;
+  if (!['active', 'flagged', 'quarantined'].includes(status)) {
+    return res.status(400).json({ error: 'status must be active, flagged, or quarantined' });
+  }
+  device.status = status;
+  res.json(device);
+});
+
 // ─── Enrollment Token API ─────────────────────────────────────────────────────────
 
 const PLATFORMS = ['windows', 'macos', 'linux', 'ios', 'android'];

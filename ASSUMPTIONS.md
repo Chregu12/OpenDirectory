@@ -44,6 +44,26 @@ Every engineering decision made without explicit instruction is documented here.
 - PermissionsView: 3-tab UI (matrix, unused perms, PIM) with German labels and demo data fallback.
 - TypeScript check: only `target: ES5` deprecation warning, no type errors.
 
+### Phase 3 Extension — Bulk Import & Bearer Auth Middleware (2026-05-16)
+- `POST /api/users/bulk-import` creates users in an isolated in-memory Map within the auth service IIFE (not shared with the oauth-provider SCIM store); production should unify storage.
+- Bearer auth middleware skips `/api/auth/*` (those endpoints manage their own auth via Passport) and `/api/enrollment/*` (device enrollment uses token-based auth handled in request body).
+- OU seed IDs changed from descriptive slugs (`ou-engineering`) to numeric IDs (`ou-1`, `ou-2`, `ou-3`) with a 4th child OU `ou-4` (Backend, parentId: ou-1) as specified.
+
+### Phase 4 Extension — Auto-Revoke, Escalation Detection, Group Propagation (2026-05-16)
+- Auto-revoke cron: unused permissions array is authoritative; entries with daysIdle > 97 are removed after setting user override to 'none'. Runs every 60s (dev stand-in for daily job).
+- Escalation detection: fires on every POST /api/permissions/users/:userId/assign; threshold is >3 admin-level resources. Alert stored in `escalationAlerts` Map, overwritten per userId.
+- Group propagation uses ROLE_DEFAULTS['user'] as the template for all groups (group-specific templates are a future enhancement).
+
+### Phase 2 Extension — Device Registry & Auto-Quarantine (2026-05-16)
+- Device registry seeded with 3 demo devices with staggered `lastSeen` values to trigger flagged/quarantined states on first cron tick.
+- Auto-quarantine cron runs every 30s (represents a daily check in production); thresholds are 30 days → flagged, 60 days → quarantined.
+- Device registry is separate from the enrollment token device sub-map; in production these should be unified.
+
+### Phase 6 Extension — CIS Baselines (5 profiles) (2026-05-16)
+- Replaced 4 simplified CIS entries with 5 full-detail profiles: Ubuntu 22.04 L1/L2, macOS 14 Sonoma L1, Windows 11 L1/L2.
+- `POST /api/policies/baselines/:id/apply` now creates a real in-memory policy entry (`inMemoryPolicies` Map) when the database is unavailable, instead of returning a mock stub.
+- The in-memory policy store is not exposed via GET /api/policies (which queries PostgreSQL); a future task should merge in-memory entries into the DB-backed list response.
+
 ---
 
 ## Assumption: OAuth Provider port 3010
