@@ -5,6 +5,47 @@ Every engineering decision made without explicit instruction is documented here.
 
 ---
 
+## Phase 1-7 Autonomous Implementation (2026-05-16)
+
+### Phase 1 — OAuth Provider (RSA + SCIM + Device Auth)
+- RSA-2048 key pair generated at startup using `crypto.generateKeyPairSync`; private key held in memory, never written to disk.
+- All tokens (access, ID, device) signed with RS256. Existing `JWT_SECRET` env var no longer used for signing.
+- Device Authorization flow (RFC 8628): Approval page at `/oauth/device/verify` renders inline HTML.
+- SCIM 2.0 endpoints are purely in-memory; reset on service restart.
+- `PUT /api/clients/:id` and `DELETE /api/clients/:id` complete CRUD on the in-memory clients Map.
+
+### Phase 2 — Enrollment Script Generation
+- macOS/iOS `.mobileconfig` uses placeholder APNS values — must be replaced for production MDM.
+- Agent binary download URLs are placeholders; actual binaries must be served separately.
+- Heartbeat updates in-memory `last_seen`; production should write to device DB.
+
+### Phase 3 — Directory Service API
+- OUs, groups, password policy, service accounts appended to authentication-service via an IIFE after startup.
+- Service account tokens are plain random hex strings; production should use short-lived JWTs.
+
+### Phase 4 — Least Privilege Service
+- New Express service on port 3011 with own in-memory stores.
+- PIM elevations not automatically cleaned up in this implementation.
+- Risk scores use a heuristic (admin=40pts per resource, write=25, read=10, none=0).
+
+### Phase 5 — App Catalog
+- 20 app catalog entries with real-world correct configuration templates.
+- SCIM push endpoint is a mock; always returns success.
+
+### Phase 6 — Policy Engine (Baselines)
+- Simulate and baseline endpoints fall back gracefully when DB unavailable.
+- CIS baselines seeded: Ubuntu 22.04 L1, macOS 14 L1, Windows 11 L1+L2.
+
+### Phase 7 — Frontend
+- DashboardView: existing functionality preserved, new sections prepended (quick stats, SVG donut, platform bars, activity feed, quick actions). German UI throughout.
+- ApplicationsView: added SSO catalog tab with 4-step wizard; mock test always succeeds.
+- UnifiLayout: Cmd+K/Ctrl+K global search overlay; notification center slides in from right; KeyIcon used for Permissions nav item.
+- OnboardingWizard: shown when `localStorage.od_onboarded` is falsy. Domain validation, password strength meter, OS-specific enrollment command.
+- PermissionsView: 3-tab UI (matrix, unused perms, PIM) with German labels and demo data fallback.
+- TypeScript check: only `target: ES5` deprecation warning, no type errors.
+
+---
+
 ## Assumption: OAuth Provider port 3010
 **Phase:** 1
 **Decision:** OAuth2/OIDC provider runs on port 3010 (not conflicting with auth-service on 3002)

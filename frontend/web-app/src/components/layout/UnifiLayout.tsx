@@ -157,6 +157,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     { type: 'item', id: 'policies',       name: 'Policies',        icon: DocumentTextIcon },
     { type: 'item', id: 'security',       name: 'Security',        icon: ShieldExclamationIcon },
     { type: 'item', id: 'secrets',        name: 'Secrets',         icon: LockClosedIcon },
+    { type: 'item', id: 'permissions',    name: 'Berechtigungen',  icon: KeyIcon },
     { type: 'divider', label: '' },
     { type: 'item', id: 'settings',       name: 'Settings',        icon: Cog6ToothIcon },
   ];
@@ -263,24 +264,24 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden text-gray-400 hover:text-gray-600">
               <Bars3Icon className="w-6 h-6" />
             </button>
-            <div className="hidden sm:block relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search services, devices..."
-                className="block w-64 pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-gray-50 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
-              />
-            </div>
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="hidden sm:flex items-center gap-2 w-64 pl-3 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 text-sm hover:bg-white hover:border-gray-400 transition-colors"
+            >
+              <MagnifyingGlassIcon className="h-4 w-4 shrink-0" />
+              <span className="flex-1 text-left text-gray-400">Suchen...</span>
+              <kbd className="hidden md:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs bg-gray-100 text-gray-500 rounded border border-gray-200">
+                <span>⌘</span><span>K</span>
+              </kbd>
+            </button>
           </div>
 
           <div className="flex items-center space-x-4">
-            <button className="relative text-gray-400 hover:text-gray-600">
+            <button onClick={() => setNotifOpen(o => !o)} className="relative text-gray-400 hover:text-gray-600">
               <BellIcon className="w-6 h-6" />
-              {notifications > 0 && (
+              {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                  {notifications}
+                  {unreadCount}
                 </span>
               )}
             </button>
@@ -306,6 +307,75 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
           {children}
         </main>
       </div>
+
+      {/* ─── Global Search Overlay ──────────────────────────────────────────── */}
+      {searchOpen && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex items-start justify-center pt-24 px-4" onClick={() => setSearchOpen(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+              <MagnifyingGlassIcon className="w-5 h-5 text-gray-400 shrink-0" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Suche nach Seiten, Nutzern, Geräten, Apps..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="flex-1 text-sm focus:outline-none text-gray-900"
+              />
+              <button onClick={() => setSearchOpen(false)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
+            </div>
+            {searchResults.length > 0 && (
+              <ul className="py-2 max-h-72 overflow-y-auto">
+                {searchResults.map(item => (
+                  <li key={item.id}>
+                    <button
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
+                      onClick={() => { onViewChange(item.view); setSearchOpen(false); setSearchQuery(''); }}
+                    >
+                      <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded w-16 text-center shrink-0">{item.type}</span>
+                      <span className="text-sm text-gray-900">{item.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {searchQuery.trim().length > 0 && searchResults.length === 0 && (
+              <p className="text-sm text-gray-400 px-4 py-4">Keine Ergebnisse für "{searchQuery}"</p>
+            )}
+            {searchQuery.trim().length === 0 && (
+              <p className="text-xs text-gray-400 px-4 py-3">Tippe, um zu suchen. Drücke Escape zum Schliessen.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Notification Panel ─────────────────────────────────────────────── */}
+      {notifOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
+          <div className="fixed top-16 right-0 w-80 bg-white border-l border-gray-200 shadow-xl z-50 h-[calc(100vh-4rem)] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900">Benachrichtigungen</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={markAllRead} className="text-xs text-blue-600 hover:underline">Alle gelesen</button>
+                <button onClick={() => setNotifOpen(false)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-4 h-4" /></button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto py-2">
+              {notifications.map(n => (
+                <div key={n.id} className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${!n.read ? 'bg-blue-50/40' : ''}`}>
+                  <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${NOTIF_COLOR[n.type]}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-800 leading-snug">{n.title}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
+                  </div>
+                  {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 mt-2" />}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

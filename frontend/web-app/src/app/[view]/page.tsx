@@ -18,6 +18,8 @@ import SecurityView from '@/components/views/SecurityView';
 import PrintersView from '@/components/views/PrintersView';
 import IdentityProviderView from '@/components/views/IdentityProviderView';
 import EnrollmentHubView from '@/components/views/EnrollmentHubView';
+import PermissionsView from '@/components/views/PermissionsView';
+import OnboardingWizard from '@/components/setup/OnboardingWizard';
 
 const MODULE_NAV_MAP: Record<string, string> = {
   'monitoring-analytics':   'monitoring',
@@ -30,7 +32,7 @@ const MODULE_NAV_MAP: Record<string, string> = {
 const VALID_VIEWS = new Set([
   'dashboard','topology','devices','applications','infrastructure',
   'users','monitoring','secrets','security','printers','policies','settings',
-  'identity','enrollment',
+  'identity','enrollment','permissions',
 ]);
 
 export default function ViewPage() {
@@ -42,11 +44,15 @@ export default function ViewPage() {
   const [enabledModules, setEnabledModules] = useState<string[]>(Object.keys(MODULE_NAV_MAP));
   const [currentUser,    setCurrentUser]    = useState<{ name: string; role: string } | null>(null);
   const [authChecked,    setAuthChecked]    = useState(false);
+  const [onboarded,      setOnboarded]      = useState(true);
 
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem('auth_user') : null;
     if (!stored) { router.push('/login'); return; }
     try { setCurrentUser(JSON.parse(stored)); } catch { router.push('/login'); return; }
+    // Check onboarding
+    const od = typeof window !== 'undefined' ? localStorage.getItem('od_onboarded') : 'true';
+    setOnboarded(!!od);
     setAuthChecked(true);
   }, [router]);
 
@@ -88,6 +94,7 @@ export default function ViewPage() {
       case 'policies':       return <PolicyView />;
       case 'identity':       return <IdentityProviderView />;
       case 'enrollment':     return <EnrollmentHubView />;
+      case 'permissions':    return <PermissionsView />;
       case 'settings':
         return (
           <div className="p-6">
@@ -99,6 +106,11 @@ export default function ViewPage() {
   };
 
   if (!authChecked) return null;
+
+  // Show onboarding wizard overlay when not yet onboarded (except on settings page)
+  if (!onboarded && activeView !== 'settings') {
+    return <OnboardingWizard />;
+  }
 
   return (
     <UnifiLayout
