@@ -119,12 +119,19 @@ function RiskBar({ score }: { score: number }) {
 // ─── Tab 1: Permission Matrix ─────────────────────────────────────────────────
 
 function MatrixTab({ onDemoData }: { onDemoData: () => void }) {
-  const [matrix, setMatrix] = useState<UserPermRow[]>(DEMO_MATRIX);
+  const [matrix, setMatrix] = useState<UserPermRow[]>([]);
+  const [matrixLoading, setMatrixLoading] = useState(true);
   const [editCell, setEditCell] = useState<{ userId: string; resource: string } | null>(null);
 
   useEffect(() => {
-    // Matrix always starts from demo data; notify parent
-    onDemoData();
+    fetch('/api/permissions/matrix')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setMatrix(data); else { setMatrix([]); onDemoData(); } })
+      .catch(() => {
+        setMatrix([]);
+        onDemoData();
+      })
+      .finally(() => setMatrixLoading(false));
   }, [onDemoData]);
 
   const handleLevelChange = async (userId: string, resourceKey: string, newLevel: PermLevel) => {
@@ -146,51 +153,61 @@ function MatrixTab({ onDemoData }: { onDemoData: () => void }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-200">
-            <th className="text-left px-4 py-3 font-medium text-gray-500 w-44">Benutzer</th>
-            <th className="text-left px-4 py-3 font-medium text-gray-500">Rolle</th>
-            {RESOURCES.map((r, i) => (
-              <th key={r} className="text-center px-3 py-3 font-medium text-gray-500 whitespace-nowrap">{r}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {matrix.map(row => (
-            <tr key={row.userId} className="hover:bg-gray-50">
-              <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{row.name}</td>
-              <td className="px-4 py-3">
-                <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">{row.role}</span>
-              </td>
-              {RESOURCE_KEYS.map((key, i) => {
-                const level = (row.permissions[key] ?? 'none') as PermLevel;
-                const isEditing = editCell?.userId === row.userId && editCell?.resource === key;
-                return (
-                  <td key={key} className="px-3 py-3 text-center">
-                    {isEditing ? (
-                      <select
-                        autoFocus
-                        defaultValue={level}
-                        onBlur={() => setEditCell(null)}
-                        onChange={e => handleLevelChange(row.userId, key, e.target.value as PermLevel)}
-                        className="text-xs border border-gray-300 rounded px-1 py-0.5"
-                      >
-                        {(['none', 'read', 'write', 'admin'] as PermLevel[]).map(l => (
-                          <option key={l} value={l}>{LEVEL_LABEL[l]}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <LevelBadge level={level} onClick={() => setEditCell({ userId: row.userId, resource: key })} />
-                    )}
+      {matrixLoading ? (
+        <div className="space-y-2 p-4">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-gray-700 rounded animate-pulse" />)}
+        </div>
+      ) : matrix.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 text-sm">Keine Berechtigungen konfiguriert</div>
+      ) : (
+        <>
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left px-4 py-3 font-medium text-gray-500 w-44">Benutzer</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">Rolle</th>
+                {RESOURCES.map((r) => (
+                  <th key={r} className="text-center px-3 py-3 font-medium text-gray-500 whitespace-nowrap">{r}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {matrix.map(row => (
+                <tr key={row.userId} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{row.name}</td>
+                  <td className="px-4 py-3">
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">{row.role}</span>
                   </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="text-xs text-gray-400 mt-3 px-4">Klick auf eine Berechtigung zum Bearbeiten</p>
+                  {RESOURCE_KEYS.map((key) => {
+                    const level = (row.permissions[key] ?? 'none') as PermLevel;
+                    const isEditing = editCell?.userId === row.userId && editCell?.resource === key;
+                    return (
+                      <td key={key} className="px-3 py-3 text-center">
+                        {isEditing ? (
+                          <select
+                            autoFocus
+                            defaultValue={level}
+                            onBlur={() => setEditCell(null)}
+                            onChange={e => handleLevelChange(row.userId, key, e.target.value as PermLevel)}
+                            className="text-xs border border-gray-300 rounded px-1 py-0.5"
+                          >
+                            {(['none', 'read', 'write', 'admin'] as PermLevel[]).map(l => (
+                              <option key={l} value={l}>{LEVEL_LABEL[l]}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <LevelBadge level={level} onClick={() => setEditCell({ userId: row.userId, resource: key })} />
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-xs text-gray-400 mt-3 px-4">Klick auf eine Berechtigung zum Bearbeiten</p>
+        </>
+      )}
     </div>
   );
 }
@@ -198,10 +215,16 @@ function MatrixTab({ onDemoData }: { onDemoData: () => void }) {
 // ─── Tab 2: Unused Permissions ────────────────────────────────────────────────
 
 function UnusedTab({ onCountChange, onDemoData }: { onCountChange: (n: number) => void; onDemoData: () => void }) {
-  const [unused, setUnused] = useState<UnusedPerm[]>(DEMO_UNUSED);
+  const [unused, setUnused] = useState<UnusedPerm[]>([]);
 
   useEffect(() => { onCountChange(unused.length); }, [unused, onCountChange]);
-  useEffect(() => { onDemoData(); }, [onDemoData]);
+
+  useEffect(() => {
+    fetch('/api/permissions/unused')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setUnused(data); else { setUnused([]); onDemoData(); } })
+      .catch(() => { setUnused([]); onDemoData(); });
+  }, [onDemoData]);
 
   const revokeOne = async (userId: string, resource: string) => {
     try {
@@ -251,19 +274,21 @@ function UnusedTab({ onCountChange, onDemoData }: { onCountChange: (n: number) =
 function PimTab() {
   const [requests, setRequests] = useState<PimRequest[]>([]);
   const [active, setActive] = useState<ActiveElevation[]>([]);
-  const [riskScores, setRiskScores] = useState<RiskScore[]>(DEMO_RISK);
-  const [form, setForm] = useState({ userId: 'user-bob', resource: 'secrets', duration_hours: 2, reason: '' });
+  const [riskScores, setRiskScores] = useState<RiskScore[]>([]);
+  const [form, setForm] = useState({ userId: '', resource: 'secrets', duration_hours: 2, reason: '' });
   const [submitting, setSubmitting] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [reqRes, actRes] = await Promise.allSettled([
+      const [reqRes, actRes, riskRes] = await Promise.allSettled([
         fetch('/api/pim/requests').then(r => r.json()),
         fetch('/api/pim/active').then(r => r.json()),
+        fetch('/api/permissions/risk-scores').then(r => r.json()),
       ]);
       if (reqRes.status === 'fulfilled' && Array.isArray(reqRes.value)) setRequests(reqRes.value);
       if (actRes.status === 'fulfilled' && Array.isArray(actRes.value)) setActive(actRes.value);
-    } catch { /* use demo */ }
+      if (riskRes.status === 'fulfilled' && Array.isArray(riskRes.value)) setRiskScores(riskRes.value);
+    } catch { /* silently fail, show empty state */ }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -316,7 +341,7 @@ function PimTab() {
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Benutzer</label>
             <select value={form.userId} onChange={e => setForm(f => ({ ...f, userId: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
-              {DEMO_RISK.map(u => <option key={u.userId} value={u.userId}>{u.name}</option>)}
+              {riskScores.map(u => <option key={u.userId} value={u.userId}>{u.name}</option>)}
             </select>
           </div>
           <div>
@@ -384,7 +409,7 @@ function PimTab() {
 
 export default function PermissionsView() {
   const [activeTab, setActiveTab] = useState<'matrix' | 'unused' | 'pim'>('matrix');
-  const [unusedCount, setUnusedCount] = useState(3);
+  const [unusedCount, setUnusedCount] = useState(0);
   const [usingDemoData, setUsingDemoData] = useState(false);
 
   const tabs: { id: 'matrix' | 'unused' | 'pim'; label: string; badge?: number }[] = [
