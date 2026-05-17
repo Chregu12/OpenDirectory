@@ -1241,30 +1241,70 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
 
   // ─── Bulk Import ──────────────────────────────────────────────────────────────
 
-  app.post('/api/users/bulk-import', (req, res) => {
+  app.post('/api/users/bulk-import', async (req, res) => {
     const { users } = req.body;
     if (!Array.isArray(users)) return res.status(400).json({ error: 'users array required' });
     const errors = [];
-    let created = 0;
+    const createdUsers = [];
     for (const [i, u] of users.entries()) {
       if (!u.name || !u.email) {
         errors.push({ index: i, error: 'name and email required', entry: u });
         continue;
       }
       const id = `user-${Date.now()}-${i}`;
-      scimUsers.set(id, {
+      const username = u.username || u.email.split('@')[0];
+      const userRecord = {
         id,
         userName: u.email,
+        username,
         displayName: u.name,
+        name: u.name,
+        email: u.email,
         emails: [{ value: u.email, primary: true }],
         active: true,
         role: u.role ?? 'user',
         group: u.group ?? null,
         createdAt: new Date().toISOString(),
-      });
-      created++;
+      };
+      scimUsers.set(id, userRecord);
+      createdUsers.push(userRecord);
     }
-    res.status(207).json({ created, errors });
+
+    // Try to sync to LLDAP via GraphQL API
+    const LLDAP_URL = process.env.LLDAP_URL || 'http://localhost:3890';
+    const LLDAP_ADMIN = process.env.LLDAP_ADMIN_USER || 'admin';
+    const LLDAP_PASS = process.env.LLDAP_ADMIN_PASSWORD || process.env.LLDAP_ADMIN_PASS || '';
+    const lldapSynced = [];
+    const lldapErrors = [];
+
+    for (const user of createdUsers) {
+      try {
+        const lldapRes = await fetch(`${LLDAP_URL}/api/graphql`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Basic ${Buffer.from(`${LLDAP_ADMIN}:${LLDAP_PASS}`).toString('base64')}`,
+          },
+          body: JSON.stringify({
+            query: `mutation CreateUser($user: CreateUserInput!) { createUser(user: $user) { id } }`,
+            variables: {
+              user: {
+                id: user.username,
+                email: user.email || `${user.username}@opendirectory.local`,
+                displayName: user.name || user.username,
+              }
+            }
+          })
+        });
+        if (lldapRes.ok) {
+          lldapSynced.push(user.username);
+        }
+      } catch (err) {
+        lldapErrors.push({ username: user.username, error: err.message });
+      }
+    }
+
+    res.status(207).json({ created: createdUsers.length, errors, lldapSynced, lldapErrors });
   });
 
   // ─── Domain Config ────────────────────────────────────────────────────────────

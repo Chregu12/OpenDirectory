@@ -192,10 +192,22 @@ function AddUserWizard({ onClose, onSuccess, availableGroups = [] }: { onClose: 
   async function submit() {
     setLoading(true);
     setError('');
+    // Derive username from email local part or name
+    const username = form.email
+      ? form.email.split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '')
+      : form.name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9._-]/g, '');
     try {
-      await api.post('/api/users', { name: form.name, email: form.email, role: form.role, ou: form.ou, group: form.group, notify: form.notify });
+      await api.post('/api/auth/register', {
+        username,
+        password: crypto.randomUUID().slice(0, 12) + 'A1!',
+        name: form.name || username,
+        email: form.email || `${username}@opendirectory.local`,
+        role: form.role || 'user',
+        groups: form.group ? [form.group] : [],
+        ouId: form.ou,
+      });
     } catch (_) {
-      // API unavailable — proceed with demo
+      // API unavailable — proceed with optimistic local update
     }
     const newUser: User = {
       id: `new-${Date.now()}`,
@@ -499,7 +511,8 @@ function BenutzerTab({ ouFilter, onDemoData }: { ouFilter: string | null; onDemo
   const [showWizard, setShowWizard] = useState(false);
   const [toast, setToast] = useState('');
 
-  useEffect(() => {
+  const fetchUsers = () => {
+    setLoading(true);
     api.get('/api/users')
       .then(r => { if (Array.isArray(r.data)) setUsers(r.data); })
       .catch(() => {
@@ -508,7 +521,12 @@ function BenutzerTab({ ouFilter, onDemoData }: { ouFilter: string | null; onDemo
         onDemoData();
       })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchUsers();
     api.get('/api/groups').then(r => { if (Array.isArray(r.data)) setWizardGroups(r.data); }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onDemoData]);
 
   function showToast(msg: string) {
@@ -624,7 +642,7 @@ function BenutzerTab({ ouFilter, onDemoData }: { ouFilter: string | null; onDemo
       {showWizard && (
         <AddUserWizard
           onClose={() => setShowWizard(false)}
-          onSuccess={u => { setUsers(us => [u, ...us]); showToast(`Benutzer „${u.name}" wurde angelegt.`); }}
+          onSuccess={u => { setUsers(us => [u, ...us]); showToast(`Benutzer „${u.name}" wurde angelegt.`); fetchUsers(); }}
           availableGroups={wizardGroups}
         />
       )}

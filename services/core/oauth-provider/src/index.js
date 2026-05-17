@@ -425,8 +425,13 @@ app.post('/oauth/token', (req, res) => {
     const id_token     = signToken({ ...payload, nonce: uuidv4() });
     const rt           = uuidv4();
 
-    tokens.set(crypto.createHash('sha256').update(access_token).digest('hex'), { ...payload, type: 'access' });
-    tokens.set(crypto.createHash('sha256').update(rt).digest('hex'), { ...payload, type: 'refresh' });
+    const atHash = crypto.createHash('sha256').update(access_token).digest('hex');
+    const rtHash = crypto.createHash('sha256').update(rt).digest('hex');
+    tokens.set(atHash, { ...payload, type: 'access' });
+    tokens.set(rtHash, { ...payload, type: 'refresh' });
+    if (db.isAvailable()) {
+      db.saveToken(atHash, payload).catch(err => console.error('[token-db]', err.message));
+    }
 
     return res.json({ access_token, id_token, refresh_token: rt, token_type: 'Bearer', expires_in: TOKEN_TTL, scope: record.scope });
   }
@@ -440,8 +445,12 @@ app.post('/oauth/token', (req, res) => {
     const access_token = signToken(payload);
     const new_rt = uuidv4();
     tokens.delete(hash);
-    tokens.set(crypto.createHash('sha256').update(access_token).digest('hex'), { ...payload, type: 'access' });
+    const newAtHash = crypto.createHash('sha256').update(access_token).digest('hex');
+    tokens.set(newAtHash, { ...payload, type: 'access' });
     tokens.set(crypto.createHash('sha256').update(new_rt).digest('hex'), { ...payload, type: 'refresh' });
+    if (db.isAvailable()) {
+      db.saveToken(newAtHash, payload).catch(err => console.error('[token-db]', err.message));
+    }
     return res.json({ access_token, refresh_token: new_rt, token_type: 'Bearer', expires_in: TOKEN_TTL });
   }
 
@@ -1300,7 +1309,20 @@ async function seedDefaultUpdateRings() {
 
 // ─── Start ────────────────────────────────────────────────────────────────────────
 
-db.initDb().then(() => {
+db.initDb().then(async () => {
+  if (db.isAvailable()) {
+    try {
+      const existing = await db.query('SELECT COUNT(*) FROM oauth_clients');
+      if (existing.rows[0].count === '0') {
+        for (const [, client] of clients.entries()) {
+          await db.upsertClient({ id: client.clientId, name: client.name, clientSecret: client.clientSecret, redirectUris: client.redirectUris, grants: client.grantTypes, scopes: client.scopes });
+        }
+        console.log('[db] Seeded initial OAuth clients');
+      }
+    } catch (err) {
+      console.warn('[db] Could not seed clients:', err.message);
+    }
+  }
   app.listen(PORT, () => {
     console.log(`[oauth-provider] listening on :${PORT}`);
     // Seed default update rings if DB available
