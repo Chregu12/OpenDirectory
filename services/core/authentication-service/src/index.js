@@ -1121,6 +1121,8 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
     if (req.path.startsWith('/enrollment/')) return next();
     // Exclude auth endpoints (they handle their own auth)
     if (req.path.startsWith('/auth/')) return next();
+    // Exclude audit read endpoint (dashboard reads this without user auth)
+    if (req.path.startsWith('/audit/')) return next();
     const authHeader = req.headers['authorization'] ?? '';
     if (!authHeader || !authHeader.trim()) {
       return res.status(401).json({ error: 'Authorization: Bearer token required' });

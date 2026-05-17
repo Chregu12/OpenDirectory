@@ -175,7 +175,7 @@ function OUTreeNode({
 
 // ─── Add User Wizard ──────────────────────────────────────────────────────────
 
-function AddUserWizard({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u: User) => void }) {
+function AddUserWizard({ onClose, onSuccess, availableGroups = [] }: { onClose: () => void; onSuccess: (u: User) => void; availableGroups?: Group[] }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
     name: '', email: '', role: 'user' as User['role'],
@@ -268,7 +268,7 @@ function AddUserWizard({ onClose, onSuccess }: { onClose: () => void; onSuccess:
                 <label className="block text-sm font-medium text-gray-700 mb-1">Gruppe</label>
                 <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={form.group} onChange={e => set('group', e.target.value)}>
                   <option value="">Keine Gruppe</option>
-                  {DEMO_GROUPS.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
+                  {availableGroups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
                 </select>
               </div>
               <div>
@@ -493,6 +493,7 @@ function CreateGroupModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 function BenutzerTab({ ouFilter, onDemoData }: { ouFilter: string | null; onDemoData: () => void }) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [wizardGroups, setWizardGroups] = useState<Group[]>([]);
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showWizard, setShowWizard] = useState(false);
@@ -507,6 +508,7 @@ function BenutzerTab({ ouFilter, onDemoData }: { ouFilter: string | null; onDemo
         onDemoData();
       })
       .finally(() => setLoading(false));
+    api.get('/api/groups').then(r => { if (Array.isArray(r.data)) setWizardGroups(r.data); }).catch(() => {});
   }, [onDemoData]);
 
   function showToast(msg: string) {
@@ -562,53 +564,68 @@ function BenutzerTab({ ouFilter, onDemoData }: { ouFilter: string | null; onDemo
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 text-left">
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Benutzer</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Rolle</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">OU</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Zuletzt aktiv</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {filtered.map(u => (
-              <tr
-                key={u.id}
-                onClick={() => setSelectedUser(u)}
-                className="hover:bg-gray-50 cursor-pointer transition-colors"
-              >
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <UserAvatar name={u.name} />
-                    <div>
-                      <p className="font-medium text-gray-900">{u.name}</p>
-                      <p className="text-xs text-gray-500">{u.email}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
-                <td className="px-4 py-3 text-gray-600">{u.ou}</td>
-                <td className="px-4 py-3"><StatusDot status={u.status} /></td>
-                <td className="px-4 py-3 text-gray-500">{u.lastActive}</td>
-              </tr>
+        {loading ? (
+          <div className="space-y-2 p-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-12 bg-gray-700 rounded animate-pulse" />
             ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  Keine Benutzer gefunden
-                </td>
+          </div>
+        ) : users.length === 0 && !search && !ouFilter ? (
+          <div className="text-center py-12 text-gray-400">
+            <div className="text-4xl mb-3">👤</div>
+            <p className="font-medium">Keine Benutzer</p>
+            <p className="text-sm mt-1">Erstellen Sie den ersten Benutzer mit dem Button oben.</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left">
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Benutzer</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Rolle</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">OU</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Zuletzt aktiv</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.map(u => (
+                <tr
+                  key={u.id}
+                  onClick={() => setSelectedUser(u)}
+                  className="hover:bg-gray-50 cursor-pointer transition-colors"
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <UserAvatar name={u.name} />
+                      <div>
+                        <p className="font-medium text-gray-900">{u.name}</p>
+                        <p className="text-xs text-gray-500">{u.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
+                  <td className="px-4 py-3 text-gray-600">{u.ou}</td>
+                  <td className="px-4 py-3"><StatusDot status={u.status} /></td>
+                  <td className="px-4 py-3 text-gray-500">{u.lastActive}</td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-sm">
+                    Keine Benutzer gefunden
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {showWizard && (
         <AddUserWizard
           onClose={() => setShowWizard(false)}
           onSuccess={u => { setUsers(us => [u, ...us]); showToast(`Benutzer „${u.name}" wurde angelegt.`); }}
+          availableGroups={wizardGroups}
         />
       )}
 
@@ -630,11 +647,15 @@ function BenutzerTab({ ouFilter, onDemoData }: { ouFilter: string | null; onDemo
 // ─── Tab: Gruppen ─────────────────────────────────────────────────────────────
 
 function GruppenTab() {
-  const [groups, setGroups] = useState<Group[]>(DEMO_GROUPS);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    api.get('/api/groups').then(r => { if (Array.isArray(r.data)) setGroups(r.data); }).catch(() => {});
+    api.get('/api/groups')
+      .then(r => { if (Array.isArray(r.data)) setGroups(r.data); })
+      .catch(() => { setGroups([]); })
+      .finally(() => setGroupsLoading(false));
   }, []);
 
   return (
@@ -651,46 +672,60 @@ function GruppenTab() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 text-left">
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">OU</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Mitglieder</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Richtlinien</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Aktionen</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {groups.map(g => (
-              <tr key={g.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3 font-medium text-gray-900">{g.name}</td>
-                <td className="px-4 py-3 text-gray-600">{g.ou}</td>
-                <td className="px-4 py-3">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
-                    {g.memberCount} Mitglieder
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {g.policies.map(p => (
-                      <span key={p} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">{p}</span>
-                    ))}
-                    {g.policies.length === 0 && <span className="text-gray-400 text-xs">Keine</span>}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => setGroups(gs => gs.filter(x => x.id !== g.id))}
-                    className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                  </button>
-                </td>
-              </tr>
+        {groupsLoading ? (
+          <div className="space-y-2 p-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-12 bg-gray-700 rounded animate-pulse" />
             ))}
-          </tbody>
-        </table>
+          </div>
+        ) : groups.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <div className="text-4xl mb-3">👥</div>
+            <p className="font-medium">Keine Gruppen</p>
+            <p className="text-sm mt-1">Erstellen Sie die erste Gruppe mit dem Button oben.</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left">
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">OU</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Mitglieder</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Richtlinien</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Aktionen</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {groups.map(g => (
+                <tr key={g.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3 font-medium text-gray-900">{g.name}</td>
+                  <td className="px-4 py-3 text-gray-600">{g.ou}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                      {g.memberCount} Mitglieder
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {g.policies.map(p => (
+                        <span key={p} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">{p}</span>
+                      ))}
+                      {g.policies.length === 0 && <span className="text-gray-400 text-xs">Keine</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => setGroups(gs => gs.filter(x => x.id !== g.id))}
+                      className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {showModal && (
@@ -706,11 +741,13 @@ function GruppenTab() {
 // ─── Tab: Organisationseinheiten ──────────────────────────────────────────────
 
 function OUTab({ onFilterByOU }: { onFilterByOU: (ou: string | null) => void }) {
-  const [ouTree, setOuTree] = useState<OUNode[]>(DEMO_OU_TREE);
+  const [ouTree, setOuTree] = useState<OUNode[]>([]);
   const [selectedOU, setSelectedOU] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get('/api/ous').then(r => { if (Array.isArray(r.data)) setOuTree(r.data); }).catch(() => {});
+    api.get('/api/ous')
+      .then(r => { if (Array.isArray(r.data)) setOuTree(r.data); })
+      .catch(() => { setOuTree([]); });
   }, []);
 
   function handleSelect(name: string | null) {

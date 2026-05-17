@@ -33,18 +33,6 @@ import {
 import BackupRecoveryWizard from '@/components/setup/BackupRecoveryWizard';
 import toast from 'react-hot-toast';
 
-// ─── Mock activity events ─────────────────────────────────────────────────────
-const MOCK_ACTIVITY = [
-  { id: '1', type: 'success' as const, message: 'MacBook Pro von alice@firma.local eingeschrieben', time: '14:23' },
-  { id: '2', type: 'info' as const,    message: 'Benutzer bob.dev angemeldet (Berlin, DE)', time: '14:18' },
-  { id: '3', type: 'warning' as const, message: 'Richtlinie "CIS-Ubuntu-L1" aktualisiert', time: '13:55' },
-  { id: '4', type: 'success' as const, message: 'Windows-Laptop von dave@firma.local eingeschrieben', time: '13:40' },
-  { id: '5', type: 'info' as const,    message: 'Grafana SSO-App verbunden', time: '13:12' },
-  { id: '6', type: 'warning' as const, message: 'PIM-Anfrage von Bob Developer genehmigt', time: '12:48' },
-  { id: '7', type: 'success' as const, message: 'Vault-Zertifikat rotiert', time: '12:30' },
-  { id: '8', type: 'info' as const,    message: 'Ubuntu 22.04 Agent-Update abgeschlossen', time: '11:59' },
-];
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -563,6 +551,7 @@ export default function DashboardView() {
       if (events.length === 0) {
         setActivityError(true);
         setActivityEvents(null);
+        setUsingDemoData(true);
       } else {
         const mapped: ActivityEvent[] = events.slice(0, 8).map((e: any, i: number) => ({
           id: e.id ?? String(i),
@@ -584,6 +573,7 @@ export default function DashboardView() {
       // Try /api/monitoring/alerts as a fallback
       setActivityError(true);
       setActivityEvents(null);
+      setUsingDemoData(true);
     }
 
     // -----------------------------------------------------------------------
@@ -618,8 +608,6 @@ export default function DashboardView() {
 
     setLastRefresh(now);
     setLoading(false);
-    // MOCK_ACTIVITY and platform bars are always hardcoded demo data
-    setUsingDemoData(true);
   }, []);
 
   useEffect(() => {
@@ -814,15 +802,21 @@ export default function DashboardView() {
         <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Letzte Aktivitäten</h2>
           <div className="space-y-2.5">
-            {MOCK_ACTIVITY.map(evt => (
-              <div key={evt.id} className="flex items-start gap-2 text-xs">
-                <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${evt.type === 'success' ? 'bg-green-500' : evt.type === 'warning' ? 'bg-yellow-400' : 'bg-blue-400'}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-gray-700 leading-snug">{evt.message}</p>
-                  <p className="text-gray-400 mt-0.5">{evt.time}</p>
+            {activityEvents && activityEvents.length > 0 ? (
+              activityEvents.map(evt => (
+                <div key={evt.id} className="flex items-start gap-2 text-xs">
+                  <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${evt.type === 'success' ? 'bg-green-500' : evt.type === 'warning' ? 'bg-yellow-400' : evt.type === 'error' ? 'bg-red-500' : 'bg-blue-400'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-700 leading-snug">{evt.message}</p>
+                    <p className="text-gray-400 mt-0.5">{new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                {activityError ? 'Audit-Log nicht verfügbar' : 'Keine Ereignisse'}
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
