@@ -228,19 +228,25 @@ app.post('/api/pim/request', (req, res) => {
   res.status(201).json(request);
 });
 
-app.put('/api/pim/requests/:id/approve', (req, res) => {
+app.put('/api/pim/requests/:id/approve', async (req, res) => {
+  if (db.isAvailable()) {
+    try {
+      const result = await db.approvePimRequest(req.params.id, req.body.approvedBy || 'admin');
+      if (!result) return res.status(404).json({ error: 'Request not found' });
+      return res.json(result);
+    } catch (err) {
+      console.error('[pim-approve-db]', err.message);
+    }
+  }
+  // In-memory fallback
   const request = pimRequests.get(req.params.id);
   if (!request) return res.status(404).json({ error: 'Request not found' });
   if (request.status !== 'pending') return res.status(400).json({ error: 'Request already processed' });
-
   request.status = 'approved';
   const expiresAt = Date.now() + request.duration_hours * 3600_000;
   request.expiresAt = new Date(expiresAt).toISOString();
-
-  // Create active elevation
   const elevId = uuidv4();
   activeElevations.set(elevId, { id: elevId, userId: request.userId, userName: request.userName, resource: request.resource, expiresAt, requestId: request.id });
-
   res.json(request);
 });
 
@@ -251,17 +257,32 @@ app.put('/api/pim/requests/:id/deny', (req, res) => {
   res.json(request);
 });
 
-app.get('/api/pim/active', (req, res) => {
+app.get('/api/pim/active', async (req, res) => {
+  if (db.isAvailable()) {
+    try {
+      const rows = await db.getActiveElevations();
+      const now = Date.now();
+      return res.json(rows.map(e => ({
+        ...e,
+        timeRemainingMs: new Date(e.expires_at).getTime() - now,
+        timeRemainingMinutes: Math.ceil((new Date(e.expires_at).getTime() - now) / 60_000)
+      })));
+    } catch (err) { console.error('[pim-active-db]', err.message); }
+  }
   const now = Date.now();
-  const active = [...activeElevations.values()]
-    .filter(e => e.expiresAt > now)
-    .map(e => ({ ...e, timeRemainingMs: e.expiresAt - now, timeRemainingMinutes: Math.ceil((e.expiresAt - now) / 60_000) }));
+  const active = [...activeElevations.values()].filter(e => e.expiresAt > now).map(e => ({ ...e, timeRemainingMs: e.expiresAt - now, timeRemainingMinutes: Math.ceil((e.expiresAt - now) / 60_000) }));
   res.json(active);
 });
 
 // ─── Escalation Alerts ───────────────────────────────────────────────────────────
 
-app.get('/api/permissions/escalation-alerts', (req, res) => {
+app.get('/api/permissions/escalation-alerts', async (req, res) => {
+  if (db.isAvailable()) {
+    try {
+      const rows = await db.getEscalationAlerts();
+      return res.json(rows);
+    } catch (err) { console.error('[escalation-get-db]', err.message); }
+  }
   res.json([...escalationAlerts.values()]);
 });
 
