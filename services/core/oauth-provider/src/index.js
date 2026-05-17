@@ -175,7 +175,12 @@ const updateRings = new Map([
     scopes:       ['openid', 'profile', 'email'],
     grantTypes:   ['authorization_code'],
   },
-].forEach(c => clients.set(c.clientId, c));
+].forEach(c => {
+  clients.set(c.clientId, c);
+  if (db.isAvailable()) {
+    db.upsertClient({ id: c.clientId, name: c.name, clientSecret: c.clientSecret, redirectUris: c.redirectUris, grants: c.grantTypes, scopes: c.scopes }).catch(err => console.error('[clients-db]', err.message));
+  }
+});
 
 // ─── Seed SCIM Users ──────────────────────────────────────────────────────────
 
@@ -729,9 +734,15 @@ app.get('/saml/metadata', (req, res) => {
 
 // ─── OAuth2 Client Management API (full CRUD) ─────────────────────────────────────
 
-app.get('/api/clients', (req, res) => {
-  const list = [...clients.values()].map(({ clientSecret: _, ...c }) => c);
-  res.json(list);
+app.get('/api/clients', async (req, res) => {
+  if (db.isAvailable()) {
+    try {
+      const dbClients = await db.getAllClients();
+      // Merge with in-memory (in-memory may have more recent data)
+      return res.json(dbClients);
+    } catch (err) { console.error('[clients-db]', err.message); }
+  }
+  res.json([...clients.values()]);
 });
 
 app.post('/api/clients', (req, res) => {
@@ -741,6 +752,7 @@ app.post('/api/clients', (req, res) => {
   const clientSecret = crypto.randomBytes(32).toString('hex');
   const record = { clientId, clientSecret, name, redirectUris, scopes: scopes ?? ['openid', 'profile', 'email'], grantTypes: grantTypes ?? ['authorization_code'] };
   clients.set(clientId, record);
+  db.upsertClient({ id: clientId, name, clientSecret, redirectUris, grants: record.grantTypes, scopes: record.scopes }).catch(err => console.error('[clients-db]', err.message));
   res.status(201).json({ clientId, clientSecret, name });
 });
 
@@ -757,6 +769,7 @@ app.put('/api/clients/:id', (req, res) => {
 app.delete('/api/clients/:id', (req, res) => {
   if (!clients.has(req.params.id)) return res.status(404).json({ error: 'Client not found' });
   clients.delete(req.params.id);
+  db.deleteClient(req.params.id).catch(err => console.error('[clients-db]', err.message));
   res.status(204).send();
 });
 
@@ -894,7 +907,13 @@ setInterval(() => {
   console.log(`[device-quarantine] flagged=${flagged} quarantined=${quarantined}`);
 }, 30_000);
 
-app.get('/api/devices/registry', (req, res) => {
+app.get('/api/devices/registry', async (req, res) => {
+  if (db.isAvailable()) {
+    try {
+      const rows = await db.getAllDevices();
+      if (rows.length > 0) return res.json(rows.map(r => ({ ...r, ...r.data })));
+    } catch (err) { console.error('[registry-db]', err.message); }
+  }
   res.json([...deviceRegistry.values()]);
 });
 
@@ -940,6 +959,9 @@ app.post('/api/enrollment/register', (req, res) => {
   record.uses += 1;
   const deviceId = uuidv4();
   const deviceToken = signToken({ sub: deviceId, platform, hostname, serial, iss: ISSUER }, '365d');
+  if (db.isAvailable()) {
+    db.upsertDevice({ id: deviceId, enrollmentToken: token, hostname, platform, os: req.body.os, ip: req.ip, status: 'active' }).catch(err => console.error('[device-db]', err.message));
+  }
   res.status(201).json({ deviceId, deviceToken, serverUrl: ISSUER, message: `Device enrolled successfully as ${hostname} (${platform})` });
 });
 
