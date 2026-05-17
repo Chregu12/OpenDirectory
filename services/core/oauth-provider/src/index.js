@@ -247,19 +247,119 @@ app.get('/oauth/authorize', (req, res) => {
   const { client_id, redirect_uri, response_type, scope, state, code_challenge, code_challenge_method, device_id } = req.query;
 
   const client = clients.get(client_id);
-  if (!client) return res.status(400).json({ error: 'invalid_client' });
-  if (!client.redirectUris.includes(redirect_uri)) return res.status(400).json({ error: 'invalid_redirect_uri' });
+  if (!client) return res.status(400).send('<h2>Error: invalid_client</h2>');
+  if (redirect_uri && !client.redirectUris.includes(redirect_uri)) return res.status(400).send('<h2>Error: invalid_redirect_uri</h2>');
+
+  // Show login form
+  const params = new URLSearchParams({ client_id, redirect_uri: redirect_uri || '', scope: scope || 'openid profile email', state: state || '', code_challenge: code_challenge || '', code_challenge_method: code_challenge_method || '', device_id: device_id || '' });
+  res.send(`<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenDirectory Login</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;min-height:100vh;display:flex;align-items:center;justify-content:center}
+  .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:40px;width:380px}
+  .logo{text-align:center;margin-bottom:32px}
+  .logo h1{color:#fff;font-size:22px;font-weight:700;letter-spacing:-0.5px}
+  .logo p{color:#94a3b8;font-size:13px;margin-top:4px}
+  .app-badge{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;margin-bottom:24px;display:flex;align-items:center;gap:10px}
+  .app-badge span{color:#94a3b8;font-size:12px}
+  .app-badge strong{color:#e2e8f0;font-size:13px}
+  label{display:block;color:#94a3b8;font-size:12px;font-weight:500;margin-bottom:6px;margin-top:16px}
+  input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;outline:none}
+  input:focus{border-color:#3b82f6}
+  .error{background:#7f1d1d;border:1px solid #dc2626;border-radius:8px;padding:10px 14px;color:#fca5a5;font-size:13px;margin-top:16px;display:none}
+  .error.visible{display:block}
+  button{width:100%;margin-top:24px;background:#3b82f6;border:none;border-radius:8px;padding:12px;color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+  button:hover{background:#2563eb}
+  button:disabled{opacity:0.5;cursor:not-allowed}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <h1>OpenDirectory</h1>
+    <p>Sichere Anmeldung</p>
+  </div>
+  <div class="app-badge">
+    <span>App:</span>
+    <strong>${client.name || client_id}</strong>
+  </div>
+  <form id="loginForm" method="POST" action="/oauth/authorize/login">
+    <input type="hidden" name="client_id" value="${client_id}">
+    <input type="hidden" name="redirect_uri" value="${redirect_uri || ''}">
+    <input type="hidden" name="scope" value="${scope || 'openid profile email'}">
+    <input type="hidden" name="state" value="${state || ''}">
+    <input type="hidden" name="code_challenge" value="${code_challenge || ''}">
+    <input type="hidden" name="code_challenge_method" value="${code_challenge_method || ''}">
+    <input type="hidden" name="device_id" value="${device_id || ''}">
+    <label>Benutzername</label>
+    <input type="text" name="username" autocomplete="username" required autofocus>
+    <label>Passwort</label>
+    <input type="password" name="password" autocomplete="current-password" required>
+    <div class="error" id="errBox"></div>
+    <button type="submit" id="submitBtn">Anmelden</button>
+  </form>
+</div>
+<script>
+  const f=document.getElementById('loginForm');
+  const err=document.getElementById('errBox');
+  const btn=document.getElementById('submitBtn');
+  // Check for error param in URL
+  const urlErr=new URLSearchParams(location.search).get('error');
+  if(urlErr){err.textContent=decodeURIComponent(urlErr);err.classList.add('visible');}
+</script>
+</body>
+</html>`);
+});
+
+app.post('/oauth/authorize/login', async (req, res) => {
+  const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, device_id, username, password } = req.body;
+
+  if (!username || !password) {
+    const params = new URLSearchParams({ client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, device_id, error: 'Benutzername und Passwort erforderlich' });
+    return res.redirect(`/oauth/authorize?${params}`);
+  }
+
+  // Validate credentials against auth service
+  const AUTH_SERVICE = process.env.AUTH_SERVICE_URL || 'http://localhost:3002';
+  let userId = null;
+  let userInfo = null;
+  try {
+    const loginRes = await fetch(`${AUTH_SERVICE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!loginRes.ok) {
+      const params = new URLSearchParams({ client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, device_id, error: 'Ungültige Anmeldedaten' });
+      return res.redirect(`/oauth/authorize?${params}`);
+    }
+    const data = await loginRes.json();
+    userId = data.user?.id ?? data.userId ?? data.id ?? username;
+    userInfo = data.user ?? data;
+  } catch (err) {
+    // Auth service unreachable — fall back to username as ID (dev mode)
+    console.warn('[oauth/authorize] auth service unreachable, using username as userId:', err.message);
+    userId = username;
+    userInfo = { id: username, username, name: username };
+  }
+
+  const client = clients.get(client_id);
+  if (!client) return res.status(400).send('<h2>Error: invalid_client</h2>');
 
   const code = uuidv4();
   authCodes.set(code, {
-    clientId:   client_id,
+    clientId: client_id,
     redirectUri: redirect_uri,
-    scope:       scope ?? 'openid profile email',
-    userId:     'demo-user',
-    deviceId:   device_id ?? undefined,
-    codeChallenge: code_challenge,
-    codeChallengeMethod: code_challenge_method,
-    expiresAt:  Date.now() + 60_000,
+    scope: scope ?? 'openid profile email',
+    userId,
+    userInfo,
+    deviceId: device_id || undefined,
+    codeChallenge: code_challenge || undefined,
+    codeChallengeMethod: code_challenge_method || undefined,
+    expiresAt: Date.now() + 60_000,
   });
 
   const redirectUrl = new URL(redirect_uri);
@@ -303,17 +403,16 @@ app.post('/oauth/token', (req, res) => {
     }
 
     const scimUser = scimUsers.get(record.userId);
+    const ui = record.userInfo || {};
     const payload = {
       sub:   record.userId,
       iss:   ISSUER,
       aud:   client_id,
       iat:   Math.floor(Date.now() / 1000),
-      name:  scimUser?.name?.formatted ?? scimUser?.displayName ?? record.userId,
-      email: scimUser?.emails?.[0]?.value ?? `${record.userId}@opendirectory.local`,
-      preferred_username: scimUser?.userName ?? record.userId,
-      groups: (scimUser?.groups ?? []).map((g) => g.value ?? g.display ?? g).filter(Boolean).length > 0
-        ? (scimUser.groups).map((g) => g.value ?? g.display ?? g)
-        : ['users'],
+      name:  scimUser?.name?.formatted ?? scimUser?.displayName ?? ui.name ?? ui.displayName ?? record.userId,
+      email: scimUser?.emails?.[0]?.value ?? ui.email ?? `${record.userId}@opendirectory.local`,
+      preferred_username: scimUser?.userName ?? ui.username ?? record.userId,
+      groups: (scimUser?.groups ?? ui.groups ?? []).map((g) => g.value ?? g.display ?? g).filter(Boolean),
       scope: record.scope,
     };
 
@@ -435,36 +534,66 @@ app.post('/oauth/device/code', (req, res) => {
 });
 
 app.get('/oauth/device/verify', (req, res) => {
-  const { user_code } = req.query;
+  const { user_code, error } = req.query;
   res.set('Content-Type', 'text/html');
+  const errorHtml = error ? `<p style="color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px;margin-top:12px;">${error}</p>` : '';
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>Device Authorization — OpenDirectory</title>
 <style>body{font-family:system-ui,sans-serif;max-width:480px;margin:80px auto;padding:24px;background:#f9fafb;}
 h1{font-size:1.5rem;font-weight:700;color:#1e293b;}
-input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:1.1rem;letter-spacing:4px;text-align:center;margin:12px 0;}
-button{width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer;}
+input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:1rem;margin:8px 0;}
+input[name="user_code"]{font-size:1.1rem;letter-spacing:4px;text-align:center;}
+label{display:block;font-size:0.85rem;color:#475569;margin-top:12px;}
+button{width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer;margin-top:16px;}
 button:hover{background:#1d4ed8;}.msg{margin-top:16px;padding:12px;border-radius:8px;}
 </style></head>
 <body>
 <h1>Device Authorization</h1>
-<p>Enter the code displayed on your device to authorize access.</p>
+<p>Enter the code displayed on your device and your credentials to authorize access.</p>
+${errorHtml}
 <form method="POST" action="/oauth/device/approve">
+  <label>Device Code</label>
   <input name="user_code" type="text" placeholder="XXXX-XXXX" value="${user_code ?? ''}" maxlength="9"/>
+  <label>Username</label>
+  <input name="username" type="text" autocomplete="username" required/>
+  <label>Password</label>
+  <input name="password" type="password" autocomplete="current-password" required/>
   <button type="submit">Authorize Device</button>
 </form>
 </body></html>`);
 });
 
-app.post('/oauth/device/approve', express.urlencoded({ extended: true }), (req, res) => {
-  const { user_code } = req.body;
+app.post('/oauth/device/approve', express.urlencoded({ extended: true }), async (req, res) => {
+  const { user_code, username, password } = req.body;
   let found = null;
   for (const [dc, rec] of deviceCodes.entries()) {
     if (rec.user_code === user_code && rec.expiresAt > Date.now()) { found = [dc, rec]; break; }
   }
   if (!found) return res.send('<html><body><p>Invalid or expired code.</p></body></html>');
+
+  // Validate credentials against auth service
+  const AUTH_SERVICE = process.env.AUTH_SERVICE_URL || 'http://localhost:3002';
+  let userId = username; // fallback: use submitted username
+  try {
+    const loginRes = await fetch(`${AUTH_SERVICE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!loginRes.ok) {
+      return res.redirect(`/oauth/device/verify?user_code=${encodeURIComponent(user_code)}&error=${encodeURIComponent('Invalid credentials')}`);
+    }
+    const data = await loginRes.json();
+    userId = data.user?.id ?? data.userId ?? data.id ?? username;
+  } catch (err) {
+    // Auth service unreachable — fall back to username (dev mode)
+    console.warn('[device/approve] auth service unreachable, using username as userId:', err.message);
+    userId = username;
+  }
+
   found[1].approved = true;
-  found[1].userId = 'demo-user';
+  found[1].userId = userId;
   res.send('<html><body><h2 style="font-family:system-ui;color:#16a34a;">Device authorized! You may close this window.</h2></body></html>');
 });
 

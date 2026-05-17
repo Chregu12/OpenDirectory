@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { authApi } from '@/lib/api';
+import { api, authApi } from '@/lib/api';
 import { Toaster } from 'react-hot-toast';
 import {
   HomeIcon,
@@ -48,28 +48,23 @@ const SEARCH_ITEMS = [
   { id: 'macbook-pro',  name: 'MacBook Pro (alice)', view: 'devices',      type: 'Gerät' },
 ];
 
-// ─── Demo notifications ───────────────────────────────────────────────────────
+// ─── Notifications ────────────────────────────────────────────────────────────
 interface Notification {
   id: string;
   title: string;
+  message?: string;
   time: string;
   read: boolean;
-  type: 'enrollment' | 'compliance' | 'pim' | 'security';
+  type: 'enrollment' | 'compliance' | 'pim' | 'security' | 'warning' | 'info';
 }
-
-const DEMO_NOTIFICATIONS: Notification[] = [
-  { id: 'n1', title: 'MacBook Pro eingeschrieben (alice)', time: 'vor 5 Min.',   read: false, type: 'enrollment' },
-  { id: 'n2', title: 'Compliance-Prüfung fehlgeschlagen', time: 'vor 12 Min.',  read: false, type: 'compliance' },
-  { id: 'n3', title: 'PIM-Anfrage genehmigt: Bob → secrets', time: 'vor 1 Std.', read: false, type: 'pim' },
-  { id: 'n4', title: 'Sicherheitswarnung: Brute-Force-Versuch', time: 'vor 2 Std.', read: false, type: 'security' },
-  { id: 'n5', title: 'Ubuntu-Agent auf server-01 aktualisiert', time: 'vor 3 Std.', read: true, type: 'enrollment' },
-];
 
 const NOTIF_COLOR: Record<Notification['type'], string> = {
   enrollment: 'bg-blue-400',
   compliance: 'bg-orange-400',
   pim:        'bg-purple-400',
   security:   'bg-red-500',
+  warning:    'bg-orange-400',
+  info:       'bg-blue-400',
 };
 
 interface LayoutProps {
@@ -100,10 +95,69 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>(DEMO_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Load real alerts from backend services
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadAlerts = async () => {
+      const alerts: Notification[] = [];
+
+      // Fetch escalation alerts from least-privilege service
+      try {
+        const res = await api.get('/api/permissions/escalation-alerts');
+        const data = Array.isArray(res.data) ? res.data : [];
+        for (const a of data.slice(0, 3)) {
+          alerts.push({
+            id: `esc-${a.id ?? a.userId}`,
+            title: 'Privilege Escalation',
+            message: `Benutzer ${a.user_id ?? a.userId} hat Admin-Rechte auf ${a.admin_count} Ressourcen`,
+            type: 'warning' as const,
+            time: a.detected_at ? new Date(a.detected_at).toLocaleString('de-CH') : 'Gerade eben',
+            read: false,
+          });
+        }
+      } catch {}
+
+      // Fetch recent audit events from auth service
+      try {
+        const res = await api.get('/api/audit/events?limit=5');
+        const events = Array.isArray(res.data) ? res.data : [];
+        for (const e of events.filter((ev: any) => ev.severity === 'warning' || ev.event_type === 'login_failed').slice(0, 2)) {
+          alerts.push({
+            id: `audit-${e.id}`,
+            title: e.event_type === 'login_failed' ? 'Anmeldung fehlgeschlagen' : 'Sicherheitsereignis',
+            message: e.message,
+            type: 'warning' as const,
+            time: new Date(e.created_at).toLocaleString('de-CH'),
+            read: false,
+          });
+        }
+      } catch {}
+
+      // Show a "system ready" info if no alerts
+      if (alerts.length === 0) {
+        alerts.push({
+          id: 'system-ok',
+          title: 'System betriebsbereit',
+          message: 'Alle Dienste laufen normal.',
+          type: 'info' as const,
+          time: new Date().toLocaleString('de-CH'),
+          read: false,
+        });
+      }
+
+      setNotifications(alerts);
+    };
+
+    loadAlerts();
+    const interval = setInterval(loadAlerts, 30000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   // Cmd+K / Ctrl+K → open search
   useEffect(() => {
@@ -367,6 +421,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                   <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${NOTIF_COLOR[n.type]}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-gray-800 leading-snug">{n.title}</p>
+                    {n.message && <p className="text-xs text-gray-600 mt-0.5 leading-snug">{n.message}</p>}
                     <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
                   </div>
                   {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 mt-2" />}
