@@ -491,14 +491,22 @@ function CreateGroupModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 // ─── Tab: Benutzer ────────────────────────────────────────────────────────────
 
 function BenutzerTab({ ouFilter, onDemoData }: { ouFilter: string | null; onDemoData: () => void }) {
-  const [users, setUsers] = useState<User[]>(DEMO_USERS);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
-    api.get('/api/users').then(r => { if (Array.isArray(r.data)) setUsers(r.data); }).catch(() => { onDemoData(); });
+    api.get('/api/users')
+      .then(r => { if (Array.isArray(r.data)) setUsers(r.data); })
+      .catch(() => {
+        // Show empty list with error, not fake data
+        setUsers([]);
+        onDemoData();
+      })
+      .finally(() => setLoading(false));
   }, [onDemoData]);
 
   function showToast(msg: string) {

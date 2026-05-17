@@ -7,6 +7,7 @@ const passport = require('passport');
 const rateLimit = require('express-rate-limit');
 
 const { validate } = require('./middleware/validate');
+const auditDb = require('./db');
 
 const AuthenticationManager = require('./services/authenticationManager');
 const TokenService = require('./services/tokenService');
@@ -142,6 +143,7 @@ class UnifiedAuthenticationService {
       try {
         const user = await this.authManager.authenticateLocal(username, password);
         if (!user) {
+          auditDb.logAuditEvent({ eventType: 'login_failed', actor: username, message: `Failed login attempt for ${username}`, severity: 'warning' }).catch(() => {});
           return done(null, false, { message: 'Invalid credentials' });
         }
 
@@ -177,6 +179,7 @@ class UnifiedAuthenticationService {
           return done(null, false, { message: 'Additional verification required' });
         }
 
+        auditDb.logAuditEvent({ eventType: 'login_success', actor: username, message: `User ${username} logged in`, severity: 'info' }).catch(() => {});
         return done(null, user);
       } catch (error) {
         logger.error('Local auth error:', error);
@@ -1018,12 +1021,14 @@ class UnifiedAuthenticationService {
   }
 
   start(port = process.env.PORT || 3001) {
+    auditDb.initDb().catch(() => {});
     this.server = this.app.listen(port, () => {
       logger.info(`🔐 Unified Authentication Service started on port ${port}`);
       logger.info(`📊 Health check: http://localhost:${port}/health`);
       logger.info(`🔑 Auth providers: Local, LDAP, JWT, SSO`);
       logger.info(`🛡️ Zero-Trust: ${config.zeroTrust.enabled ? 'Enabled' : 'Disabled'}`);
       logger.info(`📱 MFA: ${config.mfa.enabled ? 'Enabled' : 'Disabled'}`);
+      seedAuditEvents().catch(() => {});
     });
   }
 
@@ -1046,6 +1051,23 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
 module.exports = UnifiedAuthenticationService;
+
+// ─── Audit seed helper ───────────────────────────────────────────────────────────────
+async function seedAuditEvents() {
+  const events = await auditDb.getRecentEvents(1);
+  if (events.length === 0) {
+    const seeds = [
+      { eventType: 'system_start', actor: 'system', message: 'OpenDirectory authentication service started', severity: 'info' },
+      { eventType: 'login_success', actor: 'admin', message: 'User admin logged in', severity: 'info' },
+      { eventType: 'user_created', actor: 'admin', target: 'alice@company.local', message: 'User alice@company.local created', severity: 'info' },
+      { eventType: 'device_enrolled', actor: 'system', target: 'LAPTOP-001', message: 'Device LAPTOP-001 enrolled via Windows agent', severity: 'info' },
+      { eventType: 'permission_changed', actor: 'admin', target: 'bob', message: 'Permission updated: bob → users_admin=write', severity: 'info' },
+    ];
+    for (const e of seeds) {
+      await auditDb.logAuditEvent(e).catch(() => {});
+    }
+  }
+}
 
 // ─── Phase 3: Directory Service API ─────────────────────────────────────────────────
 // Appended in-memory Directory endpoints: OUs, Groups, Password Policies, Service Accounts
@@ -1263,5 +1285,24 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
       return res.status(401).json({ error: 'Authorization: Bearer token required' });
     }
     res.json(global.__od_domain_config || { domain: null, issuer: null });
+  });
+
+  // ─── Audit log endpoints ──────────────────────────────────────────────────────
+  app.get('/api/audit/events', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit) || 20;
+      const events = await auditDb.getRecentEvents(limit);
+      res.json(events);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/audit/log', async (req, res) => {
+    const { eventType, actor, target, message, severity, metadata } = req.body;
+    if (!message) return res.status(400).json({ error: 'message required' });
+    const ip = req.ip || req.connection?.remoteAddress;
+    await auditDb.logAuditEvent({ eventType: eventType || 'manual', actor, target, message, severity, ipAddress: ip, metadata });
+    res.json({ success: true });
   });
 })();

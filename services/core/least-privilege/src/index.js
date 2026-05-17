@@ -98,7 +98,28 @@ function calcRiskScore(userId) {
 
 // ─── Permission Matrix ────────────────────────────────────────────────────────
 
-app.get('/api/permissions/matrix', (req, res) => {
+app.get('/api/permissions/matrix', async (req, res) => {
+  try {
+    if (db.isAvailable()) {
+      const rows = await db.getPermissionMatrix();
+      // Group by userId
+      const byUser = {};
+      for (const row of rows) {
+        if (!byUser[row.user_id]) byUser[row.user_id] = { userId: row.user_id, name: row.user_id, role: 'user', permissions: {} };
+        byUser[row.user_id].permissions[row.resource] = row.override || row.level;
+      }
+      // Also include in-memory users not yet in DB
+      for (const [userId, rec] of userPermissions.entries()) {
+        if (!byUser[userId]) {
+          byUser[userId] = { userId, name: rec.name, role: rec.role, permissions: getEffectivePermissions(userId) || {} };
+        }
+      }
+      return res.json({ resources: RESOURCES, levels: LEVELS, matrix: Object.values(byUser) });
+    }
+  } catch (err) {
+    console.error('[perm-matrix]', err.message);
+  }
+  // fallback to in-memory
   const matrix = [];
   for (const [userId, rec] of userPermissions.entries()) {
     const perms = getEffectivePermissions(userId);
@@ -125,6 +146,13 @@ app.post('/api/permissions/users/:userId/assign', (req, res) => {
   }
   rec.overrides[resource] = level;
 
+  // Persist to DB if available
+  if (db.isAvailable()) {
+    db.upsertPermission(req.params.userId, resource, level).catch(err =>
+      console.error('[perm-assign-db]', err.message)
+    );
+  }
+
   // ─── Privilege Escalation Detection ───────────────────────────────────────────
   const effectivePerms = getEffectivePermissions(req.params.userId);
   const adminCount = effectivePerms ? RESOURCES.filter(r => effectivePerms[r] === 'admin').length : 0;
@@ -136,6 +164,10 @@ app.post('/api/permissions/users/:userId/assign', (req, res) => {
       detectedAt: new Date().toISOString(),
     });
     console.warn(`[escalation-alert] User ${req.params.userId} has admin on ${adminCount} resources`);
+    if (db.isAvailable()) {
+      db.insertEscalationAlert(req.params.userId, adminCount, RESOURCES.filter(r => effectivePerms[r] === 'admin'))
+        .catch(err => console.error('[escalation-db]', err.message));
+    }
   }
 
   res.json({ userId: req.params.userId, resource, level });
@@ -176,7 +208,13 @@ app.get('/api/permissions/risk-scores', (req, res) => {
 
 // ─── PIM Requests ─────────────────────────────────────────────────────────────────
 
-app.get('/api/pim/requests', (req, res) => {
+app.get('/api/pim/requests', async (req, res) => {
+  if (db.isAvailable()) {
+    try {
+      const rows = await db.getPimRequests(req.query.status);
+      return res.json(rows);
+    } catch (err) { console.error('[pim-get-db]', err.message); }
+  }
   res.json([...pimRequests.values()]);
 });
 

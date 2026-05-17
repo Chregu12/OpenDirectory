@@ -46,4 +46,88 @@ async function query(sql, params) {
   return pool.query(sql, params);
 }
 
-module.exports = { initDb, query, isAvailable, pool };
+async function getPermissionMatrix() {
+  const result = await query(`
+    SELECT user_id, resource, level, override, source, last_used, days_idle
+    FROM permission_assignments
+    ORDER BY user_id, resource
+  `);
+  return result.rows;
+}
+
+async function upsertPermission(userId, resource, level, source = 'manual') {
+  await query(`
+    INSERT INTO permission_assignments(user_id, resource, level, override, source)
+    VALUES($1, $2, $3, $3, $4)
+    ON CONFLICT(user_id, resource)
+    DO UPDATE SET level=$3, override=$3, source=$4, assigned_at=NOW()
+  `, [userId, resource, level, source]);
+}
+
+async function getPimRequests(status) {
+  if (status) {
+    const result = await query('SELECT * FROM pim_requests WHERE status=$1 ORDER BY requested_at DESC', [status]);
+    return result.rows;
+  }
+  const result = await query('SELECT * FROM pim_requests ORDER BY requested_at DESC LIMIT 100');
+  return result.rows;
+}
+
+async function createPimRequest(id, userId, userName, resource, level, justification, durationHours) {
+  const result = await query(`
+    INSERT INTO pim_requests(id, user_id, resource, level, justification, duration_hours, status)
+    VALUES($1, $2, $3, $4, $5, $6, 'pending')
+    RETURNING *
+  `, [id, userId, resource, level, justification, durationHours]);
+  return result.rows[0];
+}
+
+async function approvePimRequest(id, approvedBy) {
+  const reqResult = await query('SELECT * FROM pim_requests WHERE id=$1', [id]);
+  if (!reqResult.rows.length) return null;
+  const req = reqResult.rows[0];
+  const expiresAt = new Date(Date.now() + req.duration_hours * 3600_000);
+  await query(`
+    UPDATE pim_requests SET status='approved', resolved_at=NOW(), approved_by=$2, expires_at=$3
+    WHERE id=$1
+  `, [id, approvedBy, expiresAt]);
+  // Create active elevation
+  const { v4: uuidv4 } = require('uuid');
+  const elevId = uuidv4();
+  await query(`
+    INSERT INTO pim_active(id, request_id, user_id, resource, level, expires_at)
+    VALUES($1, $2, $3, $4, $5, $6)
+  `, [elevId, id, req.user_id, req.resource, req.level, expiresAt]);
+  return { ...req, status: 'approved', expiresAt };
+}
+
+async function denyPimRequest(id) {
+  const result = await query(
+    `UPDATE pim_requests SET status='denied', resolved_at=NOW() WHERE id=$1 RETURNING *`,
+    [id]
+  );
+  return result.rows[0];
+}
+
+async function getActiveElevations() {
+  const result = await query(
+    `SELECT * FROM pim_active WHERE expires_at > NOW() ORDER BY activated_at DESC`
+  );
+  return result.rows;
+}
+
+async function insertEscalationAlert(userId, adminCount, resources) {
+  await query(`
+    INSERT INTO escalation_alerts(user_id, admin_count, resources)
+    VALUES($1, $2, $3)
+  `, [userId, adminCount, JSON.stringify(resources)]);
+}
+
+async function getEscalationAlerts() {
+  const result = await query(
+    `SELECT * FROM escalation_alerts WHERE resolved=false ORDER BY detected_at DESC LIMIT 50`
+  );
+  return result.rows;
+}
+
+module.exports = { initDb, query, isAvailable, pool, getPermissionMatrix, upsertPermission, getPimRequests, createPimRequest, approvePimRequest, denyPimRequest, getActiveElevations, insertEscalationAlert, getEscalationAlerts };
