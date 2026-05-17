@@ -316,6 +316,7 @@ export default function DashboardView() {
   ]);
 
   const [deviceCompliance, setDeviceCompliance] = useState<DeviceCompliance | null>(null);
+  const [platformBreakdown, setPlatformBreakdown] = useState<{label:string;count:number;color:string}[]>([]);
 
   const loadData = useCallback(async () => {
     const now = new Date();
@@ -602,8 +603,22 @@ export default function DashboardView() {
         else { nonCompliant++; }
       }
       setDeviceCompliance({ compliant, atRisk, nonCompliant, noData, total: rawDevices.length });
+
+      // Platform breakdown from real device data
+      const PLATFORM_COLORS: Record<string, string> = { windows: 'bg-blue-500', macos: 'bg-gray-700', linux: 'bg-orange-500', ios: 'bg-purple-500', android: 'bg-green-500' };
+      const counts: Record<string, number> = {};
+      for (const d of rawDevices) {
+        const p = (d.platform ?? d.os ?? 'unknown').toLowerCase();
+        counts[p] = (counts[p] ?? 0) + 1;
+      }
+      setPlatformBreakdown(
+        Object.entries(counts)
+          .sort((a, b) => b[1] - a[1])
+          .map(([p, count]) => ({ label: p.charAt(0).toUpperCase() + p.slice(1), count, color: PLATFORM_COLORS[p] ?? 'bg-teal-500' }))
+      );
     } else {
       setDeviceCompliance(null);
+      setPlatformBreakdown([]);
     }
 
     setLastRefresh(now);
@@ -786,15 +801,18 @@ export default function DashboardView() {
         <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Plattform-Verteilung</h2>
           <div className="space-y-4">
-            {[{ label: 'Windows', count: 8, color: 'bg-blue-500' }, { label: 'macOS', count: 5, color: 'bg-gray-700' }, { label: 'Linux', count: 4, color: 'bg-orange-500' }, { label: 'iOS', count: 3, color: 'bg-purple-500' }].map(p => {
-              const pct = Math.round((p.count / 20) * 100);
+            {platformBreakdown.length > 0 ? platformBreakdown.map(p => {
+              const total = platformBreakdown.reduce((s, x) => s + x.count, 0);
+              const pct = Math.round((p.count / total) * 100);
               return (
                 <div key={p.label}>
                   <div className="flex justify-between text-xs text-gray-600 mb-1"><span>{p.label}</span><span>{p.count} Geräte</span></div>
                   <div className="w-full bg-gray-100 rounded-full h-2"><div className={`h-2 rounded-full ${p.color}`} style={{ width: `${pct}%` }} /></div>
                 </div>
               );
-            })}
+            }) : (
+              <div className="text-center py-4 text-gray-400 text-xs">Keine Gerätedaten</div>
+            )}
           </div>
         </div>
 

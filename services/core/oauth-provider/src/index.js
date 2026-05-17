@@ -302,15 +302,18 @@ app.post('/oauth/token', (req, res) => {
       }
     }
 
+    const scimUser = scimUsers.get(record.userId);
     const payload = {
       sub:   record.userId,
       iss:   ISSUER,
       aud:   client_id,
       iat:   Math.floor(Date.now() / 1000),
-      name:  'Demo User',
-      email: 'demo@opendirectory.local',
-      preferred_username: 'demo',
-      groups: ['users', 'developers'],
+      name:  scimUser?.name?.formatted ?? scimUser?.displayName ?? record.userId,
+      email: scimUser?.emails?.[0]?.value ?? `${record.userId}@opendirectory.local`,
+      preferred_username: scimUser?.userName ?? record.userId,
+      groups: (scimUser?.groups ?? []).map((g) => g.value ?? g.display ?? g).filter(Boolean).length > 0
+        ? (scimUser.groups).map((g) => g.value ?? g.display ?? g)
+        : ['users'],
       scope: record.scope,
     };
 
@@ -467,13 +470,15 @@ app.post('/oauth/device/approve', express.urlencoded({ extended: true }), (req, 
 
 // ─── SAML Helper: build signed assertion XML ─────────────────────────────────
 
-function buildSamlResponse(spEntityId, relayState) {
+function buildSamlResponse(spEntityId, relayState, userId) {
   const now = new Date();
   const notBefore = now.toISOString();
   const notOnOrAfter = new Date(now.getTime() + 3600_000).toISOString();
   const responseId = `_${crypto.randomBytes(16).toString('hex')}`;
   const assertionId = `_${crypto.randomBytes(16).toString('hex')}`;
-  const nameId = 'demo@opendirectory.local';
+  const scimUser = userId ? scimUsers.get(userId) : null;
+  const nameId = scimUser?.emails?.[0]?.value ?? `${userId ?? 'user'}@opendirectory.local`;
+  const displayName = scimUser?.name?.formatted ?? scimUser?.displayName ?? userId ?? 'User';
 
   // Build the Assertion XML (unsigned first, then compute signature)
   const assertionXml = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="${assertionId}" IssueInstant="${notBefore}" Version="2.0">` +
@@ -492,7 +497,7 @@ function buildSamlResponse(spEntityId, relayState) {
     `</saml:AuthnStatement>` +
     `<saml:AttributeStatement>` +
       `<saml:Attribute Name="email"><saml:AttributeValue>${nameId}</saml:AttributeValue></saml:Attribute>` +
-      `<saml:Attribute Name="name"><saml:AttributeValue>Demo User</saml:AttributeValue></saml:Attribute>` +
+      `<saml:Attribute Name="name"><saml:AttributeValue>${displayName}</saml:AttributeValue></saml:Attribute>` +
       `<saml:Attribute Name="groups"><saml:AttributeValue>users</saml:AttributeValue></saml:Attribute>` +
     `</saml:AttributeStatement>` +
   `</saml:Assertion>`;
