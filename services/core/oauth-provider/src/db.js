@@ -133,4 +133,41 @@ async function updateDeviceStatus(id, status) {
   await query('UPDATE enrolled_devices SET status=$2, last_seen=NOW() WHERE id=$1', [id, status]);
 }
 
-module.exports = { initDb, query, isAvailable, pool, getClient, upsertClient, getAllClients, deleteClient, saveAuthCode, getAndDeleteAuthCode, saveToken, getToken, revokeToken, upsertDevice, getDevice, getAllDevices, updateDeviceStatus };
+// SCIM Catalog
+async function saveScimUser(appId, userId, userData) {
+  await query(`
+    INSERT INTO scim_catalog(app_id, user_id, username, email, display_name, external_id, active, synced_at)
+    VALUES($1, $2, $3, $4, $5, $6, $7, NOW())
+    ON CONFLICT(app_id, user_id) DO UPDATE SET
+      username = EXCLUDED.username,
+      email = EXCLUDED.email,
+      display_name = EXCLUDED.display_name,
+      external_id = EXCLUDED.external_id,
+      active = EXCLUDED.active,
+      synced_at = NOW()
+  `, [
+    appId,
+    userId,
+    userData.userName || userData.username || null,
+    (userData.emails && userData.emails[0] && userData.emails[0].value) || userData.email || null,
+    userData.displayName || userData.display_name || null,
+    userData.externalId || userData.external_id || null,
+    userData.active !== false,
+  ]);
+}
+
+async function getScimUser(appId, userId) {
+  const r = await query('SELECT * FROM scim_catalog WHERE app_id=$1 AND user_id=$2', [appId, userId]);
+  return r.rows[0] || null;
+}
+
+async function getScimUsers(appId) {
+  const r = await query('SELECT * FROM scim_catalog WHERE app_id=$1 ORDER BY synced_at DESC', [appId]);
+  return r.rows;
+}
+
+async function deleteScimUser(appId, userId) {
+  await query('DELETE FROM scim_catalog WHERE app_id=$1 AND user_id=$2', [appId, userId]);
+}
+
+module.exports = { initDb, query, isAvailable, pool, getClient, upsertClient, getAllClients, deleteClient, saveAuthCode, getAndDeleteAuthCode, saveToken, getToken, revokeToken, upsertDevice, getDevice, getAllDevices, updateDeviceStatus, saveScimUser, getScimUser, getScimUsers, deleteScimUser };

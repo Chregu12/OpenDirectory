@@ -941,6 +941,9 @@ app.post('/scim/v2/Users', (req, res) => {
   const id = uuidv4();
   const user = { id, userName: req.body.userName, displayName: req.body.displayName ?? req.body.userName, emails: req.body.emails ?? [], active: req.body.active !== false, groups: [] };
   scimUsers.set(id, user);
+  if (db.isAvailable()) {
+    db.saveScimUser('__catalog__', id, user).catch(err => console.error('[scim-db]', err.message));
+  }
   res.status(201).json(scimUserResource(user));
 });
 
@@ -955,6 +958,9 @@ app.put('/scim/v2/Users/:id', (req, res) => {
   if (!existing) return res.status(404).json({ status: 404, detail: 'User not found' });
   const user = { id: req.params.id, userName: req.body.userName, displayName: req.body.displayName, emails: req.body.emails ?? [], active: req.body.active !== false, groups: req.body.groups ?? [] };
   scimUsers.set(req.params.id, user);
+  if (db.isAvailable()) {
+    db.saveScimUser('__catalog__', req.params.id, user).catch(err => console.error('[scim-db]', err.message));
+  }
   // Trigger SCIM push deactivation if user was just deactivated
   if (existing.active === true && user.active === false) {
     triggerScimPush('deactivate', req.params.id, '').catch(err => console.error('[SCIM push error]', err.message));
@@ -965,6 +971,9 @@ app.put('/scim/v2/Users/:id', (req, res) => {
 app.delete('/scim/v2/Users/:id', (req, res) => {
   if (!scimUsers.has(req.params.id)) return res.status(404).json({ status: 404, detail: 'User not found' });
   scimUsers.delete(req.params.id);
+  if (db.isAvailable()) {
+    db.deleteScimUser('__catalog__', req.params.id).catch(err => console.error('[scim-db]', err.message));
+  }
   res.status(204).send();
 });
 
@@ -1709,6 +1718,28 @@ db.initDb().then(async () => {
       }
     } catch (err) {
       console.warn('[db] Could not seed devices:', err.message);
+    }
+
+    // Load existing SCIM catalog from DB into the in-memory Map (write-through cache)
+    try {
+      const scimRows = await db.getScimUsers('__catalog__');
+      for (const row of scimRows) {
+        if (!scimUsers.has(row.user_id)) {
+          scimUsers.set(row.user_id, {
+            id: row.user_id,
+            userName: row.username,
+            displayName: row.display_name,
+            emails: row.email ? [{ value: row.email, primary: true }] : [],
+            active: row.active !== false,
+            groups: [],
+          });
+        }
+      }
+      if (scimRows.length > 0) {
+        console.log(`[db] Loaded ${scimRows.length} SCIM user(s) from catalog`);
+      }
+    } catch (err) {
+      console.warn('[db] Could not load SCIM catalog:', err.message);
     }
   }
   app.listen(PORT, () => {

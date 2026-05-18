@@ -8,6 +8,9 @@ const WebSocket = require('ws');
 const cluster = require('cluster');
 const os = require('os');
 
+// PostgreSQL persistence layer
+const db = require('./db');
+
 // Import enhanced services
 const DeviceManager = require('./services/deviceManager');
 const PolicyEngine = require('./services/policyEngine');
@@ -1417,7 +1420,12 @@ class EnterpriseDeviceManagementService {
     });
   }
 
-  start(port = process.env.PORT || 3003) {
+  async start(port = process.env.PORT || 3003) {
+    // Initialize PostgreSQL persistence layer
+    await db.initDb().catch(err => {
+      logger.warn(`[device-db] startup init failed: ${err.message}`);
+    });
+
     this.server.listen(port, () => {
       logger.info(\`🖥️  Enterprise Device Management Service started on port \${port}\`);
       logger.info(\`📊 Health check: http://localhost:\${port}/health\`);
@@ -1481,7 +1489,10 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production') {
   // Start the service
   const deviceService = new EnterpriseDeviceManagementService();
   global.deviceService = deviceService;
-  deviceService.start();
+  deviceService.start().catch(err => {
+    console.error('Failed to start device service:', err);
+    process.exit(1);
+  });
 }
 
 module.exports = EnterpriseDeviceManagementService;
