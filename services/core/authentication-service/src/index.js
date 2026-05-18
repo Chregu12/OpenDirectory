@@ -1693,4 +1693,58 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
     loginAttempts.delete(req.params.username);
     res.json({ success: true });
   });
+
+  // ─── DNS Management ───────────────────────────────────────────────────────────
+  // In-memory DNS record store (production: use PowerDNS/Bind API)
+  const dnsRecords = new Map();
+
+  // Helper: require Bearer token
+  const requireBearer = (req, res, next) => {
+    const authHeader = req.headers['authorization'] ?? '';
+    if (!authHeader.trim()) return res.status(401).json({ error: 'Authorization: Bearer token required' });
+    next();
+  };
+
+  const { v4: uuidv4 } = require('uuid');
+
+  // Seed some defaults
+  ['opendirectory.local', 'auth.opendirectory.local', 'ldap.opendirectory.local', 'ca.opendirectory.local'].forEach((name, i) => {
+    dnsRecords.set(name, { id: `dns-${i+1}`, name, type: 'A', value: `192.168.1.${10+i}`, ttl: 300, zone: 'opendirectory.local', createdAt: new Date().toISOString() });
+  });
+
+  app.get('/api/dns/records', requireBearer, (req, res) => {
+    const records = [...dnsRecords.values()];
+    const zone = req.query.zone;
+    res.json(zone ? records.filter(r => r.zone === zone) : records);
+  });
+
+  app.post('/api/dns/records', requireBearer, (req, res) => {
+    const { name, type, value, ttl = 300, zone } = req.body;
+    if (!name || !type || !value) return res.status(400).json({ error: 'name, type, value required' });
+    const VALID_TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'SRV', 'PTR'];
+    if (!VALID_TYPES.includes(type.toUpperCase())) return res.status(400).json({ error: `Invalid type. Valid: ${VALID_TYPES.join(', ')}` });
+    const id = `dns-${uuidv4().slice(0,8)}`;
+    const record = { id, name: name.toLowerCase(), type: type.toUpperCase(), value, ttl, zone: zone || name.split('.').slice(-2).join('.'), createdAt: new Date().toISOString() };
+    dnsRecords.set(name.toLowerCase(), record);
+    res.status(201).json(record);
+  });
+
+  app.put('/api/dns/records/:name', requireBearer, (req, res) => {
+    const record = dnsRecords.get(req.params.name.toLowerCase());
+    if (!record) return res.status(404).json({ error: 'Record not found' });
+    Object.assign(record, req.body, { updatedAt: new Date().toISOString() });
+    dnsRecords.set(record.name, record);
+    res.json(record);
+  });
+
+  app.delete('/api/dns/records/:name', requireBearer, (req, res) => {
+    if (!dnsRecords.has(req.params.name.toLowerCase())) return res.status(404).json({ error: 'Not found' });
+    dnsRecords.delete(req.params.name.toLowerCase());
+    res.json({ success: true });
+  });
+
+  app.get('/api/dns/zones', requireBearer, (req, res) => {
+    const zones = [...new Set([...dnsRecords.values()].map(r => r.zone))];
+    res.json(zones.map(z => ({ zone: z, recordCount: [...dnsRecords.values()].filter(r => r.zone === z).length })));
+  });
 })();
