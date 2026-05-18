@@ -6,6 +6,31 @@ const RedisStore = require('connect-redis').default;
 const passport = require('passport');
 const rateLimit = require('express-rate-limit');
 
+const promClient = require('prom-client');
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register });
+
+// HTTP request counter
+const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'route', 'status'],
+  registers: [register],
+});
+
+// HTTP request duration
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request duration in seconds',
+  labelNames: ['method', 'route'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
+  registers: [register],
+});
+
+const loginAttemptsCounter = new promClient.Counter({ name: 'auth_login_attempts_total', help: 'Login attempts', labelNames: ['result'], registers: [register] });
+const activeSessionsGauge = new promClient.Gauge({ name: 'auth_active_sessions', help: 'Active user sessions', registers: [register] });
+const lockedAccountsGauge = new promClient.Gauge({ name: 'auth_locked_accounts', help: 'Currently locked accounts', registers: [register] });
+
 const { validate } = require('./middleware/validate');
 const auditDb = require('./db');
 
@@ -183,6 +208,18 @@ class UnifiedAuthenticationService {
     // Apply rate limiting to auth endpoints
     this.app.use('/api/auth/login', authLimiter);
     this.app.use('/api/auth/register', authLimiter);
+
+    // Prometheus metrics middleware
+    this.app.use((req, res, next) => {
+      const start = Date.now();
+      res.on('finish', () => {
+        const route = req.route?.path ?? req.path ?? 'unknown';
+        const duration = (Date.now() - start) / 1000;
+        httpRequestsTotal.inc({ method: req.method, route, status: res.statusCode });
+        httpRequestDuration.observe({ method: req.method, route }, duration);
+      });
+      next();
+    });
   }
 
   initializePassport() {
@@ -334,6 +371,12 @@ class UnifiedAuthenticationService {
   }
 
   initializeRoutes() {
+    // Metrics endpoint
+    this.app.get('/metrics', async (req, res) => {
+      res.setHeader('Content-Type', register.contentType);
+      res.send(await register.metrics());
+    });
+
     // Health check
     this.app.get('/health', (req, res) => {
       res.json({
@@ -410,6 +453,7 @@ class UnifiedAuthenticationService {
         }
         
         if (!user) {
+          loginAttemptsCounter.inc({ result: 'failure' });
           await this.auditService.logFailedAuth(username, req, info?.message);
           return res.status(401).json({
             error: 'Authentication failed',
@@ -467,6 +511,7 @@ class UnifiedAuthenticationService {
         });
         
         // Log successful authentication
+        loginAttemptsCounter.inc({ result: 'success' });
         await this.auditService.logSuccessfulAuth(user.id, req, provider);
         
         res.json({

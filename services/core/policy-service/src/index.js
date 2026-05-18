@@ -855,6 +855,135 @@ app.post('/api/policies/baselines/:id/apply', async (req, res) => {
   }
 });
 
+// ─── Group Policy Objects ─────────────────────────────────────────────────────
+
+const GPO_TEMPLATES = {
+  password_policy: {
+    name: 'Passwort-Richtlinie',
+    settings: { minLength: 12, requireUppercase: true, requireNumbers: true, requireSpecial: true, maxAge: 90, historyCount: 5 }
+  },
+  screen_lock: {
+    name: 'Bildschirmsperre',
+    settings: { enabled: true, timeoutMinutes: 15, requirePassword: true }
+  },
+  firewall: {
+    name: 'Firewall-Einstellungen',
+    settings: { enabled: true, blockInbound: true, allowOutbound: true }
+  },
+  windows_update: {
+    name: 'Windows Update',
+    settings: { autoUpdate: true, deferFeatureUpdates: 14, deferQualityUpdates: 7, activeHours: '08:00-18:00' }
+  },
+  bitlocker: {
+    name: 'BitLocker-Verschlüsselung',
+    settings: { enabled: true, method: 'AES256', recoveryKeyBackup: true }
+  },
+  usb_control: {
+    name: 'USB-Geräte',
+    settings: { blockAll: false, allowApproved: true, logUsage: true }
+  },
+  software_restriction: {
+    name: 'Software-Einschränkung',
+    settings: { allowlist: [], blocklist: ['torrent', 'crack', 'keygen'], mode: 'allowlist' }
+  },
+};
+
+// In-memory GPO store
+const gpos = new Map();
+
+// Seed default GPOs
+Object.entries(GPO_TEMPLATES).forEach(([type, template], i) => {
+  const id = `gpo-${i+1}`;
+  gpos.set(id, { id, type, name: template.name, settings: { ...template.settings }, enabled: true, assignedTo: [], platforms: ['windows', 'macos', 'linux'], createdAt: new Date().toISOString() });
+});
+
+app.get('/api/gpo', (req, res) => {
+  res.json([...gpos.values()]);
+});
+
+app.post('/api/gpo', async (req, res) => {
+  const { type, name, settings, platforms, assignedTo } = req.body;
+  if (!name) return res.status(400).json({ error: 'name required' });
+  const template = GPO_TEMPLATES[type] || {};
+  const id = `gpo-${Date.now()}`;
+  const gpo = { id, type: type || 'custom', name, settings: { ...(template.settings || {}), ...settings }, enabled: true, assignedTo: assignedTo || [], platforms: platforms || ['windows', 'macos', 'linux'], createdAt: new Date().toISOString() };
+  gpos.set(id, gpo);
+
+  // Persist to DB if available
+  try {
+    await db.query(
+      `INSERT INTO policies(id, name, platform, type, status, settings) VALUES($1,$2,$3,'gpo','active',$4) ON CONFLICT(id) DO UPDATE SET name=$2, settings=$4`,
+      [id, name, (platforms || ['all']).join(','), JSON.stringify(gpo)]
+    );
+  } catch (_) {}
+  res.status(201).json(gpo);
+});
+
+app.put('/api/gpo/:id', (req, res) => {
+  const gpo = gpos.get(req.params.id);
+  if (!gpo) return res.status(404).json({ error: 'GPO not found' });
+  Object.assign(gpo, req.body, { updatedAt: new Date().toISOString() });
+  res.json(gpo);
+});
+
+app.delete('/api/gpo/:id', (req, res) => {
+  if (!gpos.has(req.params.id)) return res.status(404).json({ error: 'GPO not found' });
+  gpos.delete(req.params.id);
+  res.json({ success: true });
+});
+
+// Get effective GPOs for a device/platform
+app.get('/api/gpo/effective/:platform', (req, res) => {
+  const { platform } = req.params;
+  const ouId = req.query.ouId;
+  const groups = (req.query.groups || '').split(',').filter(Boolean);
+
+  const effective = [...gpos.values()].filter(gpo => {
+    if (!gpo.enabled) return false;
+    if (!gpo.platforms.includes(platform) && !gpo.platforms.includes('all')) return false;
+    if (gpo.assignedTo.length === 0) return true; // global
+    if (ouId && gpo.assignedTo.includes(ouId)) return true;
+    if (groups.some(g => gpo.assignedTo.includes(g))) return true;
+    return false;
+  });
+
+  // Merge settings
+  const merged = {};
+  for (const gpo of effective) {
+    Object.assign(merged, gpo.settings);
+  }
+
+  res.json({ platform, effectivePolicies: effective.length, settings: merged, gpos: effective });
+});
+
+// Apply GPO to devices via MDM command
+app.post('/api/gpo/:id/apply', async (req, res) => {
+  const gpo = gpos.get(req.params.id);
+  if (!gpo) return res.status(404).json({ error: 'GPO not found' });
+
+  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://localhost:3010';
+
+  try {
+    // Get all devices from registry
+    const devRes = await fetch(`${OAUTH_PROVIDER}/api/devices/registry`);
+    const devices = devRes.ok ? await devRes.json() : [];
+
+    const results = [];
+    for (const device of devices.filter(d => gpo.platforms.includes(d.platform || 'unknown'))) {
+      const cmdRes = await fetch(`${OAUTH_PROVIDER}/api/devices/${device.id}/commands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'update_policy', payload: { gpoId: gpo.id, gpoName: gpo.name, settings: gpo.settings } })
+      });
+      results.push({ deviceId: device.id, hostname: device.hostname, success: cmdRes.ok });
+    }
+
+    res.json({ gpoId: gpo.id, devicesTargeted: results.length, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================
 // Startup
 // ============================

@@ -10,6 +10,36 @@ const { v4: uuidv4 } = require('uuid');
 const { APP_CATALOG } = require('./appCatalog');
 const db = require('./db');
 
+const promClient = require('prom-client');
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register });
+
+// HTTP request counter
+const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'route', 'status'],
+  registers: [register],
+});
+
+// HTTP request duration
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request duration in seconds',
+  labelNames: ['method', 'route'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
+  registers: [register],
+});
+
+const activeTokensGauge = new promClient.Gauge({ name: 'oauth_active_tokens', help: 'Active OAuth tokens in memory', registers: [register] });
+const scimPushErrorsCounter = new promClient.Counter({ name: 'scim_push_errors_total', help: 'SCIM push failures', labelNames: ['app'], registers: [register] });
+const enrolledDevicesGauge = new promClient.Gauge({ name: 'enrolled_devices_total', help: 'Total enrolled devices', labelNames: ['platform', 'status'], registers: [register] });
+
+// Update gauges periodically
+setInterval(() => {
+  activeTokensGauge.set(tokens.size);
+}, 30000);
+
 // ─── Redis-backed token blacklist with in-memory fallback ────────────────────
 
 let redisClient = null;
@@ -242,6 +272,23 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(rateLimit({ windowMs: 60_000, max: 500 }));
+
+// ─── Prometheus metrics middleware ────────────────────────────────────────────
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const route = req.route?.path ?? req.path ?? 'unknown';
+    const duration = (Date.now() - start) / 1000;
+    httpRequestsTotal.inc({ method: req.method, route, status: res.statusCode });
+    httpRequestDuration.observe({ method: req.method, route }, duration);
+  });
+  next();
+});
+
+app.get('/metrics', async (req, res) => {
+  res.setHeader('Content-Type', register.contentType);
+  res.send(await register.metrics());
+});
 
 // ─── OIDC Discovery ───────────────────────────────────────────────────────────────
 
