@@ -373,8 +373,11 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-600">Risk Score Over Time</h3>
             <div className="od-card p-4">
+              {trends.length === 0 && (
+                <div className="h-48 flex items-center justify-center text-sm text-gray-400">Keine Verlaufsdaten verfügbar</div>
+              )}
               <div className="flex items-end gap-4 h-48">
-                {trends.map((t, i) => (
+                {trends.map((t) => (
                   <div key={t.date} className="flex-1 flex flex-col items-center gap-2">
                     <span className="text-xs text-gray-600">{t.score}</span>
                     <div className="w-full relative" style={{ height: `${t.score * 1.8}px` }}>
