@@ -193,7 +193,25 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
 
   return (
     <div className="flex flex-col h-full">
+      {/* Demo data banner */}
+      {usingDemoData && (
+        <div className="mx-6 mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded-lg flex items-center gap-2 text-yellow-800 text-sm">
+          <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500 shrink-0" />
+          <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
+        </div>
+      )}
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="flex-1 p-6 space-y-4 animate-pulse">
+          <div className="grid grid-cols-5 gap-4">
+            {[...Array(5)].map((_, i) => <div key={i} className="h-24 bg-gray-200 rounded-xl" />)}
+          </div>
+          <div className="h-32 bg-gray-200 rounded-xl" />
+          <div className="h-24 bg-gray-200 rounded-xl" />
+        </div>
+      )}
       {/* Header */}
+      {!loading && <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
@@ -271,6 +289,9 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
             {/* Top critical findings */}
             <div className="od-card p-4 border-red-200">
               <h3 className="text-sm font-semibold text-red-600 mb-3">Critical Findings Requiring Immediate Action</h3>
+              {scanResult.findings.filter(f => f.severity === 'critical').length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-2">Keine kritischen Findings</p>
+              )}
               {scanResult.findings.filter(f => f.severity === 'critical').map(f => (
                 <div key={f.id} className="flex items-start gap-3 mb-3 last:mb-0">
                   <XCircleIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -297,6 +318,9 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
               ))}
             </div>
 
+            {filteredFindings.length === 0 && (
+              <div className="od-card p-8 text-center text-sm text-gray-400">Keine Findings gefunden</div>
+            )}
             {filteredFindings.map(f => {
               const expanded = expandedFinding === f.id;
               const Icon = categoryIcons[f.category];
@@ -368,6 +392,7 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
           </div>
         )}
       </div>
+      </>}
     </div>
   );
 }
