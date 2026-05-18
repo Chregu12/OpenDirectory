@@ -10,6 +10,43 @@ const { v4: uuidv4 } = require('uuid');
 const { APP_CATALOG } = require('./appCatalog');
 const db = require('./db');
 
+// ─── Redis-backed token blacklist with in-memory fallback ────────────────────
+
+let redisClient = null;
+const revokedTokens = new Set(); // in-memory fallback
+
+async function initRedis() {
+  try {
+    const redis = require('redis');
+    redisClient = redis.createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379', password: process.env.REDIS_PASSWORD || undefined });
+    redisClient.on('error', err => { console.warn('[redis]', err.message); redisClient = null; });
+    await redisClient.connect();
+    console.log('[redis] connected for token blacklist');
+  } catch (err) {
+    console.warn('[redis] not available, using in-memory blacklist:', err.message);
+    redisClient = null;
+  }
+}
+
+async function blacklistToken(tokenHash, ttlSeconds = 3600) {
+  revokedTokens.add(tokenHash);
+  if (revokedTokens.size > 10000) revokedTokens.clear(); // prevent unbounded growth
+  if (redisClient) {
+    try { await redisClient.setEx(`revoked:${tokenHash}`, ttlSeconds, '1'); } catch {}
+  }
+}
+
+async function isTokenRevoked(tokenHash) {
+  if (revokedTokens.has(tokenHash)) return true;
+  if (redisClient) {
+    try {
+      const val = await redisClient.get(`revoked:${tokenHash}`);
+      return val === '1';
+    } catch {}
+  }
+  return false;
+}
+
 // ─── Config ──────────────────────────────────────────────────────────────────────
 
 const PORT    = process.env.OAUTH_PROVIDER_PORT ?? 3010;
@@ -506,10 +543,15 @@ app.post('/oauth/token', async (req, res) => {
 
 // ─── UserInfo Endpoint ────────────────────────────────────────────────────────────
 
-app.get('/oauth/userinfo', (req, res) => {
+app.get('/oauth/userinfo', async (req, res) => {
   const authHeader = req.headers.authorization ?? '';
   const token = authHeader.replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ error: 'invalid_token' });
+  const bearerToken = req.headers.authorization?.replace('Bearer ', '');
+  if (bearerToken) {
+    const hash = crypto.createHash('sha256').update(bearerToken).digest('hex');
+    if (await isTokenRevoked(hash)) return res.status(401).json({ error: 'token_revoked' });
+  }
   try {
     const payload = verifyToken(token);
     return res.json({ sub: payload.sub, name: payload.name, email: payload.email, preferred_username: payload.preferred_username, groups: payload.groups ?? [] });
@@ -520,10 +562,14 @@ app.get('/oauth/userinfo', (req, res) => {
 
 // ─── Token Introspection ─────────────────────────────────────────────────────────
 
-app.post('/oauth/introspect', (req, res) => {
+app.post('/oauth/introspect', async (req, res) => {
   const { token, client_id, client_secret } = req.body;
   const client = clients.get(client_id);
   if (!client || client.clientSecret !== client_secret) return res.status(401).json({ error: 'invalid_client' });
+  const hash = crypto.createHash('sha256').update(token ?? '').digest('hex');
+  if (await isTokenRevoked(hash)) {
+    return res.json({ active: false });
+  }
   try {
     const payload = verifyToken(token);
     return res.json({ active: true, ...payload });
@@ -534,10 +580,12 @@ app.post('/oauth/introspect', (req, res) => {
 
 // ─── Token Revocation ────────────────────────────────────────────────────────────
 
-app.post('/oauth/revoke', (req, res) => {
+app.post('/oauth/revoke', async (req, res) => {
   const { token } = req.body;
   const hash = crypto.createHash('sha256').update(token ?? '').digest('hex');
   tokens.delete(hash);
+  await blacklistToken(hash, TOKEN_TTL);
+  if (db.isAvailable()) { db.revokeToken(hash).catch(() => {}); }
   res.status(200).json({ ok: true });
 });
 
@@ -1339,6 +1387,7 @@ async function seedDefaultUpdateRings() {
 // ─── Start ────────────────────────────────────────────────────────────────────────
 
 db.initDb().then(async () => {
+  initRedis().catch(err => console.warn('[redis] init error:', err.message));
   if (db.isAvailable()) {
     try {
       const existing = await db.query('SELECT COUNT(*) FROM oauth_clients');

@@ -20,6 +20,26 @@ const AuditService = require('./services/auditService');
 const logger = require('./utils/logger');
 const config = require('./utils/config');
 
+// ─── Password Reset Token Store ───────────────────────────────────────────────
+const passwordResetTokens = new Map(); // token → { userId, email, expiresAt }
+
+// ─── Nodemailer transport (lazy, config-driven) ───────────────────────────────
+let mailer = null;
+function getMailer() {
+  if (mailer) return mailer;
+  if (!process.env.SMTP_HOST) return null;
+  try {
+    const nodemailer = require('nodemailer');
+    mailer = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } : undefined,
+    });
+    return mailer;
+  } catch { return null; }
+}
+
 class UnifiedAuthenticationService {
   constructor() {
     this.app = express();
@@ -141,9 +161,27 @@ class UnifiedAuthenticationService {
       passReqToCallback: true
     }, async (req, username, password, done) => {
       try {
+        // ─── Account Lockout Check ─────────────────────────────────────────────
+        const _attempts = (global.__od_loginAttempts || new Map()).get(username) || { count: 0, lockedUntil: null };
+        if (_attempts.lockedUntil && _attempts.lockedUntil > Date.now()) {
+          const remaining = Math.ceil((_attempts.lockedUntil - Date.now()) / 60000);
+          return done(null, false, { message: `Konto gesperrt. Versuche es in ${remaining} Minuten erneut.` });
+        }
+
         const user = await this.authManager.authenticateLocal(username, password);
         if (!user) {
           auditDb.logAuditEvent({ eventType: 'login_failed', actor: username, message: `Failed login attempt for ${username}`, severity: 'warning' }).catch(() => {});
+          // ─── Increment lockout counter ────────────────────────────────────────
+          if (global.__od_loginAttempts) {
+            const att = global.__od_loginAttempts.get(username) || { count: 0, lockedUntil: null };
+            att.count++;
+            if (att.count >= (global.__od_MAX_ATTEMPTS || 5)) {
+              att.lockedUntil = Date.now() + (global.__od_LOCKOUT_MINUTES || 15) * 60_000;
+              att.count = 0;
+              auditDb.logAuditEvent({ eventType: 'account_locked', actor: username, message: `Account ${username} locked after ${global.__od_MAX_ATTEMPTS || 5} failed attempts`, severity: 'warning' }).catch(() => {});
+            }
+            global.__od_loginAttempts.set(username, att);
+          }
           return done(null, false, { message: 'Invalid credentials' });
         }
 
@@ -180,6 +218,8 @@ class UnifiedAuthenticationService {
         }
 
         auditDb.logAuditEvent({ eventType: 'login_success', actor: username, message: `User ${username} logged in`, severity: 'info' }).catch(() => {});
+        // ─── Clear lockout on successful login ────────────────────────────────
+        if (global.__od_loginAttempts) global.__od_loginAttempts.delete(username);
         return done(null, user);
       } catch (error) {
         logger.error('Local auth error:', error);
@@ -1090,6 +1130,20 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
   let passwordPolicy = _passwordPolicy;
   const serviceAccounts = new Map();
 
+  // ─── TOTP MFA Stores ──────────────────────────────────────────────────────────
+  const pendingMfaSecrets = new Map(); // userId → base32 secret (not yet verified)
+  const userMfaSecrets = new Map();    // userId → base32 secret (active)
+
+  // ─── Account Lockout Stores ───────────────────────────────────────────────────
+  const loginAttempts = new Map(); // username → { count, lockedUntil }
+  const MAX_ATTEMPTS = 5;
+  const LOCKOUT_MINUTES = 15;
+
+  // Expose lockout map module-level so LocalStrategy can access it
+  global.__od_loginAttempts = loginAttempts;
+  global.__od_MAX_ATTEMPTS = MAX_ATTEMPTS;
+  global.__od_LOCKOUT_MINUTES = LOCKOUT_MINUTES;
+
   // ─── Seed Data ─────────────────────────────────────────────────────────────────
 
   const ouSeed = [
@@ -1410,6 +1464,77 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
     if (!message) return res.status(400).json({ error: 'message required' });
     const ip = req.ip || req.connection?.remoteAddress;
     await auditDb.logAuditEvent({ eventType: eventType || 'manual', actor, target, message, severity, ipAddress: ip, metadata });
+    res.json({ success: true });
+  });
+
+  // ─── TOTP MFA Endpoints ───────────────────────────────────────────────────────
+
+  let speakeasy, QRCode;
+  try { speakeasy = require('speakeasy'); } catch (_) {}
+  try { QRCode = require('qrcode'); } catch (_) {}
+
+  // Middleware: require JWT auth for MFA management endpoints
+  const requireJwt = authService.requireAuth();
+
+  app.post('/api/auth/mfa/setup', requireJwt, async (req, res) => {
+    if (!speakeasy) return res.status(501).json({ error: 'TOTP library not installed' });
+    const userId = req.user?.id || req.user?.userId;
+    const secret = speakeasy.generateSecret({ name: `OpenDirectory (${req.user?.username || userId})`, issuer: 'OpenDirectory', length: 20 });
+    pendingMfaSecrets.set(userId, secret.base32);
+    const qrDataUrl = await QRCode.toDataURL(secret.otpauth_url);
+    res.json({ secret: secret.base32, qrDataUrl, otpauthUrl: secret.otpauth_url });
+  });
+
+  app.post('/api/auth/mfa/verify-setup', requireJwt, async (req, res) => {
+    if (!speakeasy) return res.status(501).json({ error: 'TOTP library not installed' });
+    const { token } = req.body;
+    const userId = req.user?.id || req.user?.userId;
+    const secret = pendingMfaSecrets.get(userId);
+    if (!secret) return res.status(400).json({ error: 'No pending MFA setup' });
+    const valid = speakeasy.totp.verify({ secret, encoding: 'base32', token, window: 2 });
+    if (!valid) return res.status(400).json({ error: 'Ungültiger Code' });
+    userMfaSecrets.set(userId, secret);
+    pendingMfaSecrets.delete(userId);
+    res.json({ success: true, message: 'MFA aktiviert' });
+  });
+
+  app.post('/api/auth/mfa/validate', async (req, res) => {
+    if (!speakeasy) return res.status(501).json({ error: 'TOTP library not installed' });
+    const { userId, token } = req.body;
+    if (!userId || !token) return res.status(400).json({ error: 'userId and token required' });
+    const secret = userMfaSecrets.get(userId);
+    if (!secret) return res.status(400).json({ error: 'MFA not configured for user' });
+    const valid = speakeasy.totp.verify({ secret, encoding: 'base32', token, window: 2 });
+    if (!valid) return res.status(401).json({ error: 'Ungültiger TOTP-Code' });
+    res.json({ valid: true });
+  });
+
+  app.delete('/api/auth/mfa/disable', requireJwt, (req, res) => {
+    const userId = req.user?.id || req.user?.userId;
+    userMfaSecrets.delete(userId);
+    pendingMfaSecrets.delete(userId);
+    res.json({ success: true });
+  });
+
+  app.get('/api/auth/mfa/status', requireJwt, (req, res) => {
+    const userId = req.user?.id || req.user?.userId;
+    res.json({ enabled: userMfaSecrets.has(userId) });
+  });
+
+  // ─── Account Lockout Admin Endpoints ─────────────────────────────────────────
+
+  app.get('/api/auth/lockouts', authService.requireAdmin(), (req, res) => {
+    const locked = [];
+    for (const [username, att] of loginAttempts.entries()) {
+      if (att.lockedUntil && att.lockedUntil > Date.now()) {
+        locked.push({ username, lockedUntil: new Date(att.lockedUntil).toISOString(), remaining: Math.ceil((att.lockedUntil - Date.now()) / 60000) });
+      }
+    }
+    res.json(locked);
+  });
+
+  app.delete('/api/auth/lockouts/:username', authService.requireAdmin(), (req, res) => {
+    loginAttempts.delete(req.params.username);
     res.json({ success: true });
   });
 })();
