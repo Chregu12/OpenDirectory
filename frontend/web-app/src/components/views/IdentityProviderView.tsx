@@ -22,7 +22,7 @@ import toast from 'react-hot-toast';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
-type IdpTab = 'overview' | 'apps' | 'oauth' | 'saml' | 'mfa' | 'settings' | 'certificates';
+type IdpTab = 'overview' | 'apps' | 'oauth' | 'saml' | 'mfa' | 'settings' | 'certificates' | 'kerberos';
 
 interface SaasApp {
   id: string;
@@ -796,6 +796,137 @@ function CertificatesTab() {
   );
 }
 
+// ─── Kerberos Tab ────────────────────────────────────────────────────────────────
+
+interface KerbPrincipal {
+  name: string;
+}
+
+function KerberosTab({ domain }: { domain: string }) {
+  const realm = domain.toUpperCase();
+  const [principals, setPrincipals] = useState<KerbPrincipal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [keytab, setKeytab] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    api.get('/api/kerberos/principals')
+      .then(r => setPrincipals((r.data.principals ?? []).map((p: string) => ({ name: p }))))
+      .catch(() => setPrincipals([]))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const createPrincipal = async () => {
+    if (!newName || !newPass) return;
+    setCreating(true);
+    try {
+      await api.post('/api/kerberos/principals', { name: newName, password: newPass });
+      toast.success(`Principal ${newName}@${realm} erstellt`);
+      setNewName(''); setNewPass('');
+      load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error ?? 'Fehler');
+    }
+    setCreating(false);
+  };
+
+  const deletePrincipal = async (name: string) => {
+    if (!confirm(`Principal ${name} löschen?`)) return;
+    await api.delete(`/api/kerberos/principals/${encodeURIComponent(name.split('@')[0])}`).catch(() => {});
+    setPrincipals(prev => prev.filter(p => p.name !== name));
+  };
+
+  const getKeytab = async (name: string) => {
+    const shortName = name.split('@')[0];
+    try {
+      const r = await api.post(`/api/kerberos/principals/${encodeURIComponent(shortName)}/keytab`);
+      setKeytab(r.data.keytab_path ?? r.data.message ?? 'Keytab generiert');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error ?? 'Keytab-Fehler');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-white font-semibold">Kerberos KDC — {realm}</h3>
+          <p className="text-gray-400 text-sm mt-0.5">Principals verwalten, Keytabs generieren, SPNEGO-SSO</p>
+        </div>
+      </div>
+
+      {/* Create principal */}
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-5 space-y-4">
+        <h4 className="text-white text-sm font-medium">Neuer Principal</h4>
+        <div className="flex gap-3">
+          <input
+            value={newName} onChange={e => setNewName(e.target.value)}
+            placeholder="username oder service/host"
+            className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
+          />
+          <input
+            type="password" value={newPass} onChange={e => setNewPass(e.target.value)}
+            placeholder="Passwort"
+            className="w-44 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
+          />
+          <button
+            onClick={createPrincipal} disabled={creating || !newName || !newPass}
+            className="px-4 py-2 bg-blue-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium whitespace-nowrap"
+          >
+            {creating ? 'Erstellen…' : 'Principal erstellen'}
+          </button>
+        </div>
+      </div>
+
+      {keytab && (
+        <div className="bg-green-900/30 border border-green-700 rounded-lg px-4 py-3 text-green-400 text-sm flex items-center justify-between">
+          <span>Keytab: {keytab}</span>
+          <button onClick={() => setKeytab(null)} className="text-green-600 hover:text-green-400"><XMarkIcon className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-gray-700 rounded animate-pulse" />)}</div>
+      ) : principals.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 text-sm">Keine Principals gefunden (KDC möglicherweise nicht verfügbar)</div>
+      ) : (
+        <div className="overflow-hidden border border-gray-700 rounded-xl">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-800/50">
+              <tr className="text-gray-400 text-xs">
+                <th className="px-4 py-3 text-left">Principal</th>
+                <th className="px-4 py-3 text-left">Realm</th>
+                <th className="px-4 py-3 text-left"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700/50">
+              {principals.map(p => {
+                const short = p.name.split('@')[0];
+                const r = p.name.includes('@') ? p.name.split('@')[1] : realm;
+                return (
+                  <tr key={p.name} className="hover:bg-gray-700/30">
+                    <td className="px-4 py-3 text-white font-mono text-xs">{short}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs">{r}</td>
+                    <td className="px-4 py-3 flex gap-2 justify-end">
+                      <button onClick={() => getKeytab(p.name)} className="text-blue-400 hover:text-blue-300 text-xs">Keytab</button>
+                      <button onClick={() => deletePrincipal(p.name)} className="text-red-400 hover:text-red-300 text-xs">Löschen</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────────
 
 export default function IdentityProviderView() {
@@ -809,6 +940,7 @@ export default function IdentityProviderView() {
     { id: 'saml',          label: 'SAML 2.0',      icon: LockClosedIcon },
     { id: 'mfa',           label: 'MFA & Access',  icon: FingerPrintIcon },
     { id: 'certificates',  label: 'Zertifikate',   icon: ShieldCheckIcon },
+    { id: 'kerberos',      label: 'Kerberos',      icon: KeyIcon },
     { id: 'settings',      label: 'Einstellungen', icon: Cog6ToothIcon },
   ];
 
@@ -855,6 +987,7 @@ export default function IdentityProviderView() {
       {activeTab === 'saml'         && <SamlTab domain={domain} />}
       {activeTab === 'mfa'          && <MfaTab />}
       {activeTab === 'certificates' && <CertificatesTab />}
+      {activeTab === 'kerberos'     && <KerberosTab domain={domain} />}
       {activeTab === 'settings'  && (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
           <Cog6ToothIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />

@@ -398,6 +398,10 @@ class APIGateway {
     this.app.use('/api/ca', createProxyMiddleware({ target: 'http://certificate-authority:3012', changeOrigin: true, pathRewrite: { '^/api/ca': '/ca' } }));
     connectedServices.push('certificate-authority');
 
+    // Kerberos KDC REST API (always enabled)
+    this.app.use('/api/kerberos', createProxyMiddleware({ target: 'http://kerberos-kdc:3013', changeOrigin: true }));
+    connectedServices.push('kerberos-kdc');
+
     // Intelligence Services (always enabled - core platform value)
     this.setupServiceProxy('graph', 'http://graph-explorer:3900', '/api/graph');
     this.setupServiceProxy('graph-explorer', 'http://graph-explorer:3900', '/api/graph-explorer');
