@@ -800,6 +800,29 @@ services:
       timeout: 5s
       retries: 3
 
+  kerberos-kdc:
+    build: ./services/core/kerberos-kdc
+    ports:
+      - "88:88/tcp"
+      - "88:88/udp"
+      - "749:749/tcp"
+      - "3013:3013/tcp"
+    environment:
+      - KRB5_REALM=${KRB5_REALM:-OPENDIRECTORY.LOCAL}
+      - KDC_HOST=${KDC_HOST:-kerberos-kdc}
+      - KRB5_ADMIN_PASSWORD=${KRB5_ADMIN_PASSWORD:-changeme}
+      - KRB5_DB_PASSWORD=${KRB5_DB_PASSWORD:-changeme}
+      - KDC_API_PORT=3013
+    volumes:
+      - kerberos_data:/var/lib/krb5kdc
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3013/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
 # ===================
 # Networks
 # ===================
@@ -829,3 +852,4 @@ volumes:
   network-samba-config:
   network-shares:
   network-logs:
+  kerberos_data:
