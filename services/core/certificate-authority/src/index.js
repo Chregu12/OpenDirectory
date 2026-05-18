@@ -7,10 +7,51 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const helmet = require('helmet');
 
+const promClient = require('prom-client');
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register });
+
+// HTTP request counter
+const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'route', 'status'],
+  registers: [register],
+});
+
+// HTTP request duration
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request duration in seconds',
+  labelNames: ['method', 'route'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
+  registers: [register],
+});
+
+const certsIssuedCounter = new promClient.Counter({ name: 'ca_certificates_issued_total', help: 'Total certificates issued', labelNames: ['type'], registers: [register] });
+const certsRevokedCounter = new promClient.Counter({ name: 'ca_certificates_revoked_total', help: 'Total certificates revoked', registers: [register] });
+
 const app = express();
 app.use(cors());
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
+
+// ─── Prometheus metrics middleware ────────────────────────────────────────────
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const route = req.route?.path ?? req.path ?? 'unknown';
+    const duration = (Date.now() - start) / 1000;
+    httpRequestsTotal.inc({ method: req.method, route, status: res.statusCode });
+    httpRequestDuration.observe({ method: req.method, route }, duration);
+  });
+  next();
+});
+
+app.get('/metrics', async (req, res) => {
+  res.setHeader('Content-Type', register.contentType);
+  res.send(await register.metrics());
+});
 
 const PORT = parseInt(process.env.CA_PORT || '3012');
 const CA_COMMON_NAME = process.env.CA_COMMON_NAME || 'OpenDirectory Internal CA';
@@ -174,6 +215,7 @@ app.post('/ca/issue', async (req, res) => {
     ).catch(err => console.error('[CA] DB insert:', err.message));
   }
 
+  certsIssuedCounter.inc({ type });
   res.status(201).json({ id, commonName, certificate: result.certificate, privateKey: result.privateKey, serialNumber: result.serialNumber, expiresAt: result.expiresAt, caCertificate: caCertPem });
 });
 
@@ -191,6 +233,7 @@ app.post('/ca/revoke/:id', async (req, res) => {
   if (dbReady) {
     await pool.query('UPDATE ca_certificates SET revoked=true, revoked_at=NOW() WHERE id=$1', [req.params.id]).catch(() => {});
   }
+  certsRevokedCounter.inc();
   res.json({ success: true });
 });
 

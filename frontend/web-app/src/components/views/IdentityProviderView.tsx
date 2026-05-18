@@ -22,7 +22,7 @@ import toast from 'react-hot-toast';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
-type IdpTab = 'overview' | 'apps' | 'oauth' | 'saml' | 'mfa' | 'settings';
+type IdpTab = 'overview' | 'apps' | 'oauth' | 'saml' | 'mfa' | 'settings' | 'certificates';
 
 interface SaasApp {
   id: string;

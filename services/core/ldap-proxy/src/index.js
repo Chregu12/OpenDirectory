@@ -1,6 +1,31 @@
 'use strict';
 require('dotenv').config();
 const ldap = require('ldapjs');
+const http = require('http');
+
+const promClient = require('prom-client');
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register });
+
+// HTTP request counter
+const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'route', 'status'],
+  registers: [register],
+});
+
+// HTTP request duration
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request duration in seconds',
+  labelNames: ['method', 'route'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
+  registers: [register],
+});
+
+const ldapBindsCounter = new promClient.Counter({ name: 'ldap_binds_total', help: 'LDAP bind operations', labelNames: ['result'], registers: [register] });
+const ldapSearchesCounter = new promClient.Counter({ name: 'ldap_searches_total', help: 'LDAP search operations', registers: [register] });
 
 const LLDAP_URL = process.env.LLDAP_URL || 'ldap://localhost:3890';
 const LLDAP_BASE_DN = process.env.LLDAP_BASE_DN || 'dc=opendirectory,dc=local';
@@ -28,9 +53,11 @@ server.bind(LLDAP_BASE_DN, async (req, res, next) => {
   upstream.bind(dn, password, (err) => {
     upstream.unbind();
     if (err) {
+      ldapBindsCounter.inc({ result: 'failure' });
       console.log(`[ldap-proxy] bind failed for ${dn}: ${err.message}`);
       return next(new ldap.InvalidCredentialsError());
     }
+    ldapBindsCounter.inc({ result: 'success' });
     console.log(`[ldap-proxy] bind success: ${dn}`);
     res.end();
     return next();
@@ -44,6 +71,7 @@ server.bind('', async (req, res, next) => {
 
   if (!dn) {
     // Anonymous bind
+    ldapBindsCounter.inc({ result: 'anonymous' });
     res.end();
     return next();
   }
@@ -52,8 +80,10 @@ server.bind('', async (req, res, next) => {
   upstream.bind(dn, password, (err) => {
     upstream.unbind();
     if (err) {
+      ldapBindsCounter.inc({ result: 'failure' });
       return next(new ldap.InvalidCredentialsError());
     }
+    ldapBindsCounter.inc({ result: 'success' });
     res.end();
     return next();
   });
@@ -61,6 +91,7 @@ server.bind('', async (req, res, next) => {
 
 // Search — forward to LLDAP
 server.search(LLDAP_BASE_DN, (req, res, next) => {
+  ldapSearchesCounter.inc();
   const upstream = connectToLLDAP();
 
   // Use admin credentials for upstream search
@@ -121,3 +152,13 @@ server.on('error', (err) => {
 });
 
 process.on('SIGTERM', () => { server.close(); process.exit(0); });
+
+const metricsPort = parseInt(process.env.METRICS_PORT || '9091');
+http.createServer(async (req, res) => {
+  if (req.url === '/metrics') {
+    res.setHeader('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  } else {
+    res.writeHead(404); res.end();
+  }
+}).listen(metricsPort, () => console.log(`[ldap-proxy] metrics on :${metricsPort}`));
