@@ -335,6 +335,7 @@ class UnifiedAuthenticationService {
     this.app.put('/api/auth/profile', this.updateProfile.bind(this));
     this.app.post('/api/auth/change-password', validate('changePassword'), this.changePassword.bind(this));
     this.app.post('/api/auth/reset-password', this.resetPassword.bind(this));
+    this.app.post('/api/auth/password-reset/confirm', this.confirmPasswordReset.bind(this));
     
     // SSO endpoints
     this.app.get('/api/auth/sso/providers', this.getSSOProviders.bind(this));
@@ -378,16 +379,34 @@ class UnifiedAuthenticationService {
           });
         }
         
-        // Check if MFA is required
+        // Check if TOTP MFA is required (in-memory TOTP secrets)
+        const totpSecrets = global.__od_userMfaSecrets;
+        const hasTotpMfa = totpSecrets && totpSecrets.has(user.id || user.userId);
+        if (hasTotpMfa && !mfaCode) {
+          return res.status(202).json({ mfaRequired: true, userId: user.id || user.userId });
+        }
+        if (hasTotpMfa && mfaCode) {
+          const speakeasyLib = global.__od_speakeasy;
+          if (speakeasyLib) {
+            const totpSecret = totpSecrets.get(user.id || user.userId);
+            const totpValid = speakeasyLib.totp.verify({ secret: totpSecret, encoding: 'base32', token: mfaCode, window: 2 });
+            if (!totpValid) {
+              await this.auditService.logFailedAuth(username, req, 'Invalid TOTP code');
+              return res.status(401).json({ error: 'Ungültiger TOTP-Code' });
+            }
+          }
+        }
+
+        // Check if MFA is required (class-based mfaService)
         if (user.mfaEnabled && !mfaCode) {
           return res.status(200).json({
             requiresMFA: true,
             tempToken: await this.tokenService.generateTempToken(user.id)
           });
         }
-        
-        // Verify MFA if provided
-        if (user.mfaEnabled && mfaCode) {
+
+        // Verify MFA if provided (class-based mfaService, only if no in-memory TOTP)
+        if (user.mfaEnabled && mfaCode && !hasTotpMfa) {
           const mfaValid = await this.mfaService.verifyCode(user.id, mfaCode);
           if (!mfaValid) {
             await this.auditService.logFailedAuth(username, req, 'Invalid MFA code');
@@ -396,7 +415,7 @@ class UnifiedAuthenticationService {
             });
           }
         }
-        
+
         // Generate tokens
         const accessToken = await this.tokenService.generateAccessToken(user);
         const refreshToken = await this.tokenService.generateRefreshToken(user);
@@ -831,14 +850,45 @@ class UnifiedAuthenticationService {
   async resetPassword(req, res) {
     try {
       const { email } = req.body;
-      
+
       const user = await this.userService.getUserByEmail(email);
       if (user) {
-        const resetToken = await this.tokenService.generatePasswordResetToken(user.id);
-        await this.userService.sendPasswordResetEmail(user.email, resetToken);
+        // Generate a cryptographically random reset token
+        const crypto = require('crypto');
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const expiresAt = Date.now() + 3600_000; // 1 hour
+
+        // Store reset token
+        passwordResetTokens.set(resetToken, { userId: user.id, email: user.email, expiresAt });
+
         await this.auditService.logUserEvent('password_reset_requested', user.id, req);
+
+        // Send password reset email
+        const transport = getMailer();
+        if (transport) {
+          try {
+            const resetUrl = `${process.env.APP_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+            await transport.sendMail({
+              from: process.env.SMTP_FROM || 'OpenDirectory <noreply@opendirectory.local>',
+              to: user.email,
+              subject: 'Passwort zurücksetzen — OpenDirectory',
+              html: `
+                <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+                  <h2 style="color:#1e293b">Passwort zurücksetzen</h2>
+                  <p>Hallo ${user.name || user.username},</p>
+                  <p>Sie haben eine Passwort-Zurücksetzung angefordert. Klicken Sie auf den folgenden Link:</p>
+                  <a href="${resetUrl}" style="display:inline-block;margin:16px 0;padding:12px 24px;background:#3b82f6;color:#fff;text-decoration:none;border-radius:8px">Passwort zurücksetzen</a>
+                  <p style="color:#64748b;font-size:12px">Dieser Link ist 1 Stunde gültig. Falls Sie keine Zurücksetzung angefordert haben, ignorieren Sie diese E-Mail.</p>
+                </div>
+              `,
+            });
+            console.log(`[password-reset] Email sent to ${user.email}`);
+          } catch (err) {
+            console.error('[password-reset] Email send error:', err.message);
+          }
+        }
       }
-      
+
       // Always return success to prevent email enumeration
       res.json({
         success: true,
@@ -847,6 +897,54 @@ class UnifiedAuthenticationService {
     } catch (error) {
       logger.error('Reset password error:', error);
       res.status(500).json({ error: 'Failed to process password reset' });
+    }
+  }
+
+  async confirmPasswordReset(req, res) {
+    try {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) {
+        return res.status(400).json({ error: 'token and newPassword required' });
+      }
+
+      const resetRecord = passwordResetTokens.get(token);
+      if (!resetRecord || resetRecord.expiresAt < Date.now()) {
+        return res.status(400).json({ error: 'Ungültiger oder abgelaufener Token' });
+      }
+
+      // Validate new password against policy
+      const policy = _passwordPolicy;
+      if (policy) {
+        const errors = [];
+        if (policy.minLength && newPassword.length < policy.minLength) {
+          errors.push(`Mindestlänge ${policy.minLength} Zeichen erforderlich`);
+        }
+        if (policy.requireUppercase && !/[A-Z]/.test(newPassword)) {
+          errors.push('Grossbuchstabe erforderlich');
+        }
+        if (policy.requireNumbers && !/[0-9]/.test(newPassword)) {
+          errors.push('Ziffer erforderlich');
+        }
+        if ((policy.requireSymbols || policy.requireSpecial) && !/[^A-Za-z0-9]/.test(newPassword)) {
+          errors.push('Sonderzeichen erforderlich');
+        }
+        if (errors.length > 0) {
+          return res.status(400).json({ error: 'Passwortrichtlinie nicht erfüllt', details: errors });
+        }
+      }
+
+      // Update password via userService
+      await this.userService.changePassword(resetRecord.userId, newPassword);
+
+      // Consume the token
+      passwordResetTokens.delete(token);
+
+      await this.auditService.logUserEvent('password_reset_completed', resetRecord.userId, req);
+
+      res.json({ success: true, message: 'Passwort erfolgreich zurückgesetzt' });
+    } catch (error) {
+      logger.error('Confirm password reset error:', error);
+      res.status(500).json({ error: 'Failed to reset password' });
     }
   }
 
@@ -1472,6 +1570,10 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
   let speakeasy, QRCode;
   try { speakeasy = require('speakeasy'); } catch (_) {}
   try { QRCode = require('qrcode'); } catch (_) {}
+
+  // Expose for login handler (class scope cannot access IIFE-scope Maps directly)
+  global.__od_userMfaSecrets = userMfaSecrets;
+  global.__od_speakeasy = speakeasy;
 
   // Middleware: require JWT auth for MFA management endpoints
   const requireJwt = authService.requireAuth();
