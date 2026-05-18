@@ -9,6 +9,44 @@ const rateLimit = require('express-rate-limit');
 const { validate } = require('./middleware/validate');
 const auditDb = require('./db');
 
+// ─── Password History ─────────────────────────────────────────────────────────
+const HISTORY_COUNT = 5; // prevent reuse of last 5 passwords
+
+async function checkPasswordHistory(userId, newPlaintextPassword) {
+  if (!auditDb.isAvailable()) return true; // skip check if DB unavailable
+  try {
+    const result = await auditDb.query(
+      'SELECT password_hash FROM password_history WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2',
+      [userId, HISTORY_COUNT]
+    );
+    const bcrypt = require('bcrypt');
+    for (const row of result.rows) {
+      const matches = await bcrypt.compare(newPlaintextPassword, row.password_hash);
+      if (matches) return false; // password was used before
+    }
+    return true;
+  } catch { return true; } // fail open
+}
+
+async function recordPasswordHash(userId, plaintextPassword) {
+  if (!auditDb.isAvailable()) return;
+  try {
+    const bcrypt = require('bcrypt');
+    const hash = await bcrypt.hash(plaintextPassword, 12);
+    await auditDb.query(
+      'INSERT INTO password_history(user_id, password_hash) VALUES($1,$2)',
+      [userId, hash]
+    );
+    // Keep only last 10 entries per user
+    await auditDb.query(
+      `DELETE FROM password_history WHERE user_id=$1 AND id NOT IN (
+        SELECT id FROM password_history WHERE user_id=$1 ORDER BY created_at DESC LIMIT 10
+      )`,
+      [userId]
+    );
+  } catch {}
+}
+
 const AuthenticationManager = require('./services/authenticationManager');
 const TokenService = require('./services/tokenService');
 const MFAService = require('./services/mfaService');
@@ -517,15 +555,18 @@ class UnifiedAuthenticationService {
         lastName,
         provider: 'local'
       });
-      
+
+      // Record initial password in history
+      recordPasswordHash(user.id || user.username, password).catch(() => {});
+
       // Create in LDAP if configured
       if (config.ldap.syncNewUsers) {
         await this.authManager.createLdapUser(user);
       }
-      
+
       // Log registration
       await this.auditService.logUserEvent('user_registered', user.id, req);
-      
+
       res.status(201).json({
         success: true,
         message: 'Registration successful',
@@ -825,18 +866,24 @@ class UnifiedAuthenticationService {
     try {
       const userId = req.user.id;
       const { currentPassword, newPassword } = req.body;
-      
+
       const user = await this.userService.getUserById(userId);
       const validPassword = await this.authManager.verifyPassword(currentPassword, user.password);
-      
+
       if (!validPassword) {
         return res.status(401).json({ error: 'Current password is incorrect' });
       }
-      
+
+      const historyOk = await checkPasswordHistory(userId, newPassword);
+      if (!historyOk) {
+        return res.status(400).json({ error: 'Dieses Passwort wurde bereits verwendet. Bitte wählen Sie ein anderes.' });
+      }
+
       await this.userService.changePassword(userId, newPassword);
+      recordPasswordHash(userId, newPassword).catch(() => {});
       await this.sessionManager.revokeAllUserSessions(userId);
       await this.auditService.logSecurityEvent('password_changed', userId, req);
-      
+
       res.json({
         success: true,
         message: 'Password changed successfully. Please login again.'
@@ -933,8 +980,15 @@ class UnifiedAuthenticationService {
         }
       }
 
+      // Check password history
+      const historyOk = await checkPasswordHistory(resetRecord.userId, newPassword);
+      if (!historyOk) {
+        return res.status(400).json({ error: 'Dieses Passwort wurde bereits verwendet. Bitte wählen Sie ein anderes.' });
+      }
+
       // Update password via userService
       await this.userService.changePassword(resetRecord.userId, newPassword);
+      recordPasswordHash(resetRecord.userId, newPassword).catch(() => {});
 
       // Consume the token
       passwordResetTokens.delete(token);

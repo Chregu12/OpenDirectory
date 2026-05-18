@@ -19,16 +19,27 @@ async function initDb() {
   try {
     await pool.query('SELECT 1');
     dbAvailable = true;
-    const migrationPath = path.join(__dirname, '..', 'migrations', '001_audit_log.sql');
-    if (fs.existsSync(migrationPath)) {
-      const sql = fs.readFileSync(migrationPath, 'utf8');
-      await pool.query(sql);
-    }
+    await runMigrations();
     console.log('[auth-db] PostgreSQL connected');
   } catch (err) {
     console.warn('[auth-db] PostgreSQL not available:', err.message);
     dbAvailable = false;
   }
+}
+
+async function runMigrations() {
+  const migrationsDir = path.join(__dirname, '..', 'migrations');
+  if (!fs.existsSync(migrationsDir)) return;
+  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+  for (const file of files) {
+    try {
+      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+      await pool.query(sql);
+    } catch (err) {
+      console.error(`[auth-db] Migration ${file}:`, err.message);
+    }
+  }
+  console.log(`[auth-db] ${files.length} migration(s) applied`);
 }
 
 async function logAuditEvent({ eventType, actor, target, message, severity = 'info', ipAddress, metadata = {} }) {
@@ -68,4 +79,8 @@ const inMemoryAuditLog = [];
 
 function isAvailable() { return dbAvailable; }
 
-module.exports = { initDb, logAuditEvent, getRecentEvents, isAvailable };
+async function query(sql, params) {
+  return pool.query(sql, params);
+}
+
+module.exports = { initDb, logAuditEvent, getRecentEvents, isAvailable, query };
