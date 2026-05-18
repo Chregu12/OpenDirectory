@@ -19,6 +19,11 @@ import PrintersView from '@/components/views/PrintersView';
 import IdentityProviderView from '@/components/views/IdentityProviderView';
 import EnrollmentHubView from '@/components/views/EnrollmentHubView';
 import PermissionsView from '@/components/views/PermissionsView';
+import AntivirusView from '@/components/views/AntivirusView';
+import AuditView from '@/components/views/AuditView';
+import BackupView from '@/components/views/BackupView';
+import AppStoreView from '@/components/views/AppStoreView';
+import ComplianceView from '@/components/views/ComplianceView';
 import OnboardingWizard from '@/components/setup/OnboardingWizard';
 
 const MODULE_NAV_MAP: Record<string, string> = {
@@ -33,6 +38,7 @@ const VALID_VIEWS = new Set([
   'dashboard','topology','devices','applications','infrastructure',
   'users','monitoring','secrets','security','printers','policies','settings',
   'identity','enrollment','permissions',
+  'antivirus','audit','backup','appstore','compliance',
 ]);
 
 export default function ViewPage() {
@@ -95,6 +101,11 @@ export default function ViewPage() {
       case 'identity':       return <IdentityProviderView />;
       case 'enrollment':     return <EnrollmentHubView />;
       case 'permissions':    return <PermissionsView />;
+      case 'antivirus':      return <AntivirusView />;
+      case 'audit':          return <AuditView />;
+      case 'backup':         return <BackupView />;
+      case 'appstore':       return <AppStoreView />;
+      case 'compliance':     return <ComplianceView />;
       case 'settings':
         return (
           <div className="p-6">

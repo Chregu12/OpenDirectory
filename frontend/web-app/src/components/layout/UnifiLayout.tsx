@@ -26,6 +26,11 @@ import {
   FingerPrintIcon,
   ArrowDownOnSquareStackIcon,
   KeyIcon,
+  BugAntIcon,
+  ClipboardDocumentListIcon,
+  ArchiveBoxIcon,
+  ShoppingBagIcon,
+  ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline';
 
 // ─── Search catalog ───────────────────────────────────────────────────────────
@@ -44,6 +49,11 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'secrets',      name: 'Secrets',             view: 'secrets',      type: 'Seite' },
   { id: 'printers',     name: 'Drucker',             view: 'printers',     type: 'Seite' },
   { id: 'permissions',  name: 'Berechtigungen',      view: 'permissions',  type: 'Seite' },
+  { id: 'antivirus',   name: 'Antivirus',           view: 'antivirus',    type: 'Seite' },
+  { id: 'audit',       name: 'Audit Log',           view: 'audit',        type: 'Seite' },
+  { id: 'backup',      name: 'Backup & DR',         view: 'backup',       type: 'Seite' },
+  { id: 'appstore',    name: 'App Store',           view: 'appstore',     type: 'Seite' },
+  { id: 'compliance',  name: 'Compliance',          view: 'compliance',   type: 'Seite' },
 ];
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -250,6 +260,8 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     { type: 'item', id: 'enrollment',     name: 'Enrollment Hub',  icon: ArrowDownOnSquareStackIcon },
     { type: 'divider', label: 'Geräte & Apps' },
     { type: 'item', id: 'devices',        name: 'Devices',         icon: ComputerDesktopIcon },
+    { type: 'item', id: 'antivirus',      name: 'Antivirus',       icon: BugAntIcon },
+    { type: 'item', id: 'appstore',       name: 'App Store',       icon: ShoppingBagIcon },
     { type: 'item', id: 'printers',       name: 'Printers',        icon: PrinterIcon },
     { type: 'item', id: 'applications',   name: 'Applications',    icon: CubeIcon },
     { type: 'divider', label: 'Infrastruktur' },
@@ -259,9 +271,12 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     { type: 'item', id: 'monitoring',     name: 'Monitoring',      icon: ChartBarIcon },
     { type: 'divider', label: 'Governance' },
     { type: 'item', id: 'policies',       name: 'Policies',        icon: DocumentTextIcon },
+    { type: 'item', id: 'compliance',     name: 'Compliance',      icon: ClipboardDocumentCheckIcon },
     { type: 'item', id: 'security',       name: 'Security',        icon: ShieldExclamationIcon },
     { type: 'item', id: 'secrets',        name: 'Secrets',         icon: LockClosedIcon },
     { type: 'item', id: 'permissions',    name: 'Berechtigungen',  icon: KeyIcon },
+    { type: 'item', id: 'audit',          name: 'Audit Log',       icon: ClipboardDocumentListIcon },
+    { type: 'item', id: 'backup',         name: 'Backup & DR',     icon: ArchiveBoxIcon },
     { type: 'divider', label: '' },
     { type: 'item', id: 'settings',       name: 'Settings',        icon: Cog6ToothIcon },
   ];
