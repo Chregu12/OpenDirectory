@@ -34,6 +34,7 @@ import {
   RectangleStackIcon,
   ArrowPathIcon,
   PuzzlePieceIcon,
+  FlagIcon,
 } from '@heroicons/react/24/outline';
 
 // ─── Search catalog ───────────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'scanner',      name: 'Security Scanner',    view: 'scanner',       type: 'Seite' },
   { id: 'sync',         name: 'Verzeichnis-Sync',    view: 'sync',          type: 'Seite' },
   { id: 'integrations', name: 'Integrationen',       view: 'integrations',  type: 'Seite' },
+  { id: 'roadmap',      name: 'Roadmap & TODO',      view: 'roadmap',       type: 'Seite' },
 ];
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -320,6 +322,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     { type: 'item', id: 'audit',          name: 'Audit Log',         icon: ClipboardDocumentListIcon },
     { type: 'item', id: 'backup',         name: 'Backup & DR',       icon: ArchiveBoxIcon },
     { type: 'item', id: 'integrations',   name: 'Integrationen',     icon: PuzzlePieceIcon },
+    { type: 'item', id: 'roadmap',        name: 'Roadmap & TODO',    icon: FlagIcon },
     { type: 'item', id: 'settings',       name: 'Einstellungen',     icon: Cog6ToothIcon },
   ];
 

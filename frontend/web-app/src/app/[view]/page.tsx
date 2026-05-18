@@ -26,6 +26,7 @@ import AppStoreView from '@/components/views/AppStoreView';
 import ComplianceView from '@/components/views/ComplianceView';
 import SecurityScannerView from '@/components/views/SecurityScannerView';
 import BlueprintsView from '@/components/views/BlueprintsView';
+import RoadmapView from '@/components/views/RoadmapView';
 import OnboardingWizard from '@/components/setup/OnboardingWizard';
 import SyncView from '@/components/views/SyncView';
 import IntegrationsView from '@/components/views/IntegrationsView';
@@ -43,7 +44,7 @@ const VALID_VIEWS = new Set([
   'users','monitoring','secrets','security','printers','policies','settings',
   'identity','enrollment','permissions',
   'antivirus','audit','backup','appstore','compliance','scanner',
-  'blueprints','sync','integrations',
+  'blueprints','sync','integrations','roadmap',
 ]);
 
 export default function ViewPage() {
@@ -115,6 +116,7 @@ export default function ViewPage() {
       case 'blueprints':     return <BlueprintsView />;
       case 'sync':           return <SyncView />;
       case 'integrations':   return <IntegrationsView />;
+      case 'roadmap':        return <RoadmapView onViewChange={handleViewChange} />;
       case 'settings':
         return (
           <div className="p-6">
