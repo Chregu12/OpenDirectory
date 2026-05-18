@@ -46,128 +46,16 @@ interface ScanResult {
   findings: Finding[];
 }
 
-// ── Mock Data ──────────────────────────────────────────────────────────────────
-
-const mockScan: ScanResult = {
-  scanId: 'scan-2026-03-15-001',
-  timestamp: '2026-03-15T08:00:00Z',
-  duration: '4m 32s',
+const emptyScanResult: ScanResult = {
+  scanId: '',
+  timestamp: new Date().toISOString(),
+  duration: '—',
   status: 'completed',
-  totalFindings: 12,
-  bySeverity: { critical: 2, high: 4, medium: 4, low: 2 },
-  overallRiskScore: 68,
-  findings: [
-    {
-      id: 'f-1', title: 'Weak Password Policy on Default Domain GPO',
-      category: 'gpo', severity: 'critical',
-      description: 'Default Domain Policy allows passwords with minimum length of 6 characters and no complexity requirements.',
-      affectedEntities: ['Default Domain Policy', 'All domain users (1,240)'],
-      benchmark: 'CIS Microsoft Windows Server 2022 Benchmark v1.0 - 1.1.1',
-      remediation: 'Set minimum password length to 14+ characters and enable complexity requirements.',
-      remediationScript: `Set-ADDefaultDomainPasswordPolicy -Identity corp.local \`\n  -MinPasswordLength 14 \`\n  -ComplexityEnabled $true \`\n  -PasswordHistoryCount 24 \`\n  -MaxPasswordAge (New-TimeSpan -Days 60)`,
-    },
-    {
-      id: 'f-2', title: 'User in 12 Admin Groups',
-      category: 'privilege', severity: 'critical',
-      description: 'User "svc-backup" is member of 12 groups with administrative privileges, creating excessive privilege accumulation.',
-      affectedEntities: ['svc-backup', 'Domain Admins', 'Backup Operators', 'Server Operators', '9 more groups'],
-      benchmark: 'NIST SP 800-53 AC-6 (Least Privilege)',
-      remediation: 'Review and remove unnecessary group memberships. Implement just-in-time privileged access.',
-    },
-    {
-      id: 'f-3', title: 'BitLocker Disabled on 45 Devices',
-      category: 'device', severity: 'high',
-      description: '45 devices have BitLocker encryption disabled, exposing data at rest.',
-      affectedEntities: ['LAPTOP-23', 'WS-007', 'WS-012', '42 more devices'],
-      benchmark: 'CIS Microsoft Windows 11 Benchmark v1.0 - 1.1.2',
-      remediation: 'Enable BitLocker with XTS-AES-256 on all non-compliant devices.',
-      remediationScript: `Enable-BitLocker -MountPoint "C:" \`\n  -EncryptionMethod XtsAes256 \`\n  -RecoveryPasswordProtector`,
-    },
-    {
-      id: 'f-4', title: 'EDR Agent Stopped on 8 Devices',
-      category: 'device', severity: 'high',
-      description: 'Microsoft Defender for Endpoint service is stopped or disabled on 8 devices.',
-      affectedEntities: ['MAC-05', 'WS-019', 'LAPTOP-31', '5 more devices'],
-      benchmark: 'DISA STIG V-253297',
-      remediation: 'Restart EDR agent and configure service recovery options.',
-      remediationScript: `Start-Service -Name "Sense"\nSet-Service -Name "Sense" -StartupType Automatic`,
-    },
-    {
-      id: 'f-5', title: 'Audit Policy Not Logging Privilege Use',
-      category: 'gpo', severity: 'high',
-      description: 'Audit policy does not log "Sensitive Privilege Use" events, hiding potential privilege abuse.',
-      affectedEntities: ['Default Domain Controller Policy'],
-      benchmark: 'CIS Benchmark 17.8.1',
-      remediation: 'Enable "Audit Sensitive Privilege Use" for Success and Failure.',
-    },
-    {
-      id: 'f-6', title: 'Kerberos Delegation Misconfiguration',
-      category: 'identity', severity: 'high',
-      description: '3 service accounts have unconstrained Kerberos delegation enabled, allowing credential theft.',
-      affectedEntities: ['svc-sql', 'svc-web', 'svc-iis'],
-      benchmark: 'NIST SP 800-53 IA-5',
-      remediation: 'Switch to constrained delegation or resource-based constrained delegation.',
-    },
-    {
-      id: 'f-7', title: '23 Devices Missing Critical Patches',
-      category: 'device', severity: 'medium',
-      description: '23 devices are missing KB5031234 (Critical Security Update) released 14 days ago.',
-      affectedEntities: ['23 devices across Ring B and Ring C'],
-      benchmark: 'NIST SP 800-40 Rev 4',
-      remediation: 'Push KB5031234 through expedited update ring.',
-    },
-    {
-      id: 'f-8', title: 'SMBv1 Enabled on 5 Servers',
-      category: 'network', severity: 'medium',
-      description: 'SMBv1 protocol is enabled on 5 servers, vulnerable to EternalBlue-type attacks.',
-      affectedEntities: ['SRV-FILE01', 'SRV-FILE02', 'SRV-PRINT01', '2 more'],
-      benchmark: 'CIS Benchmark 18.3.3',
-      remediation: 'Disable SMBv1 after verifying no legacy dependencies.',
-      remediationScript: `Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart`,
-    },
-    {
-      id: 'f-9', title: 'LAPS Not Deployed to All Workstations',
-      category: 'identity', severity: 'medium',
-      description: '120 workstations do not have Local Administrator Password Solution (LAPS) deployed.',
-      affectedEntities: ['120 workstations in OU=Workstations'],
-      benchmark: 'DISA STIG V-253280',
-      remediation: 'Deploy LAPS GPO to all workstation OUs.',
-    },
-    {
-      id: 'f-10', title: 'Stale Computer Accounts (90+ days inactive)',
-      category: 'identity', severity: 'medium',
-      description: '34 computer accounts have not authenticated in 90+ days, potential orphaned resources.',
-      affectedEntities: ['34 computer objects'],
-      benchmark: 'CIS Benchmark 1.1.4',
-      remediation: 'Disable inactive accounts after verification, then delete after 30-day grace period.',
-    },
-    {
-      id: 'f-11', title: 'Print Spooler Running on Domain Controllers',
-      category: 'network', severity: 'low',
-      description: 'Print Spooler service is running on 2 Domain Controllers (PrintNightmare risk).',
-      affectedEntities: ['SRV-DC01', 'SRV-DC02'],
-      benchmark: 'CIS Benchmark 5.29',
-      remediation: 'Disable Print Spooler service on all Domain Controllers.',
-      remediationScript: `Stop-Service -Name "Spooler" -Force\nSet-Service -Name "Spooler" -StartupType Disabled`,
-    },
-    {
-      id: 'f-12', title: 'Guest Account Not Renamed',
-      category: 'identity', severity: 'low',
-      description: 'Built-in Guest account has default name, making it a known target.',
-      affectedEntities: ['Guest account'],
-      benchmark: 'CIS Benchmark 2.3.10.1',
-      remediation: 'Rename Guest account to a non-standard name.',
-    },
-  ],
+  totalFindings: 0,
+  bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
+  overallRiskScore: 0,
+  findings: [],
 };
-
-const riskTrends = [
-  { date: '2026-02-15', score: 74 },
-  { date: '2026-02-22', score: 71 },
-  { date: '2026-03-01', score: 72 },
-  { date: '2026-03-08', score: 69 },
-  { date: '2026-03-15', score: 68 },
-];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -199,38 +87,49 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
   const { isSimple } = useUiMode();
   const [activeTab, setActiveTab] = useState<'overview' | 'findings' | 'trends'>('overview');
   const [scanning, setScanning] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [usingDemoData, setUsingDemoData] = useState(false);
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string>('all');
-  const [scanResult, setScanResult] = useState<ScanResult>(mockScan);
-  const [trends, setTrends] = useState(riskTrends);
+  const [scanResult, setScanResult] = useState<ScanResult>(emptyScanResult);
+  const [trends, setTrends] = useState<{ date: string; score: number }[]>([]);
 
   useEffect(() => { loadSecurityData(); }, []);
 
   const loadSecurityData = async () => {
+    setLoading(true);
     try {
       const [complianceRes, alertsRes] = await Promise.allSettled([
         securityApi.getComplianceStatus(),
         securityApi.getSecurityAlerts(),
       ]);
 
+      let apiDataFound = false;
+
       if (complianceRes.status === 'fulfilled' && complianceRes.value.data) {
         const data = complianceRes.value.data;
         if (data.findings?.length > 0) {
           setScanResult({
-            ...mockScan,
+            ...emptyScanResult,
             findings: data.findings,
             totalFindings: data.findings.length,
-            overallRiskScore: data.riskScore ?? scanResult.overallRiskScore,
-            bySeverity: data.bySeverity ?? scanResult.bySeverity,
+            overallRiskScore: data.riskScore ?? 0,
+            bySeverity: data.bySeverity ?? emptyScanResult.bySeverity,
           });
+          apiDataFound = true;
         }
       }
 
       if (alertsRes.status === 'fulfilled' && alertsRes.value.data?.trends) {
         setTrends(alertsRes.value.data.trends);
+        apiDataFound = true;
       }
+
+      setUsingDemoData(!apiDataFound);
     } catch {
-      // Keep mock data as fallback
+      setUsingDemoData(true);
+    } finally {
+      setLoading(false);
     }
   };
 
