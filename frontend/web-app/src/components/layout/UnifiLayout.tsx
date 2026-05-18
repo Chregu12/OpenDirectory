@@ -31,6 +31,7 @@ import {
   RectangleGroupIcon,
   MagnifyingGlassCircleIcon,
   ServerStackIcon,
+  RectangleStackIcon,
 } from '@heroicons/react/24/outline';
 
 // ─── Search catalog ───────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'secrets',      name: 'Secrets',             view: 'secrets',      type: 'Seite' },
   { id: 'printers',     name: 'Drucker',             view: 'printers',     type: 'Seite' },
   { id: 'permissions',  name: 'Berechtigungen',      view: 'permissions',  type: 'Seite' },
+  { id: 'blueprints',   name: 'Blueprints',          view: 'blueprints',   type: 'Seite' },
   { id: 'antivirus',    name: 'Antivirus',           view: 'antivirus',    type: 'Seite' },
   { id: 'audit',        name: 'Audit Log',           view: 'audit',        type: 'Seite' },
   { id: 'backup',       name: 'Backup & DR',         view: 'backup',       type: 'Seite' },
@@ -292,6 +294,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
 
     { type: 'section', label: 'Geräte' },
     { type: 'item', id: 'devices',        name: 'Geräte',            icon: ComputerDesktopIcon },
+    { type: 'item', id: 'blueprints',     name: 'Blueprints',        icon: RectangleStackIcon },
     { type: 'item', id: 'antivirus',      name: 'Antivirus',         icon: BugAntIcon },
     { type: 'item', id: 'appstore',       name: 'App Store',         icon: ShoppingBagIcon },
     { type: 'item', id: 'printers',       name: 'Drucker',           icon: PrinterIcon },
