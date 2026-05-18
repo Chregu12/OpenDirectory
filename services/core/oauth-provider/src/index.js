@@ -1648,6 +1648,40 @@ async function seedDefaultUpdateRings() {
   }
 }
 
+// ─── Agent binary downloads ───────────────────────────────────────────────────────
+
+const fs   = require('fs');
+const path = require('path');
+
+const AGENT_DIST = process.env.AGENT_DIST_PATH ||
+  path.join(__dirname, '..', '..', '..', '..', 'agent', 'dist');
+
+app.get('/downloads', (req, res) => {
+  if (!fs.existsSync(AGENT_DIST)) {
+    return res.json({ binaries: [], note: 'Agent not built yet. Run: cd agent && make all' });
+  }
+  const files = fs.readdirSync(AGENT_DIST)
+    .filter(f => !f.startsWith('.'))
+    .map(f => ({
+      filename: f,
+      url: `${ISSUER}/downloads/${f}`,
+      size: fs.statSync(path.join(AGENT_DIST, f)).size,
+    }));
+  res.json({ binaries: files });
+});
+
+app.get('/downloads/:filename', (req, res) => {
+  const safeName = path.basename(req.params.filename);
+  const filePath = path.join(AGENT_DIST, safeName);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({
+      error: 'Binary not available.',
+      hint: 'Build the agent first: cd agent && make all',
+    });
+  }
+  res.download(filePath, safeName);
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────────
 
 db.initDb().then(async () => {
