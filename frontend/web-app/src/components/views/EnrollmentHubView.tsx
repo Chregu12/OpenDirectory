@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ComputerDesktopIcon,
   DevicePhoneMobileIcon,
@@ -15,6 +15,7 @@ import {
   InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import { api } from '@/lib/api';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -29,23 +30,6 @@ interface EnrollmentToken {
   maxUses: number;
 }
 
-// ─── Mock Data ──────────────────────────────────────────────────────────────────
-
-const TOKENS: EnrollmentToken[] = [
-  { platform: 'windows', token: 'WE-7K3M-PQ9X-4RTZ', created: '2026-05-14', expires: '2026-06-14', uses: 5,  maxUses: 50 },
-  { platform: 'macos',   token: 'ME-2N8L-YV6W-3KSA', created: '2026-05-14', expires: '2026-06-14', uses: 4,  maxUses: 50 },
-  { platform: 'linux',   token: 'LE-9PX3-ZC7H-8MBQ', created: '2026-05-14', expires: '2026-06-14', uses: 3,  maxUses: 100 },
-  { platform: 'ios',     token: 'IE-4RT6-DK2F-7NWX', created: '2026-05-14', expires: '2026-06-14', uses: 2,  maxUses: 25 },
-  { platform: 'android', token: 'AE-6HQ5-BM8J-2YTK', created: '2026-05-14', expires: '2026-06-14', uses: 1,  maxUses: 25 },
-];
-
-const ENROLLED_COUNTS: Record<OSPlatform, number> = {
-  windows: 5,
-  macos: 4,
-  linux: 3,
-  ios: 2,
-  android: 1,
-};
 
 // ─── Platform Config ─────────────────────────────────────────────────────────────
 
@@ -514,16 +498,64 @@ export default function EnrollmentHubView() {
   const [selected, setSelected] = useState<OSPlatform>('macos');
   const domain = process.env.NEXT_PUBLIC_AD_DOMAIN ?? 'opendirectory.local';
 
+  const [tokens, setTokens] = useState<Record<string, {token: string; uses: number; maxUses: number; expires: string}>>({});
+  const [enrolledCounts, setEnrolledCounts] = useState<Record<string, number>>({});
+  const [tokensLoading, setTokensLoading] = useState(true);
+  const [tokensError, setTokensError] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      setTokensLoading(true);
+      try {
+        const [tokRes, devRes] = await Promise.allSettled([
+          api.get('/api/enrollment/tokens'),
+          api.get('/api/devices/registry'),
+        ]);
+
+        if (tokRes.status === 'fulfilled') {
+          const data = tokRes.value.data;
+          // The API may return an object keyed by platform, or an array
+          const byPlatform: Record<string, any> = {};
+          if (Array.isArray(data)) {
+            for (const t of data) {
+              byPlatform[t.platform] = t;
+            }
+          } else {
+            Object.assign(byPlatform, data);
+          }
+          setTokens(byPlatform);
+        } else {
+          setTokensError(true);
+        }
+
+        if (devRes.status === 'fulfilled') {
+          const devices = Array.isArray(devRes.value.data) ? devRes.value.data : Object.values(devRes.value.data || {});
+          const counts: Record<string, number> = {};
+          for (const d of devices as any[]) {
+            const p = (d.platform || 'unknown').toLowerCase();
+            counts[p] = (counts[p] || 0) + 1;
+          }
+          setEnrolledCounts(counts);
+        }
+      } catch {
+        setTokensError(true);
+      }
+      setTokensLoading(false);
+    };
+    load();
+  }, []);
+
   const currentPlatform = PLATFORMS.find(p => p.id === selected)!;
-  const currentToken = TOKENS.find(t => t.platform === selected)!;
+  const currentTokenData = tokens[selected];
 
   const renderEnrollment = () => {
+    const tokenStr = currentTokenData?.token ?? '';
     switch (selected) {
-      case 'windows': return <WindowsEnrollment token={currentToken.token} domain={domain} />;
-      case 'macos':   return <MacOSEnrollment   token={currentToken.token} domain={domain} />;
-      case 'linux':   return <LinuxEnrollment   token={currentToken.token} domain={domain} />;
-      case 'ios':     return <IOSEnrollment     token={currentToken.token} domain={domain} />;
-      case 'android': return <AndroidEnrollment token={currentToken.token} domain={domain} />;
+      case 'windows': return <WindowsEnrollment token={tokenStr} domain={domain} />;
+      case 'macos':   return <MacOSEnrollment   token={tokenStr} domain={domain} />;
+      case 'linux':   return <LinuxEnrollment   token={tokenStr} domain={domain} />;
+      case 'ios':     return <IOSEnrollment     token={tokenStr} domain={domain} />;
+      case 'android': return <AndroidEnrollment token={tokenStr} domain={domain} />;
     }
   };
 
@@ -565,7 +597,7 @@ export default function EnrollmentHubView() {
             }`}
           >
             <div className="text-2xl mb-1">{p.icon}</div>
-            <p className="text-xl font-bold text-gray-900">{ENROLLED_COUNTS[p.id]}</p>
+            <p className="text-xl font-bold text-gray-900">{enrolledCounts[p.id] ?? 0}</p>
             <p className="text-xs text-gray-500">{p.name}</p>
           </button>
         ))}
@@ -591,7 +623,7 @@ export default function EnrollmentHubView() {
                 <p className={`text-sm font-semibold ${selected === p.id ? p.color : 'text-gray-800'}`}>{p.name}</p>
                 <p className="text-xs text-gray-400 truncate">{p.method}</p>
               </div>
-              <span className="text-xs font-bold text-gray-600 shrink-0">{ENROLLED_COUNTS[p.id]}</span>
+              <span className="text-xs font-bold text-gray-600 shrink-0">{enrolledCounts[p.id] ?? 0}</span>
             </button>
           ))}
 
