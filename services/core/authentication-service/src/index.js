@@ -1077,6 +1077,8 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
 
 (function attachDirectoryApi() {
   const crypto = require('crypto');
+  const jwt = require('jsonwebtoken');
+  const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
   const app = authService.app;
 
   // ─── In-Memory Stores ──────────────────────────────────────────────────────────
@@ -1106,7 +1108,18 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
   groupSeed.forEach(g => { groups.set(g.id, g); groupMembers.set(g.id, new Set()); });
 
   const saSeed = [
-    { id: 'sa-ci-runner', name: 'ci-runner', description: 'CI/CD pipeline service account', scopes: ['devices:read', 'policies:read'], createdAt: new Date().toISOString(), token: crypto.randomBytes(32).toString('hex') },
+    { id: 'sa-ci-runner', name: 'ci-runner', description: 'CI/CD pipeline service account', scopes: ['devices:read', 'policies:read'], createdAt: new Date().toISOString(), token: jwt.sign(
+      {
+        sub: 'sa-ci-runner',
+        type: 'service_account',
+        name: 'ci-runner',
+        permissions: ['devices:read', 'policies:read'],
+        iss: 'opendirectory',
+        aud: 'opendirectory-services',
+      },
+      JWT_SECRET,
+      { expiresIn: '90d', algorithm: 'HS256' }
+    ) },
   ];
   saSeed.forEach(s => serviceAccounts.set(s.id, s));
 
@@ -1255,7 +1268,19 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
     const { name, scopes, description } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
     const id = `sa-${Date.now()}`;
-    const token = crypto.randomBytes(32).toString('hex');
+    const saData = { name, permissions: scopes ?? [] };
+    const token = jwt.sign(
+      {
+        sub: id,
+        type: 'service_account',
+        name: saData.name,
+        permissions: saData.permissions,
+        iss: 'opendirectory',
+        aud: 'opendirectory-services',
+      },
+      JWT_SECRET,
+      { expiresIn: '90d', algorithm: 'HS256' }
+    );
     const sa = { id, name, description: description ?? '', scopes: scopes ?? [], createdAt: new Date().toISOString(), token };
     serviceAccounts.set(id, sa);
     res.status(201).json(sa); // Include token on creation only
@@ -1265,6 +1290,18 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
     if (!serviceAccounts.has(req.params.id)) return res.status(404).json({ error: 'Service account not found' });
     serviceAccounts.delete(req.params.id);
     res.status(204).send();
+  });
+
+  app.get('/api/service-accounts/:id/token', (req, res) => {
+    const sa = serviceAccounts.get(req.params.id);
+    if (!sa) return res.status(404).json({ error: 'Service account not found' });
+    // Issue a fresh short-lived JWT rather than returning the stored token
+    const freshToken = jwt.sign(
+      { sub: sa.id, type: 'service_account', name: sa.name, permissions: sa.scopes || [], iss: 'opendirectory', aud: 'opendirectory-services' },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+    res.json({ token: freshToken, expiresIn: '24h' });
   });
 
   // ─── Bulk Import ──────────────────────────────────────────────────────────────
