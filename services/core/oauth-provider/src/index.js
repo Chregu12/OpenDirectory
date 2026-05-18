@@ -1328,36 +1328,36 @@ app.get('/api/enroll/windows/agent.ps1', (req, res) => {
 #>
 
 $ErrorActionPreference = "Stop"
-$AgentUrl    = "${ISSUER}/downloads/od-agent-windows-amd64.msi"
+$AgentUrl    = "${ISSUER}/downloads/od-agent-windows-amd64.exe"
 $ServerUrl   = "${ISSUER}"
 $EnrollToken = "${token}"
+$AgentDest   = "C:\\Program Files\\OpenDirectory\\od-agent.exe"
 
 Write-Host "[OpenDirectory] Starting enrollment..." -ForegroundColor Cyan
+
+# Create install directory
+New-Item -ItemType Directory -Force -Path "C:\\Program Files\\OpenDirectory" | Out-Null
 
 # Set enrollment token as machine environment variable
 [System.Environment]::SetEnvironmentVariable("OD_ENROLLMENT_TOKEN", $EnrollToken, [System.EnvironmentVariableTarget]::Machine)
 [System.Environment]::SetEnvironmentVariable("OD_SERVER_URL", $ServerUrl, [System.EnvironmentVariableTarget]::Machine)
 
-# Download agent installer
-$TempMsi = "$env:TEMP\\od-agent.msi"
+# Download agent binary
 Write-Host "[OpenDirectory] Downloading agent from $AgentUrl..."
-Invoke-WebRequest -Uri $AgentUrl -OutFile $TempMsi -UseBasicParsing
+Invoke-WebRequest -Uri $AgentUrl -OutFile $AgentDest -UseBasicParsing
 
-# Install agent silently
-Write-Host "[OpenDirectory] Installing agent..."
-Start-Process msiexec.exe -ArgumentList "/i $TempMsi /quiet /norestart SERVERURL=$ServerUrl TOKEN=$EnrollToken" -Wait -NoNewWindow
+# Enroll this device
+Write-Host "[OpenDirectory] Enrolling device..."
+& $AgentDest enroll
 
-# Enable and start service
-Write-Host "[OpenDirectory] Enabling service..."
-Set-Service -Name "OpenDirectoryAgent" -StartupType Automatic
-Start-Service -Name "OpenDirectoryAgent"
+# Create Windows scheduled task to run agent at startup
+$Action  = New-ScheduledTaskAction -Execute $AgentDest -Argument "run"
+$Trigger = New-ScheduledTaskTrigger -AtStartup
+$Settings = New-ScheduledTaskSettingsSet -RestartInterval (New-TimeSpan -Minutes 1) -RestartCount 10 -StartWhenAvailable
+Register-ScheduledTask -TaskName "OpenDirectoryAgent" -Action $Action -Trigger $Trigger -Settings $Settings -RunLevel Highest -Force | Out-Null
+Start-ScheduledTask -TaskName "OpenDirectoryAgent"
 
-# Trigger enrollment
-Write-Host "[OpenDirectory] Registering device..."
-$Body = @{ token=$EnrollToken; platform="windows"; hostname=$env:COMPUTERNAME; os=[System.Environment]::OSVersion.VersionString; serial=(Get-WmiObject Win32_BIOS).SerialNumber } | ConvertTo-Json
-Invoke-RestMethod -Uri "$ServerUrl/api/enrollment/register" -Method POST -Body $Body -ContentType "application/json"
-
-Write-Host "[OpenDirectory] Enrollment complete!" -ForegroundColor Green
+Write-Host "[OpenDirectory] Enrollment complete! Agent is running." -ForegroundColor Green
 `);
 });
 
