@@ -32,6 +32,8 @@ import {
   MagnifyingGlassCircleIcon,
   ServerStackIcon,
   RectangleStackIcon,
+  ArrowPathIcon,
+  PuzzlePieceIcon,
 } from '@heroicons/react/24/outline';
 
 // ─── Search catalog ───────────────────────────────────────────────────────────
@@ -55,8 +57,10 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'audit',        name: 'Audit Log',           view: 'audit',        type: 'Seite' },
   { id: 'backup',       name: 'Backup & DR',         view: 'backup',       type: 'Seite' },
   { id: 'appstore',     name: 'App Store',           view: 'appstore',     type: 'Seite' },
-  { id: 'compliance',   name: 'Compliance',          view: 'compliance',   type: 'Seite' },
-  { id: 'scanner',      name: 'Security Scanner',    view: 'scanner',      type: 'Seite' },
+  { id: 'compliance',    name: 'Compliance',           view: 'compliance',    type: 'Seite' },
+  { id: 'scanner',      name: 'Security Scanner',    view: 'scanner',       type: 'Seite' },
+  { id: 'sync',         name: 'Verzeichnis-Sync',    view: 'sync',          type: 'Seite' },
+  { id: 'integrations', name: 'Integrationen',       view: 'integrations',  type: 'Seite' },
 ];
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -291,6 +295,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     { type: 'item', id: 'permissions',    name: 'Rollen & Rechte',   icon: KeyIcon },
     { type: 'item', id: 'identity',       name: 'Identity Provider', icon: FingerPrintIcon },
     { type: 'item', id: 'enrollment',     name: 'Enrollment',        icon: ArrowDownOnSquareStackIcon },
+    { type: 'item', id: 'sync',           name: 'Verzeichnis-Sync',  icon: ArrowPathIcon },
 
     { type: 'section', label: 'Geräte' },
     { type: 'item', id: 'devices',        name: 'Geräte',            icon: ComputerDesktopIcon },
@@ -314,6 +319,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     { type: 'section', label: 'Betrieb' },
     { type: 'item', id: 'audit',          name: 'Audit Log',         icon: ClipboardDocumentListIcon },
     { type: 'item', id: 'backup',         name: 'Backup & DR',       icon: ArchiveBoxIcon },
+    { type: 'item', id: 'integrations',   name: 'Integrationen',     icon: PuzzlePieceIcon },
     { type: 'item', id: 'settings',       name: 'Einstellungen',     icon: Cog6ToothIcon },
   ];
 

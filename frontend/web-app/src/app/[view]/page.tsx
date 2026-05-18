@@ -27,6 +27,8 @@ import ComplianceView from '@/components/views/ComplianceView';
 import SecurityScannerView from '@/components/views/SecurityScannerView';
 import BlueprintsView from '@/components/views/BlueprintsView';
 import OnboardingWizard from '@/components/setup/OnboardingWizard';
+import SyncView from '@/components/views/SyncView';
+import IntegrationsView from '@/components/views/IntegrationsView';
 
 const MODULE_NAV_MAP: Record<string, string> = {
   'monitoring-analytics':   'monitoring',
@@ -41,7 +43,7 @@ const VALID_VIEWS = new Set([
   'users','monitoring','secrets','security','printers','policies','settings',
   'identity','enrollment','permissions',
   'antivirus','audit','backup','appstore','compliance','scanner',
-  'blueprints',
+  'blueprints','sync','integrations',
 ]);
 
 export default function ViewPage() {
@@ -111,6 +113,8 @@ export default function ViewPage() {
       case 'compliance':     return <ComplianceView />;
       case 'scanner':        return <SecurityScannerView />;
       case 'blueprints':     return <BlueprintsView />;
+      case 'sync':           return <SyncView />;
+      case 'integrations':   return <IntegrationsView />;
       case 'settings':
         return (
           <div className="p-6">
