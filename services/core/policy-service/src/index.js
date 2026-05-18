@@ -985,6 +985,389 @@ app.post('/api/gpo/:id/apply', async (req, res) => {
 });
 
 // ============================
+// Blueprints (ABM-style device configuration profiles)
+// ============================
+
+// In-memory fallback stores
+const inMemoryBlueprints = new Map();
+const inMemoryBlueprintConfigs = new Map();
+const inMemoryBlueprintAssignments = new Map();
+
+// Seed a demo blueprint in memory
+(function seedBlueprints() {
+  const id = 'demo-blueprint-1';
+  inMemoryBlueprints.set(id, {
+    id,
+    name: 'Corporate macOS Standard',
+    description: 'Standard configuration for all corporate macOS devices',
+    platform: 'macos',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  const cfg1 = 'demo-cfg-1';
+  inMemoryBlueprintConfigs.set(cfg1, {
+    id: cfg1,
+    blueprint_id: id,
+    config_type: 'filevault',
+    config_name: 'FileVault Encryption',
+    payload: { enabled: true, recoveryKeyEscrow: true },
+    created_at: new Date().toISOString(),
+  });
+  const cfg2 = 'demo-cfg-2';
+  inMemoryBlueprintConfigs.set(cfg2, {
+    id: cfg2,
+    blueprint_id: id,
+    config_type: 'screen_lock',
+    config_name: 'Screen Lock Policy',
+    payload: { maxInactiveMinutes: 5, requirePassword: true },
+    created_at: new Date().toISOString(),
+  });
+})();
+
+// GET /api/blueprints — list all blueprints with config count
+app.get('/api/blueprints', async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT b.*,
+             COUNT(DISTINCT bc.id)::int AS config_count,
+             COUNT(DISTINCT ba.id)::int AS assignment_count
+      FROM blueprints b
+      LEFT JOIN blueprint_configurations bc ON bc.blueprint_id = b.id
+      LEFT JOIN blueprint_assignments ba ON ba.blueprint_id = b.id
+      GROUP BY b.id
+      ORDER BY b.created_at DESC
+    `);
+    res.json({ blueprints: result.rows, total: result.rows.length });
+  } catch (err) {
+    logger.warn('DB unavailable for blueprints list, using in-memory', { error: err.message });
+    const blueprints = [...inMemoryBlueprints.values()].map(b => ({
+      ...b,
+      config_count: [...inMemoryBlueprintConfigs.values()].filter(c => c.blueprint_id === b.id).length,
+      assignment_count: [...inMemoryBlueprintAssignments.values()].filter(a => a.blueprint_id === b.id).length,
+    }));
+    res.json({ blueprints, total: blueprints.length });
+  }
+});
+
+// POST /api/blueprints — create blueprint
+app.post('/api/blueprints', async (req, res) => {
+  const { name, description, platform } = req.body;
+  if (!name) return res.status(400).json({ error: 'name is required' });
+
+  try {
+    const result = await db.query(
+      `INSERT INTO blueprints (name, description, platform)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [name, description || null, platform || 'all']
+    );
+    logger.info(`Blueprint created: ${name}`, { id: result.rows[0].id });
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    logger.warn('DB unavailable, storing blueprint in memory', { error: err.message });
+    const id = `bp-${Date.now()}`;
+    const blueprint = {
+      id, name, description: description || null, platform: platform || 'all',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    };
+    inMemoryBlueprints.set(id, blueprint);
+    res.status(201).json(blueprint);
+  }
+});
+
+// GET /api/blueprints/:id — get blueprint with all configurations
+app.get('/api/blueprints/:id', async (req, res) => {
+  try {
+    const bpResult = await db.query('SELECT * FROM blueprints WHERE id = $1', [req.params.id]);
+    if (bpResult.rows.length === 0) return res.status(404).json({ error: 'Blueprint not found' });
+    const cfgResult = await db.query(
+      'SELECT * FROM blueprint_configurations WHERE blueprint_id = $1 ORDER BY created_at ASC',
+      [req.params.id]
+    );
+    res.json({ ...bpResult.rows[0], configurations: cfgResult.rows });
+  } catch (err) {
+    logger.warn('DB unavailable, using in-memory blueprint', { error: err.message });
+    const bp = inMemoryBlueprints.get(req.params.id);
+    if (!bp) return res.status(404).json({ error: 'Blueprint not found' });
+    const configs = [...inMemoryBlueprintConfigs.values()].filter(c => c.blueprint_id === req.params.id);
+    res.json({ ...bp, configurations: configs });
+  }
+});
+
+// PUT /api/blueprints/:id — update blueprint
+app.put('/api/blueprints/:id', async (req, res) => {
+  const { name, description, platform } = req.body;
+  try {
+    const result = await db.query(
+      `UPDATE blueprints SET
+         name = COALESCE($1, name),
+         description = COALESCE($2, description),
+         platform = COALESCE($3, platform),
+         updated_at = NOW()
+       WHERE id = $4 RETURNING *`,
+      [name || null, description !== undefined ? description : null, platform || null, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Blueprint not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    logger.warn('DB unavailable, updating in-memory blueprint', { error: err.message });
+    const bp = inMemoryBlueprints.get(req.params.id);
+    if (!bp) return res.status(404).json({ error: 'Blueprint not found' });
+    const updated = {
+      ...bp,
+      name: name || bp.name,
+      description: description !== undefined ? description : bp.description,
+      platform: platform || bp.platform,
+      updated_at: new Date().toISOString(),
+    };
+    inMemoryBlueprints.set(req.params.id, updated);
+    res.json(updated);
+  }
+});
+
+// DELETE /api/blueprints/:id — delete blueprint
+app.delete('/api/blueprints/:id', async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM blueprints WHERE id = $1 RETURNING id', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Blueprint not found' });
+    res.status(204).send();
+  } catch (err) {
+    logger.warn('DB unavailable, deleting in-memory blueprint', { error: err.message });
+    if (!inMemoryBlueprints.has(req.params.id)) return res.status(404).json({ error: 'Blueprint not found' });
+    inMemoryBlueprints.delete(req.params.id);
+    // Also delete associated configs and assignments
+    for (const [k, v] of inMemoryBlueprintConfigs.entries()) {
+      if (v.blueprint_id === req.params.id) inMemoryBlueprintConfigs.delete(k);
+    }
+    for (const [k, v] of inMemoryBlueprintAssignments.entries()) {
+      if (v.blueprint_id === req.params.id) inMemoryBlueprintAssignments.delete(k);
+    }
+    res.status(204).send();
+  }
+});
+
+// POST /api/blueprints/:id/configurations — add config to blueprint
+app.post('/api/blueprints/:id/configurations', async (req, res) => {
+  const { config_type, config_name, payload } = req.body;
+  if (!config_type || !config_name) return res.status(400).json({ error: 'config_type and config_name are required' });
+
+  const VALID_CONFIG_TYPES = ['wifi', 'vpn', 'filevault', 'gatekeeper', 'software_update', 'screen_lock', 'certificate', 'webfilter', 'airdrop'];
+  if (!VALID_CONFIG_TYPES.includes(config_type)) {
+    return res.status(400).json({ error: `config_type must be one of: ${VALID_CONFIG_TYPES.join(', ')}` });
+  }
+
+  try {
+    // Verify blueprint exists
+    const bpCheck = await db.query('SELECT id FROM blueprints WHERE id = $1', [req.params.id]);
+    if (bpCheck.rows.length === 0) return res.status(404).json({ error: 'Blueprint not found' });
+
+    const result = await db.query(
+      `INSERT INTO blueprint_configurations (blueprint_id, config_type, config_name, payload)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [req.params.id, config_type, config_name, JSON.stringify(payload || {})]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    logger.warn('DB unavailable, storing config in memory', { error: err.message });
+    if (!inMemoryBlueprints.has(req.params.id)) return res.status(404).json({ error: 'Blueprint not found' });
+    const id = `cfg-${Date.now()}`;
+    const config = {
+      id, blueprint_id: req.params.id, config_type, config_name,
+      payload: payload || {}, created_at: new Date().toISOString(),
+    };
+    inMemoryBlueprintConfigs.set(id, config);
+    res.status(201).json(config);
+  }
+});
+
+// DELETE /api/blueprints/:id/configurations/:configId — remove config
+app.delete('/api/blueprints/:id/configurations/:configId', async (req, res) => {
+  try {
+    const result = await db.query(
+      'DELETE FROM blueprint_configurations WHERE id = $1 AND blueprint_id = $2 RETURNING id',
+      [req.params.configId, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Configuration not found' });
+    res.status(204).send();
+  } catch (err) {
+    logger.warn('DB unavailable, deleting in-memory config', { error: err.message });
+    const cfg = inMemoryBlueprintConfigs.get(req.params.configId);
+    if (!cfg || cfg.blueprint_id !== req.params.id) return res.status(404).json({ error: 'Configuration not found' });
+    inMemoryBlueprintConfigs.delete(req.params.configId);
+    res.status(204).send();
+  }
+});
+
+// POST /api/blueprints/:id/assign — assign blueprint to device/group
+app.post('/api/blueprints/:id/assign', async (req, res) => {
+  const { target_type, target_id, assigned_by } = req.body;
+  if (!target_type || !target_id) return res.status(400).json({ error: 'target_type and target_id are required' });
+
+  const VALID_TARGET_TYPES = ['device', 'group'];
+  if (!VALID_TARGET_TYPES.includes(target_type)) {
+    return res.status(400).json({ error: `target_type must be one of: ${VALID_TARGET_TYPES.join(', ')}` });
+  }
+
+  try {
+    const bpCheck = await db.query('SELECT id FROM blueprints WHERE id = $1', [req.params.id]);
+    if (bpCheck.rows.length === 0) return res.status(404).json({ error: 'Blueprint not found' });
+
+    const result = await db.query(
+      `INSERT INTO blueprint_assignments (blueprint_id, target_type, target_id, assigned_by)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (blueprint_id, target_type, target_id) DO NOTHING
+       RETURNING *`,
+      [req.params.id, target_type, target_id, assigned_by || null]
+    );
+    res.status(201).json(result.rows[0] || { blueprint_id: req.params.id, target_type, target_id, assigned_by });
+  } catch (err) {
+    logger.warn('DB unavailable, storing assignment in memory', { error: err.message });
+    if (!inMemoryBlueprints.has(req.params.id)) return res.status(404).json({ error: 'Blueprint not found' });
+    // Check for duplicate
+    const existing = [...inMemoryBlueprintAssignments.values()].find(
+      a => a.blueprint_id === req.params.id && a.target_type === target_type && a.target_id === target_id
+    );
+    if (existing) return res.status(201).json(existing);
+    const id = `asgn-${Date.now()}`;
+    const assignment = {
+      id, blueprint_id: req.params.id, target_type, target_id,
+      assigned_by: assigned_by || null, assigned_at: new Date().toISOString(),
+    };
+    inMemoryBlueprintAssignments.set(id, assignment);
+    res.status(201).json(assignment);
+  }
+});
+
+// GET /api/blueprints/:id/assignments — list assignments
+app.get('/api/blueprints/:id/assignments', async (req, res) => {
+  try {
+    const bpCheck = await db.query('SELECT id FROM blueprints WHERE id = $1', [req.params.id]);
+    if (bpCheck.rows.length === 0) return res.status(404).json({ error: 'Blueprint not found' });
+
+    const result = await db.query(
+      'SELECT * FROM blueprint_assignments WHERE blueprint_id = $1 ORDER BY assigned_at DESC',
+      [req.params.id]
+    );
+    res.json({ assignments: result.rows });
+  } catch (err) {
+    logger.warn('DB unavailable, using in-memory assignments', { error: err.message });
+    if (!inMemoryBlueprints.has(req.params.id)) return res.status(404).json({ error: 'Blueprint not found' });
+    const assignments = [...inMemoryBlueprintAssignments.values()].filter(a => a.blueprint_id === req.params.id);
+    res.json({ assignments });
+  }
+});
+
+// POST /api/blueprints/:id/apply — apply blueprint: push MDM commands to assigned devices
+app.post('/api/blueprints/:id/apply', async (req, res) => {
+  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider:3010';
+
+  let blueprint;
+  let configs = [];
+  let assignments = [];
+
+  // Load blueprint data (DB-first, memory fallback)
+  try {
+    const bpResult = await db.query('SELECT * FROM blueprints WHERE id = $1', [req.params.id]);
+    if (bpResult.rows.length === 0) return res.status(404).json({ error: 'Blueprint not found' });
+    blueprint = bpResult.rows[0];
+
+    const cfgResult = await db.query(
+      'SELECT * FROM blueprint_configurations WHERE blueprint_id = $1',
+      [req.params.id]
+    );
+    configs = cfgResult.rows;
+
+    const asnResult = await db.query(
+      'SELECT * FROM blueprint_assignments WHERE blueprint_id = $1',
+      [req.params.id]
+    );
+    assignments = asnResult.rows;
+  } catch (err) {
+    logger.warn('DB unavailable for blueprint apply, using in-memory', { error: err.message });
+    blueprint = inMemoryBlueprints.get(req.params.id);
+    if (!blueprint) return res.status(404).json({ error: 'Blueprint not found' });
+    configs = [...inMemoryBlueprintConfigs.values()].filter(c => c.blueprint_id === req.params.id);
+    assignments = [...inMemoryBlueprintAssignments.values()].filter(a => a.blueprint_id === req.params.id);
+  }
+
+  const results = [];
+
+  // For each assignment, push MDM commands to the assigned device(s)
+  for (const assignment of assignments) {
+    if (assignment.target_type === 'device') {
+      // Push each config as a separate MDM command
+      for (const config of configs) {
+        try {
+          const cmdRes = await fetch(`${OAUTH_PROVIDER}/api/devices/${assignment.target_id}/commands`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              command: 'apply_blueprint_config',
+              payload: {
+                blueprintId: blueprint.id,
+                blueprintName: blueprint.name,
+                configType: config.config_type,
+                configName: config.config_name,
+                settings: config.payload,
+              }
+            })
+          });
+          results.push({
+            targetType: assignment.target_type,
+            targetId: assignment.target_id,
+            configType: config.config_type,
+            success: cmdRes.ok,
+          });
+        } catch (e) {
+          results.push({
+            targetType: assignment.target_type,
+            targetId: assignment.target_id,
+            configType: config.config_type,
+            success: false,
+            error: e.message,
+          });
+        }
+      }
+
+      // Handle certificate config specially — call certificate-authority service
+      const certConfigs = configs.filter(c => c.config_type === 'certificate');
+      for (const certConfig of certConfigs) {
+        try {
+          const caUrl = process.env.CA_SERVICE_URL || 'http://certificate-authority:3018';
+          await fetch(`${caUrl}/api/certificates/issue`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              deviceId: assignment.target_id,
+              blueprintId: blueprint.id,
+              commonName: certConfig.payload.commonName,
+              sans: certConfig.payload.sans || [],
+            })
+          });
+        } catch (_) {
+          // Certificate issuance is best-effort
+        }
+      }
+    }
+  }
+
+  logger.info(`Blueprint applied: ${blueprint.name}`, {
+    blueprintId: blueprint.id,
+    assignmentsCount: assignments.length,
+    configsCount: configs.length,
+    resultsCount: results.length,
+  });
+
+  res.json({
+    blueprintId: blueprint.id,
+    blueprintName: blueprint.name,
+    assignmentsTargeted: assignments.length,
+    configsApplied: configs.length,
+    results,
+    appliedAt: new Date().toISOString(),
+  });
+});
+
+// ============================
 // Startup
 // ============================
 async function start() {

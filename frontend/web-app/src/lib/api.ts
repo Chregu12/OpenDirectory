@@ -676,4 +676,40 @@ export const appStoreApi = {
     api.post('/api/store/uninstall', data),
 };
 
+// Groups & Organisational Units API
+export const groupApi = {
+  getGroups: () =>
+    api.get('/api/groups'),
+
+  createGroup: (data: any) =>
+    api.post('/api/groups', data),
+
+  updateGroup: (id: string, data: any) =>
+    api.put(`/api/groups/${id}`, data),
+
+  deleteGroup: (id: string) =>
+    api.delete(`/api/groups/${id}`),
+
+  getGroup: (id: string) =>
+    api.get(`/api/groups/${id}`),
+
+  addMember: (groupId: string, userId: string) =>
+    api.post(`/api/groups/${groupId}/members`, { userId }),
+
+  removeMember: (groupId: string, userId: string) =>
+    api.delete(`/api/groups/${groupId}/members/${userId}`),
+
+  getOUs: () =>
+    api.get('/api/ous'),
+
+  createOU: (data: any) =>
+    api.post('/api/ous', data),
+
+  updateOU: (id: string, data: any) =>
+    api.put(`/api/ous/${id}`, data),
+
+  deleteOU: (id: string) =>
+    api.delete(`/api/ous/${id}`),
+};
+
 export default api;

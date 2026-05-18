@@ -1514,6 +1514,130 @@ app.get('/api/scim-push/log', (req, res) => {
   res.json(scimPushLog.slice(-50));
 });
 
+// ─── SCIM Connections Management ──────────────────────────────────────────────────
+
+// In-memory stores for SCIM connections, sync log, and conflicts
+const scimConnections = new Map();
+const scimSyncLog = new Map(); // connectionId → [log entries]
+const scimConflicts = new Map();
+
+// Seed demo connections
+[
+  { id: uuidv4(), name: 'Google Workspace', provider: 'google', endpoint: 'https://scim.googleapis.com/v2', syncIntervalMinutes: 60, lastSync: new Date(Date.now() - 2 * 3600_000).toISOString(), status: 'active', usersSynced: 42, createdAt: new Date(Date.now() - 30 * 86400_000).toISOString() },
+  { id: uuidv4(), name: 'Microsoft Entra ID', provider: 'entra', endpoint: 'https://scim.microsoftonline.com/v2', syncIntervalMinutes: 30, lastSync: new Date(Date.now() - 1 * 3600_000).toISOString(), status: 'active', usersSynced: 128, createdAt: new Date(Date.now() - 15 * 86400_000).toISOString() },
+].forEach(c => {
+  scimConnections.set(c.id, c);
+  scimSyncLog.set(c.id, [
+    { id: uuidv4(), connectionId: c.id, startedAt: new Date(Date.now() - 2 * 3600_000).toISOString(), completedAt: new Date(Date.now() - 2 * 3600_000 + 45000).toISOString(), status: 'completed', usersCreated: 2, usersUpdated: 5, usersDeleted: 0, errors: 0, message: 'Sync completed successfully' },
+    { id: uuidv4(), connectionId: c.id, startedAt: new Date(Date.now() - 26 * 3600_000).toISOString(), completedAt: new Date(Date.now() - 26 * 3600_000 + 60000).toISOString(), status: 'completed', usersCreated: 0, usersUpdated: 3, usersDeleted: 1, errors: 0, message: 'Sync completed successfully' },
+  ]);
+});
+
+app.get('/api/scim/connections', (req, res) => {
+  res.json([...scimConnections.values()]);
+});
+
+app.post('/api/scim/connections', (req, res) => {
+  const { name, provider, endpoint, bearerToken, syncInterval } = req.body;
+  if (!name || !provider) return res.status(400).json({ error: 'name and provider are required' });
+  if (!['google', 'entra', 'custom'].includes(provider)) return res.status(400).json({ error: 'provider must be google, entra, or custom' });
+  const id = uuidv4();
+  const tokenHash = bearerToken ? crypto.createHash('sha256').update(bearerToken).digest('hex') : null;
+  const connection = {
+    id,
+    name,
+    provider,
+    endpoint: endpoint || null,
+    bearerTokenHash: tokenHash,
+    syncIntervalMinutes: syncInterval || 60,
+    lastSync: null,
+    status: 'active',
+    usersSynced: 0,
+    createdAt: new Date().toISOString(),
+  };
+  scimConnections.set(id, connection);
+  scimSyncLog.set(id, []);
+  const { bearerTokenHash: _, ...safe } = connection;
+  res.status(201).json(safe);
+});
+
+app.put('/api/scim/connections/:id', (req, res) => {
+  const connection = scimConnections.get(req.params.id);
+  if (!connection) return res.status(404).json({ error: 'Connection not found' });
+  const { name, provider, endpoint, bearerToken, syncInterval } = req.body;
+  const tokenHash = bearerToken ? crypto.createHash('sha256').update(bearerToken).digest('hex') : connection.bearerTokenHash;
+  const updated = {
+    ...connection,
+    ...(name && { name }),
+    ...(provider && { provider }),
+    ...(endpoint !== undefined && { endpoint }),
+    bearerTokenHash: tokenHash,
+    ...(syncInterval && { syncIntervalMinutes: syncInterval }),
+  };
+  scimConnections.set(req.params.id, updated);
+  const { bearerTokenHash: _, ...safe } = updated;
+  res.json(safe);
+});
+
+app.delete('/api/scim/connections/:id', (req, res) => {
+  if (!scimConnections.has(req.params.id)) return res.status(404).json({ error: 'Connection not found' });
+  scimConnections.delete(req.params.id);
+  scimSyncLog.delete(req.params.id);
+  res.status(204).send();
+});
+
+app.post('/api/scim/connections/:id/sync', (req, res) => {
+  const connection = scimConnections.get(req.params.id);
+  if (!connection) return res.status(404).json({ error: 'Connection not found' });
+  // Simulate a sync
+  const logId = uuidv4();
+  const startedAt = new Date().toISOString();
+  connection.status = 'syncing';
+  const logEntry = { id: logId, connectionId: req.params.id, startedAt, completedAt: null, status: 'running', usersCreated: 0, usersUpdated: 0, usersDeleted: 0, errors: 0, message: 'Sync in progress' };
+  const log = scimSyncLog.get(req.params.id) || [];
+  log.unshift(logEntry);
+  scimSyncLog.set(req.params.id, log);
+
+  // Simulate async completion
+  setTimeout(() => {
+    const usersCreated = Math.floor(Math.random() * 5);
+    const usersUpdated = Math.floor(Math.random() * 10);
+    logEntry.completedAt = new Date().toISOString();
+    logEntry.status = 'completed';
+    logEntry.usersCreated = usersCreated;
+    logEntry.usersUpdated = usersUpdated;
+    logEntry.message = 'Sync completed successfully';
+    connection.status = 'active';
+    connection.lastSync = logEntry.completedAt;
+    connection.usersSynced = (connection.usersSynced || 0) + usersCreated + usersUpdated;
+  }, 2000);
+
+  res.json({ message: 'Sync started', logId, startedAt });
+});
+
+app.get('/api/scim/connections/:id/log', (req, res) => {
+  if (!scimConnections.has(req.params.id)) return res.status(404).json({ error: 'Connection not found' });
+  const log = scimSyncLog.get(req.params.id) || [];
+  res.json(log.slice(0, 50));
+});
+
+app.get('/api/scim/conflicts', (req, res) => {
+  const all = [...scimConflicts.values()].filter(c => !c.resolved);
+  res.json(all);
+});
+
+app.post('/api/scim/conflicts/:id/resolve', (req, res) => {
+  const conflict = scimConflicts.get(req.params.id);
+  if (!conflict) return res.status(404).json({ error: 'Conflict not found' });
+  const { action } = req.body;
+  if (!['keep_local', 'use_remote', 'merge'].includes(action)) return res.status(400).json({ error: 'action must be keep_local, use_remote, or merge' });
+  conflict.resolved = true;
+  conflict.resolution = action;
+  conflict.resolvedAt = new Date().toISOString();
+  scimConflicts.set(req.params.id, conflict);
+  res.json(conflict);
+});
+
 // ─── Update Rings ─────────────────────────────────────────────────────────────────
 
 app.get('/api/update-rings', (req, res) => {

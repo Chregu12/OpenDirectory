@@ -32,6 +32,31 @@ pgPool.query('SELECT 1').then(() => {
       active BOOLEAN DEFAULT TRUE
     )
   `).catch(() => {});
+  pgPool.query(`
+    CREATE TABLE IF NOT EXISTS webhooks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(255) NOT NULL,
+      url TEXT NOT NULL,
+      events TEXT[] DEFAULT '{}',
+      secret_hash VARCHAR(512),
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      last_triggered TIMESTAMPTZ,
+      delivery_count INTEGER DEFAULT 0,
+      failure_count INTEGER DEFAULT 0
+    )
+  `).catch(() => {});
+  pgPool.query(`
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      webhook_id UUID REFERENCES webhooks(id) ON DELETE CASCADE,
+      event_type VARCHAR(100),
+      payload JSONB,
+      response_status INTEGER,
+      delivered_at TIMESTAMPTZ DEFAULT NOW(),
+      success BOOLEAN DEFAULT false
+    )
+  `).catch(() => {});
 }).catch(() => {});
 
 const logger = require('./config/logger');
@@ -243,6 +268,19 @@ class APIGateway {
     this.app.post('/api/admin/keys', authMiddleware.requireAdmin(), this.createApiKey.bind(this));
     this.app.delete('/api/admin/keys/:keyId', authMiddleware.requireAdmin(), this.deleteApiKey.bind(this));
 
+    // Public API key / webhook management endpoints (used by frontend)
+    this.app.get('/api/gateway/api-keys', this.getApiKeys.bind(this));
+    this.app.post('/api/gateway/api-keys', this.createApiKey.bind(this));
+    this.app.delete('/api/gateway/api-keys/:keyId', this.deleteApiKey.bind(this));
+
+    // Webhook management
+    this.app.get('/api/gateway/webhooks', this.getWebhooks.bind(this));
+    this.app.post('/api/gateway/webhooks', this.createWebhook.bind(this));
+    this.app.put('/api/gateway/webhooks/:webhookId', this.updateWebhook.bind(this));
+    this.app.delete('/api/gateway/webhooks/:webhookId', this.deleteWebhook.bind(this));
+    this.app.post('/api/gateway/webhooks/:webhookId/test', this.testWebhook.bind(this));
+    this.app.get('/api/gateway/webhooks/:webhookId/deliveries', this.getWebhookDeliveries.bind(this));
+
     // Dynamic proxy setup for enabled modules
     this.setupDynamicProxies();
 
@@ -370,6 +408,7 @@ class APIGateway {
 
     if (enabledModules.includes('policy-service')) {
       this.setupServiceProxy('policies', 'http://policy-service:3004', '/api/policies');
+      this.setupServiceProxy('blueprints', 'http://policy-service:3004', '/api/blueprints');
       connectedServices.push('policy-service');
     }
 
@@ -815,6 +854,165 @@ class APIGateway {
       }
     }
     res.json({ message: `API key ${keyId} deleted` });
+  }
+
+  // ── In-memory webhook store (fallback when DB not ready) ──────────────────
+  _webhooks = new Map();
+  _webhookDeliveries = new Map(); // webhookId → [deliveries]
+
+  async getWebhooks(req, res) {
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks ORDER BY created_at DESC');
+        return res.json(r.rows);
+      } catch {}
+    }
+    res.json([...this._webhooks.values()]);
+  }
+
+  async createWebhook(req, res) {
+    const { name, url, events, secret } = req.body;
+    if (!name || !url) return res.status(400).json({ error: 'name and url are required' });
+    const crypto = require('crypto');
+    const id = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+    const secretHash = secret ? crypto.createHash('sha256').update(secret).digest('hex') : null;
+    const now = new Date().toISOString();
+    const webhook = { id, name, url, events: events || [], secretHash, active: true, createdAt: now, lastTriggered: null, deliveryCount: 0, failureCount: 0 };
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query(
+          'INSERT INTO webhooks(id, name, url, events, secret_hash, active) VALUES($1,$2,$3,$4,$5,true)',
+          [id, name, url, events || [], secretHash]
+        );
+        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks WHERE id=$1', [id]);
+        return res.status(201).json(r.rows[0]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    this._webhooks.set(id, webhook);
+    this._webhookDeliveries.set(id, []);
+    const { secretHash: _, ...safe } = webhook;
+    res.status(201).json(safe);
+  }
+
+  async updateWebhook(req, res) {
+    const { webhookId } = req.params;
+    const { name, url, events, secret, active } = req.body;
+    if (apiGwDbReady) {
+      try {
+        const crypto = require('crypto');
+        const secretHash = secret ? crypto.createHash('sha256').update(secret).digest('hex') : undefined;
+        const updates = [];
+        const vals = [];
+        let idx = 1;
+        if (name !== undefined) { updates.push(`name=$${idx++}`); vals.push(name); }
+        if (url !== undefined) { updates.push(`url=$${idx++}`); vals.push(url); }
+        if (events !== undefined) { updates.push(`events=$${idx++}`); vals.push(events); }
+        if (secretHash !== undefined) { updates.push(`secret_hash=$${idx++}`); vals.push(secretHash); }
+        if (active !== undefined) { updates.push(`active=$${idx++}`); vals.push(active); }
+        if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+        vals.push(webhookId);
+        await pgPool.query(`UPDATE webhooks SET ${updates.join(',')} WHERE id=$${idx}`, vals);
+        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks WHERE id=$1', [webhookId]);
+        if (r.rows.length === 0) return res.status(404).json({ error: 'Webhook not found' });
+        return res.json(r.rows[0]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    const wh = this._webhooks.get(webhookId);
+    if (!wh) return res.status(404).json({ error: 'Webhook not found' });
+    const updated = { ...wh, ...(name && { name }), ...(url && { url }), ...(events && { events }), ...(active !== undefined && { active }) };
+    this._webhooks.set(webhookId, updated);
+    const { secretHash: _, ...safe } = updated;
+    res.json(safe);
+  }
+
+  async deleteWebhook(req, res) {
+    const { webhookId } = req.params;
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query('DELETE FROM webhooks WHERE id=$1', [webhookId]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    } else {
+      this._webhooks.delete(webhookId);
+      this._webhookDeliveries.delete(webhookId);
+    }
+    res.status(204).send();
+  }
+
+  async testWebhook(req, res) {
+    const { webhookId } = req.params;
+    let webhook = null;
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query('SELECT * FROM webhooks WHERE id=$1', [webhookId]);
+        if (r.rows.length > 0) webhook = r.rows[0];
+      } catch {}
+    } else {
+      webhook = this._webhooks.get(webhookId);
+    }
+    if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
+
+    const testPayload = {
+      event: 'test',
+      timestamp: new Date().toISOString(),
+      data: { message: 'This is a test delivery from OpenDirectory API Gateway' },
+    };
+
+    let responseStatus = null;
+    let success = false;
+    try {
+      const resp = await Promise.race([
+        fetch(webhook.url || webhook.URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-OpenDirectory-Event': 'test' },
+          body: JSON.stringify(testPayload),
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+      ]);
+      responseStatus = resp.status;
+      success = resp.ok;
+    } catch (err) {
+      responseStatus = 0;
+      success = false;
+    }
+
+    // Record delivery
+    const delivery = { id: require('crypto').randomBytes(8).toString('hex'), webhookId, eventType: 'test', payload: testPayload, responseStatus, deliveredAt: new Date().toISOString(), success };
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query(
+          'INSERT INTO webhook_deliveries(webhook_id, event_type, payload, response_status, success) VALUES($1,$2,$3,$4,$5)',
+          [webhookId, 'test', testPayload, responseStatus, success]
+        );
+        await pgPool.query('UPDATE webhooks SET delivery_count=delivery_count+1, last_triggered=NOW() WHERE id=$1', [webhookId]);
+      } catch {}
+    } else {
+      const deliveries = this._webhookDeliveries.get(webhookId) || [];
+      deliveries.unshift(delivery);
+      this._webhookDeliveries.set(webhookId, deliveries);
+    }
+
+    res.json({ success, responseStatus, delivery });
+  }
+
+  async getWebhookDeliveries(req, res) {
+    const { webhookId } = req.params;
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query(
+          'SELECT id, webhook_id, event_type, response_status, delivered_at, success FROM webhook_deliveries WHERE webhook_id=$1 ORDER BY delivered_at DESC LIMIT 50',
+          [webhookId]
+        );
+        return res.json(r.rows);
+      } catch {}
+    }
+    const deliveries = this._webhookDeliveries.get(webhookId) || [];
+    res.json(deliveries.slice(0, 50));
   }
 
   getAvailableEndpoints() {
