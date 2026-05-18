@@ -17,6 +17,7 @@ type Config struct {
 	HeartbeatIntervalSecs   int    `json:"heartbeatIntervalSecs"`
 	CommandPollIntervalSecs int    `json:"commandPollIntervalSecs"`
 	ComplianceIntervalSecs  int    `json:"complianceIntervalSecs"`
+	AVReportIntervalSecs    int    `json:"avReportIntervalSecs"`
 	InsecureSkipVerify      bool   `json:"insecureSkipVerify"`
 	configPath              string
 }
@@ -38,6 +39,7 @@ func Load() *Config {
 		HeartbeatIntervalSecs:   60,
 		CommandPollIntervalSecs: 30,
 		ComplianceIntervalSecs:  300,
+		AVReportIntervalSecs:    3600,
 	}
 	cfg.configPath = defaultConfigPath()
 

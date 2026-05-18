@@ -9,8 +9,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -61,9 +63,11 @@ func runAgent(ctx context.Context, cfg *config.Config) {
 	hbTicker := time.NewTicker(time.Duration(cfg.HeartbeatIntervalSecs) * time.Second)
 	cmdTicker := time.NewTicker(time.Duration(cfg.CommandPollIntervalSecs) * time.Second)
 	compTicker := time.NewTicker(time.Duration(cfg.ComplianceIntervalSecs) * time.Second)
+	avTicker := time.NewTicker(time.Duration(cfg.AVReportIntervalSecs) * time.Second)
 	defer hbTicker.Stop()
 	defer cmdTicker.Stop()
 	defer compTicker.Stop()
+	defer avTicker.Stop()
 
 	// Initial compliance check in background so we don't block startup
 	go func() {
@@ -88,8 +92,50 @@ func runAgent(ctx context.Context, cfg *config.Config) {
 			if err := compliance.CheckAndReport(ctx, cfg); err != nil {
 				log.Printf("Compliance check failed: %v", err)
 			}
+		case <-avTicker.C:
+			go func() {
+				if err := reportAVStatus(ctx, cfg); err != nil {
+					log.Printf("AV status report failed: %v", err)
+				}
+			}()
 		}
 	}
+}
+
+func reportAVStatus(ctx context.Context, cfg *config.Config) error {
+	// Check ClamAV version
+	var clamVersion, sigVersion string
+	if out, err := exec.CommandContext(ctx, "clamscan", "--version").Output(); err == nil {
+		clamVersion = strings.TrimSpace(string(out))
+	} else if runtime.GOOS == "windows" {
+		clamVersion = "Windows Defender"
+	}
+	if out, err := exec.CommandContext(ctx, "freshclam", "--version").Output(); err == nil {
+		sigVersion = strings.TrimSpace(string(out))
+	}
+
+	payload := map[string]interface{}{
+		"deviceId":        cfg.DeviceID,
+		"platform":        runtime.GOOS,
+		"clamavVersion":   clamVersion,
+		"sigVersion":      sigVersion,
+		"realtimeEnabled": false, // ClamAV daemon check would go here
+		"reportedAt":      time.Now().UTC().Format(time.RFC3339),
+	}
+	body, _ := json.Marshal(payload)
+	url := fmt.Sprintf("%s/api/antivirus/devices/%s/status", cfg.ServerURL, cfg.DeviceID)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.DeviceToken)
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
 }
 
 func sendHeartbeat(ctx context.Context, cfg *config.Config) error {

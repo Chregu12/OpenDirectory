@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/opendirectory/agent/internal/config"
@@ -80,9 +81,119 @@ func execute(ctx context.Context, cfg *config.Config, cmd Command) (string, erro
 		return uninstallApp(cmd.Payload)
 	case "wipe":
 		return wipeDevice()
+	case "run_av_scan":
+		return runClamAVScan(ctx, cfg, cmd.Payload)
 	default:
 		return "", fmt.Errorf("unknown command: %s", cmd.Command)
 	}
+}
+
+func runClamAVScan(ctx context.Context, cfg *config.Config, payload map[string]interface{}) (string, error) {
+	// Determine scan paths from payload or use defaults
+	paths := []string{"/tmp", "/home", "/var/tmp"}
+	if p, ok := payload["paths"].([]interface{}); ok {
+		paths = make([]string, 0, len(p))
+		for _, v := range p {
+			if s, ok := v.(string); ok {
+				paths = append(paths, s)
+			}
+		}
+	}
+
+	switch runtime.GOOS {
+	case "windows":
+		return runWindowsDefenderScan(ctx, cfg, payload)
+	default:
+		return runClamScan(ctx, cfg, paths)
+	}
+}
+
+func runClamScan(ctx context.Context, cfg *config.Config, paths []string) (string, error) {
+	// Check clamscan is available
+	if _, err := exec.LookPath("clamscan"); err != nil {
+		return "", fmt.Errorf("clamscan not found: install clamav package")
+	}
+
+	args := append([]string{"--infected", "--no-summary", "--recursive", "--stdout"}, paths...)
+	out, err := exec.CommandContext(ctx, "clamscan", args...).Output()
+	// clamscan exits 1 if infections found — that's not an error for us
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			return "", fmt.Errorf("clamscan exec: %w", err)
+		}
+	}
+
+	output := string(out)
+	threats := parseClamAVOutput(output)
+
+	// Report to antivirus service
+	reportAVScan(ctx, cfg, threats, output)
+
+	if exitCode == 1 {
+		return fmt.Sprintf("scan complete — %d threat(s) found", len(threats)), nil
+	}
+	return "scan complete — no threats found", nil
+}
+
+// AVThreat holds a single detected threat from a ClamAV scan.
+type AVThreat struct {
+	Path      string `json:"path"`
+	Signature string `json:"signature"`
+}
+
+func parseClamAVOutput(output string) []AVThreat {
+	var threats []AVThreat
+	for _, line := range strings.Split(output, "\n") {
+		// Format: /path/to/file: Signature.Name FOUND
+		if strings.HasSuffix(line, "FOUND") {
+			parts := strings.Split(line, ": ")
+			if len(parts) >= 2 {
+				path := parts[0]
+				sig := strings.TrimSuffix(strings.Join(parts[1:], ": "), " FOUND")
+				threats = append(threats, AVThreat{Path: path, Signature: sig})
+			}
+		}
+	}
+	return threats
+}
+
+func reportAVScan(ctx context.Context, cfg *config.Config, threats []AVThreat, rawOutput string) {
+	url := fmt.Sprintf("%s/api/antivirus/devices/%s/report", cfg.ServerURL, cfg.DeviceID)
+	body, _ := json.Marshal(map[string]interface{}{
+		"deviceId":  cfg.DeviceID,
+		"platform":  runtime.GOOS,
+		"threats":   threats,
+		"rawOutput": rawOutput,
+		"scannedAt": time.Now().UTC().Format(time.RFC3339),
+		"clean":     len(threats) == 0,
+	})
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		log.Printf("[av] reportAVScan: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.DeviceToken)
+	resp, err := httpClient(cfg).Do(req)
+	if err != nil {
+		log.Printf("[av] reportAVScan send: %v", err)
+		return
+	}
+	resp.Body.Close()
+}
+
+func runWindowsDefenderScan(ctx context.Context, cfg *config.Config, payload map[string]interface{}) (string, error) {
+	out, err := exec.CommandContext(ctx, "powershell", "-Command",
+		"Start-MpScan -ScanType QuickScan; Get-MpThreat | ConvertTo-Json").Output()
+	if err != nil {
+		return "", fmt.Errorf("Windows Defender scan: %w", err)
+	}
+	// Report raw output to server
+	reportAVScan(ctx, cfg, nil, string(out))
+	return "Windows Defender scan initiated", nil
 }
 
 func lockScreen() (string, error) {
