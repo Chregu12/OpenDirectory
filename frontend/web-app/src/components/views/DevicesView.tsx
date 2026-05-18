@@ -337,6 +337,57 @@ function DecommissionModal({ device, apps, onConfirm, onCancel }: {
   );
 }
 
+// ─── Device Commands Panel ────────────────────────────────────────────────────
+
+function DeviceCommandsPanel({ deviceId, hostname }: { deviceId: string; hostname: string }) {
+  const [sending, setSending] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<{cmd: string; ok: boolean} | null>(null);
+
+  const sendCommand = async (command: string) => {
+    if (command === 'wipe' && !confirm(`ACHTUNG: Gerät ${hostname} wirklich zurücksetzen? Alle Daten werden gelöscht!`)) return;
+    setSending(command);
+    try {
+      await api.post(`/api/devices/${deviceId}/commands`, { command });
+      setLastResult({ cmd: command, ok: true });
+    } catch {
+      setLastResult({ cmd: command, ok: false });
+    }
+    setSending(null);
+  };
+
+  const COMMANDS = [
+    { id: 'lock', label: 'Sperren', icon: '🔒', color: 'bg-yellow-600' },
+    { id: 'unlock', label: 'Entsperren', icon: '🔓', color: 'bg-green-600' },
+    { id: 'restart', label: 'Neustart', icon: '🔄', color: 'bg-blue-600' },
+    { id: 'collect_logs', label: 'Logs', icon: '📋', color: 'bg-gray-600' },
+    { id: 'wipe', label: 'Wipe', icon: '⚠️', color: 'bg-red-600' },
+  ];
+
+  return (
+    <div className="mt-3 p-3 bg-gray-800 rounded-lg border border-gray-700">
+      <p className="text-gray-400 text-xs font-medium mb-2">MDM-Befehle</p>
+      <div className="flex flex-wrap gap-2">
+        {COMMANDS.map(cmd => (
+          <button
+            key={cmd.id}
+            onClick={() => sendCommand(cmd.id)}
+            disabled={sending !== null}
+            className={`${cmd.color} disabled:opacity-50 text-white text-xs px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5`}
+          >
+            {sending === cmd.id ? <span className="animate-spin">⏳</span> : cmd.icon}
+            {cmd.label}
+          </button>
+        ))}
+      </div>
+      {lastResult && (
+        <p className={`mt-2 text-xs ${lastResult.ok ? 'text-green-400' : 'text-red-400'}`}>
+          {lastResult.ok ? `✓ Befehl "${lastResult.cmd}" gesendet` : `✗ Fehler beim Senden von "${lastResult.cmd}"`}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── Device Detail Modal ───────────────────────────────────────────────────────
 
 function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemove, history, addHistoryEntry, onDecommission }: {
@@ -563,6 +614,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                     <ComplianceBar score={detail.complianceScore} />
                   </div>
                 </div>
+                <DeviceCommandsPanel deviceId={detail.id} hostname={detail.name ?? detail.id} />
               </>
             )}
 

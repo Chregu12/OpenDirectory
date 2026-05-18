@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { api } from '@/lib/api';
 import {
   KeyIcon,
   GlobeAltIcon,
@@ -453,12 +454,99 @@ function SamlTab({ domain }: { domain: string }) {
   );
 }
 
+// ─── MFA Setup Modal ──────────────────────────────────────────────────────────────
+
+function MfaSetupModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [step, setStep] = useState<'loading'|'show-qr'|'verify'|'done'>('loading');
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [secret, setSecret] = useState('');
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    api.post('/api/auth/mfa/setup')
+      .then(res => {
+        setQrDataUrl(res.data.qrDataUrl);
+        setSecret(res.data.secret);
+        setStep('show-qr');
+      })
+      .catch(() => setError('MFA-Setup fehlgeschlagen'));
+  }, []);
+
+  const verify = async () => {
+    if (code.length !== 6) return setError('6-stelligen Code eingeben');
+    setLoading(true);
+    try {
+      await api.post('/api/auth/mfa/verify-setup', { token: code });
+      setStep('done');
+      setTimeout(() => { onSuccess(); onClose(); }, 1500);
+    } catch (e: any) {
+      setError(e?.response?.data?.error || 'Ungültiger Code');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm">
+        <h3 className="text-white font-semibold text-lg mb-4">TOTP-MFA einrichten</h3>
+
+        {step === 'loading' && <div className="h-32 bg-gray-700 rounded animate-pulse" />}
+
+        {step === 'show-qr' && (
+          <div className="text-center space-y-4">
+            <p className="text-gray-400 text-sm">Scannen Sie den QR-Code mit Google Authenticator, Authy oder einer kompatiblen App:</p>
+            <img src={qrDataUrl} alt="TOTP QR Code" className="mx-auto rounded-lg w-48 h-48" />
+            <p className="text-gray-500 text-xs break-all">Manuell: {secret}</p>
+            <button onClick={() => setStep('verify')} className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium">Weiter →</button>
+          </div>
+        )}
+
+        {step === 'verify' && (
+          <div className="space-y-4">
+            <p className="text-gray-400 text-sm">Geben Sie den 6-stelligen Code aus Ihrer Authenticator-App ein:</p>
+            <input
+              type="text" inputMode="numeric" maxLength={6} value={code}
+              onChange={e => setCode(e.target.value.replace(/\D/g,''))}
+              placeholder="000000"
+              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-3 text-white text-center text-2xl tracking-widest"
+              autoFocus
+            />
+            {error && <p className="text-red-400 text-sm">{error}</p>}
+            <button onClick={verify} disabled={loading || code.length !== 6} className="w-full bg-blue-600 disabled:opacity-50 text-white py-2 rounded-lg font-medium">
+              {loading ? 'Überprüfe...' : 'Bestätigen'}
+            </button>
+          </div>
+        )}
+
+        {step === 'done' && (
+          <div className="text-center py-8">
+            <div className="text-green-400 text-4xl mb-3">✓</div>
+            <p className="text-white font-medium">MFA erfolgreich aktiviert</p>
+          </div>
+        )}
+
+        <button onClick={onClose} className="mt-3 w-full text-gray-500 text-sm hover:text-gray-300">Abbrechen</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── MFA Tab ─────────────────────────────────────────────────────────────────────
 
 function MfaTab() {
   const [fido2, setFido2] = useState(true);
   const [totp, setTotp] = useState(true);
   const [conditional, setConditional] = useState(true);
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [showMfaSetup, setShowMfaSetup] = useState(false);
+
+  useEffect(() => {
+    api.get('/api/auth/mfa/status')
+      .then(res => setMfaEnabled(res.data.enabled))
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -468,57 +556,83 @@ function MfaTab() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-        {[
-          {
-            id: 'fido2',
-            label: 'FIDO2 / Passkeys / WebAuthn',
-            desc: 'Hardware-Keys (YubiKey), Windows Hello, Touch ID, Face ID — Phishing-resistent',
-            icon: '🔑',
-            state: fido2,
-            set: setFido2,
-            badge: 'Empfohlen',
-            badgeColor: 'bg-green-100 text-green-700',
-          },
-          {
-            id: 'totp',
-            label: 'TOTP / HOTP (Authenticator-App)',
-            desc: 'Google Authenticator, Aegis, Bitwarden Authenticator — zeitbasierte OTPs',
-            icon: '📱',
-            state: totp,
-            set: setTotp,
-            badge: null,
-            badgeColor: '',
-          },
-          {
-            id: 'conditional',
-            label: 'Conditional Access',
-            desc: 'MFA-Anforderung basierend auf Gerät, Standort, Risikowert und Gruppe',
-            icon: '🛡️',
-            state: conditional,
-            set: setConditional,
-            badge: null,
-            badgeColor: '',
-          },
-        ].map(m => (
-          <div key={m.id} className="flex items-center justify-between p-4">
+        {/* FIDO2 row */}
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl mt-0.5">🔑</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-gray-900">FIDO2 / Passkeys / WebAuthn</p>
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">Empfohlen</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">Hardware-Keys (YubiKey), Windows Hello, Touch ID, Face ID — Phishing-resistent</p>
+            </div>
+          </div>
+          <button
+            onClick={() => { setFido2(!fido2); toast.success(`FIDO2 / Passkeys / WebAuthn ${!fido2 ? 'aktiviert' : 'deaktiviert'}`); }}
+            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${fido2 ? 'bg-blue-600' : 'bg-gray-300'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${fido2 ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+        </div>
+
+        {/* TOTP row — real setup controls */}
+        <div className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-start gap-3">
-              <span className="text-2xl mt-0.5">{m.icon}</span>
+              <span className="text-2xl mt-0.5">📱</span>
               <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-gray-900">{m.label}</p>
-                  {m.badge && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${m.badgeColor}`}>{m.badge}</span>}
-                </div>
-                <p className="text-xs text-gray-500 mt-0.5">{m.desc}</p>
+                <p className="text-sm font-medium text-gray-900">TOTP / HOTP (Authenticator-App)</p>
+                <p className="text-xs text-gray-500 mt-0.5">Google Authenticator, Aegis, Bitwarden Authenticator — zeitbasierte OTPs</p>
               </div>
             </div>
             <button
-              onClick={() => { m.set(!m.state); toast.success(`${m.label} ${!m.state ? 'aktiviert' : 'deaktiviert'}`); }}
-              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${m.state ? 'bg-blue-600' : 'bg-gray-300'}`}
+              onClick={() => { setTotp(!totp); toast.success(`TOTP / HOTP ${!totp ? 'aktiviert' : 'deaktiviert'}`); }}
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${totp ? 'bg-blue-600' : 'bg-gray-300'}`}
             >
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${m.state ? 'translate-x-5' : 'translate-x-0'}`} />
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${totp ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
-        ))}
+          <div className="flex items-center justify-between p-4 bg-gray-800/5 rounded-lg border border-gray-200">
+            <div>
+              <p className="text-white font-medium text-sm" style={{ color: '#111827' }}>TOTP Authenticator</p>
+              <p className="text-gray-400 text-xs mt-0.5">Google Authenticator, Authy, etc.</p>
+            </div>
+            {mfaEnabled ? (
+              <button
+                onClick={() => api.delete('/api/auth/mfa/disable').then(() => setMfaEnabled(false)).catch(() => {})}
+                className="px-3 py-1.5 bg-red-600/20 border border-red-600 text-red-400 rounded-lg text-xs font-medium"
+              >
+                Deaktivieren
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowMfaSetup(true)}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium"
+              >
+                Einrichten
+              </button>
+            )}
+          </div>
+          {showMfaSetup && <MfaSetupModal onClose={() => setShowMfaSetup(false)} onSuccess={() => setMfaEnabled(true)} />}
+        </div>
+
+        {/* Conditional Access row */}
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl mt-0.5">🛡️</span>
+            <div>
+              <p className="text-sm font-medium text-gray-900">Conditional Access</p>
+              <p className="text-xs text-gray-500 mt-0.5">MFA-Anforderung basierend auf Gerät, Standort, Risikowert und Gruppe</p>
+            </div>
+          </div>
+          <button
+            onClick={() => { setConditional(!conditional); toast.success(`Conditional Access ${!conditional ? 'aktiviert' : 'deaktiviert'}`); }}
+            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${conditional ? 'bg-blue-600' : 'bg-gray-300'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${conditional ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+        </div>
       </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
