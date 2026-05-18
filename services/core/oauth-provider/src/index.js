@@ -985,9 +985,35 @@ setInterval(() => {
     if (daysSinceLastSeen > 60) {
       device.status = 'quarantined';
       quarantined++;
+      // Queue update_policy command for quarantined device
+      if (!mdmCommands.has(device.id)) mdmCommands.set(device.id, []);
+      const queue = mdmCommands.get(device.id);
+      // Only queue if not already pending
+      if (!queue.find(c => c.command === 'update_policy' && c.status === 'pending')) {
+        queue.push({
+          id: uuidv4(),
+          command: 'update_policy',
+          payload: { reason: 'auto_quarantine', policy: 'compliance_remediation' },
+          issuedAt: new Date().toISOString(),
+          status: 'pending'
+        });
+        // Persist to DB
+        if (db.isAvailable()) {
+          db.query(
+            `INSERT INTO mdm_commands(id, device_id, command, payload, status) VALUES($1,$2,'update_policy',$3,'pending') ON CONFLICT(id) DO NOTHING`,
+            [queue[queue.length-1].id, device.id, JSON.stringify({ reason: 'auto_quarantine' })]
+          ).catch(() => {});
+        }
+      }
     } else if (daysSinceLastSeen > 30) {
       device.status = 'flagged';
       flagged++;
+      // Queue collect_logs command for flagged device
+      if (!mdmCommands.has(device.id)) mdmCommands.set(device.id, []);
+      const queue = mdmCommands.get(device.id);
+      if (!queue.find(c => c.command === 'collect_logs' && c.status === 'pending')) {
+        queue.push({ id: uuidv4(), command: 'collect_logs', payload: { reason: 'compliance_check' }, issuedAt: new Date().toISOString(), status: 'pending' });
+      }
     }
   }
   console.log(`[device-quarantine] flagged=${flagged} quarantined=${quarantined}`);
@@ -1065,6 +1091,76 @@ app.patch('/api/devices/:deviceId/commands/:cmdId', (req, res) => {
 app.get('/api/devices/:deviceId/commands', (req, res) => {
   const queue = mdmCommands.get(req.params.deviceId) || [];
   res.json(queue);
+});
+
+// ─── Compliance Check Endpoint ────────────────────────────────────────────────────
+
+app.post('/api/devices/:deviceId/compliance-check', async (req, res) => {
+  const { deviceId } = req.params;
+  const { settings } = req.body; // device reports its current settings
+
+  if (!settings) return res.status(400).json({ error: 'settings object required' });
+
+  // Get device platform
+  let platform = 'unknown';
+  const dbDevice = db.isAvailable() ? await db.getDevice(deviceId).catch(() => null) : null;
+  const memDevice = deviceRegistry.get(deviceId);
+  platform = dbDevice?.platform ?? memDevice?.platform ?? req.body.platform ?? 'unknown';
+
+  // Basic compliance rules per platform
+  const RULES = {
+    windows: [
+      { key: 'firewall_enabled', expected: 'true', severity: 'high', description: 'Windows Firewall muss aktiviert sein' },
+      { key: 'bitlocker_enabled', expected: 'true', severity: 'high', description: 'BitLocker-Verschlüsselung erforderlich' },
+      { key: 'auto_update_enabled', expected: 'true', severity: 'medium', description: 'Automatische Updates müssen aktiviert sein' },
+      { key: 'antivirus_enabled', expected: 'true', severity: 'high', description: 'Antivirenschutz erforderlich' },
+    ],
+    macos: [
+      { key: 'filevault_enabled', expected: 'true', severity: 'high', description: 'FileVault-Verschlüsselung erforderlich' },
+      { key: 'firewall_enabled', expected: 'true', severity: 'high', description: 'macOS Firewall muss aktiviert sein' },
+      { key: 'screen_lock_enabled', expected: 'true', severity: 'medium', description: 'Bildschirmsperre erforderlich' },
+      { key: 'gatekeeper_enabled', expected: 'true', severity: 'high', description: 'Gatekeeper muss aktiviert sein' },
+    ],
+    linux: [
+      { key: 'firewall_enabled', expected: 'true', severity: 'high', description: 'UFW/iptables Firewall erforderlich' },
+      { key: 'full_disk_encryption', expected: 'true', severity: 'high', description: 'LUKS-Verschlüsselung empfohlen' },
+      { key: 'auto_update_enabled', expected: 'true', severity: 'medium', description: 'Automatische Sicherheitsupdates erforderlich' },
+    ],
+  };
+
+  const rules = RULES[platform.toLowerCase()] || [];
+  const passing = [];
+  const failing = [];
+
+  for (const rule of rules) {
+    if (settings[rule.key] === rule.expected) {
+      passing.push(rule);
+    } else {
+      failing.push({ ...rule, actual: settings[rule.key] ?? 'not_reported' });
+    }
+  }
+
+  const score = rules.length > 0 ? Math.round((passing.length / rules.length) * 100) : 100;
+  const compliant = failing.filter(f => f.severity === 'high').length === 0;
+
+  // Update device compliance status in DB
+  if (db.isAvailable()) {
+    await db.query(
+      'UPDATE enrolled_devices SET compliance_status=$2, data=data||$3 WHERE id=$1',
+      [deviceId, compliant ? 'compliant' : 'non_compliant', JSON.stringify({ complianceScore: score, lastCheck: new Date().toISOString() })]
+    ).catch(() => {});
+  }
+
+  // Auto-queue remediation if non-compliant
+  if (!compliant) {
+    if (!mdmCommands.has(deviceId)) mdmCommands.set(deviceId, []);
+    const queue = mdmCommands.get(deviceId);
+    if (!queue.find(c => c.command === 'update_policy' && c.status === 'pending')) {
+      queue.push({ id: uuidv4(), command: 'update_policy', payload: { failingRules: failing, score }, issuedAt: new Date().toISOString(), status: 'pending' });
+    }
+  }
+
+  res.json({ deviceId, platform, score, compliant, passing: passing.length, failing, total: rules.length });
 });
 
 // ─── Enrollment Token API ─────────────────────────────────────────────────────────
