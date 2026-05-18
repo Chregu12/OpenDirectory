@@ -1014,6 +1014,59 @@ app.put('/api/devices/:id/status', (req, res) => {
   res.json(device);
 });
 
+// ─── MDM Command Queue ────────────────────────────────────────────────────────
+
+const mdmCommands = new Map(); // deviceId → [command]
+
+app.post('/api/devices/:deviceId/commands', (req, res) => {
+  const { command, payload } = req.body;
+  const VALID_COMMANDS = ['wipe', 'lock', 'unlock', 'update_policy', 'restart', 'collect_logs', 'install_app', 'uninstall_app'];
+  if (!VALID_COMMANDS.includes(command)) return res.status(400).json({ error: `Unknown command. Valid: ${VALID_COMMANDS.join(', ')}` });
+
+  const deviceId = req.params.deviceId;
+  const queue = mdmCommands.get(deviceId) || [];
+  const cmdRecord = { id: uuidv4(), command, payload: payload || {}, issuedAt: new Date().toISOString(), status: 'pending' };
+  queue.push(cmdRecord);
+  mdmCommands.set(deviceId, queue);
+
+  // Persist to DB if available
+  if (db.isAvailable()) {
+    db.query(
+      `INSERT INTO mdm_commands(id, device_id, command, payload, status) VALUES($1,$2,$3,$4,'pending')`,
+      [cmdRecord.id, deviceId, command, JSON.stringify(payload || {})]
+    ).catch(() => {});
+  }
+
+  console.log(`[MDM] Command ${command} queued for device ${deviceId}`);
+  res.status(201).json(cmdRecord);
+});
+
+// Agent polls this endpoint to get pending commands
+app.get('/api/devices/:deviceId/commands/pending', (req, res) => {
+  const deviceId = req.params.deviceId;
+  const queue = (mdmCommands.get(deviceId) || []).filter(c => c.status === 'pending');
+  res.json(queue);
+});
+
+// Agent reports command result
+app.patch('/api/devices/:deviceId/commands/:cmdId', (req, res) => {
+  const { deviceId, cmdId } = req.params;
+  const { status, result } = req.body;
+  const queue = mdmCommands.get(deviceId) || [];
+  const cmd = queue.find(c => c.id === cmdId);
+  if (!cmd) return res.status(404).json({ error: 'Command not found' });
+  cmd.status = status || 'completed';
+  cmd.result = result;
+  cmd.completedAt = new Date().toISOString();
+  res.json(cmd);
+});
+
+// List all commands for a device
+app.get('/api/devices/:deviceId/commands', (req, res) => {
+  const queue = mdmCommands.get(req.params.deviceId) || [];
+  res.json(queue);
+});
+
 // ─── Enrollment Token API ─────────────────────────────────────────────────────────
 
 const PLATFORMS = ['windows', 'macos', 'linux', 'ios', 'android'];

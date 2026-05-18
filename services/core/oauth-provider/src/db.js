@@ -14,15 +14,18 @@ const pool = new Pool({
 });
 
 async function runMigrations() {
-  const migrationPath = path.join(__dirname, '..', 'migrations', '001_initial_schema.sql');
-  if (!fs.existsSync(migrationPath)) return;
-  const sql = fs.readFileSync(migrationPath, 'utf8');
-  try {
-    await pool.query(sql);
-    console.log('[DB] Migrations applied');
-  } catch (err) {
-    console.error('[DB] Migration error (will use in-memory fallback):', err.message);
+  const migrationsDir = path.join(__dirname, '..', 'migrations');
+  if (!fs.existsSync(migrationsDir)) return;
+  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+  for (const file of files) {
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+    try {
+      await pool.query(sql);
+    } catch (err) {
+      console.error(`[DB] Migration ${file} error:`, err.message);
+    }
   }
+  console.log(`[DB] ${files.length} migration(s) applied`);
 }
 
 let dbAvailable = false;

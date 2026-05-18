@@ -1,0 +1,15 @@
+{
+  "name": "od-ldap-proxy",
+  "version": "1.0.0",
+  "description": "LDAP proxy forwarding requests to LLDAP",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js"
+  },
+  "dependencies": {
+    "ldapjs": "^3.0.7",
+    "ldapts": "^4.2.5",
+    "dotenv": "^16.0.0"
+  }
+}

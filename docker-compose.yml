@@ -89,6 +89,25 @@ services:
     networks:
       - opendirectory
 
+  ldap-proxy:
+    build: ./services/core/ldap-proxy
+    ports:
+      - "1389:1389"
+    environment:
+      - LLDAP_URL=${LLDAP_URL:-ldap://lldap:3890}
+      - LLDAP_BASE_DN=${LLDAP_BASE_DN:-dc=opendirectory,dc=local}
+      - LLDAP_ADMIN_USER=${LLDAP_ADMIN_USER:-admin}
+      - LLDAP_ADMIN_PASSWORD=${LLDAP_ADMIN_PASSWORD}
+      - LDAP_PROXY_PORT=1389
+    depends_on:
+      - lldap
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').createConnection(1389,'localhost').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   # ===================
   # Core Services (from /services/core)
   # ===================
