@@ -639,7 +639,22 @@ export default function EnrollmentHubView() {
                 Neu
               </button>
             </div>
-            <TokenCard token={currentToken} />
+            {tokensLoading && (
+              <div className="space-y-3">
+                {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-gray-700 rounded-lg animate-pulse" />)}
+              </div>
+            )}
+            {tokensError && (
+              <div className="p-4 bg-yellow-900/30 border border-yellow-700 rounded-lg text-yellow-300 text-sm">
+                Enrollment-Token-API nicht erreichbar. Überprüfen Sie den oauth-provider Dienst.
+              </div>
+            )}
+            {!tokensLoading && !tokensError && currentTokenData && (
+              <TokenCard token={{ platform: selected, token: currentTokenData.token, created: '', expires: currentTokenData.expires, uses: currentTokenData.uses, maxUses: currentTokenData.maxUses }} />
+            )}
+            {!tokensLoading && !tokensError && !currentTokenData && (
+              <p className="text-xs text-gray-400">Kein Token für diese Plattform gefunden.</p>
+            )}
           </div>
         </div>
 

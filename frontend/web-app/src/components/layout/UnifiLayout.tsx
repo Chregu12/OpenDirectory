@@ -29,7 +29,9 @@ import {
 } from '@heroicons/react/24/outline';
 
 // ─── Search catalog ───────────────────────────────────────────────────────────
-const SEARCH_ITEMS = [
+type SearchItem = { id: string; name: string; view: string; type: string };
+
+const SEARCH_ITEMS: SearchItem[] = [
   { id: 'dashboard',    name: 'Dashboard',           view: 'dashboard',    type: 'Seite' },
   { id: 'devices',      name: 'Geräte',              view: 'devices',      type: 'Seite' },
   { id: 'users',        name: 'Benutzer',            view: 'users',        type: 'Seite' },
@@ -42,10 +44,6 @@ const SEARCH_ITEMS = [
   { id: 'secrets',      name: 'Secrets',             view: 'secrets',      type: 'Seite' },
   { id: 'printers',     name: 'Drucker',             view: 'printers',     type: 'Seite' },
   { id: 'permissions',  name: 'Berechtigungen',      view: 'permissions',  type: 'Seite' },
-  { id: 'alice-user',   name: 'Alice Admin',         view: 'users',        type: 'Nutzer' },
-  { id: 'bob-user',     name: 'Bob Developer',       view: 'users',        type: 'Nutzer' },
-  { id: 'grafana-app',  name: 'Grafana Dashboard',   view: 'applications', type: 'App' },
-  { id: 'macbook-pro',  name: 'MacBook Pro (alice)', view: 'devices',      type: 'Gerät' },
 ];
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -96,7 +94,10 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
   const [searchQuery, setSearchQuery] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchItem[]>(SEARCH_ITEMS.filter(i => i.type === 'Seite'));
+  const [searching, setSearching] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -179,9 +180,58 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     if (searchOpen) setTimeout(() => searchInputRef.current?.focus(), 50);
   }, [searchOpen]);
 
-  const searchResults = searchQuery.trim().length > 0
-    ? SEARCH_ITEMS.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : [];
+  const performSearch = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults(SEARCH_ITEMS.filter(i => i.type === 'Seite'));
+      return;
+    }
+
+    setSearching(true);
+    const q = query.toLowerCase();
+
+    // Always include matching pages
+    const pageMatches = SEARCH_ITEMS.filter(i => i.type === 'Seite' && i.name.toLowerCase().includes(q));
+
+    // Fetch real users and devices in parallel
+    const [usersRes, devicesRes] = await Promise.allSettled([
+      api.get('/api/users').catch(() => api.get('/api/lldap/users')),
+      api.get('/api/devices').catch(() => api.get('/api/devices/registry')),
+    ]);
+
+    const dynamicResults: SearchItem[] = [...pageMatches];
+
+    if (usersRes.status === 'fulfilled') {
+      const users = Array.isArray(usersRes.value?.data) ? usersRes.value.data
+        : usersRes.value?.data?.users ?? usersRes.value?.data?.data ?? [];
+      for (const u of users) {
+        const name = u.displayName ?? u.name ?? u.username ?? u.id ?? '';
+        if (name.toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q)) {
+          dynamicResults.push({ id: `user-${u.id ?? u.username}`, name, view: 'users', type: 'user' });
+        }
+      }
+    }
+
+    if (devicesRes.status === 'fulfilled') {
+      const devs = Array.isArray(devicesRes.value?.data) ? devicesRes.value.data
+        : devicesRes.value?.data?.devices ?? devicesRes.value?.data?.data ?? [];
+      for (const d of devs) {
+        const name = d.hostname ?? d.name ?? d.id ?? '';
+        if (name.toLowerCase().includes(q)) {
+          dynamicResults.push({ id: `device-${d.id ?? d.hostname}`, name, view: 'devices', type: 'device' });
+        }
+      }
+    }
+
+    setSearchResults(dynamicResults);
+    setSearching(false);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => performSearch(val), 300);
+  };
 
   const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
@@ -373,12 +423,15 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                 type="text"
                 placeholder="Suche nach Seiten, Nutzern, Geräten, Apps..."
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={handleSearchChange}
                 className="flex-1 text-sm focus:outline-none text-gray-900"
               />
               <button onClick={() => setSearchOpen(false)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
             </div>
-            {searchResults.length > 0 && (
+            {searching && (
+              <p className="text-xs text-gray-400 px-4 py-3">Suche läuft...</p>
+            )}
+            {!searching && searchResults.length > 0 && (
               <ul className="py-2 max-h-72 overflow-y-auto">
                 {searchResults.map(item => (
                   <li key={item.id}>
@@ -393,10 +446,10 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                 ))}
               </ul>
             )}
-            {searchQuery.trim().length > 0 && searchResults.length === 0 && (
+            {!searching && searchQuery.trim().length > 0 && searchResults.length === 0 && (
               <p className="text-sm text-gray-400 px-4 py-4">Keine Ergebnisse für "{searchQuery}"</p>
             )}
-            {searchQuery.trim().length === 0 && (
+            {!searching && searchQuery.trim().length === 0 && (
               <p className="text-xs text-gray-400 px-4 py-3">Tippe, um zu suchen. Drücke Escape zum Schliessen.</p>
             )}
           </div>
