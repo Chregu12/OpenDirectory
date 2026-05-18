@@ -375,7 +375,7 @@ app.post('/oauth/authorize/login', async (req, res) => {
 
 // ─── Token Endpoint ───────────────────────────────────────────────────────────────
 
-app.post('/oauth/token', (req, res) => {
+app.post('/oauth/token', async (req, res) => {
   const { grant_type, code, redirect_uri, client_id, client_secret, code_verifier, refresh_token, device_code } = req.body;
 
   // Device code grant does not require client secret for public clients
@@ -395,14 +395,43 @@ app.post('/oauth/token', (req, res) => {
     }
     authCodes.delete(code);
 
-    // Device compliance check — deny token if requesting device is quarantined
+    // Device compliance check — try DB first, then in-memory registry, then external device service
     const deviceId = record.deviceId; // may be undefined for browser flows
     if (deviceId) {
-      const device = deviceRegistry.get(deviceId);
-      if (device && device.status === 'quarantined') {
+      let deviceStatus = null;
+
+      // 1. Check DB (enrolled_devices table)
+      if (db.isAvailable()) {
+        try {
+          const dbDevice = await db.getDevice(deviceId);
+          if (dbDevice) deviceStatus = dbDevice.status;
+        } catch {}
+      }
+
+      // 2. Fall back to in-memory registry
+      if (!deviceStatus) {
+        const memDevice = deviceRegistry.get(deviceId);
+        if (memDevice) deviceStatus = memDevice.status;
+      }
+
+      // 3. If still not found, try external device service
+      if (!deviceStatus) {
+        const DEVICE_SERVICE = process.env.DEVICE_SERVICE_URL || 'http://localhost:3003';
+        try {
+          const devRes = await fetch(`${DEVICE_SERVICE}/api/devices/${deviceId}`, {
+            headers: { 'Authorization': `Bearer ${process.env.SERVICE_TOKEN || ''}` }
+          });
+          if (devRes.ok) {
+            const devData = await devRes.json();
+            deviceStatus = devData.status ?? devData.complianceStatus ?? devData.compliance_status;
+          }
+        } catch {}
+      }
+
+      if (deviceStatus === 'quarantined' || deviceStatus === 'blocked') {
         return res.status(403).json({
           error: 'device_compliance_failure',
-          error_description: 'Device is quarantined and cannot obtain tokens. Enroll the device again.',
+          error_description: 'Device is quarantined and cannot obtain tokens.',
         });
       }
     }
@@ -1321,6 +1350,18 @@ db.initDb().then(async () => {
       }
     } catch (err) {
       console.warn('[db] Could not seed clients:', err.message);
+    }
+
+    try {
+      const devCount = await db.query('SELECT COUNT(*) FROM enrolled_devices');
+      if (devCount.rows[0].count === '0') {
+        for (const [, device] of deviceRegistry.entries()) {
+          await db.upsertDevice(device).catch(() => {});
+        }
+        console.log('[db] Seeded demo devices to enrolled_devices');
+      }
+    } catch (err) {
+      console.warn('[db] Could not seed devices:', err.message);
     }
   }
   app.listen(PORT, () => {
