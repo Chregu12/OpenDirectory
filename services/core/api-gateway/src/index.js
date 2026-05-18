@@ -402,6 +402,11 @@ class APIGateway {
     this.app.use('/api/kerberos', createProxyMiddleware({ target: 'http://kerberos-kdc:3013', changeOrigin: true }));
     connectedServices.push('kerberos-kdc');
 
+    // Apple MDM server (always enabled — enrollment, APNs push, command delivery)
+    this.app.use('/api/mdm', createProxyMiddleware({ target: 'http://apple-mdm:3014', changeOrigin: true }));
+    this.app.use('/mdm', createProxyMiddleware({ target: 'http://apple-mdm:3014', changeOrigin: true }));
+    connectedServices.push('apple-mdm');
+
     // Intelligence Services (always enabled - core platform value)
     this.setupServiceProxy('graph', 'http://graph-explorer:3900', '/api/graph');
     this.setupServiceProxy('graph-explorer', 'http://graph-explorer:3900', '/api/graph-explorer');

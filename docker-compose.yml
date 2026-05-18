@@ -221,6 +221,11 @@ services:
       - MONGODB_URL=mongodb://opendirectory:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongodb:27017/devices
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}@rabbitmq:5672
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=devices
+      - DB_USER=opendirectory
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set in .env}
     ports:
       - "3003:3003"
     networks:
@@ -229,6 +234,7 @@ services:
       - mongodb
       - redis
       - rabbitmq
+      - postgres
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
       interval: 30s
@@ -822,6 +828,43 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  # ── Apple MDM ──────────────────────────────────────────────────────────────
+  # Real Apple MDM server: enrollment profiles, APNs push, DeviceLock/Erase/
+  # InstallApplication/InstallProfile/RemoveProfile commands.
+  # Requires an MDM push certificate from https://identity.apple.com/pushcert/
+  # Set APNS_CERT and APNS_KEY as base64-encoded PEM strings.
+  apple-mdm:
+    build: ./services/core/apple-mdm
+    container_name: od-apple-mdm
+    ports:
+      - "3014:3014"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - APPLE_MDM_PORT=3014
+      - MDM_SERVER_URL=${MDM_SERVER_URL:-http://localhost:3014}
+      - MDM_ORG_NAME=${MDM_ORG_NAME:-OpenDirectory}
+      - APNS_CERT=${APNS_CERT:-}
+      - APNS_KEY=${APNS_KEY:-}
+      - APNS_TOPIC=${APNS_TOPIC:-}
+      - MDM_TOPIC=${MDM_TOPIC:-}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-auth}
+      - DB_USER=${DB_USER:-opendirectory}
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - opendirectory
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3014/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 # ===================
 # Networks
