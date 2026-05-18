@@ -1144,9 +1144,23 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
     const { name, parentId, description } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
     const id = `ou-${Date.now()}`;
-    const ou = { id, name, parentId: parentId ?? null, description: description ?? '', deleted: false, createdAt: new Date().toISOString() };
-    ous.set(id, ou);
-    res.status(201).json(ou);
+    const ouData = { id, name, parentId: parentId ?? null, description: description ?? '', deleted: false, createdAt: new Date().toISOString() };
+    ous.set(id, ouData);
+
+    // Sync to LLDAP
+    const LLDAP_URL = process.env.LLDAP_URL || 'http://localhost:3890';
+    const LLDAP_ADMIN = process.env.LLDAP_ADMIN_USER || 'admin';
+    const LLDAP_PASS = process.env.LLDAP_ADMIN_PASSWORD || '';
+    fetch(`${LLDAP_URL}/api/graphql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${Buffer.from(`${LLDAP_ADMIN}:${LLDAP_PASS}`).toString('base64')}` },
+      body: JSON.stringify({
+        query: `mutation CreateGroup($name: String!) { createGroup(name: $name) { id } }`,
+        variables: { name: ouData.name }
+      })
+    }).catch(() => {});
+
+    res.status(201).json(ouData);
   });
 
   app.put('/api/ous/:id', (req, res) => {
@@ -1178,6 +1192,20 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
     const group = { id, name, description: description ?? '', ouId: ouId ?? null, createdAt: new Date().toISOString() };
     groups.set(id, group);
     groupMembers.set(id, new Set());
+
+    // Sync to LLDAP
+    const LLDAP_URL = process.env.LLDAP_URL || 'http://localhost:3890';
+    const LLDAP_ADMIN = process.env.LLDAP_ADMIN_USER || 'admin';
+    const LLDAP_PASS = process.env.LLDAP_ADMIN_PASSWORD || '';
+    fetch(`${LLDAP_URL}/api/graphql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${Buffer.from(`${LLDAP_ADMIN}:${LLDAP_PASS}`).toString('base64')}` },
+      body: JSON.stringify({
+        query: `mutation CreateGroup($name: String!) { createGroup(name: $name) { id } }`,
+        variables: { name: group.name }
+      })
+    }).catch(() => {});
+
     res.status(201).json(group);
   });
 

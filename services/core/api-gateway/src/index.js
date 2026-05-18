@@ -6,6 +6,33 @@ const rateLimit = require('express-rate-limit');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const WebSocket = require('ws');
 const http = require('http');
+const { Pool } = require('pg');
+
+const pgPool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  database: process.env.DB_NAME || process.env.POSTGRES_DB || 'auth',
+  user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
+  password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || '',
+  max: 5,
+  connectionTimeoutMillis: 3000,
+});
+
+let apiGwDbReady = false;
+pgPool.query('SELECT 1').then(() => {
+  apiGwDbReady = true;
+  pgPool.query(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id VARCHAR(255) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      key_hash VARCHAR(512) NOT NULL UNIQUE,
+      permissions JSONB NOT NULL DEFAULT '["read"]',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used TIMESTAMPTZ,
+      active BOOLEAN DEFAULT TRUE
+    )
+  `).catch(() => {});
+}).catch(() => {});
 
 const logger = require('./config/logger');
 const serviceDiscovery = require('./discovery/serviceDiscovery');
@@ -730,29 +757,50 @@ class APIGateway {
     res.json(routes);
   }
 
-  getApiKeys(req, res) {
-    // This would normally query a database
-    res.json([
-      { id: '1', name: 'Development Key', permissions: ['read'], created: '2024-01-01' },
-      { id: '2', name: 'Testing Key', permissions: ['read', 'write'], created: '2024-01-01' }
-    ]);
+  async getApiKeys(req, res) {
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query('SELECT id, name, permissions, created_at as created FROM api_keys WHERE active=true ORDER BY created_at');
+        if (r.rows.length > 0) return res.json(r.rows);
+      } catch {}
+    }
+    // Fallback: read from env vars
+    const keys = [];
+    if (process.env.API_KEY_READ_ONLY) keys.push({ id: 'env-ro', name: 'Read-Only Key (env)', permissions: ['read'], created: new Date().toISOString() });
+    if (process.env.API_KEY_FULL) keys.push({ id: 'env-full', name: 'Full Access Key (env)', permissions: ['read', 'write'], created: new Date().toISOString() });
+    if (process.env.API_KEY_ADMIN) keys.push({ id: 'env-admin', name: 'Admin Key (env)', permissions: ['read', 'write', 'admin'], created: new Date().toISOString() });
+    res.json(keys);
   }
 
-  createApiKey(req, res) {
+  async createApiKey(req, res) {
     const { name, permissions } = req.body;
-    // This would normally create in database
-    res.json({
-      id: Date.now().toString(),
-      name,
-      permissions,
-      key: 'generated-api-key-' + Math.random().toString(36).substr(2),
-      created: new Date().toISOString()
-    });
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const crypto = require('crypto');
+    const id = crypto.randomBytes(8).toString('hex');
+    const rawKey = crypto.randomBytes(32).toString('hex');
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query(
+          'INSERT INTO api_keys(id, name, key_hash, permissions) VALUES($1,$2,$3,$4)',
+          [id, name, keyHash, JSON.stringify(permissions || ['read'])]
+        );
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    res.status(201).json({ id, name, key: rawKey, permissions: permissions || ['read'], created: new Date().toISOString() });
   }
 
-  deleteApiKey(req, res) {
+  async deleteApiKey(req, res) {
     const { keyId } = req.params;
-    // This would normally delete from database
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query('UPDATE api_keys SET active=false WHERE id=$1', [keyId]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
     res.json({ message: `API key ${keyId} deleted` });
   }
 
