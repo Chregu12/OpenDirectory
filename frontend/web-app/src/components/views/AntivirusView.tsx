@@ -150,39 +150,47 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
   const loadAntivirusData = async () => {
     setLoading(true);
     try {
-      const [threatRes, deviceRes] = await Promise.allSettled([
-        securityApi.getThreatIntel(),
-        deviceApi.getDevices(),
+      const [threatRes, quarantineRes, scansRes, statsRes, devicesRes] = await Promise.allSettled([
+        securityApi.getThreats(),
+        securityApi.getQuarantine(),
+        securityApi.getScans(),
+        securityApi.getAvDashboard(),
+        securityApi.getAvDevices(),
       ]);
 
       let apiDataFound = false;
 
-      if (threatRes.status === 'fulfilled' && threatRes.value.data) {
+      if (threatRes.status === 'fulfilled') {
         const d = threatRes.value.data;
-        if (d.threats?.length > 0) { setThreats(d.threats); apiDataFound = true; }
-        if (d.quarantine?.length > 0) { setQuarantine(d.quarantine); apiDataFound = true; }
-        if (d.scans?.length > 0) { setScans(d.scans); apiDataFound = true; }
-        if (d.stats) { setStats({ ...emptyStats, ...d.stats }); apiDataFound = true; }
+        const list = Array.isArray(d) ? d : d?.threats ?? [];
+        if (list.length > 0) { setThreats(list); apiDataFound = true; }
       }
 
-      if (deviceRes.status === 'fulfilled' && deviceRes.value.data?.length > 0) {
-        const avDevices = deviceRes.value.data
-          .filter((d: any) => d.antivirus || d.clamav)
-          .map((d: any) => ({
-            deviceId: d.id,
-            deviceName: d.name,
-            platform: d.platform || 'windows',
-            clamavVersion: d.antivirus?.version || d.clamav?.version || '0.104.3',
-            signatureVersion: d.antivirus?.signatureVersion || '27180',
-            signatureDate: d.antivirus?.signatureDate || new Date().toISOString().slice(0, 10),
-            lastScan: d.antivirus?.lastScan || new Date().toISOString(),
-            lastScanType: d.antivirus?.lastScanType || 'quick',
-            threatsFound: d.antivirus?.threatsFound || 0,
-            quarantinedFiles: d.antivirus?.quarantinedFiles || 0,
-            realtimeProtection: d.antivirus?.realtimeProtection ?? true,
-            status: d.antivirus?.status || 'protected',
-          }));
-        if (avDevices.length > 0) { setDevices(avDevices); apiDataFound = true; }
+      if (quarantineRes.status === 'fulfilled') {
+        const d = quarantineRes.value.data;
+        const list = Array.isArray(d) ? d : d?.quarantine ?? [];
+        if (list.length > 0) { setQuarantine(list); apiDataFound = true; }
+      }
+
+      if (scansRes.status === 'fulfilled') {
+        const d = scansRes.value.data;
+        const list = Array.isArray(d) ? d : d?.scans ?? [];
+        if (list.length > 0) { setScans(list); apiDataFound = true; }
+      }
+
+      if (statsRes.status === 'fulfilled' && statsRes.value.data) {
+        const d = statsRes.value.data;
+        const s = d.statistics ?? d.stats ?? d;
+        if (s?.totalDevices != null || s?.threatsFound != null) {
+          setStats({ ...emptyStats, ...s });
+          apiDataFound = true;
+        }
+      }
+
+      if (devicesRes.status === 'fulfilled') {
+        const d = devicesRes.value.data;
+        const list = Array.isArray(d) ? d : d?.devices ?? [];
+        if (list.length > 0) { setDevices(list); apiDataFound = true; }
       }
 
       setUsingDemoData(!apiDataFound);
@@ -196,10 +204,10 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
   const startFleetScan = async () => {
     setScanning(true);
     try {
-      await securityApi.getThreatIntel();
+      await securityApi.startScan(undefined, 'quick');
       await loadAntivirusData();
     } catch {
-      await new Promise(r => setTimeout(r, 2000));
+      // scan queued, reload when done
     } finally {
       setScanning(false);
     }

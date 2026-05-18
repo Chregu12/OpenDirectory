@@ -99,30 +99,45 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
   const loadSecurityData = async () => {
     setLoading(true);
     try {
-      const [complianceRes, alertsRes] = await Promise.allSettled([
-        securityApi.getComplianceStatus(),
-        securityApi.getSecurityAlerts(),
+      const [findingsRes, riskRes, trendsRes] = await Promise.allSettled([
+        securityApi.getFindings(),
+        securityApi.getRiskScore(),
+        securityApi.getTrends(),
       ]);
 
       let apiDataFound = false;
 
-      if (complianceRes.status === 'fulfilled' && complianceRes.value.data) {
-        const data = complianceRes.value.data;
-        if (data.findings?.length > 0) {
+      if (findingsRes.status === 'fulfilled' && findingsRes.value.data) {
+        const data = findingsRes.value.data;
+        const findings = Array.isArray(data) ? data : data?.findings ?? [];
+        if (findings.length > 0) {
+          const bySeverity = findings.reduce((acc: Record<string, number>, f: any) => {
+            acc[f.severity] = (acc[f.severity] ?? 0) + 1;
+            return acc;
+          }, { critical: 0, high: 0, medium: 0, low: 0, info: 0 });
           setScanResult({
             ...emptyScanResult,
-            findings: data.findings,
-            totalFindings: data.findings.length,
+            findings,
+            totalFindings: findings.length,
             overallRiskScore: data.riskScore ?? 0,
-            bySeverity: data.bySeverity ?? emptyScanResult.bySeverity,
+            bySeverity: { ...emptyScanResult.bySeverity, ...bySeverity },
           });
           apiDataFound = true;
         }
       }
 
-      if (alertsRes.status === 'fulfilled' && alertsRes.value.data?.trends) {
-        setTrends(alertsRes.value.data.trends);
-        apiDataFound = true;
+      if (riskRes.status === 'fulfilled' && riskRes.value.data) {
+        const score = riskRes.value.data.score ?? riskRes.value.data.riskScore;
+        if (score != null) {
+          setScanResult(prev => ({ ...prev, overallRiskScore: score }));
+          apiDataFound = true;
+        }
+      }
+
+      if (trendsRes.status === 'fulfilled') {
+        const d = trendsRes.value.data;
+        const list = Array.isArray(d) ? d : d?.trends ?? [];
+        if (list.length > 0) { setTrends(list); apiDataFound = true; }
       }
 
       setUsingDemoData(!apiDataFound);
@@ -136,10 +151,9 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
   const startScan = async () => {
     setScanning(true);
     try {
-      await securityApi.getComplianceStatus();
+      await securityApi.startSecurityScan();
       await loadSecurityData();
     } catch {
-      // Scan simulation fallback
       await new Promise(r => setTimeout(r, 2000));
     } finally {
       setScanning(false);

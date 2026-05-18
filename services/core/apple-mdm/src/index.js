@@ -837,6 +837,59 @@ app.post('/api/mdm/devices/:udid/remove-profile', async (req, res) => {
   }
 });
 
+// ─── GET/POST /api/mdm/config ─ APNs cert & MDM settings ─────────────────────
+
+app.get('/api/mdm/config', (req, res) => {
+  res.json({
+    topic: process.env.APNS_TOPIC || '',
+    serverUrl: process.env.MDM_SERVER_URL || MDM_SERVER_URL,
+    orgName: process.env.MDM_ORG_NAME || 'OpenDirectory',
+    apnsConfigured: !!(process.env.APNS_CERT && process.env.APNS_KEY && process.env.APNS_TOPIC),
+  });
+});
+
+// In-memory config store (persisted to env-overrides file in production via volume mount)
+let runtimeConfig = {};
+
+app.post('/api/mdm/config', async (req, res) => {
+  const { topic, serverUrl, orgName, apnsCert, apnsKey } = req.body || {};
+
+  if (topic)     runtimeConfig.APNS_TOPIC    = topic;
+  if (serverUrl) runtimeConfig.MDM_SERVER_URL = serverUrl;
+  if (orgName)   runtimeConfig.MDM_ORG_NAME   = orgName;
+
+  // If new certs provided, try to reinitialise APNs provider
+  if (apnsCert) {
+    process.env.APNS_CERT = apnsCert;
+    runtimeConfig.APNS_CERT = apnsCert;
+  }
+  if (apnsKey) {
+    process.env.APNS_KEY = apnsKey;
+    runtimeConfig.APNS_KEY = apnsKey;
+  }
+  if (topic) process.env.APNS_TOPIC = topic;
+
+  if (apnsCert || apnsKey || topic) {
+    apnsProvider = initApns();
+  }
+
+  // Persist to /data/mdm-config.json if writable (Docker volume)
+  try {
+    const fs = require('fs');
+    const configPath = '/data/mdm-config.json';
+    fs.mkdirSync('/data', { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify(runtimeConfig, null, 2));
+  } catch (_) { /* not writable — config lives in RAM until restart */ }
+
+  res.json({
+    saved: true,
+    apnsConfigured: !!(process.env.APNS_CERT && process.env.APNS_KEY && process.env.APNS_TOPIC),
+    topic: process.env.APNS_TOPIC || '',
+    serverUrl: process.env.MDM_SERVER_URL || MDM_SERVER_URL,
+    orgName: process.env.MDM_ORG_NAME || 'OpenDirectory',
+  });
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 async function start() {

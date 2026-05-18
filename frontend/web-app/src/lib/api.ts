@@ -469,20 +469,71 @@ export const gatewayApi = {
 
 // Security API
 export const securityApi = {
+  // Antivirus endpoints → antivirus-protection service (/api/antivirus/*)
   getThreatIntel: () =>
-    api.get('/api/security/threats'),
-  
+    api.get('/api/antivirus/threats'),
+
+  getThreats: () =>
+    api.get('/api/antivirus/threats'),
+
+  getScans: () =>
+    api.get('/api/antivirus/scans'),
+
+  getAvDevices: () =>
+    api.get('/api/antivirus/devices'),
+
+  getAvStatistics: () =>
+    api.get('/api/antivirus/statistics'),
+
+  getAvDashboard: () =>
+    api.get('/api/antivirus/dashboard'),
+
+  getQuarantine: () =>
+    api.get('/api/antivirus/quarantine'),
+
+  getSignatures: () =>
+    api.get('/api/antivirus/signatures'),
+
+  updateSignatures: () =>
+    api.post('/api/antivirus/signatures/update', {}),
+
+  startScan: (deviceIds?: string[], scanType?: string) =>
+    api.post('/api/antivirus/scan', { deviceIds, scanType: scanType ?? 'quick' }),
+
+  restoreQuarantine: (fileId: string) =>
+    api.post(`/api/antivirus/quarantine/${fileId}/restore`, {}),
+
+  deleteQuarantine: (fileId: string) =>
+    api.delete(`/api/antivirus/quarantine/${fileId}`),
+
+  // Security scanner endpoints → security-scanner service (/api/scanner/*)
+  getComplianceStatus: () =>
+    api.get('/api/scanner/findings'),
+
+  getFindings: () =>
+    api.get('/api/scanner/findings'),
+
+  getRiskScore: () =>
+    api.get('/api/scanner/risk-score'),
+
+  getTrends: () =>
+    api.get('/api/scanner/trends'),
+
+  getBenchmarks: () =>
+    api.get('/api/scanner/benchmarks'),
+
+  startSecurityScan: (target?: string) =>
+    api.post('/api/scanner/scan', { target }),
+
+  getSecurityAlerts: () =>
+    api.get('/api/scanner/findings'),
+
+  // Legacy paths kept for other callers
   getPAMSessions: () =>
     api.get('/api/security/pam/sessions'),
-  
+
   getDLPPolicies: () =>
     api.get('/api/security/dlp/policies'),
-  
-  getSecurityAlerts: () =>
-    api.get('/api/security/alerts'),
-  
-  getComplianceStatus: () =>
-    api.get('/api/security/compliance'),
 };
 
 // Backup & DR API
