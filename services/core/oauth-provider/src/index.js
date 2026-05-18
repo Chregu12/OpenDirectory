@@ -1551,6 +1551,74 @@ app.post('/api/scim-push/:appId/provision', (req, res) => {
   res.json({ success: true, appId, userId, action, timestamp: new Date().toISOString() });
 });
 
+// ─── App Deployment Repository ───────────────────────────────────────────────
+
+const appPackages = new Map([
+  ['chrome-latest', { id: 'chrome-latest', name: 'Google Chrome', version: 'latest', platform: 'windows', type: 'msi', downloadUrl: 'https://dl.google.com/chrome/install/GoogleChromeStandaloneEnterprise64.msi', silent: '/quiet /norestart', checkCommand: 'reg query "HKLM\\SOFTWARE\\Google\\Chrome"', checkValue: 'version' }],
+  ['firefox-esr', { id: 'firefox-esr', name: 'Mozilla Firefox ESR', version: '115', platform: 'windows', type: 'msi', downloadUrl: 'https://download.mozilla.org/?product=firefox-esr-latest-ssl&os=win64&lang=de', silent: '/S', checkCommand: 'reg query "HKLM\\SOFTWARE\\Mozilla\\Mozilla Firefox ESR"' }],
+  ['vscode', { id: 'vscode', name: 'Visual Studio Code', version: 'latest', platform: 'windows', type: 'exe', downloadUrl: 'https://update.code.visualstudio.com/latest/win32-x64-user/stable', silent: '/VERYSILENT /MERGETASKS=!runcode' }],
+  ['chrome-mac', { id: 'chrome-mac', name: 'Google Chrome', version: 'latest', platform: 'macos', type: 'dmg', downloadUrl: 'https://dl.google.com/chrome/mac/stable/GGRO/googlechrome.dmg' }],
+  ['homebrew', { id: 'homebrew', name: 'Homebrew Package Manager', version: 'latest', platform: 'macos', type: 'script', installScript: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"' }],
+]);
+
+app.get('/api/packages', (req, res) => {
+  const platform = req.query.platform;
+  const packages = [...appPackages.values()];
+  res.json(platform ? packages.filter(p => p.platform === platform || p.platform === 'all') : packages);
+});
+
+app.get('/api/packages/:id', (req, res) => {
+  const pkg = appPackages.get(req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'Package not found' });
+  res.json(pkg);
+});
+
+app.post('/api/packages', (req, res) => {
+  const { name, version, platform, type, downloadUrl, silent, installScript } = req.body;
+  if (!name || !platform) return res.status(400).json({ error: 'name and platform required' });
+  const id = `pkg-${uuidv4().slice(0, 8)}`;
+  const pkg = { id, name, version: version || 'latest', platform, type: type || 'script', downloadUrl, silent, installScript, addedAt: new Date().toISOString() };
+  appPackages.set(id, pkg);
+  res.status(201).json(pkg);
+});
+
+// Deploy package to a device
+app.post('/api/packages/:pkgId/deploy/:deviceId', (req, res) => {
+  const pkg = appPackages.get(req.params.pkgId);
+  if (!pkg) return res.status(404).json({ error: 'Package not found' });
+
+  const queue = mdmCommands.get(req.params.deviceId) || [];
+  const cmd = { id: uuidv4(), command: 'install_app', payload: { packageId: pkg.id, name: pkg.name, version: pkg.version, downloadUrl: pkg.downloadUrl, silent: pkg.silent, installScript: pkg.installScript, type: pkg.type }, issuedAt: new Date().toISOString(), status: 'pending' };
+  queue.push(cmd);
+  mdmCommands.set(req.params.deviceId, queue);
+
+  // Persist to DB
+  if (db.isAvailable()) {
+    db.query('INSERT INTO mdm_commands(id,device_id,command,payload,status) VALUES($1,$2,$3,$4,$5)', [cmd.id, req.params.deviceId, 'install_app', JSON.stringify(cmd.payload), 'pending']).catch(() => {});
+  }
+
+  res.status(201).json({ commandId: cmd.id, deviceId: req.params.deviceId, package: pkg.name });
+});
+
+// Bulk deploy to all devices by platform
+app.post('/api/packages/:pkgId/deploy-all', (req, res) => {
+  const pkg = appPackages.get(req.params.pkgId);
+  if (!pkg) return res.status(404).json({ error: 'Package not found' });
+
+  const targetDevices = [...deviceRegistry.values()].filter(d => d.platform === pkg.platform || pkg.platform === 'all');
+  const commands = [];
+
+  for (const device of targetDevices) {
+    const cmd = { id: uuidv4(), command: 'install_app', payload: { packageId: pkg.id, name: pkg.name, downloadUrl: pkg.downloadUrl, silent: pkg.silent }, issuedAt: new Date().toISOString(), status: 'pending' };
+    const queue = mdmCommands.get(device.id) || [];
+    queue.push(cmd);
+    mdmCommands.set(device.id, queue);
+    commands.push({ deviceId: device.id, hostname: device.hostname, commandId: cmd.id });
+  }
+
+  res.json({ package: pkg.name, devicesTargeted: targetDevices.length, commands });
+});
+
 // ─── Health ───────────────────────────────────────────────────────────────────────
 
 app.get('/health', (req, res) => {
