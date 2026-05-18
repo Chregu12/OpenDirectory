@@ -778,6 +778,28 @@ services:
       timeout: 10s
       retries: 3
 
+  certificate-authority:
+    build: ./services/core/certificate-authority
+    ports:
+      - "3012:3012"
+    environment:
+      - CA_PORT=3012
+      - CA_COMMON_NAME=OpenDirectory Internal CA
+      - CA_ORG=${CA_ORG:-OpenDirectory}
+      - CA_COUNTRY=${CA_COUNTRY:-CH}
+      - DB_HOST=postgres
+      - DB_NAME=${DB_NAME:-auth}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3012/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 # ===================
 # Networks
 # ===================
