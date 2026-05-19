@@ -35,6 +35,8 @@ import {
   ArrowPathIcon,
   PuzzlePieceIcon,
   FlagIcon,
+  ShieldCheckIcon,
+  TagIcon,
 } from '@heroicons/react/24/outline';
 
 // ─── Search catalog ───────────────────────────────────────────────────────────
@@ -63,6 +65,8 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'sync',         name: 'Verzeichnis-Sync',    view: 'sync',          type: 'Seite' },
   { id: 'integrations', name: 'Integrationen',       view: 'integrations',  type: 'Seite' },
   { id: 'roadmap',      name: 'Roadmap & TODO',      view: 'roadmap',       type: 'Seite' },
+  { id: 'pim',          name: 'PIM',                 view: 'pim',           type: 'Seite' },
+  { id: 'licenses',     name: 'Lizenz-Kiosk',        view: 'licenses',      type: 'Seite' },
 ];
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -295,6 +299,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     { type: 'section', label: 'Verzeichnis' },
     { type: 'item', id: 'users',          name: 'Benutzer',          icon: UserGroupIcon },
     { type: 'item', id: 'permissions',    name: 'Rollen & Rechte',   icon: KeyIcon },
+    { type: 'item', id: 'pim',            name: 'PIM',               icon: ShieldCheckIcon },
     { type: 'item', id: 'identity',       name: 'Identity Provider', icon: FingerPrintIcon },
     { type: 'item', id: 'enrollment',     name: 'Enrollment',        icon: ArrowDownOnSquareStackIcon },
     { type: 'item', id: 'sync',           name: 'Verzeichnis-Sync',  icon: ArrowPathIcon },
@@ -304,6 +309,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     { type: 'item', id: 'blueprints',     name: 'Blueprints',        icon: RectangleStackIcon },
     { type: 'item', id: 'antivirus',      name: 'Antivirus',         icon: BugAntIcon },
     { type: 'item', id: 'appstore',       name: 'App Store',         icon: ShoppingBagIcon },
+    { type: 'item', id: 'licenses',       name: 'Lizenz-Kiosk',      icon: TagIcon },
     { type: 'item', id: 'printers',       name: 'Drucker',           icon: PrinterIcon },
     { type: 'item', id: 'applications',   name: 'Anwendungen',       icon: CubeIcon },
 
