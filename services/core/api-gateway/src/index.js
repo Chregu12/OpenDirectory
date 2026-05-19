@@ -306,8 +306,9 @@ class APIGateway {
 
     // Core services (always enabled)
     this.setupServiceProxy('authentication', 'http://authentication-service:3001', '/api/auth');
+    this.setupServiceProxy('pim', 'http://authentication-service:3001', '/api/pim');
     this.setupServiceProxy('configuration', 'http://configuration-service:3002', '/api/config');
-    connectedServices.push('authentication', 'configuration');
+    connectedServices.push('authentication', 'pim', 'configuration');
 
     // Health service (if exists)
     this.setupServiceProxy('health', 'http://health-service:3020', '/api/health');
