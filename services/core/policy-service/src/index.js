@@ -1368,6 +1368,627 @@ app.post('/api/blueprints/:id/apply', async (req, res) => {
 });
 
 // ============================
+// License Management
+// ============================
+
+// In-memory stores for licenses (fallback when DB unavailable)
+const inMemoryLicenses = new Map();
+const inMemoryLicenseAssignments = new Map();
+const inMemoryLicenseRequests = new Map();
+
+// Seed demo licenses
+(function seedLicenses() {
+  const demos = [
+    {
+      id: 'lic-demo-1',
+      name: 'Microsoft 365 Business',
+      vendor: 'Microsoft',
+      category: 'Productivity',
+      license_type: 'per_user',
+      total_seats: 50,
+      used_seats: 32,
+      cost_per_seat: 12.50,
+      currency: 'CHF',
+      renewal_date: null,
+      auto_approve: false,
+      description: 'Office-Suite inkl. Exchange, Teams, SharePoint',
+      icon_url: null,
+      notes: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 'lic-demo-2',
+      name: 'Adobe Creative Cloud',
+      vendor: 'Adobe',
+      category: 'Design',
+      license_type: 'per_user',
+      total_seats: 10,
+      used_seats: 8,
+      cost_per_seat: 60.00,
+      currency: 'CHF',
+      renewal_date: null,
+      auto_approve: false,
+      description: 'Photoshop, Illustrator, Premiere Pro, und mehr',
+      icon_url: null,
+      notes: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 'lic-demo-3',
+      name: 'JetBrains All Products',
+      vendor: 'JetBrains',
+      category: 'Developer',
+      license_type: 'per_user',
+      total_seats: 20,
+      used_seats: 12,
+      cost_per_seat: 25.00,
+      currency: 'CHF',
+      renewal_date: null,
+      auto_approve: true,
+      description: 'IntelliJ, WebStorm, PyCharm, Rider und alle IDEs',
+      icon_url: null,
+      notes: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  ];
+  for (const lic of demos) {
+    inMemoryLicenses.set(lic.id, lic);
+  }
+})();
+
+// Helper: get used_seats count from assignments table (DB)
+async function getLicenseWithSeats(licenseId) {
+  const licResult = await db.query('SELECT * FROM license_catalog WHERE id = $1', [licenseId]);
+  if (licResult.rows.length === 0) return null;
+  const asnResult = await db.query(
+    'SELECT COUNT(*) AS cnt FROM license_assignments WHERE license_id = $1',
+    [licenseId]
+  );
+  const lic = licResult.rows[0];
+  lic.used_seats = parseInt(asnResult.rows[0].cnt, 10);
+  return lic;
+}
+
+// ── Catalog (admin) ───────────────────────────────────────────────────────────
+
+// GET /api/licenses — list all licenses with used_seats count
+app.get('/api/licenses', async (_req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT lc.*,
+             COALESCE(COUNT(la.id), 0)::int AS used_seats
+      FROM license_catalog lc
+      LEFT JOIN license_assignments la ON la.license_id = lc.id
+      GROUP BY lc.id
+      ORDER BY lc.name ASC
+    `);
+    res.json({ licenses: result.rows, total: result.rows.length });
+  } catch (err) {
+    logger.warn('DB unavailable for licenses list, using in-memory', { error: err.message });
+    const licenses = [...inMemoryLicenses.values()];
+    res.json({ licenses, total: licenses.length });
+  }
+});
+
+// GET /api/licenses/kiosk — public self-service catalog (hides cost/notes)
+app.get('/api/licenses/kiosk', async (_req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT lc.id, lc.name, lc.vendor, lc.category, lc.license_type,
+             lc.total_seats, lc.auto_approve, lc.description, lc.icon_url,
+             COALESCE(COUNT(la.id), 0)::int AS used_seats,
+             (lc.total_seats - COALESCE(COUNT(la.id), 0))::int AS available_seats
+      FROM license_catalog lc
+      LEFT JOIN license_assignments la ON la.license_id = lc.id
+      GROUP BY lc.id
+      ORDER BY lc.name ASC
+    `);
+    res.json({ licenses: result.rows, total: result.rows.length });
+  } catch (err) {
+    logger.warn('DB unavailable for kiosk, using in-memory', { error: err.message });
+    const licenses = [...inMemoryLicenses.values()].map(({ cost_per_seat, notes, ...pub }) => ({
+      ...pub,
+      available_seats: pub.total_seats - pub.used_seats,
+    }));
+    res.json({ licenses, total: licenses.length });
+  }
+});
+
+// GET /api/licenses/requests — list license requests (query: ?status=pending)
+app.get('/api/licenses/requests', async (req, res) => {
+  try {
+    const { status } = req.query;
+    const params = [];
+    let where = '';
+    if (status) {
+      params.push(status);
+      where = 'WHERE status = $1';
+    }
+    const result = await db.query(
+      `SELECT * FROM license_requests ${where} ORDER BY requested_at DESC`,
+      params
+    );
+    res.json({ requests: result.rows, total: result.rows.length });
+  } catch (err) {
+    logger.warn('DB unavailable for license requests, using in-memory', { error: err.message });
+    let requests = [...inMemoryLicenseRequests.values()];
+    if (req.query.status) {
+      requests = requests.filter(r => r.status === req.query.status);
+    }
+    res.json({ requests, total: requests.length });
+  }
+});
+
+// POST /api/licenses — create license
+app.post('/api/licenses', async (req, res) => {
+  const { name, vendor, category, license_type, total_seats, cost_per_seat, currency, renewal_date, auto_approve, description } = req.body;
+  if (!name) return res.status(400).json({ error: 'name is required' });
+
+  try {
+    const result = await db.query(
+      `INSERT INTO license_catalog
+         (name, vendor, category, license_type, total_seats, cost_per_seat, currency, renewal_date, auto_approve, description)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING *`,
+      [
+        name,
+        vendor || null,
+        category || 'Software',
+        license_type || 'per_user',
+        total_seats || 0,
+        cost_per_seat || null,
+        currency || 'CHF',
+        renewal_date || null,
+        auto_approve || false,
+        description || null,
+      ]
+    );
+    logger.info(`License created: ${name}`, { id: result.rows[0].id });
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    logger.warn('DB unavailable, storing license in memory', { error: err.message });
+    const id = `lic-${Date.now()}`;
+    const license = {
+      id, name,
+      vendor: vendor || null,
+      category: category || 'Software',
+      license_type: license_type || 'per_user',
+      total_seats: total_seats || 0,
+      used_seats: 0,
+      cost_per_seat: cost_per_seat || null,
+      currency: currency || 'CHF',
+      renewal_date: renewal_date || null,
+      auto_approve: auto_approve || false,
+      description: description || null,
+      icon_url: null,
+      notes: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    inMemoryLicenses.set(id, license);
+    res.status(201).json(license);
+  }
+});
+
+// PUT /api/licenses/:id — update license
+app.put('/api/licenses/:id', async (req, res) => {
+  const { name, vendor, category, license_type, total_seats, cost_per_seat, currency, renewal_date, auto_approve, description, notes, icon_url } = req.body;
+  try {
+    const result = await db.query(
+      `UPDATE license_catalog SET
+         name = COALESCE($1, name),
+         vendor = COALESCE($2, vendor),
+         category = COALESCE($3, category),
+         license_type = COALESCE($4, license_type),
+         total_seats = COALESCE($5, total_seats),
+         cost_per_seat = COALESCE($6, cost_per_seat),
+         currency = COALESCE($7, currency),
+         renewal_date = COALESCE($8, renewal_date),
+         auto_approve = COALESCE($9, auto_approve),
+         description = COALESCE($10, description),
+         notes = COALESCE($11, notes),
+         icon_url = COALESCE($12, icon_url),
+         updated_at = NOW()
+       WHERE id = $13
+       RETURNING *`,
+      [
+        name || null, vendor || null, category || null, license_type || null,
+        total_seats != null ? total_seats : null,
+        cost_per_seat != null ? cost_per_seat : null,
+        currency || null, renewal_date || null,
+        auto_approve != null ? auto_approve : null,
+        description || null, notes || null, icon_url || null,
+        req.params.id,
+      ]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'License not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    logger.warn('DB unavailable, updating in-memory license', { error: err.message });
+    const lic = inMemoryLicenses.get(req.params.id);
+    if (!lic) return res.status(404).json({ error: 'License not found' });
+    const updated = {
+      ...lic,
+      ...(name != null && { name }),
+      ...(vendor != null && { vendor }),
+      ...(category != null && { category }),
+      ...(license_type != null && { license_type }),
+      ...(total_seats != null && { total_seats }),
+      ...(cost_per_seat != null && { cost_per_seat }),
+      ...(currency != null && { currency }),
+      ...(renewal_date != null && { renewal_date }),
+      ...(auto_approve != null && { auto_approve }),
+      ...(description != null && { description }),
+      ...(notes != null && { notes }),
+      ...(icon_url != null && { icon_url }),
+      updated_at: new Date().toISOString(),
+    };
+    inMemoryLicenses.set(req.params.id, updated);
+    res.json(updated);
+  }
+});
+
+// DELETE /api/licenses/:id — delete license
+app.delete('/api/licenses/:id', async (req, res) => {
+  try {
+    const result = await db.query(
+      'DELETE FROM license_catalog WHERE id = $1 RETURNING id',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'License not found' });
+    res.status(204).send();
+  } catch (err) {
+    logger.warn('DB unavailable, deleting in-memory license', { error: err.message });
+    if (!inMemoryLicenses.has(req.params.id)) return res.status(404).json({ error: 'License not found' });
+    inMemoryLicenses.delete(req.params.id);
+    // Remove associated assignments and requests
+    for (const [k, v] of inMemoryLicenseAssignments.entries()) {
+      if (v.license_id === req.params.id) inMemoryLicenseAssignments.delete(k);
+    }
+    for (const [k, v] of inMemoryLicenseRequests.entries()) {
+      if (v.license_id === req.params.id) inMemoryLicenseRequests.delete(k);
+    }
+    res.status(204).send();
+  }
+});
+
+// ── Assignments (admin) ───────────────────────────────────────────────────────
+
+// GET /api/licenses/:id/assignments — list who has this license
+app.get('/api/licenses/:id/assignments', async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT * FROM license_assignments WHERE license_id = $1 ORDER BY assigned_at DESC',
+      [req.params.id]
+    );
+    res.json({ assignments: result.rows, total: result.rows.length });
+  } catch (err) {
+    logger.warn('DB unavailable for assignments list, using in-memory', { error: err.message });
+    const assignments = [...inMemoryLicenseAssignments.values()].filter(a => a.license_id === req.params.id);
+    res.json({ assignments, total: assignments.length });
+  }
+});
+
+// POST /api/licenses/:id/assign — assign license to user/group/device
+app.post('/api/licenses/:id/assign', async (req, res) => {
+  const { assignee_type, assignee_id, assignee_name, assigned_by, expires_at } = req.body;
+  if (!assignee_type || !assignee_id) {
+    return res.status(400).json({ error: 'assignee_type and assignee_id are required' });
+  }
+  const validTypes = ['user', 'group', 'device'];
+  if (!validTypes.includes(assignee_type)) {
+    return res.status(400).json({ error: `assignee_type must be one of: ${validTypes.join(', ')}` });
+  }
+
+  try {
+    // Check seats available
+    const lic = await getLicenseWithSeats(req.params.id);
+    if (!lic) return res.status(404).json({ error: 'License not found' });
+    if (lic.total_seats > 0 && lic.used_seats >= lic.total_seats) {
+      return res.status(409).json({ error: 'No seats available for this license' });
+    }
+
+    const result = await db.query(
+      `INSERT INTO license_assignments (license_id, assignee_type, assignee_id, assignee_name, assigned_by, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING *`,
+      [req.params.id, assignee_type, assignee_id, assignee_name || null, assigned_by || null, expires_at || null]
+    );
+
+    // Update used_seats on catalog
+    await db.query(
+      'UPDATE license_catalog SET used_seats = used_seats + 1, updated_at = NOW() WHERE id = $1',
+      [req.params.id]
+    );
+
+    logger.info(`License assigned: ${req.params.id} -> ${assignee_type}:${assignee_id}`);
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'This assignee already has this license' });
+    }
+    logger.warn('DB unavailable, assigning in-memory', { error: err.message });
+    const lic = inMemoryLicenses.get(req.params.id);
+    if (!lic) return res.status(404).json({ error: 'License not found' });
+
+    // Check seats
+    const currentAssignments = [...inMemoryLicenseAssignments.values()].filter(a => a.license_id === req.params.id);
+    if (lic.total_seats > 0 && currentAssignments.length >= lic.total_seats) {
+      return res.status(409).json({ error: 'No seats available for this license' });
+    }
+    // Check duplicate
+    const dup = currentAssignments.find(a => a.assignee_type === assignee_type && a.assignee_id === assignee_id);
+    if (dup) return res.status(409).json({ error: 'This assignee already has this license' });
+
+    const id = `lasgn-${Date.now()}`;
+    const assignment = {
+      id,
+      license_id: req.params.id,
+      assignee_type,
+      assignee_id,
+      assignee_name: assignee_name || null,
+      assigned_at: new Date().toISOString(),
+      assigned_by: assigned_by || null,
+      expires_at: expires_at || null,
+    };
+    inMemoryLicenseAssignments.set(id, assignment);
+    lic.used_seats = (lic.used_seats || 0) + 1;
+    inMemoryLicenses.set(req.params.id, lic);
+    res.status(201).json(assignment);
+  }
+});
+
+// DELETE /api/licenses/:id/assignments/:assigneeId — revoke assignment
+app.delete('/api/licenses/:id/assignments/:assigneeId', async (req, res) => {
+  try {
+    // assigneeId is the assignee_id value
+    const result = await db.query(
+      'DELETE FROM license_assignments WHERE license_id = $1 AND assignee_id = $2 RETURNING id',
+      [req.params.id, req.params.assigneeId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Assignment not found' });
+
+    // Decrement used_seats
+    await db.query(
+      'UPDATE license_catalog SET used_seats = GREATEST(used_seats - 1, 0), updated_at = NOW() WHERE id = $1',
+      [req.params.id]
+    );
+
+    logger.info(`License assignment revoked: ${req.params.id} -> ${req.params.assigneeId}`);
+    res.status(204).send();
+  } catch (err) {
+    logger.warn('DB unavailable, revoking in-memory assignment', { error: err.message });
+    let found = false;
+    for (const [k, v] of inMemoryLicenseAssignments.entries()) {
+      if (v.license_id === req.params.id && v.assignee_id === req.params.assigneeId) {
+        inMemoryLicenseAssignments.delete(k);
+        found = true;
+        break;
+      }
+    }
+    if (!found) return res.status(404).json({ error: 'Assignment not found' });
+    const lic = inMemoryLicenses.get(req.params.id);
+    if (lic) {
+      lic.used_seats = Math.max((lic.used_seats || 0) - 1, 0);
+      inMemoryLicenses.set(req.params.id, lic);
+    }
+    res.status(204).send();
+  }
+});
+
+// ── Kiosk / Requests ──────────────────────────────────────────────────────────
+
+// POST /api/licenses/:id/request — user requests a license
+app.post('/api/licenses/:id/request', async (req, res) => {
+  const { requester_id, requester_name, justification, assignee_type, assignee_id, assignee_name } = req.body;
+  if (!requester_id) return res.status(400).json({ error: 'requester_id is required' });
+
+  try {
+    // Check license exists and get seat info
+    const lic = await getLicenseWithSeats(req.params.id);
+    if (!lic) return res.status(404).json({ error: 'License not found' });
+
+    const seatsAvailable = lic.total_seats === 0 || lic.used_seats < lic.total_seats;
+    const effectiveAssigneeType = assignee_type || 'user';
+    const effectiveAssigneeId = assignee_id || requester_id;
+    const effectiveAssigneeName = assignee_name || requester_name || null;
+
+    // Auto-approve path
+    if (lic.auto_approve && seatsAvailable) {
+      // Create assignment directly
+      await db.query(
+        `INSERT INTO license_assignments (license_id, assignee_type, assignee_id, assignee_name, assigned_by)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (license_id, assignee_type, assignee_id) DO NOTHING`,
+        [req.params.id, effectiveAssigneeType, effectiveAssigneeId, effectiveAssigneeName, requester_id]
+      );
+      await db.query(
+        'UPDATE license_catalog SET used_seats = used_seats + 1, updated_at = NOW() WHERE id = $1',
+        [req.params.id]
+      );
+      const reqResult = await db.query(
+        `INSERT INTO license_requests
+           (license_id, license_name, requester_id, requester_name, assignee_type, assignee_id, assignee_name, justification, status, decided_at, decided_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'approved',NOW(),'auto-approve')
+         RETURNING *`,
+        [req.params.id, lic.name, requester_id, requester_name || null, effectiveAssigneeType, effectiveAssigneeId, effectiveAssigneeName, justification || null]
+      );
+      logger.info(`License auto-approved: ${req.params.id} -> ${requester_id}`);
+      return res.status(201).json(reqResult.rows[0]);
+    }
+
+    // Pending path
+    const reqResult = await db.query(
+      `INSERT INTO license_requests
+         (license_id, license_name, requester_id, requester_name, assignee_type, assignee_id, assignee_name, justification, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending')
+       RETURNING *`,
+      [req.params.id, lic.name, requester_id, requester_name || null, effectiveAssigneeType, effectiveAssigneeId, effectiveAssigneeName, justification || null]
+    );
+    logger.info(`License request created: ${req.params.id} by ${requester_id}`);
+    res.status(201).json(reqResult.rows[0]);
+  } catch (err) {
+    logger.warn('DB unavailable, processing license request in-memory', { error: err.message });
+    const lic = inMemoryLicenses.get(req.params.id);
+    if (!lic) return res.status(404).json({ error: 'License not found' });
+
+    const seatsAvailable = lic.total_seats === 0 || lic.used_seats < lic.total_seats;
+    const effectiveAssigneeType = assignee_type || 'user';
+    const effectiveAssigneeId = assignee_id || requester_id;
+    const effectiveAssigneeName = assignee_name || requester_name || null;
+    const id = `lreq-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    if (lic.auto_approve && seatsAvailable) {
+      // Create in-memory assignment
+      const aId = `lasgn-${Date.now()}`;
+      inMemoryLicenseAssignments.set(aId, {
+        id: aId,
+        license_id: req.params.id,
+        assignee_type: effectiveAssigneeType,
+        assignee_id: effectiveAssigneeId,
+        assignee_name: effectiveAssigneeName,
+        assigned_at: now,
+        assigned_by: requester_id,
+        expires_at: null,
+      });
+      lic.used_seats = (lic.used_seats || 0) + 1;
+      inMemoryLicenses.set(req.params.id, lic);
+
+      const request = {
+        id, license_id: req.params.id, license_name: lic.name,
+        requester_id, requester_name: requester_name || null,
+        assignee_type: effectiveAssigneeType, assignee_id: effectiveAssigneeId, assignee_name: effectiveAssigneeName,
+        justification: justification || null,
+        status: 'approved',
+        requested_at: now, decided_at: now, decided_by: 'auto-approve',
+      };
+      inMemoryLicenseRequests.set(id, request);
+      return res.status(201).json(request);
+    }
+
+    const request = {
+      id, license_id: req.params.id, license_name: lic.name,
+      requester_id, requester_name: requester_name || null,
+      assignee_type: effectiveAssigneeType, assignee_id: effectiveAssigneeId, assignee_name: effectiveAssigneeName,
+      justification: justification || null,
+      status: 'pending',
+      requested_at: now, decided_at: null, decided_by: null,
+    };
+    inMemoryLicenseRequests.set(id, request);
+    res.status(201).json(request);
+  }
+});
+
+// POST /api/licenses/requests/:id/approve — admin approves request
+app.post('/api/licenses/requests/:id/approve', async (req, res) => {
+  const { decided_by } = req.body;
+  try {
+    const reqResult = await db.query('SELECT * FROM license_requests WHERE id = $1', [req.params.id]);
+    if (reqResult.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+
+    const licReq = reqResult.rows[0];
+    if (licReq.status !== 'pending') {
+      return res.status(409).json({ error: `Request is already ${licReq.status}` });
+    }
+
+    // Check seats
+    const lic = await getLicenseWithSeats(licReq.license_id);
+    if (!lic) return res.status(404).json({ error: 'License not found' });
+    if (lic.total_seats > 0 && lic.used_seats >= lic.total_seats) {
+      return res.status(409).json({ error: 'No seats available for this license' });
+    }
+
+    // Create assignment
+    await db.query(
+      `INSERT INTO license_assignments (license_id, assignee_type, assignee_id, assignee_name, assigned_by)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (license_id, assignee_type, assignee_id) DO NOTHING`,
+      [licReq.license_id, licReq.assignee_type, licReq.assignee_id, licReq.assignee_name, decided_by || 'admin']
+    );
+    await db.query(
+      'UPDATE license_catalog SET used_seats = used_seats + 1, updated_at = NOW() WHERE id = $1',
+      [licReq.license_id]
+    );
+
+    // Mark request approved
+    const updated = await db.query(
+      `UPDATE license_requests SET status = 'approved', decided_at = NOW(), decided_by = $1
+       WHERE id = $2 RETURNING *`,
+      [decided_by || 'admin', req.params.id]
+    );
+    logger.info(`License request approved: ${req.params.id}`);
+    res.json(updated.rows[0]);
+  } catch (err) {
+    logger.warn('DB unavailable, approving in-memory request', { error: err.message });
+    const licReq = inMemoryLicenseRequests.get(req.params.id);
+    if (!licReq) return res.status(404).json({ error: 'Request not found' });
+    if (licReq.status !== 'pending') return res.status(409).json({ error: `Request is already ${licReq.status}` });
+
+    const lic = inMemoryLicenses.get(licReq.license_id);
+    if (!lic) return res.status(404).json({ error: 'License not found' });
+    const currentAssignments = [...inMemoryLicenseAssignments.values()].filter(a => a.license_id === licReq.license_id);
+    if (lic.total_seats > 0 && currentAssignments.length >= lic.total_seats) {
+      return res.status(409).json({ error: 'No seats available for this license' });
+    }
+
+    const aId = `lasgn-${Date.now()}`;
+    const now = new Date().toISOString();
+    inMemoryLicenseAssignments.set(aId, {
+      id: aId,
+      license_id: licReq.license_id,
+      assignee_type: licReq.assignee_type,
+      assignee_id: licReq.assignee_id,
+      assignee_name: licReq.assignee_name,
+      assigned_at: now,
+      assigned_by: decided_by || 'admin',
+      expires_at: null,
+    });
+    lic.used_seats = (lic.used_seats || 0) + 1;
+    inMemoryLicenses.set(licReq.license_id, lic);
+
+    const updated = { ...licReq, status: 'approved', decided_at: now, decided_by: decided_by || 'admin' };
+    inMemoryLicenseRequests.set(req.params.id, updated);
+    res.json(updated);
+  }
+});
+
+// POST /api/licenses/requests/:id/deny — admin denies request
+app.post('/api/licenses/requests/:id/deny', async (req, res) => {
+  const { decided_by } = req.body;
+  try {
+    const reqResult = await db.query('SELECT * FROM license_requests WHERE id = $1', [req.params.id]);
+    if (reqResult.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+
+    const licReq = reqResult.rows[0];
+    if (licReq.status !== 'pending') {
+      return res.status(409).json({ error: `Request is already ${licReq.status}` });
+    }
+
+    const updated = await db.query(
+      `UPDATE license_requests SET status = 'denied', decided_at = NOW(), decided_by = $1
+       WHERE id = $2 RETURNING *`,
+      [decided_by || 'admin', req.params.id]
+    );
+    logger.info(`License request denied: ${req.params.id}`);
+    res.json(updated.rows[0]);
+  } catch (err) {
+    logger.warn('DB unavailable, denying in-memory request', { error: err.message });
+    const licReq = inMemoryLicenseRequests.get(req.params.id);
+    if (!licReq) return res.status(404).json({ error: 'Request not found' });
+    if (licReq.status !== 'pending') return res.status(409).json({ error: `Request is already ${licReq.status}` });
+
+    const now = new Date().toISOString();
+    const updated = { ...licReq, status: 'denied', decided_at: now, decided_by: decided_by || 'admin' };
+    inMemoryLicenseRequests.set(req.params.id, updated);
+    res.json(updated);
+  }
+});
+
+// ============================
 // Startup
 // ============================
 async function start() {

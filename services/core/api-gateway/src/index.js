@@ -410,6 +410,7 @@ class APIGateway {
     if (enabledModules.includes('policy-service')) {
       this.setupServiceProxy('policies', 'http://policy-service:3004', '/api/policies');
       this.setupServiceProxy('blueprints', 'http://policy-service:3004', '/api/blueprints');
+      this.setupServiceProxy('licenses', 'http://policy-service:3004', '/api/licenses');
       connectedServices.push('policy-service');
     }
 
