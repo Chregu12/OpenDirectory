@@ -126,10 +126,138 @@ function getInitialApps(device: Device): InstalledApp[] {
   ];
 }
 
-// ─── Small helpers ─────────────────────────────────────────────────────────────
+// ─── Device SVG Thumbnails ──────────────────────────────────────────────────────
 
-function PlatformIcon({ platform, className = 'w-4 h-4' }: { platform: Device['platform']; className?: string }) {
-  if (platform === 'windows') return <ServerIcon className={`${className} text-blue-500`} />;
+function MacBookSVG({ size = 48 }: { size?: number }) {
+  return (
+    <svg width={size} height={Math.round(size * 0.72)} viewBox="0 0 48 35" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="1" width="42" height="26" rx="2.5" fill="#F5F5F7" stroke="#C7C7CC" strokeWidth="1.4"/>
+      <rect x="5" y="3" width="38" height="22" rx="1.5" fill="#E5E5EA"/>
+      <circle cx="24" cy="2.2" r="0.8" fill="#AEAEB2"/>
+      {/* Apple logo */}
+      <path d="M22.5 11.5 C22.5 10.5 23.2 9.8 24 9.8 C24.8 9.8 25.5 10.5 25.5 11.5 L25.5 12 C26.5 12 27.5 13 27.2 14.3 C27 15.2 26.1 15.8 25.2 15.8 C24.8 15.8 24.5 15.6 24 15.6 C23.5 15.6 23.2 15.8 22.8 15.8 C21.9 15.8 21 15.2 20.8 14.3 C20.5 13 21.5 12 22.5 12 Z" fill="#AEAEB2"/>
+      <path d="M0.5 28 L5 27.2 L43 27.2 L47.5 28 C47.5 29.5 46.5 30.5 44.5 31 L3.5 31 C1.5 30.5 0.5 29.5 0.5 28Z" fill="#C7C7CC"/>
+      <rect x="19" y="29" width="10" height="1.2" rx="0.6" fill="#AEAEB2"/>
+    </svg>
+  );
+}
+
+function WindowsLaptopSVG({ size = 48 }: { size?: number }) {
+  return (
+    <svg width={size} height={Math.round(size * 0.72)} viewBox="0 0 48 35" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="1" width="42" height="26" rx="2.5" fill="#EEF2FF" stroke="#C5CFF5" strokeWidth="1.4"/>
+      <rect x="5" y="3" width="38" height="22" rx="1.5" fill="#DDE3FF"/>
+      <circle cx="24" cy="2.2" r="0.8" fill="#A0AEE8"/>
+      {/* Windows logo 4-square */}
+      <rect x="20.5" y="10.5" width="3" height="3" rx="0.4" fill="#4F7EF5"/>
+      <rect x="24.5" y="10.5" width="3" height="3" rx="0.4" fill="#4F7EF5"/>
+      <rect x="20.5" y="14.5" width="3" height="3" rx="0.4" fill="#4F7EF5"/>
+      <rect x="24.5" y="14.5" width="3" height="3" rx="0.4" fill="#4F7EF5"/>
+      <path d="M0.5 28 L5 27.2 L43 27.2 L47.5 28 C47.5 29.5 46.5 30.5 44.5 31 L3.5 31 C1.5 30.5 0.5 29.5 0.5 28Z" fill="#C5CFF5"/>
+      <rect x="19" y="29" width="10" height="1.2" rx="0.6" fill="#A0AEE8"/>
+    </svg>
+  );
+}
+
+function LinuxLaptopSVG({ size = 48 }: { size?: number }) {
+  return (
+    <svg width={size} height={Math.round(size * 0.72)} viewBox="0 0 48 35" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="1" width="42" height="26" rx="2.5" fill="#1C1C1E" stroke="#3A3A3C" strokeWidth="1.4"/>
+      <rect x="5" y="3" width="38" height="22" rx="1.5" fill="#2C2C2E"/>
+      {/* Terminal prompt */}
+      <rect x="9" y="10" width="5" height="1.5" rx="0.5" fill="#30D158"/>
+      <rect x="15" y="10" width="12" height="1.5" rx="0.5" fill="#48484A"/>
+      <rect x="9" y="14" width="16" height="1.5" rx="0.5" fill="#48484A"/>
+      <rect x="9" y="18" width="10" height="1.5" rx="0.5" fill="#48484A"/>
+      <rect x="20" y="10" width="1.5" height="1.5" rx="0.3" fill="#30D158"/>
+      <path d="M0.5 28 L5 27.2 L43 27.2 L47.5 28 C47.5 29.5 46.5 30.5 44.5 31 L3.5 31 C1.5 30.5 0.5 29.5 0.5 28Z" fill="#3A3A3C"/>
+      <rect x="19" y="29" width="10" height="1.2" rx="0.6" fill="#48484A"/>
+    </svg>
+  );
+}
+
+function IPhoneSVG({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={Math.round(size * 1.9)} viewBox="0 0 28 53" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="26" height="51" rx="5.5" fill="#F5F5F7" stroke="#C7C7CC" strokeWidth="1.4"/>
+      <rect x="3.5" y="8" width="21" height="34" rx="2" fill="#E5E5EA"/>
+      {/* Dynamic island */}
+      <rect x="9" y="3.5" width="10" height="2.5" rx="1.25" fill="#1C1C1E"/>
+      {/* Home indicator */}
+      <rect x="9.5" y="47" width="9" height="1.5" rx="0.75" fill="#C7C7CC"/>
+    </svg>
+  );
+}
+
+function IPadSVG({ size = 36 }: { size?: number }) {
+  return (
+    <svg width={size} height={Math.round(size * 1.42)} viewBox="0 0 36 51" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="34" height="49" rx="4.5" fill="#F5F5F7" stroke="#C7C7CC" strokeWidth="1.4"/>
+      <rect x="3.5" y="7" width="29" height="36" rx="1.5" fill="#E5E5EA"/>
+      <circle cx="18" cy="4" r="1.2" fill="#AEAEB2"/>
+      <rect x="12" y="47" width="12" height="1.5" rx="0.75" fill="#C7C7CC"/>
+      {/* Camera top */}
+      <circle cx="3" cy="14" r="1" fill="#AEAEB2"/>
+    </svg>
+  );
+}
+
+function AndroidSVG({ size = 26 }: { size?: number }) {
+  return (
+    <svg width={size} height={Math.round(size * 2)} viewBox="0 0 26 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="3" width="24" height="46" rx="4.5" fill="#E8F5E9" stroke="#A5D6A7" strokeWidth="1.4"/>
+      <rect x="3.5" y="9" width="19" height="30" rx="1.5" fill="#C8E6C9"/>
+      {/* Speaker top */}
+      <rect x="9" y="5" width="8" height="1.5" rx="0.75" fill="#A5D6A7"/>
+      {/* Camera */}
+      <circle cx="20" cy="6" r="1" fill="#81C784"/>
+      {/* Nav buttons */}
+      <circle cx="13" cy="46.5" r="2" fill="none" stroke="#A5D6A7" strokeWidth="1.2"/>
+      {/* Antennas (robot ears) */}
+      <line x1="8" y1="1.5" x2="6" y2="0" stroke="#A5D6A7" strokeWidth="1.2" strokeLinecap="round"/>
+      <line x1="18" y1="1.5" x2="20" y2="0" stroke="#A5D6A7" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function ServerRackSVG({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={Math.round(size * 0.75)} viewBox="0 0 40 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="38" height="28" rx="3" fill="#F2F2F7" stroke="#C7C7CC" strokeWidth="1.4"/>
+      {[6, 13, 20].map((y, i) => (
+        <g key={i}>
+          <rect x="4" y={y} width="32" height="5" rx="1" fill="#E5E5EA" stroke="#D1D1D6" strokeWidth="0.8"/>
+          <circle cx="9" cy={y + 2.5} r="1.2" fill={i === 0 ? '#30D158' : '#AEAEB2'}/>
+          <rect x="13" y={y + 1.5} width="14" height="2" rx="0.5" fill="#D1D1D6"/>
+          <circle cx="32" cy={y + 2.5} r="1" fill="#AEAEB2"/>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+type AnyPlatform = 'macos' | 'windows' | 'linux' | 'ios' | 'ipados' | 'android' | 'server' | string;
+
+function DeviceThumbnail({ platform, size = 'sm' }: { platform: AnyPlatform; size?: 'sm' | 'md' | 'lg' }) {
+  const p = (platform || '').toLowerCase();
+  const scale = size === 'sm' ? 0.65 : size === 'md' ? 1 : 1.5;
+
+  if (p === 'macos' || p === 'darwin')  return <MacBookSVG    size={Math.round(48 * scale)} />;
+  if (p === 'windows')                  return <WindowsLaptopSVG size={Math.round(48 * scale)} />;
+  if (p === 'linux')                    return <LinuxLaptopSVG size={Math.round(48 * scale)} />;
+  if (p === 'ios' || p === 'iphone')    return <IPhoneSVG    size={Math.round(28 * scale)} />;
+  if (p === 'ipados' || p === 'ipad')   return <IPadSVG      size={Math.round(36 * scale)} />;
+  if (p === 'android')                  return <AndroidSVG   size={Math.round(26 * scale)} />;
+  if (p === 'server')                   return <ServerRackSVG size={Math.round(40 * scale)} />;
+  // fallback
+  return <MacBookSVG size={Math.round(48 * scale)} />;
+}
+
+// Legacy icon (kept for small inline badge use)
+function PlatformIcon({ platform, className = 'w-4 h-4' }: { platform: AnyPlatform; className?: string }) {
+  const p = (platform || '').toLowerCase();
+  if (p === 'windows')                return <ServerIcon        className={`${className} text-blue-500`} />;
+  if (p === 'ios' || p === 'iphone')  return <DevicePhoneMobileIcon className={`${className} text-gray-500`} />;
   return <ComputerDesktopIcon className={`${className} text-gray-500`} />;
 }
 
@@ -542,12 +670,12 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
 
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-0">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${detail.status === 'online' ? 'bg-green-50' : 'bg-gray-100'}`}>
-                <PlatformIcon platform={detail.platform} className="w-6 h-6" />
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 flex items-center justify-center w-16 h-12 bg-[#F2F2F7] rounded-xl">
+                <DeviceThumbnail platform={detail.platform} size="md" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{detail.name || 'Unknown Device'}</h2>
+                <h2 className="text-lg font-semibold text-[#1D1D1F]">{detail.name || 'Unknown Device'}</h2>
                 <div className="flex items-center gap-2 mt-0.5">
                   {loadingDetail ? (
                     <span className="inline-block w-16 h-4 bg-gray-200 rounded animate-pulse" />
@@ -559,7 +687,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                       {detail.status === 'online' ? 'Online' : 'Offline'}
                     </span>
                   )}
-                  <span className="text-xs text-gray-500 capitalize">{detail.platform}</span>
+                  <span className="text-xs text-[#8E8E93] capitalize">{detail.platform}</span>
                 </div>
               </div>
             </div>
@@ -1473,13 +1601,15 @@ export default function DevicesView() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm font-medium text-gray-900">{device.name || '—'}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-shrink-0 flex items-center justify-center w-12 h-9">
+                          <DeviceThumbnail platform={device.platform} size="sm" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-900">{device.name || '—'}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <PlatformIcon platform={device.platform} />
-                        <span className="text-sm text-gray-600 capitalize">{device.platform || '—'}</span>
-                      </div>
+                      <span className="text-sm text-gray-600 capitalize">{device.platform || '—'}</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-600">
