@@ -203,6 +203,18 @@ export const deviceApi = {
 
   getEnrollmentToken: (expiresInHours = 24) =>
     api.post('/api/devices/enrollment-token', { expires_in_hours: expiresInHours }),
+
+  getStammdaten: (deviceId: string) =>
+    api.get(`/api/devices/${deviceId}/stammdaten`),
+
+  updateStammdaten: (deviceId: string, data: Record<string, string>) =>
+    api.put(`/api/devices/${deviceId}/stammdaten`, data),
+
+  uploadPhoto: (deviceId: string, photoDataUrl: string) =>
+    api.post(`/api/devices/${deviceId}/photo`, { photo: photoDataUrl }),
+
+  getPhotoUrl: (deviceId: string) =>
+    `/api/devices/${deviceId}/photo`,
 };
 
 // Printer Management API

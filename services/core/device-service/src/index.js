@@ -351,6 +351,11 @@ class EnterpriseDeviceManagementService {
     this.app.post('/api/devices/:deviceId/lock', this.lockDevice.bind(this));
     this.app.post('/api/devices/:deviceId/unlock', this.unlockDevice.bind(this));
     this.app.post('/api/devices/:deviceId/wipe', this.wipeDevice.bind(this));
+    // Stammdaten (master data) + photo
+    this.app.get('/api/devices/:deviceId/stammdaten', this.getStammdaten.bind(this));
+    this.app.put('/api/devices/:deviceId/stammdaten', this.updateStammdaten.bind(this));
+    this.app.post('/api/devices/:deviceId/photo', this.uploadPhoto.bind(this));
+    this.app.get('/api/devices/:deviceId/photo', this.getPhoto.bind(this));
     
     // Enrollment Routes
     this.app.post('/api/enrollment/initiate', this.initiateEnrollment.bind(this));
@@ -999,6 +1004,106 @@ class EnterpriseDeviceManagementService {
         error: 'Failed to retrieve device',
         requestId: req.id
       });
+    }
+  }
+
+  // ── Stammdaten (master data) ──────────────────────────────────────────────────
+
+  async getStammdaten(req, res) {
+    try {
+      const { deviceId } = req.params;
+      let stammdaten = {};
+      if (db.isAvailable()) {
+        const r = await db.query(
+          `SELECT metadata FROM devices WHERE id = $1`, [deviceId]
+        );
+        if (r.rows.length) stammdaten = r.rows[0].metadata?.stammdaten || {};
+      } else {
+        const d = db.getMemoryDevice ? db.getMemoryDevice(deviceId) : null;
+        stammdaten = d?.metadata?.stammdaten || {};
+      }
+      res.json({ success: true, data: stammdaten });
+    } catch (err) {
+      logger.error('getStammdaten error:', err);
+      res.status(500).json({ error: 'Failed to get stammdaten' });
+    }
+  }
+
+  async updateStammdaten(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const fields = req.body || {};
+      // Sanitise: strip photo from this endpoint (use /photo instead)
+      delete fields.photo;
+      if (db.isAvailable()) {
+        await db.query(
+          `UPDATE devices
+           SET metadata = jsonb_set(
+             COALESCE(metadata, '{}'),
+             '{stammdaten}',
+             COALESCE(metadata->'stammdaten', '{}') || $1::jsonb
+           )
+           WHERE id = $2`,
+          [JSON.stringify(fields), deviceId]
+        );
+      }
+      res.json({ success: true });
+    } catch (err) {
+      logger.error('updateStammdaten error:', err);
+      res.status(500).json({ error: 'Failed to update stammdaten' });
+    }
+  }
+
+  async uploadPhoto(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const { photo } = req.body; // base64 data URL, e.g. "data:image/jpeg;base64,..."
+      if (!photo || !photo.startsWith('data:image/')) {
+        return res.status(400).json({ error: 'Invalid photo — send base64 data URL' });
+      }
+      if (Buffer.byteLength(photo, 'utf8') > 512 * 1024) {
+        return res.status(413).json({ error: 'Photo too large — max 512 KB' });
+      }
+      if (db.isAvailable()) {
+        await db.query(
+          `UPDATE devices
+           SET metadata = jsonb_set(
+             COALESCE(metadata, '{}'),
+             '{stammdaten,photo}',
+             $1::jsonb
+           )
+           WHERE id = $2`,
+          [JSON.stringify(photo), deviceId]
+        );
+      }
+      res.json({ success: true });
+    } catch (err) {
+      logger.error('uploadPhoto error:', err);
+      res.status(500).json({ error: 'Failed to upload photo' });
+    }
+  }
+
+  async getPhoto(req, res) {
+    try {
+      const { deviceId } = req.params;
+      if (!db.isAvailable()) return res.status(404).json({ error: 'No photo' });
+      const r = await db.query(
+        `SELECT metadata->'stammdaten'->>'photo' AS photo FROM devices WHERE id = $1`,
+        [deviceId]
+      );
+      const photo = r.rows[0]?.photo;
+      if (!photo) return res.status(404).json({ error: 'No photo' });
+      // Return as image
+      const match = photo.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+      if (match) {
+        res.set('Content-Type', match[1]);
+        res.send(Buffer.from(match[2], 'base64'));
+      } else {
+        res.json({ success: true, data: photo });
+      }
+    } catch (err) {
+      logger.error('getPhoto error:', err);
+      res.status(500).json({ error: 'Failed to get photo' });
     }
   }
 

@@ -28,11 +28,42 @@ import { deviceApi, api } from '@/lib/api';
 import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
 import toast from 'react-hot-toast';
 
+function resizeImage(file: File, maxPx: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const ratio = Math.min(maxPx / img.width, maxPx / img.height, 1);
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.round(img.width  * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type StatusFilter   = 'all' | 'online' | 'offline';
 type PlatformFilter = 'all' | 'linux' | 'macos' | 'windows';
-type DeviceTab      = 'details' | 'apps' | 'hardware' | 'network' | 'history';
+type DeviceTab      = 'details' | 'apps' | 'hardware' | 'network' | 'history' | 'stammdaten';
+
+interface Stammdaten {
+  custom_name?: string;
+  owner?: string;
+  department?: string;
+  location?: string;
+  asset_tag?: string;
+  serial_override?: string;
+  purchase_date?: string;
+  warranty_until?: string;
+  notes?: string;
+  photo?: string; // base64 data URL
+}
 
 type HistoryEventType = 'enrolled' | 'app_installed' | 'app_removed' | 'app_updated' | 'policy_applied' | 'decommissioned';
 
@@ -543,6 +574,12 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
   // Network tab
   const [netInfo, setNetInfo]             = useState<any>(null);
   const [loadingNet, setLoadingNet]       = useState(false);
+  // Stammdaten tab
+  const [stammdaten, setStammdaten]       = useState<Stammdaten>({});
+  const [stammdatenDraft, setStammdatenDraft] = useState<Stammdaten>({});
+  const [loadingSd, setLoadingSd]         = useState(false);
+  const [savingSd, setSavingSd]           = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Wrapper: update local state + notify parent cache
   const setApps = (updater: (prev: InstalledApp[]) => InstalledApp[]) => {
@@ -599,6 +636,52 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
       .catch(() => setNetInfo({}))
       .finally(() => setLoadingNet(false));
   }, [deviceTab]);
+
+  // Lazy-load Stammdaten
+  useEffect(() => {
+    if (deviceTab !== 'stammdaten' || loadingSd) return;
+    setLoadingSd(true);
+    deviceApi.getStammdaten(device.id)
+      .then(res => {
+        const sd: Stammdaten = res.data?.data || {};
+        setStammdaten(sd);
+        setStammdatenDraft(sd);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingSd(false));
+  }, [deviceTab]);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      // Resize client-side via canvas
+      const dataUrl = await resizeImage(file, 400);
+      await deviceApi.uploadPhoto(device.id, dataUrl);
+      setStammdaten(prev => ({ ...prev, photo: dataUrl }));
+      setStammdatenDraft(prev => ({ ...prev, photo: dataUrl }));
+      toast.success('Foto gespeichert');
+    } catch {
+      toast.error('Foto-Upload fehlgeschlagen');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const saveStammdaten = async () => {
+    setSavingSd(true);
+    try {
+      const { photo, ...fields } = stammdatenDraft;
+      await deviceApi.updateStammdaten(device.id, fields as Record<string, string>);
+      setStammdaten(stammdatenDraft);
+      toast.success('Stammdaten gespeichert');
+    } catch {
+      toast.error('Speichern fehlgeschlagen');
+    } finally {
+      setSavingSd(false);
+    }
+  };
 
   const updateApp = async (id: string) => {
     const appEntry = apps.find(a => a.id === id);
@@ -671,11 +754,15 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-0">
             <div className="flex items-center gap-4">
-              <div className="flex-shrink-0 flex items-center justify-center w-16 h-12 bg-[#F2F2F7] rounded-xl">
-                <DeviceThumbnail platform={detail.platform} size="md" />
+              <div className="flex-shrink-0 flex items-center justify-center w-16 h-16 bg-[#F2F2F7] rounded-xl overflow-hidden">
+                {stammdaten.photo
+                  ? <img src={stammdaten.photo} alt="Device" className="w-full h-full object-cover" />
+                  : <DeviceThumbnail platform={detail.platform} size="md" />}
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-[#1D1D1F]">{detail.name || 'Unknown Device'}</h2>
+                <h2 className="text-lg font-semibold text-[#1D1D1F]">
+                  {stammdaten.custom_name || detail.name || 'Unknown Device'}
+                </h2>
                 <div className="flex items-center gap-2 mt-0.5">
                   {loadingDetail ? (
                     <span className="inline-block w-16 h-4 bg-gray-200 rounded animate-pulse" />
@@ -699,11 +786,12 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
           {/* Tab bar */}
           <div className="flex border-b border-gray-100 px-6 mt-4 overflow-x-auto">
             {([
-              { key: 'details'  as DeviceTab, label: 'Details' },
-              { key: 'apps'     as DeviceTab, label: `Apps (${apps.length})` },
-              { key: 'hardware' as DeviceTab, label: 'Hardware' },
-              { key: 'network'  as DeviceTab, label: 'Network' },
-              { key: 'history'  as DeviceTab, label: 'History' },
+              { key: 'details'     as DeviceTab, label: 'Details' },
+              { key: 'stammdaten' as DeviceTab, label: 'Stammdaten' },
+              { key: 'apps'       as DeviceTab, label: `Apps (${apps.length})` },
+              { key: 'hardware'   as DeviceTab, label: 'Hardware' },
+              { key: 'network'    as DeviceTab, label: 'Network' },
+              { key: 'history'    as DeviceTab, label: 'History' },
             ]).map(t => (
               <button key={t.key} onClick={() => setDeviceTab(t.key)}
                 className={`py-2 px-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
@@ -724,6 +812,108 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
 
           {/* Scrollable content */}
           <div className="flex-1 overflow-y-auto p-6">
+
+            {/* ── Stammdaten Tab ── */}
+            {deviceTab === 'stammdaten' && (
+              <div className="space-y-6">
+                {loadingSd ? (
+                  <div className="space-y-3">
+                    {[1,2,3,4].map(i => <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />)}
+                  </div>
+                ) : (
+                  <>
+                    {/* Photo upload */}
+                    <div>
+                      <p className="text-xs font-semibold text-[#8E8E93] uppercase tracking-wider mb-2">Gerätefoto</p>
+                      <div className="flex items-center gap-4">
+                        <div className="w-20 h-20 rounded-xl bg-[#F2F2F7] overflow-hidden flex items-center justify-center flex-shrink-0 border border-[#E5E5EA]">
+                          {stammdatenDraft.photo
+                            ? <img src={stammdatenDraft.photo} alt="Gerät" className="w-full h-full object-cover" />
+                            : <DeviceThumbnail platform={detail.platform} size="md" />}
+                        </div>
+                        <div className="space-y-2">
+                          <label className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingPhoto ? 'bg-gray-100 text-gray-400' : 'bg-[#0071E3] text-white hover:bg-[#0077ED]'}`}>
+                            {uploadingPhoto ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <></>}
+                            {uploadingPhoto ? 'Lädt hoch…' : 'Foto hochladen'}
+                            <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={uploadingPhoto} />
+                          </label>
+                          {stammdatenDraft.photo && (
+                            <button onClick={() => { setStammdatenDraft(p => ({ ...p, photo: undefined })); setStammdaten(p => ({ ...p, photo: undefined })); }}
+                              className="text-xs text-red-500 hover:text-red-700">
+                              Foto entfernen
+                            </button>
+                          )}
+                          <p className="text-xs text-[#8E8E93]">Max. 512 KB · JPG, PNG, HEIC</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Auto-detected (read-only) */}
+                    <div>
+                      <p className="text-xs font-semibold text-[#8E8E93] uppercase tracking-wider mb-2">Vom Gerät erkannt</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { label: 'Hostname',       value: detail.name },
+                          { label: 'Platform',       value: detail.platform },
+                          { label: 'OS',             value: [detail.os, detail.osVersion].filter(Boolean).join(' ') },
+                          { label: 'Seriennummer',   value: (detail as any).serial_number || '—' },
+                          { label: 'Modell',         value: (detail as any).model || '—' },
+                          { label: 'IP-Adresse',     value: detail.ip_address || '—' },
+                        ].map(f => (
+                          <div key={f.label} className="bg-[#F2F2F7] rounded-lg px-3 py-2.5">
+                            <p className="text-xs text-[#8E8E93] mb-0.5">{f.label}</p>
+                            <p className="text-sm text-[#1D1D1F] font-mono truncate">{f.value || '—'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Editable fields */}
+                    <div>
+                      <p className="text-xs font-semibold text-[#8E8E93] uppercase tracking-wider mb-2">Benutzerdefiniert</p>
+                      <div className="space-y-3">
+                        {([
+                          { key: 'custom_name',    label: 'Anzeigename',     placeholder: detail.name || 'z.B. MacBook Pro von Anna' },
+                          { key: 'owner',          label: 'Besitzer',        placeholder: 'z.B. Anna Meier' },
+                          { key: 'department',     label: 'Abteilung',       placeholder: 'z.B. Engineering' },
+                          { key: 'location',       label: 'Standort',        placeholder: 'z.B. Zürich, Büro 3.14' },
+                          { key: 'asset_tag',      label: 'Asset-Tag',       placeholder: 'z.B. IT-2024-042' },
+                          { key: 'serial_override',label: 'Seriennummer (manuell)', placeholder: 'Überschreibt erkannte S/N' },
+                          { key: 'purchase_date',  label: 'Kaufdatum',       placeholder: 'YYYY-MM-DD', type: 'date' },
+                          { key: 'warranty_until', label: 'Garantie bis',    placeholder: 'YYYY-MM-DD', type: 'date' },
+                        ] as Array<{key: keyof Stammdaten; label: string; placeholder: string; type?: string}>).map(f => (
+                          <div key={f.key}>
+                            <label className="block text-xs font-medium text-[#3C3C43] mb-1">{f.label}</label>
+                            <input
+                              type={f.type || 'text'}
+                              value={(stammdatenDraft[f.key] as string) || ''}
+                              onChange={e => setStammdatenDraft(p => ({ ...p, [f.key]: e.target.value }))}
+                              placeholder={f.placeholder}
+                              className="w-full px-3 py-2 text-sm border border-[#E5E5EA] rounded-lg focus:outline-none focus:border-[#0071E3] focus:ring-1 focus:ring-[#0071E3] bg-white"
+                            />
+                          </div>
+                        ))}
+                        <div>
+                          <label className="block text-xs font-medium text-[#3C3C43] mb-1">Notizen</label>
+                          <textarea
+                            value={stammdatenDraft.notes || ''}
+                            onChange={e => setStammdatenDraft(p => ({ ...p, notes: e.target.value }))}
+                            placeholder="Interne Notizen zum Gerät…"
+                            rows={3}
+                            className="w-full px-3 py-2 text-sm border border-[#E5E5EA] rounded-lg focus:outline-none focus:border-[#0071E3] focus:ring-1 focus:ring-[#0071E3] bg-white resize-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button onClick={saveStammdaten} disabled={savingSd}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-white bg-[#0071E3] hover:bg-[#0077ED] rounded-lg transition-colors disabled:opacity-60">
+                      {savingSd ? <><ArrowPathIcon className="w-4 h-4 animate-spin" />Speichern…</> : 'Stammdaten speichern'}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* ── Details Tab ── */}
             {deviceTab === 'details' && (
@@ -1602,10 +1792,19 @@ export default function DevicesView() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 flex items-center justify-center w-12 h-9">
-                          <DeviceThumbnail platform={device.platform} size="sm" />
+                        <div className="flex-shrink-0 flex items-center justify-center w-12 h-10 bg-[#F2F2F7] rounded-lg overflow-hidden">
+                          {(device as any).metadata?.stammdaten?.photo
+                            ? <img src={(device as any).metadata.stammdaten.photo} alt="" className="w-full h-full object-cover" />
+                            : <DeviceThumbnail platform={device.platform} size="sm" />}
                         </div>
-                        <span className="text-sm font-medium text-gray-900">{device.name || '—'}</span>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {(device as any).metadata?.stammdaten?.custom_name || device.name || '—'}
+                          </p>
+                          {(device as any).metadata?.stammdaten?.custom_name && (
+                            <p className="text-xs text-[#8E8E93]">{device.name}</p>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
