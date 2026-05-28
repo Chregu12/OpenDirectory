@@ -50,6 +50,20 @@ const commandQueuedCounter = new promClient.Counter({
   registers: [register],
 });
 
+const blueprintAppliesTotal = new promClient.Counter({
+  name: 'mdm_blueprint_applies_total',
+  help: 'Total blueprint apply operations',
+  labelNames: ['blueprint_id', 'result'],
+  registers: [register],
+});
+
+const depEnrollmentsTotal = new promClient.Counter({
+  name: 'mdm_dep_enrollments_total',
+  help: 'Total DEP device assignments',
+  labelNames: ['result'],
+  registers: [register],
+});
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const PORT = parseInt(process.env.APPLE_MDM_PORT || process.env.PORT || '3014', 10);
@@ -110,6 +124,34 @@ async function initDb() {
       CREATE INDEX IF NOT EXISTS idx_mdm_commands_udid_status
         ON mdm_commands(udid, status)
     `);
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS mdm_blueprint_status (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        blueprint_id VARCHAR(255) NOT NULL,
+        device_id VARCHAR(255) NOT NULL,
+        status VARCHAR(50) DEFAULT 'queued',
+        progress INTEGER DEFAULT 0,
+        error TEXT,
+        started_at TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        UNIQUE(blueprint_id, device_id)
+      )
+    `);
+    await pgPool.query(`
+      CREATE INDEX IF NOT EXISTS idx_mdm_blueprint_status_blueprint
+        ON mdm_blueprint_status(blueprint_id)
+    `);
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS mdm_profiles (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        payload_type VARCHAR(100),
+        payload JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
     console.log('[apple-mdm] PostgreSQL connected and schema ready');
   } catch (err) {
     dbReady = false;
@@ -119,8 +161,26 @@ async function initDb() {
 
 // ─── In-memory fallback stores ───────────────────────────────────────────────
 
-const memDevices = new Map();   // udid -> device object
-const memCommands = new Map();  // id   -> command object
+const memDevices = new Map();          // udid -> device object
+const memCommands = new Map();         // id   -> command object
+const memBlueprintStatus = new Map();  // `${blueprintId}:${deviceId}` -> status object
+const memProfiles = new Map();         // profileId -> profile object
+const memDepDevices = new Map();       // serialNumber -> dep device object
+const memScripts = new Map();          // `${blueprintId}:${deviceId}` -> scripts array
+
+// ─── Seed simulated DEP devices ──────────────────────────────────────────────
+
+const DEP_SEED = [
+  { serialNumber: 'C02XG1ZHJGH7', model: 'MacBook Pro (16-inch, 2021)', color: 'Space Grey', os: 'macOS 14.4', status: 'unassigned', blueprintId: null },
+  { serialNumber: 'FVFXC2MNPH29', model: 'MacBook Air (M2, 2022)', color: 'Midnight', os: 'macOS 14.4', status: 'unassigned', blueprintId: null },
+  { serialNumber: 'DLXW3V26PHFR', model: 'iPad Pro 12.9" (M2)', color: 'Silver', os: 'iPadOS 17.4', status: 'unassigned', blueprintId: null },
+  { serialNumber: 'HVTN4J8KMQR2', model: 'iPhone 15 Pro', color: 'Natural Titanium', os: 'iOS 17.4', status: 'unassigned', blueprintId: null },
+  { serialNumber: 'PQRX7M2LJKF5', model: 'MacBook Pro (14-inch, M3)', color: 'Space Black', os: 'macOS 14.4', status: 'assigned', blueprintId: null },
+];
+
+for (const d of DEP_SEED) {
+  memDepDevices.set(d.serialNumber, d);
+}
 
 // ─── DB helpers ──────────────────────────────────────────────────────────────
 
@@ -237,6 +297,90 @@ async function markCommandCompleted(commandUuid, udid) {
       }
     }
   }
+}
+
+// ─── Blueprint status helpers ─────────────────────────────────────────────────
+
+async function upsertBlueprintStatus(blueprintId, deviceId, status, progress, error, completedAt) {
+  const key = `${blueprintId}:${deviceId}`;
+  if (dbReady) {
+    await pgPool.query(
+      `INSERT INTO mdm_blueprint_status (blueprint_id, device_id, status, progress, error, started_at, completed_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+       ON CONFLICT (blueprint_id, device_id) DO UPDATE SET
+         status       = EXCLUDED.status,
+         progress     = EXCLUDED.progress,
+         error        = EXCLUDED.error,
+         completed_at = EXCLUDED.completed_at`,
+      [blueprintId, deviceId, status, progress ?? 0, error ?? null, completedAt ?? null]
+    );
+  } else {
+    const existing = memBlueprintStatus.get(key) || { startedAt: new Date().toISOString() };
+    memBlueprintStatus.set(key, {
+      ...existing,
+      blueprintId,
+      deviceId,
+      status,
+      progress: progress ?? 0,
+      error: error ?? null,
+      completedAt: completedAt ?? null,
+    });
+  }
+}
+
+async function getBlueprintStatus(blueprintId) {
+  if (dbReady) {
+    const r = await pgPool.query(
+      `SELECT bs.*, d.device_name
+       FROM mdm_blueprint_status bs
+       LEFT JOIN mdm_devices d ON d.udid = bs.device_id
+       WHERE bs.blueprint_id = $1
+       ORDER BY bs.started_at DESC`,
+      [blueprintId]
+    );
+    return r.rows;
+  }
+  const results = [];
+  for (const [key, val] of memBlueprintStatus) {
+    if (val.blueprintId === blueprintId) {
+      const dev = memDevices.get(val.deviceId);
+      results.push({ ...val, device_name: dev?.device_name || null });
+    }
+  }
+  return results;
+}
+
+// ─── Profile CRUD helpers ─────────────────────────────────────────────────────
+
+async function createProfile(name, description, payloadType, payload) {
+  const id = uuidv4();
+  if (dbReady) {
+    const r = await pgPool.query(
+      `INSERT INTO mdm_profiles (id, name, description, payload_type, payload)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [id, name, description || null, payloadType || null, JSON.stringify(payload || {})]
+    );
+    return r.rows[0];
+  }
+  const profile = { id, name, description: description || null, payload_type: payloadType || null, payload: payload || {}, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  memProfiles.set(id, profile);
+  return profile;
+}
+
+async function listProfiles() {
+  if (dbReady) {
+    const r = await pgPool.query('SELECT * FROM mdm_profiles ORDER BY created_at DESC');
+    return r.rows;
+  }
+  return Array.from(memProfiles.values()).sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+async function deleteProfile(profileId) {
+  if (dbReady) {
+    const r = await pgPool.query('DELETE FROM mdm_profiles WHERE id = $1 RETURNING id', [profileId]);
+    return r.rowCount > 0;
+  }
+  return memProfiles.delete(profileId);
 }
 
 // ─── APNs provider (lazy initialisation) ─────────────────────────────────────
@@ -401,6 +545,25 @@ ${inner}</dict>
 const EMPTY_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict/></plist>`;
+
+// ─── Policy-service helper ────────────────────────────────────────────────────
+
+const http = require('http');
+const POLICY_SERVICE_URL = process.env.POLICY_SERVICE_URL || 'http://localhost:3004';
+
+async function fetchBlueprintFromPolicyService(blueprintId) {
+  return new Promise((resolve) => {
+    const url = `${POLICY_SERVICE_URL}/api/blueprints/${blueprintId}`;
+    http.get(url, { timeout: 3000 }, (res) => {
+      let raw = '';
+      res.on('data', chunk => { raw += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(raw)); }
+        catch { resolve(null); }
+      });
+    }).on('error', () => resolve(null));
+  });
+}
 
 // ─── Express app ──────────────────────────────────────────────────────────────
 
