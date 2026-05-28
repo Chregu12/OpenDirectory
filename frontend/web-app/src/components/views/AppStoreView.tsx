@@ -28,6 +28,9 @@ import {
   UserGroupIcon,
   BuildingOfficeIcon,
   ServerIcon,
+  RocketLaunchIcon,
+  ClockIcon,
+  NoSymbolIcon,
 } from '@heroicons/react/24/outline';
 import { appStoreApi } from '@/lib/api';
 import { useUiMode } from '@/lib/ui-mode';
@@ -105,6 +108,27 @@ interface Assignment {
   created_by: string;
 }
 
+interface DeploymentTarget {
+  type: 'device' | 'group' | 'user';
+  id: string;
+  name?: string;
+}
+
+interface Deployment {
+  id: string;
+  app_id: string;
+  app_name?: string;
+  targets: DeploymentTarget[];
+  version?: string;
+  status: string;
+  mandatory: boolean;
+  deadline?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+  created_by?: string;
+  progress?: { total: number; installed: number; failed: number; pending: number };
+}
+
 // --- Helpers ---
 const categoryIcons: Record<string, React.ComponentType<any>> = {
   browser: GlobeAltIcon,
@@ -156,7 +180,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedApp, setSelectedApp] = useState<StoreApp | null>(null);
-  const [activeTab, setActiveTab] = useState<'available' | 'installed' | 'required' | 'admin'>('available');
+  const [activeTab, setActiveTab] = useState<'available' | 'installed' | 'required' | 'admin' | 'deployments'>('available');
   const [installedApps, setInstalledApps] = useState<Installation[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [installingApps, setInstallingApps] = useState<Set<string>>(new Set());
@@ -164,6 +188,10 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   const [assignTarget, setAssignTarget] = useState({ target_type: 'domain', target_id: '', target_name: '' });
   const [assignInstallType, setAssignInstallType] = useState('available');
   const [showShareAppModal, setShowShareAppModal] = useState(false);
+  const [showDeployModal, setShowDeployModal] = useState(false);
+  const [deployTarget, setDeployTarget] = useState<StoreApp | null>(null);
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [deploying, setDeploying] = useState(false);
 
   // Device ID for demo/self-service - in production this comes from the client agent
   const deviceId = 'self-service';
@@ -291,6 +319,37 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
       setAssignments(res.data || []);
     } catch (error) {
       console.error('Failed to load assignments:', error);
+    }
+  };
+
+  const loadDeployments = useCallback(async () => {
+    try {
+      const res = await fetch('/api/appstore/deployments');
+      if (res.ok) {
+        const data = await res.json();
+        setDeployments(data.deployments || []);
+      }
+    } catch (error) {
+      console.error('Failed to load deployments:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'deployments') loadDeployments();
+  }, [activeTab, loadDeployments]);
+
+  const handleCancelDeployment = async (deploymentId: string) => {
+    try {
+      const res = await fetch(`/api/appstore/deployments/${deploymentId}/cancel`, { method: 'PUT' });
+      if (res.ok) {
+        toast.success('Deployment abgebrochen');
+        loadDeployments();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Fehler beim Abbrechen');
+      }
+    } catch {
+      toast.error('Fehler beim Abbrechen des Deployments');
     }
   };
 
@@ -465,6 +524,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
             { id: 'available' as const, label: 'Available Apps', icon: ArrowDownTrayIcon },
             { id: 'installed' as const, label: 'Installed', icon: CheckCircleIcon },
             { id: 'required' as const, label: 'Required', icon: ExclamationTriangleIcon },
+            { id: 'deployments' as const, label: 'Deployments', icon: RocketLaunchIcon },
             { id: 'admin' as const, label: 'Admin', icon: Cog6ToothIcon },
           ].map((tab) => (
             <button
@@ -713,7 +773,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                     })}
                   </div>
 
-                  {/* Footer: version + license + install button */}
+                  {/* Footer: version + license + buttons */}
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                     <div className="flex items-center space-x-2">
                       <span className="text-xs text-gray-500">v{app.version}</span>
@@ -730,41 +790,58 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                       )}
                     </div>
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (installed) {
-                          handleUninstall(app);
-                        } else {
-                          handleInstall(app);
-                        }
-                      }}
-                      disabled={isInstalling || installStatus === 'installing' || installStatus === 'downloading'}
-                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        installed
-                          ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                          : isInstalling || installStatus === 'installing' || installStatus === 'downloading'
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
-                    >
-                      {installed ? (
-                        <>
-                          <TrashIcon className="w-3.5 h-3.5" />
-                          <span>Remove</span>
-                        </>
-                      ) : isInstalling || installStatus === 'installing' || installStatus === 'downloading' ? (
-                        <>
-                          <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
-                          <span>Installing</span>
-                        </>
-                      ) : (
-                        <>
-                          <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-                          <span>Install</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-center space-x-1.5">
+                      {/* Deploy button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeployTarget(app);
+                          setShowDeployModal(true);
+                        }}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
+                        title="App deployen"
+                      >
+                        <RocketLaunchIcon className="w-3.5 h-3.5" />
+                        <span>Deployen</span>
+                      </button>
+
+                      {/* Install button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (installed) {
+                            handleUninstall(app);
+                          } else {
+                            handleInstall(app);
+                          }
+                        }}
+                        disabled={isInstalling || installStatus === 'installing' || installStatus === 'downloading'}
+                        className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          installed
+                            ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                            : isInstalling || installStatus === 'installing' || installStatus === 'downloading'
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
+                      >
+                        {installed ? (
+                          <>
+                            <TrashIcon className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </>
+                        ) : isInstalling || installStatus === 'installing' || installStatus === 'downloading' ? (
+                          <>
+                            <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                            <span>Installing</span>
+                          </>
+                        ) : (
+                          <>
+                            <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                            <span>Install</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

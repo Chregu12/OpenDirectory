@@ -1,0 +1,49 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+# PDB for API Gateway
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-api-gateway
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "opendirectory.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api-gateway
+---
+# PDB for Auth Service
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-auth
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: auth
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "opendirectory.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: auth
+---
+# PDB for Identity Service
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-identity
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: identity
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "opendirectory.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: identity
+{{- end }}

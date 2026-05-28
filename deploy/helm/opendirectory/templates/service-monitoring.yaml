@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-monitoring
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+spec:
+  type: {{ .Values.monitoring.service.type }}
+  ports:
+    - port: {{ .Values.monitoring.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "opendirectory.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
