@@ -1,0 +1,14 @@
+{
+  "name": "@opendirectory/service-contracts",
+  "version": "1.0.0",
+  "description": "Shared service contracts for OpenDirectory microservices: event constants, error types, and base HTTP client utilities",
+  "main": "src/index.js",
+  "license": "MIT",
+  "keywords": ["opendirectory", "microservices", "contracts"],
+  "exports": {
+    ".": "./src/index.js",
+    "./events": "./src/events.js",
+    "./errors": "./src/errors.js",
+    "./httpClient": "./src/httpClient.js"
+  }
+}

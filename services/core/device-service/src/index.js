@@ -23,31 +23,15 @@ const CertificateManager = require('./services/certificateManager');
 const ThreatDetector = require('./services/threatDetector');
 const AnalyticsEngine = require('./services/analyticsEngine');
 const PolicyAgentService = require('./services/PolicyAgentService');
-let UpdateAgentService, NetworkProfileAgentService;
-try {
-  UpdateAgentService = require('../../update-management/src/services/UpdateAgentService');
-} catch (e) { /* UpdateAgentService not available */ }
-try {
-  NetworkProfileAgentService = require('../../certificate-network/src/services/NetworkProfileAgentService');
-} catch (e) { /* NetworkProfileAgentService not available */ }
 
-// Enterprise services (optional)
+// HTTP clients — replace cross-service file imports with proper API calls
+const updateClient = require('./clients/updateClient');
+const networkProfileClient = require('./clients/networkProfileClient');
+const licenseClient = require('./clients/licenseClient');
+const backupClient = require('./clients/backupClient');
+
+// Enterprise services (local only)
 const { AnalyticsBridge } = require('./analytics-bridge');
-const { DashboardService } = require('../../../license-management/src/services/dashboardService');
-
-let BackupManagementSystem, FailoverController, DisasterRecoveryOrchestrator, GeoReplicationEngine;
-try {
-  ({ BackupManagementSystem } = require('../../../enterprise/disaster-recovery/opendirectory-backup-system'));
-} catch (e) { /* Backup system not available */ }
-try {
-  ({ FailoverController } = require('../../../enterprise/disaster-recovery/opendirectory-failover-controller'));
-} catch (e) { /* Failover controller not available */ }
-try {
-  ({ DisasterRecoveryOrchestrator } = require('../../../enterprise/disaster-recovery/opendirectory-dr-orchestrator'));
-} catch (e) { /* DR orchestrator not available */ }
-try {
-  ({ GeoReplicationEngine } = require('../../../enterprise/disaster-recovery/opendirectory-geo-replication'));
-} catch (e) { /* Geo replication not available */ }
 
 // Utilities
 const logger = require('./utils/logger');
@@ -86,25 +70,15 @@ class EnterpriseDeviceManagementService {
     this.threatDetector = new ThreatDetector(this.db, this.eventBus);
     this.analyticsEngine = new AnalyticsEngine(this.db, this.cache);
     this.policyAgentService = new PolicyAgentService(this);
-    this.updateAgentService = UpdateAgentService ? new UpdateAgentService(this) : null;
-    this.networkProfileAgentService = NetworkProfileAgentService ? new NetworkProfileAgentService(this) : null;
 
-    // Enterprise Disaster Recovery services
-    try { this.backupSystem = BackupManagementSystem ? new BackupManagementSystem() : null; } catch (e) { this.backupSystem = null; }
-    try { this.failoverController = FailoverController ? new FailoverController() : null; } catch (e) { this.failoverController = null; }
-    try { this.drOrchestrator = DisasterRecoveryOrchestrator ? new DisasterRecoveryOrchestrator() : null; } catch (e) { this.drOrchestrator = null; }
-    try { this.geoReplication = GeoReplicationEngine ? new GeoReplicationEngine() : null; } catch (e) { this.geoReplication = null; }
+    // HTTP service clients (microservice isolation — no direct file imports)
+    this.updateClient = updateClient;
+    this.networkProfileClient = networkProfileClient;
+    this.licenseClient = licenseClient;
+    this.backupClient = backupClient;
 
     // Analytics Bridge (connects agent events to AI/ML analytics)
     this.analyticsBridge = new AnalyticsBridge();
-
-    // Dashboard Service (aggregates data for reporting dashboard)
-    this.dashboardService = new DashboardService();
-    this.dashboardService.registerServices({
-      deviceService: this,
-      analyticsBridge: this.analyticsBridge,
-      backupSystem: this.backupSystem
-    });
 
     // Connected agent registry: deviceId -> WebSocket connection
     this.connectedAgents = new Map();
@@ -422,157 +396,141 @@ class EnterpriseDeviceManagementService {
     this.app.get('/api/agent/policy/status/:deviceId', this.agentGetPolicyStatus.bind(this));
 
     // Update Agent Routes
-    this.app.post('/api/agent/update/configure', (req, res) => {
-      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
-      const result = this.updateAgentService.configureUpdates(req.body.deviceId, req.body.policy);
+    this.app.post('/api/agent/update/configure', async (req, res) => {
+      const result = await this.updateClient.configureUpdates(req.body.deviceId, req.body.policy);
+      if (!result) return res.status(503).json({ error: 'Update service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/update/check-status', (req, res) => {
-      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
-      const result = this.updateAgentService.checkUpdateStatus(req.body.deviceId);
+    this.app.post('/api/agent/update/check-status', async (req, res) => {
+      const result = await this.updateClient.checkUpdateStatus(req.body.deviceId);
+      if (!result) return res.status(503).json({ error: 'Update service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/update/trigger', (req, res) => {
-      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
-      const result = this.updateAgentService.triggerUpdate(req.body.deviceId, req.body.options);
+    this.app.post('/api/agent/update/trigger', async (req, res) => {
+      const result = await this.updateClient.triggerUpdate(req.body.deviceId, req.body.options);
+      if (!result) return res.status(503).json({ error: 'Update service unavailable' });
       res.json(result);
     });
-    this.app.get('/api/agent/update/status/:deviceId', (req, res) => {
-      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
-      res.json(this.updateAgentService.getDeviceUpdateStatus(req.params.deviceId));
+    this.app.get('/api/agent/update/status/:deviceId', async (req, res) => {
+      const result = await this.updateClient.getDeviceUpdateStatus(req.params.deviceId);
+      if (!result) return res.status(503).json({ error: 'Update service unavailable' });
+      res.json(result);
     });
-    this.app.post('/api/agent/update/configure-winget', (req, res) => {
-      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
-      const result = this.updateAgentService.configureWingetAutoUpdate(req.body.deviceId, req.body.policy);
+    this.app.post('/api/agent/update/configure-winget', async (req, res) => {
+      const result = await this.updateClient.configureWingetAutoUpdate(req.body.deviceId, req.body.policy);
+      if (!result) return res.status(503).json({ error: 'Update service unavailable' });
       res.json(result);
     });
 
     // Network Profile Agent Routes
-    this.app.post('/api/agent/network/configure-wifi', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.configureWiFi(req.body.deviceId, req.body.profile);
+    this.app.post('/api/agent/network/configure-wifi', async (req, res) => {
+      const result = await this.networkProfileClient.configureWiFi(req.body.deviceId, req.body.profile);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/network/remove-wifi', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.removeWiFi(req.body.deviceId, req.body.profileId, req.body.ssid);
+    this.app.post('/api/agent/network/remove-wifi', async (req, res) => {
+      const result = await this.networkProfileClient.removeWiFi(req.body.deviceId, req.body.profileId, req.body.ssid);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/network/configure-vpn', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.configureVPN(req.body.deviceId, req.body.profile);
+    this.app.post('/api/agent/network/configure-vpn', async (req, res) => {
+      const result = await this.networkProfileClient.configureVPN(req.body.deviceId, req.body.profile);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/network/remove-vpn', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.removeVPN(req.body.deviceId, req.body.profileId);
+    this.app.post('/api/agent/network/remove-vpn', async (req, res) => {
+      const result = await this.networkProfileClient.removeVPN(req.body.deviceId, req.body.profileId);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/network/configure-email', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.configureEmail(req.body.deviceId, req.body.profile);
+    this.app.post('/api/agent/network/configure-email', async (req, res) => {
+      const result = await this.networkProfileClient.configureEmail(req.body.deviceId, req.body.profile);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/network/remove-email', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.removeEmail(req.body.deviceId, req.body.profileId);
+    this.app.post('/api/agent/network/remove-email', async (req, res) => {
+      const result = await this.networkProfileClient.removeEmail(req.body.deviceId, req.body.profileId);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.get('/api/agent/network/status/:deviceId', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      res.json(this.networkProfileAgentService.getDeviceProfileState(req.params.deviceId));
+    this.app.get('/api/agent/network/status/:deviceId', async (req, res) => {
+      const result = await this.networkProfileClient.getDeviceProfileState(req.params.deviceId);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
+      res.json(result);
     });
 
     // Backup & Disaster Recovery Routes
     this.app.post('/api/backup/trigger', async (req, res) => {
       try {
-        if (!this.backupSystem) return res.status(503).json({ error: 'Backup system not available' });
         const jobId = `bak-${Date.now()}`;
         const type = req.body.type || 'incremental';
-        this.backupSystem.emit('backup:trigger', { type, jobId });
-        res.json({ success: true, jobId, type, status: 'started', startedAt: new Date().toISOString() });
+        const result = await this.backupClient.triggerBackup(type, jobId);
+        if (!result) return res.status(503).json({ error: 'Backup service unavailable' });
+        res.json({ success: true, jobId, type, status: 'started', startedAt: new Date().toISOString(), ...result });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/backup/status', (req, res) => {
+    this.app.get('/api/backup/status', async (req, res) => {
       try {
-        const status = this.backupSystem ? {
-          running: false,
-          lastFullBackup: null,
-          lastIncrementalBackup: null,
-          nextScheduled: null,
-          storageUsedGB: 0,
-          totalBackups: 0
-        } : null;
-        res.json({ success: true, data: status || { error: 'Backup system not available' } });
+        const status = await this.backupClient.getBackupStatus();
+        res.json({ success: true, data: status || { error: 'Backup service unavailable' } });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/backup/history', (req, res) => {
+    this.app.get('/api/backup/history', async (req, res) => {
       try {
         const limit = parseInt(req.query.limit) || 20;
-        res.json({ success: true, data: [], limit });
+        const data = await this.backupClient.getBackupHistory(limit);
+        res.json({ success: true, data: data || [], limit });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
     this.app.post('/api/backup/restore', async (req, res) => {
       try {
-        if (!this.backupSystem) return res.status(503).json({ error: 'Backup system not available' });
         const { backupId } = req.body;
         if (!backupId) return res.status(400).json({ error: 'backupId required' });
-        const jobId = `rst-${Date.now()}`;
-        res.json({ success: true, jobId, backupId, status: 'started', startedAt: new Date().toISOString() });
+        const result = await this.backupClient.restoreBackup(backupId);
+        if (!result) return res.status(503).json({ error: 'Backup service unavailable' });
+        res.json({ success: true, backupId, status: 'started', startedAt: new Date().toISOString(), ...result });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/dr/health', (req, res) => {
+    this.app.get('/api/dr/health', async (req, res) => {
       try {
-        const health = {
-          status: this.drOrchestrator ? 'operational' : 'not_configured',
-          backupSystem: !!this.backupSystem,
-          failoverController: !!this.failoverController,
-          geoReplication: !!this.geoReplication,
-          drOrchestrator: !!this.drOrchestrator,
-          timestamp: new Date().toISOString()
-        };
-        res.json({ success: true, data: health });
+        const health = await this.backupClient.getDrHealth();
+        res.json({ success: true, data: health || { status: 'not_configured', timestamp: new Date().toISOString() } });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
     this.app.post('/api/dr/failover/test', async (req, res) => {
       try {
-        if (!this.failoverController) return res.status(503).json({ error: 'Failover controller not available' });
-        const result = { success: true, message: 'DR drill initiated', failedOver: false, duration: 0, timestamp: new Date().toISOString() };
+        const result = await this.backupClient.testFailover();
+        if (!result) return res.status(503).json({ error: 'Backup service unavailable' });
         res.json(result);
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/dr/replication/status', (req, res) => {
+    this.app.get('/api/dr/replication/status', async (req, res) => {
       try {
-        const status = {
-          active: !!this.geoReplication,
-          lagSeconds: 0,
-          primaryRegion: 'primary',
-          replicas: [],
-          timestamp: new Date().toISOString()
-        };
-        res.json({ success: true, data: status });
+        const status = await this.backupClient.getReplicationStatus();
+        res.json({ success: true, data: status || { active: false, timestamp: new Date().toISOString() } });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
     this.app.post('/api/dr/failover/execute', async (req, res) => {
       try {
-        if (!this.failoverController) return res.status(503).json({ error: 'Failover controller not available' });
         const { confirm } = req.body;
         if (confirm !== true) return res.status(400).json({ error: 'Explicit confirmation required: { "confirm": true }' });
-        res.json({ success: true, message: 'Failover execution initiated', timestamp: new Date().toISOString() });
+        const result = await this.backupClient.executeFailover(confirm);
+        if (!result) return res.status(503).json({ error: 'Backup service unavailable' });
+        res.json(result);
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
@@ -635,30 +593,39 @@ class EnterpriseDeviceManagementService {
     // Dashboard & Reporting Routes
     this.app.get('/api/dashboard', async (req, res) => {
       try {
-        const data = await this.dashboardService.getDashboardData();
+        const data = await this.licenseClient.getDashboardData();
+        if (!data) return res.status(503).json({ error: 'License service unavailable' });
         res.json({ success: true, data });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/dashboard/timeseries/:metric', (req, res) => {
+    this.app.get('/api/dashboard/timeseries/:metric', async (req, res) => {
       try {
         const { metric } = req.params;
         const timeframe = req.query.timeframe || '24h';
-        const data = this.dashboardService.getTimeSeries(metric, timeframe);
+        const data = await this.licenseClient.getTimeSeries(metric, timeframe);
+        if (!data) return res.status(503).json({ error: 'License service unavailable' });
         res.json({ success: true, data, metric, timeframe });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/reports/templates', (req, res) => {
-      res.json({ success: true, data: this.dashboardService.getReportTemplates() });
+    this.app.get('/api/reports/templates', async (req, res) => {
+      try {
+        const data = await this.licenseClient.getReportTemplates();
+        if (!data) return res.status(503).json({ error: 'License service unavailable' });
+        res.json({ success: true, data });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
     });
     this.app.post('/api/reports/generate', async (req, res) => {
       try {
         const { template, format, params } = req.body;
         if (!template || !format) return res.status(400).json({ error: 'template and format required' });
-        const report = await this.dashboardService.generateReport(template, format, params || {});
+        const report = await this.licenseClient.generateReport(template, format, params || {});
+        if (!report) return res.status(503).json({ error: 'License service unavailable' });
         res.json({ success: true, data: report });
       } catch (error) {
         res.status(500).json({ error: error.message });
@@ -758,13 +725,13 @@ class EnterpriseDeviceManagementService {
 
       case 'command_result':
         logger.info(\`Command result from \${ws.deviceId}: \${data.commandId} - \${data.status}\`);
-        // Forward results to the correct AgentService based on command prefix
+        // Forward results to the correct service based on command prefix
         if (data.commandId && data.commandId.startsWith('pol-')) {
           this.policyAgentService.handleCommandResult(ws.deviceId, data);
-        } else if (data.commandId && data.commandId.startsWith('upd-') && this.updateAgentService) {
-          this.updateAgentService.handleCommandResult(ws.deviceId, data);
-        } else if (data.commandId && data.commandId.startsWith('net-') && this.networkProfileAgentService) {
-          this.networkProfileAgentService.handleCommandResult(ws.deviceId, data);
+        } else if (data.commandId && data.commandId.startsWith('upd-')) {
+          this.updateClient.handleCommandResult(ws.deviceId, data).catch(() => {});
+        } else if (data.commandId && data.commandId.startsWith('net-')) {
+          this.networkProfileClient.handleCommandResult(ws.deviceId, data).catch(() => {});
         }
         // Feed all command results into Analytics Bridge for ML analysis
         if (this.analyticsBridge && data.commandId) {
