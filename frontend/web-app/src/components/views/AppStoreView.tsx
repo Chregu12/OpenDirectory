@@ -1280,6 +1280,227 @@ function TargetTypeIcon({ type }: { type: string }) {
   return <Icon className="w-5 h-5 text-gray-400" />;
 }
 
+// --- Deployment Status Badge ---
+function DeploymentStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { bg: string; text: string; label: string }> = {
+    pending:   { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Ausstehend' },
+    running:   { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'Läuft' },
+    completed: { bg: 'bg-green-100',  text: 'text-green-700',  label: 'Abgeschlossen' },
+    failed:    { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Fehlgeschlagen' },
+    cancelled: { bg: 'bg-gray-100',   text: 'text-gray-600',   label: 'Abgebrochen' },
+  };
+  const c = config[status] || { bg: 'bg-gray-100', text: 'text-gray-600', label: status };
+  return (
+    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${c.bg} ${c.text}`}>
+      {c.label}
+    </span>
+  );
+}
+
+// --- Deploy Modal ---
+function DeployModal({
+  app,
+  onClose,
+  onDeployed,
+}: {
+  app: { id: string; display_name?: string; name: string; version: string };
+  onClose: () => void;
+  onDeployed: () => void;
+}) {
+  const [targetType, setTargetType] = useState<'all' | 'group' | 'device' | 'user'>('all');
+  const [targetId, setTargetId] = useState('');
+  const [mandatory, setMandatory] = useState(false);
+  const [deadline, setDeadline] = useState('');
+  const [deploying, setDeploying] = useState(false);
+
+  const DEMO_GROUPS = [
+    { id: 'all-devices', name: 'Alle Geräte' },
+    { id: 'macos-devices', name: 'macOS Geräte' },
+    { id: 'windows-devices', name: 'Windows Geräte' },
+    { id: 'it-department', name: 'IT-Abteilung' },
+    { id: 'marketing', name: 'Marketing' },
+    { id: 'finance', name: 'Finanzen' },
+  ];
+
+  const buildTargets = () => {
+    if (targetType === 'all') {
+      return [{ type: 'group' as const, id: 'all-devices', name: 'Alle Geräte' }];
+    }
+    if (!targetId.trim()) return null;
+    return [{ type: targetType, id: targetId.trim(), name: targetId.trim() }];
+  };
+
+  const handleDeploy = async () => {
+    const targets = buildTargets();
+    if (!targets) { return; }
+    setDeploying(true);
+    try {
+      const res = await fetch(`/api/appstore/apps/${app.id}/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targets,
+          mandatory,
+          deadline: deadline || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Deployment fehlgeschlagen');
+      }
+      onDeployed();
+    } catch (err: any) {
+      alert(err.message || 'Deployment fehlgeschlagen');
+    } finally {
+      setDeploying(false);
+    }
+  };
+
+  const isValid = targetType === 'all' || targetId.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <RocketLaunchIcon className="h-5 w-5 text-violet-600" />
+            <h2 className="text-base font-semibold text-gray-900">App deployen</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-5">
+          {/* App info */}
+          <div className="flex items-center gap-3 bg-violet-50 rounded-lg p-3">
+            <RocketLaunchIcon className="h-8 w-8 text-violet-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{app.display_name || app.name}</p>
+              <p className="text-xs text-gray-500">v{app.version}</p>
+            </div>
+          </div>
+
+          {/* Target selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Zielgruppe</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: 'all', label: 'Alle Geräte' },
+                { value: 'group', label: 'Bestimmte Gruppe' },
+                { value: 'device', label: 'Bestimmte Geräte' },
+                { value: 'user', label: 'Bestimmte Benutzer' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => { setTargetType(opt.value as any); setTargetId(''); }}
+                  className={`py-2 px-3 rounded-lg border text-sm font-medium transition-colors text-left ${
+                    targetType === opt.value
+                      ? 'border-violet-500 bg-violet-50 text-violet-700'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Group/Device/User picker */}
+          {targetType === 'group' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Gruppe auswählen</label>
+              <select
+                value={targetId}
+                onChange={(e) => setTargetId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+              >
+                <option value="">— Gruppe wählen —</option>
+                {DEMO_GROUPS.slice(1).map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {(targetType === 'device' || targetType === 'user') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {targetType === 'device' ? 'Geräte-ID' : 'Benutzer-ID'} eingeben
+              </label>
+              <input
+                type="text"
+                value={targetId}
+                onChange={(e) => setTargetId(e.target.value)}
+                placeholder={targetType === 'device' ? 'z.B. LAPTOP-001' : 'z.B. max.muster@corp.local'}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+            </div>
+          )}
+
+          {/* Mandatory toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Pflichtinstallation</p>
+              <p className="text-xs text-gray-500">App wird automatisch auf Zielgeräten installiert</p>
+            </div>
+            <button
+              onClick={() => setMandatory(!mandatory)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                mandatory ? 'bg-violet-600' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 ease-in-out ${
+                  mandatory ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Deadline */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Deadline <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <input
+              type="datetime-local"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+          <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">
+            Abbrechen
+          </button>
+          <button
+            onClick={handleDeploy}
+            disabled={!isValid || deploying}
+            className="flex items-center gap-1.5 bg-violet-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {deploying ? (
+              <>
+                <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                <span>Wird deployed…</span>
+              </>
+            ) : (
+              <>
+                <RocketLaunchIcon className="h-4 w-4" />
+                <span>Jetzt deployen</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Share App Modal ---
 
 interface ScannedFile {
