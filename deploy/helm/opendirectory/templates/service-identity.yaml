@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-identity
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: identity
+spec:
+  type: {{ .Values.identity.service.type }}
+  ports:
+    - port: {{ .Values.identity.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "opendirectory.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: identity
