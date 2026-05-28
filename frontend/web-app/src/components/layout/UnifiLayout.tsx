@@ -37,6 +37,12 @@ import {
   FlagIcon,
   ShieldCheckIcon,
   TagIcon,
+  DevicePhoneMobileIcon,
+  BellAlertIcon,
+  DocumentCheckIcon,
+  FunnelIcon,
+  SignalIcon,
+  ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline';
 
 // ─── Search catalog ───────────────────────────────────────────────────────────
@@ -64,9 +70,16 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'scanner',      name: 'Security Scanner',    view: 'scanner',       type: 'Seite' },
   { id: 'sync',         name: 'Verzeichnis-Sync',    view: 'sync',          type: 'Seite' },
   { id: 'integrations', name: 'Integrationen',       view: 'integrations',  type: 'Seite' },
-  { id: 'roadmap',      name: 'Roadmap & TODO',      view: 'roadmap',       type: 'Seite' },
-  { id: 'pim',          name: 'PIM',                 view: 'pim',           type: 'Seite' },
-  { id: 'licenses',     name: 'Lizenz-Kiosk',        view: 'licenses',      type: 'Seite' },
+  { id: 'roadmap',           name: 'Roadmap & TODO',      view: 'roadmap',           type: 'Seite' },
+  { id: 'pim',               name: 'PIM',                 view: 'pim',               type: 'Seite' },
+  { id: 'licenses',          name: 'Lizenz-Kiosk',        view: 'licenses',          type: 'Seite' },
+  { id: 'mfa',               name: 'MFA / 2FA',           view: 'mfa',               type: 'Seite' },
+  { id: 'sspr',              name: 'Passwort-Reset',      view: 'sspr',              type: 'Seite' },
+  { id: 'conditionalaccess', name: 'Conditional Access',  view: 'conditionalaccess', type: 'Seite' },
+  { id: 'alerting',          name: 'Benachrichtigungen',  view: 'alerting',          type: 'Seite' },
+  { id: 'certificates',      name: 'Zertifikate / PKI',   view: 'certificates',      type: 'Seite' },
+  { id: 'radius',            name: 'RADIUS / 802.1X',     view: 'radius',            type: 'Seite' },
+  { id: 'servicehealth',     name: 'Service Health',      view: 'servicehealth',     type: 'Seite' },
 ];
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -300,6 +313,8 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     { type: 'item', id: 'users',          name: 'Benutzer',          icon: UserGroupIcon },
     { type: 'item', id: 'permissions',    name: 'Rollen & Rechte',   icon: KeyIcon },
     { type: 'item', id: 'pim',            name: 'PIM',               icon: ShieldCheckIcon },
+    { type: 'item', id: 'mfa',            name: 'MFA / 2FA',         icon: DevicePhoneMobileIcon },
+    { type: 'item', id: 'sspr',           name: 'Passwort-Reset',    icon: ArrowUturnLeftIcon },
     { type: 'item', id: 'identity',       name: 'Identity Provider', icon: FingerPrintIcon },
     { type: 'item', id: 'enrollment',     name: 'Enrollment',        icon: ArrowDownOnSquareStackIcon },
     { type: 'item', id: 'sync',           name: 'Verzeichnis-Sync',  icon: ArrowPathIcon },
@@ -314,22 +329,27 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
     { type: 'item', id: 'applications',   name: 'Anwendungen',       icon: CubeIcon },
 
     { type: 'section', label: 'Netzwerk & Infra' },
-    { type: 'item', id: 'topology',       name: 'Netzwerk',          icon: RectangleGroupIcon },
-    { type: 'item', id: 'infrastructure', name: 'Infrastruktur',     icon: ServerStackIcon },
-    { type: 'item', id: 'monitoring',     name: 'Monitoring',        icon: ChartBarIcon },
+    { type: 'item', id: 'topology',            name: 'Netzwerk',           icon: RectangleGroupIcon },
+    { type: 'item', id: 'infrastructure',      name: 'Infrastruktur',      icon: ServerStackIcon },
+    { type: 'item', id: 'radius',              name: 'RADIUS / 802.1X',    icon: WifiIcon },
+    { type: 'item', id: 'monitoring',          name: 'Monitoring',         icon: ChartBarIcon },
+    { type: 'item', id: 'servicehealth',       name: 'Service Health',     icon: SignalIcon },
+    { type: 'item', id: 'alerting',            name: 'Benachrichtigungen', icon: BellAlertIcon },
 
     { type: 'section', label: 'Sicherheit' },
-    { type: 'item', id: 'security',       name: 'Security',          icon: ShieldExclamationIcon },
-    { type: 'item', id: 'compliance',     name: 'Compliance',        icon: ClipboardDocumentCheckIcon },
-    { type: 'item', id: 'scanner',        name: 'Security Scanner',  icon: MagnifyingGlassCircleIcon },
-    { type: 'item', id: 'secrets',        name: 'Secrets',           icon: LockClosedIcon },
+    { type: 'item', id: 'security',            name: 'Security',           icon: ShieldExclamationIcon },
+    { type: 'item', id: 'conditionalaccess',   name: 'Conditional Access', icon: FunnelIcon },
+    { type: 'item', id: 'certificates',        name: 'Zertifikate / PKI',  icon: DocumentCheckIcon },
+    { type: 'item', id: 'compliance',          name: 'Compliance',         icon: ClipboardDocumentCheckIcon },
+    { type: 'item', id: 'scanner',             name: 'Security Scanner',   icon: MagnifyingGlassCircleIcon },
+    { type: 'item', id: 'secrets',             name: 'Secrets',            icon: LockClosedIcon },
 
     { type: 'section', label: 'Betrieb' },
-    { type: 'item', id: 'audit',          name: 'Audit Log',         icon: ClipboardDocumentListIcon },
-    { type: 'item', id: 'backup',         name: 'Backup & DR',       icon: ArchiveBoxIcon },
-    { type: 'item', id: 'integrations',   name: 'Integrationen',     icon: PuzzlePieceIcon },
-    { type: 'item', id: 'roadmap',        name: 'Roadmap & TODO',    icon: FlagIcon },
-    { type: 'item', id: 'settings',       name: 'Einstellungen',     icon: Cog6ToothIcon },
+    { type: 'item', id: 'audit',               name: 'Audit Log',          icon: ClipboardDocumentListIcon },
+    { type: 'item', id: 'backup',              name: 'Backup & DR',        icon: ArchiveBoxIcon },
+    { type: 'item', id: 'integrations',        name: 'Integrationen',      icon: PuzzlePieceIcon },
+    { type: 'item', id: 'roadmap',             name: 'Roadmap & TODO',     icon: FlagIcon },
+    { type: 'item', id: 'settings',            name: 'Einstellungen',      icon: Cog6ToothIcon },
   ];
 
   // Hide nav items whose controlling module is disabled

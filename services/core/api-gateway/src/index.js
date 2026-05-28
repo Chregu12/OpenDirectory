@@ -474,6 +474,31 @@ class APIGateway {
     this.setupServiceProxy('clamav', 'http://antivirus-protection:3905', '/api/clamav');
     connectedServices.push('antivirus-protection');
 
+    // App Store
+    this.setupServiceProxy('appstore', 'http://app-store:3906', '/api/appstore');
+    connectedServices.push('app-store');
+
+    // Notification / Alerting service
+    this.setupServiceProxy('notification', 'http://notification-service:3020', '/api/notification');
+    connectedServices.push('notification-service');
+
+    // Backup service
+    this.setupServiceProxy('backup-jobs', 'http://backup-service:3011', '/api/backup');
+    connectedServices.push('backup-service');
+
+    // MDM (Apple MDM)
+    this.setupServiceProxy('mdm', 'http://apple-mdm:3014', '/api/mdm');
+    connectedServices.push('apple-mdm');
+
+    // Certificate Authority
+    this.setupServiceProxy('ca', 'http://certificate-authority:3012', '/api/ca');
+    this.setupServiceProxy('certificates', 'http://certificate-authority:3012', '/api/certificates');
+    connectedServices.push('certificate-authority');
+
+    // Conditional Access
+    this.setupServiceProxy('conditional-access', 'http://conditional-access:3007', '/api/conditional-access');
+    connectedServices.push('conditional-access');
+
     logger.info(`API Gateway configured with ${connectedServices.length} services`);
     logger.info(`Connected services: ${connectedServices.join(', ')}`);
     logger.info(`Enabled modules: ${enabledModules.join(', ') || 'none'}`);

@@ -32,6 +32,13 @@ import LicenseKioskView from '@/components/views/LicenseKioskView';
 import OnboardingWizard from '@/components/setup/OnboardingWizard';
 import SyncView from '@/components/views/SyncView';
 import IntegrationsView from '@/components/views/IntegrationsView';
+import MFAView from '@/components/views/MFAView';
+import SSPRView from '@/components/views/SSPRView';
+import ConditionalAccessView from '@/components/views/ConditionalAccessView';
+import AlertingView from '@/components/views/AlertingView';
+import CertificatesView from '@/components/views/CertificatesView';
+import RadiusView from '@/components/views/RadiusView';
+import ServiceHealthView from '@/components/views/ServiceHealthView';
 
 const MODULE_NAV_MAP: Record<string, string> = {
   'monitoring-analytics':   'monitoring',
@@ -47,6 +54,7 @@ const VALID_VIEWS = new Set([
   'identity','enrollment','permissions',
   'antivirus','audit','backup','appstore','compliance','scanner',
   'blueprints','sync','integrations','roadmap','pim','licenses',
+  'mfa','sspr','conditionalaccess','alerting','certificates','radius','servicehealth',
 ]);
 
 export default function ViewPage() {
@@ -120,7 +128,14 @@ export default function ViewPage() {
       case 'integrations':   return <IntegrationsView />;
       case 'roadmap':        return <RoadmapView onViewChange={handleViewChange} />;
       case 'pim':            return <PIMView />;
-      case 'licenses':       return <LicenseKioskView />;
+      case 'licenses':           return <LicenseKioskView />;
+      case 'mfa':                return <MFAView />;
+      case 'sspr':               return <SSPRView />;
+      case 'conditionalaccess':  return <ConditionalAccessView />;
+      case 'alerting':           return <AlertingView />;
+      case 'certificates':       return <CertificatesView />;
+      case 'radius':             return <RadiusView />;
+      case 'servicehealth':      return <ServiceHealthView />;
       case 'settings':
         return (
           <div className="p-6">

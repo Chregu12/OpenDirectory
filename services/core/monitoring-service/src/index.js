@@ -361,7 +361,7 @@ class EnterpriseMonitoringService {
         default:
           ws.send(JSON.stringify({
             type: 'error',
-            message: \`Unknown message type: \${type}\`,
+            message: `Unknown message type: ${type}`,
             requestId,
             timestamp: Date.now()
           }));
@@ -1118,11 +1118,11 @@ class EnterpriseMonitoringService {
     const sendMetrics = async () => {
       try {
         const metrics = await this.dashboardService.getRealTimeMetrics();
-        res.write(\`data: \${JSON.stringify({
+        res.write(`data: ${JSON.stringify({
           type: 'metrics',
           data: metrics,
           timestamp: Date.now()
-        })}\\n\\n\`);
+        })}\\n\\n`);
       } catch (error) {
         logger.error('SSE metrics stream error:', error);
       }
@@ -1161,7 +1161,7 @@ class EnterpriseMonitoringService {
     });
     
     if (count > 0) {
-      logger.debug(\`Broadcast sent to \${count} subscribers\`, { subscription });
+      logger.debug(`Broadcast sent to ${count} subscribers`, { subscription });
     }
   }
 
@@ -1186,12 +1186,12 @@ class EnterpriseMonitoringService {
 
   start(port = process.env.PORT || 3009) {
     this.server.listen(port, () => {
-      logger.info(\`📊 Enterprise Monitoring Service started on port \${port}\`);
-      logger.info(\`🔍 Health check: http://localhost:\${port}/health\`);
-      logger.info(\`📈 Metrics: http://localhost:\${port}/metrics\`);
-      logger.info(\`🔌 WebSocket: ws://localhost:\${port}/ws/monitoring\`);
-      logger.info(\`📺 Features: Real-time Dashboards, Predictive Analytics, SLA Monitoring\`);
-      logger.info(\`🚨 Alerts: Anomaly Detection, Performance Monitoring, Cost Analysis\`);
+      logger.info(`📊 Enterprise Monitoring Service started on port ${port}`);
+      logger.info(`🔍 Health check: http://localhost:${port}/health`);
+      logger.info(`📈 Metrics: http://localhost:${port}/metrics`);
+      logger.info(`🔌 WebSocket: ws://localhost:${port}/ws/monitoring`);
+      logger.info(`📺 Features: Real-time Dashboards, Predictive Analytics, SLA Monitoring`);
+      logger.info(`🚨 Alerts: Anomaly Detection, Performance Monitoring, Cost Analysis`);
     });
   }
 
