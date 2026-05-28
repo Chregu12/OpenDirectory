@@ -871,6 +871,118 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
         </>
       )}
 
+      {/* Deployments Tab Content */}
+      {activeTab === 'deployments' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-gray-900">Aktive Deployments</h2>
+            <button
+              onClick={loadDeployments}
+              className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              <ArrowPathIcon className="w-3.5 h-3.5" />
+              <span>Aktualisieren</span>
+            </button>
+          </div>
+
+          {deployments.length === 0 ? (
+            <div className="text-center py-12">
+              <RocketLaunchIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Deployments</h3>
+              <p className="text-sm text-gray-500">Klicken Sie auf «Deployen» bei einer App um ein Deployment zu starten</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">App</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziele</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fortschritt</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Erstellt</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aktion</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {deployments.map((dep) => {
+                    const progress = dep.progress || { total: dep.targets?.length || 0, installed: 0, failed: 0, pending: dep.targets?.length || 0 };
+                    const pct = progress.total > 0 ? Math.round((progress.installed / progress.total) * 100) : 0;
+                    return (
+                      <tr key={dep.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{dep.app_name || dep.app_id}</p>
+                            <p className="text-xs text-gray-500">v{dep.version || '–'}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {dep.targets?.length || 0} {dep.mandatory && <span className="ml-1 px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded">Pflicht</span>}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-24 bg-gray-200 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full transition-all ${progress.failed > 0 ? 'bg-red-500' : 'bg-blue-500'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-500 whitespace-nowrap">
+                              {progress.installed}/{progress.total} Geräte
+                            </span>
+                          </div>
+                          {progress.failed > 0 && (
+                            <p className="text-xs text-red-600 mt-0.5">{progress.failed} Fehler</p>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <DeploymentStatusBadge status={dep.status} />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(dep.created_at).toLocaleDateString('de-CH')}
+                          {dep.deadline && (
+                            <p className="text-xs text-orange-600 flex items-center space-x-0.5 mt-0.5">
+                              <ClockIcon className="w-3 h-3" />
+                              <span>{new Date(dep.deadline).toLocaleDateString('de-CH')}</span>
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(dep.status === 'pending' || dep.status === 'running') && (
+                            <button
+                              onClick={() => handleCancelDeployment(dep.id)}
+                              className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                            >
+                              <NoSymbolIcon className="w-3.5 h-3.5" />
+                              <span>Abbrechen</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Deploy Modal */}
+      {showDeployModal && deployTarget && (
+        <DeployModal
+          app={deployTarget}
+          onClose={() => { setShowDeployModal(false); setDeployTarget(null); }}
+          onDeployed={() => {
+            setShowDeployModal(false);
+            setDeployTarget(null);
+            setActiveTab('deployments');
+            loadDeployments();
+            toast.success('Deployment gestartet');
+          }}
+        />
+      )}
+
       {/* App Detail Modal */}
       {selectedApp && (
         <div
