@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-config
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  POSTGRES_HOST: {{ include "opendirectory.fullname" . }}-postgresql
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: {{ .Values.postgresql.database | quote }}
+  POSTGRES_USER: {{ .Values.postgresql.username | quote }}
+  API_GATEWAY_PORT: {{ .Values.apiGateway.service.port | quote }}
+  AUTH_SERVICE_PORT: {{ .Values.auth.service.port | quote }}
+  IDENTITY_SERVICE_PORT: {{ .Values.identity.service.port | quote }}
+  DEVICE_SERVICE_PORT: {{ .Values.device.service.port | quote }}
+  POLICY_SERVICE_PORT: {{ .Values.policy.service.port | quote }}
+  MONITORING_SERVICE_PORT: {{ .Values.monitoring.service.port | quote }}
+  MDM_SERVICE_PORT: {{ .Values.mdm.service.port | quote }}
+  BACKUP_SERVICE_PORT: {{ .Values.backup.service.port | quote }}
+  AUTH_SERVICE_URL: "http://{{ include "opendirectory.fullname" . }}-auth:{{ .Values.auth.service.port }}"
+  IDENTITY_SERVICE_URL: "http://{{ include "opendirectory.fullname" . }}-identity:{{ .Values.identity.service.port }}"
+  DEVICE_SERVICE_URL: "http://{{ include "opendirectory.fullname" . }}-device:{{ .Values.device.service.port }}"
+  POLICY_SERVICE_URL: "http://{{ include "opendirectory.fullname" . }}-policy:{{ .Values.policy.service.port }}"
+  MONITORING_SERVICE_URL: "http://{{ include "opendirectory.fullname" . }}-monitoring:{{ .Values.monitoring.service.port }}"
+  MDM_SERVICE_URL: "http://{{ include "opendirectory.fullname" . }}-mdm:{{ .Values.mdm.service.port }}"
+  BACKUP_SERVICE_URL: "http://{{ include "opendirectory.fullname" . }}-backup:{{ .Values.backup.service.port }}"

@@ -1000,6 +1000,194 @@ app.post('/api/mdm/devices/:udid/remove-profile', async (req, res) => {
   }
 });
 
+// ─── Blueprint Apply ─ POST /api/mdm/blueprints/:blueprintId/apply ────────────
+
+app.post('/api/mdm/blueprints/:blueprintId/apply', async (req, res) => {
+  const { blueprintId } = req.params;
+  const { deviceIds } = req.body || {};
+
+  try {
+    // Fetch all enrolled active devices
+    const allDevices = await listDevices();
+    const targets = (Array.isArray(deviceIds) && deviceIds.length > 0)
+      ? allDevices.filter(d => deviceIds.includes(d.udid))
+      : allDevices;
+
+    if (targets.length === 0) {
+      return res.json({ queued: 0, devices: [], message: 'No active devices to target' });
+    }
+
+    // Try to fetch blueprint config from policy-service
+    let blueprintConfig = null;
+    try {
+      blueprintConfig = await fetchBlueprintFromPolicyService(blueprintId);
+    } catch (_) { /* fallback below */ }
+
+    // Build a normalised blueprint shape from whatever we got
+    const bp = blueprintConfig || {};
+    const configs = bp.configurations || bp.configs || [];
+    const profiles = configs.filter(c => ['wifi', 'vpn', 'certificate', 'webfilter'].includes(c.config_type));
+    const restrictions = configs.filter(c => ['gatekeeper', 'screen_lock', 'airdrop', 'filevault', 'software_update'].includes(c.config_type));
+    const apps = bp.apps || [];
+    const scripts = bp.scripts || [];
+
+    const deviceResults = [];
+
+    for (const device of targets) {
+      const udid = device.udid;
+      try {
+        // Mark as queued
+        await upsertBlueprintStatus(blueprintId, udid, 'queued', 0, null, null);
+
+        let commandsQueued = 0;
+
+        // InstallProfile for network/cert configs
+        for (const profile of profiles) {
+          const profilePayload = Buffer.from(JSON.stringify(profile.payload || {})).toString('base64');
+          await enqueueCommand(udid, 'InstallProfile', { Payload: profilePayload, ProfileName: profile.config_name });
+          commandsQueued++;
+        }
+
+        // InstallProfile with restrictions payload
+        if (restrictions.length > 0) {
+          const restrictionsMap = {};
+          for (const r of restrictions) {
+            Object.assign(restrictionsMap, r.payload || {});
+          }
+          const restrictionsPayload = Buffer.from(JSON.stringify({ restrictions: restrictionsMap })).toString('base64');
+          await enqueueCommand(udid, 'InstallProfile', { Payload: restrictionsPayload, ProfileName: 'Restrictions' });
+          commandsQueued++;
+        }
+
+        // InstallApplication for apps
+        for (const app_ of apps) {
+          if (app_.manifest_url || app_.ManifestURL) {
+            await enqueueCommand(udid, 'InstallApplication', { ManifestURL: app_.manifest_url || app_.ManifestURL });
+            commandsQueued++;
+          }
+        }
+
+        // Store scripts for next check-in
+        if (scripts.length > 0) {
+          memScripts.set(`${blueprintId}:${udid}`, scripts);
+        }
+
+        // Update status to 'applying'
+        await upsertBlueprintStatus(blueprintId, udid, commandsQueued > 0 ? 'applying' : 'applied', commandsQueued > 0 ? 10 : 100, null, commandsQueued > 0 ? null : new Date().toISOString());
+
+        // Trigger APNs push to wake device
+        if (device.push_token) {
+          sendMdmPush(device.push_token).catch(() => {});
+        }
+
+        deviceResults.push({ deviceId: udid, status: commandsQueued > 0 ? 'applying' : 'applied' });
+        blueprintAppliesTotal.inc({ blueprint_id: blueprintId, result: 'queued' });
+      } catch (err) {
+        console.error(`[apple-mdm] blueprint apply error for ${udid}:`, err.message);
+        await upsertBlueprintStatus(blueprintId, udid, 'failed', 0, err.message, new Date().toISOString()).catch(() => {});
+        deviceResults.push({ deviceId: udid, status: 'failed', error: err.message });
+        blueprintAppliesTotal.inc({ blueprint_id: blueprintId, result: 'failed' });
+      }
+    }
+
+    res.json({ queued: deviceResults.filter(d => d.status !== 'failed').length, devices: deviceResults });
+  } catch (err) {
+    console.error('[apple-mdm] blueprint apply error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Blueprint Apply Status ─ GET /api/mdm/blueprints/:blueprintId/apply-status
+
+app.get('/api/mdm/blueprints/:blueprintId/apply-status', async (req, res) => {
+  const { blueprintId } = req.params;
+  try {
+    const rows = await getBlueprintStatus(blueprintId);
+    const result = rows.map(r => ({
+      deviceId: r.device_id || r.deviceId,
+      deviceName: r.device_name || r.deviceName || null,
+      status: r.status,
+      progress: r.progress ?? 0,
+      error: r.error || null,
+      startedAt: r.started_at || r.startedAt,
+      completedAt: r.completed_at || r.completedAt || null,
+    }));
+    res.json({ blueprintId, statuses: result });
+  } catch (err) {
+    console.error('[apple-mdm] blueprint apply-status error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── DEP Devices ─ GET /api/mdm/dep/devices ──────────────────────────────────
+
+app.get('/api/mdm/dep/devices', (req, res) => {
+  const devices = Array.from(memDepDevices.values());
+  res.json({ devices, count: devices.length });
+});
+
+// ─── DEP Assign ─ POST /api/mdm/dep/assign ───────────────────────────────────
+
+app.post('/api/mdm/dep/assign', (req, res) => {
+  const { serialNumbers, blueprintId } = req.body || {};
+  if (!Array.isArray(serialNumbers) || serialNumbers.length === 0) {
+    return res.status(400).json({ error: 'serialNumbers array is required' });
+  }
+
+  const results = [];
+  for (const sn of serialNumbers) {
+    const device = memDepDevices.get(sn);
+    if (!device) {
+      results.push({ serialNumber: sn, success: false, error: 'Device not found' });
+      continue;
+    }
+    const updated = { ...device, blueprintId: blueprintId || null, status: blueprintId ? 'assigned' : 'unassigned' };
+    memDepDevices.set(sn, updated);
+    results.push({ serialNumber: sn, success: true, blueprintId: blueprintId || null });
+    depEnrollmentsTotal.inc({ result: 'assigned' });
+  }
+
+  res.json({ results, assigned: results.filter(r => r.success).length });
+});
+
+// ─── Profile Management ─ GET /api/mdm/profiles ───────────────────────────────
+
+app.get('/api/mdm/profiles', async (req, res) => {
+  try {
+    const profiles = await listProfiles();
+    res.json({ profiles, count: profiles.length });
+  } catch (err) {
+    console.error('[apple-mdm] list profiles error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/mdm/profiles — create a new profile
+app.post('/api/mdm/profiles', async (req, res) => {
+  const { name, description, payload_type, payload } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  try {
+    const profile = await createProfile(name, description, payload_type, payload);
+    res.status(201).json({ profile });
+  } catch (err) {
+    console.error('[apple-mdm] create profile error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/mdm/profiles/:profileId
+app.delete('/api/mdm/profiles/:profileId', async (req, res) => {
+  const { profileId } = req.params;
+  try {
+    const deleted = await deleteProfile(profileId);
+    if (!deleted) return res.status(404).json({ error: 'Profile not found' });
+    res.json({ deleted: true, profileId });
+  } catch (err) {
+    console.error('[apple-mdm] delete profile error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET/POST /api/mdm/config ─ APNs cert & MDM settings ─────────────────────
 
 app.get('/api/mdm/config', (req, res) => {

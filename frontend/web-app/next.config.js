@@ -30,6 +30,7 @@ const nextConfig = {
       { source: '/api/printer/:path*',      destination: `${printerUrl}/api/printer/:path*` },
       // App Store routes → app-store service
       { source: '/api/store/:path*',        destination: `${appStoreUrl}/api/store/:path*` },
+      { source: '/api/appstore/:path*',     destination: `${appStoreUrl}/api/appstore/:path*` },
       // Everything else → api-backend
       { source: '/api/:path*',              destination: `${apiBackendUrl}/api/:path*` },
     ];

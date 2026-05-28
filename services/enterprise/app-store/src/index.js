@@ -510,6 +510,253 @@ app.post('/api/store/shares/:shareId/scan', async (req, res) => {
 });
 
 // ========================================================================
+// /api/appstore — Simplified deployment-oriented API (port-compatible)
+// ========================================================================
+
+const { v4: uuidv4 } = require('uuid');
+
+const DEMO_APPS = [
+  { id: 'slack', name: 'Slack', vendor: 'Salesforce', version: '4.35.131', category: 'Kommunikation', size: '180MB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'per_user', description: 'Team communication and collaboration platform', icon_url: null },
+  { id: 'zoom', name: 'Zoom', vendor: 'Zoom Video', version: '5.17.0', category: 'Kommunikation', size: '95MB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'per_user', description: 'Video conferencing and virtual meetings', icon_url: null },
+  { id: 'chrome', name: 'Google Chrome', vendor: 'Google', version: '122.0.6261', category: 'Browser', size: '280MB', platforms: ['macOS', 'Windows'], license_type: 'free', description: 'Fast and secure web browser by Google', icon_url: null },
+  { id: 'firefox', name: 'Mozilla Firefox', vendor: 'Mozilla', version: '124.0', category: 'Browser', size: '220MB', platforms: ['macOS', 'Windows'], license_type: 'free', description: 'Open-source web browser focused on privacy', icon_url: null },
+  { id: 'vscode', name: 'Visual Studio Code', vendor: 'Microsoft', version: '1.87.0', category: 'Entwicklung', size: '340MB', platforms: ['macOS', 'Windows'], license_type: 'free', description: 'Lightweight but powerful source code editor', icon_url: null },
+  { id: 'office365', name: 'Microsoft 365', vendor: 'Microsoft', version: '16.83', category: 'Produktivität', size: '4.2GB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'subscription', description: 'Microsoft Office suite with cloud services', icon_url: null },
+  { id: '1password', name: '1Password', vendor: '1Password', version: '8.10.28', category: 'Sicherheit', size: '120MB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'per_user', description: 'Password manager and secure digital wallet', icon_url: null },
+  { id: 'jamf-connect', name: 'Jamf Connect', vendor: 'Jamf', version: '2.35.0', category: 'Sicherheit', size: '45MB', platforms: ['macOS'], license_type: 'per_device', description: 'macOS identity management with cloud IdP', icon_url: null },
+];
+
+// In-memory stores (with optional DB persistence)
+const inMemoryCatalog = new Map(DEMO_APPS.map(a => [a.id, {
+  ...a,
+  supported_platforms: a.platforms,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  version_history: [{ version: a.version, released_at: new Date().toISOString(), notes: 'Initial version' }],
+}]));
+const inMemoryDeployments = new Map();
+const inMemoryDeploymentStatus = new Map(); // deploymentId -> [{ device_id, status, installed_at, error }]
+
+// Helper: ensure DB tables exist, fall back gracefully
+async function ensureAppstoreTables() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS app_catalog (
+        id VARCHAR(100) PRIMARY KEY,
+        metadata JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS app_deployments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        app_id VARCHAR(100),
+        targets JSONB,
+        status VARCHAR(50) DEFAULT 'pending',
+        mandatory BOOLEAN DEFAULT false,
+        deadline TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        created_by VARCHAR(255)
+      );
+      CREATE TABLE IF NOT EXISTS deployment_status (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        deployment_id UUID REFERENCES app_deployments(id),
+        device_id VARCHAR(255),
+        status VARCHAR(50) DEFAULT 'pending',
+        installed_at TIMESTAMPTZ,
+        error TEXT
+      );
+    `);
+  } catch (err) {
+    logger.warn('appstore tables setup warning', { error: err.message });
+  }
+}
+
+// GET /api/appstore/apps
+app.get('/api/appstore/apps', async (req, res) => {
+  try {
+    const { category, platform, search } = req.query;
+    let apps = Array.from(inMemoryCatalog.values());
+    if (category) apps = apps.filter(a => a.category === category);
+    if (platform) apps = apps.filter(a => (a.supported_platforms || a.platforms || []).includes(platform));
+    if (search) {
+      const s = search.toLowerCase();
+      apps = apps.filter(a => a.name.toLowerCase().includes(s) || (a.description || '').toLowerCase().includes(s) || a.vendor.toLowerCase().includes(s));
+    }
+    res.json({ apps, total: apps.length });
+  } catch (err) {
+    logger.error('GET /api/appstore/apps error', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/appstore/apps/:id
+app.get('/api/appstore/apps/:id', async (req, res) => {
+  try {
+    const app = inMemoryCatalog.get(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    res.json(app);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/appstore/apps — publish new app (admin only)
+app.post('/api/appstore/apps', async (req, res) => {
+  try {
+    const { id, name, vendor, version, category, size, platforms, license_type, description, icon_url, supported_platforms } = req.body;
+    if (!id || !name || !version) return res.status(400).json({ error: 'id, name and version are required' });
+    const entry = {
+      id, name, vendor: vendor || '', version, category: category || 'Allgemein',
+      size: size || null, platforms: supported_platforms || platforms || [],
+      supported_platforms: supported_platforms || platforms || [],
+      license_type: license_type || 'free', description: description || '', icon_url: icon_url || null,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      version_history: [{ version, released_at: new Date().toISOString(), notes: 'Initial publish' }],
+    };
+    inMemoryCatalog.set(id, entry);
+    try {
+      await pool.query(
+        'INSERT INTO app_catalog (id, metadata) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET metadata = $2',
+        [id, JSON.stringify(entry)]
+      );
+    } catch (_) { /* DB optional */ }
+    res.status(201).json(entry);
+  } catch (err) {
+    logger.error('POST /api/appstore/apps error', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/appstore/apps/:id — update app metadata
+app.put('/api/appstore/apps/:id', async (req, res) => {
+  try {
+    const existing = inMemoryCatalog.get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'App not found' });
+    const updated = { ...existing, ...req.body, id: req.params.id, updated_at: new Date().toISOString() };
+    if (req.body.version && req.body.version !== existing.version) {
+      updated.version_history = [...(existing.version_history || []), {
+        version: req.body.version, released_at: new Date().toISOString(), notes: req.body.release_notes || ''
+      }];
+    }
+    inMemoryCatalog.set(req.params.id, updated);
+    try {
+      await pool.query(
+        'INSERT INTO app_catalog (id, metadata) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET metadata = $2',
+        [req.params.id, JSON.stringify(updated)]
+      );
+    } catch (_) { /* DB optional */ }
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/appstore/apps/:id/deploy
+app.post('/api/appstore/apps/:id/deploy', async (req, res) => {
+  try {
+    const appEntry = inMemoryCatalog.get(req.params.id);
+    if (!appEntry) return res.status(404).json({ error: 'App not found' });
+    const { targets, version, mandatory, deadline } = req.body;
+    if (!targets || !Array.isArray(targets) || targets.length === 0) {
+      return res.status(400).json({ error: 'targets array is required' });
+    }
+    const deploymentId = uuidv4();
+    const deployment = {
+      id: deploymentId, app_id: req.params.id, app_name: appEntry.name,
+      targets, version: version || appEntry.version,
+      mandatory: mandatory || false, deadline: deadline || null,
+      status: 'pending', created_at: new Date().toISOString(),
+      completed_at: null,
+      created_by: req.headers['x-user-id'] || req.body.created_by || 'admin',
+    };
+    inMemoryDeployments.set(deploymentId, deployment);
+    // Initialize per-device status records
+    const deviceStatuses = targets.map(t => ({
+      id: uuidv4(), deployment_id: deploymentId,
+      device_id: t.id || t.name || String(t),
+      target_type: t.type || 'device', status: 'pending',
+      installed_at: null, error: null,
+    }));
+    inMemoryDeploymentStatus.set(deploymentId, deviceStatuses);
+
+    try {
+      await pool.query(
+        `INSERT INTO app_deployments (id, app_id, targets, status, mandatory, deadline, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [deploymentId, req.params.id, JSON.stringify(targets), 'pending', mandatory || false, deadline || null, deployment.created_by]
+      );
+      for (const ds of deviceStatuses) {
+        await pool.query(
+          `INSERT INTO deployment_status (id, deployment_id, device_id, status) VALUES ($1, $2, $3, $4)`,
+          [ds.id, deploymentId, ds.device_id, 'pending']
+        );
+      }
+    } catch (_) { /* DB optional */ }
+
+    res.status(201).json({ deploymentId, deployment });
+  } catch (err) {
+    logger.error('POST /api/appstore/apps/:id/deploy error', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/appstore/deployments
+app.get('/api/appstore/deployments', async (req, res) => {
+  try {
+    const { app_id, status } = req.query;
+    let deployments = Array.from(inMemoryDeployments.values());
+    if (app_id) deployments = deployments.filter(d => d.app_id === app_id);
+    if (status) deployments = deployments.filter(d => d.status === status);
+    // Enrich with progress
+    const enriched = deployments.map(d => {
+      const statuses = inMemoryDeploymentStatus.get(d.id) || [];
+      const total = statuses.length;
+      const installed = statuses.filter(s => s.status === 'installed').length;
+      const failed = statuses.filter(s => s.status === 'failed').length;
+      return { ...d, progress: { total, installed, failed, pending: total - installed - failed } };
+    });
+    res.json({ deployments: enriched, total: enriched.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/appstore/deployments/:id
+app.get('/api/appstore/deployments/:id', async (req, res) => {
+  try {
+    const deployment = inMemoryDeployments.get(req.params.id);
+    if (!deployment) return res.status(404).json({ error: 'Deployment not found' });
+    const statuses = inMemoryDeploymentStatus.get(req.params.id) || [];
+    res.json({ ...deployment, device_statuses: statuses });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/appstore/deployments/:id/cancel
+app.put('/api/appstore/deployments/:id/cancel', async (req, res) => {
+  try {
+    const deployment = inMemoryDeployments.get(req.params.id);
+    if (!deployment) return res.status(404).json({ error: 'Deployment not found' });
+    if (deployment.status === 'completed') {
+      return res.status(409).json({ error: 'Cannot cancel a completed deployment' });
+    }
+    const updated = { ...deployment, status: 'cancelled', completed_at: new Date().toISOString() };
+    inMemoryDeployments.set(req.params.id, updated);
+    // Update pending device statuses to cancelled
+    const statuses = inMemoryDeploymentStatus.get(req.params.id) || [];
+    const updatedStatuses = statuses.map(s => s.status === 'pending' ? { ...s, status: 'cancelled' } : s);
+    inMemoryDeploymentStatus.set(req.params.id, updatedStatuses);
+    try {
+      await pool.query("UPDATE app_deployments SET status = 'cancelled', completed_at = NOW() WHERE id = $1", [req.params.id]);
+    } catch (_) { /* DB optional */ }
+    res.json({ message: 'Deployment cancelled', deployment: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================================================
 // Startup
 // ========================================================================
 
@@ -538,6 +785,9 @@ async function start() {
 
     // Run migrations
     await runMigrations();
+
+    // Ensure appstore tables exist
+    await ensureAppstoreTables();
 
     // Initialize messaging
     await distributionEngine.initializeMessaging();

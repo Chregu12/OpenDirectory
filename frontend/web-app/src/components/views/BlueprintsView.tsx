@@ -17,6 +17,11 @@ import {
   ComputerDesktopIcon,
   UserGroupIcon,
   ChevronRightIcon,
+  PlayIcon,
+  DevicePhoneMobileIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -53,6 +58,34 @@ interface BlueprintAssignment {
 
 interface BlueprintDetail extends Blueprint {
   configurations: BlueprintConfig[];
+}
+
+interface MdmDevice {
+  udid: string;
+  device_name?: string;
+  model?: string;
+  os_version?: string;
+  enrolled_at?: string;
+  status?: string;
+}
+
+interface BlueprintApplyStatus {
+  deviceId: string;
+  deviceName?: string | null;
+  status: 'queued' | 'applying' | 'applied' | 'failed';
+  progress: number;
+  error?: string | null;
+  startedAt?: string;
+  completedAt?: string | null;
+}
+
+interface DepDevice {
+  serialNumber: string;
+  model: string;
+  color: string;
+  os: string;
+  status: 'unassigned' | 'assigned';
+  blueprintId: string | null;
 }
 
 type ConfigType =
@@ -424,6 +457,26 @@ export default function BlueprintsView() {
 
   const [applying, setApplying] = useState(false);
 
+  // MDM apply modal
+  const [applyModalBlueprintId, setApplyModalBlueprintId] = useState<string | null>(null);
+  const [applyModalBlueprintName, setApplyModalBlueprintName] = useState('');
+  const [mdmDevices, setMdmDevices] = useState<MdmDevice[]>([]);
+  const [applyTargetMode, setApplyTargetMode] = useState<'all' | 'specific'>('all');
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
+  const [mdmApplying, setMdmApplying] = useState(false);
+  const [mdmApplyResult, setMdmApplyResult] = useState<{ queued: number; devices: { deviceId: string; status: string }[] } | null>(null);
+
+  // Blueprint apply statuses (blueprintId -> statuses[])
+  const [applyStatuses, setApplyStatuses] = useState<Record<string, BlueprintApplyStatus[]>>({});
+
+  // DEP tab
+  const [activeTab, setActiveTab] = useState<'blueprints' | 'dep'>('blueprints');
+  const [depDevices, setDepDevices] = useState<DepDevice[]>([]);
+  const [depLoading, setDepLoading] = useState(false);
+  const [depAssigning, setDepAssigning] = useState(false);
+  const [selectedDepSerials, setSelectedDepSerials] = useState<string[]>([]);
+  const [depAssignBlueprintId, setDepAssignBlueprintId] = useState('');
+
   // ── Fetch blueprints ─────────────────────────────────────────────────────────
 
   const fetchBlueprints = useCallback(async () => {
@@ -441,6 +494,135 @@ export default function BlueprintsView() {
   useEffect(() => {
     fetchBlueprints();
   }, [fetchBlueprints]);
+
+  // ── Fetch MDM devices ────────────────────────────────────────────────────────
+
+  const fetchMdmDevices = useCallback(async () => {
+    try {
+      const res = await api.get('/api/mdm/devices');
+      const data = res.data as { devices: MdmDevice[] };
+      setMdmDevices(data.devices || []);
+    } catch {
+      setMdmDevices([]);
+    }
+  }, []);
+
+  // ── Fetch apply statuses for all blueprints ──────────────────────────────────
+
+  const fetchApplyStatuses = useCallback(async (bps: Blueprint[]) => {
+    const results: Record<string, BlueprintApplyStatus[]> = {};
+    await Promise.all(
+      bps.map(async (bp) => {
+        try {
+          const res = await api.get(`/api/mdm/blueprints/${bp.id}/apply-status`);
+          const data = res.data as { statuses: BlueprintApplyStatus[] };
+          results[bp.id] = data.statuses || [];
+        } catch {
+          results[bp.id] = [];
+        }
+      })
+    );
+    setApplyStatuses(results);
+  }, []);
+
+  useEffect(() => {
+    if (blueprints.length > 0) {
+      fetchApplyStatuses(blueprints);
+    }
+  }, [blueprints, fetchApplyStatuses]);
+
+  // ── Fetch DEP devices ────────────────────────────────────────────────────────
+
+  const fetchDepDevices = useCallback(async () => {
+    setDepLoading(true);
+    try {
+      const res = await api.get('/api/mdm/dep/devices');
+      const data = res.data as { devices: DepDevice[] };
+      setDepDevices(data.devices || []);
+    } catch {
+      toast.error('DEP-Geräte konnten nicht geladen werden');
+    } finally {
+      setDepLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'dep') {
+      fetchDepDevices();
+    }
+  }, [activeTab, fetchDepDevices]);
+
+  // ── Open MDM apply modal ─────────────────────────────────────────────────────
+
+  const openApplyModal = async (bp: Blueprint, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setApplyModalBlueprintId(bp.id);
+    setApplyModalBlueprintName(bp.name);
+    setApplyTargetMode('all');
+    setSelectedDeviceIds([]);
+    setMdmApplyResult(null);
+    await fetchMdmDevices();
+  };
+
+  const closeApplyModal = () => {
+    setApplyModalBlueprintId(null);
+    setMdmApplyResult(null);
+  };
+
+  // ── Submit MDM blueprint apply ───────────────────────────────────────────────
+
+  const handleMdmApply = async () => {
+    if (!applyModalBlueprintId) return;
+    setMdmApplying(true);
+    try {
+      const deviceIds = applyTargetMode === 'specific' ? selectedDeviceIds : [];
+      const res = await api.post(`/api/mdm/blueprints/${applyModalBlueprintId}/apply`, { deviceIds });
+      const data = res.data as { queued: number; devices: { deviceId: string; status: string }[] };
+      setMdmApplyResult(data);
+      toast.success(`Blueprint auf ${data.queued} Gerät(e) angewendet`);
+      // Refresh statuses
+      fetchApplyStatuses(blueprints);
+    } catch {
+      toast.error('Blueprint konnte nicht angewendet werden');
+    } finally {
+      setMdmApplying(false);
+    }
+  };
+
+  // ── DEP assign ───────────────────────────────────────────────────────────────
+
+  const handleDepAssign = async () => {
+    if (selectedDepSerials.length === 0) return toast.error('Bitte Geräte auswählen');
+    setDepAssigning(true);
+    try {
+      await api.post('/api/mdm/dep/assign', {
+        serialNumbers: selectedDepSerials,
+        blueprintId: depAssignBlueprintId || undefined,
+      });
+      toast.success(`${selectedDepSerials.length} Gerät(e) zugewiesen`);
+      setSelectedDepSerials([]);
+      setDepAssignBlueprintId('');
+      fetchDepDevices();
+    } catch {
+      toast.error('DEP-Zuweisung fehlgeschlagen');
+    } finally {
+      setDepAssigning(false);
+    }
+  };
+
+  // ── Get apply status summary for a blueprint ─────────────────────────────────
+
+  const getBlueprintStatusSummary = (blueprintId: string) => {
+    const statuses = applyStatuses[blueprintId] || [];
+    if (statuses.length === 0) return null;
+    const failed = statuses.filter(s => s.status === 'failed').length;
+    const latest = statuses.reduce((a, b) => {
+      const aTime = a.completedAt || a.startedAt || '';
+      const bTime = b.completedAt || b.startedAt || '';
+      return aTime > bTime ? a : b;
+    });
+    return { failed, total: statuses.length, latest };
+  };
 
   // ── Open detail panel ────────────────────────────────────────────────────────
 
@@ -613,118 +795,310 @@ export default function BlueprintsView() {
             Gerätekonfigurationsprofile erstellen und zuweisen — nach Vorbild von Apple Business Manager
           </p>
         </div>
-        <button
-          onClick={() => setCreateOpen(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: '#0071E3', color: 'white', border: 'none',
-            borderRadius: 8, padding: '8px 16px', fontSize: 14, fontWeight: 500,
-            cursor: 'pointer',
-          }}
-        >
-          <PlusIcon className="w-4 h-4" />
-          Neues Blueprint
-        </button>
-      </div>
-
-      {/* Blueprints table */}
-      <div className="border border-[#E5E5EA] rounded-xl bg-white overflow-hidden">
-        {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#6E6E73', fontSize: 14 }}>
-            Wird geladen...
-          </div>
-        ) : blueprints.length === 0 ? (
-          <div style={{ padding: 60, textAlign: 'center' }}>
-            <RectangleStackIcon className="w-12 h-12 mx-auto mb-3" style={{ color: '#C7C7CC' }} />
-            <p style={{ fontSize: 15, fontWeight: 600, color: '#1D1D1F', marginBottom: 4 }}>Keine Blueprints vorhanden</p>
-            <p style={{ fontSize: 13, color: '#6E6E73' }}>Erstelle ein Blueprint, um Gerätekonfigurationen zu verwalten</p>
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #E5E5EA' }}>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</th>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Plattform</th>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Konfigurationen</th>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Zugewiesen</th>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Erstellt</th>
-                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {blueprints.map((bp, idx) => (
-                <tr
-                  key={bp.id}
-                  onClick={() => openDetail(bp)}
-                  style={{
-                    borderBottom: idx < blueprints.length - 1 ? '1px solid #F2F2F7' : 'none',
-                    cursor: 'pointer',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = '#F9F9FB'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
-                >
-                  <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{
-                        width: 32, height: 32, borderRadius: 8,
-                        background: '#EAF4FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                      }}>
-                        <RectangleStackIcon className="w-4 h-4" style={{ color: '#0071E3' }} />
-                      </div>
-                      <div>
-                        <p style={{ fontSize: 14, fontWeight: 500, color: '#1D1D1F' }}>{bp.name}</p>
-                        {bp.description && (
-                          <p style={{ fontSize: 12, color: '#6E6E73', marginTop: 1 }}>{bp.description}</p>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{
-                      fontSize: 12, padding: '2px 8px', borderRadius: 4,
-                      background: '#F2F2F7', color: '#1D1D1F', fontWeight: 500,
-                    }}>
-                      {PLATFORM_LABELS[bp.platform] || bp.platform}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{
-                      fontSize: 12, padding: '2px 8px', borderRadius: 10,
-                      background: '#EAF4FF', color: '#0071E3', fontWeight: 600,
-                    }}>
-                      {bp.config_count}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{ fontSize: 13, color: '#1D1D1F' }}>{bp.assignment_count}</span>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{ fontSize: 13, color: '#6E6E73' }}>{formatDate(bp.created_at)}</span>
-                  </td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
-                      <button
-                        onClick={(e) => handleDelete(bp.id, e)}
-                        style={{
-                          background: 'none', border: 'none', cursor: 'pointer', padding: 6,
-                          borderRadius: 6, color: '#6E6E73',
-                        }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#FF3B30'; (e.currentTarget as HTMLButtonElement).style.background = '#FFF2F1'; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#6E6E73'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
-                        title="Blueprint löschen"
-                      >
-                        <TrashIcon className="w-4 h-4" />
-                      </button>
-                      <ChevronRightIcon className="w-4 h-4" style={{ color: '#C7C7CC' }} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {activeTab === 'blueprints' && (
+          <button
+            onClick={() => setCreateOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: '#0071E3', color: 'white', border: 'none',
+              borderRadius: 8, padding: '8px 16px', fontSize: 14, fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            <PlusIcon className="w-4 h-4" />
+            Neues Blueprint
+          </button>
         )}
       </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid #E5E5EA', paddingBottom: 0 }}>
+        {(['blueprints', 'dep'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: '8px 16px', fontSize: 14, fontWeight: 500,
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: activeTab === tab ? '#0071E3' : '#6E6E73',
+              borderBottom: activeTab === tab ? '2px solid #0071E3' : '2px solid transparent',
+              marginBottom: -1,
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            {tab === 'blueprints'
+              ? <><RectangleStackIcon className="w-4 h-4" /> Blueprints</>
+              : <><DevicePhoneMobileIcon className="w-4 h-4" /> DEP Geräte</>
+            }
+          </button>
+        ))}
+      </div>
+
+      {/* ─── Blueprints tab ─────────────────────────────────────────────────────── */}
+      {activeTab === 'blueprints' && (
+        <div className="border border-[#E5E5EA] rounded-xl bg-white overflow-hidden">
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#6E6E73', fontSize: 14 }}>
+              Wird geladen...
+            </div>
+          ) : blueprints.length === 0 ? (
+            <div style={{ padding: 60, textAlign: 'center' }}>
+              <RectangleStackIcon className="w-12 h-12 mx-auto mb-3" style={{ color: '#C7C7CC' }} />
+              <p style={{ fontSize: 15, fontWeight: 600, color: '#1D1D1F', marginBottom: 4 }}>Keine Blueprints vorhanden</p>
+              <p style={{ fontSize: 13, color: '#6E6E73' }}>Erstelle ein Blueprint, um Gerätekonfigurationen zu verwalten</p>
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #E5E5EA' }}>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Plattform</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Konfigurationen</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Zugewiesen</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Erstellt</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {blueprints.map((bp, idx) => {
+                  const summary = getBlueprintStatusSummary(bp.id);
+                  return (
+                    <tr
+                      key={bp.id}
+                      onClick={() => openDetail(bp)}
+                      style={{
+                        borderBottom: idx < blueprints.length - 1 ? '1px solid #F2F2F7' : 'none',
+                        cursor: 'pointer',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = '#F9F9FB'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
+                    >
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{
+                            width: 32, height: 32, borderRadius: 8,
+                            background: '#EAF4FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                          }}>
+                            <RectangleStackIcon className="w-4 h-4" style={{ color: '#0071E3' }} />
+                          </div>
+                          <div>
+                            <p style={{ fontSize: 14, fontWeight: 500, color: '#1D1D1F' }}>{bp.name}</p>
+                            {bp.description && (
+                              <p style={{ fontSize: 12, color: '#6E6E73', marginTop: 1 }}>{bp.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{
+                          fontSize: 12, padding: '2px 8px', borderRadius: 4,
+                          background: '#F2F2F7', color: '#1D1D1F', fontWeight: 500,
+                        }}>
+                          {PLATFORM_LABELS[bp.platform] || bp.platform}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{
+                          fontSize: 12, padding: '2px 8px', borderRadius: 10,
+                          background: '#EAF4FF', color: '#0071E3', fontWeight: 600,
+                        }}>
+                          {bp.config_count}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ fontSize: 13, color: '#1D1D1F' }}>{bp.assignment_count}</span>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        {!summary ? (
+                          <span style={{ fontSize: 12, color: '#AEAEB2', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <ClockIcon className="w-3.5 h-3.5" />
+                            Noch nie angewendet
+                          </span>
+                        ) : summary.failed > 0 ? (
+                          <span style={{ fontSize: 12, color: '#FF3B30', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <ExclamationCircleIcon className="w-3.5 h-3.5" />
+                            Fehler bei {summary.failed} Gerät(en)
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 12, color: '#34C759', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <CheckCircleIcon className="w-3.5 h-3.5" />
+                            {summary.latest.completedAt
+                              ? `Angewendet am ${formatDate(summary.latest.completedAt)}`
+                              : 'Wird angewendet…'
+                            }
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ fontSize: 13, color: '#6E6E73' }}>{formatDate(bp.created_at)}</span>
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={(e) => openApplyModal(bp, e)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 4,
+                              background: '#EAF4FF', border: 'none', cursor: 'pointer', padding: '5px 10px',
+                              borderRadius: 6, color: '#0071E3', fontSize: 12, fontWeight: 500,
+                            }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#0071E3'; (e.currentTarget as HTMLButtonElement).style.color = 'white'; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#EAF4FF'; (e.currentTarget as HTMLButtonElement).style.color = '#0071E3'; }}
+                            title="Blueprint via MDM anwenden"
+                          >
+                            <PlayIcon className="w-3.5 h-3.5" />
+                            Anwenden
+                          </button>
+                          <button
+                            onClick={(e) => handleDelete(bp.id, e)}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer', padding: 6,
+                              borderRadius: 6, color: '#6E6E73',
+                            }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#FF3B30'; (e.currentTarget as HTMLButtonElement).style.background = '#FFF2F1'; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#6E6E73'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+                            title="Blueprint löschen"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
+                          <ChevronRightIcon className="w-4 h-4" style={{ color: '#C7C7CC' }} />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* ─── DEP Geräte tab ─────────────────────────────────────────────────────── */}
+      {activeTab === 'dep' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: '#6E6E73' }}>
+              Geräte, die über Apple DEP / Zero-Touch-Enrollment automatisch konfiguriert werden können.
+            </p>
+            <button
+              onClick={fetchDepDevices}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F2F2F7', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 13, color: '#1D1D1F', cursor: 'pointer' }}
+            >
+              <ArrowPathIcon className={`w-4 h-4 ${depLoading ? 'animate-spin' : ''}`} />
+              Aktualisieren
+            </button>
+          </div>
+
+          {/* DEP assign bar */}
+          {selectedDepSerials.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#EAF4FF', border: '1px solid #BDD8F9', borderRadius: 10, padding: '10px 16px', marginBottom: 16 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: '#0071E3', flex: 1 }}>
+                {selectedDepSerials.length} Gerät(e) ausgewählt
+              </span>
+              <select
+                value={depAssignBlueprintId}
+                onChange={e => setDepAssignBlueprintId(e.target.value)}
+                style={{ border: '1px solid #BDD8F9', borderRadius: 6, padding: '5px 10px', fontSize: 13, color: '#1D1D1F', background: 'white', minWidth: 180 }}
+              >
+                <option value="">Blueprint wählen…</option>
+                {blueprints.map(bp => (
+                  <option key={bp.id} value={bp.id}>{bp.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleDepAssign}
+                disabled={depAssigning}
+                style={{
+                  background: depAssigning ? '#A0C4F1' : '#0071E3', color: 'white', border: 'none',
+                  borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: depAssigning ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {depAssigning ? 'Zuweisen...' : 'Blueprint zuweisen'}
+              </button>
+            </div>
+          )}
+
+          <div className="border border-[#E5E5EA] rounded-xl bg-white overflow-hidden">
+            {depLoading ? (
+              <div style={{ padding: 40, textAlign: 'center', color: '#6E6E73', fontSize: 14 }}>Wird geladen...</div>
+            ) : depDevices.length === 0 ? (
+              <div style={{ padding: 60, textAlign: 'center' }}>
+                <DevicePhoneMobileIcon className="w-12 h-12 mx-auto mb-3" style={{ color: '#C7C7CC' }} />
+                <p style={{ fontSize: 15, fontWeight: 600, color: '#1D1D1F', marginBottom: 4 }}>Keine DEP-Geräte gefunden</p>
+              </div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #E5E5EA' }}>
+                    <th style={{ padding: '10px 16px', width: 40 }}></th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Seriennummer</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Modell</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Betriebssystem</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Blueprint</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {depDevices.map((dev, idx) => (
+                    <tr
+                      key={dev.serialNumber}
+                      style={{ borderBottom: idx < depDevices.length - 1 ? '1px solid #F2F2F7' : 'none' }}
+                    >
+                      <td style={{ padding: '10px 16px' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedDepSerials.includes(dev.serialNumber)}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setSelectedDepSerials(prev => [...prev, dev.serialNumber]);
+                            } else {
+                              setSelectedDepSerials(prev => prev.filter(s => s !== dev.serialNumber));
+                            }
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: '10px 16px' }}>
+                        <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#1D1D1F' }}>{dev.serialNumber}</span>
+                      </td>
+                      <td style={{ padding: '10px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <DevicePhoneMobileIcon className="w-4 h-4" style={{ color: '#6E6E73', flexShrink: 0 }} />
+                          <div>
+                            <p style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F' }}>{dev.model}</p>
+                            <p style={{ fontSize: 11, color: '#6E6E73' }}>{dev.color}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 16px' }}>
+                        <span style={{ fontSize: 13, color: '#6E6E73' }}>{dev.os}</span>
+                      </td>
+                      <td style={{ padding: '10px 16px' }}>
+                        <span style={{
+                          fontSize: 12, padding: '2px 8px', borderRadius: 10, fontWeight: 500,
+                          background: dev.status === 'assigned' ? '#E8FAE8' : '#F2F2F7',
+                          color: dev.status === 'assigned' ? '#34C759' : '#6E6E73',
+                        }}>
+                          {dev.status === 'assigned' ? 'Zugewiesen' : 'Nicht zugewiesen'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 16px' }}>
+                        {dev.blueprintId ? (
+                          <span style={{ fontSize: 13, color: '#0071E3', fontWeight: 500 }}>
+                            {blueprints.find(b => b.id === dev.blueprintId)?.name || dev.blueprintId}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 13, color: '#AEAEB2' }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ─── Detail Panel ───────────────────────────────────────────────────────── */}
       {panelOpen && selectedBlueprint && (
@@ -999,6 +1373,167 @@ export default function BlueprintsView() {
                 {creating ? 'Erstelle...' : 'Erstellen'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MDM Blueprint Apply Modal ──────────────────────────────────────────── */}
+      {applyModalBlueprintId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.35)', padding: 16 }}
+          onClick={closeApplyModal}
+        >
+          <div
+            style={{
+              background: 'white', borderRadius: 16, padding: 28,
+              width: '100%', maxWidth: 480,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              maxHeight: '90vh', overflowY: 'auto',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1D1D1F' }}>Blueprint anwenden</h2>
+              <button onClick={closeApplyModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6E6E73' }}>
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 14, color: '#6E6E73', marginBottom: 20 }}>
+              <strong style={{ color: '#1D1D1F' }}>{applyModalBlueprintName}</strong> per MDM-Push auf Geräte anwenden
+            </p>
+
+            {mdmApplyResult ? (
+              <div>
+                <div style={{ background: '#E8FAE8', border: '1px solid #A8E6B8', borderRadius: 10, padding: '14px 16px', marginBottom: 20 }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1D7A35', marginBottom: 6 }}>
+                    Blueprint auf {mdmApplyResult.queued} Gerät(e) angewendet
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {mdmApplyResult.devices.map(d => (
+                      <div key={d.deviceId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                        {d.status === 'failed'
+                          ? <ExclamationCircleIcon className="w-4 h-4" style={{ color: '#FF3B30', flexShrink: 0 }} />
+                          : <CheckCircleIcon className="w-4 h-4" style={{ color: '#34C759', flexShrink: 0 }} />
+                        }
+                        <span style={{ fontFamily: 'monospace', color: '#1D1D1F' }}>{d.deviceId}</span>
+                        <span style={{ color: d.status === 'failed' ? '#FF3B30' : '#34C759' }}>{d.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={closeApplyModal}
+                  style={{ width: '100%', background: '#F2F2F7', border: 'none', borderRadius: 8, padding: '10px 0', fontSize: 14, fontWeight: 500, color: '#1D1D1F', cursor: 'pointer' }}
+                >
+                  Schliessen
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Target mode */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 8 }}>Zielgeräte</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 8, border: `1.5px solid ${applyTargetMode === 'all' ? '#0071E3' : '#E5E5EA'}`, background: applyTargetMode === 'all' ? '#EAF4FF' : 'white' }}>
+                      <input
+                        type="radio"
+                        name="applyTarget"
+                        value="all"
+                        checked={applyTargetMode === 'all'}
+                        onChange={() => { setApplyTargetMode('all'); setSelectedDeviceIds([]); }}
+                      />
+                      <div>
+                        <p style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F' }}>Alle kompatiblen Geräte</p>
+                        <p style={{ fontSize: 11, color: '#6E6E73' }}>{mdmDevices.length} eingeschriebene Gerät(e)</p>
+                      </div>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 8, border: `1.5px solid ${applyTargetMode === 'specific' ? '#0071E3' : '#E5E5EA'}`, background: applyTargetMode === 'specific' ? '#EAF4FF' : 'white' }}>
+                      <input
+                        type="radio"
+                        name="applyTarget"
+                        value="specific"
+                        checked={applyTargetMode === 'specific'}
+                        onChange={() => setApplyTargetMode('specific')}
+                      />
+                      <div>
+                        <p style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F' }}>Bestimmte Geräte</p>
+                        <p style={{ fontSize: 11, color: '#6E6E73' }}>Geräte manuell auswählen</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Device checklist for specific mode */}
+                {applyTargetMode === 'specific' && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 8 }}>
+                      Geräte auswählen {selectedDeviceIds.length > 0 && `(${selectedDeviceIds.length} ausgewählt)`}
+                    </label>
+                    {mdmDevices.length === 0 ? (
+                      <p style={{ fontSize: 13, color: '#AEAEB2', padding: '12px 0' }}>Keine eingeschriebenen Geräte gefunden</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto', border: '1px solid #E5E5EA', borderRadius: 8, padding: 8 }}>
+                        {mdmDevices.map(dev => (
+                          <label key={dev.udid} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '7px 8px', borderRadius: 6, background: selectedDeviceIds.includes(dev.udid) ? '#EAF4FF' : 'transparent' }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedDeviceIds.includes(dev.udid)}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSelectedDeviceIds(prev => [...prev, dev.udid]);
+                                } else {
+                                  setSelectedDeviceIds(prev => prev.filter(id => id !== dev.udid));
+                                }
+                              }}
+                            />
+                            <ComputerDesktopIcon className="w-4 h-4" style={{ color: '#6E6E73', flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {dev.device_name || dev.udid}
+                              </p>
+                              {dev.model && <p style={{ fontSize: 11, color: '#6E6E73' }}>{dev.model}</p>}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Affected count */}
+                <div style={{ background: '#F9F9FB', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#6E6E73' }}>
+                  {applyTargetMode === 'all'
+                    ? `${mdmDevices.length} Gerät(e) werden betroffen sein`
+                    : `${selectedDeviceIds.length} Gerät(e) ausgewählt`
+                  }
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <button
+                    onClick={closeApplyModal}
+                    style={{ flex: 1, background: '#F2F2F7', border: 'none', borderRadius: 8, padding: '10px 0', fontSize: 14, fontWeight: 500, color: '#1D1D1F', cursor: 'pointer' }}
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    onClick={handleMdmApply}
+                    disabled={mdmApplying || (applyTargetMode === 'specific' && selectedDeviceIds.length === 0)}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      background: mdmApplying || (applyTargetMode === 'specific' && selectedDeviceIds.length === 0) ? '#A0C4F1' : '#0071E3',
+                      border: 'none', borderRadius: 8, padding: '10px 0',
+                      fontSize: 14, fontWeight: 600, color: 'white',
+                      cursor: mdmApplying || (applyTargetMode === 'specific' && selectedDeviceIds.length === 0) ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <PlayIcon className="w-4 h-4" />
+                    {mdmApplying ? 'Wird angewendet...' : 'Jetzt anwenden'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
