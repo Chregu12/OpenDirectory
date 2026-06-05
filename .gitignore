@@ -275,4 +275,4 @@ production-configs/
 customer-data/
 audit-logs/
 *.audit
-*.compliance
+*.compliance.claude/worktrees/
