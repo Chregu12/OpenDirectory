@@ -217,4 +217,93 @@ describe('Events module', () => {
       }
     });
   });
+
+  // ─── Additional legacy constant coverage ────────────────────────────────────
+
+  describe('additional legacy PascalCase constants', () => {
+    it('exports DEVICE_GEOFENCE_VIOLATION', () => {
+      expect(eventsModule.DEVICE_GEOFENCE_VIOLATION).toBe('DeviceGeofenceViolation');
+    });
+  });
+
+  // ─── Additional Events routing key coverage ─────────────────────────────────
+
+  describe('additional Events routing key coverage', () => {
+    const { Events } = eventsModule;
+
+    it('DEVICE_LOST', () => {
+      expect(Events.DEVICE_LOST).toBe('device.lost');
+    });
+
+    it('DEVICE_WIPED', () => {
+      expect(Events.DEVICE_WIPED).toBe('device.wiped');
+    });
+
+    it('APP_PACKAGE_UPLOADED', () => {
+      expect(Events.APP_PACKAGE_UPLOADED).toBe('app.package.uploaded');
+    });
+
+    it('APP_UNINSTALL_COMPLETED', () => {
+      expect(Events.APP_UNINSTALL_COMPLETED).toBe('app.uninstall.completed');
+    });
+
+    it('IDENTITY_LOGIN_FAILED', () => {
+      expect(Events.IDENTITY_LOGIN_FAILED).toBe('identity.login.failed');
+    });
+
+    it('IDENTITY_MFA_DISABLED', () => {
+      expect(Events.IDENTITY_MFA_DISABLED).toBe('identity.mfa.disabled');
+    });
+
+    it('POLICY_VIOLATED', () => {
+      expect(Events.POLICY_VIOLATED).toBe('policy.violated');
+    });
+
+    it('PIM_ACCESS_EXPIRED', () => {
+      expect(Events.PIM_ACCESS_EXPIRED).toBe('security.pim.expired');
+    });
+
+    it('PIM_ACCESS_REQUESTED', () => {
+      expect(Events.PIM_ACCESS_REQUESTED).toBe('security.pim.requested');
+    });
+
+    it('ADMIN_CONFIG_CHANGED', () => {
+      expect(Events.ADMIN_CONFIG_CHANGED).toBe('admin.config.changed');
+    });
+
+    it('ADMIN_SERVICE_RESTARTED', () => {
+      expect(Events.ADMIN_SERVICE_RESTARTED).toBe('admin.service.restarted');
+    });
+  });
+
+  // ─── Uniqueness checks ───────────────────────────────────────────────────────
+
+  describe('uniqueness', () => {
+    it('no two legacy PascalCase constants share the same value', () => {
+      const stringExports = Object.entries(eventsModule)
+        .filter(([k]) => k !== 'Events')
+        .map(([, v]) => v);
+      const unique = new Set(stringExports);
+      expect(unique.size).toBe(stringExports.length);
+    });
+
+    it('no two Events routing key constants share the same value', () => {
+      const { Events } = eventsModule;
+      const values = Object.values(Events);
+      const unique = new Set(values);
+      expect(unique.size).toBe(values.length);
+    });
+
+    it('Events routing key constants do not duplicate legacy PascalCase values', () => {
+      const { Events } = eventsModule;
+      const routingKeys = new Set(Object.values(Events));
+      const legacyValues = Object.entries(eventsModule)
+        .filter(([k]) => k !== 'Events')
+        .map(([, v]) => v);
+      // No legacy string value should equal a dot-notation routing key
+      for (const legacy of legacyValues) {
+        expect(routingKeys.has(legacy)).toBe(false);
+      }
+    });
+  });
 });

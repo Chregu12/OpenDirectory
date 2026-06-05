@@ -170,4 +170,165 @@ describe('SagaBase', () => {
       expect(saga.publish('key', {})).toBe(false);
     });
   });
+
+  // ─── Max retries exhausted ──────────────────────────────────────────────────
+
+  describe('retry behaviour', () => {
+    it('keeps retrying on repeated subscribe errors and logs each attempt', async () => {
+      const bus = makeBus(true);
+      // Fail twice, succeed on third attempt
+      bus.subscribe
+        .mockRejectedValueOnce(new Error('err1'))
+        .mockRejectedValueOnce(new Error('err2'))
+        .mockResolvedValue(undefined);
+
+      const logger = { info: jest.fn(), warn: jest.fn() };
+      const saga = new SagaBase(bus, logger);
+      saga.start('q', ['e']);
+
+      // Advance timers: 3 s initial + 5 s retry + 5 s retry = 13 s total
+      await jest.advanceTimersByTimeAsync(3001);  // first attempt — fails
+      await jest.advanceTimersByTimeAsync(5001);  // second attempt — fails
+      await jest.advanceTimersByTimeAsync(5001);  // third attempt — succeeds
+
+      // subscribe() should have been called 3 times
+      expect(bus.subscribe).toHaveBeenCalledTimes(3);
+      // warn should have been called for each failure
+      expect(logger.warn).toHaveBeenCalledTimes(2);
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('subscribe error'));
+    });
+
+    it('retry count never goes below zero — warn log count equals number of failures', async () => {
+      const bus = makeBus(true);
+      // Fail 3 times; SagaBase has no max-retry cap — it keeps retrying indefinitely
+      bus.subscribe
+        .mockRejectedValueOnce(new Error('fail-1'))
+        .mockRejectedValueOnce(new Error('fail-2'))
+        .mockRejectedValueOnce(new Error('fail-3'))
+        .mockResolvedValue(undefined);
+
+      const logger = { info: jest.fn(), warn: jest.fn() };
+      const saga = new SagaBase(bus, logger);
+      saga.start('q', ['e']);
+
+      // Drive through all retries
+      await jest.advanceTimersByTimeAsync(3001);
+      await jest.advanceTimersByTimeAsync(5001);
+      await jest.advanceTimersByTimeAsync(5001);
+      await jest.advanceTimersByTimeAsync(5001);
+
+      // Exactly 3 warn calls — one per failure, not an inflated negative counter
+      expect(logger.warn).toHaveBeenCalledTimes(3);
+      expect(bus.subscribe).toHaveBeenCalledTimes(4);
+    });
+
+    it('retry delay is 5 s — retry fires after the initial attempt plus 5000 ms', async () => {
+      const bus = makeBus(true);
+      bus.subscribe
+        .mockRejectedValueOnce(new Error('delay-test'))
+        .mockResolvedValue(undefined);
+
+      const logger = { info: jest.fn(), warn: jest.fn() };
+      const saga = new SagaBase(bus, logger);
+      saga.start('q', ['e']);
+
+      // Advance past the initial 3 s delay so the first attempt fires and fails
+      await jest.advanceTimersByTimeAsync(3001);
+      expect(bus.subscribe).toHaveBeenCalledTimes(1);
+
+      // Advance well short of the 5 s retry window — retry must NOT have fired
+      await jest.advanceTimersByTimeAsync(2000);
+      expect(bus.subscribe).toHaveBeenCalledTimes(1);
+
+      // Advance past the remaining retry delay — retry fires
+      await jest.advanceTimersByTimeAsync(3001);
+      expect(bus.subscribe).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ─── Concurrent saga instances ──────────────────────────────────────────────
+
+  describe('concurrent saga instances', () => {
+    it('events on saga A do not trigger saga B handlers', async () => {
+      const busA = makeBus(true);
+      const busB = makeBus(true);
+
+      let capturedHandlerA;
+      let capturedHandlerB;
+      busA.subscribe.mockImplementation(async (q, keys, handler) => { capturedHandlerA = handler; });
+      busB.subscribe.mockImplementation(async (q, keys, handler) => { capturedHandlerB = handler; });
+
+      const handlerA = jest.fn().mockResolvedValue(undefined);
+      const handlerB = jest.fn().mockResolvedValue(undefined);
+
+      const sagaA = new SagaBase(busA);
+      const sagaB = new SagaBase(busB);
+
+      sagaA.on('some.event', handlerA);
+      sagaB.on('some.event', handlerB);
+
+      sagaA.start('q-a', ['some.event']);
+      sagaB.start('q-b', ['some.event']);
+
+      await jest.runAllTimersAsync();
+
+      // Trigger saga A's internal handler only
+      const rawMsg = { fields: { routingKey: 'some.event' } };
+      await capturedHandlerA({ data: 'a-only' }, rawMsg);
+
+      expect(handlerA).toHaveBeenCalledTimes(1);
+      expect(handlerA).toHaveBeenCalledWith({ data: 'a-only' });
+      // Saga B's handler must NOT have been invoked
+      expect(handlerB).not.toHaveBeenCalled();
+    });
+
+    it('two saga instances maintain independent handler registries', () => {
+      const sagaA = new SagaBase(makeBus());
+      const sagaB = new SagaBase(makeBus());
+
+      const hA = jest.fn();
+      const hB = jest.fn();
+
+      sagaA.on('x.event', hA);
+      sagaB.on('x.event', hB);
+
+      expect(sagaA._handlers.get('x.event')).toBe(hA);
+      expect(sagaB._handlers.get('x.event')).toBe(hB);
+      // Registries are separate objects
+      expect(sagaA._handlers).not.toBe(sagaB._handlers);
+    });
+  });
+
+  // ─── Bus not-connected retry loop ───────────────────────────────────────────
+
+  describe('start() bus not connected — retry loop', () => {
+    it('keeps polling at 5 s intervals until bus becomes connected', async () => {
+      // Bus starts disconnected; becomes connected after the second poll
+      let callCount = 0;
+      const bus = {
+        isConnected: jest.fn(() => {
+          callCount += 1;
+          return callCount >= 3; // connected starting from 3rd call
+        }),
+        subscribe: jest.fn().mockResolvedValue(undefined),
+        publish: jest.fn(),
+      };
+
+      const logger = { info: jest.fn(), warn: jest.fn() };
+      const saga = new SagaBase(bus, logger);
+      saga.start('q', ['e']);
+
+      // First poll (3 s delay) — not connected
+      await jest.advanceTimersByTimeAsync(3001);
+      expect(bus.subscribe).not.toHaveBeenCalled();
+
+      // Second poll (5 s later) — not connected
+      await jest.advanceTimersByTimeAsync(5001);
+      expect(bus.subscribe).not.toHaveBeenCalled();
+
+      // Third poll (5 s later) — now connected
+      await jest.advanceTimersByTimeAsync(5001);
+      expect(bus.subscribe).toHaveBeenCalledTimes(1);
+    });
+  });
 });
