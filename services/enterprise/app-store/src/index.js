@@ -10,6 +10,10 @@ const winston = require('winston');
 const WebSocket = require('ws');
 const http = require('http');
 const promClient = require('prom-client');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 
 const CatalogManager = require('./catalog/catalogManager');
 const ClientDetector = require('./detection/clientDetector');
@@ -757,6 +761,277 @@ app.put('/api/appstore/deployments/:id/cancel', async (req, res) => {
 });
 
 // ========================================================================
+// Multi-Platform Package Distribution
+// ========================================================================
+
+const PACKAGES_DIR = process.env.PACKAGES_DIR || path.join(__dirname, '../../../data/packages');
+fs.mkdirSync(PACKAGES_DIR, { recursive: true });
+
+// Platform detection from file extension
+const PLATFORM_MAP = {
+  '.exe': 'windows', '.msi': 'windows', '.msix': 'windows',
+  '.dmg': 'macos',   '.pkg': 'macos',
+  '.deb': 'linux',   '.rpm': 'linux',   '.appimage': 'linux',
+  '.tar.gz': 'linux', '.tar.xz': 'linux',
+};
+const PLATFORM_ICONS = { windows: '🪟', macos: '🍎', linux: '🐧' };
+
+function detectPlatform(filename) {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.tar.gz') || lower.endsWith('.tar.xz')) return 'linux';
+  return PLATFORM_MAP[path.extname(lower)] || 'unknown';
+}
+
+function detectFormat(filename) {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.tar.gz'))  return 'tar.gz';
+  if (lower.endsWith('.tar.xz'))  return 'tar.xz';
+  return path.extname(lower).replace('.', '').toLowerCase();
+}
+
+// Multer storage — files go to PACKAGES_DIR/<appId>/<uuid>-<original>
+const packageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(PACKAGES_DIR, req.params.id || 'unknown');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const uniquePrefix = crypto.randomUUID().split('-')[0];
+    cb(null, `${uniquePrefix}-${file.originalname.replace(/[^a-zA-Z0-9._\-]/g, '_')}`);
+  },
+});
+
+const ALLOWED_EXTS = new Set(['.exe','.msi','.msix','.dmg','.pkg','.deb','.rpm','.appimage','.gz','.xz','.zip']);
+const packageUpload = multer({
+  storage: packageStorage,
+  limits: { fileSize: 4 * 1024 * 1024 * 1024 }, // 4 GB
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname.toLowerCase());
+    if (ALLOWED_EXTS.has(ext) || file.originalname.toLowerCase().endsWith('.tar.gz') || file.originalname.toLowerCase().endsWith('.tar.xz')) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Dateityp nicht erlaubt: ${ext}`));
+    }
+  },
+});
+
+// Compute SHA-256 of a file path
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', d => hash.update(d));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+// In-memory package store (fallback when DB unavailable)
+const inMemoryPackages = new Map(); // packageId → package object
+
+async function ensurePackagesTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS app_packages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        app_id VARCHAR(100) NOT NULL,
+        platform VARCHAR(20) NOT NULL,
+        format VARCHAR(20) NOT NULL,
+        version VARCHAR(100) NOT NULL,
+        filename VARCHAR(500) NOT NULL,
+        filepath TEXT NOT NULL,
+        size_bytes BIGINT,
+        sha256 VARCHAR(64),
+        architecture VARCHAR(20) DEFAULT 'x64',
+        release_notes TEXT,
+        uploaded_by VARCHAR(255),
+        uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+        download_count INTEGER DEFAULT 0,
+        active BOOLEAN DEFAULT true
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_app_packages_app_id ON app_packages(app_id)`);
+  } catch (_) { /* DB optional */ }
+}
+
+// GET /api/appstore/apps/:id/packages — list packages for an app
+app.get('/api/appstore/apps/:id/packages', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let packages = [];
+    try {
+      const result = await pool.query(
+        'SELECT * FROM app_packages WHERE app_id=$1 AND active=true ORDER BY uploaded_at DESC',
+        [id]
+      );
+      packages = result.rows;
+    } catch (_) {
+      packages = [...inMemoryPackages.values()].filter(p => p.app_id === id && p.active);
+    }
+    res.json(packages);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/appstore/apps/:id/packages — upload a package file
+app.post('/api/appstore/apps/:id/packages', packageUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+    const { id } = req.params;
+    const { version = '1.0.0', architecture = 'x64', release_notes = '' } = req.body;
+
+    const platform = detectPlatform(req.file.originalname);
+    const format   = detectFormat(req.file.originalname);
+    const sha256   = await sha256File(req.file.path);
+    const uploadedBy = req.headers['x-user-id'] || 'admin';
+
+    const pkg = {
+      id: crypto.randomUUID(),
+      app_id: id,
+      platform,
+      format,
+      version,
+      filename: req.file.originalname,
+      filepath: req.file.path,
+      size_bytes: req.file.size,
+      sha256,
+      architecture,
+      release_notes,
+      uploaded_by: uploadedBy,
+      uploaded_at: new Date().toISOString(),
+      download_count: 0,
+      active: true,
+    };
+
+    try {
+      const row = await pool.query(
+        `INSERT INTO app_packages
+           (id, app_id, platform, format, version, filename, filepath, size_bytes, sha256, architecture, release_notes, uploaded_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        [pkg.id, pkg.app_id, pkg.platform, pkg.format, pkg.version, pkg.filename,
+         pkg.filepath, pkg.size_bytes, pkg.sha256, pkg.architecture, pkg.release_notes, pkg.uploaded_by]
+      );
+      inMemoryPackages.set(pkg.id, row.rows[0]);
+    } catch (_) {
+      inMemoryPackages.set(pkg.id, pkg);
+    }
+
+    logger.info('Package uploaded', { appId: id, platform, format, version, size: req.file.size });
+    res.status(201).json(pkg);
+  } catch (err) {
+    // Clean up uploaded file on error
+    if (req.file?.path) try { fs.unlinkSync(req.file.path); } catch (_) {}
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/appstore/packages/:packageId/download — stream file to client
+app.get('/api/appstore/packages/:packageId/download', async (req, res) => {
+  try {
+    const { packageId } = req.params;
+    let pkg = inMemoryPackages.get(packageId);
+    if (!pkg) {
+      try {
+        const result = await pool.query('SELECT * FROM app_packages WHERE id=$1 AND active=true', [packageId]);
+        if (result.rows.length) pkg = result.rows[0];
+      } catch (_) {}
+    }
+    if (!pkg) return res.status(404).json({ error: 'Paket nicht gefunden' });
+    if (!fs.existsSync(pkg.filepath)) return res.status(404).json({ error: 'Datei nicht vorhanden' });
+
+    // Increment download counter
+    try {
+      await pool.query('UPDATE app_packages SET download_count = download_count + 1 WHERE id=$1', [packageId]);
+    } catch (_) {
+      if (inMemoryPackages.has(packageId)) {
+        inMemoryPackages.get(packageId).download_count++;
+      }
+    }
+
+    const stat = fs.statSync(pkg.filepath);
+    res.setHeader('Content-Disposition', `attachment; filename="${pkg.filename}"`);
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('X-SHA256', pkg.sha256 || '');
+    res.setHeader('X-Platform', pkg.platform);
+    res.setHeader('X-Version', pkg.version);
+    // Disable helmet's content-type sniffing for binary downloads
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    const mimeMap = {
+      exe: 'application/vnd.microsoft.portable-executable',
+      msi: 'application/x-msi',
+      msix: 'application/msix',
+      dmg: 'application/x-apple-diskimage',
+      pkg: 'application/x-newton-compatible-pkg',
+      deb: 'application/vnd.debian.binary-package',
+      rpm: 'application/x-rpm',
+      appimage: 'application/x-executable',
+      gz: 'application/gzip',
+      xz: 'application/x-xz',
+      zip: 'application/zip',
+    };
+    res.setHeader('Content-Type', mimeMap[pkg.format] || 'application/octet-stream');
+
+    const readStream = fs.createReadStream(pkg.filepath);
+    readStream.pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/appstore/packages/:packageId — soft-delete a package
+app.delete('/api/appstore/packages/:packageId', async (req, res) => {
+  try {
+    const { packageId } = req.params;
+    let pkg = inMemoryPackages.get(packageId);
+    if (!pkg) {
+      try {
+        const r = await pool.query('SELECT * FROM app_packages WHERE id=$1', [packageId]);
+        if (r.rows.length) pkg = r.rows[0];
+      } catch (_) {}
+    }
+    if (!pkg) return res.status(404).json({ error: 'Paket nicht gefunden' });
+
+    try {
+      await pool.query('UPDATE app_packages SET active=false WHERE id=$1', [packageId]);
+    } catch (_) {}
+    if (inMemoryPackages.has(packageId)) {
+      inMemoryPackages.get(packageId).active = false;
+    }
+    res.json({ message: 'Paket gelöscht' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/appstore/apps/:id/packages/summary — per-platform availability summary
+app.get('/api/appstore/apps/:id/packages/summary', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let packages = [];
+    try {
+      const result = await pool.query(
+        'SELECT platform, format, version, id, sha256, size_bytes, download_count, uploaded_at FROM app_packages WHERE app_id=$1 AND active=true ORDER BY uploaded_at DESC',
+        [id]
+      );
+      packages = result.rows;
+    } catch (_) {
+      packages = [...inMemoryPackages.values()].filter(p => p.app_id === id && p.active);
+    }
+
+    const summary = { windows: null, macos: null, linux: null };
+    for (const p of packages) {
+      if (!summary[p.platform]) summary[p.platform] = p;
+    }
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================================================
 // Startup
 // ========================================================================
 
@@ -788,6 +1063,7 @@ async function start() {
 
     // Ensure appstore tables exist
     await ensureAppstoreTables();
+    await ensurePackagesTable();
 
     // Initialize messaging
     await distributionEngine.initializeMessaging();
