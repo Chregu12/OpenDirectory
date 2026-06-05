@@ -423,20 +423,78 @@ PYEOF
             pkg_id=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('packageId',''))" 2>/dev/null)
             app_name=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('appName',''))" 2>/dev/null)
             local install_status="completed" install_output=""
-            if command -v brew &>/dev/null; then
-                case "$pkg_type" in
-                    cask)
+            local download_url pkg_sha256 pkg_format
+            download_url=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('downloadUrl',''))" 2>/dev/null)
+            pkg_sha256=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('sha256',''))" 2>/dev/null)
+            pkg_format=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('format',''))" 2>/dev/null)
+
+            case "$pkg_type" in
+                internal)
+                    # Download from internal OpenDirectory App Store, install without admin prompt
+                    local tmp_dir tmp_file
+                    tmp_dir=$(mktemp -d /tmp/od-install-XXXXXX)
+                    tmp_file="$tmp_dir/package.$pkg_format"
+                    (
+                        curl -fsSL -H "X-Device-Id: $DEVICE_ID" "$download_url" -o "$tmp_file" 2>&1
+                    ) || { install_status="failed"; install_output="Download fehlgeschlagen"; }
+
+                    if [ "$install_status" = "completed" ]; then
+                        # Verify SHA256 if provided
+                        if [ -n "$pkg_sha256" ] && [ ${#pkg_sha256} -eq 64 ]; then
+                            actual_hash=$(shasum -a 256 "$tmp_file" | awk '{print $1}')
+                            if [ "$actual_hash" != "$pkg_sha256" ]; then
+                                install_status="failed"; install_output="SHA256-Prüfsumme falsch"
+                            fi
+                        fi
+                    fi
+
+                    if [ "$install_status" = "completed" ]; then
+                        case "$pkg_format" in
+                            dmg)
+                                local mount_point
+                                mount_point=$(hdiutil attach "$tmp_file" -nobrowse -noautoopen 2>/dev/null | awk 'END{print $NF}')
+                                if [ -n "$mount_point" ]; then
+                                    # Copy .app bundle to /Applications
+                                    local app_bundle
+                                    app_bundle=$(find "$mount_point" -maxdepth 1 -name "*.app" | head -1)
+                                    if [ -n "$app_bundle" ]; then
+                                        cp -R "$app_bundle" /Applications/ 2>&1 || install_status="failed"
+                                    else
+                                        install_status="failed"; install_output="Kein .app Bundle in DMG gefunden"
+                                    fi
+                                    hdiutil detach "$mount_point" -quiet 2>/dev/null
+                                else
+                                    install_status="failed"; install_output="DMG konnte nicht eingehängt werden"
+                                fi
+                                ;;
+                            pkg)
+                                # pkg installer runs as system — LaunchDaemon has root
+                                installer -pkg "$tmp_file" -target / 2>&1 || install_status="failed"
+                                ;;
+                            *)
+                                install_status="failed"; install_output="Unbekanntes Format: $pkg_format"
+                                ;;
+                        esac
+                    fi
+                    rm -rf "$tmp_dir"
+                    ;;
+                cask)
+                    if command -v brew &>/dev/null; then
                         install_output=$(brew install --cask "$pkg_id" 2>&1) || install_status="failed"
-                        ;;
-                    brew|*)
+                    else
+                        install_status="failed"; install_output="Homebrew not installed"
+                    fi
+                    ;;
+                brew|*)
+                    if command -v brew &>/dev/null; then
                         install_output=$(brew install "$pkg_id" 2>&1) || {
                             install_output=$(brew install --cask "$pkg_id" 2>&1) || install_status="failed"
                         }
-                        ;;
-                esac
-            else
-                install_status="failed"; install_output="Homebrew not installed"
-            fi
+                    else
+                        install_status="failed"; install_output="Homebrew not installed"
+                    fi
+                    ;;
+            esac
             show_notification "App Installation" "$app_name: $install_status" "OpenDirectory"
             output=$(python3 -c "import json; print(json.dumps({'type':'store_install_result','data':{'appId':$(echo "$json" | python3 -c "import sys,json; print(repr(json.load(sys.stdin).get('data',{}).get('appId','')))"),'status':'$install_status'}}))" 2>/dev/null)
             ;;

@@ -644,6 +644,11 @@ class EnterpriseDeviceManagementService {
     this.app.get('/api/v1/agents/download/:platform', this.downloadAgent.bind(this));
     this.app.get('/api/v1/agent/windows/download', this.downloadWindowsAgent.bind(this));
 
+    // ── App Store Install (reuses existing queueCommand + WebSocket push) ───
+    this.app.post('/api/devices/:deviceId/install-app', this.installApp.bind(this));
+    this.app.get('/api/devices/:deviceId/install-jobs', this.getInstallJobs.bind(this));
+    this.app.post('/api/devices/:deviceId/install-jobs/:jobId/result', this.reportInstallResult.bind(this));
+
     // Error handling
     this.app.use(this.errorHandler.bind(this));
   }
@@ -1249,6 +1254,91 @@ class EnterpriseDeviceManagementService {
   }
 
   // Push command directly to device via WebSocket
+  // ── App Store Install via existing agent WebSocket ──────────────────────
+  async installApp(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const { appId, appName, packageId, downloadUrl, sha256, format, version, architecture } = req.body;
+
+      if (!packageId && !downloadUrl) {
+        return res.status(400).json({ error: 'packageId oder downloadUrl erforderlich' });
+      }
+
+      // Build the download URL if only packageId given
+      const APP_STORE_URL = process.env.APP_STORE_URL || 'http://app-store:3906';
+      const pkgDownloadUrl = downloadUrl || `${APP_STORE_URL}/api/appstore/packages/${packageId}/download`;
+
+      const jobId = `install-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+      // Build store_install command for the agent — reuses existing command type
+      const command = {
+        type: 'command',
+        command_type: 'store_install',
+        id: jobId,
+        data: {
+          appId,
+          appName: appName || appId,
+          packageInfo: {
+            type: 'internal',       // new type — agent downloads from our store
+            packageId,
+            downloadUrl: pkgDownloadUrl,
+            sha256: sha256 || '',
+            format: format || 'exe',
+            version: version || '1.0.0',
+            architecture: architecture || 'x64',
+          },
+        },
+      };
+
+      // Track in-memory job
+      if (!global.__od_installJobs) global.__od_installJobs = new Map();
+      global.__od_installJobs.set(jobId, {
+        jobId, deviceId, appId, appName, packageId, format, version,
+        status: 'queued', queuedAt: new Date().toISOString(),
+      });
+
+      // Push via WebSocket — if offline, cache queues automatically
+      const delivered = this.sendToDevice(deviceId, command);
+      if (!delivered && this.cache) {
+        const existing = await this.cache.get(`pending:${deviceId}`).catch(() => null);
+        const pending = existing ? JSON.parse(existing) : [];
+        pending.push(command);
+        await this.cache.set(`pending:${deviceId}`, JSON.stringify(pending), 'EX', 86400).catch(() => {});
+      }
+
+      logger.info(`install-app ${delivered ? 'pushed live' : 'queued offline'}: device=${deviceId} app=${appId} job=${jobId}`);
+
+      res.json({
+        jobId,
+        status: delivered ? 'delivered' : 'queued_offline',
+        message: delivered
+          ? 'Installation wird auf dem Gerät ausgeführt'
+          : 'Gerät ist offline — Installation wird beim nächsten Check-in gestartet',
+      });
+    } catch (err) {
+      logger.error('installApp error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+
+  async getInstallJobs(req, res) {
+    const { deviceId } = req.params;
+    const jobs = global.__od_installJobs
+      ? [...global.__od_installJobs.values()].filter(j => j.deviceId === deviceId)
+      : [];
+    res.json(jobs);
+  }
+
+  async reportInstallResult(req, res) {
+    const { jobId } = req.params;
+    const { status, output, error } = req.body;
+    if (global.__od_installJobs?.has(jobId)) {
+      const job = global.__od_installJobs.get(jobId);
+      Object.assign(job, { status, output, error, completedAt: new Date().toISOString() });
+    }
+    res.json({ ok: true });
+  }
+
   async queueCommand(req, res) {
     try {
       const { deviceId } = req.params;

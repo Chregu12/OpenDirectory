@@ -273,11 +273,53 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   const handleInstall = async (app: StoreApp) => {
     try {
       setInstallingApps((prev) => new Set(prev).add(app.id));
-      await appStoreApi.requestInstall({ appId: app.id, deviceId });
-      toast.success(`Installing ${app.display_name}...`);
+
+      // Detect current device ID from agent registration (falls back to 'self-service')
+      const currentDeviceId = (typeof window !== 'undefined' && (window as any).__od_deviceId) || deviceId;
+
+      // Check if we have a platform-specific internal package for this device
+      let summary = packageSummaries[app.id];
+      if (!summary) {
+        try {
+          const r = await fetch(`/api/appstore/apps/${app.id}/packages/summary`);
+          if (r.ok) { summary = await r.json(); setPackageSummaries(prev => ({ ...prev, [app.id]: summary })); }
+        } catch {}
+      }
+
+      // Detect platform (browser UA as fallback — agent on device is the real executor)
+      const ua = navigator.userAgent.toLowerCase();
+      const platformKey = ua.includes('win') ? 'windows' : ua.includes('mac') ? 'macos' : 'linux';
+      const internalPkg = summary?.[platformKey];
+
+      if (internalPkg) {
+        // We have a native package — push install command to the device agent
+        const res = await fetch(`/api/devices/${currentDeviceId}/install-app`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            appId: app.id,
+            appName: app.display_name || app.name,
+            packageId: internalPkg.id,
+            sha256: internalPkg.sha256,
+            format: internalPkg.format,
+            version: internalPkg.version,
+            architecture: internalPkg.architecture,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast.success(data.message || `${app.display_name} wird installiert…`, { duration: 4000 });
+        } else {
+          toast.error(data.error || 'Installation fehlgeschlagen');
+        }
+      } else {
+        // No internal package — fall back to winget/brew/apt catalog install
+        await appStoreApi.requestInstall({ appId: app.id, deviceId: currentDeviceId });
+        toast.success(`${app.display_name} wird über Paketmanager installiert…`);
+      }
       loadInstalled();
     } catch (error: any) {
-      const msg = error.response?.data?.error || 'Installation failed';
+      const msg = error.response?.data?.error || error.message || 'Installation fehlgeschlagen';
       toast.error(msg);
     } finally {
       setInstallingApps((prev) => {
