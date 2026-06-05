@@ -10,6 +10,39 @@ const compression = require('compression');
 const mongoose = require('mongoose');
 const Redis = require('redis');
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let channel, connection;
+
+async function connectBus() {
+  try {
+    const amqplib = require('amqplib');
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://opendirectory:changeme@rabbitmq:5672/';
+    try {
+      connection = await amqplib.connect(RABBITMQ_URL);
+      connection.on('error', () => { channel = null; });
+      connection.on('close', () => { channel = null; setTimeout(connectBus, 5000); });
+      channel = await connection.createChannel();
+      await channel.assertExchange('opendirectory.events', 'topic', { durable: true });
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!channel) return;
+  try {
+    channel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _source: 'certificate-network', _ts: Date.now() })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
+
 // Configuration
 const config = require('./config');
 
@@ -259,6 +292,26 @@ class CertificateNetworkService {
       next();
     });
 
+    // Publish RabbitMQ events after profile deploy/revoke operations
+    this.app.use('/api/profiles', (req, res, next) => {
+      const origJson = res.json.bind(res);
+      res.json = (body) => {
+        if (body && body.success !== false) {
+          const url = req.path;
+          const profileId = body.profileId || body.id || (body.profile && body.profile.id) || 'unknown';
+          const deviceId = req.body && (req.body.targetId || req.body.deviceId) || 'unknown';
+          if (req.method === 'POST' && /\/(wifi|vpn|email)\/deploy/.test(url)) {
+            const type = url.split('/')[1];
+            publish('network.profile.deployed', { profileId, deviceId, type });
+          } else if (req.method === 'DELETE' || (req.method === 'POST' && /revoke/.test(url))) {
+            publish('network.profile.revoked', { profileId, deviceId });
+          }
+        }
+        return origJson(body);
+      };
+      next();
+    });
+
     // Routes
     this.app.use('/api/certificates', certificateRoutes);
     this.app.use('/api/profiles', profileRoutes);
@@ -311,6 +364,7 @@ class CertificateNetworkService {
           reject(error);
         } else {
           logger.info(`✅ Server listening on ${config.server.host}:${config.server.port}`);
+          connectBus();
           resolve();
         }
       });

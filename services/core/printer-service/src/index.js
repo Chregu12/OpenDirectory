@@ -21,6 +21,39 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let channel, connection;
+
+async function connectBus() {
+  try {
+    const amqplib = require('amqplib');
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://opendirectory:changeme@rabbitmq:5672/';
+    try {
+      connection = await amqplib.connect(RABBITMQ_URL);
+      connection.on('error', () => { channel = null; });
+      connection.on('close', () => { channel = null; setTimeout(connectBus, 5000); });
+      channel = await connection.createChannel();
+      await channel.assertExchange('opendirectory.events', 'topic', { durable: true });
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!channel) return;
+  try {
+    channel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _source: 'printer-service', _ts: Date.now() })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
+
 // Lightweight in-memory job log (survives restarts via DB if needed later)
 const jobLog = [];
 function addJobLog(entry) {
@@ -90,8 +123,11 @@ wss.on('connection', (ws) => {
 
 // Broadcast printer status updates
 function broadcastPrinterStatus(printerId, status) {
+  if (status === 'offline') {
+    publish('printer.offline', { printerId });
+  }
   wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN && 
+    if (client.readyState === WebSocket.OPEN &&
         client.printerSubscriptions?.includes(printerId)) {
       client.send(JSON.stringify({
         type: 'printer_status',
@@ -629,11 +665,14 @@ app.post('/api/print', async (req, res) => {
       priority
     });
     
+    publish('printer.job.created', { jobId: job.id, printerId, userId });
+
     // Process job asynchronously
     printQueue.processJob(job.id).then(result => {
       broadcastJobStatus(job.id, result.status);
+      publish('printer.job.completed', { jobId: job.id, printerId });
     });
-    
+
     res.json({ success: true, jobId: job.id });
   } catch (error) {
     logger.error('Print error:', error);
@@ -962,6 +1001,7 @@ server.listen(PORT, () => {
   printerManager.startMonitoring();
   printQueue.startProcessor();
   quota.startQuotaReset();
+  connectBus();
 });
 
 function shutdown(signal) {

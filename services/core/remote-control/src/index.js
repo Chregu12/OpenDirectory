@@ -11,6 +11,39 @@ const path = require('path');
 const fs = require('fs');
 const logger = require('./utils/logger');
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let channel, connection;
+
+async function connectBus() {
+  try {
+    const amqplib = require('amqplib');
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://opendirectory:changeme@rabbitmq:5672/';
+    try {
+      connection = await amqplib.connect(RABBITMQ_URL);
+      connection.on('error', () => { channel = null; });
+      connection.on('close', () => { channel = null; setTimeout(connectBus, 5000); });
+      channel = await connection.createChannel();
+      await channel.assertExchange('opendirectory.events', 'topic', { durable: true });
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!channel) return;
+  try {
+    channel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _source: 'remote-control', _ts: Date.now() })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
+
 // Service configurations
 const SERVICES = {
   desktop: {
@@ -162,6 +195,7 @@ class RemoteControlOrchestrator {
 
   async startMaster() {
     logger.info('🎯 Starting as master process...');
+    connectBus();
 
     // Initialize shared configuration
     this.initializeSharedConfiguration();
@@ -271,6 +305,12 @@ class RemoteControlOrchestrator {
           clearTimeout(timeout);
           logger.info(`✅ ${service.name} started successfully on port ${service.port}`);
           resolve();
+        }
+        if (message.type === 'session_started') {
+          publish('remote.session.started', { sessionId: message.sessionId, deviceId: message.deviceId, userId: message.userId });
+        }
+        if (message.type === 'session_ended') {
+          publish('remote.session.ended', { sessionId: message.sessionId, deviceId: message.deviceId });
         }
       });
 

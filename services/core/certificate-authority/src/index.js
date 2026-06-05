@@ -36,6 +36,39 @@ app.use(cors());
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let channel, connection;
+
+async function connectBus() {
+  try {
+    const amqplib = require('amqplib');
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://opendirectory:changeme@rabbitmq:5672/';
+    try {
+      connection = await amqplib.connect(RABBITMQ_URL);
+      connection.on('error', () => { channel = null; });
+      connection.on('close', () => { channel = null; setTimeout(connectBus, 5000); });
+      channel = await connection.createChannel();
+      await channel.assertExchange('opendirectory.events', 'topic', { durable: true });
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!channel) return;
+  try {
+    channel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _source: 'certificate-authority', _ts: Date.now() })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
+
 // ─── Prometheus metrics middleware ────────────────────────────────────────────
 app.use((req, res, next) => {
   const start = Date.now();
@@ -216,6 +249,7 @@ app.post('/ca/issue', async (req, res) => {
   }
 
   certsIssuedCounter.inc({ type });
+  publish('certificate.issued', { certId: id, subject: commonName, expiresAt: result.expiresAt });
   res.status(201).json({ id, commonName, certificate: result.certificate, privateKey: result.privateKey, serialNumber: result.serialNumber, expiresAt: result.expiresAt, caCertificate: caCertPem });
 });
 
@@ -234,6 +268,8 @@ app.post('/ca/revoke/:id', async (req, res) => {
     await pool.query('UPDATE ca_certificates SET revoked=true, revoked_at=NOW() WHERE id=$1', [req.params.id]).catch(() => {});
   }
   certsRevokedCounter.inc();
+  const revokedAt = new Date().toISOString();
+  publish('certificate.revoked', { certId: req.params.id, revokedAt });
   res.json({ success: true });
 });
 
@@ -247,5 +283,8 @@ app.get('/health', (req, res) => res.json({ status: 'ok', caReady: !!caCert }));
 
 initCA();
 initDb().then(() => {
-  app.listen(PORT, () => console.log(`[certificate-authority] listening on :${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`[certificate-authority] listening on :${PORT}`);
+    connectBus();
+  });
 });

@@ -5,6 +5,39 @@ const WebSocket = require('ws');
 const http = require('http');
 const EventEmitter = require('eventemitter3');
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let channel, connection;
+
+async function connectBus() {
+  try {
+    const amqplib = require('amqplib');
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://opendirectory:changeme@rabbitmq:5672/';
+    try {
+      connection = await amqplib.connect(RABBITMQ_URL);
+      connection.on('error', () => { channel = null; });
+      connection.on('close', () => { channel = null; setTimeout(connectBus, 5000); });
+      channel = await connection.createChannel();
+      await channel.assertExchange('opendirectory.events', 'topic', { durable: true });
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!channel) return;
+  try {
+    channel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _source: 'configuration-service', _ts: Date.now() })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
+
 const ConfigurationManager = require('./configurationManager');
 const ModuleRegistry = require('./moduleRegistry');
 const FeatureFlags = require('./featureFlags');
@@ -213,7 +246,10 @@ class ConfigurationService extends EventEmitter {
     try {
       const { moduleId } = req.params;
       await this.moduleRegistry.disableModule(moduleId);
-      
+
+      const deletedBy = req.headers['x-user-id'] || 'unknown';
+      publish('config.deleted', { key: moduleId, deletedBy });
+
       res.json({
         success: true,
         message: `Module ${moduleId} disabled`
@@ -306,7 +342,10 @@ class ConfigurationService extends EventEmitter {
       }
       
       const updated = await this.configManager.updateModuleSettings(moduleId, settings);
-      
+
+      const updatedBy = req.headers['x-user-id'] || 'unknown';
+      publish('config.updated', { key: moduleId, value: settings, updatedBy });
+
       res.json({
         success: true,
         settings: updated
@@ -436,6 +475,7 @@ class ConfigurationService extends EventEmitter {
       logger.info(`🔧 Configuration Service started on port ${port}`);
       logger.info(`📊 Health check: http://localhost:${port}/health`);
       logger.info(`🔌 WebSocket: ws://localhost:${port}/ws/config`);
+      connectBus();
     });
   }
 
