@@ -33,6 +33,12 @@
     "eslint": "^8.54.0",
     "supertest": "^6.3.3"
   },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/__tests__/**/*.test.js", "**/__tests__/**/*.e2e.test.js"],
+    "testTimeout": 15000,
+    "transform": {}
+  },
   "author": "OpenDirectory Team",
   "license": "MIT",
   "engines": {
