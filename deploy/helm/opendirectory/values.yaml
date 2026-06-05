@@ -146,6 +146,42 @@ backup:
       cpu: "250m"
       memory: "256Mi"
 
+# ─── Notification Service ────────────────────────────────────────────────────
+notification:
+  replicaCount: 1
+  image:
+    name: notification-service
+  service:
+    type: ClusterIP
+    port: 3020
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+# ─── App Store ───────────────────────────────────────────────────────────────
+appStore:
+  replicaCount: 1
+  image:
+    name: app-store
+  service:
+    type: ClusterIP
+    port: 3906
+  persistence:
+    enabled: true
+    size: "20Gi"
+    storageClass: ""
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
 # ─── RabbitMQ ─────────────────────────────────────────────────────────────────
 rabbitmq:
   enabled: true

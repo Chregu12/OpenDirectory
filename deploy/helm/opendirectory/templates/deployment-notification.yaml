@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-notification
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: notification
+spec:
+  replicas: {{ .Values.notification.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "opendirectory.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: notification
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "opendirectory.labels" . | nindent 8 }}
+        app.kubernetes.io/component: notification
+      annotations:
+        {{- include "opendirectory.prometheusAnnotations" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "opendirectory.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- include "opendirectory.podAntiAffinity" . | nindent 6 }}
+      containers:
+        - name: notification
+          image: {{ include "opendirectory.image" (dict "root" . "name" .Values.notification.image.name) }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.notification.service.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "opendirectory.fullname" . }}-config
+            - secretRef:
+                name: {{ include "opendirectory.fullname" . }}-secret
+          env:
+            - name: PORT
+              value: {{ .Values.notification.service.port | quote }}
+            - name: RABBITMQ_URL
+              value: "amqp://{{ .Values.rabbitmq.auth.username }}:{{ .Values.rabbitmq.auth.password }}@rabbitmq:5672/"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.notification.resources | nindent 12 }}
