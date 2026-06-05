@@ -1,0 +1,31 @@
+[package]
+name = "od-agent-service"
+version = "1.0.0"
+edition = "2021"
+description = "OpenDirectory MDM Agent Service"
+
+[[bin]]
+name = "od-agent-service"
+path = "src/main.rs"
+
+[dependencies]
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+clap = { version = "4.4", features = ["derive", "env"] }
+dirs = "5.0"
+log = "0.4"
+env_logger = "0.11"
+uuid = { version = "1.6", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+hostname = "0.3"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.52"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

@@ -6,6 +6,58 @@ const rateLimit = require('express-rate-limit');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const WebSocket = require('ws');
 const http = require('http');
+const { Pool } = require('pg');
+
+const pgPool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  database: process.env.DB_NAME || process.env.POSTGRES_DB || 'auth',
+  user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
+  password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || '',
+  max: 5,
+  connectionTimeoutMillis: 3000,
+});
+
+let apiGwDbReady = false;
+pgPool.query('SELECT 1').then(() => {
+  apiGwDbReady = true;
+  pgPool.query(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id VARCHAR(255) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      key_hash VARCHAR(512) NOT NULL UNIQUE,
+      permissions JSONB NOT NULL DEFAULT '["read"]',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used TIMESTAMPTZ,
+      active BOOLEAN DEFAULT TRUE
+    )
+  `).catch(() => {});
+  pgPool.query(`
+    CREATE TABLE IF NOT EXISTS webhooks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(255) NOT NULL,
+      url TEXT NOT NULL,
+      events TEXT[] DEFAULT '{}',
+      secret_hash VARCHAR(512),
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      last_triggered TIMESTAMPTZ,
+      delivery_count INTEGER DEFAULT 0,
+      failure_count INTEGER DEFAULT 0
+    )
+  `).catch(() => {});
+  pgPool.query(`
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      webhook_id UUID REFERENCES webhooks(id) ON DELETE CASCADE,
+      event_type VARCHAR(100),
+      payload JSONB,
+      response_status INTEGER,
+      delivered_at TIMESTAMPTZ DEFAULT NOW(),
+      success BOOLEAN DEFAULT false
+    )
+  `).catch(() => {});
+}).catch(() => {});
 
 const logger = require('./config/logger');
 const serviceDiscovery = require('./discovery/serviceDiscovery');
@@ -216,6 +268,19 @@ class APIGateway {
     this.app.post('/api/admin/keys', authMiddleware.requireAdmin(), this.createApiKey.bind(this));
     this.app.delete('/api/admin/keys/:keyId', authMiddleware.requireAdmin(), this.deleteApiKey.bind(this));
 
+    // Public API key / webhook management endpoints (used by frontend)
+    this.app.get('/api/gateway/api-keys', this.getApiKeys.bind(this));
+    this.app.post('/api/gateway/api-keys', this.createApiKey.bind(this));
+    this.app.delete('/api/gateway/api-keys/:keyId', this.deleteApiKey.bind(this));
+
+    // Webhook management
+    this.app.get('/api/gateway/webhooks', this.getWebhooks.bind(this));
+    this.app.post('/api/gateway/webhooks', this.createWebhook.bind(this));
+    this.app.put('/api/gateway/webhooks/:webhookId', this.updateWebhook.bind(this));
+    this.app.delete('/api/gateway/webhooks/:webhookId', this.deleteWebhook.bind(this));
+    this.app.post('/api/gateway/webhooks/:webhookId/test', this.testWebhook.bind(this));
+    this.app.get('/api/gateway/webhooks/:webhookId/deliveries', this.getWebhookDeliveries.bind(this));
+
     // Dynamic proxy setup for enabled modules
     this.setupDynamicProxies();
 
@@ -241,8 +306,9 @@ class APIGateway {
 
     // Core services (always enabled)
     this.setupServiceProxy('authentication', 'http://authentication-service:3001', '/api/auth');
+    this.setupServiceProxy('pim', 'http://authentication-service:3001', '/api/pim');
     this.setupServiceProxy('configuration', 'http://configuration-service:3002', '/api/config');
-    connectedServices.push('authentication', 'configuration');
+    connectedServices.push('authentication', 'pim', 'configuration');
 
     // Health service (if exists)
     this.setupServiceProxy('health', 'http://health-service:3020', '/api/health');
@@ -343,6 +409,8 @@ class APIGateway {
 
     if (enabledModules.includes('policy-service')) {
       this.setupServiceProxy('policies', 'http://policy-service:3004', '/api/policies');
+      this.setupServiceProxy('blueprints', 'http://policy-service:3004', '/api/blueprints');
+      this.setupServiceProxy('licenses', 'http://policy-service:3004', '/api/licenses');
       connectedServices.push('policy-service');
     }
 
@@ -366,6 +434,19 @@ class APIGateway {
       this.setupServiceProxy('licenses', 'http://license-management:3018', '/api/license'); // Alternative route
       connectedServices.push('license-management');
     }
+
+    // Certificate Authority service (always enabled)
+    this.app.use('/api/ca', createProxyMiddleware({ target: 'http://certificate-authority:3012', changeOrigin: true, pathRewrite: { '^/api/ca': '/ca' } }));
+    connectedServices.push('certificate-authority');
+
+    // Kerberos KDC REST API (always enabled)
+    this.app.use('/api/kerberos', createProxyMiddleware({ target: 'http://kerberos-kdc:3013', changeOrigin: true }));
+    connectedServices.push('kerberos-kdc');
+
+    // Apple MDM server (always enabled — enrollment, APNs push, command delivery)
+    this.app.use('/api/mdm', createProxyMiddleware({ target: 'http://apple-mdm:3014', changeOrigin: true }));
+    this.app.use('/mdm', createProxyMiddleware({ target: 'http://apple-mdm:3014', changeOrigin: true }));
+    connectedServices.push('apple-mdm');
 
     // Intelligence Services (always enabled - core platform value)
     this.setupServiceProxy('graph', 'http://graph-explorer:3900', '/api/graph');
@@ -392,6 +473,31 @@ class APIGateway {
     this.setupServiceProxy('antivirus', 'http://antivirus-protection:3905', '/api/antivirus');
     this.setupServiceProxy('clamav', 'http://antivirus-protection:3905', '/api/clamav');
     connectedServices.push('antivirus-protection');
+
+    // App Store
+    this.setupServiceProxy('appstore', 'http://app-store:3906', '/api/appstore');
+    connectedServices.push('app-store');
+
+    // Notification / Alerting service
+    this.setupServiceProxy('notification', 'http://notification-service:3020', '/api/notification');
+    connectedServices.push('notification-service');
+
+    // Backup service
+    this.setupServiceProxy('backup-jobs', 'http://backup-service:3011', '/api/backup');
+    connectedServices.push('backup-service');
+
+    // MDM (Apple MDM)
+    this.setupServiceProxy('mdm', 'http://apple-mdm:3014', '/api/mdm');
+    connectedServices.push('apple-mdm');
+
+    // Certificate Authority
+    this.setupServiceProxy('ca', 'http://certificate-authority:3012', '/api/ca');
+    this.setupServiceProxy('certificates', 'http://certificate-authority:3012', '/api/certificates');
+    connectedServices.push('certificate-authority');
+
+    // Conditional Access
+    this.setupServiceProxy('conditional-access', 'http://conditional-access:3007', '/api/conditional-access');
+    connectedServices.push('conditional-access');
 
     logger.info(`API Gateway configured with ${connectedServices.length} services`);
     logger.info(`Connected services: ${connectedServices.join(', ')}`);
@@ -730,30 +836,210 @@ class APIGateway {
     res.json(routes);
   }
 
-  getApiKeys(req, res) {
-    // This would normally query a database
-    res.json([
-      { id: '1', name: 'Development Key', permissions: ['read'], created: '2024-01-01' },
-      { id: '2', name: 'Testing Key', permissions: ['read', 'write'], created: '2024-01-01' }
-    ]);
+  async getApiKeys(req, res) {
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query('SELECT id, name, permissions, created_at as created FROM api_keys WHERE active=true ORDER BY created_at');
+        if (r.rows.length > 0) return res.json(r.rows);
+      } catch {}
+    }
+    // Fallback: read from env vars
+    const keys = [];
+    if (process.env.API_KEY_READ_ONLY) keys.push({ id: 'env-ro', name: 'Read-Only Key (env)', permissions: ['read'], created: new Date().toISOString() });
+    if (process.env.API_KEY_FULL) keys.push({ id: 'env-full', name: 'Full Access Key (env)', permissions: ['read', 'write'], created: new Date().toISOString() });
+    if (process.env.API_KEY_ADMIN) keys.push({ id: 'env-admin', name: 'Admin Key (env)', permissions: ['read', 'write', 'admin'], created: new Date().toISOString() });
+    res.json(keys);
   }
 
-  createApiKey(req, res) {
+  async createApiKey(req, res) {
     const { name, permissions } = req.body;
-    // This would normally create in database
-    res.json({
-      id: Date.now().toString(),
-      name,
-      permissions,
-      key: 'generated-api-key-' + Math.random().toString(36).substr(2),
-      created: new Date().toISOString()
-    });
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const crypto = require('crypto');
+    const id = crypto.randomBytes(8).toString('hex');
+    const rawKey = crypto.randomBytes(32).toString('hex');
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query(
+          'INSERT INTO api_keys(id, name, key_hash, permissions) VALUES($1,$2,$3,$4)',
+          [id, name, keyHash, JSON.stringify(permissions || ['read'])]
+        );
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    res.status(201).json({ id, name, key: rawKey, permissions: permissions || ['read'], created: new Date().toISOString() });
   }
 
-  deleteApiKey(req, res) {
+  async deleteApiKey(req, res) {
     const { keyId } = req.params;
-    // This would normally delete from database
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query('UPDATE api_keys SET active=false WHERE id=$1', [keyId]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
     res.json({ message: `API key ${keyId} deleted` });
+  }
+
+  // ── In-memory webhook store (fallback when DB not ready) ──────────────────
+  _webhooks = new Map();
+  _webhookDeliveries = new Map(); // webhookId → [deliveries]
+
+  async getWebhooks(req, res) {
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks ORDER BY created_at DESC');
+        return res.json(r.rows);
+      } catch {}
+    }
+    res.json([...this._webhooks.values()]);
+  }
+
+  async createWebhook(req, res) {
+    const { name, url, events, secret } = req.body;
+    if (!name || !url) return res.status(400).json({ error: 'name and url are required' });
+    const crypto = require('crypto');
+    const id = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+    const secretHash = secret ? crypto.createHash('sha256').update(secret).digest('hex') : null;
+    const now = new Date().toISOString();
+    const webhook = { id, name, url, events: events || [], secretHash, active: true, createdAt: now, lastTriggered: null, deliveryCount: 0, failureCount: 0 };
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query(
+          'INSERT INTO webhooks(id, name, url, events, secret_hash, active) VALUES($1,$2,$3,$4,$5,true)',
+          [id, name, url, events || [], secretHash]
+        );
+        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks WHERE id=$1', [id]);
+        return res.status(201).json(r.rows[0]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    this._webhooks.set(id, webhook);
+    this._webhookDeliveries.set(id, []);
+    const { secretHash: _, ...safe } = webhook;
+    res.status(201).json(safe);
+  }
+
+  async updateWebhook(req, res) {
+    const { webhookId } = req.params;
+    const { name, url, events, secret, active } = req.body;
+    if (apiGwDbReady) {
+      try {
+        const crypto = require('crypto');
+        const secretHash = secret ? crypto.createHash('sha256').update(secret).digest('hex') : undefined;
+        const updates = [];
+        const vals = [];
+        let idx = 1;
+        if (name !== undefined) { updates.push(`name=$${idx++}`); vals.push(name); }
+        if (url !== undefined) { updates.push(`url=$${idx++}`); vals.push(url); }
+        if (events !== undefined) { updates.push(`events=$${idx++}`); vals.push(events); }
+        if (secretHash !== undefined) { updates.push(`secret_hash=$${idx++}`); vals.push(secretHash); }
+        if (active !== undefined) { updates.push(`active=$${idx++}`); vals.push(active); }
+        if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+        vals.push(webhookId);
+        await pgPool.query(`UPDATE webhooks SET ${updates.join(',')} WHERE id=$${idx}`, vals);
+        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks WHERE id=$1', [webhookId]);
+        if (r.rows.length === 0) return res.status(404).json({ error: 'Webhook not found' });
+        return res.json(r.rows[0]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    const wh = this._webhooks.get(webhookId);
+    if (!wh) return res.status(404).json({ error: 'Webhook not found' });
+    const updated = { ...wh, ...(name && { name }), ...(url && { url }), ...(events && { events }), ...(active !== undefined && { active }) };
+    this._webhooks.set(webhookId, updated);
+    const { secretHash: _, ...safe } = updated;
+    res.json(safe);
+  }
+
+  async deleteWebhook(req, res) {
+    const { webhookId } = req.params;
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query('DELETE FROM webhooks WHERE id=$1', [webhookId]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    } else {
+      this._webhooks.delete(webhookId);
+      this._webhookDeliveries.delete(webhookId);
+    }
+    res.status(204).send();
+  }
+
+  async testWebhook(req, res) {
+    const { webhookId } = req.params;
+    let webhook = null;
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query('SELECT * FROM webhooks WHERE id=$1', [webhookId]);
+        if (r.rows.length > 0) webhook = r.rows[0];
+      } catch {}
+    } else {
+      webhook = this._webhooks.get(webhookId);
+    }
+    if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
+
+    const testPayload = {
+      event: 'test',
+      timestamp: new Date().toISOString(),
+      data: { message: 'This is a test delivery from OpenDirectory API Gateway' },
+    };
+
+    let responseStatus = null;
+    let success = false;
+    try {
+      const resp = await Promise.race([
+        fetch(webhook.url || webhook.URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-OpenDirectory-Event': 'test' },
+          body: JSON.stringify(testPayload),
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+      ]);
+      responseStatus = resp.status;
+      success = resp.ok;
+    } catch (err) {
+      responseStatus = 0;
+      success = false;
+    }
+
+    // Record delivery
+    const delivery = { id: require('crypto').randomBytes(8).toString('hex'), webhookId, eventType: 'test', payload: testPayload, responseStatus, deliveredAt: new Date().toISOString(), success };
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query(
+          'INSERT INTO webhook_deliveries(webhook_id, event_type, payload, response_status, success) VALUES($1,$2,$3,$4,$5)',
+          [webhookId, 'test', testPayload, responseStatus, success]
+        );
+        await pgPool.query('UPDATE webhooks SET delivery_count=delivery_count+1, last_triggered=NOW() WHERE id=$1', [webhookId]);
+      } catch {}
+    } else {
+      const deliveries = this._webhookDeliveries.get(webhookId) || [];
+      deliveries.unshift(delivery);
+      this._webhookDeliveries.set(webhookId, deliveries);
+    }
+
+    res.json({ success, responseStatus, delivery });
+  }
+
+  async getWebhookDeliveries(req, res) {
+    const { webhookId } = req.params;
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query(
+          'SELECT id, webhook_id, event_type, response_status, delivered_at, success FROM webhook_deliveries WHERE webhook_id=$1 ORDER BY delivered_at DESC LIMIT 50',
+          [webhookId]
+        );
+        return res.json(r.rows);
+      } catch {}
+    }
+    const deliveries = this._webhookDeliveries.get(webhookId) || [];
+    res.json(deliveries.slice(0, 50));
   }
 
   getAvailableEndpoints() {

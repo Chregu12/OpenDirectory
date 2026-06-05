@@ -1,0 +1,243 @@
+# Default values for OpenDirectory Helm chart.
+# Override with values.prod.yaml for production deployments.
+
+# ─── Global ───────────────────────────────────────────────────────────────────
+global:
+  image:
+    registry: ghcr.io/opendirectory
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
+
+# ─── Namespace ────────────────────────────────────────────────────────────────
+namespace:
+  create: true
+  name: opendirectory
+
+# ─── API Gateway ──────────────────────────────────────────────────────────────
+apiGateway:
+  replicaCount: 2
+  image:
+    name: api-gateway
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  env:
+    NODE_ENV: production
+
+# ─── Authentication Service ───────────────────────────────────────────────────
+auth:
+  replicaCount: 2
+  image:
+    name: authentication-service
+  service:
+    type: ClusterIP
+    port: 3001
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Identity Service ─────────────────────────────────────────────────────────
+identity:
+  replicaCount: 2
+  image:
+    name: identity-service
+  service:
+    type: ClusterIP
+    port: 3002
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Device Service ───────────────────────────────────────────────────────────
+device:
+  replicaCount: 1
+  image:
+    name: device-service
+  service:
+    type: ClusterIP
+    port: 3003
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Policy Service ───────────────────────────────────────────────────────────
+policy:
+  replicaCount: 1
+  image:
+    name: policy-service
+  service:
+    type: ClusterIP
+    port: 3004
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+
+# ─── Monitoring Service ───────────────────────────────────────────────────────
+monitoring:
+  replicaCount: 1
+  image:
+    name: monitoring-service
+  service:
+    type: ClusterIP
+    port: 3005
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── MDM Service ─────────────────────────────────────────────────────────────
+mdm:
+  replicaCount: 1
+  image:
+    name: apple-mdm
+  service:
+    type: ClusterIP
+    port: 3006
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+
+# ─── Backup Service ───────────────────────────────────────────────────────────
+backup:
+  replicaCount: 1
+  image:
+    name: backup-service
+  service:
+    type: ClusterIP
+    port: 3011
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+
+# ─── Ingress ──────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  hostname: opendirectory.local
+  tls:
+    enabled: false
+    secretName: opendirectory-tls
+  annotations: {}
+
+# ─── PostgreSQL ───────────────────────────────────────────────────────────────
+postgresql:
+  enabled: true
+  image: postgres:15-alpine
+  database: opendirectory
+  username: opendirectory
+  storageSize: "10Gi"
+  storageClass: ""
+  service:
+    port: 5432
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+# ─── Persistence ─────────────────────────────────────────────────────────────
+persistence:
+  enabled: true
+  storageClass: ""
+  backupStorageSize: "50Gi"
+
+# ─── Autoscaling ─────────────────────────────────────────────────────────────
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# ─── Pod Disruption Budget ───────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ─── Network Policies ────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+
+# ─── RBAC ─────────────────────────────────────────────────────────────────────
+rbac:
+  create: true
+  serviceAccount:
+    create: true
+    name: ""
+
+# ─── Monitoring / Prometheus ─────────────────────────────────────────────────
+prometheusAnnotations:
+  enabled: true
+  path: /metrics
+  port: "metrics"
+  scrape: "true"
+
+# ─── Pod Security / Affinity ─────────────────────────────────────────────────
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+
+# Prefer spreading pods across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - opendirectory
+          topologyKey: kubernetes.io/hostname

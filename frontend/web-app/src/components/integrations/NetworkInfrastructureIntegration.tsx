@@ -30,6 +30,7 @@ import {
 type NewDevice = { ip: string; hostname: string; mac: string; vendor: string; type: string };
 import toast from 'react-hot-toast';
 import NetworkConfigWizard from '@/components/setup/NetworkConfigWizard';
+import { api } from '@/lib/api';
 
 interface NetworkDevice {
   ip: string;
@@ -80,7 +81,7 @@ interface FileShare {
 interface LdapGroup { id: string; displayName: string; members: string[] }
 interface LdapUser  { id: string; displayName: string; email: string; groups: string[] }
 
-type TabId = 'dns' | 'dhcp' | 'shares' | 'discovery' | 'statistics';
+type TabId = 'dns' | 'dhcp' | 'shares' | 'discovery' | 'statistics' | 'dns-records';
 type WizardStep = 1 | 2 | 3;
 type Protocol = 'SMB' | 'NFS' | 'S3';
 
@@ -178,6 +179,71 @@ function AutoMountSetup() {
         Die Scripts fragen beim Login <code className="bg-purple-100 px-1 rounded">/api/network/shares/for-user/&#123;username&#125;</code> ab
         und mounten automatisch die Shares, auf die der User Zugriff hat.
       </p>
+    </div>
+  );
+}
+
+// ─── DNS Records Tab (live API) ──────────────────────────────────────────────────
+
+function DnsTab() {
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ name: '', type: 'A', value: '', ttl: 300 });
+  const [adding, setAdding] = useState(false);
+
+  const load = () => {
+    api.get('/api/dns/records').then(r => setRecords(Array.isArray(r.data) ? r.data : [])).catch(() => setRecords([])).finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    setAdding(true);
+    try {
+      await api.post('/api/dns/records', form);
+      setForm({ name: '', type: 'A', value: '', ttl: 300 });
+      load();
+    } catch (e: any) { alert(e?.response?.data?.error || 'Fehler'); }
+    setAdding(false);
+  };
+
+  const del = async (name: string) => {
+    await api.delete(`/api/dns/records/${encodeURIComponent(name)}`).catch(() => {});
+    setRecords(r => r.filter(x => x.name !== name));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+        <h4 className="text-white font-medium text-sm mb-3">DNS-Eintrag hinzufügen</h4>
+        <div className="grid grid-cols-4 gap-3">
+          <input value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} placeholder="hostname.local" className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm" />
+          <select value={form.type} onChange={e => setForm(f=>({...f,type:e.target.value}))} className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm">
+            {['A','AAAA','CNAME','MX','TXT','SRV'].map(t => <option key={t}>{t}</option>)}
+          </select>
+          <input value={form.value} onChange={e => setForm(f=>({...f,value:e.target.value}))} placeholder="192.168.1.10" className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm" />
+          <button onClick={add} disabled={adding||!form.name||!form.value} className="bg-blue-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium">Hinzufügen</button>
+        </div>
+      </div>
+      {loading ? <div className="h-32 bg-gray-700 rounded animate-pulse" /> : (
+        <div className="border border-gray-700 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-800/50"><tr className="text-gray-400 text-xs">
+              <th className="px-4 py-3 text-left">Name</th><th className="px-4 py-3 text-left">Typ</th><th className="px-4 py-3 text-left">Wert</th><th className="px-4 py-3 text-left">TTL</th><th className="px-4 py-3"></th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-700/50">
+              {records.map(r => (
+                <tr key={r.id} className="hover:bg-gray-700/30">
+                  <td className="px-4 py-3 text-white font-mono text-xs">{r.name}</td>
+                  <td className="px-4 py-3"><span className="px-2 py-0.5 bg-blue-900/50 text-blue-300 rounded text-xs">{r.type}</span></td>
+                  <td className="px-4 py-3 text-gray-300 font-mono text-xs">{r.value}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs">{r.ttl}s</td>
+                  <td className="px-4 py-3"><button onClick={()=>del(r.name)} className="text-red-400 hover:text-red-300 text-xs">Löschen</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -411,11 +477,12 @@ export default function NetworkInfrastructureIntegration() {
   };
 
   const tabs: { key: TabId; label: string; icon: React.ElementType }[] = [
-    { key: 'dns',        label: 'DNS',          icon: GlobeAltIcon },
-    { key: 'dhcp',       label: 'DHCP',         icon: ServerIcon },
-    { key: 'shares',     label: 'File Shares',  icon: FolderIcon },
-    { key: 'discovery',  label: 'Discovery',    icon: MagnifyingGlassIcon },
-    { key: 'statistics', label: 'Statistics',   icon: ChartBarIcon },
+    { key: 'dns',         label: 'DNS',          icon: GlobeAltIcon },
+    { key: 'dns-records', label: 'DNS Records',  icon: GlobeAltIcon },
+    { key: 'dhcp',        label: 'DHCP',         icon: ServerIcon },
+    { key: 'shares',      label: 'File Shares',  icon: FolderIcon },
+    { key: 'discovery',   label: 'Discovery',    icon: MagnifyingGlassIcon },
+    { key: 'statistics',  label: 'Statistics',   icon: ChartBarIcon },
   ];
 
   const statSummary = [
@@ -477,6 +544,9 @@ export default function NetworkInfrastructureIntegration() {
 
       {/* Tab Content */}
       <div className="p-6">
+
+        {/* DNS Records Tab (live API) */}
+        {activeTab === 'dns-records' && <DnsTab />}
 
         {/* DNS Tab */}
         {activeTab === 'dns' && (

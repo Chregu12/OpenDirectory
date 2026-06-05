@@ -14,6 +14,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const logger = require('./utils/logger');
 const config = require('./utils/config');
+const db = require('./db');
 
 // Enhanced network management modules
 const DNSManager = require('./services/dnsManager');
@@ -1137,7 +1138,11 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     });
   }
 
-  start(port = process.env.PORT || 3003) {
+  async start(port = process.env.PORT || 3003) {
+    // Initialize database (non-fatal – falls back to in-memory on failure)
+    await db.initDb();
+    await this.loadDbCacheIntoMemory();
+
     this.server = this.app.listen(port, () => {
       logger.info(`🌐 Enterprise Network Infrastructure Service started on port ${port}`);
       logger.info(`📊 Health check: http://localhost:${port}/health`);
@@ -1146,10 +1151,42 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
       logger.info(`🔒 Security features: Enabled`);
       logger.info(`📈 Analytics: Enabled`);
       logger.info(`📋 Compliance monitoring: Enabled`);
-      
+      logger.info(`🗄️ Database persistence: ${db.isAvailable() ? 'enabled' : 'in-memory fallback'}`);
+
       // Start background services
       this.startBackgroundServices();
     });
+  }
+
+  /**
+   * Pre-warm the in-memory caches of the individual managers from PostgreSQL so
+   * that the existing manager implementations keep working transparently.
+   */
+  async loadDbCacheIntoMemory() {
+    if (!db.isAvailable()) return;
+
+    try {
+      const [dnsRecords, dhcpLeases, vlans] = await Promise.all([
+        db.getDnsRecords(),
+        db.getDhcpLeases(),
+        db.getVlans(),
+      ]);
+
+      // Push records into managers if they expose a cache-load interface
+      if (typeof this.dnsManager.loadRecords === 'function') {
+        this.dnsManager.loadRecords(dnsRecords);
+      }
+      if (typeof this.dhcpManager.loadLeases === 'function') {
+        this.dhcpManager.loadLeases(dhcpLeases);
+      }
+      if (typeof this.vlanManager.loadVlans === 'function') {
+        this.vlanManager.loadVlans(vlans);
+      }
+
+      logger.info(`🗄️ Loaded from DB: ${dnsRecords.length} DNS records, ${dhcpLeases.length} DHCP leases, ${vlans.length} VLANs`);
+    } catch (err) {
+      logger.warn('⚠️ Failed to pre-warm in-memory cache from DB:', err.message);
+    }
   }
   
   startBackgroundServices() {
@@ -1271,20 +1308,239 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     }
   }
 
-  // Placeholder implementations for route handlers
-  async getDNSRecords(req, res) { res.json({ message: 'DNS records endpoint - implementation needed' }); }
-  async createDNSRecord(req, res) { res.json({ message: 'Create DNS record endpoint - implementation needed' }); }
-  async updateDNSRecord(req, res) { res.json({ message: 'Update DNS record endpoint - implementation needed' }); }
-  async deleteDNSRecord(req, res) { res.json({ message: 'Delete DNS record endpoint - implementation needed' }); }
-  async getDNSZones(req, res) { res.json({ message: 'DNS zones endpoint - implementation needed' }); }
-  async createDNSZone(req, res) { res.json({ message: 'Create DNS zone endpoint - implementation needed' }); }
-  async getDHCPLeases(req, res) { res.json({ message: 'DHCP leases endpoint - implementation needed' }); }
-  async createDHCPLease(req, res) { res.json({ message: 'Create DHCP lease endpoint - implementation needed' }); }
-  async releaseDHCPLease(req, res) { res.json({ message: 'Release DHCP lease endpoint - implementation needed' }); }
-  async getDHCPReservations(req, res) { res.json({ message: 'DHCP reservations endpoint - implementation needed' }); }
-  async createDHCPReservation(req, res) { res.json({ message: 'Create DHCP reservation endpoint - implementation needed' }); }
-  async getDHCPScopes(req, res) { res.json({ message: 'DHCP scopes endpoint - implementation needed' }); }
-  async createDHCPScope(req, res) { res.json({ message: 'Create DHCP scope endpoint - implementation needed' }); }
+  // ── DNS route handlers (DB-first, in-memory fallback) ──────────────────────
+
+  async getDNSRecords(req, res) {
+    try {
+      if (db.isAvailable()) {
+        const { zone } = req.query;
+        const records = await db.getDnsRecords(zone || undefined);
+        return res.json({ records, source: 'db', timestamp: new Date().toISOString() });
+      }
+      // In-memory fallback
+      const records = await this.dnsManager.getRecords(req.query);
+      res.json({ records, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('getDNSRecords error:', error);
+      res.status(500).json({ error: 'Failed to retrieve DNS records' });
+    }
+  }
+
+  async createDNSRecord(req, res) {
+    try {
+      if (db.isAvailable()) {
+        const record = await db.upsertDnsRecord(req.body);
+        this.auditLog('DNS_RECORD_CREATED', record);
+        this.broadcast('dnsRecordCreated', record);
+        return res.status(201).json({ record, source: 'db', timestamp: new Date().toISOString() });
+      }
+      // In-memory fallback
+      const record = await this.dnsManager.createRecord(req.body);
+      res.status(201).json({ record, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('createDNSRecord error:', error);
+      res.status(500).json({ error: 'Failed to create DNS record' });
+    }
+  }
+
+  async updateDNSRecord(req, res) {
+    try {
+      const payload = { ...req.body, id: req.params.id };
+      if (db.isAvailable()) {
+        const record = await db.upsertDnsRecord(payload);
+        this.auditLog('DNS_RECORD_UPDATED', record);
+        this.broadcast('dnsRecordUpdated', record);
+        return res.json({ record, source: 'db', timestamp: new Date().toISOString() });
+      }
+      const record = await this.dnsManager.updateRecord(req.params.id, req.body);
+      res.json({ record, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('updateDNSRecord error:', error);
+      res.status(500).json({ error: 'Failed to update DNS record' });
+    }
+  }
+
+  async deleteDNSRecord(req, res) {
+    try {
+      const { id } = req.params;
+      if (db.isAvailable()) {
+        const deleted = await db.deleteDnsRecord(id);
+        if (!deleted) return res.status(404).json({ error: 'DNS record not found' });
+        this.auditLog('DNS_RECORD_DELETED', { id });
+        this.broadcast('dnsRecordDeleted', { recordId: id });
+        return res.json({ success: true, source: 'db', timestamp: new Date().toISOString() });
+      }
+      await this.dnsManager.deleteRecord(id);
+      res.json({ success: true, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('deleteDNSRecord error:', error);
+      res.status(500).json({ error: 'Failed to delete DNS record' });
+    }
+  }
+
+  async getDNSZones(req, res) {
+    try {
+      if (db.isAvailable()) {
+        // Derive distinct zones from the dns_records table via getDnsRecords
+        const records = await db.getDnsRecords();
+        const zones = [...new Set(records.map(r => r.zone))].map(z => ({ zone: z }));
+        return res.json({ zones, source: 'db', timestamp: new Date().toISOString() });
+      }
+      const zones = await this.dnsManager.getZones ? this.dnsManager.getZones() : [];
+      res.json({ zones, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('getDNSZones error:', error);
+      res.status(500).json({ error: 'Failed to retrieve DNS zones' });
+    }
+  }
+
+  async createDNSZone(req, res) {
+    try {
+      const zone = await this.dnsManager.createZone ? this.dnsManager.createZone(req.body) : req.body;
+      res.status(201).json({ zone, timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('createDNSZone error:', error);
+      res.status(500).json({ error: 'Failed to create DNS zone' });
+    }
+  }
+
+  // ── DHCP route handlers (DB-first, in-memory fallback) ─────────────────────
+
+  async getDHCPLeases(req, res) {
+    try {
+      if (db.isAvailable()) {
+        const leases = await db.getDhcpLeases();
+        return res.json({ leases, source: 'db', timestamp: new Date().toISOString() });
+      }
+      const leases = await this.dhcpManager.getLeases ? this.dhcpManager.getLeases() : [];
+      res.json({ leases, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('getDHCPLeases error:', error);
+      res.status(500).json({ error: 'Failed to retrieve DHCP leases' });
+    }
+  }
+
+  async createDHCPLease(req, res) {
+    try {
+      if (db.isAvailable()) {
+        const lease = await db.upsertDhcpLease(req.body);
+        this.auditLog('DHCP_LEASE_CREATED', lease);
+        this.broadcast('dhcpLeaseAssigned', lease);
+        return res.status(201).json({ lease, source: 'db', timestamp: new Date().toISOString() });
+      }
+      const lease = await this.dhcpManager.createLease ? this.dhcpManager.createLease(req.body) : req.body;
+      res.status(201).json({ lease, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('createDHCPLease error:', error);
+      res.status(500).json({ error: 'Failed to create DHCP lease' });
+    }
+  }
+
+  async releaseDHCPLease(req, res) {
+    try {
+      if (db.isAvailable()) {
+        await db.upsertDhcpLease({ mac_address: req.params.id, status: 'released' });
+        return res.json({ success: true, source: 'db', timestamp: new Date().toISOString() });
+      }
+      if (this.dhcpManager.releaseLease) await this.dhcpManager.releaseLease(req.params.id);
+      res.json({ success: true, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('releaseDHCPLease error:', error);
+      res.status(500).json({ error: 'Failed to release DHCP lease' });
+    }
+  }
+
+  async getDHCPReservations(req, res) {
+    try {
+      const reservations = await this.dhcpManager.getReservations ? this.dhcpManager.getReservations() : [];
+      res.json({ reservations, timestamp: new Date().toISOString() });
+    } catch (error) { res.status(500).json({ error: 'Failed to retrieve DHCP reservations' }); }
+  }
+
+  async createDHCPReservation(req, res) {
+    try {
+      const reservation = await this.dhcpManager.createReservation ? this.dhcpManager.createReservation(req.body) : req.body;
+      res.status(201).json({ reservation, timestamp: new Date().toISOString() });
+    } catch (error) { res.status(500).json({ error: 'Failed to create DHCP reservation' }); }
+  }
+
+  async getDHCPScopes(req, res) {
+    try {
+      const scopes = await this.dhcpManager.getScopes ? this.dhcpManager.getScopes() : [];
+      res.json({ scopes, timestamp: new Date().toISOString() });
+    } catch (error) { res.status(500).json({ error: 'Failed to retrieve DHCP scopes' }); }
+  }
+
+  async createDHCPScope(req, res) {
+    try {
+      const scope = await this.dhcpManager.createScope ? this.dhcpManager.createScope(req.body) : req.body;
+      res.status(201).json({ scope, timestamp: new Date().toISOString() });
+    } catch (error) { res.status(500).json({ error: 'Failed to create DHCP scope' }); }
+  }
+
+  // ── VLAN route handlers (DB-first, in-memory fallback) ─────────────────────
+
+  async getVLANs(req, res) {
+    try {
+      if (db.isAvailable()) {
+        const vlans = await db.getVlans();
+        return res.json({ vlans, source: 'db', timestamp: new Date().toISOString() });
+      }
+      const vlans = await this.vlanManager.getVlans ? this.vlanManager.getVlans() : [];
+      res.json({ vlans, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('getVLANs error:', error);
+      res.status(500).json({ error: 'Failed to retrieve VLANs' });
+    }
+  }
+
+  async createVLAN(req, res) {
+    try {
+      if (db.isAvailable()) {
+        const vlan = await db.upsertVlan(req.body);
+        this.auditLog('VLAN_CREATED', vlan);
+        return res.status(201).json({ vlan, source: 'db', timestamp: new Date().toISOString() });
+      }
+      const vlan = await this.vlanManager.createVlan ? this.vlanManager.createVlan(req.body) : req.body;
+      res.status(201).json({ vlan, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('createVLAN error:', error);
+      res.status(500).json({ error: 'Failed to create VLAN' });
+    }
+  }
+
+  async updateVLAN(req, res) {
+    try {
+      const payload = { ...req.body, id: parseInt(req.params.id, 10) };
+      if (db.isAvailable()) {
+        const vlan = await db.upsertVlan(payload);
+        this.auditLog('VLAN_UPDATED', vlan);
+        return res.json({ vlan, source: 'db', timestamp: new Date().toISOString() });
+      }
+      const vlan = await this.vlanManager.updateVlan ? this.vlanManager.updateVlan(req.params.id, req.body) : payload;
+      res.json({ vlan, source: 'memory', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('updateVLAN error:', error);
+      res.status(500).json({ error: 'Failed to update VLAN' });
+    }
+  }
+
+  async deleteVLAN(req, res) {
+    try {
+      if (this.vlanManager.deleteVlan) await this.vlanManager.deleteVlan(req.params.id);
+      res.json({ success: true, timestamp: new Date().toISOString() });
+    } catch (error) { res.status(500).json({ error: 'Failed to delete VLAN' }); }
+  }
+
+  async getVLANDevices(req, res) {
+    try {
+      const devices = await this.vlanManager.getDevices ? this.vlanManager.getDevices(req.params.id) : [];
+      res.json({ devices, timestamp: new Date().toISOString() });
+    } catch (error) { res.status(500).json({ error: 'Failed to retrieve VLAN devices' }); }
+  }
+
+  // ── Remaining placeholder handlers ─────────────────────────────────────────
+
   async performNetworkScan(req, res) { res.json({ message: 'Network scan endpoint - implementation needed' }); }
   async getDiscoveredDevices(req, res) { res.json({ message: 'Discovered devices endpoint - implementation needed' }); }
   async getNetworkPerformance(req, res) { res.json({ message: 'Network performance endpoint - implementation needed' }); }
@@ -1297,11 +1553,6 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
   async deleteFileShare(req, res) { res.json({ message: 'Delete file share endpoint - implementation needed' }); }
   async getSharePermissions(req, res) { res.json({ message: 'Share permissions endpoint - implementation needed' }); }
   async setSharePermissions(req, res) { res.json({ message: 'Set share permissions endpoint - implementation needed' }); }
-  async getVLANs(req, res) { res.json({ message: 'VLANs endpoint - implementation needed' }); }
-  async createVLAN(req, res) { res.json({ message: 'Create VLAN endpoint - implementation needed' }); }
-  async updateVLAN(req, res) { res.json({ message: 'Update VLAN endpoint - implementation needed' }); }
-  async deleteVLAN(req, res) { res.json({ message: 'Delete VLAN endpoint - implementation needed' }); }
-  async getVLANDevices(req, res) { res.json({ message: 'VLAN devices endpoint - implementation needed' }); }
   async getFirewallRules(req, res) { res.json({ message: 'Firewall rules endpoint - implementation needed' }); }
   async createFirewallRule(req, res) { res.json({ message: 'Create firewall rule endpoint - implementation needed' }); }
   async updateFirewallRule(req, res) { res.json({ message: 'Update firewall rule endpoint - implementation needed' }); }

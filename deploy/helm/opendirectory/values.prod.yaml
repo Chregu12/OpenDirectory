@@ -1,0 +1,141 @@
+# Production overrides for OpenDirectory Helm chart.
+# Apply with: helm upgrade --install opendirectory . -f values.yaml -f values.prod.yaml
+
+global:
+  image:
+    registry: ghcr.io/opendirectory
+    tag: "1.0.0"
+    pullPolicy: Always
+
+# ─── Higher replicas for HA ───────────────────────────────────────────────────
+apiGateway:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+auth:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+identity:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+device:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+policy:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+monitoring:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+mdm:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+backup:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Ingress with TLS ─────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  hostname: opendirectory.example.com
+  tls:
+    enabled: true
+    secretName: opendirectory-tls-prod
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+
+# ─── PostgreSQL ───────────────────────────────────────────────────────────────
+postgresql:
+  storageSize: "100Gi"
+  storageClass: "fast-ssd"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+# ─── Persistence ─────────────────────────────────────────────────────────────
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  backupStorageSize: "500Gi"
+
+# ─── Autoscaling ─────────────────────────────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+# ─── Pod Disruption Budgets ───────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# ─── Network Policies ────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+
+# ─── Prometheus ───────────────────────────────────────────────────────────────
+prometheusAnnotations:
+  enabled: true

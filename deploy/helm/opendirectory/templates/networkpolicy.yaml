@@ -1,0 +1,105 @@
+{{- if .Values.networkPolicy.enabled }}
+# Default deny-all ingress policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-default-deny
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    # Allow DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Allow ingress to API Gateway from anywhere (ingress controller)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-allow-api-gateway
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "opendirectory.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api-gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - port: {{ .Values.apiGateway.service.port }}
+          protocol: TCP
+  egress:
+    - podSelector:
+        matchLabels:
+          {{- include "opendirectory.selectorLabels" . | nindent 10 }}
+      ports:
+        - port: {{ .Values.auth.service.port }}
+        - port: {{ .Values.identity.service.port }}
+        - port: {{ .Values.device.service.port }}
+        - port: {{ .Values.policy.service.port }}
+        - port: {{ .Values.monitoring.service.port }}
+        - port: {{ .Values.mdm.service.port }}
+        - port: {{ .Values.backup.service.port }}
+---
+# Allow internal service-to-service communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-allow-internal
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "opendirectory.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "opendirectory.selectorLabels" . | nindent 14 }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "opendirectory.selectorLabels" . | nindent 14 }}
+---
+# Allow PostgreSQL access from services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-allow-postgresql
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "opendirectory.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgresql
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "opendirectory.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.postgresql.service.port }}
+          protocol: TCP
+{{- end }}

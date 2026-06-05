@@ -74,3 +74,34 @@ scrape_configs:
     static_configs:
       - targets: ['node-exporter:9100']
     scrape_interval: 15s
+
+  # OpenDirectory core services — Prometheus-native /metrics
+  - job_name: 'oauth-provider'
+    static_configs:
+      - targets: ['oauth-provider:3010']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'authentication-service'
+    static_configs:
+      - targets: ['authentication-service:3002']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'least-privilege'
+    static_configs:
+      - targets: ['least-privilege:3011']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'certificate-authority'
+    static_configs:
+      - targets: ['certificate-authority:3012']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'ldap-proxy'
+    static_configs:
+      - targets: ['ldap-proxy:9091']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
