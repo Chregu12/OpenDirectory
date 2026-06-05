@@ -25,6 +25,7 @@ apiGateway:
     type: ClusterIP
     port: 80
     appPort: 3000
+    grpcPort: 50051
   resources:
     requests:
       cpu: "100m"
@@ -44,6 +45,7 @@ auth:
     type: ClusterIP
     port: 80
     appPort: 3001
+    grpcPort: 50051
   resources:
     requests:
       cpu: "100m"
@@ -61,6 +63,7 @@ identity:
     type: ClusterIP
     port: 80
     appPort: 3002
+    grpcPort: 50051
   resources:
     requests:
       cpu: "100m"
@@ -78,6 +81,7 @@ device:
     type: ClusterIP
     port: 80
     appPort: 3003
+    grpcPort: 50051
   resources:
     requests:
       cpu: "100m"
@@ -95,6 +99,7 @@ policy:
     type: ClusterIP
     port: 80
     appPort: 3004
+    grpcPort: 50051
   resources:
     requests:
       cpu: "50m"
@@ -112,6 +117,7 @@ monitoring:
     type: ClusterIP
     port: 80
     appPort: 3005
+    grpcPort: 50051
   resources:
     requests:
       cpu: "100m"
@@ -146,6 +152,7 @@ backup:
     type: ClusterIP
     port: 80
     appPort: 3011
+    grpcPort: 50051
   resources:
     requests:
       cpu: "50m"
@@ -163,6 +170,7 @@ notification:
     type: ClusterIP
     port: 80
     appPort: 3020
+    grpcPort: 50051
   resources:
     requests:
       cpu: "50m"
@@ -180,6 +188,7 @@ appStore:
     type: ClusterIP
     port: 80
     appPort: 3906
+    grpcPort: 50051
   persistence:
     enabled: true
     size: "20Gi"

@@ -43,6 +43,9 @@ spec:
             - name: http
               containerPort: {{ .Values.appStore.service.appPort }}
               protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.appStore.service.grpcPort }}
+              protocol: TCP
             - name: metrics
               containerPort: 9090
               protocol: TCP
