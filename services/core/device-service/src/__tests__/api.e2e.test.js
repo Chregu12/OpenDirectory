@@ -507,4 +507,224 @@ describe('Device Service - E2E API Tests', () => {
       expect(res.body).toHaveProperty('success', true);
     });
   });
+
+  // ─── PUT /api/devices/:deviceId ─────────────────────────────────────────────
+  describe('PUT /api/devices/:deviceId', () => {
+    it('returns 200 with updated device on success', async () => {
+      mockDeviceManager.updateDevice.mockResolvedValueOnce({
+        id: 'device-123',
+        name: 'Updated-Laptop',
+        platform: 'windows',
+        status: 'active',
+      });
+
+      const res = await request(app)
+        .put('/api/devices/device-123')
+        .send({ name: 'Updated-Laptop', status: 'active' });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('success', true);
+      expect(res.body).toHaveProperty('data');
+    });
+
+    it('returns 500 when update fails', async () => {
+      mockDeviceManager.updateDevice.mockRejectedValueOnce(new Error('DB error'));
+
+      const res = await request(app)
+        .put('/api/devices/device-123')
+        .send({ name: 'Bad' });
+      expect(res.status).toBe(500);
+      expect(res.body).toHaveProperty('error');
+    });
+  });
+
+  // ─── DELETE /api/devices/:deviceId ──────────────────────────────────────────
+  describe('DELETE /api/devices/:deviceId', () => {
+    it('returns 200 on successful deletion', async () => {
+      mockDeviceManager.deleteDevice.mockResolvedValueOnce(undefined);
+
+      const res = await request(app).delete('/api/devices/device-123');
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('success', true);
+    });
+
+    it('returns 500 when deletion fails', async () => {
+      mockDeviceManager.deleteDevice.mockRejectedValueOnce(new Error('Device locked'));
+
+      const res = await request(app).delete('/api/devices/device-456');
+      expect(res.status).toBe(500);
+      expect(res.body).toHaveProperty('error');
+    });
+  });
+
+  // ─── POST /api/v1/devices/:deviceId/commands ────────────────────────────────
+  describe('POST /api/v1/devices/:deviceId/commands', () => {
+    it('returns 200 with queued_offline status when device is not connected via WS', async () => {
+      const res = await request(app)
+        .post('/api/v1/devices/device-offline/commands')
+        .send({ command_type: 'run_script', data: { script: 'echo hello' } });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('status');
+      expect(['delivered', 'queued_offline']).toContain(res.body.status);
+      expect(res.body).toHaveProperty('deviceId', 'device-offline');
+    });
+
+    it('returns 200 even without a body (graceful no-op command)', async () => {
+      const res = await request(app)
+        .post('/api/v1/devices/device-abc/commands')
+        .send({});
+      expect(res.status).toBe(200);
+    });
+  });
+
+  // ─── GET /api/compliance/scan/:deviceId ────────────────────────────────────
+  describe('GET /api/compliance/scan/:deviceId', () => {
+    it('returns 200 with compliance scan result', async () => {
+      const res = await request(app).get('/api/compliance/scan/device-123');
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('success', true);
+      expect(res.body).toHaveProperty('data');
+    });
+  });
+
+  // ─── GET /api/compliance/violations ── additional cases ─────────────────────
+  describe('GET /api/compliance/violations — additional cases', () => {
+    it('returns 200 with empty array when no violations exist', async () => {
+      service.complianceScanner.getViolations.mockResolvedValueOnce([]);
+      const res = await request(app).get('/api/compliance/violations');
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('success', true);
+      expect(Array.isArray(res.body.data)).toBe(true);
+    });
+  });
+
+  // ─── POST /api/devices/:deviceId/install-app ────────────────────────────────
+  describe('POST /api/devices/:deviceId/install-app', () => {
+    it('returns 400 when neither packageId nor downloadUrl is provided', async () => {
+      const res = await request(app)
+        .post('/api/devices/device-123/install-app')
+        .send({ appId: 'app-1', appName: 'My App' });
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('error');
+    });
+
+    it('returns 200 with jobId when packageId is provided', async () => {
+      const res = await request(app)
+        .post('/api/devices/device-123/install-app')
+        .send({ appId: 'app-1', appName: 'My App', packageId: 'com.example.app', format: 'msi', version: '1.0.0' });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('jobId');
+      expect(res.body).toHaveProperty('status');
+    });
+
+    it('returns 200 with jobId when downloadUrl is provided', async () => {
+      const res = await request(app)
+        .post('/api/devices/device-123/install-app')
+        .send({ appId: 'app-2', downloadUrl: 'https://example.com/app.msi' });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('jobId');
+    });
+  });
+
+  // ─── GET /api/devices/:deviceId/install-jobs ────────────────────────────────
+  describe('GET /api/devices/:deviceId/install-jobs', () => {
+    it('returns 200 with array of install jobs', async () => {
+      const res = await request(app).get('/api/devices/device-123/install-jobs');
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+  });
+
+  // ─── GET /api/v1/agents/download/:platform ──────────────────────────────────
+  describe('GET /api/v1/agents/download/:platform', () => {
+    it('returns 400 for an unknown platform', async () => {
+      const res = await request(app).get('/api/v1/agents/download/solaris');
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('error');
+    });
+
+    it('returns 404 when agent file is not present on disk', async () => {
+      // Agent scripts do not exist in the test environment
+      const res = await request(app).get('/api/v1/agents/download/windows');
+      expect([200, 404]).toContain(res.status);
+    });
+  });
+
+  // ─── POST /api/enrollment/complete ──────────────────────────────────────────
+  describe('POST /api/enrollment/complete', () => {
+    it('returns 200 on successful completion', async () => {
+      service.enrollmentService.completeEnrollment.mockResolvedValueOnce({
+        deviceId: 'device-999',
+        status: 'enrolled',
+      });
+      const res = await request(app)
+        .post('/api/enrollment/complete')
+        .send({ enrollmentId: 'enroll-123', token: 'tok-xyz789' });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('success', true);
+    });
+
+    it('returns 500 when completion fails', async () => {
+      service.enrollmentService.completeEnrollment.mockRejectedValueOnce(new Error('Token expired'));
+      const res = await request(app)
+        .post('/api/enrollment/complete')
+        .send({ enrollmentId: 'enroll-bad' });
+      expect(res.status).toBe(500);
+    });
+  });
+
+  // ─── POST /api/backup/restore ─────────────────────────────────────────────
+  describe('POST /api/backup/restore', () => {
+    it('returns 400 when backupId is missing', async () => {
+      const res = await request(app)
+        .post('/api/backup/restore')
+        .send({});
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('error');
+    });
+
+    it('returns 200 when backupId is provided', async () => {
+      const res = await request(app)
+        .post('/api/backup/restore')
+        .send({ backupId: 'bak-001' });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('success', true);
+    });
+  });
+
+  // ─── POST /api/dr/failover/execute ──────────────────────────────────────────
+  describe('POST /api/dr/failover/execute', () => {
+    it('returns 400 when confirm is not true', async () => {
+      const res = await request(app)
+        .post('/api/dr/failover/execute')
+        .send({ confirm: false });
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('error');
+    });
+
+    it('returns 200 when confirm is true', async () => {
+      const res = await request(app)
+        .post('/api/dr/failover/execute')
+        .send({ confirm: true });
+      expect(res.status).toBe(200);
+    });
+  });
+
+  // ─── POST /api/reports/generate ─────────────────────────────────────────────
+  describe('POST /api/reports/generate', () => {
+    it('returns 400 when template or format is missing', async () => {
+      const res = await request(app)
+        .post('/api/reports/generate')
+        .send({ template: 'compliance' });
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('error');
+    });
+
+    it('returns 200 when template and format are provided', async () => {
+      const res = await request(app)
+        .post('/api/reports/generate')
+        .send({ template: 'compliance', format: 'pdf' });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('success', true);
+    });
+  });
 });

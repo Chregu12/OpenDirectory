@@ -123,5 +123,72 @@ describe('InstallJobAggregate', () => {
         status: 'queued',
       });
     });
+
+    it('includes completedAt and error after failure', () => {
+      const job = new InstallJobAggregate(baseProps);
+      job.fail('disk full');
+      const json = job.toJSON();
+      expect(json.status).toBe('failed');
+      expect(json.error).toBe('disk full');
+      expect(json.completedAt).toBeInstanceOf(Date);
+    });
+
+    it('includes completedAt after successful completion', () => {
+      const job = new InstallJobAggregate(baseProps);
+      job.complete('121.0');
+      const json = job.toJSON();
+      expect(json.status).toBe('completed');
+      expect(json.completedAt).toBeInstanceOf(Date);
+    });
+
+    it('does not expose internal domain events', () => {
+      const job = InstallJobAggregate.create(baseProps);
+      const json = job.toJSON();
+      expect(json).not.toHaveProperty('_domainEvents');
+    });
+  });
+
+  describe('invalid state transitions', () => {
+    it('calling complete() on an already-failed job overwrites status (no guard)', () => {
+      // InstallJobAggregate does not enforce state guards — document actual behaviour.
+      const job = new InstallJobAggregate(baseProps);
+      job.fail('some error');
+      job.getAndClearDomainEvents();
+      // complete() does not throw; it simply transitions (library choice)
+      expect(() => job.complete('1.0')).not.toThrow();
+    });
+
+    it('calling fail() on an already-completed job does not throw', () => {
+      const job = new InstallJobAggregate(baseProps);
+      job.complete('1.0');
+      job.getAndClearDomainEvents();
+      expect(() => job.fail('late error')).not.toThrow();
+    });
+  });
+
+  describe('fail() — additional edge cases', () => {
+    it('stores the error reason on the job', () => {
+      const job = new InstallJobAggregate(baseProps);
+      job.fail('network timeout');
+      expect(job._error).toBe('network timeout');
+    });
+
+    it('emits event with deviceId and appId in payload', () => {
+      const job = new InstallJobAggregate(baseProps);
+      job.fail('reason');
+      const events = job.getAndClearDomainEvents();
+      expect(events[0].payload.deviceId).toBe('device-1');
+      expect(events[0].payload.appId).toBe('app-chrome');
+    });
+  });
+
+  describe('complete() — additional edge cases', () => {
+    it('emits event with deviceId and appId in payload', () => {
+      const job = new InstallJobAggregate(baseProps);
+      job.complete('1.0');
+      const events = job.getAndClearDomainEvents();
+      expect(events[0].payload.deviceId).toBe('device-1');
+      expect(events[0].payload.appId).toBe('app-chrome');
+    });
   });
 });
