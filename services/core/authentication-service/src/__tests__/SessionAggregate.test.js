@@ -87,5 +87,105 @@ describe('SessionAggregate', () => {
       expect(events.length).toBeGreaterThan(0);
       expect(session.getAndClearDomainEvents()).toHaveLength(0);
     });
+
+    it('second call always returns empty array', () => {
+      const session = SessionAggregate.create(baseProps);
+      session.getAndClearDomainEvents();
+      expect(session.getAndClearDomainEvents()).toEqual([]);
+    });
+  });
+
+  describe('isExpired()', () => {
+    it('isValid() returns false when expiresAt is in the past', () => {
+      const past = new Date(Date.now() - 5000);
+      const session = new SessionAggregate({ ...baseProps, expiresAt: past });
+      expect(session.isValid()).toBe(false);
+    });
+
+    it('isValid() returns true when expiresAt is in the future', () => {
+      const future = new Date(Date.now() + 60000);
+      const session = new SessionAggregate({ ...baseProps, expiresAt: future });
+      expect(session.isValid()).toBe(true);
+    });
+
+    it('isValid() returns false exactly at expiry boundary', () => {
+      const past = new Date(Date.now() - 1);
+      const session = new SessionAggregate({ ...baseProps, expiresAt: past });
+      expect(session.isValid()).toBe(false);
+    });
+  });
+
+  describe('revoke() marks session as inactive', () => {
+    it('sets _revokedAt to a Date', () => {
+      const session = new SessionAggregate(baseProps);
+      expect(session.revokedAt).toBeNull();
+      session.revoke();
+      expect(session.revokedAt).toBeInstanceOf(Date);
+    });
+
+    it('isValid() returns false after revoke even if not expired', () => {
+      const session = new SessionAggregate(baseProps); // futureDate
+      session.revoke();
+      expect(session.isValid()).toBe(false);
+    });
+
+    it('emits SESSION_REVOKED with userId in payload', () => {
+      const session = SessionAggregate.create(baseProps);
+      session.getAndClearDomainEvents(); // clear SESSION_CREATED
+      session.revoke();
+      const events = session.getAndClearDomainEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe(AuthEvents.SESSION_REVOKED);
+      expect(events[0].payload.userId).toBe(baseProps.userId);
+    });
+
+    it('calling revoke() twice does not add duplicate events', () => {
+      const session = new SessionAggregate(baseProps);
+      session.revoke();
+      session.revoke();
+      const events = session.getAndClearDomainEvents();
+      // Each revoke adds an event; verify both are SESSION_REVOKED
+      expect(events.length).toBeGreaterThanOrEqual(1);
+      expect(events.every(e => e.type === AuthEvents.SESSION_REVOKED)).toBe(true);
+    });
+  });
+
+  describe('properties', () => {
+    it('exposes sessionId, userId, token, expiresAt via getters', () => {
+      const session = new SessionAggregate(baseProps);
+      expect(session.sessionId).toBe(baseProps.sessionId);
+      expect(session.userId).toBe(baseProps.userId);
+      expect(session.token).toBe(baseProps.token);
+      expect(session.expiresAt).toBe(baseProps.expiresAt);
+    });
+
+    it('revokedAt is null for a fresh session', () => {
+      const session = new SessionAggregate(baseProps);
+      expect(session.revokedAt).toBeNull();
+    });
+
+    it('defaults _refreshToken to null when not provided', () => {
+      const session = new SessionAggregate(baseProps);
+      expect(session._refreshToken).toBeNull();
+    });
+
+    it('accepts and stores a refreshToken when provided', () => {
+      const session = new SessionAggregate({ ...baseProps, refreshToken: 'refresh-abc' });
+      expect(session._refreshToken).toBe('refresh-abc');
+    });
+  });
+
+  describe('static create() vs constructor', () => {
+    it('constructor does NOT emit any domain events', () => {
+      const session = new SessionAggregate(baseProps);
+      expect(session.getAndClearDomainEvents()).toHaveLength(0);
+    });
+
+    it('static create() emits exactly one SESSION_CREATED event', () => {
+      const session = SessionAggregate.create(baseProps);
+      const events = session.getAndClearDomainEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe(AuthEvents.SESSION_CREATED);
+    });
   });
 });

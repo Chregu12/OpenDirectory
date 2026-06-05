@@ -229,6 +229,22 @@ describe('UserAggregate', () => {
       expect(events).toHaveLength(1);
       expect(user.getAndClearDomainEvents()).toHaveLength(0);
     });
+
+    it('second call always returns an empty array', () => {
+      const user = UserAggregate.create(baseProps);
+      user.getAndClearDomainEvents(); // first call clears
+      const second = user.getAndClearDomainEvents();
+      expect(second).toEqual([]);
+    });
+
+    it('accumulates events from multiple operations before clearing', () => {
+      const user = new UserAggregate(baseProps);
+      user.changePassword('hash1');
+      user.changePassword('hash2');
+      const events = user.getAndClearDomainEvents();
+      expect(events).toHaveLength(2);
+      expect(events.every(e => e.type === AuthEvents.PASSWORD_CHANGED)).toBe(true);
+    });
   });
 
   describe('toJSON()', () => {
@@ -240,6 +256,110 @@ describe('UserAggregate', () => {
       expect(json.email).toBe(baseProps.email);
       expect(json).not.toHaveProperty('passwordHash');
       expect(json).not.toHaveProperty('mfaSecret');
+    });
+
+    it('includes locked and loginAttempts', () => {
+      const user = new UserAggregate({ ...baseProps, locked: true, loginAttempts: 3 });
+      const json = user.toJSON();
+      expect(json.locked).toBe(true);
+      expect(json.loginAttempts).toBe(3);
+    });
+
+    it('includes mfaEnabled but not mfaSecret', () => {
+      const user = new UserAggregate({ ...baseProps, mfaEnabled: true, mfaSecret: 'super-secret' });
+      const json = user.toJSON();
+      expect(json.mfaEnabled).toBe(true);
+      expect(json).not.toHaveProperty('mfaSecret');
+    });
+
+    it('includes roles array', () => {
+      const user = new UserAggregate({ ...baseProps, roles: ['user', 'admin'] });
+      const json = user.toJSON();
+      expect(json.roles).toEqual(['user', 'admin']);
+    });
+  });
+
+  describe('assignRole() idempotency', () => {
+    it('does not duplicate when same role is added twice', () => {
+      const user = new UserAggregate(baseProps);
+      user.assignRole('admin');
+      user.assignRole('admin');
+      expect(user.roles.filter(r => r === 'admin')).toHaveLength(1);
+    });
+
+    it('does not emit an event when role already exists (no-op)', () => {
+      const user = new UserAggregate({ ...baseProps, roles: ['user', 'admin'] });
+      user.assignRole('admin'); // already exists
+      expect(user.getAndClearDomainEvents()).toHaveLength(0);
+    });
+  });
+
+  describe('removeRole() edge cases', () => {
+    it('removes the specified role from the list', () => {
+      const user = new UserAggregate({ ...baseProps, roles: ['user', 'admin', 'manager'] });
+      user.removeRole('admin');
+      expect(user.roles).not.toContain('admin');
+      expect(user.roles).toContain('user');
+      expect(user.roles).toContain('manager');
+    });
+
+    it('is a no-op when role does not exist', () => {
+      const user = new UserAggregate(baseProps); // roles: ['user']
+      user.removeRole('nonexistent');
+      expect(user.roles).toEqual(['user']);
+    });
+
+    it('allows removing the last role (source does not guard against it)', () => {
+      const user = new UserAggregate({ ...baseProps, roles: ['user'] });
+      user.removeRole('user');
+      expect(user.roles).toEqual([]);
+    });
+  });
+
+  describe('enableMFA() / disableMFA() toggling', () => {
+    it('can re-enable MFA after disabling it', () => {
+      const user = new UserAggregate({ ...baseProps, mfaEnabled: true, mfaSecret: 'OLD', recoveryCodes: ['c1'] });
+      user.disableMFA();
+      user.enableMFA('NEW_SECRET', ['code-a', 'code-b']);
+      expect(user.mfaEnabled).toBe(true);
+      expect(user.mfaSecret).toBe('NEW_SECRET');
+      expect(user.recoveryCodes).toEqual(['code-a', 'code-b']);
+    });
+
+    it('enableMFA with no recovery codes defaults to empty array', () => {
+      const user = new UserAggregate(baseProps);
+      user.enableMFA('SECRET');
+      expect(user.recoveryCodes).toEqual([]);
+    });
+  });
+
+  describe('recordLoginFailure() locking emits USER_LOCKED', () => {
+    it('emits both LOGIN_FAILED and USER_LOCKED when threshold reached', () => {
+      const user = new UserAggregate({ ...baseProps, loginAttempts: 4 });
+      user.recordLoginFailure('1.2.3.4');
+      const events = user.getAndClearDomainEvents();
+      const types = events.map(e => e.type);
+      expect(types).toContain(AuthEvents.LOGIN_FAILED);
+      expect(types).toContain(AuthEvents.USER_LOCKED);
+    });
+
+    it('USER_LOCKED payload includes lockUntil timestamp', () => {
+      const user = new UserAggregate({ ...baseProps, loginAttempts: 4 });
+      user.recordLoginFailure('10.0.0.1');
+      const events = user.getAndClearDomainEvents();
+      const lockEvent = events.find(e => e.type === AuthEvents.USER_LOCKED);
+      expect(lockEvent.payload.lockUntil).toBeInstanceOf(Date);
+      expect(lockEvent.payload.lockUntil.getTime()).toBeGreaterThan(Date.now());
+    });
+  });
+
+  describe('unlock() resets everything', () => {
+    it('emits USER_UNLOCKED event with userId', () => {
+      const user = new UserAggregate({ ...baseProps, locked: true, loginAttempts: 5 });
+      user.unlock();
+      const events = user.getAndClearDomainEvents();
+      expect(events[0].type).toBe(AuthEvents.USER_UNLOCKED);
+      expect(events[0].payload.userId).toBe(baseProps.id);
     });
   });
 });
