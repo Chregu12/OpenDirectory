@@ -10,6 +10,11 @@
 const eventsModule = require('./events');
 const MessageBus   = require('./messageBus');
 
+const SagaBase           = require('./sagas/SagaBase');
+const StoreInstallSaga   = require('./sagas/StoreInstallSaga');
+const UserOnboardingSaga = require('./sagas/UserOnboardingSaga');
+const DeadLetterHandler  = require('./deadLetter/DeadLetterHandler');
+
 module.exports = {
   events:     eventsModule,
   errors:     require('./errors'),
@@ -19,4 +24,10 @@ module.exports = {
   // Convenience re-export: destructure Events directly from the top level
   // e.g.  const { Events } = require('@opendirectory/service-contracts');
   Events: eventsModule.Events,
+
+  // Saga orchestration
+  SagaBase,
+  StoreInstallSaga,
+  UserOnboardingSaga,
+  DeadLetterHandler,
 };
