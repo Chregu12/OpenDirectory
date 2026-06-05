@@ -2,6 +2,41 @@
 'use strict';
 require('dotenv').config();
 
+const amqplib = require('amqplib');
+
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let _amqpChannel = null;
+
+async function connectBus() {
+  try {
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
+    try {
+      const conn = await amqplib.connect(RABBITMQ_URL);
+      conn.on('error', () => { _amqpChannel = null; });
+      conn.on('close', () => { _amqpChannel = null; setTimeout(connectBus, 5000); });
+      const ch = await conn.createChannel();
+      await ch.assertExchange('opendirectory.events', 'topic', { durable: true });
+      _amqpChannel = ch;
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!_amqpChannel) return;
+  try {
+    _amqpChannel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: 'apple-mdm' })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -83,7 +118,7 @@ const APNS_TOPIC = process.env.APNS_TOPIC || process.env.MDM_TOPIC || '';
 const pgPool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432', 10),
-  database: process.env.DB_NAME || process.env.POSTGRES_DB || 'auth',
+  database: process.env.DB_NAME || process.env.POSTGRES_DB || 'mdm',
   user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
   password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || '',
   max: 5,
@@ -262,6 +297,7 @@ async function enqueueCommand(udid, requestType, payload) {
     });
   }
   commandQueuedCounter.inc({ request_type: requestType });
+  publish('mdm.command.sent', { deviceId: udid, command: requestType });
   return { id, command_uuid: commandUuid };
 }
 
@@ -732,6 +768,7 @@ app.put('/mdm/checkin', async (req, res) => {
           model: msg.Model,
           os_version: msg.OSVersion,
         }).catch(err => console.error('[apple-mdm] upsertDevice error:', err.message));
+        publish('mdm.device.enrolled', { deviceId: udid, udid, platform: 'ios' });
       }
       res.set('Content-Type', 'text/xml');
       return res.send(EMPTY_PLIST);
@@ -969,6 +1006,7 @@ app.post('/api/mdm/devices/:udid/install-profile', async (req, res) => {
       await sendMdmPush(device.push_token).catch(() => {});
     }
 
+    publish('mdm.profile.pushed', { deviceId: udid, profileId: command_uuid });
     res.status(202).json({ queued: true, command: { id, command_uuid, request_type: 'InstallProfile', udid } });
   } catch (err) {
     console.error('[apple-mdm] install-profile error:', err.message);
@@ -1246,6 +1284,7 @@ app.post('/api/mdm/config', async (req, res) => {
 async function start() {
   await initDb();
   apnsProvider = initApns();
+  connectBus();
 
   app.listen(PORT, () => {
     console.log(`[apple-mdm] Apple MDM server listening on port ${PORT}`);

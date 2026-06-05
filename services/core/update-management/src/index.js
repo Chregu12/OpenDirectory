@@ -4,6 +4,40 @@ const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { EventEmitter } = require('events');
+const amqplib = require('amqplib');
+
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let _amqpChannel = null;
+
+async function connectBus() {
+  try {
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
+    try {
+      const conn = await amqplib.connect(RABBITMQ_URL);
+      conn.on('error', () => { _amqpChannel = null; });
+      conn.on('close', () => { _amqpChannel = null; setTimeout(connectBus, 5000); });
+      const ch = await conn.createChannel();
+      await ch.assertExchange('opendirectory.events', 'topic', { durable: true });
+      _amqpChannel = ch;
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!_amqpChannel) return;
+  try {
+    _amqpChannel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: 'update-management' })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
 
 // Import services
 const WindowsUpdateService = require('./services/WindowsUpdateService');
@@ -358,6 +392,17 @@ class UpdateManagementService extends EventEmitter {
         this.services.updateRings.on('deploymentScheduled', (deployment) => {
             logger.info(`Deployment scheduled: ${deployment.name}`);
             this.emit('deploymentScheduled', deployment);
+            publish('update.deployed', { deviceId: deployment.deviceId, version: deployment.version, deployedAt: deployment.scheduledAt || new Date().toISOString() });
+        });
+
+        this.services.updateRings.on('deploymentFailed', (deployment) => {
+            logger.info(`Deployment failed: ${deployment.name}`);
+            publish('update.failed', { deviceId: deployment.deviceId, version: deployment.version, error: deployment.error });
+        });
+
+        this.services.updateRings.on('ringUpdated', (ring) => {
+            logger.info(`Update ring changed: ${ring.name}`);
+            publish('update.ring.changed', { ringId: ring.id, deviceIds: ring.deviceIds || [] });
         });
 
         // Remote actions service events
@@ -508,6 +553,8 @@ class UpdateManagementService extends EventEmitter {
      */
     async start() {
         try {
+            connectBus();
+
             const port = config.port || 3000;
             const host = config.host || '0.0.0.0';
 

@@ -4,12 +4,46 @@ const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const winston = require('winston');
+const amqplib = require('amqplib');
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
   transports: [new winston.transports.Console()]
 });
+
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let _amqpChannel = null;
+
+async function connectBus() {
+  try {
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
+    try {
+      const conn = await amqplib.connect(RABBITMQ_URL);
+      conn.on('error', () => { _amqpChannel = null; });
+      conn.on('close', () => { _amqpChannel = null; setTimeout(connectBus, 5000); });
+      const ch = await conn.createChannel();
+      await ch.assertExchange('opendirectory.events', 'topic', { durable: true });
+      _amqpChannel = ch;
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!_amqpChannel) return;
+  try {
+    _amqpChannel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: 'identity-service' })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -58,6 +92,7 @@ app.post('/api/users', (req, res) => {
   const user = { id, username, email, displayName, department, title, enabled: true, createdAt: new Date().toISOString() };
   users.set(id, user);
   logger.info(`User created: ${username}`);
+  publish('identity.user.created', { userId: id, username, email });
   res.status(201).json(user);
 });
 
@@ -71,7 +106,9 @@ app.put('/api/users/:id', (req, res) => {
 
 app.delete('/api/users/:id', (req, res) => {
   if (!users.has(req.params.id)) return res.status(404).json({ error: 'User not found' });
-  users.delete(req.params.id);
+  const userId = req.params.id;
+  users.delete(userId);
+  publish('identity.user.deleted', { userId });
   res.status(204).send();
 });
 
@@ -95,6 +132,7 @@ app.post('/api/groups', (req, res) => {
   const group = { id, name, description, members: [], createdAt: new Date().toISOString() };
   groups.set(id, group);
   logger.info(`Group created: ${name}`);
+  publish('identity.group.created', { groupId: id, name });
   res.status(201).json(group);
 });
 
@@ -123,6 +161,7 @@ app.get('/api/identity/search', (req, res) => {
 });
 
 // Start server
+connectBus();
 const server = app.listen(PORT, () => {
   logger.info(`Identity Service running on port ${PORT}`);
 });

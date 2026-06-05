@@ -11,6 +11,40 @@ const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const ioredis = require('ioredis');
 const { v4: uuidv4 } = require('uuid');
+const amqplib = require('amqplib');
+
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let _amqpChannel = null;
+
+async function connectBus() {
+  try {
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
+    try {
+      const conn = await amqplib.connect(RABBITMQ_URL);
+      conn.on('error', () => { _amqpChannel = null; });
+      conn.on('close', () => { _amqpChannel = null; setTimeout(connectBus, 5000); });
+      const ch = await conn.createChannel();
+      await ch.assertExchange('opendirectory.events', 'topic', { durable: true });
+      _amqpChannel = ch;
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!_amqpChannel) return;
+  try {
+    _amqpChannel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: 'network-infrastructure' })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
 
 const logger = require('./utils/logger');
 const config = require('./utils/config');
@@ -550,11 +584,13 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     this.dnsManager.on('recordCreated', (record) => {
       this.broadcast('dnsRecordCreated', record);
       this.auditLog('DNS_RECORD_CREATED', record);
+      publish('network.dns.updated', { record, action: 'created' });
     });
-    
+
     this.dnsManager.on('recordUpdated', (record) => {
       this.broadcast('dnsRecordUpdated', record);
       this.auditLog('DNS_RECORD_UPDATED', record);
+      publish('network.dns.updated', { record, action: 'updated' });
     });
     
     this.dnsManager.on('recordDeleted', (recordId) => {
@@ -566,6 +602,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     this.dhcpManager.on('leaseAssigned', (lease) => {
       this.broadcast('dhcpLeaseAssigned', lease);
       this.auditLog('DHCP_LEASE_ASSIGNED', lease);
+      publish('network.dhcp.lease.issued', { deviceId: lease.deviceId || lease.hostname, ip: lease.ip || lease.ipAddress, mac: lease.mac || lease.macAddress });
     });
     
     this.dhcpManager.on('leaseExpired', (lease) => {
@@ -1142,6 +1179,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     // Initialize database (non-fatal – falls back to in-memory on failure)
     await db.initDb();
     await this.loadDbCacheIntoMemory();
+    connectBus();
 
     this.server = this.app.listen(port, () => {
       logger.info(`🌐 Enterprise Network Infrastructure Service started on port ${port}`);
@@ -1332,10 +1370,12 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         const record = await db.upsertDnsRecord(req.body);
         this.auditLog('DNS_RECORD_CREATED', record);
         this.broadcast('dnsRecordCreated', record);
+        publish('network.dns.updated', { record, action: 'created' });
         return res.status(201).json({ record, source: 'db', timestamp: new Date().toISOString() });
       }
       // In-memory fallback
       const record = await this.dnsManager.createRecord(req.body);
+      publish('network.dns.updated', { record, action: 'created' });
       res.status(201).json({ record, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('createDNSRecord error:', error);
@@ -1350,9 +1390,11 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         const record = await db.upsertDnsRecord(payload);
         this.auditLog('DNS_RECORD_UPDATED', record);
         this.broadcast('dnsRecordUpdated', record);
+        publish('network.dns.updated', { record, action: 'updated' });
         return res.json({ record, source: 'db', timestamp: new Date().toISOString() });
       }
       const record = await this.dnsManager.updateRecord(req.params.id, req.body);
+      publish('network.dns.updated', { record, action: 'updated' });
       res.json({ record, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('updateDNSRecord error:', error);
@@ -1426,9 +1468,11 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         const lease = await db.upsertDhcpLease(req.body);
         this.auditLog('DHCP_LEASE_CREATED', lease);
         this.broadcast('dhcpLeaseAssigned', lease);
+        publish('network.dhcp.lease.issued', { deviceId: lease.deviceId || lease.hostname, ip: lease.ip || lease.ip_address, mac: lease.mac || lease.mac_address });
         return res.status(201).json({ lease, source: 'db', timestamp: new Date().toISOString() });
       }
       const lease = await this.dhcpManager.createLease ? this.dhcpManager.createLease(req.body) : req.body;
+      publish('network.dhcp.lease.issued', { deviceId: lease.deviceId || lease.hostname, ip: lease.ip || lease.ip_address, mac: lease.mac || lease.mac_address });
       res.status(201).json({ lease, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('createDHCPLease error:', error);
@@ -1499,9 +1543,11 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
       if (db.isAvailable()) {
         const vlan = await db.upsertVlan(req.body);
         this.auditLog('VLAN_CREATED', vlan);
+        publish('network.vlan.created', { vlanId: vlan.id || vlan.vlan_id, name: vlan.name });
         return res.status(201).json({ vlan, source: 'db', timestamp: new Date().toISOString() });
       }
       const vlan = await this.vlanManager.createVlan ? this.vlanManager.createVlan(req.body) : req.body;
+      publish('network.vlan.created', { vlanId: vlan.id || vlan.vlan_id, name: vlan.name });
       res.status(201).json({ vlan, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('createVLAN error:', error);
