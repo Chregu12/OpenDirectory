@@ -5,14 +5,15 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "test": "jest --forceExit --runInBand"
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --no-coverage --forceExit --runInBand"
   },
   "jest": {
     "testEnvironment": "node",
     "testMatch": [
       "**/__tests__/**/*.test.js"
     ],
-    "testTimeout": 30000
+    "testTimeout": 30000,
+    "transform": {}
   },
   "dependencies": {
     "compression": "^1.7.4",
