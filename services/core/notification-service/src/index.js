@@ -17,8 +17,9 @@ const _bus = new EventBusClient({ source: 'notification-service' });
 async function connectBus() { await _bus.connect(); }
 function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 async function subscribeToEvents(queueName, routingKeys, handler) {
-  await _bus.subscribe(queueName, routingKeys, (payload, meta) => {
-    handler(meta.routingKey, payload);
+  await _bus.subscribe(queueName, routingKeys, async (payload, meta) => {
+    await handler(meta.routingKey, payload);
+    meta.ack();
   });
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -639,42 +640,53 @@ async function start() {
       dbAvailable = false;
     }
 
-    // Connect to RabbitMQ event bus and subscribe to alert-triggering events
+    // Connect to RabbitMQ event bus and subscribe per event-routing.yaml:
+    //   notification.send  — direct send requests
+    //   monitoring.alert.* — alerts raised by the monitoring service
     connectBus();
     setTimeout(async () => {
-      await subscribeToEvents('notification.alerts', [
-        'identity.login.failed',
-        'identity.account.locked',
-        'identity.mfa.disabled',
-        'device.non_compliant',
-        'app.install.failed',
-        'system.backup.failed',
-        'security.pim.granted',
-        'security.pim.expired',
-        'security.cert.expiring',
-        'policy.violated',
-        'compliance.failed',
+      await subscribeToEvents('notification.events', [
+        'notification.send',
+        'monitoring.alert.*',
       ], async (routingKey, payload) => {
         try {
-          const notifMessages = {
-            'identity.login.failed':   `Fehlgeschlagener Login: ${payload.username} von ${payload.ip}`,
-            'identity.account.locked': `Konto gesperrt: ${payload.username}`,
-            'device.non_compliant':    `Gerät nicht konform: ${payload.deviceId}`,
-            'app.install.failed':      `Installation fehlgeschlagen: ${payload.appId} auf ${payload.deviceId}`,
-            'system.backup.failed':    `Backup fehlgeschlagen: ${payload.error || 'Unbekannter Fehler'}`,
-            'security.pim.granted':    `PIM Zugriff gewährt: ${payload.userId} → ${payload.roleId}`,
-            'security.cert.expiring':  `Zertifikat läuft ab: ${payload.subject || payload.id}`,
-            'policy.violated':         `Policy verletzt: ${payload.policyId} auf ${payload.deviceId}`,
-            'compliance.failed':       `Compliance-Check fehlgeschlagen: ${payload.deviceId}`,
-          };
+          // Determine subject and body from routing key and payload
+          let subject, message;
 
-          const message = notifMessages[routingKey] || JSON.stringify(payload);
-          const severity = routingKey.includes('failed') || routingKey.includes('locked') || routingKey.includes('violated') ? 'error' : 'warning';
+          if (routingKey === 'notification.send') {
+            // Direct send request: payload may carry subject/body/channel_id
+            subject = payload.subject || `[NOTIFICATION] ${routingKey}`;
+            message = payload.body || payload.message || JSON.stringify(payload);
+
+            // If a specific channel_id is requested, send only to that channel
+            if (payload.channel_id) {
+              const channel = inMemoryChannels.get(payload.channel_id);
+              if (channel && channel.enabled) {
+                try {
+                  if (channel.type === 'email') {
+                    await sendEmail(channel, subject, message, payload.to || []);
+                  } else if (channel.type === 'slack') {
+                    await sendSlack(channel, subject, message);
+                  } else if (channel.type === 'webhook' || channel.type === 'teams') {
+                    await sendWebhook(channel, subject, message);
+                  }
+                  publishEvent('notification.sent', { routingKey, channel_id: payload.channel_id });
+                } catch (_) {
+                  publishEvent('notification.failed', { routingKey, channel_id: payload.channel_id, error: _.message });
+                }
+              }
+            }
+          } else {
+            // monitoring.alert.critical / monitoring.alert.warning
+            const severity = routingKey.endsWith('.critical') ? 'CRITICAL' : 'WARNING';
+            subject = payload.title ? `[${severity}] ${payload.title}` : `[${severity}] ${routingKey}`;
+            message = payload.message || JSON.stringify(payload);
+          }
 
           const entry = {
             id: require('crypto').randomUUID(),
-            channel_id: null,
-            subject: `[${severity.toUpperCase()}] ${routingKey}`,
+            channel_id: payload.channel_id || null,
+            subject,
             body: message,
             sent_at: new Date().toISOString(),
             status: 'received',
@@ -685,18 +697,23 @@ async function start() {
           inMemoryHistory.unshift(entry);
           if (inMemoryHistory.length > 500) inMemoryHistory.length = 500;
 
-          // Try to send via enabled channels
-          for (const channel of inMemoryChannels.values()) {
-            if (!channel.enabled) continue;
-            try {
-              if (channel.type === 'email') {
-                await sendEmail(channel, entry.subject, message, []);
-              } else if (channel.type === 'slack') {
-                await sendSlack(channel, entry.subject, message);
-              } else if (channel.type === 'webhook' || channel.type === 'teams') {
-                await sendWebhook(channel, entry.subject, message);
+          // For monitoring alerts, broadcast to all enabled channels
+          if (routingKey.startsWith('monitoring.alert.')) {
+            for (const channel of inMemoryChannels.values()) {
+              if (!channel.enabled) continue;
+              try {
+                if (channel.type === 'email') {
+                  await sendEmail(channel, subject, message, []);
+                } else if (channel.type === 'slack') {
+                  await sendSlack(channel, subject, message);
+                } else if (channel.type === 'webhook' || channel.type === 'teams') {
+                  await sendWebhook(channel, subject, message);
+                }
+                publishEvent('notification.sent', { routingKey, channel_id: channel.id });
+              } catch (_) {
+                publishEvent('notification.failed', { routingKey, channel_id: channel.id, error: _.message });
               }
-            } catch (_) {}
+            }
           }
         } catch (e) {
           log('warn', 'Event notification handler error', { error: e.message });

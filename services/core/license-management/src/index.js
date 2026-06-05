@@ -20,8 +20,49 @@ const EventBusClient = (() => {
 const _bus = new EventBusClient({ source: 'license-management' });
 async function connectBus() { await _bus.connect(); }
 function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+async function subscribeToEvents(queueName, routingKeys, handler) {
+  await _bus.subscribe(queueName, routingKeys, async (payload, meta) => {
+    await handler(meta.routingKey, payload);
+    meta.ack();
+  });
+}
 
 connectBus();
+
+// Subscribe per event-routing.yaml: identity.user.created / identity.user.deleted
+// so the license service can react to user lifecycle events (e.g. auto-revoke).
+setTimeout(async () => {
+  try {
+    await subscribeToEvents('license.identity.events', [
+      'identity.user.created',
+      'identity.user.deleted',
+    ], async (routingKey, payload) => {
+      try {
+        if (routingKey === 'identity.user.deleted' && payload.userId) {
+          // Revoke all licenses assigned to the deleted user
+          if (global.licenseService) {
+            for (const license of global.licenseService.licenses.values()) {
+              const assignments = license.assignments || [];
+              const hasAssignment = assignments.some(a => a.userId === payload.userId);
+              if (hasAssignment) {
+                license.assignments = assignments.filter(a => a.userId !== payload.userId);
+                license.updatedAt = new Date().toISOString();
+                global.licenseService.licenses.set(license.id, license);
+                publish('license.revoked', { licenseId: license.id, userId: payload.userId, reason: 'user_deleted' });
+              }
+            }
+          }
+        }
+        // identity.user.created — no automatic action needed; licenses are assigned explicitly
+      } catch (e) {
+        // log but don't crash
+        console.warn('[license-management] identity event handler error:', e.message);
+      }
+    });
+  } catch (e) {
+    console.warn('[license-management] subscribeToEvents error:', e.message);
+  }
+}, 3000);
 
 /**
  * Enterprise License Management Service

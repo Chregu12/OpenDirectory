@@ -40,8 +40,9 @@ const _bus = new EventBusClient({ source: 'monitoring-service' });
 async function connectBus() { await _bus.connect(); }
 function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 async function subscribeToEvents(queueName, routingKeys, handler) {
-  await _bus.subscribe(queueName, routingKeys, (payload, meta) => {
-    handler(meta.routingKey, payload);
+  await _bus.subscribe(queueName, routingKeys, async (payload, meta) => {
+    await handler(meta.routingKey, payload);
+    meta.ack();
   });
 }
 // ─────────────────────────────────────────────────────────────────────────────
