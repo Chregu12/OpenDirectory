@@ -45,6 +45,8 @@ services:
       - policy.created
       - policy.updated
       - policy.applied
+      - ad.computer.joined
+      - ad.computer.unjoined
 
   policy-service:
     publishes:
@@ -68,6 +70,8 @@ services:
       - system.backup.completed
       - identity.login.failed
       - admin.#
+      - ad.replication.failed
+      - ad.replication.recovered
 
   notification-service:
     publishes:
@@ -76,6 +80,14 @@ services:
     subscribes:
       - notification.send
       - monitoring.alert.*
+      - notification.alert.critical
+      - security.elevation.#
+      - security.breakglass.#
+      - directory.object.deleted
+      - ad.replication.failed
+      - ad.replication.recovered
+      - ad.trust.created
+      - ad.trust.removed
 
   identity-service:
     publishes:
@@ -156,6 +168,49 @@ services:
       - identity.group.created
       - identity.group.updated
       - identity.group.deleted
+      - directory.object.created
+      - directory.object.modified
+      - directory.object.deleted
+      - directory.object.moved
+      - directory.group.member.added
+      - directory.group.member.removed
+      - directory.gpo.applied
+      - directory.gpo.modified
+
+  conditional-access:
+    publishes:
+      - security.elevation.requested
+      - security.elevation.approved
+      - security.elevation.denied
+      - security.elevation.expired
+      - security.elevation.revoked
+      - security.breakglass.activated
+      - security.breakglass.terminated
+    subscribes: []
+
+  kerberos-kdc:
+    publishes:
+      - kerberos.ticket.issued
+      - kerberos.ticket.renewed
+      - kerberos.delegation.granted
+      - kerberos.delegation.denied
+      - kerberos.principal.created
+      - kerberos.principal.deleted
+    subscribes: []
+
+  samba-ad-dc:
+    publishes:
+      - ad.trust.created
+      - ad.trust.removed
+      - ad.trust.verified
+      - ad.computer.joined
+      - ad.computer.unjoined
+      - ad.replication.failed
+      - ad.replication.recovered
+      - ad.laps.password.retrieved
+      - ad.laps.password.rotated
+      - ad.bitlocker.key.retrieved
+    subscribes: []
 
   antivirus-protection:
     publishes:
@@ -175,6 +230,7 @@ services:
   audit-service:
     publishes:
       - audit.event.logged
+      - notification.alert.critical
     subscribes:
       - policy.#
       - device.#
@@ -184,6 +240,9 @@ services:
       - compliance.#
       - admin.#
       - system.#
+      - directory.#
+      - kerberos.#
+      - ad.#
 
   auto-remediation:
     publishes:
@@ -204,6 +263,15 @@ services:
       - device.seen
       - policy.created
       - compliance.evaluation.*
+      - security.elevation.approved
+      - security.breakglass.activated
+      - directory.object.modified
+      - directory.group.member.added
+      - directory.group.member.removed
+      - directory.gpo.applied
+      - kerberos.delegation.granted
+      - ad.trust.created
+      - ad.trust.removed
 
   device-lifecycle:
     publishes:
@@ -229,4 +297,17 @@ services:
       - security.scan.started
       - security.scan.completed
       - security.vulnerability.found
-    subscribes: []
+    subscribes:
+      - security.breakglass.activated
+      - ad.trust.created
+      - ad.trust.removed
+
+  sync-service:
+    publishes: []
+    subscribes:
+      - directory.object.created
+      - directory.object.modified
+      - directory.object.deleted
+      - directory.object.moved
+      - directory.group.member.added
+      - directory.group.member.removed
