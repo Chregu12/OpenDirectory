@@ -84,7 +84,7 @@ pool.on('error', (err) => {
 // Service instances
 const catalogManager = new CatalogManager(pool);
 const clientDetector = new ClientDetector(pool);
-const distributionEngine = new DistributionEngine(pool, wss);
+const distributionEngine = new DistributionEngine(pool, wss, publishEvent);
 const assignmentEngine = new AssignmentEngine(pool, distributionEngine);
 
 // --- Middleware ---
@@ -1086,9 +1086,6 @@ async function start() {
 
     // Connect to event bus (fire and forget)
     connectBus().catch(() => {});
-
-    // Initialize messaging
-    await distributionEngine.initializeMessaging();
 
     // Start HTTP server
     server.listen(PORT, '0.0.0.0', () => {

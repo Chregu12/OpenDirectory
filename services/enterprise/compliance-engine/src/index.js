@@ -7,7 +7,6 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const Redis = require('ioredis');
-const amqplib = require('amqplib');
 const { WebSocketServer } = require('ws');
 const cron = require('node-cron');
 const http = require('http');
@@ -114,28 +113,6 @@ function connectRedis() {
   redis.on('close', () => logger.warn('Redis connection closed'));
 
   return redis;
-}
-
-// ─── RabbitMQ Connection ────────────────────────────────────────────
-
-async function connectRabbitMQ() {
-  const url = process.env.RABBITMQ_URL || process.env.AMQP_URL || 'amqp://guest:guest@localhost:5672';
-
-  const connection = await amqplib.connect(url);
-  const channel = await connection.createChannel();
-
-  // Declare exchanges and queues
-  await channel.assertExchange('compliance.events', 'topic', { durable: true });
-  await channel.assertQueue('compliance.evaluations', { durable: true });
-  await channel.assertQueue('compliance.alerts', { durable: true });
-  await channel.bindQueue('compliance.evaluations', 'compliance.events', 'compliance.evaluation.*');
-  await channel.bindQueue('compliance.alerts', 'compliance.events', 'compliance.alert.*');
-
-  connection.on('error', (err) => logger.error(`RabbitMQ connection error: ${err.message}`));
-  connection.on('close', () => logger.warn('RabbitMQ connection closed'));
-
-  logger.info('RabbitMQ connected');
-  return { connection, channel };
 }
 
 // ─── Database Migrations ────────────────────────────────────────────
@@ -335,7 +312,7 @@ function createApp(deps) {
 async function main() {
   logger.info('Starting Compliance Engine service...');
 
-  let db, redis, rabbitMQ;
+  let db, redis;
 
   try {
     // Connect to PostgreSQL
@@ -369,24 +346,15 @@ async function main() {
       logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
     });
 
-    // Connect to RabbitMQ
-    try {
-      rabbitMQ = await connectRabbitMQ();
-    } catch (error) {
-      logger.warn(`RabbitMQ connection failed (non-critical): ${error.message}`);
-      rabbitMQ = null;
-    }
-
     // Run database migrations
     await runMigrations(db);
 
     // Initialize engines
-    const eventBus = rabbitMQ ? rabbitMQ.channel : null;
     const baselineManager = new BaselineManager(db);
     const waiverManager = new WaiverManager(db);
     const scoreCalculator = new ScoreCalculator(db);
     const trendAnalyzer = new TrendAnalyzer(db);
-    const evaluator = new ComplianceEvaluator(db, redis, eventBus, publish);
+    const evaluator = new ComplianceEvaluator(db, redis, null, publish);
     const reportGenerator = new ReportGenerator(db);
 
     // Load built-in baselines
@@ -400,7 +368,7 @@ async function main() {
     const deps = {
       db,
       redis,
-      eventBus,
+      eventBus: null,
       evaluator,
       baselineManager,
       waiverManager,
@@ -419,36 +387,30 @@ async function main() {
     // Setup scheduled tasks
     setupScheduledTasks(evaluator, waiverManager, trendAnalyzer);
 
-    // Listen for compliance evaluation requests via RabbitMQ
-    if (rabbitMQ) {
-      rabbitMQ.channel.consume('compliance.evaluations', async (msg) => {
-        if (!msg) return;
-        try {
-          const { deviceId, inventoryData } = JSON.parse(msg.content.toString());
-          const timer = evaluationDuration.startTimer();
-
-          const result = await evaluator.evaluateDevice(deviceId, inventoryData);
-
-          timer();
-          evaluationCounter.inc({ status: 'success' });
-
-          // Broadcast result via WebSocket
-          broadcast({
-            type: 'compliance.evaluation.completed',
-            deviceId,
-            overallScore: result.overallScore,
-            timestamp: result.evaluatedAt,
-          });
-
-          rabbitMQ.channel.ack(msg);
-        } catch (error) {
-          evaluationCounter.inc({ status: 'error' });
-          logger.error(`Failed to process evaluation message: ${error.message}`);
-          rabbitMQ.channel.nack(msg, false, false);
-        }
-      });
-      logger.info('Listening for compliance evaluation messages on RabbitMQ');
-    }
+    // Listen for compliance evaluation requests via EventBusClient
+    _bus.subscribe('compliance.evaluations', ['compliance.evaluation.*'], async (payload, meta) => {
+      try {
+        const { deviceId, inventoryData } = payload;
+        const timer = evaluationDuration.startTimer();
+        const result = await evaluator.evaluateDevice(deviceId, inventoryData);
+        timer();
+        evaluationCounter.inc({ status: 'success' });
+        broadcast({
+          type: 'compliance.evaluation.completed',
+          deviceId,
+          overallScore: result.overallScore,
+          timestamp: result.evaluatedAt,
+        });
+        if (meta.ack) await meta.ack();
+      } catch (error) {
+        evaluationCounter.inc({ status: 'error' });
+        logger.error(`Failed to process evaluation message: ${error.message}`);
+        if (meta.nack) await meta.nack(false);
+      }
+    }).catch((err) => {
+      logger.warn(`EventBusClient compliance.evaluations subscribe failed (non-critical): ${err.message}`);
+    });
+    logger.info('Listening for compliance evaluation messages on EventBusClient');
 
     // Start server
     server.listen(PORT, '0.0.0.0', () => {
@@ -468,13 +430,10 @@ async function main() {
       });
 
       try {
-        if (rabbitMQ) {
-          await rabbitMQ.channel.close();
-          await rabbitMQ.connection.close();
-          logger.info('RabbitMQ connection closed');
-        }
+        await _bus.close();
+        logger.info('EventBusClient closed');
       } catch (error) {
-        logger.error(`Error closing RabbitMQ: ${error.message}`);
+        logger.error(`Error closing EventBusClient: ${error.message}`);
       }
 
       try {

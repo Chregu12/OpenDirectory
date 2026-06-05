@@ -7,7 +7,6 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { WebSocketServer } = require('ws');
 const http = require('http');
-const amqplib = require('amqplib');
 const Redis = require('ioredis');
 const promClient = require('prom-client');
 const { v4: uuidv4 } = require('uuid');
@@ -741,22 +740,13 @@ async function start() {
       logger.warn('EventBusClient connection failed (non-critical)', { error: err.message });
     });
 
-    // 8. Connect to RabbitMQ and start event collector
+    // 8. Start event collector via generic EventBusClient
     try {
-      const amqpConnection = await amqplib.connect(RABBITMQ_URL);
-      amqpConnection.on('error', (err) => {
-        logger.error('RabbitMQ connection error', { error: err.message });
-      });
-      amqpConnection.on('close', () => {
-        logger.warn('RabbitMQ connection closed');
-      });
-
-      const channel = await amqpConnection.createChannel();
-      const collector = new EventCollector(pool, channel, integrityChecker, eventStore, alertEngine, wsClients, metrics, publish);
+      const collector = new EventCollector(pool, _bus, integrityChecker, eventStore, alertEngine, wsClients, metrics, publish);
       await collector.start();
-      logger.info('RabbitMQ event collector started');
+      logger.info('EventBus event collector started');
     } catch (err) {
-      logger.warn('RabbitMQ connection failed, event collection disabled', { error: err.message });
+      logger.warn('EventBus event collector start failed (non-critical)', { error: err.message });
     }
 
     // 9. Start HTTP server

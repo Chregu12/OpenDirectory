@@ -14,9 +14,9 @@ const ROUTING_KEYS = [
 ];
 
 class EventCollector {
-  constructor(db, channel, integrityChecker, eventStore, alertEngine, wsClients, metrics, publishFn) {
+  constructor(db, bus, integrityChecker, eventStore, alertEngine, wsClients, metrics, publishFn) {
     this.db = db;
-    this.channel = channel;
+    this._bus = bus;
     this.integrityChecker = integrityChecker;
     this.publishFn = publishFn || null;
     this.eventStore = eventStore;
@@ -24,43 +24,22 @@ class EventCollector {
     this.wsClients = wsClients;
     this.metrics = metrics;
     this.queueName = 'audit-service-events';
-    this.exchangeName = 'opendirectory.events';
   }
 
   async start() {
     try {
-      await this.channel.assertExchange(this.exchangeName, 'topic', { durable: true });
-      await this.channel.assertQueue(this.queueName, {
-        durable: true,
-        arguments: {
-          'x-message-ttl': 86400000, // 24 hours
-          'x-max-length': 100000,
-        },
-      });
-
-      for (const key of ROUTING_KEYS) {
-        await this.channel.bindQueue(this.queueName, this.exchangeName, key);
-        logger.info('Bound queue to routing key', { queue: this.queueName, routingKey: key });
-      }
-
-      this.channel.prefetch(10);
-
-      this.channel.consume(this.queueName, async (msg) => {
-        if (!msg) return;
-
+      await this._bus.subscribe(this.queueName, ROUTING_KEYS, async (payload, meta) => {
         try {
-          await this._processMessage(msg);
-          this.channel.ack(msg);
+          await this._processMessagePayload(payload, meta.routingKey || meta.routing_key || '');
+          if (meta.ack) await meta.ack();
         } catch (err) {
           logger.error('Failed to process audit event message', {
             error: err.message,
-            routingKey: msg.fields.routingKey,
+            routingKey: meta.routingKey || '',
           });
-          // Requeue on first failure, dead-letter on subsequent
-          this.channel.nack(msg, false, !msg.fields.redelivered);
+          if (meta.nack) await meta.nack(false);
         }
       });
-
       logger.info('Event collector started', { queue: this.queueName, routingKeys: ROUTING_KEYS });
     } catch (err) {
       logger.error('Failed to start event collector', { error: err.message });
@@ -68,16 +47,8 @@ class EventCollector {
     }
   }
 
-  async _processMessage(msg) {
-    const routingKey = msg.fields.routingKey;
-    let event;
-
-    try {
-      event = JSON.parse(msg.content.toString());
-    } catch (err) {
-      logger.error('Invalid JSON in audit event message', { routingKey, error: err.message });
-      return;
-    }
+  async _processMessagePayload(payload, routingKey) {
+    let event = typeof payload === 'string' ? JSON.parse(payload) : payload;
 
     // Derive category from routing key if not present
     if (!event.category) {

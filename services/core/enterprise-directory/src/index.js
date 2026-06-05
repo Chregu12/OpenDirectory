@@ -20,8 +20,16 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
 const Redis = require('redis');
-const amqp = require('amqplib');
 const { v4: uuidv4 } = require('uuid');
+
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'enterprise-directory' });
+async function connectBus() { await _bus.connect(); }
+// ─────────────────────────────────────────────────────────────────────────────
 const path = require('path');
 const fs = require('fs');
 
@@ -62,7 +70,7 @@ class EnterpriseDirectoryService {
     // Database connections
     this.mongodb = null;
     this.redis = null;
-    this.rabbitmq = null;
+    this.rabbitmq = null; // legacy field kept for health-check compat
     
     // Service instances
     this.activeDirectoryService = null;
@@ -217,17 +225,11 @@ class EnterpriseDirectoryService {
       await this.redis.connect();
       logger.info('🔄 Connected to Redis');
 
-      // Connect to RabbitMQ
-      this.rabbitmq = await amqp.connect(config.rabbitmq.url);
-      const channel = await this.rabbitmq.createChannel();
-      
-      // Declare exchanges
-      await channel.assertExchange(config.rabbitmq.exchanges.directory, 'topic', { durable: true });
-      await channel.assertExchange(config.rabbitmq.exchanges.events, 'topic', { durable: true });
-      await channel.assertExchange(config.rabbitmq.exchanges.policies, 'topic', { durable: true });
-      await channel.assertExchange(config.rabbitmq.exchanges.auth, 'topic', { durable: true });
-      
-      logger.info('🐰 Connected to RabbitMQ');
+      // Connect to generic event bus (fire and forget)
+      connectBus().catch((err) => {
+        logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+      });
+      logger.info('🚌 EventBusClient connecting');
 
     } catch (error) {
       logger.error('❌ Database connection failed:', error);
@@ -415,10 +417,8 @@ class EnterpriseDirectoryService {
           logger.info('✅ Redis connection closed');
         }
 
-        if (this.rabbitmq) {
-          await this.rabbitmq.close();
-          logger.info('✅ RabbitMQ connection closed');
-        }
+        await _bus.close().catch(() => {});
+        logger.info('✅ EventBusClient closed');
 
         logger.info('✅ Graceful shutdown completed');
         process.exit(0);
@@ -463,13 +463,9 @@ class EnterpriseDirectoryService {
         healthChecks.redis = 'unhealthy';
       }
 
-      // Check RabbitMQ
+      // Check event bus
       try {
-        if (this.rabbitmq && !this.rabbitmq.connection.closed) {
-          healthChecks.rabbitmq = 'healthy';
-        } else {
-          healthChecks.rabbitmq = 'unhealthy';
-        }
+        healthChecks.rabbitmq = _bus.isConnected() ? 'healthy' : 'unhealthy';
       } catch (error) {
         healthChecks.rabbitmq = 'unhealthy';
       }
