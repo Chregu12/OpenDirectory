@@ -8,7 +8,15 @@ const WebSocket = require('ws');
 const cluster = require('cluster');
 const os = require('os');
 
-// Shared RabbitMQ message bus
+// Generic event bus (publish / subscribe)
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+
+// RabbitMQ MessageBus — kept only for device-command-queue operations
+// (consumeDeviceCommands / queueDeviceCommand) which are not part of
+// the generic EventBusClient contract.
 const MessageBus = require('../../../../packages/service-contracts/src/messageBus');
 const { Events }  = require('../../../../packages/service-contracts/src/events');
 
@@ -84,7 +92,14 @@ class EnterpriseDeviceManagementService {
     // Analytics Bridge (connects agent events to AI/ML analytics)
     this.analyticsBridge = new AnalyticsBridge();
 
-    // RabbitMQ message bus — connect in background; failures must not crash service
+    // Generic event bus — used for all domain-event publishing/subscribing
+    this._eventBus = new EventBusClient({ source: 'device-service' });
+    this._eventBus.connect().catch(err => {
+      logger.warn('EventBus connect failed at startup (will retry in background)', { error: err.message });
+    });
+
+    // RabbitMQ command bus — kept only for per-device command-queue operations
+    // (consumeDeviceCommands / queueDeviceCommand). Not used for domain events.
     this.messageBus = new MessageBus();
     this.messageBus.connect(process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672').catch(err => {
       logger.warn('RabbitMQ unavailable, falling back to Redis cache for command queue', { error: err.message });
@@ -1115,8 +1130,8 @@ class EnterpriseDeviceManagementService {
       }
     });
 
-    // Publish domain event to RabbitMQ (fire-and-forget)
-    this.messageBus.publish(Events.DEVICE_ENROLLED, {
+    // Publish domain event via generic EventBusClient (fire-and-forget)
+    this._eventBus.publish(Events.DEVICE_ENROLLED, {
       deviceId:   device.id,
       hostname:   device.name,
       platform:   device.platform,
@@ -1149,8 +1164,8 @@ class EnterpriseDeviceManagementService {
       data: { rule: violation.rule, details: violation.details, severity: violation.severity }
     });
 
-    // Publish domain event to RabbitMQ (fire-and-forget)
-    this.messageBus.publish(Events.DEVICE_NON_COMPLIANT, {
+    // Publish domain event via generic EventBusClient (fire-and-forget)
+    this._eventBus.publish(Events.DEVICE_NON_COMPLIANT, {
       deviceId,
       violation: {
         rule:     violation.rule,
@@ -1386,12 +1401,12 @@ class EnterpriseDeviceManagementService {
       Object.assign(job, { status, output, error, completedAt: new Date().toISOString() });
     }
 
-    // Publish install result event to RabbitMQ (fire-and-forget)
+    // Publish install result event via generic EventBusClient (fire-and-forget)
     if (job) {
       const routingKey = status === 'success'
         ? Events.APP_INSTALL_COMPLETED
         : Events.APP_INSTALL_FAILED;
-      this.messageBus.publish(routingKey, {
+      this._eventBus.publish(routingKey, {
         jobId,
         deviceId: job.deviceId,
         appId:    job.appId,
@@ -1947,7 +1962,10 @@ class EnterpriseDeviceManagementService {
         client.terminate();
       });
 
-      // Close RabbitMQ connection gracefully
+      // Close EventBus and RabbitMQ command-bus connections gracefully
+      if (this._eventBus) {
+        await this._eventBus.close().catch(() => {});
+      }
       if (this.messageBus) {
         await this.messageBus.close().catch(() => {});
       }

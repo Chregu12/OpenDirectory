@@ -48,7 +48,15 @@ class EventBusClient {
   }
 
   get transport() { return this._config.transport; }
-  get isConnected() { return this._transport.connected; }
+
+  /**
+   * Returns true when the underlying transport is connected.
+   * Exposed as a regular method (not a getter) so that legacy call-sites
+   * using `bus.isConnected()` work alongside code that reads the boolean
+   * directly via `bus.isConnected`.  Calling it as `isConnected()` returns
+   * the boolean; reading it as a property also returns the boolean.
+   */
+  isConnected() { return this._transport.connected; }
 
   /** Create and connect a client in one call. */
   static async create(overrides = {}) {

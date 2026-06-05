@@ -2038,9 +2038,8 @@ async function start() {
   // Wire DDD Application Service + Compliance Saga
   const PolicyApplicationService = require('./application/PolicyApplicationService');
   const ComplianceSaga = require('./application/ComplianceSaga');
-  const MessageBus = require('../../../../packages/service-contracts/src/messageBus');
-  const _policyAppSvc = new PolicyApplicationService({ db, messageBus: MessageBus.getInstance(), logger });
-  const _complianceSaga = new ComplianceSaga({ messageBus: MessageBus.getInstance(), policyApplicationService: _policyAppSvc, db, logger });
+  const _policyAppSvc = new PolicyApplicationService({ db, messageBus: _bus, logger });
+  const _complianceSaga = new ComplianceSaga({ messageBus: _bus, policyApplicationService: _policyAppSvc, db, logger });
   setTimeout(() => _complianceSaga.start(), 4000);
 
   app.listen(PORT, () => {

@@ -1292,10 +1292,9 @@ class UnifiedAuthenticationService {
   start(port = process.env.PORT || 3001) {
     auditDb.initDb().catch(() => {});
     try { connectBus(); } catch (e) { console.warn('[bus] startup connect error:', e.message); }
-    // User onboarding saga
+    // User onboarding saga — uses the module-level EventBusClient (_bus)
     const { UserOnboardingSaga } = require('../../../../packages/service-contracts/src');
-    const MessageBusSingleton = require('../../../../packages/service-contracts/src/messageBus');
-    const _userSaga = new UserOnboardingSaga(MessageBusSingleton.getInstance(), { logger });
+    const _userSaga = new UserOnboardingSaga(_bus, { logger });
     setTimeout(() => _userSaga.launch().catch(e => logger.warn('[UserOnboardingSaga] ' + e.message)), 5000);
     this.server = this.app.listen(port, () => {
       logger.info(`🔐 Unified Authentication Service started on port ${port}`);
