@@ -23,7 +23,8 @@ apiGateway:
     name: api-gateway
   service:
     type: ClusterIP
-    port: 3000
+    port: 80
+    appPort: 3000
   resources:
     requests:
       cpu: "100m"
@@ -41,7 +42,8 @@ auth:
     name: authentication-service
   service:
     type: ClusterIP
-    port: 3001
+    port: 80
+    appPort: 3001
   resources:
     requests:
       cpu: "100m"
@@ -57,7 +59,8 @@ identity:
     name: identity-service
   service:
     type: ClusterIP
-    port: 3002
+    port: 80
+    appPort: 3002
   resources:
     requests:
       cpu: "100m"
@@ -73,7 +76,8 @@ device:
     name: device-service
   service:
     type: ClusterIP
-    port: 3003
+    port: 80
+    appPort: 3003
   resources:
     requests:
       cpu: "100m"
@@ -89,7 +93,8 @@ policy:
     name: policy-service
   service:
     type: ClusterIP
-    port: 3004
+    port: 80
+    appPort: 3004
   resources:
     requests:
       cpu: "50m"
@@ -105,7 +110,8 @@ monitoring:
     name: monitoring-service
   service:
     type: ClusterIP
-    port: 3005
+    port: 80
+    appPort: 3005
   resources:
     requests:
       cpu: "100m"
@@ -121,7 +127,8 @@ mdm:
     name: apple-mdm
   service:
     type: ClusterIP
-    port: 3006
+    port: 80
+    appPort: 3006
   resources:
     requests:
       cpu: "50m"
@@ -137,7 +144,8 @@ backup:
     name: backup-service
   service:
     type: ClusterIP
-    port: 3011
+    port: 80
+    appPort: 3011
   resources:
     requests:
       cpu: "50m"
@@ -153,7 +161,8 @@ notification:
     name: notification-service
   service:
     type: ClusterIP
-    port: 3020
+    port: 80
+    appPort: 3020
   resources:
     requests:
       cpu: "50m"
@@ -169,7 +178,8 @@ appStore:
     name: app-store
   service:
     type: ClusterIP
-    port: 3906
+    port: 80
+    appPort: 3906
   persistence:
     enabled: true
     size: "20Gi"

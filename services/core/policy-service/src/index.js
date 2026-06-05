@@ -1006,7 +1006,7 @@ app.post('/api/gpo/:id/apply', async (req, res) => {
   const gpo = gpos.get(req.params.id);
   if (!gpo) return res.status(404).json({ error: 'GPO not found' });
 
-  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://localhost:3010';
+  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider';
 
   try {
     // Get all devices from registry

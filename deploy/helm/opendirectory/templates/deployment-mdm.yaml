@@ -41,7 +41,7 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           ports:
             - name: http
-              containerPort: {{ .Values.mdm.service.port }}
+              containerPort: {{ .Values.mdm.service.appPort }}
               protocol: TCP
             - name: metrics
               containerPort: 9090
@@ -53,7 +53,7 @@ spec:
                 name: {{ include "opendirectory.fullname" . }}-secret
           env:
             - name: PORT
-              value: {{ .Values.mdm.service.port | quote }}
+              value: {{ .Values.mdm.service.appPort | quote }}
           livenessProbe:
             httpGet:
               path: /health
