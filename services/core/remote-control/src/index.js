@@ -130,9 +130,9 @@ class RemoteControlOrchestrator {
         max_concurrent_sessions: 50
       },
       integrations: {
-        mobile_management_url: 'http://mobile-management:3013',
-        license_management_url: 'http://license-management:3018',
-        auth_service_url: 'http://authentication-service:3001'
+        mobile_management_url: 'http://mobile-management',
+        license_management_url: 'http://license-management',
+        auth_service_url: 'http://authentication-service'
       },
       performance: {
         compression_enabled: true,

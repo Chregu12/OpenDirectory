@@ -647,7 +647,7 @@ class UnifiedAuthenticationService {
       }
 
       // Sync to Kerberos KDC
-      const KDC_API = process.env.KDC_API_URL || 'http://kerberos-kdc:3013';
+      const KDC_API = process.env.KDC_API_URL || 'http://kerberos-kdc';
       fetch(`${KDC_API}/api/kerberos/sync-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -977,7 +977,7 @@ class UnifiedAuthenticationService {
       await this.auditService.logSecurityEvent('password_changed', userId, req);
 
       // Sync new password to Kerberos KDC
-      const KDC_API_CP = process.env.KDC_API_URL || 'http://kerberos-kdc:3013';
+      const KDC_API_CP = process.env.KDC_API_URL || 'http://kerberos-kdc';
       fetch(`${KDC_API_CP}/api/kerberos/sync-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

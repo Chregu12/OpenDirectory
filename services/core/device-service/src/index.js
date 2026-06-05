@@ -1304,7 +1304,7 @@ class EnterpriseDeviceManagementService {
       }
 
       // Build the download URL if only packageId given
-      const APP_STORE_URL = process.env.APP_STORE_URL || 'http://app-store:3906';
+      const APP_STORE_URL = process.env.APP_STORE_URL || 'http://app-store';
       const pkgDownloadUrl = downloadUrl || `${APP_STORE_URL}/api/appstore/packages/${packageId}/download`;
 
       const jobId = `install-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
