@@ -5,7 +5,8 @@
  *
  * Strategy:
  *   - Set env vars before requiring any modules so serviceClient picks up mock URLs.
- *   - Use nock to intercept downstream HTTP calls (works with node-fetch v3).
+ *   - Use jest.spyOn on serviceClient.call / serviceClient.ping to intercept
+ *     downstream HTTP calls (avoids the node-fetch v3 ESM / jest incompatibility).
  *   - Send real HTTP requests via supertest against the Express app.
  */
 
@@ -20,40 +21,72 @@ process.env.PIM_SERVICE_URL       = 'http://pim-mock';
 process.env.MDM_SERVICE_URL       = 'http://mdm-mock';
 process.env.APP_STORE_SERVICE_URL = 'http://appstore-mock';
 
-const request = require('supertest');
-const nock    = require('nock');
-const app     = require('../index');
+const request       = require('supertest');
+const serviceClient = require('../utils/serviceClient');
+const app           = require('../index');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const AUTH      = 'http://auth-mock';
-const DIRECTORY = 'http://directory-mock';
-const KERBEROS  = 'http://kerberos-mock';
-const SAMBA     = 'http://samba-mock';
-const DEVICE    = 'http://device-mock';
-const POLICY    = 'http://policy-mock';
-const PIM       = 'http://pim-mock';
-const MDM       = 'http://mdm-mock';
-
 /** Returns true if the string looks like a UUID v4. */
-const isUuid = (s) => typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+const isUuid = (s) =>
+  typeof s === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 
 /** Returns true if the string looks like a 64-char hex string. */
 const is64Hex = (s) => typeof s === 'string' && /^[0-9a-f]{64}$/i.test(s);
 
-// ── Global setup / teardown ───────────────────────────────────────────────────
+/**
+ * Build a mock call() implementation from a routing table.
+ *
+ * Each route: { service?, method?, pathPattern, response, times? }
+ *   - pathPattern : exact string or RegExp
+ *   - response    : value to resolve (or Error instance to reject)
+ *   - times       : max match count (default Infinity)
+ *
+ * Unmatched calls throw so tests surface unexpected downstream calls.
+ */
+function buildCallMock(routes) {
+  const counters = routes.map(() => 0);
+  return jest.fn(async (service, method, path) => {
+    for (let i = 0; i < routes.length; i++) {
+      const r = routes[i];
+      if (counters[i] >= (r.times ?? Infinity)) continue;
+      const svcMatch  = !r.service || r.service === service;
+      const methMatch = !r.method  || r.method.toUpperCase() === method.toUpperCase();
+      const pathMatch = r.pathPattern instanceof RegExp
+        ? r.pathPattern.test(path)
+        : path === r.pathPattern;
+      if (svcMatch && methMatch && pathMatch) {
+        counters[i]++;
+        if (r.response instanceof Error) throw r.response;
+        return r.response;
+      }
+    }
+    const err = new Error(`[mock] No route for: ${service} ${method} ${path}`);
+    throw err;
+  });
+}
 
-beforeAll(() => {
-  nock.disableNetConnect();
-  nock.enableNetConnect('127.0.0.1');
+/** Convenience: make an HTTP 4xx/5xx error that the orchestrators expect. */
+function httpErr(service, status, method, path) {
+  const err = new Error(`Service "${service}" returned ${status} for ${method} ${path}`);
+  err.status = status;
+  return err;
+}
+
+// ── Spy setup ─────────────────────────────────────────────────────────────────
+
+let callSpy;
+let pingSpy;
+
+beforeEach(() => {
+  callSpy = jest.spyOn(serviceClient, 'call');
+  pingSpy = jest.spyOn(serviceClient, 'ping');
 });
 
 afterEach(() => {
-  nock.cleanAll();
-});
-
-afterAll(() => {
-  nock.enableNetConnect();
+  callSpy.mockRestore();
+  pingSpy.mockRestore();
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -63,10 +96,12 @@ afterAll(() => {
 describe('Service Principal Lifecycle', () => {
 
   test('creates SP with all downstream services successful', async () => {
-    nock(SAMBA).post('/api/computers/join').reply(201, { dn: 'CN=test-app$,CN=Computers,DC=opendirectory,DC=local' });
-    nock(KERBEROS).post('/api/principals').reply(201, { principal: 'app/test-app' });
-    nock(AUTH).post('/api/service-accounts').reply(201, { id: 'test-app', name: 'test-app' });
-    nock(PIM).post(/\/api\/v1\/permissions\/users\/.*\/assign/).reply(200, { assigned: true });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'samba',    method: 'POST', pathPattern: '/api/computers/join',                             response: { dn: 'CN=test-app$,CN=Computers,DC=opendirectory,DC=local' } },
+      { service: 'kerberos', method: 'POST', pathPattern: '/api/principals',                                  response: { principal: 'app/test-app' } },
+      { service: 'auth',     method: 'POST', pathPattern: '/api/service-accounts',                            response: { id: 'test-app', name: 'test-app' } },
+      { service: 'pim',      method: 'POST', pathPattern: /\/api\/v1\/permissions\/users\/.*\/assign/,        response: { assigned: true } },
+    ]));
 
     const res = await request(app)
       .post('/api/quick/service-principals')
@@ -79,10 +114,12 @@ describe('Service Principal Lifecycle', () => {
   });
 
   test('creates SP even when Kerberos is down (partial success)', async () => {
-    nock(SAMBA).post('/api/computers/join').reply(201, { dn: 'CN=test-app2$,CN=Computers,DC=opendirectory,DC=local' });
-    nock(KERBEROS).post('/api/principals').reply(503, { error: 'Service Unavailable' });
-    nock(AUTH).post('/api/service-accounts').reply(201, { id: 'test-app2', name: 'test-app2' });
-    nock(PIM).post(/\/api\/v1\/permissions\/users\/.*\/assign/).reply(200, { assigned: true });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'samba',    method: 'POST', pathPattern: '/api/computers/join',                      response: { dn: 'CN=test-app2$,CN=Computers,DC=opendirectory,DC=local' } },
+      { service: 'kerberos', method: 'POST', pathPattern: '/api/principals',                           response: httpErr('kerberos', 503, 'POST', '/api/principals') },
+      { service: 'auth',     method: 'POST', pathPattern: '/api/service-accounts',                     response: { id: 'test-app2', name: 'test-app2' } },
+      { service: 'pim',      method: 'POST', pathPattern: /\/api\/v1\/permissions\/users\/.*\/assign/, response: { assigned: true } },
+    ]));
 
     const res = await request(app)
       .post('/api/quick/service-principals')
@@ -90,23 +127,23 @@ describe('Service Principal Lifecycle', () => {
 
     expect(res.status).toBe(207);
     expect(res.body.success).toBe(false);
-    // clientId is still present (SP partially created)
     expect(isUuid(res.body.clientId)).toBe(true);
-    // At least one failed step references kerberos
+
     const failedSteps = res.body.completedSteps.filter(s => !s.ok);
     expect(failedSteps.length).toBeGreaterThan(0);
     const kerberosStep = failedSteps.find(s => s.name === 'create-kerberos-spn');
     expect(kerberosStep).toBeDefined();
   });
 
-  test('rotates secret — new secret differs from previous', async () => {
+  test('rotates secret — new secret is 64-char hex', async () => {
     const clientId = '11111111-1111-4111-a111-111111111111';
     const appName  = 'rotate-test';
 
-    // Rotation: fetch account details, then update auth, then update kerberos
-    nock(AUTH).get(`/api/service-accounts/${clientId}`).reply(200, { name: appName, id: clientId });
-    nock(AUTH).patch(`/api/service-accounts/${clientId}`).reply(200, { updated: true });
-    nock(KERBEROS).patch(`/api/principals/app%2F${appName}`).reply(200, { updated: true });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'auth',     method: 'GET',   pathPattern: `/api/service-accounts/${clientId}`, response: { name: appName, id: clientId } },
+      { service: 'auth',     method: 'PATCH', pathPattern: `/api/service-accounts/${clientId}`, response: { updated: true } },
+      { service: 'kerberos', method: 'PATCH', pathPattern: /\/api\/principals\/.+/,             response: { updated: true } },
+    ]));
 
     const res = await request(app)
       .post(`/api/quick/service-principals/${clientId}/rotate-secret`);
@@ -117,35 +154,39 @@ describe('Service Principal Lifecycle', () => {
   });
 
   test('deletes SP — cleanup called on all services', async () => {
-    const clientId = '22222222-2222-4222-a222-222222222222';
-    const appName  = 'delete-test';
+    const clientId    = '22222222-2222-4222-a222-222222222222';
+    const appName     = 'delete-test';
+    const pimRevoke   = jest.fn().mockResolvedValue({ revoked: true });
+    const authDelete  = jest.fn().mockResolvedValue({ deleted: true });
+    const kerbDelete  = jest.fn().mockResolvedValue({ deleted: true });
+    const sambaDelete = jest.fn().mockResolvedValue({ deleted: true });
 
-    // deleteServicePrincipal fetches account name first, then revokes/deletes everywhere
-    nock(AUTH).get(`/api/service-accounts/${clientId}`).reply(200, { name: appName });
-    const pimRevoke = nock(PIM).post(`/api/v1/permissions/users/${clientId}/revoke-all`).reply(200, { revoked: true });
-    const authDel  = nock(AUTH).delete(`/api/service-accounts/${clientId}`).reply(200, { deleted: true });
-    const kerbDel  = nock(KERBEROS).delete(`/api/principals/app%2F${appName}`).reply(200, { deleted: true });
-    const sambaDel = nock(SAMBA).delete(`/api/computers/${appName}%24`).reply(200, { deleted: true });
+    callSpy.mockImplementation(async (service, method, path) => {
+      if (service === 'auth'     && method === 'GET'    && path.includes(clientId)) return { name: appName };
+      if (service === 'pim'      && method === 'POST'   && path.includes('revoke-all')) return pimRevoke();
+      if (service === 'auth'     && method === 'DELETE')                               return authDelete();
+      if (service === 'kerberos' && method === 'DELETE')                               return kerbDelete();
+      if (service === 'samba'    && method === 'DELETE')                               return sambaDelete();
+      throw new Error(`[mock] Unmatched: ${service} ${method} ${path}`);
+    });
 
     const res = await request(app)
       .delete(`/api/quick/service-principals/${clientId}`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    // Verify all mocks were satisfied (all cleanup endpoints were called)
-    expect(pimRevoke.isDone()).toBe(true);
-    expect(authDel.isDone()).toBe(true);
-    expect(kerbDel.isDone()).toBe(true);
-    expect(sambaDel.isDone()).toBe(true);
+    expect(pimRevoke).toHaveBeenCalledTimes(1);
+    expect(authDelete).toHaveBeenCalledTimes(1);
+    expect(kerbDelete).toHaveBeenCalledTimes(1);
+    expect(sambaDelete).toHaveBeenCalledTimes(1);
   });
 
   test('GET /api/quick/service-principals returns list', async () => {
-    nock(AUTH).get('/api/service-accounts').reply(200, {
-      accounts: [
-        { name: 'app1', clientId: 'aaa' },
-        { name: 'app2', clientId: 'bbb' },
-      ],
-    });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'auth', method: 'GET', pathPattern: '/api/service-accounts', response: {
+        accounts: [{ name: 'app1', clientId: 'aaa' }, { name: 'app2', clientId: 'bbb' }],
+      }},
+    ]));
 
     const res = await request(app).get('/api/quick/service-principals');
 
@@ -153,6 +194,49 @@ describe('Service Principal Lifecycle', () => {
     expect(res.body.success).toBe(true);
     expect(Array.isArray(res.body.data)).toBe(true);
     expect(res.body.data.length).toBe(2);
+  });
+
+  test('GET /api/quick/service-principals/:id returns SP details', async () => {
+    const clientId = '33333333-3333-4333-a333-333333333333';
+
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'auth', method: 'GET', pathPattern: `/api/service-accounts/${clientId}`, response: { name: 'test-app', id: clientId } },
+      { service: 'pim',  method: 'GET', pathPattern: /\/api\/v1\/permissions\/users\/.+/, response: { permissions: ['read-users'] } },
+    ]));
+
+    const res = await request(app).get(`/api/quick/service-principals/${clientId}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.clientId).toBe(clientId);
+    expect(res.body.account).toBeDefined();
+  });
+
+  test('listServicePrincipals — returns empty array when auth is down', async () => {
+    callSpy.mockImplementation(() => { throw new Error('connect ECONNREFUSED'); });
+
+    const res = await request(app).get('/api/quick/service-principals');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(false);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data.length).toBe(0);
+  });
+
+  test('creates SP with no permissions — skips PIM step', async () => {
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'samba',    method: 'POST', pathPattern: '/api/computers/join',   response: { dn: 'CN=no-perms$,CN=Computers,DC=opendirectory,DC=local' } },
+      { service: 'kerberos', method: 'POST', pathPattern: '/api/principals',        response: { principal: 'app/no-perms' } },
+      { service: 'auth',     method: 'POST', pathPattern: '/api/service-accounts',  response: { id: 'no-perms', name: 'no-perms' } },
+    ]));
+
+    const res = await request(app)
+      .post('/api/quick/service-principals')
+      .send({ appName: 'no-perms' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(isUuid(res.body.clientId)).toBe(true);
   });
 });
 
@@ -167,31 +251,39 @@ describe('Device Enrollment', () => {
   for (const platform of PLATFORMS) {
     test(`enrolls ${platform} device successfully`, async () => {
       const deviceName = `test-${platform}`;
+      const routes = [
+        { service: 'device', method: 'POST', pathPattern: '/api/devices',        response: { id: 'dev-001', name: deviceName, platform } },
+        { service: 'samba',  method: 'POST', pathPattern: '/api/computers/join', response: { dn: `CN=${deviceName},CN=Computers,DC=opendirectory,DC=local` } },
+      ];
 
-      // Common mocks
-      nock(DEVICE).post('/api/devices').reply(201, { id: 'dev-001', name: deviceName, platform });
-      nock(SAMBA).post('/api/computers/join').reply(201, { dn: `CN=${deviceName},CN=Computers,DC=opendirectory,DC=local` });
-
-      // Platform-specific mocks
       if (platform === 'macos') {
-        nock(MDM).post('/api/mdm/enroll').reply(200, { enrollmentUrl: 'mdmEnroll://enroll?device=dev-001' });
-        nock(POLICY).post('/api/policies/assign').reply(200, { policies: ['baseline'] });
+        routes.push(
+          { service: 'mdm',    method: 'POST', pathPattern: '/api/mdm/enroll',      response: { enrollmentUrl: 'mdmEnroll://enroll?device=dev-001' } },
+          { service: 'policy', method: 'POST', pathPattern: '/api/policies/assign', response: { policies: ['baseline'] } },
+        );
       } else if (platform === 'windows') {
-        nock(DIRECTORY).post('/api/winrm/configure').reply(200, { configured: true });
-        nock(DIRECTORY).post('/api/gpo/baseline/apply').reply(200, { applied: true });
+        routes.push(
+          { service: 'directory', method: 'POST', pathPattern: '/api/winrm/configure',    response: { configured: true } },
+          { service: 'directory', method: 'POST', pathPattern: '/api/gpo/baseline/apply', response: { applied: true } },
+        );
       } else if (platform === 'linux') {
-        nock(DIRECTORY).post('/api/sssd/config').reply(200, { config: '# sssd.conf' });
-        nock(KERBEROS).post('/api/keytabs').reply(200, { keytabB64: 'dGVzdA==' });
-        nock(POLICY).post('/api/policies/assign').reply(200, { policies: ['hardening'] });
+        routes.push(
+          { service: 'directory', method: 'POST', pathPattern: '/api/sssd/config',      response: { config: '# sssd.conf' } },
+          { service: 'kerberos',  method: 'POST', pathPattern: '/api/keytabs',           response: { keytabB64: 'dGVzdA==' } },
+          { service: 'policy',    method: 'POST', pathPattern: '/api/policies/assign',   response: { policies: ['hardening'] } },
+        );
       } else if (platform === 'ios' || platform === 'android') {
-        nock(MDM).post('/api/mdm/enroll').reply(200, { enrollmentUrl: `mdmenroll://enroll?device=dev-001&platform=${platform}` });
+        routes.push(
+          { service: 'mdm', method: 'POST', pathPattern: '/api/mdm/enroll', response: { enrollmentUrl: `mdmenroll://enroll?device=dev-001&platform=${platform}` } },
+        );
       }
+
+      callSpy.mockImplementation(buildCallMock(routes));
 
       const res = await request(app)
         .post('/api/quick/devices/enroll')
         .send({ platform, deviceName });
 
-      // Accept 201 (full success) or 207 (partial - some non-critical steps may fail in test env)
       expect([200, 201, 207]).toContain(res.status);
       expect(res.body.deviceId).toBeDefined();
       expect(res.body.platform).toBe(platform);
@@ -201,57 +293,46 @@ describe('Device Enrollment', () => {
   }
 
   test('bulk enroll 3 devices — 2 succeed, 1 fails', async () => {
-    const devices = [
-      { platform: 'linux', deviceName: 'bulk-linux-1' },
-      { platform: 'linux', deviceName: 'bulk-linux-2' },
-      { platform: 'linux', deviceName: 'bulk-linux-3' },
-    ];
+    let deviceCallCount = 0;
 
-    // Device 1: success
-    nock(DEVICE).post('/api/devices').reply(201, { id: 'bulk-dev-1' });
-    nock(SAMBA).post('/api/computers/join').reply(201, { dn: 'CN=bulk-linux-1,CN=Computers,DC=opendirectory,DC=local' });
-    nock(DIRECTORY).post('/api/sssd/config').reply(200, { config: '# sssd.conf' });
-    nock(KERBEROS).post('/api/keytabs').reply(200, { keytabB64: 'dGVzdA==' });
-    nock(POLICY).post('/api/policies/assign').reply(200, { policies: [] });
-
-    // Device 2: success
-    nock(DEVICE).post('/api/devices').reply(201, { id: 'bulk-dev-2' });
-    nock(SAMBA).post('/api/computers/join').reply(201, { dn: 'CN=bulk-linux-2,CN=Computers,DC=opendirectory,DC=local' });
-    nock(DIRECTORY).post('/api/sssd/config').reply(200, { config: '# sssd.conf' });
-    nock(KERBEROS).post('/api/keytabs').reply(200, { keytabB64: 'dGVzdA==' });
-    nock(POLICY).post('/api/policies/assign').reply(200, { policies: [] });
-
-    // Device 3: device-service fails → enrollDevice returns success:false
-    nock(DEVICE).post('/api/devices').reply(503, { error: 'Service Unavailable' });
-    nock(SAMBA).post('/api/computers/join').reply(201, { dn: 'CN=bulk-linux-3,CN=Computers,DC=opendirectory,DC=local' });
-    nock(DIRECTORY).post('/api/sssd/config').reply(200, { config: '# sssd.conf' });
-    nock(KERBEROS).post('/api/keytabs').reply(200, { keytabB64: 'dGVzdA==' });
-    nock(POLICY).post('/api/policies/assign').reply(200, { policies: [] });
+    callSpy.mockImplementation(async (service, method, path) => {
+      if (service === 'device' && method === 'POST') {
+        deviceCallCount++;
+        if (deviceCallCount === 3) throw httpErr('device', 503, 'POST', '/api/devices');
+        return { id: `bulk-dev-${deviceCallCount}` };
+      }
+      if (service === 'samba'     && method === 'POST') return { dn: 'CN=x,CN=Computers,DC=opendirectory,DC=local' };
+      if (service === 'directory' && method === 'POST') return { config: '# sssd.conf' };
+      if (service === 'kerberos'  && method === 'POST') return { keytabB64: 'dGVzdA==' };
+      if (service === 'policy'    && method === 'POST') return { policies: [] };
+      throw new Error(`[mock] Unmatched: ${service} ${method} ${path}`);
+    });
 
     const res = await request(app)
       .post('/api/quick/devices/bulk-enroll')
-      .send({ devices });
+      .send({ devices: [
+        { platform: 'linux', deviceName: 'bulk-linux-1' },
+        { platform: 'linux', deviceName: 'bulk-linux-2' },
+        { platform: 'linux', deviceName: 'bulk-linux-3' },
+      ]});
 
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(3);
     expect(Array.isArray(res.body.results)).toBe(true);
     expect(res.body.results.length).toBe(3);
-
-    // At least the first two should succeed, the third should fail
-    const successes = res.body.results.filter(r => r.success);
-    const failures  = res.body.results.filter(r => !r.success);
-    expect(successes.length).toBeGreaterThanOrEqual(2);
-    expect(failures.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.results.filter(r => r.success).length).toBeGreaterThanOrEqual(2);
+    expect(res.body.results.filter(r => !r.success).length).toBeGreaterThanOrEqual(1);
   });
 
   test('enrollment status check', async () => {
     const deviceId = 'status-device-abc';
 
-    nock(DEVICE).get(`/api/devices/${deviceId}`).reply(200, { id: deviceId, status: 'enrolled', platform: 'macos' });
-    nock(MDM).get(`/api/mdm/devices/${deviceId}/status`).reply(200, { mdmStatus: 'active', managed: true });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'device', method: 'GET', pathPattern: `/api/devices/${deviceId}`,            response: { id: deviceId, status: 'enrolled', platform: 'macos' } },
+      { service: 'mdm',    method: 'GET', pathPattern: `/api/mdm/devices/${deviceId}/status`, response: { mdmStatus: 'active', managed: true } },
+    ]));
 
-    const res = await request(app)
-      .get(`/api/quick/devices/${deviceId}/enrollment-status`);
+    const res = await request(app).get(`/api/quick/devices/${deviceId}/enrollment-status`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -259,13 +340,16 @@ describe('Device Enrollment', () => {
     expect(res.body.device).toBeDefined();
   });
 
-  test('unenroll with wipe=false — no MDM wipe call', async () => {
+  test('unenroll with wipe=false — MDM wipe NOT called', async () => {
     const deviceId = 'no-wipe-device';
+    const wipeCall = jest.fn().mockResolvedValue({ wiped: true });
 
-    // Only remove-mdm-enrollment and remove-device-record should be called
-    const mdmWipeScope = nock(MDM).post(`/api/mdm/devices/${deviceId}/wipe`).reply(200, { wiped: true });
-    nock(MDM).delete(`/api/mdm/devices/${deviceId}`).reply(200, { removed: true });
-    nock(DEVICE).delete(`/api/devices/${deviceId}`).reply(200, { deleted: true });
+    callSpy.mockImplementation(async (service, method, path) => {
+      if (service === 'mdm'    && method === 'POST'   && path.includes('/wipe')) return wipeCall();
+      if (service === 'mdm'    && method === 'DELETE')                            return { removed: true };
+      if (service === 'device' && method === 'DELETE')                            return { deleted: true };
+      throw new Error(`[mock] Unmatched: ${service} ${method} ${path}`);
+    });
 
     const res = await request(app)
       .post(`/api/quick/devices/${deviceId}/unenroll`)
@@ -273,18 +357,19 @@ describe('Device Enrollment', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    // Wipe endpoint should NOT have been called
-    expect(mdmWipeScope.isDone()).toBe(false);
-    // Clean up the unused interceptor
-    nock.cleanAll();
+    expect(wipeCall).not.toHaveBeenCalled();
   });
 
   test('unenroll with wipe=true — MDM wipe called', async () => {
     const deviceId = 'wipe-device';
+    const wipeCall = jest.fn().mockResolvedValue({ wiped: true });
 
-    const mdmWipeScope = nock(MDM).post(`/api/mdm/devices/${deviceId}/wipe`).reply(200, { wiped: true });
-    nock(MDM).delete(`/api/mdm/devices/${deviceId}`).reply(200, { removed: true });
-    nock(DEVICE).delete(`/api/devices/${deviceId}`).reply(200, { deleted: true });
+    callSpy.mockImplementation(async (service, method, path) => {
+      if (service === 'mdm'    && method === 'POST'   && path.includes('/wipe')) return wipeCall();
+      if (service === 'mdm'    && method === 'DELETE')                            return { removed: true };
+      if (service === 'device' && method === 'DELETE')                            return { deleted: true };
+      throw new Error(`[mock] Unmatched: ${service} ${method} ${path}`);
+    });
 
     const res = await request(app)
       .post(`/api/quick/devices/${deviceId}/unenroll`)
@@ -293,8 +378,26 @@ describe('Device Enrollment', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.wiped).toBe(true);
-    // Wipe endpoint SHOULD have been called
-    expect(mdmWipeScope.isDone()).toBe(true);
+    expect(wipeCall).toHaveBeenCalledTimes(1);
+  });
+
+  test('getEnrollmentStatus — warnings when MDM is down', async () => {
+    const deviceId = 'mdm-down-device';
+
+    callSpy.mockImplementation(async (service, method) => {
+      if (service === 'device' && method === 'GET') return { id: deviceId, status: 'enrolled' };
+      if (service === 'mdm'    && method === 'GET') throw new Error('MDM service connection refused');
+      throw new Error(`[mock] Unmatched: ${service} ${method}`);
+    });
+
+    const res = await request(app).get(`/api/quick/devices/${deviceId}/enrollment-status`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.device).toBeDefined();
+    expect(res.body.mdmStatus).toBeNull();
+    expect(Array.isArray(res.body.warnings)).toBe(true);
+    expect(res.body.warnings.length).toBeGreaterThan(0);
   });
 });
 
@@ -304,32 +407,33 @@ describe('Device Enrollment', () => {
 
 describe('User Lifecycle', () => {
 
-  function mockFullOnboard({ notificationFail = false } = {}) {
-    nock(DIRECTORY).post('/api/users').reply(201, { id: 'user-123', dn: 'CN=John Doe,OU=Engineering,OU=Users,DC=opendirectory,DC=local' });
-    nock(AUTH).post('/api/users').reply(201, { id: 'user-123', temporaryPassword: 'Temp@123' });
-    // standard role → auth POST /api/users/roles
-    nock(AUTH).post('/api/users/roles').reply(200, { assigned: true });
-    nock(SAMBA).post(/\/api\/groups\/.*\/members/).reply(200, { added: true });
-    nock(POLICY).post('/api/policies/assign').reply(200, { policies: ['user-baseline'] });
-    if (notificationFail) {
-      nock(AUTH).post('/api/notifications').reply(503, { error: 'Notification service down' });
-    } else {
-      nock(AUTH).post('/api/notifications').reply(200, { sent: true });
-    }
+  function buildOnboardMock({ notificationFail = false, directoryFail = false } = {}) {
+    return buildCallMock([
+      {
+        service: 'directory', method: 'POST', pathPattern: '/api/users',
+        response: directoryFail
+          ? httpErr('directory', 500, 'POST', '/api/users')
+          : { id: 'user-123', dn: 'CN=John Doe,OU=Engineering,OU=Users,DC=opendirectory,DC=local' },
+      },
+      { service: 'auth',   method: 'POST', pathPattern: '/api/users',       response: { id: 'user-123' } },
+      { service: 'auth',   method: 'POST', pathPattern: '/api/users/roles', response: { assigned: true } },
+      { service: 'samba',  method: 'POST', pathPattern: /\/api\/groups\/.*\/members/, response: { added: true } },
+      { service: 'policy', method: 'POST', pathPattern: '/api/policies/assign', response: { policies: ['user-baseline'] } },
+      {
+        service: 'auth', method: 'POST', pathPattern: '/api/notifications',
+        response: notificationFail
+          ? httpErr('auth', 503, 'POST', '/api/notifications')
+          : { sent: true },
+      },
+    ]);
   }
 
-  test('onboards new employee — all 7 steps complete', async () => {
-    mockFullOnboard();
+  test('onboards new employee — all steps complete', async () => {
+    callSpy.mockImplementation(buildOnboardMock());
 
     const res = await request(app)
       .post('/api/quick/users/onboard')
-      .send({
-        firstName:  'John',
-        lastName:   'Doe',
-        email:      'john@test.com',
-        department: 'Engineering',
-        role:       'standard',
-      });
+      .send({ firstName: 'John', lastName: 'Doe', email: 'john@test.com', department: 'Engineering', role: 'standard' });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
@@ -338,47 +442,25 @@ describe('User Lifecycle', () => {
   });
 
   test('onboards user — notification failure is non-blocking', async () => {
-    mockFullOnboard({ notificationFail: true });
+    callSpy.mockImplementation(buildOnboardMock({ notificationFail: true }));
 
     const res = await request(app)
       .post('/api/quick/users/onboard')
-      .send({
-        firstName:  'Jane',
-        lastName:   'Smith',
-        email:      'jane@test.com',
-        department: 'Engineering',
-        role:       'standard',
-      });
+      .send({ firstName: 'Jane', lastName: 'Smith', email: 'jane@test.com', department: 'Engineering', role: 'standard' });
 
-    // Notification failure means not all steps succeeded → 207
     expect(res.status).toBe(207);
-    // But user was still created (success refers to all steps, not the notification)
     expect(res.body.userId).toBeDefined();
-    // Warnings should mention the notification failure
-    const warnings = res.body.warnings || [];
-    expect(warnings.length).toBeGreaterThan(0);
+    expect(Array.isArray(res.body.warnings)).toBe(true);
+    expect(res.body.warnings.length).toBeGreaterThan(0);
   });
 
-  test('onboards user — critical step fails returns 207', async () => {
-    // enterprise-directory user creation fails
-    nock(DIRECTORY).post('/api/users').reply(500, { error: 'Internal Server Error' });
-    nock(AUTH).post('/api/users').reply(201, { id: 'user-456' });
-    nock(AUTH).post('/api/users/roles').reply(200, { assigned: true });
-    nock(SAMBA).post(/\/api\/groups\/.*\/members/).reply(200, { added: true });
-    nock(POLICY).post('/api/policies/assign').reply(200, { policies: [] });
-    nock(AUTH).post('/api/notifications').reply(200, { sent: true });
+  test('onboards user — critical step (AD user) fails returns 207', async () => {
+    callSpy.mockImplementation(buildOnboardMock({ directoryFail: true }));
 
     const res = await request(app)
       .post('/api/quick/users/onboard')
-      .send({
-        firstName:  'Bob',
-        lastName:   'Builder',
-        email:      'bob@test.com',
-        department: 'Engineering',
-        role:       'standard',
-      });
+      .send({ firstName: 'Bob', lastName: 'Builder', email: 'bob@test.com', department: 'Engineering', role: 'standard' });
 
-    // At least one step failed → 207
     expect(res.status).toBe(207);
     expect(res.body.success).toBe(false);
     expect(res.body.failedAt).toBe('create-ad-user');
@@ -387,23 +469,16 @@ describe('User Lifecycle', () => {
   test('offboards user — revokes all devices', async () => {
     const userId = 'offboard-user-111';
 
-    nock(DIRECTORY).post(`/api/users/${userId}/disable`).reply(200, { disabled: true });
-    nock(PIM).post(`/api/v1/permissions/users/${userId}/revoke-all`).reply(200, { revoked: true });
-    nock(AUTH).patch(`/api/users/${userId}`).reply(200, { disabled: true });
-    // unassign-devices: GET devices for user
-    nock(DEVICE).get(`/api/devices?assignedUser=${userId}`).reply(200, {
-      devices: [
-        { id: 'dev-a' },
-        { id: 'dev-b' },
-      ],
-    });
-    // Patch each device
-    nock(DEVICE).patch('/api/devices/dev-a').reply(200, { updated: true });
-    nock(DEVICE).patch('/api/devices/dev-b').reply(200, { updated: true });
-    // remove-from-groups
-    nock(SAMBA).get(`/api/users/${userId}/groups`).reply(200, { groups: [] });
-    // archive-home-directory
-    nock(DIRECTORY).post(`/api/users/${userId}/archive`).reply(200, { archived: true });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'directory', method: 'POST',  pathPattern: `/api/users/${userId}/disable`,              response: { disabled: true } },
+      { service: 'pim',       method: 'POST',  pathPattern: /\/api\/v1\/permissions\/users\/.*\/revoke-all/, response: { revoked: true } },
+      { service: 'auth',      method: 'PATCH', pathPattern: `/api/users/${userId}`,                      response: { disabled: true } },
+      { service: 'device',    method: 'GET',   pathPattern: /\/api\/devices\?assignedUser=.+/,           response: { devices: [{ id: 'dev-a' }, { id: 'dev-b' }] } },
+      { service: 'device',    method: 'PATCH', pathPattern: '/api/devices/dev-a',                        response: { updated: true } },
+      { service: 'device',    method: 'PATCH', pathPattern: '/api/devices/dev-b',                        response: { updated: true } },
+      { service: 'samba',     method: 'GET',   pathPattern: `/api/users/${userId}/groups`,               response: { groups: [] } },
+      { service: 'directory', method: 'POST',  pathPattern: `/api/users/${userId}/archive`,              response: { archived: true } },
+    ]));
 
     const res = await request(app)
       .post(`/api/quick/users/${userId}/offboard`)
@@ -414,19 +489,20 @@ describe('User Lifecycle', () => {
     expect(res.body.userId).toBe(userId);
   });
 
-  test('offboards user — disableOnly does not delete ad user', async () => {
-    const userId = 'offboard-user-222';
+  test('offboards user — disableOnly does not call user DELETE', async () => {
+    const userId       = 'offboard-user-222';
+    const deleteUserFn = jest.fn().mockResolvedValue({ deleted: true });
 
-    nock(DIRECTORY).post(`/api/users/${userId}/disable`).reply(200, { disabled: true });
-    nock(PIM).post(`/api/v1/permissions/users/${userId}/revoke-all`).reply(200, { revoked: true });
-    nock(AUTH).patch(`/api/users/${userId}`).reply(200, { disabled: true });
-    // unassign-devices: revokeDevices defaults to true in offboardUser
-    nock(DEVICE).get(`/api/devices?assignedUser=${userId}`).reply(200, { devices: [] });
-    nock(SAMBA).get(`/api/users/${userId}/groups`).reply(200, { groups: [] });
-    nock(DIRECTORY).post(`/api/users/${userId}/archive`).reply(200, { archived: true });
-
-    // Track that DELETE is NOT called on the user
-    const deleteScope = nock(DIRECTORY).delete(`/api/users/${userId}`).reply(200, { deleted: true });
+    callSpy.mockImplementation(async (service, method, path) => {
+      if (service === 'directory' && method === 'DELETE' && path.includes(userId)) return deleteUserFn();
+      if (service === 'directory' && method === 'POST'   && path.includes('disable')) return { disabled: true };
+      if (service === 'directory' && method === 'POST'   && path.includes('archive')) return { archived: true };
+      if (service === 'pim'       && method === 'POST'   && path.includes('revoke-all')) return { revoked: true };
+      if (service === 'auth'      && method === 'PATCH')                               return { disabled: true };
+      if (service === 'device'    && method === 'GET')                                 return { devices: [] };
+      if (service === 'samba'     && method === 'GET')                                 return { groups: [] };
+      throw new Error(`[mock] Unmatched: ${service} ${method} ${path}`);
+    });
 
     const res = await request(app)
       .post(`/api/quick/users/${userId}/offboard`)
@@ -434,9 +510,29 @@ describe('User Lifecycle', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.disabled).toBe(true);
-    // Delete should NOT have been called
-    expect(deleteScope.isDone()).toBe(false);
-    nock.cleanAll();
+    expect(deleteUserFn).not.toHaveBeenCalled();
+  });
+
+  test('onboards user with elevated role — PIM endpoint called', async () => {
+    const pimCall = jest.fn().mockResolvedValue({ assigned: true });
+
+    callSpy.mockImplementation(async (service, method, path) => {
+      if (service === 'directory' && method === 'POST' && path === '/api/users') return { id: 'admin-user', dn: 'CN=x' };
+      if (service === 'auth'      && method === 'POST' && path === '/api/users') return { id: 'admin-user' };
+      if (service === 'pim'       && method === 'POST' && path.includes('/pim/roles')) return pimCall();
+      if (service === 'samba'     && method === 'POST') return { added: true };
+      if (service === 'policy'    && method === 'POST') return { policies: [] };
+      if (service === 'auth'      && method === 'POST') return { sent: true };
+      throw new Error(`[mock] Unmatched: ${service} ${method} ${path}`);
+    });
+
+    const res = await request(app)
+      .post('/api/quick/users/onboard')
+      .send({ firstName: 'Admin', lastName: 'User', email: 'admin@test.com', department: 'IT', role: 'admin' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(pimCall).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -448,15 +544,16 @@ describe('Policy Deployment', () => {
 
   test('deploys policy to OU — calls enterprise-directory GPO apply', async () => {
     const policyId = 'pol-123';
-    const ouTarget = 'ou=engineering,dc=opendirectory,dc=local';
 
-    nock(POLICY).get(`/api/policies/${policyId}`).reply(200, { id: policyId, name: 'Engineering Policy', settings: { firewall: 'on' } });
-    nock(DIRECTORY).post(`/api/gpo/${policyId}/apply`).reply(200, { applied: 5 });
-    nock(POLICY).post('/api/policies/deployments').reply(200, { recorded: true });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'policy',    method: 'GET',  pathPattern: `/api/policies/${policyId}`,     response: { id: policyId, name: 'Eng Policy', settings: { firewall: 'on' } } },
+      { service: 'directory', method: 'POST', pathPattern: `/api/gpo/${policyId}/apply`,    response: { applied: 5 } },
+      { service: 'policy',    method: 'POST', pathPattern: '/api/policies/deployments',     response: { recorded: true } },
+    ]));
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
-      .send({ policyId, targetType: 'ou', targetId: ouTarget });
+      .send({ policyId, targetType: 'ou', targetId: 'ou=engineering,dc=opendirectory,dc=local' });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -464,14 +561,16 @@ describe('Policy Deployment', () => {
     expect(res.body.affectedTargets).toBeGreaterThan(0);
   });
 
-  test('deploys policy to all — parallel fan-out to MDM, directory, policy', async () => {
+  test('deploys policy to all — parallel fan-out', async () => {
     const policyId = 'pol-all-123';
 
-    nock(POLICY).get(`/api/policies/${policyId}`).reply(200, { id: policyId, name: 'Global Policy', settings: { encryption: 'required' } });
-    nock(MDM).post('/api/policies/push').reply(200, { pushed: true });
-    nock(DIRECTORY).post(`/api/gpo/${policyId}/apply`).reply(200, { applied: 10 });
-    nock(POLICY).post('/api/policies/broadcast').reply(200, { broadcasted: true });
-    nock(POLICY).post('/api/policies/deployments').reply(200, { recorded: true });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'policy',    method: 'GET',  pathPattern: `/api/policies/${policyId}`,   response: { id: policyId, name: 'Global', settings: { encryption: 'required' } } },
+      { service: 'mdm',       method: 'POST', pathPattern: '/api/policies/push',          response: { pushed: true } },
+      { service: 'directory', method: 'POST', pathPattern: `/api/gpo/${policyId}/apply`,  response: { applied: 10 } },
+      { service: 'policy',    method: 'POST', pathPattern: '/api/policies/broadcast',     response: { broadcasted: true } },
+      { service: 'policy',    method: 'POST', pathPattern: '/api/policies/deployments',   response: { recorded: true } },
+    ]));
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
@@ -480,18 +579,22 @@ describe('Policy Deployment', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.deployed).toBe(true);
-    // affectedTargets includes all-devices, all-ous, all-users
     expect(res.body.affectedTargets).toBeGreaterThanOrEqual(3);
   });
 
   test('dry run — does not call deploy endpoints', async () => {
-    const policyId = 'pol-dry-456';
+    const policyId  = 'pol-dry-456';
+    const gpoCall   = jest.fn().mockResolvedValue({ applied: 5 });
+    const recCall   = jest.fn().mockResolvedValue({ recorded: true });
 
-    nock(POLICY).get(`/api/policies/${policyId}`).reply(200, { id: policyId, name: 'Dry Run Policy', settings: { audit: true } });
-
-    // These endpoints should NOT be called during a dry run
-    const gpoScope    = nock(DIRECTORY).post(`/api/gpo/${policyId}/apply`).reply(200, { applied: 5 });
-    const deployScope = nock(POLICY).post('/api/policies/deployments').reply(200, { recorded: true });
+    callSpy.mockImplementation(async (service, method, path) => {
+      if (service === 'policy' && method === 'GET' && path.includes(policyId)) {
+        return { id: policyId, name: 'Dry Run Policy', settings: { audit: true } };
+      }
+      if (service === 'directory' && method === 'POST') return gpoCall();
+      if (service === 'policy'    && method === 'POST') return recCall();
+      throw new Error(`[mock] Unmatched: ${service} ${method} ${path}`);
+    });
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
@@ -503,35 +606,27 @@ describe('Policy Deployment', () => {
     expect(res.body.deployed).toBe(false);
     expect(res.body.dryRunReport).toBeDefined();
     expect(res.body.dryRunReport.policyId).toBe(policyId);
-
-    // Verify deploy endpoints were NOT called
-    expect(gpoScope.isDone()).toBe(false);
-    expect(deployScope.isDone()).toBe(false);
-    nock.cleanAll();
+    expect(gpoCall).not.toHaveBeenCalled();
+    expect(recCall).not.toHaveBeenCalled();
   });
 
   test('compliance snapshot returns aggregated stats', async () => {
-    nock(POLICY).get('/api/compliance/summary').reply(200, {
-      total: 150,
-      compliant: 120,
-      nonCompliant: 30,
-      topViolations: [
-        { rule: 'encryption', count: 15 },
-        { rule: 'os-version', count: 10 },
-      ],
-    });
-    nock(DEVICE).get('/api/compliance/devices').reply(200, {
-      total: 150,
-      compliant: 120,
-      nonCompliant: 30,
-    });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'policy', method: 'GET', pathPattern: '/api/compliance/summary', response: {
+        total: 150, compliant: 120, nonCompliant: 30,
+        topViolations: [{ rule: 'encryption', count: 15 }, { rule: 'os-version', count: 10 }],
+      }},
+      { service: 'device', method: 'GET', pathPattern: '/api/compliance/devices', response: {
+        total: 150, compliant: 120, nonCompliant: 30,
+      }},
+    ]));
 
     const res = await request(app).get('/api/quick/compliance/snapshot');
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.snapshot).toBeDefined();
-    expect(res.body.snapshot.total).toBeDefined();
+    expect(res.body.snapshot.total).toBeGreaterThan(0);
     expect(res.body.snapshot.compliant).toBeDefined();
     expect(res.body.snapshot.nonCompliant).toBeDefined();
     expect(Array.isArray(res.body.snapshot.topViolations)).toBe(true);
@@ -541,9 +636,11 @@ describe('Policy Deployment', () => {
     const policyId = 'pol-user-789';
     const userId   = 'user-target-001';
 
-    nock(POLICY).get(`/api/policies/${policyId}`).reply(200, { id: policyId, name: 'User Policy' });
-    nock(PIM).post('/api/policies/assign').reply(200, { assigned: true });
-    nock(POLICY).post('/api/policies/deployments').reply(200, { recorded: true });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'policy', method: 'GET',  pathPattern: `/api/policies/${policyId}`, response: { id: policyId, name: 'User Policy' } },
+      { service: 'pim',    method: 'POST', pathPattern: '/api/policies/assign',      response: { assigned: true } },
+      { service: 'policy', method: 'POST', pathPattern: '/api/policies/deployments', response: { recorded: true } },
+    ]));
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
@@ -558,9 +655,11 @@ describe('Policy Deployment', () => {
     const policyId = 'pol-device-789';
     const deviceId = 'device-target-001';
 
-    nock(POLICY).get(`/api/policies/${policyId}`).reply(200, { id: policyId, name: 'Device Policy' });
-    nock(MDM).post('/api/policies/push').reply(200, { pushed: true });
-    nock(POLICY).post('/api/policies/deployments').reply(200, { recorded: true });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'policy', method: 'GET',  pathPattern: `/api/policies/${policyId}`, response: { id: policyId, name: 'Device Policy' } },
+      { service: 'mdm',    method: 'POST', pathPattern: '/api/policies/push',        response: { pushed: true } },
+      { service: 'policy', method: 'POST', pathPattern: '/api/policies/deployments', response: { recorded: true } },
+    ]));
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
@@ -571,10 +670,28 @@ describe('Policy Deployment', () => {
     expect(res.body.deployed).toBe(true);
   });
 
+  test('deploys policy to group target', async () => {
+    const policyId = 'pol-group-555';
+    const groupId  = 'engineering-group';
+
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'policy',    method: 'GET',  pathPattern: `/api/policies/${policyId}`,    response: { id: policyId, name: 'Group Policy' } },
+      { service: 'directory', method: 'POST', pathPattern: '/api/policies/group/assign',   response: { assigned: true } },
+      { service: 'policy',    method: 'POST', pathPattern: '/api/policies/deployments',    response: { recorded: true } },
+    ]));
+
+    const res = await request(app)
+      .post('/api/quick/policies/deploy')
+      .send({ policyId, targetType: 'group', targetId: groupId });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.deployed).toBe(true);
+  });
+
   test('policy deployment fails when policy-service is down', async () => {
     const policyId = 'pol-missing-999';
-
-    nock(POLICY).get(`/api/policies/${policyId}`).reply(500, { error: 'Internal Server Error' });
+    callSpy.mockImplementation(async () => { throw httpErr('policy', 500, 'GET', `/api/policies/${policyId}`); });
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
@@ -585,16 +702,17 @@ describe('Policy Deployment', () => {
     expect(res.body.failedAt).toBe('fetch-policy');
   });
 
-  test('deployment status lookup returns deployment record', async () => {
+  test('deployment status lookup — returns record from in-memory store', async () => {
     const policyId = 'pol-status-111';
 
-    nock(POLICY).get(`/api/policies/${policyId}`).reply(200, { id: policyId, name: 'Status Policy' });
-    nock(MDM).post('/api/policies/push').reply(200, { pushed: true });
-    nock(DIRECTORY).post(`/api/gpo/${policyId}/apply`).reply(200, { applied: 5 });
-    nock(POLICY).post('/api/policies/broadcast').reply(200, { broadcasted: true });
-    nock(POLICY).post('/api/policies/deployments').reply(200, { recorded: true });
+    callSpy.mockImplementation(buildCallMock([
+      { service: 'policy',    method: 'GET',  pathPattern: `/api/policies/${policyId}`, response: { id: policyId, name: 'Status Policy' } },
+      { service: 'mdm',       method: 'POST', pathPattern: '/api/policies/push',        response: { pushed: true } },
+      { service: 'directory', method: 'POST', pathPattern: `/api/gpo/${policyId}/apply`,response: { applied: 5 } },
+      { service: 'policy',    method: 'POST', pathPattern: '/api/policies/broadcast',   response: { broadcasted: true } },
+      { service: 'policy',    method: 'POST', pathPattern: '/api/policies/deployments', response: { recorded: true } },
+    ]));
 
-    // First deploy
     const deployRes = await request(app)
       .post('/api/quick/policies/deploy')
       .send({ policyId, targetType: 'all' });
@@ -603,7 +721,6 @@ describe('Policy Deployment', () => {
     const deploymentId = deployRes.body.deploymentId;
     expect(deploymentId).toBeDefined();
 
-    // Then check status
     const statusRes = await request(app)
       .get(`/api/quick/policies/deployments/${deploymentId}`);
 
@@ -622,81 +739,74 @@ describe('Health and Status', () => {
 
   test('GET /health returns healthy', async () => {
     const res = await request(app).get('/health');
-
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('healthy');
     expect(res.body.service).toBe('quick-actions');
   });
 
-  test('GET /api/quick/status — all services up', async () => {
-    // Mock all 9 service /health endpoints
-    [AUTH, DIRECTORY, KERBEROS, SAMBA, DEVICE, POLICY, PIM, MDM, 'http://appstore-mock'].forEach(svc => {
-      nock(svc).get('/health').reply(200, { status: 'healthy' });
-    });
-
-    const res = await request(app).get('/api/quick/status');
-
-    expect(res.status).toBe(200);
-    expect(res.body.overall).toBe('healthy');
-    // All service entries should be healthy
-    const serviceStatuses = Object.values(res.body.services);
-    expect(serviceStatuses.every(s => s.healthy)).toBe(true);
-  });
-
-  test('GET /api/quick/status — some services down', async () => {
-    // Some services healthy, kerberos and samba simulate connection refused
-    nock(AUTH).get('/health').reply(200, { status: 'healthy' });
-    nock(DIRECTORY).get('/health').reply(200, { status: 'healthy' });
-    nock(KERBEROS).get('/health').replyWithError('connect ECONNREFUSED');
-    nock(SAMBA).get('/health').replyWithError('connect ECONNREFUSED');
-    nock(DEVICE).get('/health').reply(200, { status: 'healthy' });
-    nock(POLICY).get('/health').reply(200, { status: 'healthy' });
-    nock(PIM).get('/health').reply(200, { status: 'healthy' });
-    nock(MDM).get('/health').reply(200, { status: 'healthy' });
-    nock('http://appstore-mock').get('/health').reply(200, { status: 'healthy' });
-
-    const res = await request(app).get('/api/quick/status');
-
-    expect(res.status).toBe(200);
-    expect(res.body.overall).toBe('degraded');
-    // At least some services should be unhealthy
-    const serviceStatuses = Object.values(res.body.services);
-    expect(serviceStatuses.some(s => !s.healthy)).toBe(true);
-  });
-
-  test('rate limiting — 201+ requests returns 429', async () => {
-    // Send 201 rapid requests to trigger rate limiter (limit is 200/min)
-    const promises = [];
-    for (let i = 0; i < 201; i++) {
-      promises.push(request(app).get('/api/quick/service-principals').catch(() => ({ status: 429 })));
-    }
-    // Mock auth for the first several calls (nock will exhaust and then nock will block by default)
-    // We allow many calls - the rate limiter will cut in before all succeed
-    nock(AUTH).get('/api/service-accounts').times(201).reply(200, { accounts: [] });
-
-    const results = await Promise.all(promises);
-    const statuses = results.map(r => r.status);
-    expect(statuses.some(s => s === 429)).toBe(true);
-  }, 30000);
-
-  test('GET /health returns uptime as number', async () => {
+  test('GET /health returns uptime as number and timestamp', async () => {
     const res = await request(app).get('/health');
-
     expect(res.status).toBe(200);
     expect(typeof res.body.uptime).toBe('number');
     expect(res.body.timestamp).toBeDefined();
   });
 
+  test('GET /api/quick/status — all services up', async () => {
+    pingSpy.mockResolvedValue({ healthy: true, latencyMs: 5 });
+
+    const res = await request(app).get('/api/quick/status');
+
+    expect(res.status).toBe(200);
+    expect(res.body.overall).toBe('healthy');
+    expect(Object.values(res.body.services).every(s => s.healthy)).toBe(true);
+  });
+
+  test('GET /api/quick/status — some services down', async () => {
+    let pingCount = 0;
+    pingSpy.mockImplementation(async () => {
+      pingCount++;
+      return pingCount <= 2
+        ? { healthy: false, latencyMs: 50, error: 'ECONNREFUSED' }
+        : { healthy: true, latencyMs: 5 };
+    });
+
+    const res = await request(app).get('/api/quick/status');
+
+    expect(res.status).toBe(200);
+    expect(res.body.overall).toBe('degraded');
+    expect(Object.values(res.body.services).some(s => !s.healthy)).toBe(true);
+  });
+
+  test('GET /api/quick/status — all services down returns unhealthy', async () => {
+    pingSpy.mockResolvedValue({ healthy: false, latencyMs: 100, error: 'ECONNREFUSED' });
+
+    const res = await request(app).get('/api/quick/status');
+
+    expect(res.status).toBe(200);
+    expect(res.body.overall).toBe('unhealthy');
+  });
+
+  test('rate limiting — 201+ requests returns 429', async () => {
+    pingSpy.mockResolvedValue({ healthy: true, latencyMs: 1 });
+
+    const promises = [];
+    for (let i = 0; i < 201; i++) {
+      promises.push(request(app).get('/api/quick/status'));
+    }
+    const results  = await Promise.all(promises);
+    const statuses = results.map(r => r.status);
+    expect(statuses.some(s => s === 429)).toBe(true);
+  }, 30000);
+
   test('404 for unknown routes', async () => {
     const res = await request(app).get('/api/quick/does-not-exist');
-
     expect(res.status).toBe(404);
     expect(res.body.success).toBe(false);
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Suite 6: Edge Cases
+// Suite 6: Input Validation / Edge Cases
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('Edge Cases', () => {
@@ -729,10 +839,19 @@ describe('Edge Cases', () => {
     expect(res.body.success).toBe(false);
   });
 
-  test('bulk-enroll — empty array returns 400', async () => {
+  test('bulk-enroll — empty devices array returns 400', async () => {
     const res = await request(app)
       .post('/api/quick/devices/bulk-enroll')
       .send({ devices: [] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('bulk-enroll — missing devices field returns 400', async () => {
+    const res = await request(app)
+      .post('/api/quick/devices/bulk-enroll')
+      .send({ platform: 'linux' });
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
@@ -747,6 +866,15 @@ describe('Edge Cases', () => {
     expect(res.body.success).toBe(false);
   });
 
+  test('deployPolicy — missing targetType returns 500', async () => {
+    const res = await request(app)
+      .post('/api/quick/policies/deploy')
+      .send({ policyId: 'pol-123' });
+
+    expect(res.status).toBe(500);
+    expect(res.body.success).toBe(false);
+  });
+
   test('onboardUser — missing firstName returns 500', async () => {
     const res = await request(app)
       .post('/api/quick/users/onboard')
@@ -756,46 +884,12 @@ describe('Edge Cases', () => {
     expect(res.body.success).toBe(false);
   });
 
-  test('GET /api/quick/service-principals/:id returns SP details', async () => {
-    const clientId = '33333333-3333-4333-a333-333333333333';
-
-    nock(AUTH).get(`/api/service-accounts/${clientId}`).reply(200, { name: 'test-app', id: clientId });
-    nock(PIM).get(`/api/v1/permissions/users/${clientId}`).reply(200, { permissions: ['read-users'] });
-
+  test('onboardUser — missing email returns 500', async () => {
     const res = await request(app)
-      .get(`/api/quick/service-principals/${clientId}`);
+      .post('/api/quick/users/onboard')
+      .send({ firstName: 'John', lastName: 'Doe' });
 
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.clientId).toBe(clientId);
-    expect(res.body.account).toBeDefined();
-  });
-
-  test('getEnrollmentStatus — returns warnings when MDM is down', async () => {
-    const deviceId = 'mdm-down-device';
-
-    nock(DEVICE).get(`/api/devices/${deviceId}`).reply(200, { id: deviceId, status: 'enrolled' });
-    nock(MDM).get(`/api/mdm/devices/${deviceId}/status`).replyWithError('MDM service connection refused');
-
-    const res = await request(app)
-      .get(`/api/quick/devices/${deviceId}/enrollment-status`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.device).toBeDefined();
-    expect(res.body.mdmStatus).toBeNull();
-    expect(Array.isArray(res.body.warnings)).toBe(true);
-    expect(res.body.warnings.length).toBeGreaterThan(0);
-  });
-
-  test('listServicePrincipals — returns empty array when auth is down', async () => {
-    nock(AUTH).get('/api/service-accounts').replyWithError('connection refused');
-
-    const res = await request(app).get('/api/quick/service-principals');
-
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(500);
     expect(res.body.success).toBe(false);
-    expect(Array.isArray(res.body.data)).toBe(true);
-    expect(res.body.data.length).toBe(0);
   });
 });
