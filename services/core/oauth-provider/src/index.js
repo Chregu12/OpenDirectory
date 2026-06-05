@@ -10,6 +10,40 @@ const { v4: uuidv4 } = require('uuid');
 const { APP_CATALOG } = require('./appCatalog');
 const db = require('./db');
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let _amqpChannel = null;
+
+async function connectBus() {
+  try {
+    const amqplib = require('amqplib');
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
+    try {
+      const conn = await amqplib.connect(RABBITMQ_URL);
+      conn.on('error', () => { _amqpChannel = null; });
+      conn.on('close', () => { _amqpChannel = null; setTimeout(connectBus, 5000); });
+      const ch = await conn.createChannel();
+      await ch.assertExchange('opendirectory.events', 'topic', { durable: true });
+      _amqpChannel = ch;
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!_amqpChannel) return;
+  try {
+    _amqpChannel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: 'oauth-provider' })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
+
 const promClient = require('prom-client');
 const register = new promClient.Registry();
 promClient.collectDefaultMetrics({ register });
@@ -412,7 +446,7 @@ app.post('/oauth/authorize/login', async (req, res) => {
   }
 
   // Validate credentials against auth service
-  const AUTH_SERVICE = process.env.AUTH_SERVICE_URL || 'http://localhost:3002';
+  const AUTH_SERVICE = process.env.AUTH_SERVICE_URL || 'http://authentication-service';
   let userId = null;
   let userInfo = null;
   try {
@@ -500,7 +534,7 @@ app.post('/oauth/token', async (req, res) => {
 
       // 3. If still not found, try external device service
       if (!deviceStatus) {
-        const DEVICE_SERVICE = process.env.DEVICE_SERVICE_URL || 'http://localhost:3003';
+        const DEVICE_SERVICE = process.env.DEVICE_SERVICE_URL || 'http://device-service';
         try {
           const devRes = await fetch(`${DEVICE_SERVICE}/api/devices/${deviceId}`, {
             headers: { 'Authorization': `Bearer ${process.env.SERVICE_TOKEN || ''}` }
@@ -546,6 +580,7 @@ app.post('/oauth/token', async (req, res) => {
       db.saveToken(atHash, payload).catch(err => console.error('[token-db]', err.message));
     }
 
+    publish('identity.token.issued', { clientId: client_id, userId: record.userId, scope: record.scope, issuedAt: new Date().toISOString() });
     return res.json({ access_token, id_token, refresh_token: rt, token_type: 'Bearer', expires_in: TOKEN_TTL, scope: record.scope });
   }
 
@@ -564,12 +599,14 @@ app.post('/oauth/token', async (req, res) => {
     if (db.isAvailable()) {
       db.saveToken(newAtHash, payload).catch(err => console.error('[token-db]', err.message));
     }
+    publish('identity.token.issued', { clientId: client_id, userId: record.sub, scope: record.scope, issuedAt: new Date().toISOString() });
     return res.json({ access_token, refresh_token: new_rt, token_type: 'Bearer', expires_in: TOKEN_TTL });
   }
 
   if (grant_type === 'client_credentials') {
     const payload = { sub: client_id, iss: ISSUER, aud: client_id, iat: Math.floor(Date.now() / 1000), scope: req.body.scope ?? '' };
     const access_token = signToken(payload);
+    publish('identity.token.issued', { clientId: client_id, userId: client_id, scope: payload.scope, issuedAt: new Date().toISOString() });
     return res.json({ access_token, token_type: 'Bearer', expires_in: TOKEN_TTL });
   }
 
@@ -582,6 +619,7 @@ app.post('/oauth/token', async (req, res) => {
     deviceCodes.delete(device_code);
     const payload = { sub: record.userId ?? 'device-user', iss: ISSUER, aud: client_id ?? 'device-client', iat: Math.floor(Date.now() / 1000), scope: record.scope ?? 'openid profile' };
     const access_token = signToken(payload);
+    publish('identity.token.issued', { clientId: client_id ?? 'device-client', userId: payload.sub, scope: payload.scope, issuedAt: new Date().toISOString() });
     return res.json({ access_token, token_type: 'Bearer', expires_in: TOKEN_TTL });
   }
 
@@ -633,6 +671,7 @@ app.post('/oauth/revoke', async (req, res) => {
   tokens.delete(hash);
   await blacklistToken(hash, TOKEN_TTL);
   if (db.isAvailable()) { db.revokeToken(hash).catch(() => {}); }
+  publish('identity.token.revoked', { tokenId: hash, revokedAt: new Date().toISOString() });
   res.status(200).json({ ok: true });
 });
 
@@ -711,7 +750,7 @@ app.post('/oauth/device/approve', express.urlencoded({ extended: true }), async 
   if (!found) return res.send('<html><body><p>Invalid or expired code.</p></body></html>');
 
   // Validate credentials against auth service
-  const AUTH_SERVICE = process.env.AUTH_SERVICE_URL || 'http://localhost:3002';
+  const AUTH_SERVICE = process.env.AUTH_SERVICE_URL || 'http://authentication-service';
   let userId = username; // fallback: use submitted username
   try {
     const loginRes = await fetch(`${AUTH_SERVICE}/api/auth/login`, {
@@ -886,6 +925,7 @@ app.post('/api/clients', (req, res) => {
   const record = { clientId, clientSecret, name, redirectUris, scopes: scopes ?? ['openid', 'profile', 'email'], grantTypes: grantTypes ?? ['authorization_code'] };
   clients.set(clientId, record);
   db.upsertClient({ id: clientId, name, clientSecret, redirectUris, grants: record.grantTypes, scopes: record.scopes }).catch(err => console.error('[clients-db]', err.message));
+  publish('identity.client.registered', { clientId, name });
   res.status(201).json({ clientId, clientSecret, name });
 });
 
@@ -1819,6 +1859,7 @@ app.get('/downloads/:filename', (req, res) => {
 
 db.initDb().then(async () => {
   initRedis().catch(err => console.warn('[redis] init error:', err.message));
+  connectBus();
   if (db.isAvailable()) {
     try {
       const existing = await db.query('SELECT COUNT(*) FROM oauth_clients');
