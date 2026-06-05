@@ -31,6 +31,66 @@ const logger = require('./utils/logger');
 const config = require('./config');
 const EventBus = require('./events/eventBus');
 
+// ── RabbitMQ Event Bus ────────────────────────────────────────────────────────
+let _amqpChannel = null;
+const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
+const EVENTS_EXCHANGE = 'opendirectory.events';
+
+async function connectBus(serviceName) {
+  const amqplib = require('amqplib');
+  try {
+    const conn = await amqplib.connect(RABBITMQ_URL);
+    conn.on('error', () => { _amqpChannel = null; });
+    conn.on('close', () => { _amqpChannel = null; setTimeout(() => connectBus(serviceName), 5000); });
+    const ch = await conn.createChannel();
+    await ch.assertExchange(EVENTS_EXCHANGE, 'topic', { durable: true });
+    _amqpChannel = ch;
+    console.log(`[${serviceName}] RabbitMQ connected`);
+    return ch;
+  } catch (e) {
+    console.warn(`[${serviceName}] RabbitMQ unavailable, retrying in 10s:`, e.message);
+    setTimeout(() => connectBus(serviceName), 10000);
+    return null;
+  }
+}
+
+function publishEvent(routingKey, payload, source) {
+  if (!_amqpChannel) return;
+  try {
+    _amqpChannel.publish(EVENTS_EXCHANGE, routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: source })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (_) {}
+}
+
+async function subscribeToEvents(queueName, routingKeys, handler) {
+  if (!_amqpChannel) return;
+  try {
+    await _amqpChannel.assertQueue(queueName, {
+      durable: true,
+      arguments: { 'x-message-ttl': 86400000, 'x-max-length': 10000 }
+    });
+    for (const rk of routingKeys) {
+      await _amqpChannel.bindQueue(queueName, EVENTS_EXCHANGE, rk);
+    }
+    _amqpChannel.prefetch(5);
+    _amqpChannel.consume(queueName, async (msg) => {
+      if (!msg) return;
+      try {
+        const payload = JSON.parse(msg.content.toString());
+        await handler(msg.fields.routingKey, payload);
+        _amqpChannel.ack(msg);
+      } catch (e) {
+        _amqpChannel.nack(msg, false, !msg.fields.redelivered);
+      }
+    });
+  } catch (e) {
+    console.warn('subscribe error:', e.message);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 class EnterpriseMonitoringService {
   constructor() {
     this.app = express();
@@ -1185,7 +1245,41 @@ class EnterpriseMonitoringService {
   }
 
   start(port = process.env.PORT || 3009) {
+    // Connect to RabbitMQ event bus (fire and forget)
+    connectBus('monitoring-service');
+
+    setTimeout(async () => {
+      await subscribeToEvents('monitoring.events', [
+        'device.non_compliant',
+        'app.install.failed',
+        'system.backup.failed',
+        'system.backup.completed',
+        'compliance.failed',
+        'policy.violated',
+        'identity.login.failed',
+        'admin.#',
+      ], async (routingKey, payload) => {
+        try {
+          const alertData = {
+            id: require('crypto').randomUUID(),
+            title: `Event: ${routingKey}`,
+            message: JSON.stringify(payload),
+            severity: routingKey.includes('failed') ? 'critical' : 'warning',
+            source: payload._source || 'message-bus',
+            status: 'active',
+            created_at: new Date().toISOString(),
+          };
+          if (typeof global.__od_activeAlerts === 'undefined') global.__od_activeAlerts = [];
+          global.__od_activeAlerts.unshift(alertData);
+          if (global.__od_activeAlerts.length > 200) global.__od_activeAlerts.length = 200;
+        } catch (e) {
+          logger.warn('monitoring event handler error:', e.message);
+        }
+      });
+    }, 3000);
+
     this.server.listen(port, () => {
+      publishEvent('admin.service.health', { service: 'monitoring', status: 'healthy', timestamp: new Date().toISOString() }, 'monitoring');
       logger.info(`📊 Enterprise Monitoring Service started on port ${port}`);
       logger.info(`🔍 Health check: http://localhost:${port}/health`);
       logger.info(`📈 Metrics: http://localhost:${port}/metrics`);

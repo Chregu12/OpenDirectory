@@ -8,6 +8,66 @@ const nodemailer = require('nodemailer');
 const promClient = require('prom-client');
 const { v4: uuidv4 } = require('uuid');
 
+// ── RabbitMQ Event Bus ────────────────────────────────────────────────────────
+let _amqpChannel = null;
+const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
+const EVENTS_EXCHANGE = 'opendirectory.events';
+
+async function connectBus(serviceName) {
+  const amqplib = require('amqplib');
+  try {
+    const conn = await amqplib.connect(RABBITMQ_URL);
+    conn.on('error', () => { _amqpChannel = null; });
+    conn.on('close', () => { _amqpChannel = null; setTimeout(() => connectBus(serviceName), 5000); });
+    const ch = await conn.createChannel();
+    await ch.assertExchange(EVENTS_EXCHANGE, 'topic', { durable: true });
+    _amqpChannel = ch;
+    console.log(`[${serviceName}] RabbitMQ connected`);
+    return ch;
+  } catch (e) {
+    console.warn(`[${serviceName}] RabbitMQ unavailable, retrying in 10s:`, e.message);
+    setTimeout(() => connectBus(serviceName), 10000);
+    return null;
+  }
+}
+
+function publishEvent(routingKey, payload, source) {
+  if (!_amqpChannel) return;
+  try {
+    _amqpChannel.publish(EVENTS_EXCHANGE, routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: source })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (_) {}
+}
+
+async function subscribeToEvents(queueName, routingKeys, handler) {
+  if (!_amqpChannel) return;
+  try {
+    await _amqpChannel.assertQueue(queueName, {
+      durable: true,
+      arguments: { 'x-message-ttl': 86400000, 'x-max-length': 10000 }
+    });
+    for (const rk of routingKeys) {
+      await _amqpChannel.bindQueue(queueName, EVENTS_EXCHANGE, rk);
+    }
+    _amqpChannel.prefetch(5);
+    _amqpChannel.consume(queueName, async (msg) => {
+      if (!msg) return;
+      try {
+        const payload = JSON.parse(msg.content.toString());
+        await handler(msg.fields.routingKey, payload);
+        _amqpChannel.ack(msg);
+      } catch (e) {
+        _amqpChannel.nack(msg, false, !msg.fields.redelivered);
+      }
+    });
+  } catch (e) {
+    console.warn('subscribe error:', e.message);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // --- Logger ---
 function log(level, msg, meta = {}) {
   console.log(JSON.stringify({ level, message: msg, service: 'notification-service', timestamp: new Date().toISOString(), ...meta }));
@@ -623,6 +683,71 @@ async function start() {
       log('warn', 'Database unavailable, running in in-memory mode', { error: err.message });
       dbAvailable = false;
     }
+
+    // Connect to RabbitMQ event bus and subscribe to alert-triggering events
+    connectBus('notification-service');
+    setTimeout(async () => {
+      await subscribeToEvents('notification.alerts', [
+        'identity.login.failed',
+        'identity.account.locked',
+        'identity.mfa.disabled',
+        'device.non_compliant',
+        'app.install.failed',
+        'system.backup.failed',
+        'security.pim.granted',
+        'security.pim.expired',
+        'security.cert.expiring',
+        'policy.violated',
+        'compliance.failed',
+      ], async (routingKey, payload) => {
+        try {
+          const notifMessages = {
+            'identity.login.failed':   `Fehlgeschlagener Login: ${payload.username} von ${payload.ip}`,
+            'identity.account.locked': `Konto gesperrt: ${payload.username}`,
+            'device.non_compliant':    `Gerät nicht konform: ${payload.deviceId}`,
+            'app.install.failed':      `Installation fehlgeschlagen: ${payload.appId} auf ${payload.deviceId}`,
+            'system.backup.failed':    `Backup fehlgeschlagen: ${payload.error || 'Unbekannter Fehler'}`,
+            'security.pim.granted':    `PIM Zugriff gewährt: ${payload.userId} → ${payload.roleId}`,
+            'security.cert.expiring':  `Zertifikat läuft ab: ${payload.subject || payload.id}`,
+            'policy.violated':         `Policy verletzt: ${payload.policyId} auf ${payload.deviceId}`,
+            'compliance.failed':       `Compliance-Check fehlgeschlagen: ${payload.deviceId}`,
+          };
+
+          const message = notifMessages[routingKey] || JSON.stringify(payload);
+          const severity = routingKey.includes('failed') || routingKey.includes('locked') || routingKey.includes('violated') ? 'error' : 'warning';
+
+          const entry = {
+            id: require('crypto').randomUUID(),
+            channel_id: null,
+            subject: `[${severity.toUpperCase()}] ${routingKey}`,
+            body: message,
+            sent_at: new Date().toISOString(),
+            status: 'received',
+            source: payload._source || 'system',
+            routing_key: routingKey,
+          };
+
+          inMemoryHistory.unshift(entry);
+          if (inMemoryHistory.length > 500) inMemoryHistory.length = 500;
+
+          // Try to send via enabled channels
+          for (const channel of inMemoryChannels.values()) {
+            if (!channel.enabled) continue;
+            try {
+              if (channel.type === 'email') {
+                await sendEmail(channel, entry.subject, message, []);
+              } else if (channel.type === 'slack') {
+                await sendSlack(channel, entry.subject, message);
+              } else if (channel.type === 'webhook' || channel.type === 'teams') {
+                await sendWebhook(channel, entry.subject, message);
+              }
+            } catch (_) {}
+          }
+        } catch (e) {
+          log('warn', 'Event notification handler error', { error: e.message });
+        }
+      });
+    }, 3000);
 
     app.listen(PORT, '0.0.0.0', () => {
       log('info', `Notification service running on port ${PORT}`);
