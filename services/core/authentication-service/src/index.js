@@ -1325,6 +1325,8 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
 module.exports = UnifiedAuthenticationService;
+// Expose the module-level singleton so tests can access IIFE-registered routes
+module.exports._instance = authService;
 
 // ─── Audit seed helper ───────────────────────────────────────────────────────────────
 async function seedAuditEvents() {
