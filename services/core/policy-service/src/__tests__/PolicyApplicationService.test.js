@@ -192,5 +192,146 @@ describe('PolicyApplicationService', () => {
       expect(result.results).toHaveLength(2); // 2 devices x 1 policy
       expect(bus.publish).toHaveBeenCalledWith('policy.applied', expect.any(Object));
     });
+
+    it('returns empty results when no target devices and no policies', async () => {
+      const { svc, db, bus } = makeService();
+      const bp = { id: 'bp-2', name: 'Empty Blueprint' };
+      db.query
+        .mockResolvedValueOnce({ rows: [bp] })
+        .mockResolvedValueOnce({ rows: [] }); // no linked policies
+
+      const result = await svc.deployBlueprint({ blueprintId: 'bp-2', targetDeviceIds: [] });
+      expect(result.results).toHaveLength(0);
+      expect(bus.publish).toHaveBeenCalledWith('policy.applied', expect.objectContaining({ blueprintId: 'bp-2' }));
+    });
+
+    it('includes appliedAt timestamp in result', async () => {
+      const { svc, db } = makeService();
+      const bp = { id: 'bp-3', name: 'TS Blueprint' };
+      db.query
+        .mockResolvedValueOnce({ rows: [bp] })
+        .mockResolvedValueOnce({ rows: [] });
+
+      const result = await svc.deployBlueprint({ blueprintId: 'bp-3', targetDeviceIds: [] });
+      expect(result).toHaveProperty('appliedAt');
+      expect(typeof result.appliedAt).toBe('string');
+    });
+  });
+
+  describe('createPolicy() — additional cases', () => {
+    it('returns the inserted row', async () => {
+      const { svc, db } = makeService();
+      const row = { id: 'pol-2', name: 'Firewall Policy', type: 'firewall' };
+      db.query.mockResolvedValue({ rows: [row] });
+
+      const result = await svc.createPolicy({ name: 'Firewall Policy', type: 'firewall' });
+      expect(result).toEqual(row);
+    });
+
+    it('publishes event with _source = "policy-service"', async () => {
+      const { svc, db, bus } = makeService();
+      db.query.mockResolvedValue({ rows: [{ id: 'pol-3', name: 'X', type: 'security' }] });
+
+      await svc.createPolicy({ name: 'X', type: 'security' });
+      expect(bus.publish).toHaveBeenCalledWith(
+        'policy.created',
+        expect.objectContaining({ _source: 'policy-service' })
+      );
+    });
+
+    it('propagates db errors', async () => {
+      const { svc, db } = makeService();
+      db.query.mockRejectedValue(new Error('DB connection lost'));
+
+      await expect(svc.createPolicy({ name: 'Fail', type: 'security' }))
+        .rejects.toThrow('DB connection lost');
+    });
+  });
+
+  describe('evaluateCompliance() — additional cases', () => {
+    it('includes evaluatedAt timestamp in result', async () => {
+      const { svc, db } = makeService();
+      db.query.mockResolvedValue({ rows: [] });
+
+      const result = await svc.evaluateCompliance({ deviceId: 'dev-x', devicePlatform: 'linux', deviceProperties: {} });
+      expect(result).toHaveProperty('evaluatedAt');
+      expect(typeof result.evaluatedAt).toBe('string');
+    });
+
+    it('includes deviceId in result', async () => {
+      const { svc, db } = makeService();
+      db.query.mockResolvedValue({ rows: [] });
+
+      const result = await svc.evaluateCompliance({ deviceId: 'dev-unique', devicePlatform: 'macos', deviceProperties: {} });
+      expect(result.deviceId).toBe('dev-unique');
+    });
+
+    it('handles multiple rules across multiple policies', async () => {
+      const { svc, db } = makeService();
+      db.query.mockResolvedValue({
+        rows: [
+          {
+            id: 'pol-a',
+            name: 'Policy A',
+            rules: [
+              { key: 'diskEncrypted', operator: 'equals', value: true, severity: 'high' },
+              { key: 'osVersion', operator: 'exists', severity: 'medium' },
+            ],
+          },
+          {
+            id: 'pol-b',
+            name: 'Policy B',
+            rules: [{ key: 'firewallEnabled', operator: 'equals', value: true, severity: 'high' }],
+          },
+        ],
+      });
+
+      const result = await svc.evaluateCompliance({
+        deviceId: 'dev-multi',
+        devicePlatform: 'windows',
+        deviceProperties: {
+          diskEncrypted: false, // violates
+          osVersion: '11',     // ok
+          firewallEnabled: false, // violates
+        },
+      });
+
+      expect(result.isCompliant).toBe(false);
+      expect(result.violations).toHaveLength(2);
+    });
+
+    it('not_equals: passes when actual !== value', () => {
+      const { svc } = makeService();
+      // not_equals returns true (violated) when actual === value, false otherwise
+      expect(svc._checkRule({ key: 'x', operator: 'not_equals', value: 'blocked' }, { x: 'allowed' })).toBe(false);
+    });
+
+    it('greater_than: passes when actual > value', () => {
+      const { svc } = makeService();
+      expect(svc._checkRule({ key: 'age', operator: 'greater_than', value: 5 }, { age: 10 })).toBe(false);
+    });
+
+    it('less_than: passes when actual < value', () => {
+      const { svc } = makeService();
+      expect(svc._checkRule({ key: 'size', operator: 'less_than', value: 100 }, { size: 50 })).toBe(false);
+    });
+
+    it('unknown operator returns false (not violated)', () => {
+      const { svc } = makeService();
+      expect(svc._checkRule({ key: 'x', operator: 'unknown_op', value: 'y' }, { x: 'z' })).toBe(false);
+    });
+  });
+
+  describe('_publish() — bus guard', () => {
+    it('does not throw when bus.publish throws internally', async () => {
+      const { svc, db, bus } = makeService();
+      bus.publish.mockImplementation(() => { throw new Error('publish error'); });
+      db.query.mockResolvedValue({ rows: [] });
+
+      // evaluateCompliance calls _publish — should not throw
+      await expect(
+        svc.evaluateCompliance({ deviceId: 'dev-1', devicePlatform: 'all', deviceProperties: {} })
+      ).resolves.toBeDefined();
+    });
   });
 });

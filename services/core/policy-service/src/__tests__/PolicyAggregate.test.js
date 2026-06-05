@@ -193,5 +193,110 @@ describe('PolicyAggregate', () => {
       expect(json).toMatchObject({ id: 'pol-1', name: 'Disk Encryption Policy', type: 'security' });
       expect(json.createdAt).toBeInstanceOf(Date);
     });
+
+    it('includes all expected fields', () => {
+      const policy = new PolicyAggregate({ ...baseData, id: 'pol-1', priority: 77, settings: { foo: 'bar' } });
+      const json = policy.toJSON();
+      expect(json).toHaveProperty('id', 'pol-1');
+      expect(json).toHaveProperty('name');
+      expect(json).toHaveProperty('type');
+      expect(json).toHaveProperty('platform');
+      expect(json).toHaveProperty('rules');
+      expect(json).toHaveProperty('settings');
+      expect(json).toHaveProperty('enabled');
+      expect(json).toHaveProperty('priority', 77);
+      expect(json).toHaveProperty('createdAt');
+      expect(json).toHaveProperty('updatedAt');
+      expect(Array.isArray(json.rules)).toBe(true);
+    });
+  });
+
+  describe('fromRow() — DB row reconstruction', () => {
+    it('maps snake_case created_at / updated_at to camelCase', () => {
+      const now = new Date('2024-01-15T10:00:00Z');
+      const row = {
+        id: 'pol-db-1', name: 'DB Policy', type: 'compliance',
+        platform: 'linux', rules: [], settings: {}, enabled: false,
+        priority: 20, created_at: now, updated_at: now,
+      };
+      const policy = PolicyAggregate.fromRow(row);
+      expect(policy.createdAt).toEqual(now);
+      expect(policy.updatedAt).toEqual(now);
+      expect(policy.enabled).toBe(false);
+      expect(policy.priority).toBe(20);
+    });
+
+    it('also accepts camelCase dates from row', () => {
+      const now = new Date();
+      const row = {
+        id: 'pol-db-2', name: 'CamelRow', type: 'security',
+        platform: 'all', rules: [], settings: {}, enabled: true,
+        priority: 50, createdAt: now, updatedAt: now,
+      };
+      const policy = PolicyAggregate.fromRow(row);
+      expect(policy.createdAt).toEqual(now);
+    });
+
+    it('does not emit any domain events', () => {
+      const row = {
+        id: 'pol-db-3', name: 'No Events', type: 'network',
+        platform: 'all', rules: [], settings: {}, enabled: true,
+        priority: 50, created_at: new Date(), updated_at: new Date(),
+      };
+      const policy = PolicyAggregate.fromRow(row);
+      expect(policy.getAndClearDomainEvents()).toHaveLength(0);
+    });
+  });
+
+  describe('update() — edge cases', () => {
+    it('emits POLICY_UPDATED even for empty allowed changes (always records update)', () => {
+      const policy = new PolicyAggregate({ ...baseData, id: 'pol-1' });
+      policy.update({});
+      const events = policy.getAndClearDomainEvents();
+      // update() always emits regardless of whether any fields changed
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe(POLICY_UPDATED);
+    });
+
+    it('does not apply unknown fields', () => {
+      const policy = new PolicyAggregate({ ...baseData, id: 'pol-1' });
+      policy.update({ malicious: true, __proto__: 'x' });
+      expect((policy)['malicious']).toBeUndefined();
+    });
+
+    it('partial update preserves untouched fields', () => {
+      const policy = new PolicyAggregate({ ...baseData, id: 'pol-1', priority: 10 });
+      policy.update({ name: 'Only Name Changed' });
+      expect(policy.priority).toBe(10);
+      expect(policy.type).toBe('security');
+    });
+  });
+
+  describe('event accumulation and clearing', () => {
+    it('multiple state transitions accumulate events and clearAll at once', () => {
+      const policy = new PolicyAggregate({ ...baseData, id: 'pol-1', enabled: false });
+      // enable → disable → enable
+      policy.enable();   // POLICY_ENABLED
+      policy.disable();  // POLICY_DISABLED
+      policy.enable();   // POLICY_ENABLED
+
+      const events = policy.getAndClearDomainEvents();
+      expect(events).toHaveLength(3);
+      expect(events[0].type).toBe(POLICY_ENABLED);
+      expect(events[1].type).toBe(POLICY_DISABLED);
+      expect(events[2].type).toBe(POLICY_ENABLED);
+
+      // cleared now
+      expect(policy.getAndClearDomainEvents()).toHaveLength(0);
+    });
+
+    it('each domain event has type, payload, and occurredAt', () => {
+      const policy = PolicyAggregate.create({ ...baseData, id: 'pol-1' });
+      const [event] = policy.getAndClearDomainEvents();
+      expect(event).toHaveProperty('type');
+      expect(event).toHaveProperty('payload');
+      expect(event).toHaveProperty('occurredAt');
+      expect(event.occurredAt).toBeInstanceOf(Date);
+    });
   });
 });

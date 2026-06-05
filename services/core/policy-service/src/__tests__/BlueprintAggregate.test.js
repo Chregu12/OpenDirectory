@@ -165,5 +165,106 @@ describe('BlueprintAggregate', () => {
       expect(json).toMatchObject({ id: 'bp-1', name: 'Standard Windows Blueprint' });
       expect(json.createdAt).toBeInstanceOf(Date);
     });
+
+    it('includes all expected fields with correct shapes', () => {
+      const bp = new BlueprintAggregate({ ...baseData, id: 'bp-1', description: 'A description', policies: ['pol-1'], version: 2, settings: { key: 'val' } });
+      const json = bp.toJSON();
+      expect(json).toHaveProperty('id', 'bp-1');
+      expect(json).toHaveProperty('name', 'Standard Windows Blueprint');
+      expect(json).toHaveProperty('description', 'A description');
+      expect(json).toHaveProperty('platform', 'windows');
+      expect(json).toHaveProperty('policies');
+      expect(Array.isArray(json.policies)).toBe(true);
+      expect(json.policies).toContain('pol-1');
+      expect(json).toHaveProperty('settings');
+      expect(json).toHaveProperty('version', 2);
+      expect(json).toHaveProperty('createdAt');
+      expect(json).toHaveProperty('updatedAt');
+      expect(json.createdAt).toBeInstanceOf(Date);
+      expect(json.updatedAt).toBeInstanceOf(Date);
+    });
+
+    it('does not expose internal _domainEvents', () => {
+      const bp = BlueprintAggregate.create({ ...baseData, id: 'bp-1' });
+      const json = bp.toJSON();
+      expect(json).not.toHaveProperty('_domainEvents');
+    });
+  });
+
+  describe('fromRow() — DB row reconstruction', () => {
+    it('maps snake_case created_at / updated_at to camelCase', () => {
+      const now = new Date('2024-03-01T08:00:00Z');
+      const row = {
+        id: 'bp-db-1', name: 'DB Blueprint', description: 'From DB',
+        platform: 'macos', policies: ['pol-a'], settings: {}, version: 5,
+        created_at: now, updated_at: now,
+      };
+      const bp = BlueprintAggregate.fromRow(row);
+      expect(bp.id).toBe('bp-db-1');
+      expect(bp.version).toBe(5);
+      expect(bp.createdAt).toEqual(now);
+      expect(bp.updatedAt).toEqual(now);
+      expect(bp.policies).toEqual(['pol-a']);
+    });
+
+    it('also accepts camelCase dates', () => {
+      const now = new Date();
+      const row = {
+        id: 'bp-db-2', name: 'Camel Blueprint', platform: 'all',
+        policies: [], settings: {}, version: 1, createdAt: now, updatedAt: now,
+      };
+      const bp = BlueprintAggregate.fromRow(row);
+      expect(bp.createdAt).toEqual(now);
+    });
+
+    it('emits no domain events on reconstruction', () => {
+      const row = {
+        id: 'bp-db-3', name: 'No Events BP', platform: 'windows',
+        policies: [], settings: {}, version: 1,
+        created_at: new Date(), updated_at: new Date(),
+      };
+      const bp = BlueprintAggregate.fromRow(row);
+      expect(bp.getAndClearDomainEvents()).toHaveLength(0);
+    });
+  });
+
+  describe('update() — edge cases', () => {
+    it('does not apply unknown fields', () => {
+      const bp = new BlueprintAggregate({ ...baseData, id: 'bp-1' });
+      bp.update({ policies: ['pol-x'], version: 99, unknown: true });
+      expect(bp.policies).toEqual([]);  // not in allowed list
+      expect((bp)['unknown']).toBeUndefined();
+    });
+
+    it('partial update only changes supplied fields', () => {
+      const bp = new BlueprintAggregate({ ...baseData, id: 'bp-1', description: 'Original' });
+      bp.update({ name: 'New Name' });
+      expect(bp.description).toBe('Original');
+      expect(bp.name).toBe('New Name');
+    });
+  });
+
+  describe('event accumulation', () => {
+    it('events accumulate across multiple operations and clear together', () => {
+      const bp = new BlueprintAggregate({ ...baseData, id: 'bp-1' });
+      bp.addPolicy('pol-1');    // BLUEPRINT_UPDATED
+      bp.addPolicy('pol-2');    // BLUEPRINT_UPDATED
+      bp.removePolicy('pol-1'); // BLUEPRINT_UPDATED
+
+      const events = bp.getAndClearDomainEvents();
+      expect(events).toHaveLength(3);
+      events.forEach(ev => expect(ev.type).toBe(BLUEPRINT_UPDATED));
+      // cleared
+      expect(bp.getAndClearDomainEvents()).toHaveLength(0);
+    });
+
+    it('each event has type, payload, and occurredAt', () => {
+      const bp = BlueprintAggregate.create({ ...baseData, id: 'bp-1' });
+      const [event] = bp.getAndClearDomainEvents();
+      expect(event).toHaveProperty('type', BLUEPRINT_CREATED);
+      expect(event).toHaveProperty('payload');
+      expect(event).toHaveProperty('occurredAt');
+      expect(event.occurredAt).toBeInstanceOf(Date);
+    });
   });
 });
