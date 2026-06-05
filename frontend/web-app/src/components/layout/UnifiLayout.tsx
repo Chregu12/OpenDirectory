@@ -80,6 +80,8 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'certificates',      name: 'Zertifikate / PKI',   view: 'certificates',      type: 'Seite' },
   { id: 'radius',            name: 'RADIUS / 802.1X',     view: 'radius',            type: 'Seite' },
   { id: 'servicehealth',     name: 'Service Health',      view: 'servicehealth',     type: 'Seite' },
+  { id: 'fleet',             name: 'Device Fleet',        view: 'fleet',             type: 'Seite' },
+  { id: 'serviceprincipals', name: 'Service Principals',  view: 'serviceprincipals', type: 'Seite' },
 ];
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -308,9 +310,11 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
   const ALL_NAV_ITEMS: NavItem[] = [
     { type: 'section', label: 'Übersicht' },
     { type: 'item', id: 'dashboard',      name: 'Dashboard',         icon: HomeIcon },
+    { type: 'item', id: 'fleet',          name: 'Device Fleet',      icon: ComputerDesktopIcon },
 
     { type: 'section', label: 'Verzeichnis' },
     { type: 'item', id: 'users',          name: 'Benutzer',          icon: UserGroupIcon },
+    { type: 'item', id: 'serviceprincipals', name: 'Service Principals', icon: KeyIcon },
     { type: 'item', id: 'permissions',    name: 'Rollen & Rechte',   icon: KeyIcon },
     { type: 'item', id: 'pim',            name: 'PIM',               icon: ShieldCheckIcon },
     { type: 'item', id: 'mfa',            name: 'MFA / 2FA',         icon: DevicePhoneMobileIcon },

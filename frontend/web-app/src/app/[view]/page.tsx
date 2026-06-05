@@ -39,6 +39,15 @@ import AlertingView from '@/components/views/AlertingView';
 import CertificatesView from '@/components/views/CertificatesView';
 import RadiusView from '@/components/views/RadiusView';
 import ServiceHealthView from '@/components/views/ServiceHealthView';
+// ABM-style UI additions
+import QuickActionsBar from '@/components/views/QuickActionsBar';
+import DeviceFleetView from '@/components/views/DeviceFleetView';
+import ServicePrincipalsView from '@/components/views/ServicePrincipalsView';
+import EnrollmentWizard from '@/components/views/EnrollmentWizard';
+import UserOnboardingWizard from '@/components/views/UserOnboardingWizard';
+import ServicePrincipalWizard from '@/components/views/ServicePrincipalWizard';
+import PolicyDeployWizard from '@/components/views/PolicyDeployWizard';
+import ComplianceSnapshot from '@/components/views/ComplianceSnapshot';
 
 const MODULE_NAV_MAP: Record<string, string> = {
   'monitoring-analytics':   'monitoring',
@@ -55,7 +64,12 @@ const VALID_VIEWS = new Set([
   'antivirus','audit','backup','appstore','compliance','scanner',
   'blueprints','sync','integrations','roadmap','pim','licenses',
   'mfa','sspr','conditionalaccess','alerting','certificates','radius','servicehealth',
+  // ABM-style views
+  'fleet','serviceprincipals',
 ]);
+
+// Views that show the QuickActionsBar at the top
+const VIEWS_WITH_QUICK_ACTIONS = new Set(['fleet', 'dashboard', 'serviceprincipals']);
 
 export default function ViewPage() {
   const router = useRouter();
@@ -67,6 +81,13 @@ export default function ViewPage() {
   const [currentUser,    setCurrentUser]    = useState<{ name: string; role: string } | null>(null);
   const [authChecked,    setAuthChecked]    = useState(false);
   const [onboarded,      setOnboarded]      = useState(true);
+
+  // Wizard / panel open state
+  const [showEnrollWizard,  setShowEnrollWizard]  = useState(false);
+  const [showUserWizard,    setShowUserWizard]    = useState(false);
+  const [showSPWizard,      setShowSPWizard]      = useState(false);
+  const [showPolicyWizard,  setShowPolicyWizard]  = useState(false);
+  const [showCompliance,    setShowCompliance]    = useState(false);
 
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem('auth_user') : null;
@@ -136,6 +157,13 @@ export default function ViewPage() {
       case 'certificates':       return <CertificatesView />;
       case 'radius':             return <RadiusView />;
       case 'servicehealth':      return <ServiceHealthView />;
+      // ABM-style views
+      case 'fleet':
+        return <DeviceFleetView />;
+      case 'serviceprincipals':
+        return (
+          <ServicePrincipalsView onCreateNew={() => setShowSPWizard(true)} />
+        );
       case 'settings':
         return (
           <div className="p-6">
@@ -153,6 +181,8 @@ export default function ViewPage() {
     return <OnboardingWizard />;
   }
 
+  const showQABar = VIEWS_WITH_QUICK_ACTIONS.has(activeView);
+
   return (
     <UnifiLayout
       activeView={activeView}
@@ -160,7 +190,40 @@ export default function ViewPage() {
       enabledModules={enabledModules}
       currentUser={currentUser}
     >
-      {renderView()}
+      {showQABar ? (
+        <div style={{ padding: '20px 24px' }}>
+          <QuickActionsBar
+            onEnrollDevice={() => setShowEnrollWizard(true)}
+            onNewUser={() => setShowUserWizard(true)}
+            onServicePrincipal={() => setShowSPWizard(true)}
+            onDeployPolicy={() => setShowPolicyWizard(true)}
+            onComplianceSnapshot={() => setShowCompliance(true)}
+          />
+          {renderView()}
+        </div>
+      ) : (
+        renderView()
+      )}
+
+      {/* ── Wizard overlays ─────────────────────────────────────────────────── */}
+      {showEnrollWizard && (
+        <EnrollmentWizard onClose={() => setShowEnrollWizard(false)} />
+      )}
+      {showUserWizard && (
+        <UserOnboardingWizard onClose={() => setShowUserWizard(false)} />
+      )}
+      {showSPWizard && (
+        <ServicePrincipalWizard onClose={() => setShowSPWizard(false)} />
+      )}
+      {showPolicyWizard && (
+        <PolicyDeployWizard onClose={() => setShowPolicyWizard(false)} />
+      )}
+      {showCompliance && (
+        <ComplianceSnapshot
+          onClose={() => setShowCompliance(false)}
+          onViewChange={handleViewChange}
+        />
+      )}
     </UnifiLayout>
   );
 }
