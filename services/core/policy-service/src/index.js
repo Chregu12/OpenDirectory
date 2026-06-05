@@ -2059,6 +2059,14 @@ async function start() {
 
   try { connectBus(); } catch (e) { logger.warn('[bus] startup connect error: ' + e.message); }
 
+  // Wire DDD Application Service + Compliance Saga
+  const PolicyApplicationService = require('./application/PolicyApplicationService');
+  const ComplianceSaga = require('./application/ComplianceSaga');
+  const MessageBus = require('../../../../packages/service-contracts/src/messageBus');
+  const _policyAppSvc = new PolicyApplicationService({ db, messageBus: MessageBus.getInstance(), logger });
+  const _complianceSaga = new ComplianceSaga({ messageBus: MessageBus.getInstance(), policyApplicationService: _policyAppSvc, db, logger });
+  setTimeout(() => _complianceSaga.start(), 4000);
+
   app.listen(PORT, () => {
     logger.info(`Policy Service running on port ${PORT}`);
   });
