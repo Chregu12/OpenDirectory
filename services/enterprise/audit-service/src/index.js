@@ -14,6 +14,16 @@ const { v4: uuidv4 } = require('uuid');
 
 const logger = require('./utils/logger');
 const { pool, connect: connectPg, runMigrations } = require('./db/postgres');
+
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'audit-service' });
+async function connectBusClient() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
 const IntegrityChecker = require('./storage/integrityChecker');
 const EventStore = require('./storage/eventStore');
 const EventCollector = require('./collectors/eventCollector');
@@ -726,7 +736,12 @@ async function start() {
     alertEngine = new AlertEngine(pool, webhookNotifier);
     await alertEngine.loadRules();
 
-    // 7. Connect to RabbitMQ and start event collector
+    // 7. Connect to generic event bus (fire and forget)
+    connectBusClient().catch((err) => {
+      logger.warn('EventBusClient connection failed (non-critical)', { error: err.message });
+    });
+
+    // 8. Connect to RabbitMQ and start event collector
     try {
       const amqpConnection = await amqplib.connect(RABBITMQ_URL);
       amqpConnection.on('error', (err) => {
@@ -737,14 +752,14 @@ async function start() {
       });
 
       const channel = await amqpConnection.createChannel();
-      const collector = new EventCollector(pool, channel, integrityChecker, eventStore, alertEngine, wsClients, metrics);
+      const collector = new EventCollector(pool, channel, integrityChecker, eventStore, alertEngine, wsClients, metrics, publish);
       await collector.start();
       logger.info('RabbitMQ event collector started');
     } catch (err) {
       logger.warn('RabbitMQ connection failed, event collection disabled', { error: err.message });
     }
 
-    // 8. Start HTTP server
+    // 9. Start HTTP server
     server.listen(PORT, () => {
       logger.info(`Audit service listening on port ${PORT}`, {
         port: PORT,

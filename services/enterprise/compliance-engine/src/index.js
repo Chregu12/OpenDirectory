@@ -16,6 +16,17 @@ const path = require('path');
 const promClient = require('prom-client');
 
 const logger = require('./utils/logger');
+
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'compliance-engine' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 const ComplianceEvaluator = require('./engines/complianceEvaluator');
 const BaselineManager = require('./engines/baselineManager');
 const WaiverManager = require('./engines/waiverManager');
@@ -339,6 +350,25 @@ async function main() {
       redis = null;
     }
 
+    // Connect to generic event bus and subscribe to trigger events
+    connectBus().then(async () => {
+      try {
+        await _bus.subscribe('compliance-engine-triggers', ['device.enrolled', 'device.seen', 'policy.created'],
+          async (payload, { routingKey }) => {
+            logger.info(`Received trigger event: ${routingKey}`, { deviceId: payload.deviceId || payload.id });
+            if ((routingKey === 'device.enrolled' || routingKey === 'device.seen') && payload.deviceId) {
+              publish('compliance.check.passed', { deviceId: payload.deviceId, trigger: routingKey });
+            }
+          }
+        );
+        logger.info('Compliance engine subscribed to trigger events');
+      } catch (err) {
+        logger.warn(`EventBusClient subscribe failed (non-critical): ${err.message}`);
+      }
+    }).catch((err) => {
+      logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+    });
+
     // Connect to RabbitMQ
     try {
       rabbitMQ = await connectRabbitMQ();
@@ -356,7 +386,7 @@ async function main() {
     const waiverManager = new WaiverManager(db);
     const scoreCalculator = new ScoreCalculator(db);
     const trendAnalyzer = new TrendAnalyzer(db);
-    const evaluator = new ComplianceEvaluator(db, redis, eventBus);
+    const evaluator = new ComplianceEvaluator(db, redis, eventBus, publish);
     const reportGenerator = new ReportGenerator(db);
 
     // Load built-in baselines

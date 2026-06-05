@@ -14,10 +14,11 @@ const ROUTING_KEYS = [
 ];
 
 class EventCollector {
-  constructor(db, channel, integrityChecker, eventStore, alertEngine, wsClients, metrics) {
+  constructor(db, channel, integrityChecker, eventStore, alertEngine, wsClients, metrics, publishFn) {
     this.db = db;
     this.channel = channel;
     this.integrityChecker = integrityChecker;
+    this.publishFn = publishFn || null;
     this.eventStore = eventStore;
     this.alertEngine = alertEngine;
     this.wsClients = wsClients;
@@ -91,6 +92,20 @@ class EventCollector {
 
     // Store event with hash chain
     const storedEvent = await this.eventStore.store(event);
+
+    // Publish audit.event.logged to generic event bus
+    if (this.publishFn) {
+      this.publishFn('audit.event.logged', {
+        id: storedEvent.id,
+        category: storedEvent.category,
+        severity: storedEvent.severity,
+        action: storedEvent.action,
+        actor_id: storedEvent.actor_id,
+        target_id: storedEvent.target_id,
+        result: storedEvent.result,
+        timestamp: storedEvent.timestamp,
+      });
+    }
 
     // Check alert rules
     if (this.alertEngine) {
