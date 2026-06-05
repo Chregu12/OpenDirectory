@@ -88,6 +88,11 @@ backup:
       cpu: "500m"
       memory: "512Mi"
 
+# ─── RabbitMQ ─────────────────────────────────────────────────────────────────
+rabbitmq:
+  enabled: true
+  storageSize: "10Gi"
+
 # ─── Ingress with TLS ─────────────────────────────────────────────────────────
 ingress:
   enabled: true

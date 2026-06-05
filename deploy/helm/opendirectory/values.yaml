@@ -146,6 +146,14 @@ backup:
       cpu: "250m"
       memory: "256Mi"
 
+# ─── RabbitMQ ─────────────────────────────────────────────────────────────────
+rabbitmq:
+  enabled: true
+  storageSize: "5Gi"
+  auth:
+    username: opendirectory
+    password: changeme  # override in production
+
 # ─── Ingress ──────────────────────────────────────────────────────────────────
 ingress:
   enabled: true

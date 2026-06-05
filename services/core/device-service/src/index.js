@@ -8,6 +8,10 @@ const WebSocket = require('ws');
 const cluster = require('cluster');
 const os = require('os');
 
+// Shared RabbitMQ message bus
+const MessageBus = require('../../../../packages/service-contracts/src/messageBus');
+const { Events }  = require('../../../../packages/service-contracts/src/events');
+
 // PostgreSQL persistence layer
 const db = require('./db');
 
@@ -79,6 +83,12 @@ class EnterpriseDeviceManagementService {
 
     // Analytics Bridge (connects agent events to AI/ML analytics)
     this.analyticsBridge = new AnalyticsBridge();
+
+    // RabbitMQ message bus — connect in background; failures must not crash service
+    this.messageBus = new MessageBus();
+    this.messageBus.connect(process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672').catch(err => {
+      logger.warn('RabbitMQ unavailable, falling back to Redis cache for command queue', { error: err.message });
+    });
 
     // Connected agent registry: deviceId -> WebSocket connection
     this.connectedAgents = new Map();
@@ -708,6 +718,17 @@ class EnterpriseDeviceManagementService {
           }
         }
 
+        // Drain RabbitMQ device command queue for this agent
+        if (this.messageBus && this.messageBus.isConnected() && ws.deviceId) {
+          this.messageBus.consumeDeviceCommands(ws.deviceId, (cmd) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ ...cmd, timestamp: new Date().toISOString() }));
+            }
+          }, { once: true }).catch(err => {
+            logger.warn(`Failed to drain RabbitMQ command queue for ${ws.deviceId}: ${err.message}`);
+          });
+        }
+
         logger.info(`Agent registered: ${ws.deviceId} (${ws.platform})`);
         break;
 
@@ -1082,7 +1103,7 @@ class EnterpriseDeviceManagementService {
   // Event handlers
   async handleDeviceEnrolled(event) {
     const { device } = event;
-    
+
     // Broadcast to WebSocket clients
     this.broadcastToSubscribers('device_events', {
       type: 'device_enrolled',
@@ -1094,9 +1115,17 @@ class EnterpriseDeviceManagementService {
       }
     });
 
+    // Publish domain event to RabbitMQ (fire-and-forget)
+    this.messageBus.publish(Events.DEVICE_ENROLLED, {
+      deviceId:   device.id,
+      hostname:   device.name,
+      platform:   device.platform,
+      enrolledAt: device.enrolledAt,
+    }).catch(() => {});
+
     // Auto-assign default policies
     await this.policyEngine.assignDefaultPolicies(device.id);
-    
+
     logger.info('Device enrolled successfully', { deviceId: device.id });
   }
 
@@ -1119,6 +1148,16 @@ class EnterpriseDeviceManagementService {
       body: violation.description || violation.rule,
       data: { rule: violation.rule, details: violation.details, severity: violation.severity }
     });
+
+    // Publish domain event to RabbitMQ (fire-and-forget)
+    this.messageBus.publish(Events.DEVICE_NON_COMPLIANT, {
+      deviceId,
+      violation: {
+        rule:     violation.rule,
+        severity: violation.severity,
+        details:  violation.details,
+      },
+    }).catch(() => {});
 
     if (violation.autoRemediable) {
       await this.complianceScanner.autoRemediate(violation.id);
@@ -1297,13 +1336,22 @@ class EnterpriseDeviceManagementService {
         status: 'queued', queuedAt: new Date().toISOString(),
       });
 
-      // Push via WebSocket — if offline, cache queues automatically
+      // Push via WebSocket — if offline, queue via RabbitMQ (preferred) or Redis (fallback)
       const delivered = this.sendToDevice(deviceId, command);
-      if (!delivered && this.cache) {
-        const existing = await this.cache.get(`pending:${deviceId}`).catch(() => null);
-        const pending = existing ? JSON.parse(existing) : [];
-        pending.push(command);
-        await this.cache.set(`pending:${deviceId}`, JSON.stringify(pending), 'EX', 86400).catch(() => {});
+      if (!delivered) {
+        let mqQueued = false;
+        if (this.messageBus && this.messageBus.isConnected()) {
+          mqQueued = await this.messageBus.queueDeviceCommand(deviceId, command).catch(err => {
+            logger.warn('RabbitMQ queueDeviceCommand failed, falling back to Redis cache', { error: err.message, deviceId });
+            return false;
+          });
+        }
+        if (!mqQueued && this.cache) {
+          const existing = await this.cache.get(`pending:${deviceId}`).catch(() => null);
+          const pending = existing ? JSON.parse(existing) : [];
+          pending.push(command);
+          await this.cache.set(`pending:${deviceId}`, JSON.stringify(pending), 'EX', 86400).catch(() => {});
+        }
       }
 
       logger.info(`install-app ${delivered ? 'pushed live' : 'queued offline'}: device=${deviceId} app=${appId} job=${jobId}`);
@@ -1352,12 +1400,21 @@ class EnterpriseDeviceManagementService {
       const delivered = this.sendToDevice(deviceId, cmdMessage);
       logger.info(\`Command \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${command.type}\`);
 
-      // If device offline, queue for delivery on reconnect
-      if (!delivered && this.cache) {
-        const existing = await this.cache.get(\`pending:\${deviceId}\`);
-        const pending = existing ? JSON.parse(existing) : [];
-        pending.push(cmdMessage);
-        await this.cache.set(\`pending:\${deviceId}\`, JSON.stringify(pending), 'EX', 86400);
+      // If device offline, queue via RabbitMQ (preferred) or Redis (fallback)
+      if (!delivered) {
+        let mqQueued = false;
+        if (this.messageBus && this.messageBus.isConnected()) {
+          mqQueued = await this.messageBus.queueDeviceCommand(deviceId, cmdMessage).catch(err => {
+            logger.warn('RabbitMQ queueDeviceCommand failed, falling back to Redis cache', { error: err.message, deviceId });
+            return false;
+          });
+        }
+        if (!mqQueued && this.cache) {
+          const existing = await this.cache.get(\`pending:\${deviceId}\`);
+          const pending = existing ? JSON.parse(existing) : [];
+          pending.push(cmdMessage);
+          await this.cache.set(\`pending:\${deviceId}\`, JSON.stringify(pending), 'EX', 86400);
+        }
       }
 
       res.json({

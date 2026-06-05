@@ -34,6 +34,8 @@ volumes:
     name: od-backup-prod
   traefik-certs:
     name: od-traefik-certs
+  rabbitmq_data:
+    name: od-rabbitmq-prod
 
 # ─── Common anchors ──────────────────────────────────────────────────────────
 x-service-defaults: &service-defaults
@@ -216,6 +218,31 @@ services:
           cpus: "0.2"
           memory: 128M
 
+  # ─── RabbitMQ ─────────────────────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: od-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-opendirectory}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-changeme}
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
   # ─── Authentication Service ──────────────────────────────────────────────────
   auth-service:
     <<: *node-defaults
@@ -231,6 +258,7 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?}
       LLDAP_URL: ${LLDAP_URL:-http://lldap:17170}
       LLDAP_JWT_SECRET: ${LLDAP_JWT_SECRET:?LLDAP_JWT_SECRET must be set}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-opendirectory}:${RABBITMQ_PASS:-changeme}@rabbitmq:5672/
     depends_on:
       postgres:
         condition: service_healthy
@@ -264,6 +292,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
       JWT_SECRET: ${JWT_SECRET:?}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-opendirectory}:${RABBITMQ_PASS:-changeme}@rabbitmq:5672/
     depends_on:
       postgres:
         condition: service_healthy
@@ -297,6 +326,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
       JWT_SECRET: ${JWT_SECRET:?}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-opendirectory}:${RABBITMQ_PASS:-changeme}@rabbitmq:5672/
     depends_on:
       postgres:
         condition: service_healthy
@@ -329,6 +359,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
       JWT_SECRET: ${JWT_SECRET:?}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-opendirectory}:${RABBITMQ_PASS:-changeme}@rabbitmq:5672/
     depends_on:
       postgres:
         condition: service_healthy
@@ -361,6 +392,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
       JWT_SECRET: ${JWT_SECRET:?}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-opendirectory}:${RABBITMQ_PASS:-changeme}@rabbitmq:5672/
     depends_on:
       postgres:
         condition: service_healthy
@@ -427,6 +459,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
       JWT_SECRET: ${JWT_SECRET:?}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-opendirectory}:${RABBITMQ_PASS:-changeme}@rabbitmq:5672/
     volumes:
       - backup-data:/backups
     depends_on:
