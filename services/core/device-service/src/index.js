@@ -1380,10 +1380,28 @@ class EnterpriseDeviceManagementService {
   async reportInstallResult(req, res) {
     const { jobId } = req.params;
     const { status, output, error } = req.body;
+    let job = null;
     if (global.__od_installJobs?.has(jobId)) {
-      const job = global.__od_installJobs.get(jobId);
+      job = global.__od_installJobs.get(jobId);
       Object.assign(job, { status, output, error, completedAt: new Date().toISOString() });
     }
+
+    // Publish install result event to RabbitMQ (fire-and-forget)
+    if (job) {
+      const routingKey = status === 'success'
+        ? Events.APP_INSTALL_COMPLETED
+        : Events.APP_INSTALL_FAILED;
+      this.messageBus.publish(routingKey, {
+        jobId,
+        deviceId: job.deviceId,
+        appId:    job.appId,
+        appName:  job.appName,
+        status,
+        output,
+        error,
+      }).catch(() => {});
+    }
+
     res.json({ ok: true });
   }
 
@@ -1656,19 +1674,24 @@ class EnterpriseDeviceManagementService {
 
   gracefulShutdown() {
     logger.info('Starting graceful shutdown...');
-    
-    this.server.close(() => {
+
+    this.server.close(async () => {
       logger.info('HTTP server closed');
-      
+
       // Close WebSocket connections
       this.wss.clients.forEach(client => {
         client.terminate();
       });
-      
+
+      // Close RabbitMQ connection gracefully
+      if (this.messageBus) {
+        await this.messageBus.close().catch(() => {});
+      }
+
       // Close database connections
       this.db.close();
       this.cache.close();
-      
+
       logger.info('Graceful shutdown completed');
       process.exit(0);
     });
