@@ -60,6 +60,10 @@ const authMiddleware = require('./middleware/auth');
 const validationMiddleware = require('./middleware/validation');
 const auditMiddleware = require('./middleware/audit');
 
+// Import GPO enforcement engine and audit trail
+const GroupPolicyEngine = require('./policies/groupPolicyEngine');
+const DirectoryAudit = require('./audit/directoryAudit');
+
 class EnterpriseDirectoryService {
   constructor() {
     this.app = express();
@@ -81,7 +85,11 @@ class EnterpriseDirectoryService {
     this.deviceJoinService = null;
     this.certificateAuthorityService = null;
     this.dnsIntegrationService = null;
-    
+
+    // GPO enforcement engine and audit trail
+    this.gpoEngine = null;
+    this.directoryAudit = null;
+
     // Initialize the service
     this.initialize();
   }
@@ -279,11 +287,43 @@ class EnterpriseDirectoryService {
       await this.deviceJoinService.initialize();
       this.services.set('deviceJoin', this.deviceJoinService);
 
+      // Initialize GPO Enforcement Engine
+      this.gpoEngine = new GroupPolicyEngine();
+      this.services.set('gpoEngine', this.gpoEngine);
+
+      // Initialize Directory Audit Trail
+      // Pass a publish function so audit events reach the event bus
+      this.directoryAudit = new DirectoryAudit(mongoose, this._publishEvent.bind(this));
+      this.services.set('directoryAudit', this.directoryAudit);
+
       logger.info('🛠️ All services initialized successfully');
 
     } catch (error) {
       logger.error('❌ Service initialization failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Publish an event to the event bus (RabbitMQ exchange).
+   * Non-fatal — logs a warning on failure.
+   */
+  async _publishEvent(topic, payload) {
+    try {
+      if (this.rabbitmq) {
+        const channel = await this.rabbitmq.createChannel();
+        const exchange = config.rabbitmq.exchanges.events;
+        await channel.assertExchange(exchange, 'topic', { durable: true });
+        channel.publish(
+          exchange,
+          topic,
+          Buffer.from(JSON.stringify(payload)),
+          { persistent: true }
+        );
+        await channel.close();
+      }
+    } catch (err) {
+      logger.warn(`[_publishEvent] Failed to publish ${topic}:`, err.message);
     }
   }
 
@@ -320,6 +360,12 @@ class EnterpriseDirectoryService {
     const certController = new CertificateController(this.certificateAuthorityService);
     this.app.use('/api/certificates', authMiddleware, certController.getRoutes());
 
+    // ── GPO Enforcement endpoints ────────────────────────────────────────────
+    this.setupGPOEnforcementRoutes();
+
+    // ── Directory Audit endpoints ─────────────────────────────────────────────
+    this.setupAuditRoutes();
+
     // LDAP endpoints (direct LDAP protocol handling)
     this.app.use('/ldap', (req, res) => {
       res.status(200).json({
@@ -351,6 +397,228 @@ class EnterpriseDirectoryService {
     });
 
     logger.info('🛣️ Routes configured');
+  }
+
+  // ── GPO Enforcement route handlers ──────────────────────────────────────────
+
+  setupGPOEnforcementRoutes() {
+    const engine = () => this.gpoEngine;
+    const audit = () => this.directoryAudit;
+
+    /**
+     * POST /api/gpo/:id/apply
+     * Apply a GPO to all OUs it is linked to immediately.
+     * Body: { ouDn?: string, dryRun?: boolean }
+     */
+    this.app.post('/api/gpo/:id/apply', authMiddleware, async (req, res, next) => {
+      try {
+        const gpoId = req.params.id;
+        const { ouDn, dryRun = false } = req.body || {};
+
+        const gpo = engine().policies.get(gpoId);
+        if (!gpo) {
+          return res.status(404).json({ error: 'GPO not found', gpoId });
+        }
+
+        // Determine target OUs: explicit ouDn, or all linked OUs from the GPO scope
+        const linkedOUs =
+          ouDn
+            ? [ouDn]
+            : (gpo.scope?.links?.organizationalUnits || []);
+
+        if (linkedOUs.length === 0) {
+          return res.status(400).json({
+            error: 'No target OUs specified and GPO has no linked OUs',
+          });
+        }
+
+        const results = { applied: [], skipped: [], errors: [] };
+        for (const ou of linkedOUs) {
+          const r = await engine().applyGPOToOU(ou, gpoId, { dryRun });
+          results.applied.push(...r.applied);
+          results.skipped.push(...r.skipped);
+          results.errors.push(...r.errors);
+        }
+
+        // Audit the GPO application
+        await audit().logGPOChange({
+          actorId: req.user?.id || 'system',
+          gpoId,
+          operation: 'apply',
+          ouDn: linkedOUs.join(', '),
+          settings: { linkedOUs, dryRun },
+        });
+
+        res.json({ gpoId, linkedOUs, dryRun, results });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    /**
+     * GET /api/gpo/:id/status
+     * Return which OUs/objects the GPO is currently applied to.
+     */
+    this.app.get('/api/gpo/:id/status', authMiddleware, async (req, res, next) => {
+      try {
+        const status = await engine().getGPOApplicationStatus(req.params.id);
+        if (!status.policyInfo) {
+          return res.status(404).json({ error: 'GPO not found', gpoId: req.params.id });
+        }
+        res.json(status);
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    /**
+     * GET /api/ou/:dn/rsop
+     * Compute Resultant Set of Policy for an OU.
+     * The :dn parameter is base64-encoded to avoid URL encoding issues with commas/equals.
+     */
+    this.app.get('/api/ou/:dn/rsop', authMiddleware, async (req, res, next) => {
+      try {
+        const targetDn = Buffer.from(req.params.dn, 'base64').toString('utf8');
+        const rsop = await engine().computeResultantSetOfPolicy(targetDn);
+        res.json({ targetDn, ...rsop });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    /**
+     * GET /api/users/:id/rsop
+     * Compute Resultant Set of Policy for a specific user.
+     * The :id is the user's sAMAccountName or base64-encoded DN.
+     */
+    this.app.get('/api/users/:id/rsop', authMiddleware, async (req, res, next) => {
+      try {
+        // Try to decode as base64; fall back to treating as a plain identifier
+        let targetDn;
+        try {
+          targetDn = Buffer.from(req.params.id, 'base64').toString('utf8');
+          // Basic sanity check: must contain at least one '='
+          if (!targetDn.includes('=')) targetDn = req.params.id;
+        } catch (_) {
+          targetDn = req.params.id;
+        }
+        const rsop = await engine().computeResultantSetOfPolicy(targetDn);
+        res.json({ targetDn, ...rsop });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    /**
+     * POST /api/domain/password-policy
+     * Set password policy for the domain.
+     * Body: { domainDn, minLength, complexity, maxAge, minAge, historyCount }
+     */
+    this.app.post('/api/domain/password-policy', authMiddleware, async (req, res, next) => {
+      try {
+        const { domainDn = config.activeDirectory.baseDN, ...policySettings } = req.body || {};
+        const result = await engine().enforcePasswordPolicy(domainDn, policySettings);
+
+        await audit().logGPOChange({
+          actorId: req.user?.id || 'system',
+          gpoId: 'domain-password-policy',
+          operation: 'modify',
+          ouDn: domainDn,
+          settings: policySettings,
+        });
+
+        res.json({ domainDn, ...result });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    /**
+     * POST /api/domain/lockout-policy
+     * Set account lockout policy for the domain.
+     * Body: { domainDn, threshold, observationWindow, lockoutDuration }
+     */
+    this.app.post('/api/domain/lockout-policy', authMiddleware, async (req, res, next) => {
+      try {
+        const { domainDn = config.activeDirectory.baseDN, ...policySettings } = req.body || {};
+        const result = await engine().enforceAccountLockoutPolicy(domainDn, policySettings);
+
+        await audit().logGPOChange({
+          actorId: req.user?.id || 'system',
+          gpoId: 'domain-lockout-policy',
+          operation: 'modify',
+          ouDn: domainDn,
+          settings: policySettings,
+        });
+
+        res.json({ domainDn, ...result });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    logger.info('🗂️ GPO enforcement routes configured');
+  }
+
+  // ── Directory Audit route handlers ───────────────────────────────────────────
+
+  setupAuditRoutes() {
+    const audit = () => this.directoryAudit;
+
+    /**
+     * GET /api/audit/log
+     * Query the audit log.
+     * Query params: from, to, actorId, targetDn, operation, limit, offset
+     */
+    this.app.get('/api/audit/log', authMiddleware, async (req, res, next) => {
+      try {
+        const { from, to, actorId, targetDn, operation, limit = 100, offset = 0 } = req.query;
+        const result = await audit().queryAuditLog({
+          from,
+          to,
+          actorId,
+          targetDn,
+          operation,
+          limit: parseInt(limit, 10),
+          offset: parseInt(offset, 10),
+        });
+        res.json(result);
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    /**
+     * GET /api/audit/objects/:dn/history
+     * Full change history for a directory object.
+     * :dn is base64-encoded.
+     */
+    this.app.get('/api/audit/objects/:dn/history', authMiddleware, async (req, res, next) => {
+      try {
+        const targetDn = Buffer.from(req.params.dn, 'base64').toString('utf8');
+        const history = await audit().getObjectHistory(targetDn);
+        res.json({ targetDn, history });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    /**
+     * GET /api/audit/actors/:id/activity
+     * Activity report for a specific actor.
+     * Query params: from, to
+     */
+    this.app.get('/api/audit/actors/:id/activity', authMiddleware, async (req, res, next) => {
+      try {
+        const { from, to } = req.query;
+        const activity = await audit().getActorActivity(req.params.id, { from, to });
+        res.json({ actorId: req.params.id, activity });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    logger.info('📋 Directory audit routes configured');
   }
 
   setupErrorHandling() {
