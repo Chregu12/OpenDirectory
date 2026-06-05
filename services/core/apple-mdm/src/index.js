@@ -559,7 +559,7 @@ const EMPTY_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 // ─── Policy-service helper ────────────────────────────────────────────────────
 
 const http = require('http');
-const POLICY_SERVICE_URL = process.env.POLICY_SERVICE_URL || 'http://localhost:3004';
+const POLICY_SERVICE_URL = process.env.POLICY_SERVICE_URL || 'http://policy-service';
 
 async function fetchBlueprintFromPolicyService(blueprintId) {
   return new Promise((resolve) => {

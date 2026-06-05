@@ -147,3 +147,86 @@ services:
     publishes:
       - config.updated
       - config.deleted
+
+  enterprise-directory:
+    publishes:
+      - identity.user.created
+      - identity.user.updated
+      - identity.user.deleted
+      - identity.group.created
+      - identity.group.updated
+      - identity.group.deleted
+
+  antivirus-protection:
+    publishes:
+      - security.scan.completed
+      - security.threat.detected
+    subscribes: []
+
+  app-store:
+    publishes:
+      - app.published
+      - app.install.requested
+      - app.install.completed
+      - app.install.failed
+      - app.package.uploaded
+    subscribes: []
+
+  audit-service:
+    publishes:
+      - audit.event.logged
+    subscribes:
+      - policy.#
+      - device.#
+      - identity.#
+      - app.#
+      - security.#
+      - compliance.#
+      - admin.#
+      - system.#
+
+  auto-remediation:
+    publishes:
+      - remediation.started
+      - remediation.completed
+      - remediation.failed
+    subscribes:
+      - compliance.violation.detected
+      - device.non_compliant
+
+  compliance-engine:
+    publishes:
+      - compliance.check.passed
+      - compliance.check.failed
+      - compliance.violation.detected
+    subscribes:
+      - device.enrolled
+      - device.seen
+      - policy.created
+      - compliance.evaluation.*
+
+  device-lifecycle:
+    publishes:
+      - device.lifecycle.onboarded
+      - device.lifecycle.retired
+    subscribes:
+      - device.enrolled
+      - device.retired
+
+  mobile-management:
+    publishes:
+      - mdm.app.installed
+      - mdm.policy.applied
+    subscribes: []
+
+  policy-simulator:
+    publishes:
+      - policy.simulation.completed
+    subscribes: []
+
+  security-scanner:
+    publishes:
+      - security.scan.started
+      - security.scan.completed
+      - security.vulnerability.found
+    subscribes: []

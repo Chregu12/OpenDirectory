@@ -217,7 +217,7 @@ class RemoteControlOrchestrator {
       // Register each service with the API Gateway
       for (const [serviceId, service] of Object.entries(SERVICES)) {
         try {
-          await axios.post('http://api-gateway:8080/api/services/register', {
+          await axios.post('http://api-gateway/api/services/register', {
             name: `remote-control-${serviceId}`,
             url: `http://remote-control-${serviceId}:${service.port}`,
             healthPath: '/health',
