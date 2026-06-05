@@ -37,37 +37,13 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 
 // ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
-let channel, connection;
-
-async function connectBus() {
-  try {
-    const amqplib = require('amqplib');
-    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://opendirectory:changeme@rabbitmq:5672/';
-    try {
-      connection = await amqplib.connect(RABBITMQ_URL);
-      connection.on('error', () => { channel = null; });
-      connection.on('close', () => { channel = null; setTimeout(connectBus, 5000); });
-      channel = await connection.createChannel();
-      await channel.assertExchange('opendirectory.events', 'topic', { durable: true });
-      console.log('[bus] RabbitMQ connected');
-    } catch (e) {
-      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
-      setTimeout(connectBus, 10000);
-    }
-  } catch (e) {
-    console.warn('[bus] connectBus error:', e.message);
-  }
-}
-
-function publish(routingKey, payload) {
-  if (!channel) return;
-  try {
-    channel.publish('opendirectory.events', routingKey,
-      Buffer.from(JSON.stringify({ ...payload, _source: 'certificate-authority', _ts: Date.now() })),
-      { persistent: true, contentType: 'application/json' }
-    );
-  } catch (e) { /* fail silently */ }
-}
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'certificate-authority' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 
 // ─── Prometheus metrics middleware ────────────────────────────────────────────
 app.use((req, res, next) => {

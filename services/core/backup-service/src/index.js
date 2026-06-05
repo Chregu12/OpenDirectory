@@ -37,31 +37,13 @@ try {
 }
 
 // ─── RabbitMQ message bus ─────────────────────────────────────────────────────
-let _amqpChannel = null;
-async function connectBus() {
-  const amqplib = require('amqplib');
-  try {
-    const conn = await amqplib.connect(process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672');
-    conn.on('error', () => { _amqpChannel = null; });
-    conn.on('close', () => { _amqpChannel = null; setTimeout(connectBus, 5000); });
-    const ch = await conn.createChannel();
-    await ch.assertExchange('opendirectory.events', 'topic', { durable: true });
-    _amqpChannel = ch;
-    console.log('[backup-service] RabbitMQ connected');
-  } catch (e) {
-    console.warn('[backup-service] RabbitMQ unavailable:', e.message);
-    setTimeout(connectBus, 10000);
-  }
-}
-function publishEvent(routingKey, payload) {
-  if (!_amqpChannel) return;
-  try {
-    _amqpChannel.publish('opendirectory.events', routingKey,
-      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: 'backup-service' })),
-      { persistent: true }
-    );
-  } catch (_) {}
-}
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'backup-service' });
+async function connectBus() { await _bus.connect(); }
+function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 
 // ─── In-memory store (fallback) ───────────────────────────────────────────────
 const memoryStore = {

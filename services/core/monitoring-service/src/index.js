@@ -32,62 +32,17 @@ const config = require('./config');
 const EventBus = require('./events/eventBus');
 
 // ── RabbitMQ Event Bus ────────────────────────────────────────────────────────
-let _amqpChannel = null;
-const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
-const EVENTS_EXCHANGE = 'opendirectory.events';
-
-async function connectBus(serviceName) {
-  const amqplib = require('amqplib');
-  try {
-    const conn = await amqplib.connect(RABBITMQ_URL);
-    conn.on('error', () => { _amqpChannel = null; });
-    conn.on('close', () => { _amqpChannel = null; setTimeout(() => connectBus(serviceName), 5000); });
-    const ch = await conn.createChannel();
-    await ch.assertExchange(EVENTS_EXCHANGE, 'topic', { durable: true });
-    _amqpChannel = ch;
-    console.log(`[${serviceName}] RabbitMQ connected`);
-    return ch;
-  } catch (e) {
-    console.warn(`[${serviceName}] RabbitMQ unavailable, retrying in 10s:`, e.message);
-    setTimeout(() => connectBus(serviceName), 10000);
-    return null;
-  }
-}
-
-function publishEvent(routingKey, payload, source) {
-  if (!_amqpChannel) return;
-  try {
-    _amqpChannel.publish(EVENTS_EXCHANGE, routingKey,
-      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: source })),
-      { persistent: true, contentType: 'application/json' }
-    );
-  } catch (_) {}
-}
-
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'monitoring-service' });
+async function connectBus() { await _bus.connect(); }
+function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 async function subscribeToEvents(queueName, routingKeys, handler) {
-  if (!_amqpChannel) return;
-  try {
-    await _amqpChannel.assertQueue(queueName, {
-      durable: true,
-      arguments: { 'x-message-ttl': 86400000, 'x-max-length': 10000 }
-    });
-    for (const rk of routingKeys) {
-      await _amqpChannel.bindQueue(queueName, EVENTS_EXCHANGE, rk);
-    }
-    _amqpChannel.prefetch(5);
-    _amqpChannel.consume(queueName, async (msg) => {
-      if (!msg) return;
-      try {
-        const payload = JSON.parse(msg.content.toString());
-        await handler(msg.fields.routingKey, payload);
-        _amqpChannel.ack(msg);
-      } catch (e) {
-        _amqpChannel.nack(msg, false, !msg.fields.redelivered);
-      }
-    });
-  } catch (e) {
-    console.warn('subscribe error:', e.message);
-  }
+  await _bus.subscribe(queueName, routingKeys, (payload, meta) => {
+    handler(meta.routingKey, payload);
+  });
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1246,7 +1201,7 @@ class EnterpriseMonitoringService {
 
   start(port = process.env.PORT || 3009) {
     // Connect to RabbitMQ event bus (fire and forget)
-    connectBus('monitoring-service');
+    connectBus();
 
     setTimeout(async () => {
       await subscribeToEvents('monitoring.events', [
@@ -1279,7 +1234,7 @@ class EnterpriseMonitoringService {
     }, 3000);
 
     this.server.listen(port, () => {
-      publishEvent('admin.service.health', { service: 'monitoring', status: 'healthy', timestamp: new Date().toISOString() }, 'monitoring');
+      publishEvent('admin.service.health', { service: 'monitoring', status: 'healthy', timestamp: new Date().toISOString() });
       logger.info(`📊 Enterprise Monitoring Service started on port ${port}`);
       logger.info(`🔍 Health check: http://localhost:${port}/health`);
       logger.info(`📈 Metrics: http://localhost:${port}/metrics`);
