@@ -209,6 +209,15 @@ rabbitmq:
     username: opendirectory
     password: changeme  # override in production
 
+# ─── Event Bus ───────────────────────────────────────────────────────────────
+eventBus:
+  transport: rabbitmq        # rabbitmq | grpc | memory — overrideable per-env
+  grpcAddress: "event-bus:50050"
+  grpcServerPort: 50050
+  exchange: "opendirectory.events"
+  prefetch: 10
+  reconnectDelayMs: 2000
+
 # ─── Ingress ──────────────────────────────────────────────────────────────────
 ingress:
   enabled: true

@@ -119,6 +119,12 @@ rabbitmq:
   enabled: true
   storageSize: "10Gi"
 
+# ─── Event Bus ───────────────────────────────────────────────────────────────
+eventBus:
+  transport: rabbitmq
+  prefetch: 25
+  reconnectDelayMs: 1000
+
 # ─── Ingress with TLS ─────────────────────────────────────────────────────────
 ingress:
   enabled: true

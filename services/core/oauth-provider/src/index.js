@@ -10,39 +10,14 @@ const { v4: uuidv4 } = require('uuid');
 const { APP_CATALOG } = require('./appCatalog');
 const db = require('./db');
 
-// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
-let _amqpChannel = null;
-
-async function connectBus() {
-  try {
-    const amqplib = require('amqplib');
-    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
-    try {
-      const conn = await amqplib.connect(RABBITMQ_URL);
-      conn.on('error', () => { _amqpChannel = null; });
-      conn.on('close', () => { _amqpChannel = null; setTimeout(connectBus, 5000); });
-      const ch = await conn.createChannel();
-      await ch.assertExchange('opendirectory.events', 'topic', { durable: true });
-      _amqpChannel = ch;
-      console.log('[bus] RabbitMQ connected');
-    } catch (e) {
-      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
-      setTimeout(connectBus, 10000);
-    }
-  } catch (e) {
-    console.warn('[bus] connectBus error:', e.message);
-  }
-}
-
-function publish(routingKey, payload) {
-  if (!_amqpChannel) return;
-  try {
-    _amqpChannel.publish('opendirectory.events', routingKey,
-      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: 'oauth-provider' })),
-      { persistent: true, contentType: 'application/json' }
-    );
-  } catch (e) { /* fail silently */ }
-}
+// ─── Event Bus ───────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'oauth-provider' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 
 const promClient = require('prom-client');
 const register = new promClient.Registry();
