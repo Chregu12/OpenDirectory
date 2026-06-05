@@ -1289,9 +1289,9 @@ class UnifiedAuthenticationService {
     });
   }
 
-  start(port = process.env.PORT || 3001) {
+  async start(port = process.env.PORT || 3001) {
     auditDb.initDb().catch(() => {});
-    try { connectBus(); } catch (e) { console.warn('[bus] startup connect error:', e.message); }
+    try { await connectBus(); } catch (e) { console.warn('[bus] startup connect error:', e.message); }
     // User onboarding saga — uses the module-level EventBusClient (_bus)
     const { UserOnboardingSaga } = require('../../../../packages/service-contracts/src');
     const _userSaga = new UserOnboardingSaga(_bus, { logger });

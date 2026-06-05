@@ -68,7 +68,7 @@ async function connectPostgres() {
   const pool = new Pool({
     host: process.env.POSTGRES_HOST || process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.POSTGRES_PORT || process.env.DB_PORT, 10) || 5432,
-    database: process.env.POSTGRES_DB || process.env.DB_NAME || 'opendirectory',
+    database: process.env.POSTGRES_DB || process.env.DB_NAME || 'compliance',
     user: process.env.POSTGRES_USER || process.env.DB_USER || 'opendirectory',
     password: process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD,
     max: 20,

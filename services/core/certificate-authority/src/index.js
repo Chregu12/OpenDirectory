@@ -73,7 +73,7 @@ const CA_VALIDITY_YEARS = parseInt(process.env.CA_VALIDITY_YEARS || '10');
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'auth',
+  database: process.env.DB_NAME || 'certs',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || '',
   max: 5,

@@ -25,7 +25,7 @@ try {
   pgPool = new pg.Pool({
     host: process.env.POSTGRES_HOST || 'postgresql',
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    database: process.env.POSTGRES_DB || 'opendirectory',
+    database: process.env.POSTGRES_DB || 'backup',
     user: process.env.POSTGRES_USER || 'opendirectory',
     password: process.env.POSTGRES_PASSWORD || 'opendirectory',
     connectionTimeoutMillis: 3000,

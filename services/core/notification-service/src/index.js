@@ -19,7 +19,7 @@ function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).c
 async function subscribeToEvents(queueName, routingKeys, handler) {
   await _bus.subscribe(queueName, routingKeys, async (payload, meta) => {
     await handler(meta.routingKey, payload);
-    meta.ack();
+    await meta.ack();
   });
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ const PORT = parseInt(process.env.PORT, 10) || 3020;
 const DB_CONFIG = {
   host: process.env.DB_HOST || 'postgres',
   port: parseInt(process.env.DB_PORT, 10) || 5432,
-  database: process.env.DB_NAME || 'opendirectory',
+  database: process.env.DB_NAME || 'notifications',
   user: process.env.DB_USER || 'opendirectory',
   password: process.env.DB_PASSWORD || 'opendirectory',
   max: 10,

@@ -34,6 +34,16 @@ const rateLimitMiddleware = require('./middleware/rateLimit');
 // Import configuration
 const config = require('./config');
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'conditional-access' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 class ConditionalAccessService {
     constructor() {
         this.app = express();
@@ -254,7 +264,40 @@ class ConditionalAccessService {
             await this.auditLogger.initialize();
             
             this.logger.info('✅ All engines initialized successfully');
-            
+
+            // Wire up EventBus publish calls for security decisions
+            this.conditionalAccessEngine.on('accessEvaluated', (ev) => {
+                const decision = ev.accessDecision && ev.accessDecision.action;
+                const payload = {
+                    userId: ev.userId,
+                    deviceId: ev.deviceId,
+                    resource: ev.application,
+                    timestamp: ev.timestamp instanceof Date ? ev.timestamp.toISOString() : ev.timestamp,
+                };
+                if (decision === 'ALLOW') {
+                    publish('security.access.granted', payload);
+                } else if (decision === 'DENY' || decision === 'BLOCK') {
+                    publish('security.access.denied', { ...payload, reason: ev.accessDecision.reasons && ev.accessDecision.reasons[0] });
+                }
+            });
+
+            this.pimService.on('elevationApproved', (ev) => {
+                publish('security.pim.granted', {
+                    userId: ev.userId,
+                    role: ev.roleId,
+                    justification: ev.approvalReason,
+                    timestamp: new Date().toISOString(),
+                });
+            });
+
+            this.emergencyAccessService.on('emergencyAccessGranted', (ev) => {
+                publish('security.emergency.access.activated', {
+                    userId: ev.requester,
+                    activatedBy: ev.emergencyAccount,
+                    timestamp: new Date().toISOString(),
+                });
+            });
+
             // Start background services
             this.startBackgroundServices();
             
@@ -284,6 +327,7 @@ class ConditionalAccessService {
 
     async start() {
         try {
+            connectBus().catch(err => this.logger.warn(`EventBusClient connect failed: ${err.message}`));
             await this.initialize();
             
             this.server = this.app.listen(this.port, () => {
