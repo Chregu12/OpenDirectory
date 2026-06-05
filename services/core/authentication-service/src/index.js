@@ -83,6 +83,40 @@ const AuditService = require('./services/auditService');
 const logger = require('./utils/logger');
 const config = require('./utils/config');
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+let _amqpChannel = null;
+
+async function connectBus() {
+  try {
+    const amqplib = require('amqplib');
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
+    try {
+      const conn = await amqplib.connect(RABBITMQ_URL);
+      conn.on('error', () => { _amqpChannel = null; });
+      conn.on('close', () => { _amqpChannel = null; setTimeout(connectBus, 5000); });
+      const ch = await conn.createChannel();
+      await ch.assertExchange('opendirectory.events', 'topic', { durable: true });
+      _amqpChannel = ch;
+      console.log('[bus] RabbitMQ connected');
+    } catch (e) {
+      console.warn('[bus] RabbitMQ unavailable, retrying in 10s:', e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    console.warn('[bus] connectBus error:', e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!_amqpChannel) return;
+  try {
+    _amqpChannel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: 'authentication-service' })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
+
 // ─── Password Reset Token Store ───────────────────────────────────────────────
 const passwordResetTokens = new Map(); // token → { userId, email, expiresAt }
 
@@ -254,6 +288,7 @@ class UnifiedAuthenticationService {
               att.lockedUntil = Date.now() + (global.__od_LOCKOUT_MINUTES || 15) * 60_000;
               att.count = 0;
               auditDb.logAuditEvent({ eventType: 'account_locked', actor: username, message: `Account ${username} locked after ${global.__od_MAX_ATTEMPTS || 5} failed attempts`, severity: 'warning' }).catch(() => {});
+              try { publish('identity.account.locked', { username, ip: req.ip, lockUntil: new Date(att.lockedUntil).toISOString() }); } catch (e) {}
             }
             global.__od_loginAttempts.set(username, att);
           }
@@ -455,6 +490,7 @@ class UnifiedAuthenticationService {
         if (!user) {
           loginAttemptsCounter.inc({ result: 'failure' });
           await this.auditService.logFailedAuth(username, req, info?.message);
+          try { publish('identity.login.failed', { username, ip: req.ip, reason: 'invalid_password' }); } catch (e) {}
           return res.status(401).json({
             error: 'Authentication failed',
             message: info?.message || 'Invalid credentials'
@@ -513,7 +549,8 @@ class UnifiedAuthenticationService {
         // Log successful authentication
         loginAttemptsCounter.inc({ result: 'success' });
         await this.auditService.logSuccessfulAuth(user.id, req, provider);
-        
+        try { publish('identity.login.success', { userId: user.id, username: user.username, ip: req.ip, deviceId, provider }); } catch (e) {}
+
         res.json({
           success: true,
           user: {
@@ -619,6 +656,7 @@ class UnifiedAuthenticationService {
 
       // Log registration
       await this.auditService.logUserEvent('user_registered', user.id, req);
+      try { publish('identity.user.created', { userId: user.id, username: user.username || username, role: user.roles?.[0] || 'user', createdBy: 'self-registration' }); } catch (e) {}
 
       res.status(201).json({
         success: true,
@@ -700,8 +738,9 @@ class UnifiedAuthenticationService {
       if (valid) {
         await this.mfaService.enableMFA(userId);
         await this.auditService.logSecurityEvent('mfa_enabled', userId, req);
+        try { publish('identity.mfa.enabled', { userId, method: 'totp' }); } catch (e) {}
       }
-      
+
       res.json({ valid });
     } catch (error) {
       logger.error('MFA verification error:', error);
@@ -1055,6 +1094,7 @@ class UnifiedAuthenticationService {
       passwordResetTokens.delete(token);
 
       await this.auditService.logUserEvent('password_reset_completed', resetRecord.userId, req);
+      try { publish('identity.password.reset', { userId: resetRecord.userId, ip: req.ip }); } catch (e) {}
 
       res.json({ success: true, message: 'Passwort erfolgreich zurückgesetzt' });
     } catch (error) {
@@ -1275,6 +1315,7 @@ class UnifiedAuthenticationService {
 
   start(port = process.env.PORT || 3001) {
     auditDb.initDb().catch(() => {});
+    try { connectBus(); } catch (e) { console.warn('[bus] startup connect error:', e.message); }
     this.server = this.app.listen(port, () => {
       logger.info(`🔐 Unified Authentication Service started on port ${port}`);
       logger.info(`📊 Health check: http://localhost:${port}/health`);
@@ -1712,6 +1753,7 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
     if (!valid) return res.status(400).json({ error: 'Ungültiger Code' });
     userMfaSecrets.set(userId, secret);
     pendingMfaSecrets.delete(userId);
+    try { publish('identity.mfa.enabled', { userId, method: 'totp' }); } catch (e) {}
     res.json({ success: true, message: 'MFA aktiviert' });
   });
 
@@ -2038,11 +2080,13 @@ let _passwordPolicy = { minLength: 12, requireUppercase: true, requireNumbers: t
         if (r.rows.length > 0) {
           const updated = r.rows[0];
           pimRequests.set(id, { ...pimRequests.get(id), ...updated });
+          try { publish('security.pim.granted', { userId: request.user_id, roleId: request.role_id, duration: request.requested_duration_hours, approvedBy: decider }); } catch (e) {}
           return res.json(updated);
         }
       } catch (err) { return res.status(500).json({ error: err.message }); }
     }
     Object.assign(request, { status: 'active', decided_at: now.toISOString(), decided_by: decider, activated_at: now.toISOString(), expires_at: expiresAt });
+    try { publish('security.pim.granted', { userId: request.user_id, roleId: request.role_id, duration: request.requested_duration_hours, approvedBy: decider }); } catch (e) {}
     res.json(request);
   });
 

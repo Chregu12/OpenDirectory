@@ -58,6 +58,40 @@ function loadTemplates() {
   return templateCache;
 }
 
+// --- RabbitMQ Event Bus ---
+let _amqpChannel = null;
+
+async function connectBus() {
+  try {
+    const amqplib = require('amqplib');
+    const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672';
+    try {
+      const conn = await amqplib.connect(RABBITMQ_URL);
+      conn.on('error', () => { _amqpChannel = null; });
+      conn.on('close', () => { _amqpChannel = null; setTimeout(connectBus, 5000); });
+      const ch = await conn.createChannel();
+      await ch.assertExchange('opendirectory.events', 'topic', { durable: true });
+      _amqpChannel = ch;
+      logger.info('[bus] RabbitMQ connected');
+    } catch (e) {
+      logger.warn('[bus] RabbitMQ unavailable, retrying in 10s: ' + e.message);
+      setTimeout(connectBus, 10000);
+    }
+  } catch (e) {
+    logger.warn('[bus] connectBus error: ' + e.message);
+  }
+}
+
+function publish(routingKey, payload) {
+  if (!_amqpChannel) return;
+  try {
+    _amqpChannel.publish('opendirectory.events', routingKey,
+      Buffer.from(JSON.stringify({ ...payload, _timestamp: new Date().toISOString(), _source: 'policy-service' })),
+      { persistent: true, contentType: 'application/json' }
+    );
+  } catch (e) { /* fail silently */ }
+}
+
 // --- Audit helper ---
 async function auditLog(policyId, action, actor, changes) {
   try {
@@ -171,6 +205,7 @@ app.post('/api/policies', async (req, res) => {
 
     const policy = result.rows[0];
     await auditLog(policy.id, 'created', created_by, { name, type });
+    try { publish('policy.created', { policyId: policy.id, name: policy.name, type: policy.type, createdBy: created_by || null }); } catch (e) {}
     logger.info(`Policy created: ${name} (${type})`, { id: policy.id });
     res.status(201).json(policy);
   } catch (err) {
@@ -219,6 +254,7 @@ app.put('/api/policies/:id', async (req, res) => {
 
     const updated = result.rows[0];
     await auditLog(updated.id, 'updated', req.body.updated_by, { before: old, after: updated });
+    try { publish('policy.updated', { policyId: updated.id, name: updated.name, changes: Object.keys(req.body) }); } catch (e) {}
     res.json(updated);
   } catch (err) {
     logger.error('Failed to update policy', { id: req.params.id, error: err.message });
@@ -322,6 +358,15 @@ app.post('/api/policies/evaluate', async (req, res) => {
     const result = await db.query(
       `SELECT * FROM policies WHERE status = 'active' ORDER BY priority ASC`
     );
+    // Publish violation events for any enforce=true policies when a deviceId is provided
+    if (deviceId && Array.isArray(result.rows)) {
+      for (const p of result.rows) {
+        if (p.enforce && context?.violations?.[p.id]) {
+          const v = context.violations[p.id];
+          try { publish('policy.violated', { policyId: p.id, deviceId, violation: v.violation || 'policy_not_met', severity: v.severity || 'medium' }); } catch (e) {}
+        }
+      }
+    }
     res.json({ applicablePolicies: result.rows, evaluatedAt: new Date().toISOString() });
   } catch (err) {
     logger.error('Failed to evaluate policies', { error: err.message });
@@ -1357,6 +1402,8 @@ app.post('/api/blueprints/:id/apply', async (req, res) => {
     resultsCount: results.length,
   });
 
+  try { publish('policy.applied', { blueprintId: blueprint.id, name: blueprint.name, deviceCount: assignments.filter(a => a.target_type === 'device').length, appliedBy: req.body.applied_by || null }); } catch (e) {}
+
   res.json({
     blueprintId: blueprint.id,
     blueprintName: blueprint.name,
@@ -2009,6 +2056,8 @@ async function start() {
 
   // Pre-load templates
   loadTemplates();
+
+  try { connectBus(); } catch (e) { logger.warn('[bus] startup connect error: ' + e.message); }
 
   app.listen(PORT, () => {
     logger.info(`Policy Service running on port ${PORT}`);
