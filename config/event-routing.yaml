@@ -1,0 +1,149 @@
+# OpenDirectory — Event Bus Routing Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# transport: rabbitmq | grpc | memory
+# Override per-environment with EVENT_BUS_TRANSPORT env var.
+# ─────────────────────────────────────────────────────────────────────────────
+
+event_bus:
+  transport: rabbitmq          # default transport
+  grpc_address: event-bus:50050
+  grpc_server_port: 50050
+  rabbitmq_url: amqp://opendirectory:changeme@rabbitmq:5672/
+  exchange: opendirectory.events
+  prefetch: 10
+  reconnect_delay_ms: 2000
+
+services:
+  api-gateway:
+    publishes:
+      - api.request
+
+  authentication-service:
+    publishes:
+      - identity.login.success
+      - identity.login.failed
+      - identity.user.created
+      - identity.user.deleted
+      - identity.token.issued
+      - security.pim.granted
+      - security.pim.revoked
+      - security.mfa.enabled
+      - security.mfa.disabled
+    subscribes: []
+
+  device-service:
+    publishes:
+      - device.enrolled
+      - device.compliant
+      - device.non_compliant
+      - device.retired
+      - device.seen
+      - device.install.job.created
+      - device.install.job.completed
+      - device.install.job.failed
+    subscribes:
+      - policy.created
+      - policy.updated
+      - policy.applied
+
+  policy-service:
+    publishes:
+      - policy.created
+      - policy.updated
+      - policy.applied
+      - policy.violated
+      - device.compliance.recheck
+    subscribes:
+      - device.enrolled
+      - device.non_compliant
+
+  monitoring-service:
+    publishes:
+      - monitoring.alert.critical
+      - monitoring.alert.warning
+    subscribes:
+      - device.non_compliant
+      - policy.violated
+      - system.backup.failed
+      - system.backup.completed
+      - identity.login.failed
+      - admin.#
+
+  notification-service:
+    publishes:
+      - notification.sent
+      - notification.failed
+    subscribes:
+      - notification.send
+      - monitoring.alert.*
+
+  identity-service:
+    publishes:
+      - identity.user.created
+      - identity.user.deleted
+      - identity.group.created
+
+  license-management:
+    publishes:
+      - license.assigned
+      - license.revoked
+      - license.expired
+    subscribes:
+      - identity.user.created
+      - identity.user.deleted
+
+  backup-service:
+    publishes:
+      - system.backup.started
+      - system.backup.completed
+      - system.backup.failed
+
+  oauth-provider:
+    publishes:
+      - identity.token.issued
+      - identity.token.revoked
+      - identity.client.registered
+
+  update-management:
+    publishes:
+      - update.deployed
+      - update.failed
+      - update.ring.changed
+
+  apple-mdm:
+    publishes:
+      - mdm.device.enrolled
+      - mdm.command.sent
+      - mdm.profile.pushed
+
+  network-infrastructure:
+    publishes:
+      - network.dns.updated
+      - network.vlan.created
+      - network.dhcp.lease.issued
+
+  certificate-authority:
+    publishes:
+      - certificate.issued
+      - certificate.revoked
+
+  certificate-network:
+    publishes:
+      - network.profile.deployed
+      - network.profile.revoked
+
+  printer-service:
+    publishes:
+      - printer.job.created
+      - printer.job.completed
+      - printer.offline
+
+  remote-control:
+    publishes:
+      - remote.session.started
+      - remote.session.ended
+
+  configuration-service:
+    publishes:
+      - config.updated
+      - config.deleted

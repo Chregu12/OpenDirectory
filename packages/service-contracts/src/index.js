@@ -10,6 +10,14 @@
 const eventsModule = require('./events');
 const MessageBus   = require('./messageBus');
 
+const eventBusPkg = (() => {
+  try { return require('@opendirectory/grpc-event-bus'); }
+  catch (_) {
+    try { return require('../../grpc-event-bus/src'); }
+    catch (_) { return { EventBusClient: null, EventBusServer: null }; }
+  }
+})();
+
 const SagaBase           = require('./sagas/SagaBase');
 const StoreInstallSaga   = require('./sagas/StoreInstallSaga');
 const UserOnboardingSaga = require('./sagas/UserOnboardingSaga');
@@ -30,4 +38,8 @@ module.exports = {
   StoreInstallSaga,
   UserOnboardingSaga,
   DeadLetterHandler,
+
+  // Generic event bus (grpc-event-bus package, falls back gracefully)
+  EventBusClient: eventBusPkg.EventBusClient,
+  EventBusServer: eventBusPkg.EventBusServer,
 };
