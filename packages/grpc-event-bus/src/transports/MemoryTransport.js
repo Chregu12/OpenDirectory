@@ -1,10 +1,30 @@
 'use strict';
 const { EventEmitter } = require('events');
 
+// Shared handler map used when shared: true — all MemoryTransport instances
+// created with the same sharedKey read/write the same subscription registry.
+const _sharedBuses = new Map(); // sharedKey → Map<queueName, [{patterns, handler}]>
+
 class MemoryTransport extends EventEmitter {
-  constructor() {
+  /**
+   * @param {object} [opts]
+   * @param {boolean} [opts.shared=false]  When true, all instances with the
+   *   same sharedKey share subscriptions (simulates a real broker).
+   * @param {string}  [opts.sharedKey='default']
+   */
+  constructor(opts = {}) {
     super();
-    this._handlers = new Map(); // queueName → [{ patterns, handler }]
+    const shared    = !!opts.shared;
+    const sharedKey = opts.sharedKey || 'default';
+
+    if (shared) {
+      if (!_sharedBuses.has(sharedKey)) _sharedBuses.set(sharedKey, new Map());
+      this._handlers = _sharedBuses.get(sharedKey);
+      this._shared   = true;
+    } else {
+      this._handlers = new Map(); // queueName → [{ patterns, handler }]
+      this._shared   = false;
+    }
     this.connected = false;
   }
 
@@ -27,7 +47,10 @@ class MemoryTransport extends EventEmitter {
     this._handlers.get(queueName).push({ patterns, handler });
   }
 
-  async close() { this.connected = false; this._handlers.clear(); }
+  async close() {
+    this.connected = false;
+    if (!this._shared) this._handlers.clear();
+  }
 
   // AMQP-style wildcard matching: * = one word, # = zero or more words
   _match(pattern, key) {
@@ -37,6 +60,11 @@ class MemoryTransport extends EventEmitter {
       .replace(/\*/g, '[^.]+')
       .replace(/#/g, '.*') + '$';
     return new RegExp(re).test(key);
+  }
+
+  /** Reset the shared bus for a given key (useful in tests). */
+  static resetShared(sharedKey = 'default') {
+    _sharedBuses.delete(sharedKey);
   }
 }
 

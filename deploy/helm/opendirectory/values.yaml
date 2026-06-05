@@ -217,6 +217,17 @@ eventBus:
   exchange: "opendirectory.events"
   prefetch: 10
   reconnectDelayMs: 2000
+  replicaCount: 1
+  backendTransport: rabbitmq
+  image:
+    name: event-bus-service
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
 
 # ─── Ingress ──────────────────────────────────────────────────────────────────
 ingress:

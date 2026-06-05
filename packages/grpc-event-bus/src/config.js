@@ -17,6 +17,7 @@ const DEFAULTS = {
 
 function loadConfig(overrides = {}) {
   return {
+    // Known / env-mapped fields
     transport:           process.env.EVENT_BUS_TRANSPORT      || overrides.transport      || DEFAULTS.transport,
     rabbitmqUrl:         process.env.RABBITMQ_URL              || overrides.rabbitmqUrl    || DEFAULTS.rabbitmqUrl,
     grpcAddress:         process.env.EVENT_BUS_GRPC_ADDRESS   || overrides.grpcAddress    || DEFAULTS.grpcAddress,
@@ -25,6 +26,9 @@ function loadConfig(overrides = {}) {
     tls:                 process.env.EVENT_BUS_TLS === 'true'  || overrides.tls           || DEFAULTS.tls,
     prefetch:       parseInt(process.env.EVENT_BUS_PREFETCH   || overrides.prefetch       || DEFAULTS.prefetch, 10),
     reconnectDelayMs: parseInt(process.env.EVENT_BUS_RECONNECT_MS || overrides.reconnectDelayMs || DEFAULTS.reconnectDelayMs, 10),
+    // Pass-through extras (e.g. shared / sharedKey for MemoryTransport in tests)
+    ...(overrides.shared    !== undefined && { shared:    overrides.shared }),
+    ...(overrides.sharedKey !== undefined && { sharedKey: overrides.sharedKey }),
   };
 }
 
