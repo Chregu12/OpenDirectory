@@ -201,6 +201,329 @@ appStore:
       cpu: "500m"
       memory: "512Mi"
 
+# ─── Certificate Authority ───────────────────────────────────────────────────
+certAuthority:
+  replicaCount: 1
+  image:
+    name: certificate-authority
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3010
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Certificate Network ──────────────────────────────────────────────────────
+certNetwork:
+  replicaCount: 1
+  image:
+    name: certificate-network
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3011
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Configuration Service ────────────────────────────────────────────────────
+configuration:
+  replicaCount: 1
+  image:
+    name: configuration-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3012
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Enterprise Directory ─────────────────────────────────────────────────────
+enterpriseDirectory:
+  replicaCount: 1
+  image:
+    name: enterprise-directory
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3008
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── License Management ───────────────────────────────────────────────────────
+licenseManagement:
+  replicaCount: 1
+  image:
+    name: license-management
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3013
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Network Infrastructure ───────────────────────────────────────────────────
+networkInfra:
+  replicaCount: 1
+  image:
+    name: network-infrastructure
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3014
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── OAuth Provider ───────────────────────────────────────────────────────────
+oauth:
+  replicaCount: 1
+  image:
+    name: oauth-provider
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3015
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Printer Service ──────────────────────────────────────────────────────────
+printer:
+  replicaCount: 1
+  image:
+    name: printer-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3016
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Remote Control ───────────────────────────────────────────────────────────
+remoteControl:
+  replicaCount: 1
+  image:
+    name: remote-control
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3017
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Update Management ────────────────────────────────────────────────────────
+updateManagement:
+  replicaCount: 1
+  image:
+    name: update-management
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3018
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Conditional Access ───────────────────────────────────────────────────────
+conditionalAccess:
+  replicaCount: 1
+  image:
+    name: conditional-access
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3007
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Antivirus Protection ─────────────────────────────────────────────────────
+antivirus:
+  replicaCount: 1
+  image:
+    name: antivirus-protection
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3020
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Audit Service ────────────────────────────────────────────────────────────
+auditService:
+  replicaCount: 1
+  image:
+    name: audit-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3021
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Auto Remediation ─────────────────────────────────────────────────────────
+autoRemediation:
+  replicaCount: 1
+  image:
+    name: auto-remediation
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3022
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Compliance Engine ────────────────────────────────────────────────────────
+complianceEngine:
+  replicaCount: 1
+  image:
+    name: compliance-engine
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3023
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Device Lifecycle ─────────────────────────────────────────────────────────
+deviceLifecycle:
+  replicaCount: 1
+  image:
+    name: device-lifecycle
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3024
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Mobile Management ────────────────────────────────────────────────────────
+mobileMgmt:
+  replicaCount: 1
+  image:
+    name: mobile-management
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3025
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Policy Simulator ─────────────────────────────────────────────────────────
+policySimulator:
+  replicaCount: 1
+  image:
+    name: policy-simulator
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3026
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Security Scanner ─────────────────────────────────────────────────────────
+securityScanner:
+  replicaCount: 1
+  image:
+    name: security-scanner
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3027
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
 # ─── RabbitMQ ─────────────────────────────────────────────────────────────────
 rabbitmq:
   enabled: true
