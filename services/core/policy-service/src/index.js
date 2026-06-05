@@ -1303,7 +1303,7 @@ app.get('/api/blueprints/:id/assignments', async (req, res) => {
 
 // POST /api/blueprints/:id/apply — apply blueprint: push MDM commands to assigned devices
 app.post('/api/blueprints/:id/apply', async (req, res) => {
-  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider:3010';
+  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider';
 
   let blueprint;
   let configs = [];
@@ -1377,7 +1377,7 @@ app.post('/api/blueprints/:id/apply', async (req, res) => {
       const certConfigs = configs.filter(c => c.config_type === 'certificate');
       for (const certConfig of certConfigs) {
         try {
-          const caUrl = process.env.CA_SERVICE_URL || 'http://certificate-authority:3018';
+          const caUrl = process.env.CA_SERVICE_URL || 'http://certificate-authority';
           await fetch(`${caUrl}/api/certificates/issue`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

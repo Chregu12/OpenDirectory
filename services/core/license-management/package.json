@@ -35,7 +35,8 @@
     "mime-types": "^2.1.35",
     "archiver": "^6.0.1",
     "extract-zip": "^2.0.1",
-    "registry-js": "^1.15.1"
+    "registry-js": "^1.15.1",
+    "amqplib": "^0.10.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",
