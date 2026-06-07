@@ -9,10 +9,39 @@
 //
 // For the call() tests we use nock — a real HTTP interceptor that works at the
 // Node http/https layer, meaning no mock-fetch gymnastics needed.
+//
+// getServiceToken() POSTs to the TOKEN_ENDPOINT (default http://localhost:3001/token).
+// In tests we set QA_CLIENT_SECRET and intercept that endpoint with nock so no
+// real network call is made. The token cache is reset before each test by
+// re-requiring the module via jest.resetModules().
+
+process.env.QA_CLIENT_SECRET  = 'test-client-secret';
+process.env.TOKEN_ENDPOINT    = 'http://localhost:3001/token';
 
 const nock = require('nock');
-const serviceClient = require('../utils/serviceClient');
-const { call, ping, SERVICES } = serviceClient;
+
+// Helper: set up a nock intercept for the token endpoint (called once per test
+// that exercises getServiceToken, which is every call() / ping() invocation).
+// We use allowUnmocked so other nock scopes are unaffected.
+function mockTokenEndpoint(times = 10) {
+  return nock('http://localhost:3001')
+    .post('/token')
+    .times(times)
+    .reply(200, { access_token: 'test-service-token', expires_in: 3600 }, { 'Content-Type': 'application/json' });
+}
+
+// Re-require serviceClient fresh before each test so the token cache is reset.
+let serviceClient, call, ping, SERVICES;
+beforeEach(() => {
+  jest.resetModules();
+  // Re-set env so the fresh module picks up the right values
+  process.env.QA_CLIENT_SECRET = 'test-client-secret';
+  process.env.TOKEN_ENDPOINT   = 'http://localhost:3001/token';
+  serviceClient = require('../utils/serviceClient');
+  ({ call, ping, SERVICES } = serviceClient);
+  // Pre-register a token endpoint intercept for this test
+  mockTokenEndpoint(10);
+});
 
 afterEach(() => {
   nock.cleanAll();
