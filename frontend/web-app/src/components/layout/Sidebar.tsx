@@ -52,6 +52,7 @@ export const NAV_ITEMS: NavEntry[] = [
   { id: 'certificates',      label: 'Certificates / PKI',  icon: '📜' },
   { id: 'scanner',           label: 'Security Scanner',    icon: '🔍' },
   { id: 'security',          label: 'Security',            icon: '🛡' },
+  { id: 'threats',           label: 'Threats',             icon: '🐛' },
   { id: 'secrets',           label: 'Secrets',             icon: '🔏' },
   { divider: true },
   { id: 'gpo',               label: 'Group Policy',        icon: '📋' },

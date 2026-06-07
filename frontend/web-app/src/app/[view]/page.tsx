@@ -40,6 +40,7 @@ import AlertingView from '@/components/views/AlertingView';
 import CertificatesView from '@/components/views/CertificatesView';
 import RadiusView from '@/components/views/RadiusView';
 import ServiceHealthView from '@/components/views/ServiceHealthView';
+import ThreatDashboardView from '@/components/views/ThreatDashboardView';
 
 // ABM-style 3-column views
 import DeviceFleetView from '@/components/views/DeviceFleetView';
@@ -71,7 +72,7 @@ const MODULE_NAV_MAP: Record<string, string> = {
 
 const VALID_VIEWS = new Set([
   'dashboard', 'topology', 'devices', 'applications', 'infrastructure',
-  'users', 'monitoring', 'secrets', 'security', 'printers', 'policies', 'settings',
+  'users', 'monitoring', 'secrets', 'security', 'threats', 'printers', 'policies', 'settings',
   'identity', 'enrollment', 'permissions',
   'antivirus', 'audit', 'backup', 'appstore', 'compliance', 'scanner',
   'blueprints', 'sync', 'integrations', 'roadmap', 'pim', 'licenses',
@@ -194,6 +195,7 @@ export default function ViewPage() {
         case 'monitoring':        return <MonitoringView />;
         case 'secrets':           return <SecretsView />;
         case 'security':          return <SecurityView />;
+        case 'threats':           return <ThreatDashboardView />;
         case 'printers':          return <PrintersView />;
         case 'policies':          return <PolicyView />;
         case 'identity':          return <IdentityProviderView />;
