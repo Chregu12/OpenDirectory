@@ -54,6 +54,11 @@ import PolicyDeployWizard from '@/components/views/PolicyDeployWizard';
 import ComplianceSnapshot from '@/components/views/ComplianceSnapshot';
 import OnboardingWizard from '@/components/setup/OnboardingWizard';
 
+// Advanced infrastructure views
+import TrustManagementView from '@/components/views/TrustManagementView';
+import KerberosAdminView from '@/components/views/KerberosAdminView';
+import ReplicationView from '@/components/views/ReplicationView';
+
 // ─── Module gating ────────────────────────────────────────────────────────────
 
 const MODULE_NAV_MAP: Record<string, string> = {
@@ -73,6 +78,8 @@ const VALID_VIEWS = new Set([
   'mfa', 'sspr', 'conditionalaccess', 'alerting', 'certificates', 'radius', 'servicehealth',
   // ABM-style 3-column views
   'fleet', 'serviceprincipals',
+  // Advanced infrastructure views
+  'trusts', 'kerberos', 'replication',
 ]);
 
 // Views that display the QuickActionsBar
@@ -211,6 +218,9 @@ export default function ViewPage() {
         case 'certificates':      return <CertificatesView />;
         case 'radius':            return <RadiusView />;
         case 'servicehealth':     return <ServiceHealthView />;
+        case 'trusts':            return <TrustManagementView />;
+        case 'kerberos':          return <KerberosAdminView />;
+        case 'replication':       return <ReplicationView />;
         case 'settings':
           return (
             <div className="p-6">
