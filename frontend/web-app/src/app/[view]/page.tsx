@@ -60,6 +60,7 @@ import OnboardingWizard from '@/components/setup/OnboardingWizard';
 import TrustManagementView from '@/components/views/TrustManagementView';
 import KerberosAdminView from '@/components/views/KerberosAdminView';
 import ReplicationView from '@/components/views/ReplicationView';
+import AutomationView from '@/components/views/AutomationView';
 
 // ─── Module gating ────────────────────────────────────────────────────────────
 
@@ -83,6 +84,8 @@ const VALID_VIEWS = new Set([
   'fleet', 'serviceprincipals',
   // Advanced infrastructure views
   'trusts', 'kerberos', 'replication',
+  // Automation
+  'automation',
 ]);
 
 // Views that display the QuickActionsBar
@@ -200,6 +203,7 @@ export default function ViewPage() {
         case 'threats':           return <ThreatDashboardView />;
         case 'printers':          return <PrintersView />;
         case 'policies':          return <PolicyView />;
+        case 'automation':        return <AutomationView />;
         case 'identity':          return <IdentityProviderView />;
         case 'enrollment':        return <EnrollmentHubView />;
         case 'permissions':       return <PermissionsView />;
