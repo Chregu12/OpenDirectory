@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
+import { useTheme } from '@/hooks/useTheme';
 
 // ─── Navigation definition ────────────────────────────────────────────────────
 
@@ -116,6 +117,7 @@ export default function Sidebar({
   mobileOpen,
   onMobileClose,
 }: SidebarProps) {
+  const { theme, toggleTheme } = useTheme();
   const userInitials = currentUser?.name ? getInitials(currentUser.name) : 'OD';
 
   // Filter items by module availability
@@ -152,8 +154,8 @@ export default function Sidebar({
           left: 0,
           bottom: 0,
           width: 'var(--apple-sidebar-width)',
-          background: '#F5F5F7',
-          borderRight: '1px solid var(--apple-gray-2)',
+          background: 'var(--bg-sidebar)',
+          borderRight: '1px solid var(--border-color)',
           zIndex: 50,
           transition: 'transform 0.3s ease',
           display: 'flex',
@@ -164,7 +166,7 @@ export default function Sidebar({
         <div
           style={{
             height: 'var(--apple-topbar-height)',
-            borderBottom: '1px solid var(--apple-gray-2)',
+            borderBottom: '1px solid var(--border-color)',
             padding: '0 16px',
             display: 'flex',
             alignItems: 'center',
@@ -191,7 +193,7 @@ export default function Sidebar({
               style={{
                 fontSize: 13,
                 fontWeight: 600,
-                color: 'var(--apple-text-primary)',
+                color: 'var(--text-primary)',
                 lineHeight: 1.2,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
@@ -200,21 +202,22 @@ export default function Sidebar({
             >
               OpenDirectory
             </p>
-            <p style={{ fontSize: 11, color: 'var(--apple-text-secondary)', lineHeight: 1.2 }}>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.2 }}>
               opendirectory.local
             </p>
           </div>
           <button
             onClick={onMobileClose}
+            aria-label="Close sidebar"
             className="lg:hidden"
-            style={{ color: 'var(--apple-gray-5)', padding: 4, flexShrink: 0 }}
+            style={{ color: 'var(--text-secondary)', padding: 4, flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
           >
             <XMarkIcon style={{ width: 18, height: 18 }} />
           </button>
         </div>
 
         {/* Navigation list */}
-        <nav style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+        <nav role="navigation" aria-label="Main navigation" style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
           {visibleItems.map((entry, idx) => {
             if ('divider' in entry) {
               return (
@@ -222,7 +225,7 @@ export default function Sidebar({
                   key={`divider-${idx}`}
                   style={{
                     height: 1,
-                    background: 'var(--apple-gray-2)',
+                    background: 'var(--border-color)',
                     margin: '6px 12px',
                   }}
                 />
@@ -234,6 +237,7 @@ export default function Sidebar({
               <button
                 key={entry.id}
                 onClick={() => handleItemClick(entry.id)}
+                aria-current={isActive ? 'page' : undefined}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -245,7 +249,7 @@ export default function Sidebar({
                   fontWeight: isActive ? 500 : 400,
                   textAlign: 'left',
                   background: isActive ? 'var(--apple-blue)' : 'transparent',
-                  color: isActive ? '#ffffff' : 'var(--apple-text-primary)',
+                  color: isActive ? '#ffffff' : 'var(--text-primary)',
                   border: 'none',
                   borderRadius: 7,
                   cursor: 'pointer',
@@ -274,58 +278,87 @@ export default function Sidebar({
           })}
         </nav>
 
-        {/* User footer */}
+        {/* Dark mode toggle + user footer */}
         <div
           style={{
-            padding: '12px 14px',
-            borderTop: '1px solid var(--apple-gray-2)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
+            borderTop: '1px solid var(--border-color)',
             flexShrink: 0,
           }}
         >
+          {/* Theme toggle */}
+          <div style={{ padding: '8px 14px 0' }}>
+            <button
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                width: '100%',
+                padding: '6px 12px',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                background: 'none',
+                border: 'none',
+                borderRadius: 7,
+                cursor: 'pointer',
+              }}
+            >
+              {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+            </button>
+          </div>
+          {/* User info */}
           <div
             style={{
-              width: 30,
-              height: 30,
-              borderRadius: '50%',
-              background: 'var(--apple-blue)',
-              color: 'white',
-              fontSize: 11,
-              fontWeight: 700,
+              padding: '8px 14px 12px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
+              gap: 10,
             }}
           >
-            {userInitials}
-          </div>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <p
+            <div
               style={{
-                fontSize: 12,
-                fontWeight: 500,
-                color: 'var(--apple-text-primary)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {currentUser?.name ?? 'Administrator'}
-            </p>
-            <p
-              style={{
+                width: 30,
+                height: 30,
+                borderRadius: '50%',
+                background: 'var(--apple-blue)',
+                color: 'white',
                 fontSize: 11,
-                color: 'var(--apple-text-secondary)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
-              {currentUser?.role ?? 'Admin'}
-            </p>
+              {userInitials}
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p
+                style={{
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: 'var(--text-primary)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {currentUser?.name ?? 'Administrator'}
+              </p>
+              <p
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-secondary)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {currentUser?.role ?? 'Admin'}
+              </p>
+            </div>
           </div>
         </div>
       </aside>

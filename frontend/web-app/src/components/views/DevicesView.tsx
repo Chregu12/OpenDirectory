@@ -460,11 +460,11 @@ function AddAppModal({ device, installedIds, onAdd, onClose }: {
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="add-app-modal-title" className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-gray-900">Add Application</h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
+            <h3 id="add-app-modal-title" className="text-base font-semibold text-gray-900">Add Application</h3>
+            <button onClick={onClose} aria-label="Close dialog" className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
           </div>
 
           {available.length === 0 ? (
@@ -518,14 +518,14 @@ function DecommissionModal({ device, apps, onConfirm, onCancel }: {
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[60]" onClick={onCancel}>
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="decommission-modal-title" className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
         <div className="p-6">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <TrashIcon className="w-5 h-5 text-red-600" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-gray-900">Decommission {device.name}</h3>
+              <h3 id="decommission-modal-title" className="text-base font-semibold text-gray-900">Decommission {device.name}</h3>
               <p className="text-xs text-gray-500">This will restore the device to its original enrollment state</p>
             </div>
           </div>
@@ -887,7 +887,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
   return (
     <>
       <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div role="dialog" aria-modal="true" aria-labelledby="device-detail-modal-title" className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
 
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-0">
@@ -898,7 +898,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                   : <DeviceThumbnail platform={detail.platform} size="md" />}
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-[#1D1D1F]">
+                <h2 id="device-detail-modal-title" className="text-lg font-semibold text-[#1D1D1F]">
                   {stammdaten.custom_name || detail.name || 'Unknown Device'}
                 </h2>
                 <div className="flex items-center gap-2 mt-0.5">
@@ -916,7 +916,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                 </div>
               </div>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <button onClick={onClose} aria-label="Close dialog" className="text-gray-400 hover:text-gray-600">
               <XMarkIcon className="w-6 h-6" />
             </button>
           </div>
@@ -1155,6 +1155,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                             </div>
                           ) : (
                             <button onClick={() => removeApp(app.id)}
+                              aria-label={`Remove ${app.name}`}
                               className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
                               <TrashIcon className="w-4 h-4" />
                             </button>
@@ -1641,11 +1642,11 @@ function EnrollModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="enroll-modal-title" className="bg-white rounded-xl shadow-xl max-w-2xl w-full" onClick={e => e.stopPropagation()}>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Enroll a Device</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
+            <h2 id="enroll-modal-title" className="text-lg font-semibold text-gray-900">Enroll a Device</h2>
+            <button onClick={onClose} aria-label="Close dialog" className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
           </div>
 
           {/* Method tabs */}

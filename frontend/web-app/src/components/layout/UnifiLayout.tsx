@@ -269,6 +269,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
           <button
             className="lg:hidden"
             onClick={() => setSidebarOpen(true)}
+            aria-label="Open navigation menu"
             style={{ color: 'var(--apple-gray-6)', padding: 4, flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
           >
             <Bars3Icon style={{ width: 20, height: 20 }} />
@@ -309,6 +310,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
             <div ref={notifRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => { setNotifOpen(o => !o); setUserMenuOpen(false); }}
+                aria-label="Notifications"
                 style={{
                   position: 'relative', background: 'transparent', border: 'none',
                   cursor: 'pointer', padding: 6, color: 'var(--apple-gray-6)',
@@ -366,6 +368,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
             <div ref={userMenuRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => { setUserMenuOpen(o => !o); setNotifOpen(false); }}
+                aria-label={`User menu for ${currentUser?.name ?? 'user'}`}
                 style={{
                   width: 32, height: 32, borderRadius: '50%',
                   background: 'var(--apple-blue)', color: 'white',
@@ -435,7 +438,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                 onChange={handleSearchChange}
                 style={{ flex: 1, fontSize: 15, border: 'none', outline: 'none', color: 'var(--apple-text-primary)', background: 'transparent' }}
               />
-              <button onClick={() => setSearchOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--apple-gray-5)', padding: 2 }}>
+              <button onClick={() => setSearchOpen(false)} aria-label="Close search" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--apple-gray-5)', padding: 2 }}>
                 <XMarkIcon style={{ width: 18, height: 18 }} />
               </button>
             </div>

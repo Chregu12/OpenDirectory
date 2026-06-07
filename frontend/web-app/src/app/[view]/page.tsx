@@ -162,6 +162,12 @@ export default function ViewPage() {
       .catch(() => {});
   }, [authChecked]);
 
+  // Update document title based on active view
+  useEffect(() => {
+    const viewLabel = activeView.charAt(0).toUpperCase() + activeView.slice(1);
+    document.title = `${viewLabel} — OpenDirectory`;
+  }, [activeView]);
+
   const handleViewChange = (view: string) => router.push(`/${view}`);
 
   const handleModuleChange = (moduleId: string, enabled: boolean) => {
