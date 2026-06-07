@@ -77,6 +77,7 @@ class EnterpriseDeviceManagementService {
     this.enrollmentService = new EnrollmentService(this.db, this.eventBus);
     this.inventoryService = new InventoryService(this.db, this.cache);
     this.remoteActionService = new RemoteActionService(this.wss, this.eventBus);
+    this.remoteActionService.setDb(this.db);
     this.geofencingService = new GeofencingService(this.db, this.eventBus);
     this.certificateManager = new CertificateManager(this.db, this.eventBus);
     this.threatDetector = new ThreatDetector(this.db, this.eventBus);
@@ -192,7 +193,7 @@ class EnterpriseDeviceManagementService {
       const start = Date.now();
       res.on('finish', () => {
         const duration = Date.now() - start;
-        try { res.setHeader('X-Response-Time', `\${duration}ms`); } catch (_) {}
+        res.setHeader('X-Response-Time', `\${duration}ms`);
         this.metrics.recordResponseTime(req.route?.path || req.path, duration);
       });
       next();
@@ -1641,268 +1642,585 @@ class EnterpriseDeviceManagementService {
     }
   }
 
-  // ── Stub handlers for routes defined in initializeRoutes ─────────────────────
-
-  async initiateEnrollment(req, res) {
-    try {
-      const result = await this.enrollmentService.initiateEnrollment(req.body);
-      res.status(201).json({ success: true, data: result, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to initiate enrollment', requestId: req.id }); }
-  }
-
-  async completeEnrollment(req, res) {
-    try {
-      const result = await this.enrollmentService.completeEnrollment(req.body);
-      res.json({ success: true, data: result, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to complete enrollment', requestId: req.id }); }
-  }
-
-  async verifyEnrollment(req, res) {
-    try {
-      const result = await this.enrollmentService.verifyEnrollment(req.body);
-      res.json({ success: true, data: result, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to verify enrollment', requestId: req.id }); }
-  }
-
-  async getEnrollmentStatus(req, res) {
-    try {
-      const { enrollmentId } = req.params;
-      const result = await this.enrollmentService.getEnrollmentStatus(enrollmentId);
-      res.json({ success: true, data: result, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to get enrollment status', requestId: req.id }); }
-  }
-
-  async approveEnrollment(req, res) {
-    try {
-      const { enrollmentId } = req.params;
-      const result = await this.enrollmentService.approveEnrollment(enrollmentId, req.body);
-      res.json({ success: true, data: result, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to approve enrollment', requestId: req.id }); }
-  }
-
-  async rejectEnrollment(req, res) {
-    try {
-      const { enrollmentId } = req.params;
-      const result = await this.enrollmentService.rejectEnrollment(enrollmentId, req.body);
-      res.json({ success: true, data: result, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to reject enrollment', requestId: req.id }); }
-  }
+  // ── Device CRUD (continued) ───────────────────────────────────────────────
 
   async updateDevice(req, res) {
     try {
       const { deviceId } = req.params;
-      const device = await this.circuitBreaker.execute('update-device', () => this.deviceManager.updateDevice(deviceId, req.body));
+      const device = await this.deviceManager.updateDevice(deviceId, req.body);
+      if (!device) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
       res.json({ success: true, data: device, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to update device', requestId: req.id }); }
+    } catch (error) {
+      logger.error('Update device error:', error);
+      res.status(500).json({ error: 'Failed to update device', requestId: req.id });
+    }
   }
 
   async deleteDevice(req, res) {
     try {
       const { deviceId } = req.params;
-      await this.circuitBreaker.execute('delete-device', () => this.deviceManager.deleteDevice(deviceId));
+      const deleted = await this.deviceManager.deleteDevice(deviceId);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
       res.json({ success: true, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to delete device', requestId: req.id }); }
+    } catch (error) {
+      logger.error('Delete device error:', error);
+      res.status(500).json({ error: 'Failed to delete device', requestId: req.id });
+    }
   }
 
+  // ── Remote Actions: Lock / Unlock / Wipe ─────────────────────────────────
+
+  /**
+   * POST /api/devices/:deviceId/lock
+   * Body: { reason?: string }
+   */
   async lockDevice(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to lock device' }); }
+    try {
+      const { deviceId } = req.params;
+      const reason = req.body?.reason || '';
+      const result = await this.remoteActionService.lockDevice(deviceId, reason);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Lock device error:', error);
+      if (error.statusCode === 404) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
+      res.status(500).json({ error: 'Failed to lock device', details: error.message, requestId: req.id });
+    }
   }
 
+  /**
+   * POST /api/devices/:deviceId/unlock
+   */
   async unlockDevice(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to unlock device' }); }
+    try {
+      const { deviceId } = req.params;
+      const result = await this.remoteActionService.unlockDevice(deviceId);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Unlock device error:', error);
+      if (error.statusCode === 404) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
+      res.status(500).json({ error: 'Failed to unlock device', details: error.message, requestId: req.id });
+    }
   }
 
+  /**
+   * POST /api/devices/:deviceId/wipe
+   * Body: { type?: 'full' | 'selective' }
+   */
   async wipeDevice(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to wipe device' }); }
+    try {
+      const { deviceId } = req.params;
+      const options = { type: req.body?.type || 'full' };
+      const result = await this.remoteActionService.wipeDevice(deviceId, options);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Wipe device error:', error);
+      if (error.statusCode === 404) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
+      res.status(500).json({ error: 'Failed to wipe device', details: error.message, requestId: req.id });
+    }
   }
+
+  // ── Enrollment Handlers ───────────────────────────────────────────────────
+
+  async initiateEnrollment(req, res) {
+    try {
+      const enrollment = await this.enrollmentService.initiateEnrollment(req.body);
+      res.status(201).json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Initiate enrollment error:', error);
+      res.status(500).json({ error: 'Failed to initiate enrollment', requestId: req.id });
+    }
+  }
+
+  async completeEnrollment(req, res) {
+    try {
+      const { enrollmentId, ...deviceData } = req.body;
+      if (!enrollmentId) return res.status(400).json({ error: 'enrollmentId required', requestId: req.id });
+      const enrollment = await this.enrollmentService.completeEnrollment(enrollmentId, deviceData);
+      if (!enrollment) return res.status(404).json({ error: 'Enrollment not found', requestId: req.id });
+      res.json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Complete enrollment error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to complete enrollment', requestId: req.id });
+    }
+  }
+
+  async verifyEnrollment(req, res) {
+    try {
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: 'token required', requestId: req.id });
+      const enrollment = await this.enrollmentService.verifyEnrollment(token);
+      if (!enrollment) return res.status(404).json({ error: 'Enrollment not found', requestId: req.id });
+      res.json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Verify enrollment error:', error);
+      res.status(500).json({ error: 'Failed to verify enrollment', requestId: req.id });
+    }
+  }
+
+  async getEnrollmentStatus(req, res) {
+    try {
+      const { enrollmentId } = req.params;
+      const enrollment = await this.enrollmentService.getEnrollmentStatus(enrollmentId);
+      if (!enrollment) return res.status(404).json({ error: 'Enrollment not found', requestId: req.id });
+      res.json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Get enrollment status error:', error);
+      res.status(500).json({ error: 'Failed to get enrollment status', requestId: req.id });
+    }
+  }
+
+  async approveEnrollment(req, res) {
+    try {
+      const { enrollmentId } = req.params;
+      const enrollment = await this.enrollmentService.approveEnrollment(enrollmentId);
+      if (!enrollment) return res.status(404).json({ error: 'Enrollment not found', requestId: req.id });
+      res.json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Approve enrollment error:', error);
+      res.status(500).json({ error: 'Failed to approve enrollment', requestId: req.id });
+    }
+  }
+
+  async rejectEnrollment(req, res) {
+    try {
+      const { enrollmentId } = req.params;
+      const { reason } = req.body;
+      const enrollment = await this.enrollmentService.rejectEnrollment(enrollmentId, reason);
+      if (!enrollment) return res.status(404).json({ error: 'Enrollment not found', requestId: req.id });
+      res.json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Reject enrollment error:', error);
+      res.status(500).json({ error: 'Failed to reject enrollment', requestId: req.id });
+    }
+  }
+
+  // ── Policy Handlers ───────────────────────────────────────────────────────
 
   async getPolicies(req, res) {
     try {
-      const policies = await this.policyEngine.getDevicePolicies('*');
-      res.json({ success: true, data: policies || [], requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to get policies', requestId: req.id }); }
+      const { page = 1, limit = 50 } = req.query;
+      const result = await this.policyEngine.getPolicies({ page: parseInt(page), limit: parseInt(limit) });
+      res.json({ success: true, ...result, requestId: req.id });
+    } catch (error) {
+      logger.error('Get policies error:', error);
+      res.status(500).json({ error: 'Failed to retrieve policies', requestId: req.id });
+    }
   }
 
   async createPolicy(req, res) {
-    try { res.status(201).json({ success: true, data: { id: this.generateRequestId(), ...req.body }, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to create policy' }); }
+    try {
+      const policy = await this.policyEngine.createPolicy(req.body, req.user);
+      res.status(201).json({ success: true, data: policy, requestId: req.id });
+    } catch (error) {
+      logger.error('Create policy error:', error);
+      res.status(500).json({ error: 'Failed to create policy', requestId: req.id });
+    }
   }
 
   async getPolicy(req, res) {
-    try { res.json({ success: true, data: null, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to get policy' }); }
+    try {
+      const policy = await this.policyEngine.getPolicy(req.params.policyId);
+      if (!policy) return res.status(404).json({ error: 'Policy not found', requestId: req.id });
+      res.json({ success: true, data: policy, requestId: req.id });
+    } catch (error) {
+      logger.error('Get policy error:', error);
+      res.status(500).json({ error: 'Failed to retrieve policy', requestId: req.id });
+    }
   }
 
   async updatePolicy(req, res) {
-    try { res.json({ success: true, data: req.body, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to update policy' }); }
+    try {
+      const policy = await this.policyEngine.updatePolicy(req.params.policyId, req.body);
+      if (!policy) return res.status(404).json({ error: 'Policy not found', requestId: req.id });
+      res.json({ success: true, data: policy, requestId: req.id });
+    } catch (error) {
+      logger.error('Update policy error:', error);
+      res.status(500).json({ error: 'Failed to update policy', requestId: req.id });
+    }
   }
 
   async deletePolicy(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to delete policy' }); }
+    try {
+      const ok = await this.policyEngine.deletePolicy(req.params.policyId);
+      if (!ok) return res.status(404).json({ error: 'Policy not found', requestId: req.id });
+      res.json({ success: true, requestId: req.id });
+    } catch (error) {
+      logger.error('Delete policy error:', error);
+      res.status(500).json({ error: 'Failed to delete policy', requestId: req.id });
+    }
   }
 
   async assignPolicy(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to assign policy' }); }
+    try {
+      const result = await this.policyEngine.assignPolicy(req.params.policyId, req.body);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Assign policy error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to assign policy', requestId: req.id });
+    }
   }
 
   async deployPolicy(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to deploy policy' }); }
+    try {
+      const result = await this.policyEngine.deployPolicy(req.params.policyId, req.body);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Deploy policy error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to deploy policy', requestId: req.id });
+    }
   }
 
+  // ── Compliance Handlers ───────────────────────────────────────────────────
+
+  /**
+   * GET /api/compliance/scan/:deviceId
+   * Runs a real compliance scan via complianceScanner.scanDevice().
+   * Returns 404 if device not found, 500 on unexpected errors.
+   */
   async scanDeviceCompliance(req, res) {
-    try { res.json({ success: true, data: { compliant: true }, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Compliance scan failed' }); }
+    try {
+      const { deviceId } = req.params;
+      const result = await this.complianceScanner.scanDevice(deviceId);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Compliance scan error:', error);
+      if (error.statusCode === 404) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
+      res.status(500).json({ error: 'Compliance scan failed', details: error.message, requestId: req.id });
+    }
   }
 
   async getComplianceViolations(req, res) {
     try {
-      const violations = await this.complianceScanner.getViolations();
-      res.json({ success: true, data: violations || [], requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to get violations', requestId: req.id }); }
+      const { page = 1, limit = 50, severity, deviceId } = req.query;
+      const result = await this.complianceScanner.getViolations({ page: parseInt(page), limit: parseInt(limit), severity, deviceId });
+      res.json({ success: true, ...result, requestId: req.id });
+    } catch (error) {
+      logger.error('Get compliance violations error:', error);
+      res.status(500).json({ error: 'Failed to retrieve violations', requestId: req.id });
+    }
   }
 
   async remediateViolation(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Remediation failed' }); }
+    try {
+      const { violationId } = req.params;
+      await this.complianceScanner.autoRemediate(violationId);
+      res.json({ success: true, violationId, requestId: req.id });
+    } catch (error) {
+      logger.error('Remediate violation error:', error);
+      res.status(500).json({ error: 'Failed to remediate violation', requestId: req.id });
+    }
   }
 
   async getComplianceReports(req, res) {
-    try { res.json({ success: true, data: [], requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to get reports' }); }
+    try {
+      const { page = 1, limit = 20 } = req.query;
+      const result = await this.complianceScanner.getReports({ page: parseInt(page), limit: parseInt(limit) });
+      res.json({ success: true, ...result, requestId: req.id });
+    } catch (error) {
+      logger.error('Get compliance reports error:', error);
+      res.status(500).json({ error: 'Failed to retrieve compliance reports', requestId: req.id });
+    }
   }
+
+  // ── Remote Action Handlers ────────────────────────────────────────────────
 
   async executeRemoteAction(req, res) {
     try {
-      const result = await this.remoteActionService.executeAction(req.body);
+      const { deviceId, action, payload } = req.body;
+      if (!deviceId || !action) return res.status(400).json({ error: 'deviceId and action required', requestId: req.id });
+      const result = await this.remoteActionService.executeAction(deviceId, action, payload || {});
       res.json({ success: true, data: result, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Remote action failed', requestId: req.id }); }
+    } catch (error) {
+      logger.error('Execute remote action error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      res.status(500).json({ error: 'Failed to execute remote action', requestId: req.id });
+    }
   }
 
   async getActionStatus(req, res) {
     try {
-      const status = await this.remoteActionService.getActionStatus(req.params.actionId);
+      const { actionId } = req.params;
+      const status = await this.remoteActionService.getActionStatus(actionId);
+      if (!status) return res.status(404).json({ error: 'Action not found', requestId: req.id });
       res.json({ success: true, data: status, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to get action status' }); }
+    } catch (error) {
+      logger.error('Get action status error:', error);
+      res.status(500).json({ error: 'Failed to get action status', requestId: req.id });
+    }
   }
 
   async executeBulkAction(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Bulk action failed' }); }
+    try {
+      const { deviceIds, action, payload } = req.body;
+      if (!deviceIds || !action) return res.status(400).json({ error: 'deviceIds and action required', requestId: req.id });
+      const results = await this.remoteActionService.executeBulkAction(deviceIds, action, payload || {});
+      res.json({ success: true, data: results, requestId: req.id });
+    } catch (error) {
+      logger.error('Bulk action error:', error);
+      res.status(500).json({ error: 'Failed to execute bulk action', requestId: req.id });
+    }
   }
+
+  // ── Analytics Handlers ────────────────────────────────────────────────────
 
   async getAnalyticsDashboard(req, res) {
     try {
       const data = await this.analyticsEngine.getDashboard();
       res.json({ success: true, data, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to get analytics dashboard' }); }
+    } catch (error) {
+      logger.error('Analytics dashboard error:', error);
+      res.status(500).json({ error: 'Failed to retrieve analytics dashboard', requestId: req.id });
+    }
   }
 
   async getDeviceTrends(req, res) {
-    try { res.json({ success: true, data: [], requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to get device trends' }); }
+    try {
+      const data = await this.analyticsEngine.getDeviceTrends(req.query);
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Device trends error:', error);
+      res.status(500).json({ error: 'Failed to retrieve device trends', requestId: req.id });
+    }
   }
 
   async getComplianceMetrics(req, res) {
-    try { res.json({ success: true, data: {}, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to get compliance metrics' }); }
+    try {
+      const data = await this.analyticsEngine.getComplianceMetrics();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Compliance metrics error:', error);
+      res.status(500).json({ error: 'Failed to retrieve compliance metrics', requestId: req.id });
+    }
   }
 
   async getSecurityInsights(req, res) {
-    try { res.json({ success: true, data: {}, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to get security insights' }); }
+    try {
+      const data = await this.analyticsEngine.getSecurityInsights();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Security insights error:', error);
+      res.status(500).json({ error: 'Failed to retrieve security insights', requestId: req.id });
+    }
   }
+
+  // ── Certificate Handlers ──────────────────────────────────────────────────
 
   async getCertificates(req, res) {
     try {
-      const certs = await this.certificateManager.getCertificates();
-      res.json({ success: true, data: certs, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to get certificates' }); }
+      const { page = 1, limit = 50 } = req.query;
+      const result = await this.certificateManager.getCertificates({ page: parseInt(page), limit: parseInt(limit) });
+      res.json({ success: true, ...result, requestId: req.id });
+    } catch (error) {
+      logger.error('Get certificates error:', error);
+      res.status(500).json({ error: 'Failed to retrieve certificates', requestId: req.id });
+    }
   }
 
   async issueCertificate(req, res) {
     try {
       const cert = await this.certificateManager.issueCertificate(req.body);
       res.status(201).json({ success: true, data: cert, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to issue certificate' }); }
+    } catch (error) {
+      logger.error('Issue certificate error:', error);
+      res.status(500).json({ error: 'Failed to issue certificate', requestId: req.id });
+    }
   }
 
   async renewCertificate(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to renew certificate' }); }
+    try {
+      const cert = await this.certificateManager.renewCertificate(req.params.certId);
+      res.json({ success: true, data: cert, requestId: req.id });
+    } catch (error) {
+      logger.error('Renew certificate error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to renew certificate', requestId: req.id });
+    }
   }
 
   async revokeCertificate(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to revoke certificate' }); }
+    try {
+      const cert = await this.certificateManager.revokeCertificate(req.params.certId, req.body?.reason);
+      res.json({ success: true, data: cert, requestId: req.id });
+    } catch (error) {
+      logger.error('Revoke certificate error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to revoke certificate', requestId: req.id });
+    }
   }
+
+  // ── Geofencing Handlers ───────────────────────────────────────────────────
 
   async getGeofencingZones(req, res) {
     try {
-      const zones = await this.geofencingService.getZones();
-      res.json({ success: true, data: zones, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to get geofencing zones' }); }
+      const { page = 1, limit = 50 } = req.query;
+      const result = await this.geofencingService.getZones({ page: parseInt(page), limit: parseInt(limit) });
+      res.json({ success: true, ...result, requestId: req.id });
+    } catch (error) {
+      logger.error('Get geofencing zones error:', error);
+      res.status(500).json({ error: 'Failed to retrieve geofencing zones', requestId: req.id });
+    }
   }
 
   async createGeofencingZone(req, res) {
     try {
       const zone = await this.geofencingService.createZone(req.body);
       res.status(201).json({ success: true, data: zone, requestId: req.id });
-    } catch (error) { res.status(500).json({ error: 'Failed to create geofencing zone' }); }
+    } catch (error) {
+      logger.error('Create geofencing zone error:', error);
+      res.status(500).json({ error: 'Failed to create geofencing zone', requestId: req.id });
+    }
   }
 
   async updateGeofencingZone(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to update geofencing zone' }); }
+    try {
+      const zone = await this.geofencingService.updateZone(req.params.zoneId, req.body);
+      if (!zone) return res.status(404).json({ error: 'Zone not found', requestId: req.id });
+      res.json({ success: true, data: zone, requestId: req.id });
+    } catch (error) {
+      logger.error('Update geofencing zone error:', error);
+      res.status(500).json({ error: 'Failed to update geofencing zone', requestId: req.id });
+    }
   }
 
   async deleteGeofencingZone(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to delete geofencing zone' }); }
+    try {
+      const ok = await this.geofencingService.deleteZone(req.params.zoneId);
+      if (!ok) return res.status(404).json({ error: 'Zone not found', requestId: req.id });
+      res.json({ success: true, requestId: req.id });
+    } catch (error) {
+      logger.error('Delete geofencing zone error:', error);
+      res.status(500).json({ error: 'Failed to delete geofencing zone', requestId: req.id });
+    }
   }
 
+  // ── Bulk Operations ───────────────────────────────────────────────────────
+
   async bulkImportDevices(req, res) {
-    try { res.json({ success: true, data: { imported: 0 }, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Bulk import failed' }); }
+    try {
+      const { devices } = req.body;
+      if (!devices || !Array.isArray(devices)) return res.status(400).json({ error: 'devices array required', requestId: req.id });
+      const results = await Promise.allSettled(devices.map(d => this.deviceManager.createDevice(d, req.user)));
+      const imported = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+      const failed = results.filter(r => r.status === 'rejected').map((r, i) => ({ index: i, error: r.reason?.message }));
+      res.json({ success: true, imported: imported.length, failed: failed.length, failures: failed, requestId: req.id });
+    } catch (error) {
+      logger.error('Bulk import devices error:', error);
+      res.status(500).json({ error: 'Failed to bulk import devices', requestId: req.id });
+    }
   }
 
   async bulkUpdatePolicies(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Bulk update failed' }); }
+    try {
+      const { deviceIds, policyId } = req.body;
+      if (!deviceIds || !policyId) return res.status(400).json({ error: 'deviceIds and policyId required', requestId: req.id });
+      const result = await this.policyEngine.assignPolicy(policyId, { deviceIds });
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Bulk update policies error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to bulk update policies', requestId: req.id });
+    }
   }
 
   async bulkComplianceScan(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Bulk scan failed' }); }
+    try {
+      const { deviceIds } = req.body;
+      if (!deviceIds || !Array.isArray(deviceIds)) return res.status(400).json({ error: 'deviceIds array required', requestId: req.id });
+      const results = await Promise.allSettled(deviceIds.map(id => this.complianceScanner.scanDevice(id)));
+      const scanned = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+      const failed = results.filter(r => r.status === 'rejected').map((r, i) => ({ deviceId: deviceIds[i], error: r.reason?.message }));
+      res.json({ success: true, scanned: scanned.length, failed: failed.length, failures: failed, results: scanned, requestId: req.id });
+    } catch (error) {
+      logger.error('Bulk compliance scan error:', error);
+      res.status(500).json({ error: 'Failed to bulk compliance scan', requestId: req.id });
+    }
   }
 
   async getBulkOperationStatus(req, res) {
-    try { res.json({ success: true, data: { status: 'completed' }, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to get operation status' }); }
+    try {
+      const { operationId } = req.params;
+      // Bulk ops are fire-and-forget in the current implementation; return a placeholder
+      res.json({ success: true, data: { operationId, status: 'completed' }, requestId: req.id });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get bulk operation status', requestId: req.id });
+    }
   }
 
-  async getPendingCommands(req, res) {
-    try { res.json({ commands: [], requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to get pending commands' }); }
-  }
-
-  async handleCommandResult(req, res) {
-    try { res.json({ success: true, requestId: req.id }); }
-    catch (error) { res.status(500).json({ error: 'Failed to handle command result' }); }
-  }
+  // ── Event Handler: Geofence Violation ────────────────────────────────────
 
   async handleGeofenceViolation(event) {
-    logger.warn('Geofence violation', event);
+    const { deviceId, violation } = event;
+    this.broadcastToSubscribers('compliance_alerts', {
+      type: 'geofence_violation',
+      deviceId,
+      violation,
+      timestamp: new Date().toISOString()
+    });
+    this.sendToDevice(deviceId, {
+      type: 'notification',
+      category: 'geofence_violation',
+      title: 'Geofence-Verletzung erkannt',
+      body: violation?.description || 'Device outside allowed zone',
+      data: { violation }
+    });
   }
 
   async handlePolicyDeployed(event) {
-    logger.info('Policy deployed', event);
+    const { policy, deployment } = event;
+    this.broadcastToSubscribers('device_events', {
+      type: 'policy_deployed',
+      policy: { id: policy?.id, name: policy?.name },
+      deployment,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // ── Agent Command Queue ───────────────────────────────────────────────────
+
+  async getPendingCommands(req, res) {
+    try {
+      const { deviceId } = req.params;
+      let pending = [];
+      if (this.cache) {
+        const data = await this.cache.get(`pending:${deviceId}`);
+        if (data) pending = JSON.parse(data);
+      }
+      res.json({ commands: pending, timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('Get pending commands error:', error);
+      res.status(500).json({ error: 'Failed to get pending commands' });
+    }
+  }
+
+  async handleCommandResult(req, res) {
+    try {
+      const { deviceId, commandId } = req.params;
+      const result = req.body;
+      logger.info(`Command result via HTTP: device=${deviceId} command=${commandId} status=${result.status}`);
+      // Forward to the appropriate agent service by command prefix
+      if (commandId.startsWith('pol-')) {
+        this.policyAgentService.handleCommandResult(deviceId, { commandId, ...result });
+      }
+      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('Handle command result error:', error);
+      res.status(500).json({ error: 'Failed to handle command result' });
+    }
   }
 
   broadcastToSubscribers(subscription, data) {
