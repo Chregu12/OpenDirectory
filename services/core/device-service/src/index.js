@@ -45,6 +45,9 @@ const backupClient = require('./clients/backupClient');
 // Enterprise services (local only)
 const { AnalyticsBridge } = require('./analytics-bridge');
 
+// OIDC Authentication
+const { oidcAuth } = require('./middleware/oidcAuth');
+
 // Utilities
 const logger = require('./utils/logger');
 const config = require('./config');
@@ -180,6 +183,9 @@ class EnterpriseDeviceManagementService {
       extended: true, 
       limit: '10mb' 
     }));
+
+    // OIDC token verification (RS256 via JWKS)
+    this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
 
     // Request ID middleware
     this.app.use((req, res, next) => {

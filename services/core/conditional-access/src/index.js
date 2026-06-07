@@ -28,7 +28,7 @@ const PIMController = require('./controllers/PIMController');
 const EmergencyAccessController = require('./controllers/EmergencyAccessController');
 
 // Import middleware
-const authMiddleware = require('./middleware/auth');
+const { oidcAuth } = require('./middleware/oidcAuth');
 const auditMiddleware = require('./middleware/audit');
 const rateLimitMiddleware = require('./middleware/rateLimit');
 
@@ -159,7 +159,9 @@ class ConditionalAccessService {
 
         this.app.use(rateLimitMiddleware);
         this.app.use(auditMiddleware(this.auditLogger));
-        this.app.use('/api/v1', authMiddleware);
+
+        // Authentication middleware — OIDC/RS256 via JWKS (replaces shared JWT_SECRET)
+        this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics', '/discovery'] }));
     }
 
     setupRoutes() {

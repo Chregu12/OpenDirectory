@@ -15,7 +15,10 @@ const nextConfig = {
     const enterpriseDirUrl     = process.env.ENTERPRISE_DIRECTORY_URL       || 'http://enterprise-directory:3000';
     const conditionalAccessUrl = process.env.CONDITIONAL_ACCESS_URL         || 'http://conditional-access:3007';
     const quickActionsUrl      = process.env.QUICK_ACTIONS_URL              || 'http://quick-actions:3950';
+    const authServiceUrl       = process.env.AUTH_SERVICE_URL               || 'http://auth-service:3001';
     return [
+      // OIDC endpoints → auth-service (same-origin, avoids CORS)
+      { source: '/oidc/:path*', destination: `${authServiceUrl}/:path*` },
       // Health + integration-specific routes -> integration-service
       { source: '/health',                  destination: `${integrationUrl}/health` },
       { source: '/health/:path*',           destination: `${integrationUrl}/health/:path*` },

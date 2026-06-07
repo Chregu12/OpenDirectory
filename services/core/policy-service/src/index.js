@@ -9,6 +9,7 @@ const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
 
+const { oidcAuth } = require('./middleware/oidcAuth');
 const db = require('./db/postgres');
 const { RSOPEngine } = require('./engines/gpoProcessor');
 const { ConflictResolver } = require('./engines/conflictResolver');
@@ -32,6 +33,7 @@ app.use(cors());
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 }));
+app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
 
 // --- Engine singletons ---
 const rsopEngine = new RSOPEngine();
