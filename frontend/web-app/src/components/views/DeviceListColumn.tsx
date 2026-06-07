@@ -69,6 +69,7 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
   const [sortKey,    setSortKey]    = useState<SortKey>('name');
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen,   setSortOpen]   = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const loadDevices = useCallback(async () => {
     try {
@@ -95,7 +96,14 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
     } catch {}
   }, []);
 
-  useEffect(() => { loadDevices(); }, [loadDevices]);
+  useEffect(() => { loadDevices(); }, [loadDevices, refreshKey]);
+
+  // Refresh when a new device is enrolled via EnrollmentWizard
+  useEffect(() => {
+    const handler = () => setRefreshKey(k => k + 1);
+    window.addEventListener('device-enrolled', handler);
+    return () => window.removeEventListener('device-enrolled', handler);
+  }, []);
 
   // Close dropdowns on outside click
   useEffect(() => {

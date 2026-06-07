@@ -7,7 +7,7 @@ import {
   ClipboardDocumentIcon,
   CheckIcon,
 } from '@heroicons/react/24/outline';
-import { api } from '@/lib/api';
+import { qaPost, EnrollDeviceResult } from '@/lib/quickActionsApi';
 import toast from 'react-hot-toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -154,8 +154,9 @@ function CopyField({ label, value }: { label: string; value: string }) {
 export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
   const [step, setStep]       = useState<Step>(1);
   const [form, setForm]       = useState<FormData>({ platform: null, deviceName: '', serial: '', assignedUser: '', ou: SAMPLE_OUS[0] });
-  const [loading, setLoading] = useState(false);
-  const [token, setToken]     = useState<string | null>(null);
+  const [loading, setLoading]       = useState(false);
+  const [token, setToken]           = useState<string | null>(null);
+  const [enrollResult, setEnrollResult] = useState<EnrollDeviceResult | null>(null);
 
   const set = (key: keyof FormData, value: string | Platform | null) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -169,21 +170,23 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
   const handleEnroll = async () => {
     setLoading(true);
     try {
-      // TODO: use VITE_QUICK_ACTIONS_URL env var for production
-      // POST http://localhost:3950/api/quick/devices/enroll
-      const res = await api.post('/api/devices/enrollment-token', {
-        platform:  form.platform,
-        name:      form.deviceName,
-        serial:    form.serial,
-        user:      form.assignedUser,
-        ou:        form.ou,
-        expires_in_hours: 24,
+      const result = await qaPost<EnrollDeviceResult>('/api/quick/devices/enroll', {
+        platform:       form.platform,
+        deviceName:     form.deviceName,
+        serialNumber:   form.serial || undefined,
+        assignedUserId: form.assignedUser || undefined,
+        ouDn:           form.ou || undefined,
       });
-      const t = res.data?.token ?? res.data?.enrollment_token ?? `ODM-${Math.random().toString(36).slice(2,10).toUpperCase()}`;
-      setToken(t);
-    } catch {
-      // Fallback demo token
-      setToken(`ODM-${Math.random().toString(36).slice(2,10).toUpperCase()}`);
+      setEnrollResult(result);
+      // Use enrollmentUrl or deviceId as the display token
+      setToken(result.enrollmentUrl ?? result.deviceId ?? '');
+      // Notify device list to refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('device-enrolled', { detail: result }));
+      }
+      toast.success('Device enrolled successfully');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Enrollment failed');
     } finally {
       setLoading(false);
     }
@@ -290,7 +293,10 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                 Complete setup on your {PLATFORMS.find(p => p.id === form.platform)?.label} device:
               </p>
 
-              <CopyField label="Enrollment Token" value={token} />
+              {enrollResult?.deviceId && (
+                <CopyField label="Device ID" value={enrollResult.deviceId} />
+              )}
+              {token && <CopyField label="Enrollment URL / Token" value={token} />}
 
               {form.platform && (
                 <div
@@ -307,9 +313,12 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                     Setup Instructions
                   </div>
                   <ol style={{ margin: 0, paddingLeft: 18 }}>
-                    {getInstructions(form.platform, token).map((step, i) => (
+                    {(enrollResult?.nextSteps?.length
+                      ? enrollResult.nextSteps
+                      : getInstructions(form.platform, token ?? '')
+                    ).map((s, i) => (
                       <li key={i} style={{ fontSize: 13, color: 'var(--apple-text-primary)', marginBottom: 6, lineHeight: 1.4 }}>
-                        {step}
+                        {s}
                       </li>
                     ))}
                   </ol>
