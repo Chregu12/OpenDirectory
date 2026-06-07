@@ -1,154 +1,94 @@
-'use strict';
+const axios = require('axios');
 
-const jwt = require('jsonwebtoken');
+const TOKEN_ENDPOINT = process.env.TOKEN_ENDPOINT || 'http://localhost:3001/token';
+const CLIENT_ID = 'quick-actions';
+const CLIENT_SECRET = process.env.QA_CLIENT_SECRET;
 
-// Base URLs from env or Kubernetes service names
-const SERVICES = {
-  auth:      process.env.AUTH_SERVICE_URL      || 'http://authentication-service',
-  directory: process.env.DIRECTORY_SERVICE_URL || 'http://enterprise-directory',
-  kerberos:  process.env.KERBEROS_SERVICE_URL  || 'http://kerberos-kdc',
-  samba:     process.env.SAMBA_SERVICE_URL     || 'http://samba-ad-dc',
-  device:    process.env.DEVICE_SERVICE_URL    || 'http://device-service',
-  policy:    process.env.POLICY_SERVICE_URL    || 'http://policy-service',
-  pim:       process.env.PIM_SERVICE_URL       || 'http://conditional-access',
-  mdm:       process.env.MDM_SERVICE_URL       || 'http://mobile-management',
-  appStore:  process.env.APP_STORE_SERVICE_URL || 'http://app-store',
-};
-
-const TIMEOUT_MS = 10_000;
-
-// ── Service token cache ────────────────────────────────────────────────────────
-
-/** Cached service token state */
-const _tokenCache = {
-  token: null,
-  expiresAt: 0,   // Unix timestamp (seconds)
-};
-
-const TOKEN_TTL_SECONDS            = 60;
-const TOKEN_REFRESH_BUFFER_SECONDS = 10; // regenerate when within 10s of expiry
+// Cached token state
+let cachedToken = null;
+let tokenExpiresAt = 0;
 
 /**
- * Return a short-lived JWT signed with JWT_SECRET that identifies this service.
- * The token is cached and only regenerated when within TOKEN_REFRESH_BUFFER_SECONDS
- * of expiry, avoiding unnecessary signing on every request.
+ * Obtain a service access token via OAuth 2.0 Client Credentials grant.
+ * The token is cached until it expires (with a 30-second safety buffer).
+ */
+async function getServiceToken() {
+  const now = Date.now();
+
+  // Return cached token if still valid
+  if (cachedToken && now < tokenExpiresAt) {
+    return cachedToken;
+  }
+
+  if (!CLIENT_SECRET) {
+    throw new Error('QA_CLIENT_SECRET environment variable is required for service authentication');
+  }
+
+  const params = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: CLIENT_ID,
+    client_secret: CLIENT_SECRET,
+    scope: 'openid roles',
+  });
+
+  const response = await axios.post(TOKEN_ENDPOINT, params.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 10000,
+  });
+
+  const { access_token, expires_in } = response.data;
+
+  if (!access_token) {
+    throw new Error('Token endpoint did not return an access_token');
+  }
+
+  cachedToken = access_token;
+  // expires_in is in seconds; subtract 30s buffer
+  tokenExpiresAt = now + ((expires_in || 3600) - 30) * 1000;
+
+  return cachedToken;
+}
+
+/**
+ * Create an axios instance that automatically attaches a Bearer token
+ * obtained via the Client Credentials flow.
  *
- * @returns {string|null} Signed JWT, or null if JWT_SECRET is not configured.
+ * @param {string} baseURL - Base URL of the target service
+ * @returns {Promise<import('axios').AxiosInstance>}
  */
-function getServiceToken() {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    console.warn('[serviceClient] JWT_SECRET not set — outgoing requests will have no auth token');
-    return null;
-  }
+async function createServiceClient(baseURL) {
+  const token = await getServiceToken();
 
-  const nowSeconds = Math.floor(Date.now() / 1000);
-
-  // Return cached token if it still has more than BUFFER seconds left
-  if (_tokenCache.token && _tokenCache.expiresAt - nowSeconds > TOKEN_REFRESH_BUFFER_SECONDS) {
-    return _tokenCache.token;
-  }
-
-  // Generate a fresh token
-  const token = jwt.sign(
-    { sub: 'quick-actions-service', role: 'service' },
-    secret,
-    { expiresIn: TOKEN_TTL_SECONDS },
-  );
-
-  _tokenCache.token     = token;
-  _tokenCache.expiresAt = nowSeconds + TOKEN_TTL_SECONDS;
-
-  return token;
+  return axios.create({
+    baseURL,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    timeout: 30000,
+  });
 }
 
-// ── HTTP client ────────────────────────────────────────────────────────────────
-
 /**
- * Make an HTTP call to an internal service.
+ * Make an authenticated service-to-service request.
  *
- * @param {string} service  - key in SERVICES map (e.g. 'auth', 'directory')
- * @param {string} method   - HTTP verb ('GET', 'POST', 'PATCH', 'DELETE', …)
- * @param {string} path     - URL path starting with '/' (e.g. '/api/users')
- * @param {object} [body]   - optional JSON body (only sent for non-GET requests)
- * @returns {Promise<object>} parsed JSON response body
- * @throws  {Error}          if the request times out, the network is unreachable,
- *                           or the server returns a non-2xx status
+ * @param {string} method  - HTTP method
+ * @param {string} url     - Full URL or path (relative to baseURL if provided)
+ * @param {object} options - axios request config overrides
  */
-async function call(service, method, path, body) {
-  const { default: fetch } = await import('node-fetch');
+async function serviceRequest(method, url, options = {}) {
+  const token = await getServiceToken();
 
-  const baseUrl = SERVICES[service];
-  if (!baseUrl) throw new Error(`Unknown service: "${service}"`);
-
-  const url = `${baseUrl}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  const headers = { 'Content-Type': 'application/json' };
-
-  // Attach service-to-service auth token on every outgoing request
-  const serviceToken = getServiceToken();
-  if (serviceToken) {
-    headers['Authorization'] = `Bearer ${serviceToken}`;
-  }
-
-  const options = {
-    method: method.toUpperCase(),
-    headers,
-    signal: controller.signal,
-  };
-
-  if (body !== undefined && method.toUpperCase() !== 'GET') {
-    options.body = JSON.stringify(body);
-  }
-
-  try {
-    const res = await fetch(url, options);
-    clearTimeout(timer);
-
-    let data;
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      data = await res.json();
-    } else {
-      data = { _raw: await res.text() };
-    }
-
-    if (!res.ok) {
-      const err = new Error(
-        `Service "${service}" returned ${res.status} for ${method} ${path}`
-      );
-      err.status = res.status;
-      err.body   = data;
-      throw err;
-    }
-
-    return data;
-  } catch (err) {
-    clearTimeout(timer);
-    if (err.name === 'AbortError') {
-      const timeoutErr = new Error(
-        `Service "${service}" timed out after ${TIMEOUT_MS}ms for ${method} ${path}`
-      );
-      timeoutErr.code = 'ETIMEOUT';
-      throw timeoutErr;
-    }
-    throw err;
-  }
+  return axios({
+    method,
+    url,
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
 }
 
-/**
- * Ping a service's /health endpoint. Returns { healthy, latencyMs, error? }.
- */
-async function ping(service) {
-  const start = Date.now();
-  try {
-    await call(service, 'GET', '/health');
-    return { healthy: true, latencyMs: Date.now() - start };
-  } catch (err) {
-    return { healthy: false, latencyMs: Date.now() - start, error: err.message };
-  }
-}
-
-module.exports = { call, ping, getServiceToken, SERVICES };
+module.exports = { getServiceToken, createServiceClient, serviceRequest };
