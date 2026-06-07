@@ -6,6 +6,8 @@
  * proxy; the quick-actions service is a standalone Express app.
  */
 
+import { getAccessToken, refreshTokens, setTokens, startLogin } from './auth';
+
 const BASE =
   (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_QUICK_ACTIONS_URL) ||
   'http://localhost:3950';
@@ -47,35 +49,114 @@ export interface RotateSecretResult {
   rotatedAt?: string;
 }
 
+// ─── Auth helpers ─────────────────────────────────────────────────────────────
+
+function buildHeaders(): Record<string, string> {
+  const token = getAccessToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+async function handleUnauthorized(): Promise<boolean> {
+  const storedRefreshToken = localStorage.getItem('refresh_token');
+  if (!storedRefreshToken) return false;
+  try {
+    const tokens = await refreshTokens(storedRefreshToken);
+    setTokens(tokens);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Core helpers ─────────────────────────────────────────────────────────────
 
 export async function qaPost<T = unknown>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const url = `${BASE}${path}`;
+  const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildHeaders(),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((data as { error?: string }).error || `HTTP ${res.status}`);
+
+  if (response.status === 401) {
+    const refreshed = await handleUnauthorized();
+    if (refreshed) {
+      const retry = await fetch(url, {
+        method: 'POST',
+        headers: buildHeaders(),
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      if (retry.status === 401) {
+        startLogin();
+        return Promise.reject(new Error('Unauthorized'));
+      }
+      if (!retry.ok) throw new Error(`Request failed: ${retry.status}`);
+      return retry.json() as Promise<T>;
+    }
+    startLogin();
+    return Promise.reject(new Error('Unauthorized'));
   }
-  return data as T;
+
+  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+  return response.json() as Promise<T>;
 }
 
 export async function qaGet<T = unknown>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((data as { error?: string }).error || `HTTP ${res.status}`);
+  const url = `${BASE}${path}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: buildHeaders(),
+  });
+
+  if (response.status === 401) {
+    const refreshed = await handleUnauthorized();
+    if (refreshed) {
+      const retry = await fetch(url, {
+        method: 'GET',
+        headers: buildHeaders(),
+      });
+      if (retry.status === 401) {
+        startLogin();
+        return Promise.reject(new Error('Unauthorized'));
+      }
+      if (!retry.ok) throw new Error(`Request failed: ${retry.status}`);
+      return retry.json() as Promise<T>;
+    }
+    startLogin();
+    return Promise.reject(new Error('Unauthorized'));
   }
-  return data as T;
+
+  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+  return response.json() as Promise<T>;
 }
 
 export async function qaDelete<T = unknown>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { method: 'DELETE' });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((data as { error?: string }).error || `HTTP ${res.status}`);
+  const url = `${BASE}${path}`;
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: buildHeaders(),
+  });
+
+  if (response.status === 401) {
+    const refreshed = await handleUnauthorized();
+    if (refreshed) {
+      const retry = await fetch(url, {
+        method: 'DELETE',
+        headers: buildHeaders(),
+      });
+      if (retry.status === 401) {
+        startLogin();
+        return Promise.reject(new Error('Unauthorized'));
+      }
+      if (!retry.ok) throw new Error(`Request failed: ${retry.status}`);
+      return retry.json() as Promise<T>;
+    }
+    startLogin();
+    return Promise.reject(new Error('Unauthorized'));
   }
-  return data as T;
+
+  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+  return response.json() as Promise<T>;
 }

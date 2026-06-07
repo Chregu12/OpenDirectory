@@ -1,47 +1,21 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { authApi } from '@/lib/api';
-
-interface LoginResponse {
-  success: boolean;
-  data: {
-    token: string;
-    user: {
-      id: string;
-      username: string;
-      name: string;
-      email: string;
-      role: string;
-      groups: string[];
-    };
-  };
-}
+import { startLogin } from '@/lib/auth';
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error,    setError]    = useState('');
-  const [loading,  setLoading]  = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignIn = async () => {
     setError('');
     setLoading(true);
     try {
-      const res = await authApi.login({ username, password });
-      const { user } = (res.data as LoginResponse).data;
-      // Token is stored in httpOnly cookie by the server — do not store in localStorage
-      localStorage.setItem('auth_user', JSON.stringify(user));
-      router.push('/dashboard');
+      await startLogin();
+      // startLogin() redirects the browser — execution will not continue here
     } catch (err: unknown) {
-      const message = err instanceof Error
-        ? err.message
-        : (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-      setError(message || 'Login failed');
-    } finally {
+      const message = err instanceof Error ? err.message : 'Failed to start login';
+      setError(message);
       setLoading(false);
     }
   };
@@ -60,45 +34,19 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-              <input
-                type="text"
-                autoFocus
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="admin"
-                required
-              />
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2 mb-5">
+              {error}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="••••••••"
-                required
-              />
-            </div>
+          )}
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
+          <button
+            onClick={handleSignIn}
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading ? 'Redirecting…' : 'Sign in with OpenDirectory'}
+          </button>
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
