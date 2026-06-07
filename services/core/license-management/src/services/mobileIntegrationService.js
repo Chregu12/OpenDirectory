@@ -6,7 +6,7 @@ class MobileIntegrationService {
   constructor(licenseService) {
     this.licenseService = licenseService;
     this.mobileServiceConfig = {
-      baseUrl: process.env.MOBILE_SERVICE_URL || 'http://mobile-management:3013',
+      baseUrl: process.env.MOBILE_SERVICE_URL || 'http://mobile-management',
       apiKey: process.env.MOBILE_API_KEY || '',
       syncInterval: parseInt(process.env.MOBILE_SYNC_INTERVAL) || 300000, // 5 minutes
       timeout: parseInt(process.env.MOBILE_TIMEOUT) || 30000 // 30 seconds

@@ -69,6 +69,16 @@ if (process.env.NODE_ENV !== 'production') {
     }));
 }
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'policy-simulator' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ====================================================================== //
 //  Import services
 // ====================================================================== //
@@ -267,6 +277,12 @@ class PolicySimulatorService extends EventEmitter {
                     value.scope || {}
                 );
 
+                publish('policy.simulation.completed', {
+                    policyId: value.policyId,
+                    simulationId: result.id || result.simulationId,
+                    affectedDevices: result.affectedDevices,
+                    timestamp: new Date().toISOString(),
+                });
                 res.json(result);
             } catch (err) {
                 next(err);
@@ -548,6 +564,11 @@ class PolicySimulatorService extends EventEmitter {
     async start() {
         const port = parseInt(process.env.PORT, 10) || 3020;
         const host = process.env.HOST || '0.0.0.0';
+
+        // Connect to event bus (fire and forget)
+        connectBus().catch((err) => {
+            logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+        });
 
         return new Promise((resolve, reject) => {
             this.server = this.app.listen(port, host, () => {

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: update-management
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: update
+spec:
+  type: {{ .Values.updateManagement.service.type }}
+  ports:
+    - port: {{ .Values.updateManagement.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "opendirectory.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: update

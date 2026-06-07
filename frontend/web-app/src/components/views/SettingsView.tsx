@@ -52,12 +52,214 @@ interface Props {
   onModuleChange?: (moduleId: string, enabled: boolean) => void;
 }
 
-type TabId = 'services' | 'setup' | 'system';
+type TabId = 'services' | 'setup' | 'mdm' | 'system';
 
 // Modules that have a sidebar nav item and can be hidden
 const HAS_NAV_ITEM = new Set([
   'monitoring-analytics', 'secrets-management', 'device-management', 'network-infrastructure', 'security-suite',
 ]);
+
+// ─── MDM Settings Tab ──────────────────────────────────────────────────────────
+
+function MdmSettingsTab() {
+  const [apnsCert, setApnsCert] = useState('');
+  const [apnsKey, setApnsKey] = useState('');
+  const [apnsTopic, setApnsTopic] = useState('');
+  const [mdmServerUrl, setMdmServerUrl] = useState('');
+  const [mdmOrgName, setMdmOrgName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [mdmDevices, setMdmDevices] = useState<any[]>([]);
+  const [devLoading, setDevLoading] = useState(true);
+
+  useEffect(() => {
+    // Load current MDM config
+    fetch('/api/mdm/config').then(r => r.json()).then(d => {
+      if (d.topic) setApnsTopic(d.topic);
+      if (d.serverUrl) setMdmServerUrl(d.serverUrl);
+      if (d.orgName) setMdmOrgName(d.orgName);
+    }).catch(() => {});
+
+    // Load enrolled Apple devices
+    fetch('/api/mdm/devices').then(r => r.json()).then(d => {
+      setMdmDevices(Array.isArray(d) ? d : d?.devices ?? []);
+    }).catch(() => setMdmDevices([]))
+      .finally(() => setDevLoading(false));
+  }, []);
+
+  const saveMdmConfig = async () => {
+    setSaving(true);
+    try {
+      const body: Record<string, string> = { topic: apnsTopic, serverUrl: mdmServerUrl, orgName: mdmOrgName };
+      if (apnsCert.trim()) body.apnsCert = btoa(apnsCert.trim());
+      if (apnsKey.trim()) body.apnsKey = btoa(apnsKey.trim());
+      const res = await fetch('/api/mdm/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) toast.success('MDM-Konfiguration gespeichert');
+      else toast.error('Fehler beim Speichern');
+    } catch {
+      toast.error('Verbindungsfehler');
+    }
+    setSaving(false);
+  };
+
+  const pushDevice = async (udid: string) => {
+    await fetch(`/api/mdm/devices/${udid}/push`, { method: 'POST' });
+    toast.success('Push gesendet');
+  };
+
+  return (
+    <div className="space-y-8 p-6">
+      {/* APNs Certificate section */}
+      <div>
+        <h3 className="text-base font-semibold text-gray-900 mb-1">Apple MDM Push Certificate</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Apple MDM benötigt ein spezielles <strong>MDM Push Certificate</strong> — kein normales APNs-Zertifikat.{' '}
+          Bezug über{' '}
+          <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">
+            https://identity.apple.com/pushcert/
+          </span>{' '}
+          mit einer Apple-ID, die an deine Organisation gebunden ist.
+        </p>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5 text-sm text-amber-800">
+          <strong>Voraussetzungen:</strong>
+          <ol className="mt-2 ml-4 list-decimal space-y-1 text-amber-700">
+            <li>Apple Developer Account oder Apple Business Manager</li>
+            <li>CSR (Certificate Signing Request) von diesem Server generieren</li>
+            <li>CSR auf identity.apple.com hochladen → MDM Push Certificate (.pem) herunterladen</li>
+            <li>Zertifikat und Privaten Schlüssel hier eintragen</li>
+          </ol>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              APNs Topic (Bundle ID des MDM Push Certs)
+            </label>
+            <input
+              value={apnsTopic}
+              onChange={e => setApnsTopic(e.target.value)}
+              placeholder="com.apple.mgmt.External.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">Im Zertifikat unter UID= zu finden</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">MDM Server URL</label>
+            <input
+              value={mdmServerUrl}
+              onChange={e => setMdmServerUrl(e.target.value)}
+              placeholder="https://mdm.deine-domain.local"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Organisation</label>
+            <input
+              value={mdmOrgName}
+              onChange={e => setMdmOrgName(e.target.value)}
+              placeholder="Meine Firma GmbH"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              MDM Push Certificate (.pem) — PEM-Inhalt einfügen
+            </label>
+            <textarea
+              value={apnsCert}
+              onChange={e => setApnsCert(e.target.value)}
+              rows={5}
+              placeholder={'-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----'}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Privater Schlüssel (.key) — PEM-Inhalt einfügen
+            </label>
+            <textarea
+              value={apnsKey}
+              onChange={e => setApnsKey(e.target.value)}
+              rows={5}
+              placeholder={'-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----'}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Der Schlüssel wird Base64-verschlüsselt gespeichert und verlässt den Server nicht.
+            </p>
+          </div>
+
+          <div>
+            <button
+              onClick={saveMdmConfig}
+              disabled={saving}
+              className="px-4 py-2 bg-blue-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+            >
+              {saving ? 'Speichern…' : 'MDM-Konfiguration speichern'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Enrolled Apple Devices */}
+      <div>
+        <h3 className="text-base font-semibold text-gray-900 mb-3">
+          Eingeschriebene Apple-Geräte ({mdmDevices.length})
+        </h3>
+        {devLoading ? (
+          <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-10 bg-gray-100 rounded animate-pulse" />)}</div>
+        ) : mdmDevices.length === 0 ? (
+          <div className="text-center py-8 text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">
+            Noch keine Apple-Geräte via MDM eingeschrieben.{' '}
+            Enrollment-Link: <span className="font-mono text-xs">/mdm/enroll</span>
+          </div>
+        ) : (
+          <div className="overflow-hidden border border-gray-200 rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr className="text-gray-500 text-xs">
+                  <th className="px-4 py-3 text-left">Gerät</th>
+                  <th className="px-4 py-3 text-left">UDID</th>
+                  <th className="px-4 py-3 text-left">OS</th>
+                  <th className="px-4 py-3 text-left">Zuletzt gesehen</th>
+                  <th className="px-4 py-3 text-left"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {mdmDevices.map((d: any) => (
+                  <tr key={d.udid} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-900">{d.device_name ?? d.udid}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500">{d.udid.slice(0, 16)}…</td>
+                    <td className="px-4 py-3 text-gray-500">{d.os_version ?? '—'}</td>
+                    <td className="px-4 py-3 text-gray-500">
+                      {d.last_seen ? new Date(d.last_seen).toLocaleString('de-CH') : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => pushDevice(d.udid)}
+                        className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                      >
+                        Push
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── Double-Confirm Disable Modal ──────────────────────────────────────────────
 
@@ -248,9 +450,10 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
   })();
 
   const tabs: { key: TabId; label: string; icon: React.ComponentType<any> }[] = [
-    { key: 'services', label: 'Services',  icon: CpuChipIcon },
-    { key: 'setup',    label: 'Setup',     icon: SparklesIcon },
-    { key: 'system',   label: 'System',    icon: InformationCircleIcon },
+    { key: 'services', label: 'Services',        icon: CpuChipIcon },
+    { key: 'setup',    label: 'Setup',           icon: SparklesIcon },
+    { key: 'mdm',      label: 'MDM & Zertifikate', icon: ShieldCheckIcon },
+    { key: 'system',   label: 'System',          icon: InformationCircleIcon },
   ];
 
   return (
@@ -573,6 +776,9 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
               </div>
             </div>
           )}
+
+          {/* ── MDM & Certificates Tab ── */}
+          {activeTab === 'mdm' && <MdmSettingsTab />}
 
           {/* ── System Tab ── */}
           {activeTab === 'system' && (

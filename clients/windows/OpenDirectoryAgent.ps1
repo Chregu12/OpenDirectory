@@ -387,6 +387,40 @@ function Invoke-AgentCommand {
                             Start-Process -FilePath $pkg.url -ArgumentList $pkg.installArgs -Wait -NoNewWindow
                             $storeResult.status = if ($LASTEXITCODE -eq 0) { "completed" } else { "failed" }
                         }
+                        "internal" {
+                            # Download from internal OpenDirectory App Store, then install silently
+                            $tmpDir  = Join-Path $env:TEMP "od-install-$(New-Guid)"
+                            New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+                            $tmpFile = Join-Path $tmpDir $pkg.downloadUrl.Split('/')[-1].Split('?')[0]
+                            if (-not $tmpFile.Contains('.')) { $tmpFile = "$tmpFile.$($pkg.format)" }
+                            try {
+                                # Download with device auth header
+                                $headers = @{ 'X-Device-Id' = $script:DeviceId; 'X-Agent-Token' = $script:AgentToken }
+                                Write-AgentLog "Downloading $($pkg.downloadUrl) → $tmpFile"
+                                Invoke-WebRequest -Uri $pkg.downloadUrl -OutFile $tmpFile -Headers $headers -UseBasicParsing
+                                # Verify SHA256 checksum if provided
+                                if ($pkg.sha256 -and $pkg.sha256.Length -eq 64) {
+                                    $actualHash = (Get-FileHash $tmpFile -Algorithm SHA256).Hash.ToLower()
+                                    if ($actualHash -ne $pkg.sha256.ToLower()) {
+                                        throw "SHA256-Prüfsumme stimmt nicht überein: erwartet=$($pkg.sha256) tatsächlich=$actualHash"
+                                    }
+                                    Write-AgentLog "SHA256 OK: $actualHash"
+                                }
+                                # Silent install based on format
+                                switch ($pkg.format.ToLower()) {
+                                    "msi"  { Start-Process msiexec -ArgumentList "/i `"$tmpFile`" /qn /norestart" -Wait -NoNewWindow }
+                                    "msix" { Add-AppxPackage -Path $tmpFile }
+                                    default {
+                                        # .exe — try common silent flags (NSIS /S, Inno /VERYSILENT, WiX /quiet)
+                                        $exitCode = (Start-Process -FilePath $tmpFile -ArgumentList "/S /VERYSILENT /SUPPRESSMSGBOXES /quiet /norestart" -Wait -NoNewWindow -PassThru).ExitCode
+                                        if ($exitCode -notin @(0,3010)) { throw "Installer exit code: $exitCode" }
+                                    }
+                                }
+                                $storeResult.status = if ($LASTEXITCODE -in @($null,0,3010)) { "completed" } else { "failed" }
+                            } finally {
+                                Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+                            }
+                        }
                     }
                 } catch { $storeResult.status = "failed"; $storeResult.error = $_.Exception.Message }
                 $storeResult.completedAt = (Get-Date -Format "o")

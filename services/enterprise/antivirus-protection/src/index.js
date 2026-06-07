@@ -71,14 +71,27 @@ if (process.env.NODE_ENV !== 'production') {
     }));
 }
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'antivirus-protection' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ====================================================================== //
 //  Import services
 // ====================================================================== //
 
+const db = require('./db');
 const ScanOrchestrator = require('./services/scanOrchestrator');
 const SignatureManager = require('./services/signatureManager');
 const QuarantineManager = require('./services/quarantineManager');
 const ThreatIntelligence = require('./services/threatIntelligence');
+
+const OAUTH_PROVIDER_URL = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider:3010';
 
 // ====================================================================== //
 //  Validation schemas
@@ -269,8 +282,8 @@ class AntivirusProtectionService extends EventEmitter {
 
         // -- Scan endpoints --
 
-        // POST /api/antivirus/scan - Initiate scan
-        router.post('/scan', (req, res, next) => {
+        // POST /api/antivirus/scan - Initiate scan (dispatches run_av_scan MDM command)
+        router.post('/scan', async (req, res, next) => {
             try {
                 const { error, value } = schemas.initiateScan.validate(req.body);
                 if (error) {
@@ -281,13 +294,41 @@ class AntivirusProtectionService extends EventEmitter {
                     });
                 }
 
-                const result = this.scanOrchestrator.initiateScan(
-                    value.deviceIds,
-                    value.scanType,
-                    value.paths
-                );
+                const { scanType, paths, deviceIds } = value;
 
-                res.status(201).json(result);
+                // Resolve target device IDs
+                let targets = deviceIds;
+                if (!targets || targets.length === 0) {
+                    try {
+                        const devices = await db.getDevices();
+                        targets = devices.map(d => d.device_id);
+                    } catch {
+                        targets = [];
+                    }
+                }
+
+                const dispatched = [];
+                const errors = [];
+                for (const deviceId of targets) {
+                    try {
+                        const resp = await fetch(`${OAUTH_PROVIDER_URL}/api/devices/${deviceId}/commands`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ command: 'run_av_scan', payload: { scanType, paths } }),
+                        });
+                        dispatched.push({ deviceId, status: resp.ok ? 'queued' : 'error', httpStatus: resp.status });
+                    } catch (err) {
+                        errors.push({ deviceId, error: err.message });
+                    }
+                }
+
+                res.status(201).json({
+                    scanType,
+                    paths: paths || null,
+                    dispatched,
+                    errors,
+                    timestamp: new Date().toISOString(),
+                });
             } catch (err) {
                 next(err);
             }
@@ -304,19 +345,16 @@ class AntivirusProtectionService extends EventEmitter {
         });
 
         // GET /api/antivirus/scans - List all scans
-        router.get('/scans', (req, res, next) => {
+        router.get('/scans', async (req, res, next) => {
             try {
-                const filters = {
-                    status: req.query.status || null,
-                    deviceId: req.query.deviceId || null,
-                    scanType: req.query.scanType || null,
-                    dateFrom: req.query.dateFrom || null,
-                    dateTo: req.query.dateTo || null,
-                    page: req.query.page || 1,
-                    limit: req.query.limit || 50,
-                };
-                const result = this.scanOrchestrator.listScans(filters);
-                res.json(result);
+                const limit = parseInt(req.query.limit, 10) || 50;
+                let scans;
+                try {
+                    scans = await db.getScans(limit);
+                } catch {
+                    scans = this.scanOrchestrator.listScans({ limit }).scans || [];
+                }
+                res.json({ scans, total: scans.length, timestamp: new Date().toISOString() });
             } catch (err) {
                 next(err);
             }
@@ -325,15 +363,15 @@ class AntivirusProtectionService extends EventEmitter {
         // -- Device endpoints --
 
         // GET /api/antivirus/devices - Device AV status overview
-        router.get('/devices', (req, res, next) => {
+        router.get('/devices', async (req, res, next) => {
             try {
-                const filters = {
-                    platform: req.query.platform || null,
-                    department: req.query.department || null,
-                    status: req.query.status || null,
-                };
-                const result = this.scanOrchestrator.getDevices(filters);
-                res.json(result);
+                let devices;
+                try {
+                    devices = await db.getDevices();
+                } catch {
+                    devices = this.scanOrchestrator.getDevices({}).devices || [];
+                }
+                res.json({ devices, total: devices.length, timestamp: new Date().toISOString() });
             } catch (err) {
                 next(err);
             }
@@ -352,18 +390,16 @@ class AntivirusProtectionService extends EventEmitter {
         // -- Threat endpoints --
 
         // GET /api/antivirus/threats - List all detected threats
-        router.get('/threats', (req, res, next) => {
+        router.get('/threats', async (req, res, next) => {
             try {
-                const filters = {
-                    severity: req.query.severity || null,
-                    deviceId: req.query.deviceId || null,
-                    category: req.query.category || null,
-                    action: req.query.action || null,
-                    page: req.query.page || 1,
-                    limit: req.query.limit || 50,
-                };
-                const result = this.scanOrchestrator.getThreats(filters);
-                res.json(result);
+                const limit = parseInt(req.query.limit, 10) || 100;
+                let threats;
+                try {
+                    threats = await db.getThreats(limit);
+                } catch {
+                    threats = this.scanOrchestrator.getThreats({ limit }).threats || [];
+                }
+                res.json({ threats, total: threats.length, timestamp: new Date().toISOString() });
             } catch (err) {
                 next(err);
             }
@@ -382,19 +418,15 @@ class AntivirusProtectionService extends EventEmitter {
         // -- Quarantine endpoints --
 
         // GET /api/antivirus/quarantine - List quarantined files
-        router.get('/quarantine', (req, res, next) => {
+        router.get('/quarantine', async (req, res, next) => {
             try {
-                const filters = {
-                    deviceId: req.query.deviceId || null,
-                    severity: req.query.severity || null,
-                    status: req.query.status || null,
-                    category: req.query.category || null,
-                    sha256: req.query.sha256 || null,
-                    page: req.query.page || 1,
-                    limit: req.query.limit || 50,
-                };
-                const result = this.quarantineManager.listQuarantinedFiles(filters);
-                res.json(result);
+                let quarantine;
+                try {
+                    quarantine = await db.getQuarantine();
+                } catch {
+                    quarantine = this.quarantineManager.listQuarantinedFiles({}).files || [];
+                }
+                res.json({ quarantine, total: quarantine.length, timestamp: new Date().toISOString() });
             } catch (err) {
                 next(err);
             }
@@ -454,20 +486,91 @@ class AntivirusProtectionService extends EventEmitter {
         // -- Statistics & Dashboard --
 
         // GET /api/antivirus/statistics - Fleet-wide AV statistics
-        router.get('/statistics', (_req, res, next) => {
+        router.get('/statistics', async (_req, res, next) => {
             try {
-                const stats = this.scanOrchestrator.getStatistics();
-                res.json(stats);
+                let stats;
+                try {
+                    stats = await db.getStatistics();
+                } catch {
+                    stats = this.scanOrchestrator.getStatistics();
+                }
+                res.json({ ...stats, timestamp: new Date().toISOString() });
             } catch (err) {
                 next(err);
             }
         });
 
         // GET /api/antivirus/dashboard - Dashboard summary data
-        router.get('/dashboard', (_req, res, next) => {
+        router.get('/dashboard', async (_req, res, next) => {
             try {
-                const dashboard = this.scanOrchestrator.getDashboard();
-                res.json(dashboard);
+                let stats, recentThreats;
+                try {
+                    [stats, recentThreats] = await Promise.all([
+                        db.getStatistics(),
+                        db.getThreats(10),
+                    ]);
+                } catch {
+                    stats = this.scanOrchestrator.getStatistics();
+                    recentThreats = [];
+                }
+                res.json({ ...stats, recentThreats, timestamp: new Date().toISOString() });
+            } catch (err) {
+                next(err);
+            }
+        });
+
+        // -- Agent-facing endpoints --
+
+        // POST /api/antivirus/devices/:deviceId/report — receive ClamAV scan results from agent
+        router.post('/devices/:deviceId/report', async (req, res, next) => {
+            try {
+                const { deviceId } = req.params;
+                const { threats, rawOutput, scannedAt, platform, clean } = req.body;
+
+                // Ensure device row exists
+                try {
+                    await db.upsertDeviceStatus(deviceId, platform, null, null, false);
+                } catch (err) {
+                    logger.warn('upsertDeviceStatus failed during report', { deviceId, error: err.message });
+                }
+
+                const scanId = require('crypto').randomUUID();
+                try {
+                    await db.saveScanResult(deviceId, scanId, threats, rawOutput, scannedAt ? new Date(scannedAt) : new Date());
+                    if (threats && threats.length > 0) {
+                        await db.saveThreats(deviceId, threats, scannedAt ? new Date(scannedAt) : new Date());
+                    }
+                } catch (err) {
+                    logger.warn('Failed to persist scan result', { deviceId, error: err.message });
+                }
+
+                logger.info('Received AV scan report', { deviceId, threatCount: threats ? threats.length : 0, clean });
+                publish('security.scan.completed', { deviceId, scanId, threatCount: threats ? threats.length : 0, clean: !!clean });
+                if (threats && threats.length > 0) {
+                    for (const threat of threats) {
+                        publish('security.threat.detected', { deviceId, scanId, threat });
+                    }
+                }
+                res.json({ received: true, scanId, timestamp: new Date().toISOString() });
+            } catch (err) {
+                next(err);
+            }
+        });
+
+        // POST /api/antivirus/devices/:deviceId/status — receive AV status from agent
+        router.post('/devices/:deviceId/status', async (req, res, next) => {
+            try {
+                const { deviceId } = req.params;
+                const { platform, clamavVersion, sigVersion, realtimeEnabled } = req.body;
+
+                try {
+                    await db.upsertDeviceStatus(deviceId, platform, clamavVersion, sigVersion, realtimeEnabled || false);
+                } catch (err) {
+                    logger.warn('Failed to persist AV status', { deviceId, error: err.message });
+                }
+
+                logger.info('Received AV status report', { deviceId, platform, clamavVersion });
+                res.json({ received: true, timestamp: new Date().toISOString() });
             } catch (err) {
                 next(err);
             }
@@ -802,6 +905,19 @@ class AntivirusProtectionService extends EventEmitter {
     async start() {
         const port = parseInt(process.env.PORT, 10) || 3905;
         const host = process.env.HOST || '0.0.0.0';
+
+        // Connect to event bus (fire and forget)
+        connectBus().catch((err) => {
+            logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+        });
+
+        // Initialize database (run migrations); log but don't fatal on failure
+        try {
+            await db.initDb();
+            logger.info('Database initialized');
+        } catch (err) {
+            logger.warn('Database initialization failed — running without persistence', { error: err.message });
+        }
 
         return new Promise((resolve, reject) => {
             this.server = http.createServer(this.app);

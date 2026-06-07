@@ -89,6 +89,25 @@ services:
     networks:
       - opendirectory
 
+  ldap-proxy:
+    build: ./services/core/ldap-proxy
+    ports:
+      - "1389:1389"
+    environment:
+      - LLDAP_URL=${LLDAP_URL:-ldap://lldap:3890}
+      - LLDAP_BASE_DN=${LLDAP_BASE_DN:-dc=opendirectory,dc=local}
+      - LLDAP_ADMIN_USER=${LLDAP_ADMIN_USER:-admin}
+      - LLDAP_ADMIN_PASSWORD=${LLDAP_ADMIN_PASSWORD}
+      - LDAP_PROXY_PORT=1389
+    depends_on:
+      - lldap
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').createConnection(1389,'localhost').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   # ===================
   # Core Services (from /services/core)
   # ===================
@@ -158,6 +177,38 @@ services:
       - ./services/core/auth-service:/app
       - /app/node_modules
 
+  oauth-provider:
+    build:
+      context: ./services/core/oauth-provider
+      dockerfile: Dockerfile
+    container_name: od-oauth-provider
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - OAUTH_PROVIDER_PORT=3010
+      - OAUTH_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/auth
+    ports:
+      - "3010:3010"
+    networks:
+      - opendirectory
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    volumes:
+      - ./services/core/oauth-provider:/app
+      - /app/node_modules
+
   device-service:
     build:
       context: ./services/core/device-service
@@ -170,6 +221,11 @@ services:
       - MONGODB_URL=mongodb://opendirectory:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongodb:27017/devices
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}@rabbitmq:5672
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=devices
+      - DB_USER=opendirectory
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set in .env}
     ports:
       - "3003:3003"
     networks:
@@ -178,6 +234,7 @@ services:
       - mongodb
       - redis
       - rabbitmq
+      - postgres
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
       interval: 30s
@@ -707,6 +764,108 @@ services:
       timeout: 10s
       retries: 3
 
+  # ── Least Privilege Service ────────────────────────────────────────────────────
+  least-privilege:
+    build:
+      context: ./services/core/least-privilege
+      dockerfile: Dockerfile
+    container_name: od-least-privilege
+    environment:
+      LEAST_PRIVILEGE_PORT: 3011
+      NODE_ENV: production
+    ports:
+      - "3011:3011"
+    networks:
+      - opendirectory
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  certificate-authority:
+    build: ./services/core/certificate-authority
+    ports:
+      - "3012:3012"
+    environment:
+      - CA_PORT=3012
+      - CA_COMMON_NAME=OpenDirectory Internal CA
+      - CA_ORG=${CA_ORG:-OpenDirectory}
+      - CA_COUNTRY=${CA_COUNTRY:-CH}
+      - DB_HOST=postgres
+      - DB_NAME=${DB_NAME:-auth}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3012/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  kerberos-kdc:
+    build: ./services/core/kerberos-kdc
+    ports:
+      - "88:88/tcp"
+      - "88:88/udp"
+      - "749:749/tcp"
+      - "3013:3013/tcp"
+    environment:
+      - KRB5_REALM=${KRB5_REALM:-OPENDIRECTORY.LOCAL}
+      - KDC_HOST=${KDC_HOST:-kerberos-kdc}
+      - KRB5_ADMIN_PASSWORD=${KRB5_ADMIN_PASSWORD:-changeme}
+      - KRB5_DB_PASSWORD=${KRB5_DB_PASSWORD:-changeme}
+      - KDC_API_PORT=3013
+    volumes:
+      - kerberos_data:/var/lib/krb5kdc
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3013/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── Apple MDM ──────────────────────────────────────────────────────────────
+  # Real Apple MDM server: enrollment profiles, APNs push, DeviceLock/Erase/
+  # InstallApplication/InstallProfile/RemoveProfile commands.
+  # Requires an MDM push certificate from https://identity.apple.com/pushcert/
+  # Set APNS_CERT and APNS_KEY as base64-encoded PEM strings.
+  apple-mdm:
+    build: ./services/core/apple-mdm
+    container_name: od-apple-mdm
+    ports:
+      - "3014:3014"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - APPLE_MDM_PORT=3014
+      - MDM_SERVER_URL=${MDM_SERVER_URL:-http://localhost:3014}
+      - MDM_ORG_NAME=${MDM_ORG_NAME:-OpenDirectory}
+      - APNS_CERT=${APNS_CERT:-}
+      - APNS_KEY=${APNS_KEY:-}
+      - APNS_TOPIC=${APNS_TOPIC:-}
+      - MDM_TOPIC=${MDM_TOPIC:-}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-auth}
+      - DB_USER=${DB_USER:-opendirectory}
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - opendirectory
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3014/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
 # ===================
 # Networks
 # ===================
@@ -736,3 +895,4 @@ volumes:
   network-samba-config:
   network-shares:
   network-logs:
+  kerberos_data:

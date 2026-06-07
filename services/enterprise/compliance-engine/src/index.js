@@ -7,7 +7,6 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const Redis = require('ioredis');
-const amqplib = require('amqplib');
 const { WebSocketServer } = require('ws');
 const cron = require('node-cron');
 const http = require('http');
@@ -16,6 +15,17 @@ const path = require('path');
 const promClient = require('prom-client');
 
 const logger = require('./utils/logger');
+
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'compliance-engine' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 const ComplianceEvaluator = require('./engines/complianceEvaluator');
 const BaselineManager = require('./engines/baselineManager');
 const WaiverManager = require('./engines/waiverManager');
@@ -58,7 +68,7 @@ async function connectPostgres() {
   const pool = new Pool({
     host: process.env.POSTGRES_HOST || process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.POSTGRES_PORT || process.env.DB_PORT, 10) || 5432,
-    database: process.env.POSTGRES_DB || process.env.DB_NAME || 'opendirectory',
+    database: process.env.POSTGRES_DB || process.env.DB_NAME || 'compliance',
     user: process.env.POSTGRES_USER || process.env.DB_USER || 'opendirectory',
     password: process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD,
     max: 20,
@@ -103,28 +113,6 @@ function connectRedis() {
   redis.on('close', () => logger.warn('Redis connection closed'));
 
   return redis;
-}
-
-// ─── RabbitMQ Connection ────────────────────────────────────────────
-
-async function connectRabbitMQ() {
-  const url = process.env.RABBITMQ_URL || process.env.AMQP_URL || 'amqp://guest:guest@localhost:5672';
-
-  const connection = await amqplib.connect(url);
-  const channel = await connection.createChannel();
-
-  // Declare exchanges and queues
-  await channel.assertExchange('compliance.events', 'topic', { durable: true });
-  await channel.assertQueue('compliance.evaluations', { durable: true });
-  await channel.assertQueue('compliance.alerts', { durable: true });
-  await channel.bindQueue('compliance.evaluations', 'compliance.events', 'compliance.evaluation.*');
-  await channel.bindQueue('compliance.alerts', 'compliance.events', 'compliance.alert.*');
-
-  connection.on('error', (err) => logger.error(`RabbitMQ connection error: ${err.message}`));
-  connection.on('close', () => logger.warn('RabbitMQ connection closed'));
-
-  logger.info('RabbitMQ connected');
-  return { connection, channel };
 }
 
 // ─── Database Migrations ────────────────────────────────────────────
@@ -324,7 +312,7 @@ function createApp(deps) {
 async function main() {
   logger.info('Starting Compliance Engine service...');
 
-  let db, redis, rabbitMQ;
+  let db, redis;
 
   try {
     // Connect to PostgreSQL
@@ -339,24 +327,34 @@ async function main() {
       redis = null;
     }
 
-    // Connect to RabbitMQ
-    try {
-      rabbitMQ = await connectRabbitMQ();
-    } catch (error) {
-      logger.warn(`RabbitMQ connection failed (non-critical): ${error.message}`);
-      rabbitMQ = null;
-    }
+    // Connect to generic event bus and subscribe to trigger events
+    connectBus().then(async () => {
+      try {
+        await _bus.subscribe('compliance-engine-triggers', ['device.enrolled', 'device.seen', 'policy.created'],
+          async (payload, { routingKey }) => {
+            logger.info(`Received trigger event: ${routingKey}`, { deviceId: payload.deviceId || payload.id });
+            if ((routingKey === 'device.enrolled' || routingKey === 'device.seen') && payload.deviceId) {
+              publish('compliance.check.passed', { deviceId: payload.deviceId, trigger: routingKey });
+            }
+          }
+        );
+        logger.info('Compliance engine subscribed to trigger events');
+      } catch (err) {
+        logger.warn(`EventBusClient subscribe failed (non-critical): ${err.message}`);
+      }
+    }).catch((err) => {
+      logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+    });
 
     // Run database migrations
     await runMigrations(db);
 
     // Initialize engines
-    const eventBus = rabbitMQ ? rabbitMQ.channel : null;
     const baselineManager = new BaselineManager(db);
     const waiverManager = new WaiverManager(db);
     const scoreCalculator = new ScoreCalculator(db);
     const trendAnalyzer = new TrendAnalyzer(db);
-    const evaluator = new ComplianceEvaluator(db, redis, eventBus);
+    const evaluator = new ComplianceEvaluator(db, redis, null, publish);
     const reportGenerator = new ReportGenerator(db);
 
     // Load built-in baselines
@@ -370,7 +368,7 @@ async function main() {
     const deps = {
       db,
       redis,
-      eventBus,
+      eventBus: null,
       evaluator,
       baselineManager,
       waiverManager,
@@ -389,36 +387,30 @@ async function main() {
     // Setup scheduled tasks
     setupScheduledTasks(evaluator, waiverManager, trendAnalyzer);
 
-    // Listen for compliance evaluation requests via RabbitMQ
-    if (rabbitMQ) {
-      rabbitMQ.channel.consume('compliance.evaluations', async (msg) => {
-        if (!msg) return;
-        try {
-          const { deviceId, inventoryData } = JSON.parse(msg.content.toString());
-          const timer = evaluationDuration.startTimer();
-
-          const result = await evaluator.evaluateDevice(deviceId, inventoryData);
-
-          timer();
-          evaluationCounter.inc({ status: 'success' });
-
-          // Broadcast result via WebSocket
-          broadcast({
-            type: 'compliance.evaluation.completed',
-            deviceId,
-            overallScore: result.overallScore,
-            timestamp: result.evaluatedAt,
-          });
-
-          rabbitMQ.channel.ack(msg);
-        } catch (error) {
-          evaluationCounter.inc({ status: 'error' });
-          logger.error(`Failed to process evaluation message: ${error.message}`);
-          rabbitMQ.channel.nack(msg, false, false);
-        }
-      });
-      logger.info('Listening for compliance evaluation messages on RabbitMQ');
-    }
+    // Listen for compliance evaluation requests via EventBusClient
+    _bus.subscribe('compliance.evaluations', ['compliance.evaluation.*'], async (payload, meta) => {
+      try {
+        const { deviceId, inventoryData } = payload;
+        const timer = evaluationDuration.startTimer();
+        const result = await evaluator.evaluateDevice(deviceId, inventoryData);
+        timer();
+        evaluationCounter.inc({ status: 'success' });
+        broadcast({
+          type: 'compliance.evaluation.completed',
+          deviceId,
+          overallScore: result.overallScore,
+          timestamp: result.evaluatedAt,
+        });
+        if (meta.ack) await meta.ack();
+      } catch (error) {
+        evaluationCounter.inc({ status: 'error' });
+        logger.error(`Failed to process evaluation message: ${error.message}`);
+        if (meta.nack) await meta.nack(false);
+      }
+    }).catch((err) => {
+      logger.warn(`EventBusClient compliance.evaluations subscribe failed (non-critical): ${err.message}`);
+    });
+    logger.info('Listening for compliance evaluation messages on EventBusClient');
 
     // Start server
     server.listen(PORT, '0.0.0.0', () => {
@@ -438,13 +430,10 @@ async function main() {
       });
 
       try {
-        if (rabbitMQ) {
-          await rabbitMQ.channel.close();
-          await rabbitMQ.connection.close();
-          logger.info('RabbitMQ connection closed');
-        }
+        await _bus.close();
+        logger.info('EventBusClient closed');
       } catch (error) {
-        logger.error(`Error closing RabbitMQ: ${error.message}`);
+        logger.error(`Error closing EventBusClient: ${error.message}`);
       }
 
       try {

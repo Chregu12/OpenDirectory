@@ -203,6 +203,18 @@ export const deviceApi = {
 
   getEnrollmentToken: (expiresInHours = 24) =>
     api.post('/api/devices/enrollment-token', { expires_in_hours: expiresInHours }),
+
+  getStammdaten: (deviceId: string) =>
+    api.get(`/api/devices/${deviceId}/stammdaten`),
+
+  updateStammdaten: (deviceId: string, data: Record<string, string>) =>
+    api.put(`/api/devices/${deviceId}/stammdaten`, data),
+
+  uploadPhoto: (deviceId: string, photoDataUrl: string) =>
+    api.post(`/api/devices/${deviceId}/photo`, { photo: photoDataUrl }),
+
+  getPhotoUrl: (deviceId: string) =>
+    `/api/devices/${deviceId}/photo`,
 };
 
 // Printer Management API
@@ -469,20 +481,71 @@ export const gatewayApi = {
 
 // Security API
 export const securityApi = {
+  // Antivirus endpoints → antivirus-protection service (/api/antivirus/*)
   getThreatIntel: () =>
-    api.get('/api/security/threats'),
-  
+    api.get('/api/antivirus/threats'),
+
+  getThreats: () =>
+    api.get('/api/antivirus/threats'),
+
+  getScans: () =>
+    api.get('/api/antivirus/scans'),
+
+  getAvDevices: () =>
+    api.get('/api/antivirus/devices'),
+
+  getAvStatistics: () =>
+    api.get('/api/antivirus/statistics'),
+
+  getAvDashboard: () =>
+    api.get('/api/antivirus/dashboard'),
+
+  getQuarantine: () =>
+    api.get('/api/antivirus/quarantine'),
+
+  getSignatures: () =>
+    api.get('/api/antivirus/signatures'),
+
+  updateSignatures: () =>
+    api.post('/api/antivirus/signatures/update', {}),
+
+  startScan: (deviceIds?: string[], scanType?: string) =>
+    api.post('/api/antivirus/scan', { deviceIds, scanType: scanType ?? 'quick' }),
+
+  restoreQuarantine: (fileId: string) =>
+    api.post(`/api/antivirus/quarantine/${fileId}/restore`, {}),
+
+  deleteQuarantine: (fileId: string) =>
+    api.delete(`/api/antivirus/quarantine/${fileId}`),
+
+  // Security scanner endpoints → security-scanner service (/api/scanner/*)
+  getComplianceStatus: () =>
+    api.get('/api/scanner/findings'),
+
+  getFindings: () =>
+    api.get('/api/scanner/findings'),
+
+  getRiskScore: () =>
+    api.get('/api/scanner/risk-score'),
+
+  getTrends: () =>
+    api.get('/api/scanner/trends'),
+
+  getBenchmarks: () =>
+    api.get('/api/scanner/benchmarks'),
+
+  startSecurityScan: (target?: string) =>
+    api.post('/api/scanner/scan', { target }),
+
+  getSecurityAlerts: () =>
+    api.get('/api/scanner/findings'),
+
+  // Legacy paths kept for other callers
   getPAMSessions: () =>
     api.get('/api/security/pam/sessions'),
-  
+
   getDLPPolicies: () =>
     api.get('/api/security/dlp/policies'),
-  
-  getSecurityAlerts: () =>
-    api.get('/api/security/alerts'),
-  
-  getComplianceStatus: () =>
-    api.get('/api/security/compliance'),
 };
 
 // Backup & DR API
@@ -726,6 +789,42 @@ export const appStoreApi = {
 
   requestUninstall: (data: { appId: string; deviceId: string }) =>
     api.post('/api/store/uninstall', data),
+};
+
+// Groups & Organisational Units API
+export const groupApi = {
+  getGroups: () =>
+    api.get('/api/groups'),
+
+  createGroup: (data: any) =>
+    api.post('/api/groups', data),
+
+  updateGroup: (id: string, data: any) =>
+    api.put(`/api/groups/${id}`, data),
+
+  deleteGroup: (id: string) =>
+    api.delete(`/api/groups/${id}`),
+
+  getGroup: (id: string) =>
+    api.get(`/api/groups/${id}`),
+
+  addMember: (groupId: string, userId: string) =>
+    api.post(`/api/groups/${groupId}/members`, { userId }),
+
+  removeMember: (groupId: string, userId: string) =>
+    api.delete(`/api/groups/${groupId}/members/${userId}`),
+
+  getOUs: () =>
+    api.get('/api/ous'),
+
+  createOU: (data: any) =>
+    api.post('/api/ous', data),
+
+  updateOU: (id: string, data: any) =>
+    api.put(`/api/ous/${id}`, data),
+
+  deleteOU: (id: string) =>
+    api.delete(`/api/ous/${id}`),
 };
 
 export default api;

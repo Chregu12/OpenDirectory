@@ -31,6 +31,7 @@ import {
   policyApi,
 } from '@/lib/api';
 import BackupRecoveryWizard from '@/components/setup/BackupRecoveryWizard';
+import toast from 'react-hot-toast';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -286,6 +287,7 @@ export default function DashboardView() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [showBackupWizard, setShowBackupWizard] = useState(false);
+  const [usingDemoData, setUsingDemoData] = useState(false);
 
   const [kpi, setKpi] = useState<KpiData>({
     totalUsers: null,
@@ -314,6 +316,7 @@ export default function DashboardView() {
   ]);
 
   const [deviceCompliance, setDeviceCompliance] = useState<DeviceCompliance | null>(null);
+  const [platformBreakdown, setPlatformBreakdown] = useState<{label:string;count:number;color:string}[]>([]);
 
   const loadData = useCallback(async () => {
     const now = new Date();
@@ -549,6 +552,7 @@ export default function DashboardView() {
       if (events.length === 0) {
         setActivityError(true);
         setActivityEvents(null);
+        setUsingDemoData(true);
       } else {
         const mapped: ActivityEvent[] = events.slice(0, 8).map((e: any, i: number) => ({
           id: e.id ?? String(i),
@@ -570,6 +574,7 @@ export default function DashboardView() {
       // Try /api/monitoring/alerts as a fallback
       setActivityError(true);
       setActivityEvents(null);
+      setUsingDemoData(true);
     }
 
     // -----------------------------------------------------------------------
@@ -598,8 +603,22 @@ export default function DashboardView() {
         else { nonCompliant++; }
       }
       setDeviceCompliance({ compliant, atRisk, nonCompliant, noData, total: rawDevices.length });
+
+      // Platform breakdown from real device data
+      const PLATFORM_COLORS: Record<string, string> = { windows: 'bg-blue-500', macos: 'bg-gray-700', linux: 'bg-orange-500', ios: 'bg-purple-500', android: 'bg-green-500' };
+      const counts: Record<string, number> = {};
+      for (const d of rawDevices) {
+        const p = (d.platform ?? d.os ?? 'unknown').toLowerCase();
+        counts[p] = (counts[p] ?? 0) + 1;
+      }
+      setPlatformBreakdown(
+        Object.entries(counts)
+          .sort((a, b) => b[1] - a[1])
+          .map(([p, count]) => ({ label: p.charAt(0).toUpperCase() + p.slice(1), count, color: PLATFORM_COLORS[p] ?? 'bg-teal-500' }))
+      );
     } else {
       setDeviceCompliance(null);
+      setPlatformBreakdown([]);
     }
 
     setLastRefresh(now);
@@ -660,14 +679,20 @@ export default function DashboardView() {
 
   return (
     <div className="p-6 space-y-6">
+      {usingDemoData && (
+        <div className="mx-6 mt-4 p-3 bg-yellow-900/50 border border-yellow-600 rounded-lg flex items-center gap-2 text-yellow-300 text-sm">
+          <span className="text-yellow-400">⚠</span>
+          <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
+        </div>
+      )}
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                              */}
       {/* ------------------------------------------------------------------ */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">System Overview</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Übersicht</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Real-time status of your OpenDirectory infrastructure
+            Echtzeit-Status deiner OpenDirectory-Infrastruktur
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -688,6 +713,147 @@ export default function DashboardView() {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Quick Stats Row (German, simplified)                                */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+          <p className="text-xs text-gray-500 font-medium">Geräte gesamt</p>
+          <p className="text-3xl font-bold text-gray-900 mt-1">{kpi.totalDevices ?? '—'}</p>
+          <p className="text-xs text-green-600 mt-1">{kpi.onlineDevices ?? 0} online</p>
+        </div>
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+          <p className="text-xs text-gray-500 font-medium">Compliant %</p>
+          <p className="text-3xl font-bold text-gray-900 mt-1">
+            {deviceCompliance && deviceCompliance.total > 0 ? `${Math.round((deviceCompliance.compliant / deviceCompliance.total) * 100)}%` : '—'}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">Konformitatsquote</p>
+        </div>
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+          <p className="text-xs text-gray-500 font-medium">Nutzer aktiv</p>
+          <p className="text-3xl font-bold text-gray-900 mt-1">{kpi.totalUsers ?? '—'}</p>
+          <p className="text-xs text-gray-400 mt-1">{kpi.totalGroups ?? 0} Gruppen</p>
+        </div>
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+          <p className="text-xs text-gray-500 font-medium">Apps verbunden</p>
+          <p className="text-3xl font-bold text-gray-900 mt-1">2</p>
+          <p className="text-xs text-blue-600 mt-1">SSO aktiv</p>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Compliance Donut + Platform bars + Activity feed                    */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Compliance Donut (CSS/SVG) */}
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">Compliance Verteilung</h2>
+          {deviceCompliance && deviceCompliance.total > 0 ? (
+            <div className="flex flex-col items-center">
+              {/* SVG Donut */}
+              <svg viewBox="0 0 120 120" className="w-32 h-32 -rotate-90">
+                {(() => {
+                  const total = deviceCompliance.total;
+                  const slices = [
+                    { val: deviceCompliance.compliant, color: '#22c55e' },
+                    { val: deviceCompliance.atRisk,    color: '#facc15' },
+                    { val: deviceCompliance.nonCompliant, color: '#ef4444' },
+                    { val: deviceCompliance.noData,    color: '#d1d5db' },
+                  ];
+                  const r = 46; const cx = 60; const cy = 60;
+                  const circ = 2 * Math.PI * r;
+                  let offset = 0;
+                  return slices.map((s, i) => {
+                    const pct = s.val / total;
+                    const dash = pct * circ;
+                    const el = (
+                      <circle key={i} cx={cx} cy={cy} r={r}
+                        fill="none" stroke={s.color} strokeWidth="18"
+                        strokeDasharray={`${dash} ${circ - dash}`}
+                        strokeDashoffset={-offset}
+                      />
+                    );
+                    offset += dash;
+                    return el;
+                  });
+                })()}
+                <text x="60" y="64" textAnchor="middle" className="fill-gray-900 font-bold" style={{ fontSize: 18, transform: 'rotate(90deg)', transformOrigin: '60px 60px' }}>
+                  {deviceCompliance.total}
+                </text>
+              </svg>
+              <div className="mt-3 space-y-1 text-xs w-full">
+                {[{ label: 'Konform', count: deviceCompliance.compliant, color: 'bg-green-500' }, { label: 'Gefährdet', count: deviceCompliance.atRisk, color: 'bg-yellow-400' }, { label: 'Nicht konform', count: deviceCompliance.nonCompliant, color: 'bg-red-500' }, { label: 'Keine Daten', count: deviceCompliance.noData, color: 'bg-gray-300' }].map(row => (
+                  <div key={row.label} className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.color}`} /><span className="text-gray-600">{row.label}</span></div>
+                    <span className="font-medium text-gray-700">{row.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-400 text-sm">Keine Gerätedaten</div>
+          )}
+        </div>
+
+        {/* Platform breakdown bars */}
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">Plattform-Verteilung</h2>
+          <div className="space-y-4">
+            {platformBreakdown.length > 0 ? platformBreakdown.map(p => {
+              const total = platformBreakdown.reduce((s, x) => s + x.count, 0);
+              const pct = Math.round((p.count / total) * 100);
+              return (
+                <div key={p.label}>
+                  <div className="flex justify-between text-xs text-gray-600 mb-1"><span>{p.label}</span><span>{p.count} Geräte</span></div>
+                  <div className="w-full bg-gray-100 rounded-full h-2"><div className={`h-2 rounded-full ${p.color}`} style={{ width: `${pct}%` }} /></div>
+                </div>
+              );
+            }) : (
+              <div className="text-center py-4 text-gray-400 text-xs">Keine Gerätedaten</div>
+            )}
+          </div>
+        </div>
+
+        {/* Activity Feed */}
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">Letzte Aktivitäten</h2>
+          <div className="space-y-2.5">
+            {activityEvents && activityEvents.length > 0 ? (
+              activityEvents.map(evt => (
+                <div key={evt.id} className="flex items-start gap-2 text-xs">
+                  <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${evt.type === 'success' ? 'bg-green-500' : evt.type === 'warning' ? 'bg-yellow-400' : evt.type === 'error' ? 'bg-red-500' : 'bg-blue-400'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-700 leading-snug">{evt.message}</p>
+                    <p className="text-gray-400 mt-0.5">{new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                {activityError ? 'Audit-Log nicht verfügbar' : 'Keine Ereignisse'}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Quick Actions                                                        */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: 'Gerät anmelden', icon: ComputerDesktopIcon, color: 'text-blue-600 bg-blue-50 hover:bg-blue-100 border-blue-200' },
+          { label: 'Nutzer hinzufügen', icon: UsersIcon, color: 'text-green-600 bg-green-50 hover:bg-green-100 border-green-200' },
+          { label: 'App verbinden', icon: SparklesIcon, color: 'text-purple-600 bg-purple-50 hover:bg-purple-100 border-purple-200' },
+          { label: 'Richtlinie erstellen', icon: DocumentTextIcon, color: 'text-orange-600 bg-orange-50 hover:bg-orange-100 border-orange-200' },
+        ].map(action => (
+          <button key={action.label} onClick={() => toast.success(`${action.label} gestartet`)} className={`flex items-center justify-center gap-2 p-4 border rounded-xl text-sm font-medium transition-colors ${action.color}`}>
+            <action.icon className="w-5 h-5" />
+            {action.label}
+          </button>
+        ))}
       </div>
 
       {/* ------------------------------------------------------------------ */}

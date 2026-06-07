@@ -6,8 +6,70 @@ const rateLimit = require('express-rate-limit');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const WebSocket = require('ws');
 const http = require('http');
+const { Pool } = require('pg');
+
+const pgPool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  database: process.env.DB_NAME || process.env.POSTGRES_DB || 'api_gateway',
+  user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
+  password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || '',
+  max: 5,
+  connectionTimeoutMillis: 3000,
+});
+
+let apiGwDbReady = false;
+pgPool.query('SELECT 1').then(() => {
+  apiGwDbReady = true;
+  pgPool.query(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id VARCHAR(255) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      key_hash VARCHAR(512) NOT NULL UNIQUE,
+      permissions JSONB NOT NULL DEFAULT '["read"]',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used TIMESTAMPTZ,
+      active BOOLEAN DEFAULT TRUE
+    )
+  `).catch(() => {});
+  pgPool.query(`
+    CREATE TABLE IF NOT EXISTS webhooks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(255) NOT NULL,
+      url TEXT NOT NULL,
+      events TEXT[] DEFAULT '{}',
+      secret_hash VARCHAR(512),
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      last_triggered TIMESTAMPTZ,
+      delivery_count INTEGER DEFAULT 0,
+      failure_count INTEGER DEFAULT 0
+    )
+  `).catch(() => {});
+  pgPool.query(`
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      webhook_id UUID REFERENCES webhooks(id) ON DELETE CASCADE,
+      event_type VARCHAR(100),
+      payload JSONB,
+      response_status INTEGER,
+      delivered_at TIMESTAMPTZ DEFAULT NOW(),
+      success BOOLEAN DEFAULT false
+    )
+  `).catch(() => {});
+}).catch(() => {});
 
 const logger = require('./config/logger');
+
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'api-gateway' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+
 const serviceDiscovery = require('./discovery/serviceDiscovery');
 const authMiddleware = require('./middleware/auth');
 const routingMiddleware = require('./middleware/routing');
@@ -216,6 +278,29 @@ class APIGateway {
     this.app.post('/api/admin/keys', authMiddleware.requireAdmin(), this.createApiKey.bind(this));
     this.app.delete('/api/admin/keys/:keyId', authMiddleware.requireAdmin(), this.deleteApiKey.bind(this));
 
+    // Public API key / webhook management endpoints (used by frontend)
+    this.app.get('/api/gateway/api-keys', this.getApiKeys.bind(this));
+    this.app.post('/api/gateway/api-keys', this.createApiKey.bind(this));
+    this.app.delete('/api/gateway/api-keys/:keyId', this.deleteApiKey.bind(this));
+
+    // Webhook management
+    this.app.get('/api/gateway/webhooks', this.getWebhooks.bind(this));
+    this.app.post('/api/gateway/webhooks', this.createWebhook.bind(this));
+    this.app.put('/api/gateway/webhooks/:webhookId', this.updateWebhook.bind(this));
+    this.app.delete('/api/gateway/webhooks/:webhookId', this.deleteWebhook.bind(this));
+    this.app.post('/api/gateway/webhooks/:webhookId/test', this.testWebhook.bind(this));
+    this.app.get('/api/gateway/webhooks/:webhookId/deliveries', this.getWebhookDeliveries.bind(this));
+
+    // RabbitMQ audit logging for API requests
+    this.app.use((req, res, next) => {
+      res.on('finish', () => {
+        if (req.path !== '/health' && req.path !== '/metrics') {
+          publish('api.request', { method: req.method, path: req.path, status: res.statusCode, ip: req.ip });
+        }
+      });
+      next();
+    });
+
     // Dynamic proxy setup for enabled modules
     this.setupDynamicProxies();
 
@@ -240,158 +325,199 @@ class APIGateway {
     const connectedServices = [];
 
     // Core services (always enabled)
-    this.setupServiceProxy('authentication', 'http://authentication-service:3001', '/api/auth');
-    this.setupServiceProxy('configuration', 'http://configuration-service:3002', '/api/config');
-    connectedServices.push('authentication', 'configuration');
+    this.setupServiceProxy('authentication', 'http://authentication-service', '/api/auth');
+    this.setupServiceProxy('pim', 'http://authentication-service', '/api/pim');
+    this.setupServiceProxy('configuration', 'http://configuration-service', '/api/config');
+    connectedServices.push('authentication', 'pim', 'configuration');
 
     // Health service (if exists)
-    this.setupServiceProxy('health', 'http://health-service:3020', '/api/health');
+    this.setupServiceProxy('health', 'http://health-service', '/api/health');
     connectedServices.push('health');
 
     // Module-based proxies - ALL available modules
     if (enabledModules.includes('network-infrastructure')) {
-      this.setupServiceProxy('network', 'http://network-infrastructure:3007', '/api/network');
+      this.setupServiceProxy('network', 'http://network-infrastructure', '/api/network');
       connectedServices.push('network-infrastructure');
     }
 
     if (enabledModules.includes('security-suite')) {
-      this.setupServiceProxy('security', 'http://security-suite:3008', '/api/security');
+      this.setupServiceProxy('security', 'http://security-suite', '/api/security');
       connectedServices.push('security-suite');
     }
 
     if (enabledModules.includes('printer-service')) {
-      this.setupServiceProxy('printer', 'http://printer-service:3006', '/api/printer');
-      this.setupServiceProxy('printers', 'http://printer-service:3006', '/api/printers'); // Alternative route
+      this.setupServiceProxy('printer', 'http://printer-service', '/api/printer');
+      this.setupServiceProxy('printers', 'http://printer-service', '/api/printers'); // Alternative route
       connectedServices.push('printer-service');
     }
 
     if (enabledModules.includes('monitoring-analytics')) {
-      this.setupServiceProxy('monitoring', 'http://monitoring-analytics:3009', '/api/monitoring');
-      this.setupServiceProxy('analytics', 'http://monitoring-analytics:3009', '/api/analytics');
+      this.setupServiceProxy('monitoring', 'http://monitoring-analytics', '/api/monitoring');
+      this.setupServiceProxy('analytics', 'http://monitoring-analytics', '/api/analytics');
       connectedServices.push('monitoring-analytics');
     }
 
     if (enabledModules.includes('device-management')) {
-      this.setupServiceProxy('devices', 'http://device-service:3003', '/api/devices');
-      this.setupServiceProxy('device', 'http://device-service:3003', '/api/device'); // Singular route
+      this.setupServiceProxy('devices', 'http://device-service', '/api/devices');
+      this.setupServiceProxy('device', 'http://device-service', '/api/device'); // Singular route
       connectedServices.push('device-management');
     }
 
     if (enabledModules.includes('policy-compliance')) {
-      this.setupServiceProxy('policy', 'http://policy-compliance:3010', '/api/policy');
-      this.setupServiceProxy('compliance', 'http://policy-compliance:3010', '/api/compliance');
+      this.setupServiceProxy('policy', 'http://policy-compliance', '/api/policy');
+      this.setupServiceProxy('compliance', 'http://policy-compliance', '/api/compliance');
       connectedServices.push('policy-compliance');
     }
 
     if (enabledModules.includes('backup-disaster')) {
-      this.setupServiceProxy('backup', 'http://backup-disaster:3011', '/api/backup');
-      this.setupServiceProxy('disaster-recovery', 'http://backup-disaster:3011', '/api/dr');
+      this.setupServiceProxy('backup', 'http://backup-disaster', '/api/backup');
+      this.setupServiceProxy('disaster-recovery', 'http://backup-disaster', '/api/dr');
       connectedServices.push('backup-disaster');
     }
 
     if (enabledModules.includes('automation-workflows')) {
-      this.setupServiceProxy('automation', 'http://automation-workflows:3012', '/api/automation');
-      this.setupServiceProxy('workflows', 'http://automation-workflows:3012', '/api/workflows');
+      this.setupServiceProxy('automation', 'http://automation-workflows', '/api/automation');
+      this.setupServiceProxy('workflows', 'http://automation-workflows', '/api/workflows');
       connectedServices.push('automation-workflows');
     }
 
     if (enabledModules.includes('container-orchestration')) {
-      this.setupServiceProxy('containers', 'http://container-orchestration:3013', '/api/containers');
-      this.setupServiceProxy('kubernetes', 'http://container-orchestration:3013', '/api/k8s');
-      this.setupServiceProxy('docker', 'http://container-orchestration:3013', '/api/docker');
+      this.setupServiceProxy('containers', 'http://container-orchestration', '/api/containers');
+      this.setupServiceProxy('kubernetes', 'http://container-orchestration', '/api/k8s');
+      this.setupServiceProxy('docker', 'http://container-orchestration', '/api/docker');
       connectedServices.push('container-orchestration');
     }
 
     if (enabledModules.includes('enterprise-integrations')) {
-      this.setupServiceProxy('integrations', 'http://enterprise-integrations:3014', '/api/integrations');
-      this.setupServiceProxy('erp', 'http://enterprise-integrations:3014', '/api/erp');
-      this.setupServiceProxy('sap', 'http://enterprise-integrations:3014', '/api/sap');
-      this.setupServiceProxy('o365', 'http://enterprise-integrations:3014', '/api/o365');
+      this.setupServiceProxy('integrations', 'http://enterprise-integrations', '/api/integrations');
+      this.setupServiceProxy('erp', 'http://enterprise-integrations', '/api/erp');
+      this.setupServiceProxy('sap', 'http://enterprise-integrations', '/api/sap');
+      this.setupServiceProxy('o365', 'http://enterprise-integrations', '/api/o365');
       connectedServices.push('enterprise-integrations');
     }
 
     if (enabledModules.includes('ai-intelligence')) {
-      this.setupServiceProxy('ai', 'http://ai-intelligence:3015', '/api/ai');
-      this.setupServiceProxy('ml', 'http://ai-intelligence:3015', '/api/ml');
-      this.setupServiceProxy('predictions', 'http://ai-intelligence:3015', '/api/predictions');
+      this.setupServiceProxy('ai', 'http://ai-intelligence', '/api/ai');
+      this.setupServiceProxy('ml', 'http://ai-intelligence', '/api/ml');
+      this.setupServiceProxy('predictions', 'http://ai-intelligence', '/api/predictions');
       connectedServices.push('ai-intelligence');
     }
 
     // Legacy API Backend (if still needed)
     if (enabledModules.includes('api-backend')) {
-      this.setupServiceProxy('legacy', 'http://api-backend:8081', '/api/legacy');
+      this.setupServiceProxy('legacy', 'http://api-backend', '/api/legacy');
       connectedServices.push('api-backend');
     }
 
     // Integration Service (for external services)
     if (enabledModules.includes('integration-service')) {
-      this.setupServiceProxy('external', 'http://integration-service:3005', '/api/external');
-      this.setupServiceProxy('lldap', 'http://integration-service:3005', '/api/lldap');
-      this.setupServiceProxy('grafana', 'http://integration-service:3005', '/api/grafana');
-      this.setupServiceProxy('prometheus', 'http://integration-service:3005', '/api/prometheus');
-      this.setupServiceProxy('vault', 'http://integration-service:3005', '/api/vault');
+      this.setupServiceProxy('external', 'http://integration-service', '/api/external');
+      this.setupServiceProxy('lldap', 'http://integration-service', '/api/lldap');
+      this.setupServiceProxy('grafana', 'http://integration-service', '/api/grafana');
+      this.setupServiceProxy('prometheus', 'http://integration-service', '/api/prometheus');
+      this.setupServiceProxy('vault', 'http://integration-service', '/api/vault');
       connectedServices.push('integration-service');
     }
 
     // Identity and Policy services from core
     if (enabledModules.includes('identity-service')) {
-      this.setupServiceProxy('identity', 'http://identity-service:3001', '/api/identity');
-      this.setupServiceProxy('users', 'http://identity-service:3001', '/api/users');
-      this.setupServiceProxy('groups', 'http://identity-service:3001', '/api/groups');
+      this.setupServiceProxy('identity', 'http://identity-service', '/api/identity');
+      this.setupServiceProxy('users', 'http://identity-service', '/api/users');
+      this.setupServiceProxy('groups', 'http://identity-service', '/api/groups');
       connectedServices.push('identity-service');
     }
 
     if (enabledModules.includes('policy-service')) {
-      this.setupServiceProxy('policies', 'http://policy-service:3004', '/api/policies');
+      this.setupServiceProxy('policies', 'http://policy-service', '/api/policies');
+      this.setupServiceProxy('blueprints', 'http://policy-service', '/api/blueprints');
+      this.setupServiceProxy('licenses', 'http://policy-service', '/api/licenses');
       connectedServices.push('policy-service');
     }
 
     // Notification Service
     if (enabledModules.includes('notification-service')) {
-      this.setupServiceProxy('notifications', 'http://notification-service:3016', '/api/notifications');
-      this.setupServiceProxy('alerts', 'http://notification-service:3016', '/api/alerts');
+      this.setupServiceProxy('notifications', 'http://notification-service', '/api/notifications');
+      this.setupServiceProxy('alerts', 'http://notification-service', '/api/alerts');
       connectedServices.push('notification-service');
     }
 
     // Deployment Service
     if (enabledModules.includes('deployment-service')) {
-      this.setupServiceProxy('deployment', 'http://deployment-service:3017', '/api/deployment');
-      this.setupServiceProxy('apps', 'http://deployment-service:3017', '/api/apps');
+      this.setupServiceProxy('deployment', 'http://deployment-service', '/api/deployment');
+      this.setupServiceProxy('apps', 'http://deployment-service', '/api/apps');
       connectedServices.push('deployment-service');
     }
 
     // License Management Service
     if (enabledModules.includes('license-management')) {
-      this.setupServiceProxy('license', 'http://license-management:3018', '/api/license');
-      this.setupServiceProxy('licenses', 'http://license-management:3018', '/api/license'); // Alternative route
+      this.setupServiceProxy('license', 'http://license-management', '/api/license');
+      this.setupServiceProxy('licenses', 'http://license-management', '/api/license'); // Alternative route
       connectedServices.push('license-management');
     }
 
+    // Certificate Authority service (always enabled)
+    this.app.use('/api/ca', createProxyMiddleware({ target: 'http://certificate-authority', changeOrigin: true, pathRewrite: { '^/api/ca': '/ca' } }));
+    connectedServices.push('certificate-authority');
+
+    // Kerberos KDC REST API (always enabled)
+    this.app.use('/api/kerberos', createProxyMiddleware({ target: 'http://kerberos-kdc', changeOrigin: true }));
+    connectedServices.push('kerberos-kdc');
+
+    // Apple MDM server (always enabled — enrollment, APNs push, command delivery)
+    this.app.use('/api/mdm', createProxyMiddleware({ target: 'http://apple-mdm', changeOrigin: true }));
+    this.app.use('/mdm', createProxyMiddleware({ target: 'http://apple-mdm', changeOrigin: true }));
+    connectedServices.push('apple-mdm');
+
     // Intelligence Services (always enabled - core platform value)
-    this.setupServiceProxy('graph', 'http://graph-explorer:3900', '/api/graph');
-    this.setupServiceProxy('graph-explorer', 'http://graph-explorer:3900', '/api/graph-explorer');
+    this.setupServiceProxy('graph', 'http://graph-explorer', '/api/graph');
+    this.setupServiceProxy('graph-explorer', 'http://graph-explorer', '/api/graph-explorer');
     connectedServices.push('graph-explorer');
 
-    this.setupServiceProxy('simulator', 'http://policy-simulator:3901', '/api/simulator');
-    this.setupServiceProxy('drift', 'http://policy-simulator:3901', '/api/drift');
-    this.setupServiceProxy('timeline', 'http://policy-simulator:3901', '/api/timeline');
+    this.setupServiceProxy('simulator', 'http://policy-simulator', '/api/simulator');
+    this.setupServiceProxy('drift', 'http://policy-simulator', '/api/drift');
+    this.setupServiceProxy('timeline', 'http://policy-simulator', '/api/timeline');
     connectedServices.push('policy-simulator');
 
-    this.setupServiceProxy('scanner', 'http://security-scanner:3902', '/api/scanner');
-    this.setupServiceProxy('security-scan', 'http://security-scanner:3902', '/api/security-scan');
+    this.setupServiceProxy('scanner', 'http://security-scanner', '/api/scanner');
+    this.setupServiceProxy('security-scan', 'http://security-scanner', '/api/security-scan');
     connectedServices.push('security-scanner');
 
-    this.setupServiceProxy('lifecycle', 'http://device-lifecycle:3903', '/api/lifecycle');
-    this.setupServiceProxy('device-lifecycle', 'http://device-lifecycle:3903', '/api/device-lifecycle');
+    this.setupServiceProxy('lifecycle', 'http://device-lifecycle', '/api/lifecycle');
+    this.setupServiceProxy('device-lifecycle', 'http://device-lifecycle', '/api/device-lifecycle');
     connectedServices.push('device-lifecycle');
 
-    this.setupServiceProxy('remediation', 'http://auto-remediation:3904', '/api/remediation');
-    this.setupServiceProxy('auto-remediation', 'http://auto-remediation:3904', '/api/auto-remediation');
+    this.setupServiceProxy('remediation', 'http://auto-remediation', '/api/remediation');
+    this.setupServiceProxy('auto-remediation', 'http://auto-remediation', '/api/auto-remediation');
     connectedServices.push('auto-remediation');
 
-    this.setupServiceProxy('antivirus', 'http://antivirus-protection:3905', '/api/antivirus');
-    this.setupServiceProxy('clamav', 'http://antivirus-protection:3905', '/api/clamav');
+    this.setupServiceProxy('antivirus', 'http://antivirus-protection', '/api/antivirus');
+    this.setupServiceProxy('clamav', 'http://antivirus-protection', '/api/clamav');
     connectedServices.push('antivirus-protection');
+
+    // App Store
+    this.setupServiceProxy('appstore', 'http://app-store', '/api/appstore');
+    connectedServices.push('app-store');
+
+    // Notification / Alerting service
+    this.setupServiceProxy('notification', 'http://notification-service', '/api/notification');
+    connectedServices.push('notification-service');
+
+    // Backup service
+    this.setupServiceProxy('backup-jobs', 'http://backup-service', '/api/backup');
+    connectedServices.push('backup-service');
+
+    // MDM (Apple MDM)
+    this.setupServiceProxy('mdm', 'http://apple-mdm', '/api/mdm');
+    connectedServices.push('apple-mdm');
+
+    // Certificate Authority
+    this.setupServiceProxy('ca', 'http://certificate-authority', '/api/ca');
+    this.setupServiceProxy('certificates', 'http://certificate-authority', '/api/certificates');
+    connectedServices.push('certificate-authority');
+
+    // Conditional Access
+    this.setupServiceProxy('conditional-access', 'http://conditional-access', '/api/conditional-access');
+    connectedServices.push('conditional-access');
 
     logger.info(`API Gateway configured with ${connectedServices.length} services`);
     logger.info(`Connected services: ${connectedServices.join(', ')}`);
@@ -730,30 +856,210 @@ class APIGateway {
     res.json(routes);
   }
 
-  getApiKeys(req, res) {
-    // This would normally query a database
-    res.json([
-      { id: '1', name: 'Development Key', permissions: ['read'], created: '2024-01-01' },
-      { id: '2', name: 'Testing Key', permissions: ['read', 'write'], created: '2024-01-01' }
-    ]);
+  async getApiKeys(req, res) {
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query('SELECT id, name, permissions, created_at as created FROM api_keys WHERE active=true ORDER BY created_at');
+        if (r.rows.length > 0) return res.json(r.rows);
+      } catch {}
+    }
+    // Fallback: read from env vars
+    const keys = [];
+    if (process.env.API_KEY_READ_ONLY) keys.push({ id: 'env-ro', name: 'Read-Only Key (env)', permissions: ['read'], created: new Date().toISOString() });
+    if (process.env.API_KEY_FULL) keys.push({ id: 'env-full', name: 'Full Access Key (env)', permissions: ['read', 'write'], created: new Date().toISOString() });
+    if (process.env.API_KEY_ADMIN) keys.push({ id: 'env-admin', name: 'Admin Key (env)', permissions: ['read', 'write', 'admin'], created: new Date().toISOString() });
+    res.json(keys);
   }
 
-  createApiKey(req, res) {
+  async createApiKey(req, res) {
     const { name, permissions } = req.body;
-    // This would normally create in database
-    res.json({
-      id: Date.now().toString(),
-      name,
-      permissions,
-      key: 'generated-api-key-' + Math.random().toString(36).substr(2),
-      created: new Date().toISOString()
-    });
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const crypto = require('crypto');
+    const id = crypto.randomBytes(8).toString('hex');
+    const rawKey = crypto.randomBytes(32).toString('hex');
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query(
+          'INSERT INTO api_keys(id, name, key_hash, permissions) VALUES($1,$2,$3,$4)',
+          [id, name, keyHash, JSON.stringify(permissions || ['read'])]
+        );
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    res.status(201).json({ id, name, key: rawKey, permissions: permissions || ['read'], created: new Date().toISOString() });
   }
 
-  deleteApiKey(req, res) {
+  async deleteApiKey(req, res) {
     const { keyId } = req.params;
-    // This would normally delete from database
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query('UPDATE api_keys SET active=false WHERE id=$1', [keyId]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
     res.json({ message: `API key ${keyId} deleted` });
+  }
+
+  // ── In-memory webhook store (fallback when DB not ready) ──────────────────
+  _webhooks = new Map();
+  _webhookDeliveries = new Map(); // webhookId → [deliveries]
+
+  async getWebhooks(req, res) {
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks ORDER BY created_at DESC');
+        return res.json(r.rows);
+      } catch {}
+    }
+    res.json([...this._webhooks.values()]);
+  }
+
+  async createWebhook(req, res) {
+    const { name, url, events, secret } = req.body;
+    if (!name || !url) return res.status(400).json({ error: 'name and url are required' });
+    const crypto = require('crypto');
+    const id = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+    const secretHash = secret ? crypto.createHash('sha256').update(secret).digest('hex') : null;
+    const now = new Date().toISOString();
+    const webhook = { id, name, url, events: events || [], secretHash, active: true, createdAt: now, lastTriggered: null, deliveryCount: 0, failureCount: 0 };
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query(
+          'INSERT INTO webhooks(id, name, url, events, secret_hash, active) VALUES($1,$2,$3,$4,$5,true)',
+          [id, name, url, events || [], secretHash]
+        );
+        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks WHERE id=$1', [id]);
+        return res.status(201).json(r.rows[0]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    this._webhooks.set(id, webhook);
+    this._webhookDeliveries.set(id, []);
+    const { secretHash: _, ...safe } = webhook;
+    res.status(201).json(safe);
+  }
+
+  async updateWebhook(req, res) {
+    const { webhookId } = req.params;
+    const { name, url, events, secret, active } = req.body;
+    if (apiGwDbReady) {
+      try {
+        const crypto = require('crypto');
+        const secretHash = secret ? crypto.createHash('sha256').update(secret).digest('hex') : undefined;
+        const updates = [];
+        const vals = [];
+        let idx = 1;
+        if (name !== undefined) { updates.push(`name=$${idx++}`); vals.push(name); }
+        if (url !== undefined) { updates.push(`url=$${idx++}`); vals.push(url); }
+        if (events !== undefined) { updates.push(`events=$${idx++}`); vals.push(events); }
+        if (secretHash !== undefined) { updates.push(`secret_hash=$${idx++}`); vals.push(secretHash); }
+        if (active !== undefined) { updates.push(`active=$${idx++}`); vals.push(active); }
+        if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+        vals.push(webhookId);
+        await pgPool.query(`UPDATE webhooks SET ${updates.join(',')} WHERE id=$${idx}`, vals);
+        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks WHERE id=$1', [webhookId]);
+        if (r.rows.length === 0) return res.status(404).json({ error: 'Webhook not found' });
+        return res.json(r.rows[0]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    const wh = this._webhooks.get(webhookId);
+    if (!wh) return res.status(404).json({ error: 'Webhook not found' });
+    const updated = { ...wh, ...(name && { name }), ...(url && { url }), ...(events && { events }), ...(active !== undefined && { active }) };
+    this._webhooks.set(webhookId, updated);
+    const { secretHash: _, ...safe } = updated;
+    res.json(safe);
+  }
+
+  async deleteWebhook(req, res) {
+    const { webhookId } = req.params;
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query('DELETE FROM webhooks WHERE id=$1', [webhookId]);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    } else {
+      this._webhooks.delete(webhookId);
+      this._webhookDeliveries.delete(webhookId);
+    }
+    res.status(204).send();
+  }
+
+  async testWebhook(req, res) {
+    const { webhookId } = req.params;
+    let webhook = null;
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query('SELECT * FROM webhooks WHERE id=$1', [webhookId]);
+        if (r.rows.length > 0) webhook = r.rows[0];
+      } catch {}
+    } else {
+      webhook = this._webhooks.get(webhookId);
+    }
+    if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
+
+    const testPayload = {
+      event: 'test',
+      timestamp: new Date().toISOString(),
+      data: { message: 'This is a test delivery from OpenDirectory API Gateway' },
+    };
+
+    let responseStatus = null;
+    let success = false;
+    try {
+      const resp = await Promise.race([
+        fetch(webhook.url || webhook.URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-OpenDirectory-Event': 'test' },
+          body: JSON.stringify(testPayload),
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+      ]);
+      responseStatus = resp.status;
+      success = resp.ok;
+    } catch (err) {
+      responseStatus = 0;
+      success = false;
+    }
+
+    // Record delivery
+    const delivery = { id: require('crypto').randomBytes(8).toString('hex'), webhookId, eventType: 'test', payload: testPayload, responseStatus, deliveredAt: new Date().toISOString(), success };
+    if (apiGwDbReady) {
+      try {
+        await pgPool.query(
+          'INSERT INTO webhook_deliveries(webhook_id, event_type, payload, response_status, success) VALUES($1,$2,$3,$4,$5)',
+          [webhookId, 'test', testPayload, responseStatus, success]
+        );
+        await pgPool.query('UPDATE webhooks SET delivery_count=delivery_count+1, last_triggered=NOW() WHERE id=$1', [webhookId]);
+      } catch {}
+    } else {
+      const deliveries = this._webhookDeliveries.get(webhookId) || [];
+      deliveries.unshift(delivery);
+      this._webhookDeliveries.set(webhookId, deliveries);
+    }
+
+    res.json({ success, responseStatus, delivery });
+  }
+
+  async getWebhookDeliveries(req, res) {
+    const { webhookId } = req.params;
+    if (apiGwDbReady) {
+      try {
+        const r = await pgPool.query(
+          'SELECT id, webhook_id, event_type, response_status, delivered_at, success FROM webhook_deliveries WHERE webhook_id=$1 ORDER BY delivered_at DESC LIMIT 50',
+          [webhookId]
+        );
+        return res.json(r.rows);
+      } catch {}
+    }
+    const deliveries = this._webhookDeliveries.get(webhookId) || [];
+    res.json(deliveries.slice(0, 50));
   }
 
   getAvailableEndpoints() {
@@ -763,6 +1069,7 @@ class APIGateway {
   }
 
   start(port = process.env.PORT || 8080) {
+    connectBus();
     this.server.listen(port, () => {
       logger.info(`🚀 OpenDirectory API Gateway started on port ${port}`);
       logger.info(`📊 Health check available at: http://localhost:${port}/health`);

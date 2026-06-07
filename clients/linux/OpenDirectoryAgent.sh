@@ -443,7 +443,58 @@ PYEOF
             pkg_version=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('version',''))" 2>/dev/null)
             app_name=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('appName',''))" 2>/dev/null)
             local install_status="completed" install_output=""
+            local download_url pkg_sha256 pkg_format
+            download_url=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('downloadUrl',''))" 2>/dev/null)
+            pkg_sha256=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('sha256',''))" 2>/dev/null)
+            pkg_format=$(echo "$json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('packageInfo',{}).get('format',''))" 2>/dev/null)
+
             case "$pkg_type" in
+                internal)
+                    # Download from internal OpenDirectory App Store, install as root (agent runs as systemd service)
+                    local tmp_dir tmp_file
+                    tmp_dir=$(mktemp -d /tmp/od-install-XXXXXX)
+                    tmp_file="$tmp_dir/package.$pkg_format"
+
+                    if curl -fsSL -H "X-Device-Id: ${DEVICE_ID:-unknown}" "$download_url" -o "$tmp_file" 2>&1; then
+                        # Verify SHA256
+                        if [ -n "$pkg_sha256" ] && [ ${#pkg_sha256} -eq 64 ]; then
+                            actual_hash=$(sha256sum "$tmp_file" | awk '{print $1}')
+                            if [ "$actual_hash" != "$pkg_sha256" ]; then
+                                install_status="failed"; install_output="SHA256 stimmt nicht überein"
+                            fi
+                        fi
+
+                        if [ "$install_status" = "completed" ]; then
+                            case "$pkg_format" in
+                                deb)
+                                    DEBIAN_FRONTEND=noninteractive apt-get install -y "$tmp_file" 2>&1 || \
+                                    dpkg -i "$tmp_file" 2>&1 && apt-get install -f -y 2>&1 || install_status="failed"
+                                    ;;
+                                rpm)
+                                    if command -v dnf &>/dev/null; then
+                                        dnf install -y "$tmp_file" 2>&1 || install_status="failed"
+                                    else
+                                        rpm -i "$tmp_file" 2>&1 || install_status="failed"
+                                    fi
+                                    ;;
+                                appimage)
+                                    chmod +x "$tmp_file"
+                                    local dest="/usr/local/bin/${app_name// /_}"
+                                    cp "$tmp_file" "$dest" && chmod +x "$dest" || install_status="failed"
+                                    ;;
+                                tar.gz|gz)
+                                    tar -xzf "$tmp_file" -C /usr/local/bin/ 2>&1 || install_status="failed"
+                                    ;;
+                                *)
+                                    install_status="failed"; install_output="Unbekanntes Format: $pkg_format"
+                                    ;;
+                            esac
+                        fi
+                    else
+                        install_status="failed"; install_output="Download fehlgeschlagen"
+                    fi
+                    rm -rf "$tmp_dir"
+                    ;;
                 apt)
                     install_output=$(DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg_id" 2>&1) || install_status="failed"
                     ;;

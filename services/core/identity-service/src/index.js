@@ -4,12 +4,20 @@ const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const winston = require('winston');
-
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
   transports: [new winston.transports.Console()]
 });
+
+// ─── Event Bus ───────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'identity-service' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -58,6 +66,7 @@ app.post('/api/users', (req, res) => {
   const user = { id, username, email, displayName, department, title, enabled: true, createdAt: new Date().toISOString() };
   users.set(id, user);
   logger.info(`User created: ${username}`);
+  publish('identity.user.created', { userId: id, username, email });
   res.status(201).json(user);
 });
 
@@ -71,7 +80,9 @@ app.put('/api/users/:id', (req, res) => {
 
 app.delete('/api/users/:id', (req, res) => {
   if (!users.has(req.params.id)) return res.status(404).json({ error: 'User not found' });
-  users.delete(req.params.id);
+  const userId = req.params.id;
+  users.delete(userId);
+  publish('identity.user.deleted', { userId });
   res.status(204).send();
 });
 
@@ -95,6 +106,7 @@ app.post('/api/groups', (req, res) => {
   const group = { id, name, description, members: [], createdAt: new Date().toISOString() };
   groups.set(id, group);
   logger.info(`Group created: ${name}`);
+  publish('identity.group.created', { groupId: id, name });
   res.status(201).json(group);
 });
 
@@ -123,6 +135,7 @@ app.get('/api/identity/search', (req, res) => {
 });
 
 // Start server
+connectBus();
 const server = app.listen(PORT, () => {
   logger.info(`Identity Service running on port ${PORT}`);
 });

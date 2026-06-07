@@ -28,6 +28,9 @@ import {
   UserGroupIcon,
   BuildingOfficeIcon,
   ServerIcon,
+  RocketLaunchIcon,
+  ClockIcon,
+  NoSymbolIcon,
 } from '@heroicons/react/24/outline';
 import { appStoreApi } from '@/lib/api';
 import { useUiMode } from '@/lib/ui-mode';
@@ -105,6 +108,48 @@ interface Assignment {
   created_by: string;
 }
 
+interface DeploymentTarget {
+  type: 'device' | 'group' | 'user';
+  id: string;
+  name?: string;
+}
+
+interface Deployment {
+  id: string;
+  app_id: string;
+  app_name?: string;
+  targets: DeploymentTarget[];
+  version?: string;
+  status: string;
+  mandatory: boolean;
+  deadline?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+  created_by?: string;
+  progress?: { total: number; installed: number; failed: number; pending: number };
+}
+
+interface AppPackage {
+  id: string;
+  app_id: string;
+  platform: 'windows' | 'macos' | 'linux';
+  format: string;
+  version: string;
+  filename: string;
+  size_bytes: number;
+  sha256: string;
+  architecture: string;
+  release_notes: string;
+  uploaded_at: string;
+  download_count: number;
+}
+
+interface PackageSummary {
+  windows: AppPackage | null;
+  macos: AppPackage | null;
+  linux: AppPackage | null;
+}
+
 // --- Helpers ---
 const categoryIcons: Record<string, React.ComponentType<any>> = {
   browser: GlobeAltIcon,
@@ -156,7 +201,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedApp, setSelectedApp] = useState<StoreApp | null>(null);
-  const [activeTab, setActiveTab] = useState<'available' | 'installed' | 'required' | 'admin'>('available');
+  const [activeTab, setActiveTab] = useState<'available' | 'installed' | 'required' | 'admin' | 'deployments'>('available');
   const [installedApps, setInstalledApps] = useState<Installation[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [installingApps, setInstallingApps] = useState<Set<string>>(new Set());
@@ -164,6 +209,21 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   const [assignTarget, setAssignTarget] = useState({ target_type: 'domain', target_id: '', target_name: '' });
   const [assignInstallType, setAssignInstallType] = useState('available');
   const [showShareAppModal, setShowShareAppModal] = useState(false);
+  const [showDeployModal, setShowDeployModal] = useState(false);
+  const [deployTarget, setDeployTarget] = useState<StoreApp | null>(null);
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [deploying, setDeploying] = useState(false);
+
+  // Package distribution state
+  const [showPackageModal, setShowPackageModal] = useState(false);
+  const [packageTarget, setPackageTarget] = useState<StoreApp | null>(null);
+  const [packageSummaries, setPackageSummaries] = useState<Record<string, PackageSummary>>({});
+  const [uploadingPkg, setUploadingPkg] = useState(false);
+  const [pkgFile, setPkgFile] = useState<File | null>(null);
+  const [pkgVersion, setPkgVersion] = useState('');
+  const [pkgArch, setPkgArch] = useState('x64');
+  const [pkgReleaseNotes, setPkgReleaseNotes] = useState('');
+  const [pkgDragOver, setPkgDragOver] = useState(false);
 
   // Device ID for demo/self-service - in production this comes from the client agent
   const deviceId = 'self-service';
@@ -213,11 +273,53 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   const handleInstall = async (app: StoreApp) => {
     try {
       setInstallingApps((prev) => new Set(prev).add(app.id));
-      await appStoreApi.requestInstall({ appId: app.id, deviceId });
-      toast.success(`Installing ${app.display_name}...`);
+
+      // Detect current device ID from agent registration (falls back to 'self-service')
+      const currentDeviceId = (typeof window !== 'undefined' && (window as any).__od_deviceId) || deviceId;
+
+      // Check if we have a platform-specific internal package for this device
+      let summary = packageSummaries[app.id];
+      if (!summary) {
+        try {
+          const r = await fetch(`/api/appstore/apps/${app.id}/packages/summary`);
+          if (r.ok) { summary = await r.json(); setPackageSummaries(prev => ({ ...prev, [app.id]: summary })); }
+        } catch {}
+      }
+
+      // Detect platform (browser UA as fallback — agent on device is the real executor)
+      const ua = navigator.userAgent.toLowerCase();
+      const platformKey = ua.includes('win') ? 'windows' : ua.includes('mac') ? 'macos' : 'linux';
+      const internalPkg = summary?.[platformKey];
+
+      if (internalPkg) {
+        // We have a native package — push install command to the device agent
+        const res = await fetch(`/api/devices/${currentDeviceId}/install-app`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            appId: app.id,
+            appName: app.display_name || app.name,
+            packageId: internalPkg.id,
+            sha256: internalPkg.sha256,
+            format: internalPkg.format,
+            version: internalPkg.version,
+            architecture: internalPkg.architecture,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast.success(data.message || `${app.display_name} wird installiert…`, { duration: 4000 });
+        } else {
+          toast.error(data.error || 'Installation fehlgeschlagen');
+        }
+      } else {
+        // No internal package — fall back to winget/brew/apt catalog install
+        await appStoreApi.requestInstall({ appId: app.id, deviceId: currentDeviceId });
+        toast.success(`${app.display_name} wird über Paketmanager installiert…`);
+      }
       loadInstalled();
     } catch (error: any) {
-      const msg = error.response?.data?.error || 'Installation failed';
+      const msg = error.response?.data?.error || error.message || 'Installation fehlgeschlagen';
       toast.error(msg);
     } finally {
       setInstallingApps((prev) => {
@@ -292,6 +394,111 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
     } catch (error) {
       console.error('Failed to load assignments:', error);
     }
+  };
+
+  const loadDeployments = useCallback(async () => {
+    try {
+      const res = await fetch('/api/appstore/deployments');
+      if (res.ok) {
+        const data = await res.json();
+        setDeployments(data.deployments || []);
+      }
+    } catch (error) {
+      console.error('Failed to load deployments:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'deployments') loadDeployments();
+  }, [activeTab, loadDeployments]);
+
+  const handleCancelDeployment = async (deploymentId: string) => {
+    try {
+      const res = await fetch(`/api/appstore/deployments/${deploymentId}/cancel`, { method: 'PUT' });
+      if (res.ok) {
+        toast.success('Deployment abgebrochen');
+        loadDeployments();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Fehler beim Abbrechen');
+      }
+    } catch {
+      toast.error('Fehler beim Abbrechen des Deployments');
+    }
+  };
+
+  // --- Package distribution helpers ---
+  const loadPackageSummary = async (appId: string) => {
+    try {
+      const res = await fetch(`/api/appstore/apps/${appId}/packages/summary`);
+      if (res.ok) {
+        const data = await res.json();
+        setPackageSummaries(prev => ({ ...prev, [appId]: data }));
+      }
+    } catch {}
+  };
+
+  const handleOpenPackageModal = (app: StoreApp) => {
+    setPackageTarget(app);
+    setPkgFile(null); setPkgVersion(''); setPkgArch('x64'); setPkgReleaseNotes('');
+    setShowPackageModal(true);
+    loadPackageSummary(app.id);
+  };
+
+  const handlePackageUpload = async () => {
+    if (!pkgFile || !packageTarget) return;
+    if (!pkgVersion.trim()) { toast.error('Bitte Version angeben'); return; }
+    setUploadingPkg(true);
+    try {
+      const form = new FormData();
+      form.append('file', pkgFile);
+      form.append('version', pkgVersion);
+      form.append('architecture', pkgArch);
+      form.append('release_notes', pkgReleaseNotes);
+      const res = await fetch(`/api/appstore/apps/${packageTarget.id}/packages`, { method: 'POST', body: form });
+      if (res.ok) {
+        toast.success('Paket hochgeladen');
+        setPkgFile(null); setPkgVersion('');
+        loadPackageSummary(packageTarget.id);
+      } else {
+        const d = await res.json();
+        toast.error(d.error || 'Upload fehlgeschlagen');
+      }
+    } catch {
+      toast.error('Upload fehlgeschlagen');
+    } finally {
+      setUploadingPkg(false);
+    }
+  };
+
+  const handlePackageDownload = (pkg: AppPackage) => {
+    const a = document.createElement('a');
+    a.href = `/api/appstore/packages/${pkg.id}/download`;
+    a.download = pkg.filename;
+    a.click();
+  };
+
+  const handlePackageDelete = async (pkgId: string, appId: string) => {
+    try {
+      const res = await fetch(`/api/appstore/packages/${pkgId}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Paket gelöscht');
+        loadPackageSummary(appId);
+      }
+    } catch { toast.error('Fehler beim Löschen'); }
+  };
+
+  const fmtBytes = (b: number) => {
+    if (!b) return '—';
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+    if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
+    return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  };
+
+  const PLATFORM_INFO = {
+    windows: { label: 'Windows', color: 'bg-blue-100 text-blue-700', ext: '.exe / .msi / .msix' },
+    macos:   { label: 'macOS',   color: 'bg-gray-100 text-gray-700',  ext: '.dmg / .pkg' },
+    linux:   { label: 'Linux',   color: 'bg-orange-100 text-orange-700', ext: '.deb / .rpm / .AppImage' },
   };
 
   // --- Filtered apps ---
@@ -465,6 +672,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
             { id: 'available' as const, label: 'Available Apps', icon: ArrowDownTrayIcon },
             { id: 'installed' as const, label: 'Installed', icon: CheckCircleIcon },
             { id: 'required' as const, label: 'Required', icon: ExclamationTriangleIcon },
+            { id: 'deployments' as const, label: 'Deployments', icon: RocketLaunchIcon },
             { id: 'admin' as const, label: 'Admin', icon: Cog6ToothIcon },
           ].map((tab) => (
             <button
@@ -713,7 +921,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                     })}
                   </div>
 
-                  {/* Footer: version + license + install button */}
+                  {/* Footer: version + license + buttons */}
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                     <div className="flex items-center space-x-2">
                       <span className="text-xs text-gray-500">v{app.version}</span>
@@ -730,41 +938,73 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                       )}
                     </div>
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (installed) {
-                          handleUninstall(app);
-                        } else {
-                          handleInstall(app);
-                        }
-                      }}
-                      disabled={isInstalling || installStatus === 'installing' || installStatus === 'downloading'}
-                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        installed
-                          ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                          : isInstalling || installStatus === 'installing' || installStatus === 'downloading'
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
-                    >
-                      {installed ? (
-                        <>
-                          <TrashIcon className="w-3.5 h-3.5" />
-                          <span>Remove</span>
-                        </>
-                      ) : isInstalling || installStatus === 'installing' || installStatus === 'downloading' ? (
-                        <>
-                          <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
-                          <span>Installing</span>
-                        </>
-                      ) : (
-                        <>
-                          <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-                          <span>Install</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-center space-x-1.5">
+                      {/* Packages button */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleOpenPackageModal(app); }}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                        title="Pakete verwalten"
+                      >
+                        <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                        <span>Pakete</span>
+                        {packageSummaries[app.id] && Object.values(packageSummaries[app.id]).some(Boolean) && (
+                          <span className="ml-0.5 bg-emerald-600 text-white rounded-full px-1 text-[10px]">
+                            {Object.values(packageSummaries[app.id]).filter(Boolean).length}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Deploy button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeployTarget(app);
+                          setShowDeployModal(true);
+                        }}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
+                        title="App deployen"
+                      >
+                        <RocketLaunchIcon className="w-3.5 h-3.5" />
+                        <span>Deployen</span>
+                      </button>
+
+                      {/* Install button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (installed) {
+                            handleUninstall(app);
+                          } else {
+                            handleInstall(app);
+                          }
+                        }}
+                        disabled={isInstalling || installStatus === 'installing' || installStatus === 'downloading'}
+                        className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          installed
+                            ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                            : isInstalling || installStatus === 'installing' || installStatus === 'downloading'
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
+                      >
+                        {installed ? (
+                          <>
+                            <TrashIcon className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </>
+                        ) : isInstalling || installStatus === 'installing' || installStatus === 'downloading' ? (
+                          <>
+                            <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                            <span>Installing</span>
+                          </>
+                        ) : (
+                          <>
+                            <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                            <span>Install</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -792,6 +1032,285 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
             </div>
           )}
         </>
+      )}
+
+      {/* Deployments Tab Content */}
+      {activeTab === 'deployments' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-gray-900">Aktive Deployments</h2>
+            <button
+              onClick={loadDeployments}
+              className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              <ArrowPathIcon className="w-3.5 h-3.5" />
+              <span>Aktualisieren</span>
+            </button>
+          </div>
+
+          {deployments.length === 0 ? (
+            <div className="text-center py-12">
+              <RocketLaunchIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Deployments</h3>
+              <p className="text-sm text-gray-500">Klicken Sie auf «Deployen» bei einer App um ein Deployment zu starten</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">App</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziele</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fortschritt</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Erstellt</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aktion</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {deployments.map((dep) => {
+                    const progress = dep.progress || { total: dep.targets?.length || 0, installed: 0, failed: 0, pending: dep.targets?.length || 0 };
+                    const pct = progress.total > 0 ? Math.round((progress.installed / progress.total) * 100) : 0;
+                    return (
+                      <tr key={dep.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{dep.app_name || dep.app_id}</p>
+                            <p className="text-xs text-gray-500">v{dep.version || '–'}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {dep.targets?.length || 0} {dep.mandatory && <span className="ml-1 px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded">Pflicht</span>}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-24 bg-gray-200 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full transition-all ${progress.failed > 0 ? 'bg-red-500' : 'bg-blue-500'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-500 whitespace-nowrap">
+                              {progress.installed}/{progress.total} Geräte
+                            </span>
+                          </div>
+                          {progress.failed > 0 && (
+                            <p className="text-xs text-red-600 mt-0.5">{progress.failed} Fehler</p>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <DeploymentStatusBadge status={dep.status} />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(dep.created_at).toLocaleDateString('de-CH')}
+                          {dep.deadline && (
+                            <p className="text-xs text-orange-600 flex items-center space-x-0.5 mt-0.5">
+                              <ClockIcon className="w-3 h-3" />
+                              <span>{new Date(dep.deadline).toLocaleDateString('de-CH')}</span>
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(dep.status === 'pending' || dep.status === 'running') && (
+                            <button
+                              onClick={() => handleCancelDeployment(dep.id)}
+                              className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                            >
+                              <NoSymbolIcon className="w-3.5 h-3.5" />
+                              <span>Abbrechen</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Package Distribution Modal */}
+      {showPackageModal && packageTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Pakete verwalten</h2>
+                <p className="text-sm text-gray-500 mt-0.5">{packageTarget.name}</p>
+              </div>
+              <button onClick={() => setShowPackageModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <XMarkIcon className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Platform availability */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Verfügbare Plattform-Pakete</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  {(['windows', 'macos', 'linux'] as const).map(platform => {
+                    const info = PLATFORM_INFO[platform];
+                    const pkg = packageSummaries[packageTarget.id]?.[platform];
+                    return (
+                      <div key={platform} className={`rounded-xl border-2 p-3 ${pkg ? 'border-emerald-200 bg-emerald-50' : 'border-dashed border-gray-200 bg-gray-50'}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${info.color}`}>{info.label}</span>
+                          {pkg && <span className="text-[10px] text-gray-400">v{pkg.version}</span>}
+                        </div>
+                        {pkg ? (
+                          <div className="space-y-1.5 mt-2">
+                            <p className="text-xs text-gray-600 truncate" title={pkg.filename}>{pkg.filename}</p>
+                            <p className="text-xs text-gray-400">{fmtBytes(pkg.size_bytes)} · {pkg.download_count} Downloads</p>
+                            <div className="flex gap-1.5 mt-2">
+                              <button
+                                onClick={() => handlePackageDownload(pkg)}
+                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700"
+                              >
+                                <ArrowDownTrayIcon className="w-3 h-3" />
+                                Download
+                              </button>
+                              <button
+                                onClick={() => handlePackageDelete(pkg.id, packageTarget.id)}
+                                className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                                title="Paket löschen"
+                              >
+                                <TrashIcon className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            {pkg.sha256 && (
+                              <p className="text-[10px] text-gray-300 font-mono break-all">SHA256: {pkg.sha256.slice(0, 16)}…</p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-center">
+                            <p className="text-xs text-gray-400">Kein Paket</p>
+                            <p className="text-[10px] text-gray-300 mt-0.5">{info.ext}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Upload section */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Neues Paket hochladen</h3>
+
+                {/* Drop zone */}
+                <div
+                  className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${pkgDragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                  onDragOver={e => { e.preventDefault(); setPkgDragOver(true); }}
+                  onDragLeave={() => setPkgDragOver(false)}
+                  onDrop={e => {
+                    e.preventDefault();
+                    setPkgDragOver(false);
+                    const f = e.dataTransfer.files[0];
+                    if (f) { setPkgFile(f); if (!pkgVersion) setPkgVersion('1.0.0'); }
+                  }}
+                  onClick={() => document.getElementById('pkg-file-input')?.click()}
+                >
+                  <input
+                    id="pkg-file-input"
+                    type="file"
+                    className="hidden"
+                    accept=".exe,.msi,.msix,.dmg,.pkg,.deb,.rpm,.AppImage,.tar.gz,.tar.xz,.zip"
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) { setPkgFile(f); if (!pkgVersion) setPkgVersion('1.0.0'); }
+                    }}
+                  />
+                  <ArrowDownTrayIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  {pkgFile ? (
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{pkgFile.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{fmtBytes(pkgFile.size)}</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm text-gray-500">Datei hier ablegen oder klicken</p>
+                      <p className="text-xs text-gray-400 mt-1">.exe · .msi · .msix · .dmg · .pkg · .deb · .rpm · .AppImage · .tar.gz</p>
+                    </div>
+                  )}
+                </div>
+
+                {pkgFile && (
+                  <div className="mt-3 grid grid-cols-3 gap-3">
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Version *</label>
+                      <input
+                        type="text"
+                        value={pkgVersion}
+                        onChange={e => setPkgVersion(e.target.value)}
+                        placeholder="z.B. 2.5.1"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Architektur</label>
+                      <select
+                        value={pkgArch}
+                        onChange={e => setPkgArch(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="x64">x64</option>
+                        <option value="arm64">arm64</option>
+                        <option value="universal">Universal</option>
+                        <option value="x86">x86</option>
+                      </select>
+                    </div>
+                    <div className="col-span-3">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Release Notes (optional)</label>
+                      <textarea
+                        value={pkgReleaseNotes}
+                        onChange={e => setPkgReleaseNotes(e.target.value)}
+                        rows={2}
+                        placeholder="Was hat sich geändert?"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handlePackageUpload}
+                  disabled={!pkgFile || !pkgVersion.trim() || uploadingPkg}
+                  className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-medium text-sm hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {uploadingPkg ? (
+                    <>
+                      <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                      Wird hochgeladen…
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDownTrayIcon className="w-4 h-4 rotate-180" />
+                      Paket hochladen
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deploy Modal */}
+      {showDeployModal && deployTarget && (
+        <DeployModal
+          app={deployTarget}
+          onClose={() => { setShowDeployModal(false); setDeployTarget(null); }}
+          onDeployed={() => {
+            setShowDeployModal(false);
+            setDeployTarget(null);
+            setActiveTab('deployments');
+            loadDeployments();
+            toast.success('Deployment gestartet');
+          }}
+        />
       )}
 
       {/* App Detail Modal */}
@@ -1089,6 +1608,227 @@ function TargetTypeIcon({ type }: { type: string }) {
   };
   const Icon = icons[type] || ServerIcon;
   return <Icon className="w-5 h-5 text-gray-400" />;
+}
+
+// --- Deployment Status Badge ---
+function DeploymentStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { bg: string; text: string; label: string }> = {
+    pending:   { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Ausstehend' },
+    running:   { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'Läuft' },
+    completed: { bg: 'bg-green-100',  text: 'text-green-700',  label: 'Abgeschlossen' },
+    failed:    { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Fehlgeschlagen' },
+    cancelled: { bg: 'bg-gray-100',   text: 'text-gray-600',   label: 'Abgebrochen' },
+  };
+  const c = config[status] || { bg: 'bg-gray-100', text: 'text-gray-600', label: status };
+  return (
+    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${c.bg} ${c.text}`}>
+      {c.label}
+    </span>
+  );
+}
+
+// --- Deploy Modal ---
+function DeployModal({
+  app,
+  onClose,
+  onDeployed,
+}: {
+  app: { id: string; display_name?: string; name: string; version: string };
+  onClose: () => void;
+  onDeployed: () => void;
+}) {
+  const [targetType, setTargetType] = useState<'all' | 'group' | 'device' | 'user'>('all');
+  const [targetId, setTargetId] = useState('');
+  const [mandatory, setMandatory] = useState(false);
+  const [deadline, setDeadline] = useState('');
+  const [deploying, setDeploying] = useState(false);
+
+  const DEMO_GROUPS = [
+    { id: 'all-devices', name: 'Alle Geräte' },
+    { id: 'macos-devices', name: 'macOS Geräte' },
+    { id: 'windows-devices', name: 'Windows Geräte' },
+    { id: 'it-department', name: 'IT-Abteilung' },
+    { id: 'marketing', name: 'Marketing' },
+    { id: 'finance', name: 'Finanzen' },
+  ];
+
+  const buildTargets = () => {
+    if (targetType === 'all') {
+      return [{ type: 'group' as const, id: 'all-devices', name: 'Alle Geräte' }];
+    }
+    if (!targetId.trim()) return null;
+    return [{ type: targetType, id: targetId.trim(), name: targetId.trim() }];
+  };
+
+  const handleDeploy = async () => {
+    const targets = buildTargets();
+    if (!targets) { return; }
+    setDeploying(true);
+    try {
+      const res = await fetch(`/api/appstore/apps/${app.id}/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targets,
+          mandatory,
+          deadline: deadline || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Deployment fehlgeschlagen');
+      }
+      onDeployed();
+    } catch (err: any) {
+      alert(err.message || 'Deployment fehlgeschlagen');
+    } finally {
+      setDeploying(false);
+    }
+  };
+
+  const isValid = targetType === 'all' || targetId.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <RocketLaunchIcon className="h-5 w-5 text-violet-600" />
+            <h2 className="text-base font-semibold text-gray-900">App deployen</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-5">
+          {/* App info */}
+          <div className="flex items-center gap-3 bg-violet-50 rounded-lg p-3">
+            <RocketLaunchIcon className="h-8 w-8 text-violet-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{app.display_name || app.name}</p>
+              <p className="text-xs text-gray-500">v{app.version}</p>
+            </div>
+          </div>
+
+          {/* Target selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Zielgruppe</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: 'all', label: 'Alle Geräte' },
+                { value: 'group', label: 'Bestimmte Gruppe' },
+                { value: 'device', label: 'Bestimmte Geräte' },
+                { value: 'user', label: 'Bestimmte Benutzer' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => { setTargetType(opt.value as any); setTargetId(''); }}
+                  className={`py-2 px-3 rounded-lg border text-sm font-medium transition-colors text-left ${
+                    targetType === opt.value
+                      ? 'border-violet-500 bg-violet-50 text-violet-700'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Group/Device/User picker */}
+          {targetType === 'group' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Gruppe auswählen</label>
+              <select
+                value={targetId}
+                onChange={(e) => setTargetId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+              >
+                <option value="">— Gruppe wählen —</option>
+                {DEMO_GROUPS.slice(1).map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {(targetType === 'device' || targetType === 'user') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {targetType === 'device' ? 'Geräte-ID' : 'Benutzer-ID'} eingeben
+              </label>
+              <input
+                type="text"
+                value={targetId}
+                onChange={(e) => setTargetId(e.target.value)}
+                placeholder={targetType === 'device' ? 'z.B. LAPTOP-001' : 'z.B. max.muster@corp.local'}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+            </div>
+          )}
+
+          {/* Mandatory toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Pflichtinstallation</p>
+              <p className="text-xs text-gray-500">App wird automatisch auf Zielgeräten installiert</p>
+            </div>
+            <button
+              onClick={() => setMandatory(!mandatory)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                mandatory ? 'bg-violet-600' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 ease-in-out ${
+                  mandatory ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Deadline */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Deadline <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <input
+              type="datetime-local"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+          <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">
+            Abbrechen
+          </button>
+          <button
+            onClick={handleDeploy}
+            disabled={!isValid || deploying}
+            className="flex items-center gap-1.5 bg-violet-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {deploying ? (
+              <>
+                <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                <span>Wird deployed…</span>
+              </>
+            ) : (
+              <>
+                <RocketLaunchIcon className="h-4 w-4" />
+                <span>Jetzt deployen</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // --- Share App Modal ---

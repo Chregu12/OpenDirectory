@@ -8,6 +8,21 @@ const WebSocket = require('ws');
 const cluster = require('cluster');
 const os = require('os');
 
+// Generic event bus (publish / subscribe)
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+
+// RabbitMQ MessageBus — kept only for device-command-queue operations
+// (consumeDeviceCommands / queueDeviceCommand) which are not part of
+// the generic EventBusClient contract.
+const MessageBus = require('../../../../packages/service-contracts/src/messageBus');
+const { Events }  = require('../../../../packages/service-contracts/src/events');
+
+// PostgreSQL persistence layer
+const db = require('./db');
+
 // Import enhanced services
 const DeviceManager = require('./services/deviceManager');
 const PolicyEngine = require('./services/policyEngine');
@@ -20,31 +35,15 @@ const CertificateManager = require('./services/certificateManager');
 const ThreatDetector = require('./services/threatDetector');
 const AnalyticsEngine = require('./services/analyticsEngine');
 const PolicyAgentService = require('./services/PolicyAgentService');
-let UpdateAgentService, NetworkProfileAgentService;
-try {
-  UpdateAgentService = require('../../update-management/src/services/UpdateAgentService');
-} catch (e) { /* UpdateAgentService not available */ }
-try {
-  NetworkProfileAgentService = require('../../certificate-network/src/services/NetworkProfileAgentService');
-} catch (e) { /* NetworkProfileAgentService not available */ }
 
-// Enterprise services (optional)
+// HTTP clients — replace cross-service file imports with proper API calls
+const updateClient = require('./clients/updateClient');
+const networkProfileClient = require('./clients/networkProfileClient');
+const licenseClient = require('./clients/licenseClient');
+const backupClient = require('./clients/backupClient');
+
+// Enterprise services (local only)
 const { AnalyticsBridge } = require('./analytics-bridge');
-const { DashboardService } = require('../../../license-management/src/services/dashboardService');
-
-let BackupManagementSystem, FailoverController, DisasterRecoveryOrchestrator, GeoReplicationEngine;
-try {
-  ({ BackupManagementSystem } = require('../../../enterprise/disaster-recovery/opendirectory-backup-system'));
-} catch (e) { /* Backup system not available */ }
-try {
-  ({ FailoverController } = require('../../../enterprise/disaster-recovery/opendirectory-failover-controller'));
-} catch (e) { /* Failover controller not available */ }
-try {
-  ({ DisasterRecoveryOrchestrator } = require('../../../enterprise/disaster-recovery/opendirectory-dr-orchestrator'));
-} catch (e) { /* DR orchestrator not available */ }
-try {
-  ({ GeoReplicationEngine } = require('../../../enterprise/disaster-recovery/opendirectory-geo-replication'));
-} catch (e) { /* Geo replication not available */ }
 
 // Utilities
 const logger = require('./utils/logger');
@@ -83,24 +82,27 @@ class EnterpriseDeviceManagementService {
     this.threatDetector = new ThreatDetector(this.db, this.eventBus);
     this.analyticsEngine = new AnalyticsEngine(this.db, this.cache);
     this.policyAgentService = new PolicyAgentService(this);
-    this.updateAgentService = UpdateAgentService ? new UpdateAgentService(this) : null;
-    this.networkProfileAgentService = NetworkProfileAgentService ? new NetworkProfileAgentService(this) : null;
 
-    // Enterprise Disaster Recovery services
-    try { this.backupSystem = BackupManagementSystem ? new BackupManagementSystem() : null; } catch (e) { this.backupSystem = null; }
-    try { this.failoverController = FailoverController ? new FailoverController() : null; } catch (e) { this.failoverController = null; }
-    try { this.drOrchestrator = DisasterRecoveryOrchestrator ? new DisasterRecoveryOrchestrator() : null; } catch (e) { this.drOrchestrator = null; }
-    try { this.geoReplication = GeoReplicationEngine ? new GeoReplicationEngine() : null; } catch (e) { this.geoReplication = null; }
+    // HTTP service clients (microservice isolation — no direct file imports)
+    this.updateClient = updateClient;
+    this.networkProfileClient = networkProfileClient;
+    this.licenseClient = licenseClient;
+    this.backupClient = backupClient;
 
     // Analytics Bridge (connects agent events to AI/ML analytics)
     this.analyticsBridge = new AnalyticsBridge();
 
-    // Dashboard Service (aggregates data for reporting dashboard)
-    this.dashboardService = new DashboardService();
-    this.dashboardService.registerServices({
-      deviceService: this,
-      analyticsBridge: this.analyticsBridge,
-      backupSystem: this.backupSystem
+    // Generic event bus — used for all domain-event publishing/subscribing
+    this._eventBus = new EventBusClient({ source: 'device-service' });
+    this._eventBus.connect().catch(err => {
+      logger.warn('EventBus connect failed at startup (will retry in background)', { error: err.message });
+    });
+
+    // RabbitMQ command bus — kept only for per-device command-queue operations
+    // (consumeDeviceCommands / queueDeviceCommand). Not used for domain events.
+    this.messageBus = new MessageBus();
+    this.messageBus.connect(process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672').catch(err => {
+      logger.warn('RabbitMQ unavailable, falling back to Redis cache for command queue', { error: err.message });
     });
 
     // Connected agent registry: deviceId -> WebSocket connection
@@ -190,7 +192,7 @@ class EnterpriseDeviceManagementService {
       const start = Date.now();
       res.on('finish', () => {
         const duration = Date.now() - start;
-        res.setHeader('X-Response-Time', \`\${duration}ms\`);
+        try { res.setHeader('X-Response-Time', `\${duration}ms`); } catch (_) {}
         this.metrics.recordResponseTime(req.route?.path || req.path, duration);
       });
       next();
@@ -198,7 +200,7 @@ class EnterpriseDeviceManagementService {
 
     // Logging middleware
     this.app.use((req, res, next) => {
-      logger.info(\`\${req.method} \${req.path}\`, {
+      logger.info(`\${req.method} \${req.path}`, {
         requestId: req.id,
         userAgent: req.headers['user-agent'],
         ip: req.ip,
@@ -348,6 +350,11 @@ class EnterpriseDeviceManagementService {
     this.app.post('/api/devices/:deviceId/lock', this.lockDevice.bind(this));
     this.app.post('/api/devices/:deviceId/unlock', this.unlockDevice.bind(this));
     this.app.post('/api/devices/:deviceId/wipe', this.wipeDevice.bind(this));
+    // Stammdaten (master data) + photo
+    this.app.get('/api/devices/:deviceId/stammdaten', this.getStammdaten.bind(this));
+    this.app.put('/api/devices/:deviceId/stammdaten', this.updateStammdaten.bind(this));
+    this.app.post('/api/devices/:deviceId/photo', this.uploadPhoto.bind(this));
+    this.app.get('/api/devices/:deviceId/photo', this.getPhoto.bind(this));
     
     // Enrollment Routes
     this.app.post('/api/enrollment/initiate', this.initiateEnrollment.bind(this));
@@ -414,157 +421,141 @@ class EnterpriseDeviceManagementService {
     this.app.get('/api/agent/policy/status/:deviceId', this.agentGetPolicyStatus.bind(this));
 
     // Update Agent Routes
-    this.app.post('/api/agent/update/configure', (req, res) => {
-      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
-      const result = this.updateAgentService.configureUpdates(req.body.deviceId, req.body.policy);
+    this.app.post('/api/agent/update/configure', async (req, res) => {
+      const result = await this.updateClient.configureUpdates(req.body.deviceId, req.body.policy);
+      if (!result) return res.status(503).json({ error: 'Update service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/update/check-status', (req, res) => {
-      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
-      const result = this.updateAgentService.checkUpdateStatus(req.body.deviceId);
+    this.app.post('/api/agent/update/check-status', async (req, res) => {
+      const result = await this.updateClient.checkUpdateStatus(req.body.deviceId);
+      if (!result) return res.status(503).json({ error: 'Update service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/update/trigger', (req, res) => {
-      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
-      const result = this.updateAgentService.triggerUpdate(req.body.deviceId, req.body.options);
+    this.app.post('/api/agent/update/trigger', async (req, res) => {
+      const result = await this.updateClient.triggerUpdate(req.body.deviceId, req.body.options);
+      if (!result) return res.status(503).json({ error: 'Update service unavailable' });
       res.json(result);
     });
-    this.app.get('/api/agent/update/status/:deviceId', (req, res) => {
-      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
-      res.json(this.updateAgentService.getDeviceUpdateStatus(req.params.deviceId));
+    this.app.get('/api/agent/update/status/:deviceId', async (req, res) => {
+      const result = await this.updateClient.getDeviceUpdateStatus(req.params.deviceId);
+      if (!result) return res.status(503).json({ error: 'Update service unavailable' });
+      res.json(result);
     });
-    this.app.post('/api/agent/update/configure-winget', (req, res) => {
-      if (!this.updateAgentService) return res.status(503).json({ error: 'UpdateAgentService not available' });
-      const result = this.updateAgentService.configureWingetAutoUpdate(req.body.deviceId, req.body.policy);
+    this.app.post('/api/agent/update/configure-winget', async (req, res) => {
+      const result = await this.updateClient.configureWingetAutoUpdate(req.body.deviceId, req.body.policy);
+      if (!result) return res.status(503).json({ error: 'Update service unavailable' });
       res.json(result);
     });
 
     // Network Profile Agent Routes
-    this.app.post('/api/agent/network/configure-wifi', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.configureWiFi(req.body.deviceId, req.body.profile);
+    this.app.post('/api/agent/network/configure-wifi', async (req, res) => {
+      const result = await this.networkProfileClient.configureWiFi(req.body.deviceId, req.body.profile);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/network/remove-wifi', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.removeWiFi(req.body.deviceId, req.body.profileId, req.body.ssid);
+    this.app.post('/api/agent/network/remove-wifi', async (req, res) => {
+      const result = await this.networkProfileClient.removeWiFi(req.body.deviceId, req.body.profileId, req.body.ssid);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/network/configure-vpn', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.configureVPN(req.body.deviceId, req.body.profile);
+    this.app.post('/api/agent/network/configure-vpn', async (req, res) => {
+      const result = await this.networkProfileClient.configureVPN(req.body.deviceId, req.body.profile);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/network/remove-vpn', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.removeVPN(req.body.deviceId, req.body.profileId);
+    this.app.post('/api/agent/network/remove-vpn', async (req, res) => {
+      const result = await this.networkProfileClient.removeVPN(req.body.deviceId, req.body.profileId);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/network/configure-email', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.configureEmail(req.body.deviceId, req.body.profile);
+    this.app.post('/api/agent/network/configure-email', async (req, res) => {
+      const result = await this.networkProfileClient.configureEmail(req.body.deviceId, req.body.profile);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.post('/api/agent/network/remove-email', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      const result = this.networkProfileAgentService.removeEmail(req.body.deviceId, req.body.profileId);
+    this.app.post('/api/agent/network/remove-email', async (req, res) => {
+      const result = await this.networkProfileClient.removeEmail(req.body.deviceId, req.body.profileId);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
       res.json(result);
     });
-    this.app.get('/api/agent/network/status/:deviceId', (req, res) => {
-      if (!this.networkProfileAgentService) return res.status(503).json({ error: 'NetworkProfileAgentService not available' });
-      res.json(this.networkProfileAgentService.getDeviceProfileState(req.params.deviceId));
+    this.app.get('/api/agent/network/status/:deviceId', async (req, res) => {
+      const result = await this.networkProfileClient.getDeviceProfileState(req.params.deviceId);
+      if (!result) return res.status(503).json({ error: 'Network profile service unavailable' });
+      res.json(result);
     });
 
     // Backup & Disaster Recovery Routes
     this.app.post('/api/backup/trigger', async (req, res) => {
       try {
-        if (!this.backupSystem) return res.status(503).json({ error: 'Backup system not available' });
         const jobId = `bak-${Date.now()}`;
         const type = req.body.type || 'incremental';
-        this.backupSystem.emit('backup:trigger', { type, jobId });
-        res.json({ success: true, jobId, type, status: 'started', startedAt: new Date().toISOString() });
+        const result = await this.backupClient.triggerBackup(type, jobId);
+        if (!result) return res.status(503).json({ error: 'Backup service unavailable' });
+        res.json({ success: true, jobId, type, status: 'started', startedAt: new Date().toISOString(), ...result });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/backup/status', (req, res) => {
+    this.app.get('/api/backup/status', async (req, res) => {
       try {
-        const status = this.backupSystem ? {
-          running: false,
-          lastFullBackup: null,
-          lastIncrementalBackup: null,
-          nextScheduled: null,
-          storageUsedGB: 0,
-          totalBackups: 0
-        } : null;
-        res.json({ success: true, data: status || { error: 'Backup system not available' } });
+        const status = await this.backupClient.getBackupStatus();
+        res.json({ success: true, data: status || { error: 'Backup service unavailable' } });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/backup/history', (req, res) => {
+    this.app.get('/api/backup/history', async (req, res) => {
       try {
         const limit = parseInt(req.query.limit) || 20;
-        res.json({ success: true, data: [], limit });
+        const data = await this.backupClient.getBackupHistory(limit);
+        res.json({ success: true, data: data || [], limit });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
     this.app.post('/api/backup/restore', async (req, res) => {
       try {
-        if (!this.backupSystem) return res.status(503).json({ error: 'Backup system not available' });
         const { backupId } = req.body;
         if (!backupId) return res.status(400).json({ error: 'backupId required' });
-        const jobId = `rst-${Date.now()}`;
-        res.json({ success: true, jobId, backupId, status: 'started', startedAt: new Date().toISOString() });
+        const result = await this.backupClient.restoreBackup(backupId);
+        if (!result) return res.status(503).json({ error: 'Backup service unavailable' });
+        res.json({ success: true, backupId, status: 'started', startedAt: new Date().toISOString(), ...result });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/dr/health', (req, res) => {
+    this.app.get('/api/dr/health', async (req, res) => {
       try {
-        const health = {
-          status: this.drOrchestrator ? 'operational' : 'not_configured',
-          backupSystem: !!this.backupSystem,
-          failoverController: !!this.failoverController,
-          geoReplication: !!this.geoReplication,
-          drOrchestrator: !!this.drOrchestrator,
-          timestamp: new Date().toISOString()
-        };
-        res.json({ success: true, data: health });
+        const health = await this.backupClient.getDrHealth();
+        res.json({ success: true, data: health || { status: 'not_configured', timestamp: new Date().toISOString() } });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
     this.app.post('/api/dr/failover/test', async (req, res) => {
       try {
-        if (!this.failoverController) return res.status(503).json({ error: 'Failover controller not available' });
-        const result = { success: true, message: 'DR drill initiated', failedOver: false, duration: 0, timestamp: new Date().toISOString() };
+        const result = await this.backupClient.testFailover();
+        if (!result) return res.status(503).json({ error: 'Backup service unavailable' });
         res.json(result);
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/dr/replication/status', (req, res) => {
+    this.app.get('/api/dr/replication/status', async (req, res) => {
       try {
-        const status = {
-          active: !!this.geoReplication,
-          lagSeconds: 0,
-          primaryRegion: 'primary',
-          replicas: [],
-          timestamp: new Date().toISOString()
-        };
-        res.json({ success: true, data: status });
+        const status = await this.backupClient.getReplicationStatus();
+        res.json({ success: true, data: status || { active: false, timestamp: new Date().toISOString() } });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
     this.app.post('/api/dr/failover/execute', async (req, res) => {
       try {
-        if (!this.failoverController) return res.status(503).json({ error: 'Failover controller not available' });
         const { confirm } = req.body;
         if (confirm !== true) return res.status(400).json({ error: 'Explicit confirmation required: { "confirm": true }' });
-        res.json({ success: true, message: 'Failover execution initiated', timestamp: new Date().toISOString() });
+        const result = await this.backupClient.executeFailover(confirm);
+        if (!result) return res.status(503).json({ error: 'Backup service unavailable' });
+        res.json(result);
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
@@ -627,30 +618,39 @@ class EnterpriseDeviceManagementService {
     // Dashboard & Reporting Routes
     this.app.get('/api/dashboard', async (req, res) => {
       try {
-        const data = await this.dashboardService.getDashboardData();
+        const data = await this.licenseClient.getDashboardData();
+        if (!data) return res.status(503).json({ error: 'License service unavailable' });
         res.json({ success: true, data });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/dashboard/timeseries/:metric', (req, res) => {
+    this.app.get('/api/dashboard/timeseries/:metric', async (req, res) => {
       try {
         const { metric } = req.params;
         const timeframe = req.query.timeframe || '24h';
-        const data = this.dashboardService.getTimeSeries(metric, timeframe);
+        const data = await this.licenseClient.getTimeSeries(metric, timeframe);
+        if (!data) return res.status(503).json({ error: 'License service unavailable' });
         res.json({ success: true, data, metric, timeframe });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-    this.app.get('/api/reports/templates', (req, res) => {
-      res.json({ success: true, data: this.dashboardService.getReportTemplates() });
+    this.app.get('/api/reports/templates', async (req, res) => {
+      try {
+        const data = await this.licenseClient.getReportTemplates();
+        if (!data) return res.status(503).json({ error: 'License service unavailable' });
+        res.json({ success: true, data });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
     });
     this.app.post('/api/reports/generate', async (req, res) => {
       try {
         const { template, format, params } = req.body;
         if (!template || !format) return res.status(400).json({ error: 'template and format required' });
-        const report = await this.dashboardService.generateReport(template, format, params || {});
+        const report = await this.licenseClient.generateReport(template, format, params || {});
+        if (!report) return res.status(503).json({ error: 'License service unavailable' });
         res.json({ success: true, data: report });
       } catch (error) {
         res.status(500).json({ error: error.message });
@@ -668,6 +668,11 @@ class EnterpriseDeviceManagementService {
     this.app.get('/api/v1/agents/connected', this.getAgentsStatus.bind(this));
     this.app.get('/api/v1/agents/download/:platform', this.downloadAgent.bind(this));
     this.app.get('/api/v1/agent/windows/download', this.downloadWindowsAgent.bind(this));
+
+    // ── App Store Install (reuses existing queueCommand + WebSocket push) ───
+    this.app.post('/api/devices/:deviceId/install-app', this.installApp.bind(this));
+    this.app.get('/api/devices/:deviceId/install-jobs', this.getInstallJobs.bind(this));
+    this.app.post('/api/devices/:deviceId/install-jobs/:jobId/result', this.reportInstallResult.bind(this));
 
     // Error handling
     this.app.use(this.errorHandler.bind(this));
@@ -728,6 +733,17 @@ class EnterpriseDeviceManagementService {
           }
         }
 
+        // Drain RabbitMQ device command queue for this agent
+        if (this.messageBus && this.messageBus.isConnected() && ws.deviceId) {
+          this.messageBus.consumeDeviceCommands(ws.deviceId, (cmd) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ ...cmd, timestamp: new Date().toISOString() }));
+            }
+          }, { once: true }).catch(err => {
+            logger.warn(`Failed to drain RabbitMQ command queue for ${ws.deviceId}: ${err.message}`);
+          });
+        }
+
         logger.info(`Agent registered: ${ws.deviceId} (${ws.platform})`);
         break;
 
@@ -749,14 +765,14 @@ class EnterpriseDeviceManagementService {
         break;
 
       case 'command_result':
-        logger.info(\`Command result from \${ws.deviceId}: \${data.commandId} - \${data.status}\`);
-        // Forward results to the correct AgentService based on command prefix
+        logger.info(`Command result from \${ws.deviceId}: \${data.commandId} - \${data.status}`);
+        // Forward results to the correct service based on command prefix
         if (data.commandId && data.commandId.startsWith('pol-')) {
           this.policyAgentService.handleCommandResult(ws.deviceId, data);
-        } else if (data.commandId && data.commandId.startsWith('upd-') && this.updateAgentService) {
-          this.updateAgentService.handleCommandResult(ws.deviceId, data);
-        } else if (data.commandId && data.commandId.startsWith('net-') && this.networkProfileAgentService) {
-          this.networkProfileAgentService.handleCommandResult(ws.deviceId, data);
+        } else if (data.commandId && data.commandId.startsWith('upd-')) {
+          this.updateClient.handleCommandResult(ws.deviceId, data).catch(() => {});
+        } else if (data.commandId && data.commandId.startsWith('net-')) {
+          this.networkProfileClient.handleCommandResult(ws.deviceId, data).catch(() => {});
         }
         // Feed all command results into Analytics Bridge for ML analysis
         if (this.analyticsBridge && data.commandId) {
@@ -775,14 +791,14 @@ class EnterpriseDeviceManagementService {
       case 'inventory_report':
         if (ws.deviceId && data.inventory) {
           await this.inventoryService.updateInventory(ws.deviceId, data.inventory);
-          logger.info(\`Inventory updated: \${ws.deviceId}\`);
+          logger.info(`Inventory updated: \${ws.deviceId}`);
         }
         break;
 
       default:
         ws.send(JSON.stringify({
           type: 'error',
-          message: \`Unknown message type: \${type}\`,
+          message: `Unknown message type: \${type}`,
           requestId
         }));
     }
@@ -999,10 +1015,110 @@ class EnterpriseDeviceManagementService {
     }
   }
 
+  // ── Stammdaten (master data) ──────────────────────────────────────────────────
+
+  async getStammdaten(req, res) {
+    try {
+      const { deviceId } = req.params;
+      let stammdaten = {};
+      if (db.isAvailable()) {
+        const r = await db.query(
+          `SELECT metadata FROM devices WHERE id = $1`, [deviceId]
+        );
+        if (r.rows.length) stammdaten = r.rows[0].metadata?.stammdaten || {};
+      } else {
+        const d = db.getMemoryDevice ? db.getMemoryDevice(deviceId) : null;
+        stammdaten = d?.metadata?.stammdaten || {};
+      }
+      res.json({ success: true, data: stammdaten });
+    } catch (err) {
+      logger.error('getStammdaten error:', err);
+      res.status(500).json({ error: 'Failed to get stammdaten' });
+    }
+  }
+
+  async updateStammdaten(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const fields = req.body || {};
+      // Sanitise: strip photo from this endpoint (use /photo instead)
+      delete fields.photo;
+      if (db.isAvailable()) {
+        await db.query(
+          `UPDATE devices
+           SET metadata = jsonb_set(
+             COALESCE(metadata, '{}'),
+             '{stammdaten}',
+             COALESCE(metadata->'stammdaten', '{}') || $1::jsonb
+           )
+           WHERE id = $2`,
+          [JSON.stringify(fields), deviceId]
+        );
+      }
+      res.json({ success: true });
+    } catch (err) {
+      logger.error('updateStammdaten error:', err);
+      res.status(500).json({ error: 'Failed to update stammdaten' });
+    }
+  }
+
+  async uploadPhoto(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const { photo } = req.body; // base64 data URL, e.g. "data:image/jpeg;base64,..."
+      if (!photo || !photo.startsWith('data:image/')) {
+        return res.status(400).json({ error: 'Invalid photo — send base64 data URL' });
+      }
+      if (Buffer.byteLength(photo, 'utf8') > 512 * 1024) {
+        return res.status(413).json({ error: 'Photo too large — max 512 KB' });
+      }
+      if (db.isAvailable()) {
+        await db.query(
+          `UPDATE devices
+           SET metadata = jsonb_set(
+             COALESCE(metadata, '{}'),
+             '{stammdaten,photo}',
+             $1::jsonb
+           )
+           WHERE id = $2`,
+          [JSON.stringify(photo), deviceId]
+        );
+      }
+      res.json({ success: true });
+    } catch (err) {
+      logger.error('uploadPhoto error:', err);
+      res.status(500).json({ error: 'Failed to upload photo' });
+    }
+  }
+
+  async getPhoto(req, res) {
+    try {
+      const { deviceId } = req.params;
+      if (!db.isAvailable()) return res.status(404).json({ error: 'No photo' });
+      const r = await db.query(
+        `SELECT metadata->'stammdaten'->>'photo' AS photo FROM devices WHERE id = $1`,
+        [deviceId]
+      );
+      const photo = r.rows[0]?.photo;
+      if (!photo) return res.status(404).json({ error: 'No photo' });
+      // Return as image
+      const match = photo.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+      if (match) {
+        res.set('Content-Type', match[1]);
+        res.send(Buffer.from(match[2], 'base64'));
+      } else {
+        res.json({ success: true, data: photo });
+      }
+    } catch (err) {
+      logger.error('getPhoto error:', err);
+      res.status(500).json({ error: 'Failed to get photo' });
+    }
+  }
+
   // Event handlers
   async handleDeviceEnrolled(event) {
     const { device } = event;
-    
+
     // Broadcast to WebSocket clients
     this.broadcastToSubscribers('device_events', {
       type: 'device_enrolled',
@@ -1014,9 +1130,17 @@ class EnterpriseDeviceManagementService {
       }
     });
 
+    // Publish domain event via generic EventBusClient (fire-and-forget)
+    this._eventBus.publish(Events.DEVICE_ENROLLED, {
+      deviceId:   device.id,
+      hostname:   device.name,
+      platform:   device.platform,
+      enrolledAt: device.enrolledAt,
+    }).catch(() => {});
+
     // Auto-assign default policies
     await this.policyEngine.assignDefaultPolicies(device.id);
-    
+
     logger.info('Device enrolled successfully', { deviceId: device.id });
   }
 
@@ -1039,6 +1163,16 @@ class EnterpriseDeviceManagementService {
       body: violation.description || violation.rule,
       data: { rule: violation.rule, details: violation.details, severity: violation.severity }
     });
+
+    // Publish domain event via generic EventBusClient (fire-and-forget)
+    this._eventBus.publish(Events.DEVICE_NON_COMPLIANT, {
+      deviceId,
+      violation: {
+        rule:     violation.rule,
+        severity: violation.severity,
+        details:  violation.details,
+      },
+    }).catch(() => {});
 
     if (violation.autoRemediable) {
       await this.complianceScanner.autoRemediate(violation.id);
@@ -1119,14 +1253,14 @@ class EnterpriseDeviceManagementService {
       };
 
       const delivered = this.sendToDevice(deviceId, notifMessage);
-      logger.info(\`Notification \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${notification.category}\`);
+      logger.info(`Notification \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${notification.category}`);
 
       // If device offline, queue in cache for delivery on reconnect
       if (!delivered && this.cache) {
-        const existing = await this.cache.get(\`pending:\${deviceId}\`);
+        const existing = await this.cache.get(`pending:\${deviceId}`);
         const pending = existing ? JSON.parse(existing) : [];
         pending.push(notifMessage);
-        await this.cache.set(\`pending:\${deviceId}\`, JSON.stringify(pending), 'EX', 86400);
+        await this.cache.set(`pending:\${deviceId}`, JSON.stringify(pending), 'EX', 86400);
       }
 
       res.json({
@@ -1159,7 +1293,7 @@ class EnterpriseDeviceManagementService {
         results = { sent, offline: 0 };
       }
 
-      logger.info(\`Broadcast: \${results.sent} delivered, \${results.offline} offline\`);
+      logger.info(`Broadcast: \${results.sent} delivered, \${results.offline} offline`);
 
       res.json({
         status: 'broadcast_sent',
@@ -1174,6 +1308,118 @@ class EnterpriseDeviceManagementService {
   }
 
   // Push command directly to device via WebSocket
+  // ── App Store Install via existing agent WebSocket ──────────────────────
+  async installApp(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const { appId, appName, packageId, downloadUrl, sha256, format, version, architecture } = req.body;
+
+      if (!packageId && !downloadUrl) {
+        return res.status(400).json({ error: 'packageId oder downloadUrl erforderlich' });
+      }
+
+      // Build the download URL if only packageId given
+      const APP_STORE_URL = process.env.APP_STORE_URL || 'http://app-store';
+      const pkgDownloadUrl = downloadUrl || `${APP_STORE_URL}/api/appstore/packages/${packageId}/download`;
+
+      const jobId = `install-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+      // Build store_install command for the agent — reuses existing command type
+      const command = {
+        type: 'command',
+        command_type: 'store_install',
+        id: jobId,
+        data: {
+          appId,
+          appName: appName || appId,
+          packageInfo: {
+            type: 'internal',       // new type — agent downloads from our store
+            packageId,
+            downloadUrl: pkgDownloadUrl,
+            sha256: sha256 || '',
+            format: format || 'exe',
+            version: version || '1.0.0',
+            architecture: architecture || 'x64',
+          },
+        },
+      };
+
+      // Track in-memory job
+      if (!global.__od_installJobs) global.__od_installJobs = new Map();
+      global.__od_installJobs.set(jobId, {
+        jobId, deviceId, appId, appName, packageId, format, version,
+        status: 'queued', queuedAt: new Date().toISOString(),
+      });
+
+      // Push via WebSocket — if offline, queue via RabbitMQ (preferred) or Redis (fallback)
+      const delivered = this.sendToDevice(deviceId, command);
+      if (!delivered) {
+        let mqQueued = false;
+        if (this.messageBus && this.messageBus.isConnected()) {
+          mqQueued = await this.messageBus.queueDeviceCommand(deviceId, command).catch(err => {
+            logger.warn('RabbitMQ queueDeviceCommand failed, falling back to Redis cache', { error: err.message, deviceId });
+            return false;
+          });
+        }
+        if (!mqQueued && this.cache) {
+          const existing = await this.cache.get(`pending:${deviceId}`).catch(() => null);
+          const pending = existing ? JSON.parse(existing) : [];
+          pending.push(command);
+          await this.cache.set(`pending:${deviceId}`, JSON.stringify(pending), 'EX', 86400).catch(() => {});
+        }
+      }
+
+      logger.info(`install-app ${delivered ? 'pushed live' : 'queued offline'}: device=${deviceId} app=${appId} job=${jobId}`);
+
+      res.json({
+        jobId,
+        status: delivered ? 'delivered' : 'queued_offline',
+        message: delivered
+          ? 'Installation wird auf dem Gerät ausgeführt'
+          : 'Gerät ist offline — Installation wird beim nächsten Check-in gestartet',
+      });
+    } catch (err) {
+      logger.error('installApp error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+
+  async getInstallJobs(req, res) {
+    const { deviceId } = req.params;
+    const jobs = global.__od_installJobs
+      ? [...global.__od_installJobs.values()].filter(j => j.deviceId === deviceId)
+      : [];
+    res.json(jobs);
+  }
+
+  async reportInstallResult(req, res) {
+    const { jobId } = req.params;
+    const { status, output, error } = req.body;
+    let job = null;
+    if (global.__od_installJobs?.has(jobId)) {
+      job = global.__od_installJobs.get(jobId);
+      Object.assign(job, { status, output, error, completedAt: new Date().toISOString() });
+    }
+
+    // Publish install result event via generic EventBusClient (fire-and-forget)
+    if (job) {
+      const routingKey = status === 'success'
+        ? Events.APP_INSTALL_COMPLETED
+        : Events.APP_INSTALL_FAILED;
+      this._eventBus.publish(routingKey, {
+        jobId,
+        deviceId: job.deviceId,
+        appId:    job.appId,
+        appName:  job.appName,
+        status,
+        output,
+        error,
+      }).catch(() => {});
+    }
+
+    res.json({ ok: true });
+  }
+
   async queueCommand(req, res) {
     try {
       const { deviceId } = req.params;
@@ -1185,14 +1431,23 @@ class EnterpriseDeviceManagementService {
       };
 
       const delivered = this.sendToDevice(deviceId, cmdMessage);
-      logger.info(\`Command \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${command.type}\`);
+      logger.info(`Command \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${command.type}`);
 
-      // If device offline, queue for delivery on reconnect
-      if (!delivered && this.cache) {
-        const existing = await this.cache.get(\`pending:\${deviceId}\`);
-        const pending = existing ? JSON.parse(existing) : [];
-        pending.push(cmdMessage);
-        await this.cache.set(\`pending:\${deviceId}\`, JSON.stringify(pending), 'EX', 86400);
+      // If device offline, queue via RabbitMQ (preferred) or Redis (fallback)
+      if (!delivered) {
+        let mqQueued = false;
+        if (this.messageBus && this.messageBus.isConnected()) {
+          mqQueued = await this.messageBus.queueDeviceCommand(deviceId, cmdMessage).catch(err => {
+            logger.warn('RabbitMQ queueDeviceCommand failed, falling back to Redis cache', { error: err.message, deviceId });
+            return false;
+          });
+        }
+        if (!mqQueued && this.cache) {
+          const existing = await this.cache.get(`pending:\${deviceId}`);
+          const pending = existing ? JSON.parse(existing) : [];
+          pending.push(cmdMessage);
+          await this.cache.set(`pending:\${deviceId}`, JSON.stringify(pending), 'EX', 86400);
+        }
       }
 
       res.json({
@@ -1239,16 +1494,16 @@ class EnterpriseDeviceManagementService {
 
       const agent = agentFiles[platform];
       if (!agent) {
-        return res.status(400).json({ error: \`Unknown platform: \${platform}. Use: windows, macos, linux\` });
+        return res.status(400).json({ error: `Unknown platform: \${platform}. Use: windows, macos, linux` });
       }
 
       const agentPath = path.join(__dirname, '../../../../clients', agent.dir, agent.file);
       if (fs.existsSync(agentPath)) {
         res.setHeader('Content-Type', 'application/octet-stream');
-        res.setHeader('Content-Disposition', \`attachment; filename="\${agent.file}"\`);
+        res.setHeader('Content-Disposition', `attachment; filename="\${agent.file}"`);
         fs.createReadStream(agentPath).pipe(res);
       } else {
-        res.status(404).json({ error: \`Agent for \${platform} not found\` });
+        res.status(404).json({ error: `Agent for \${platform} not found` });
       }
     } catch (error) {
       logger.error('Agent download error:', error);
@@ -1386,6 +1641,270 @@ class EnterpriseDeviceManagementService {
     }
   }
 
+  // ── Stub handlers for routes defined in initializeRoutes ─────────────────────
+
+  async initiateEnrollment(req, res) {
+    try {
+      const result = await this.enrollmentService.initiateEnrollment(req.body);
+      res.status(201).json({ success: true, data: result, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to initiate enrollment', requestId: req.id }); }
+  }
+
+  async completeEnrollment(req, res) {
+    try {
+      const result = await this.enrollmentService.completeEnrollment(req.body);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to complete enrollment', requestId: req.id }); }
+  }
+
+  async verifyEnrollment(req, res) {
+    try {
+      const result = await this.enrollmentService.verifyEnrollment(req.body);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to verify enrollment', requestId: req.id }); }
+  }
+
+  async getEnrollmentStatus(req, res) {
+    try {
+      const { enrollmentId } = req.params;
+      const result = await this.enrollmentService.getEnrollmentStatus(enrollmentId);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to get enrollment status', requestId: req.id }); }
+  }
+
+  async approveEnrollment(req, res) {
+    try {
+      const { enrollmentId } = req.params;
+      const result = await this.enrollmentService.approveEnrollment(enrollmentId, req.body);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to approve enrollment', requestId: req.id }); }
+  }
+
+  async rejectEnrollment(req, res) {
+    try {
+      const { enrollmentId } = req.params;
+      const result = await this.enrollmentService.rejectEnrollment(enrollmentId, req.body);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to reject enrollment', requestId: req.id }); }
+  }
+
+  async updateDevice(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const device = await this.circuitBreaker.execute('update-device', () => this.deviceManager.updateDevice(deviceId, req.body));
+      res.json({ success: true, data: device, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to update device', requestId: req.id }); }
+  }
+
+  async deleteDevice(req, res) {
+    try {
+      const { deviceId } = req.params;
+      await this.circuitBreaker.execute('delete-device', () => this.deviceManager.deleteDevice(deviceId));
+      res.json({ success: true, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to delete device', requestId: req.id }); }
+  }
+
+  async lockDevice(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to lock device' }); }
+  }
+
+  async unlockDevice(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to unlock device' }); }
+  }
+
+  async wipeDevice(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to wipe device' }); }
+  }
+
+  async getPolicies(req, res) {
+    try {
+      const policies = await this.policyEngine.getDevicePolicies('*');
+      res.json({ success: true, data: policies || [], requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to get policies', requestId: req.id }); }
+  }
+
+  async createPolicy(req, res) {
+    try { res.status(201).json({ success: true, data: { id: this.generateRequestId(), ...req.body }, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to create policy' }); }
+  }
+
+  async getPolicy(req, res) {
+    try { res.json({ success: true, data: null, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to get policy' }); }
+  }
+
+  async updatePolicy(req, res) {
+    try { res.json({ success: true, data: req.body, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to update policy' }); }
+  }
+
+  async deletePolicy(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to delete policy' }); }
+  }
+
+  async assignPolicy(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to assign policy' }); }
+  }
+
+  async deployPolicy(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to deploy policy' }); }
+  }
+
+  async scanDeviceCompliance(req, res) {
+    try { res.json({ success: true, data: { compliant: true }, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Compliance scan failed' }); }
+  }
+
+  async getComplianceViolations(req, res) {
+    try {
+      const violations = await this.complianceScanner.getViolations();
+      res.json({ success: true, data: violations || [], requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to get violations', requestId: req.id }); }
+  }
+
+  async remediateViolation(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Remediation failed' }); }
+  }
+
+  async getComplianceReports(req, res) {
+    try { res.json({ success: true, data: [], requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to get reports' }); }
+  }
+
+  async executeRemoteAction(req, res) {
+    try {
+      const result = await this.remoteActionService.executeAction(req.body);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Remote action failed', requestId: req.id }); }
+  }
+
+  async getActionStatus(req, res) {
+    try {
+      const status = await this.remoteActionService.getActionStatus(req.params.actionId);
+      res.json({ success: true, data: status, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to get action status' }); }
+  }
+
+  async executeBulkAction(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Bulk action failed' }); }
+  }
+
+  async getAnalyticsDashboard(req, res) {
+    try {
+      const data = await this.analyticsEngine.getDashboard();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to get analytics dashboard' }); }
+  }
+
+  async getDeviceTrends(req, res) {
+    try { res.json({ success: true, data: [], requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to get device trends' }); }
+  }
+
+  async getComplianceMetrics(req, res) {
+    try { res.json({ success: true, data: {}, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to get compliance metrics' }); }
+  }
+
+  async getSecurityInsights(req, res) {
+    try { res.json({ success: true, data: {}, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to get security insights' }); }
+  }
+
+  async getCertificates(req, res) {
+    try {
+      const certs = await this.certificateManager.getCertificates();
+      res.json({ success: true, data: certs, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to get certificates' }); }
+  }
+
+  async issueCertificate(req, res) {
+    try {
+      const cert = await this.certificateManager.issueCertificate(req.body);
+      res.status(201).json({ success: true, data: cert, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to issue certificate' }); }
+  }
+
+  async renewCertificate(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to renew certificate' }); }
+  }
+
+  async revokeCertificate(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to revoke certificate' }); }
+  }
+
+  async getGeofencingZones(req, res) {
+    try {
+      const zones = await this.geofencingService.getZones();
+      res.json({ success: true, data: zones, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to get geofencing zones' }); }
+  }
+
+  async createGeofencingZone(req, res) {
+    try {
+      const zone = await this.geofencingService.createZone(req.body);
+      res.status(201).json({ success: true, data: zone, requestId: req.id });
+    } catch (error) { res.status(500).json({ error: 'Failed to create geofencing zone' }); }
+  }
+
+  async updateGeofencingZone(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to update geofencing zone' }); }
+  }
+
+  async deleteGeofencingZone(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to delete geofencing zone' }); }
+  }
+
+  async bulkImportDevices(req, res) {
+    try { res.json({ success: true, data: { imported: 0 }, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Bulk import failed' }); }
+  }
+
+  async bulkUpdatePolicies(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Bulk update failed' }); }
+  }
+
+  async bulkComplianceScan(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Bulk scan failed' }); }
+  }
+
+  async getBulkOperationStatus(req, res) {
+    try { res.json({ success: true, data: { status: 'completed' }, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to get operation status' }); }
+  }
+
+  async getPendingCommands(req, res) {
+    try { res.json({ commands: [], requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to get pending commands' }); }
+  }
+
+  async handleCommandResult(req, res) {
+    try { res.json({ success: true, requestId: req.id }); }
+    catch (error) { res.status(500).json({ error: 'Failed to handle command result' }); }
+  }
+
+  async handleGeofenceViolation(event) {
+    logger.warn('Geofence violation', event);
+  }
+
+  async handlePolicyDeployed(event) {
+    logger.info('Policy deployed', event);
+  }
+
   broadcastToSubscribers(subscription, data) {
     this.wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN && client.subscriptions.has(subscription)) {
@@ -1417,31 +1936,44 @@ class EnterpriseDeviceManagementService {
     });
   }
 
-  start(port = process.env.PORT || 3003) {
+  async start(port = process.env.PORT || 3003) {
+    // Initialize PostgreSQL persistence layer
+    await db.initDb().catch(err => {
+      logger.warn(`[device-db] startup init failed: ${err.message}`);
+    });
+
     this.server.listen(port, () => {
-      logger.info(\`🖥️  Enterprise Device Management Service started on port \${port}\`);
-      logger.info(\`📊 Health check: http://localhost:\${port}/health\`);
-      logger.info(\`🔌 WebSocket: ws://localhost:\${port}/ws/devices\`);
-      logger.info(\`📱 Features: Enrollment, Compliance, Remote Actions, Analytics\`);
-      logger.info(\`🛡️  Security: Threat Detection, Geofencing, Certificate Management\`);
+      logger.info(`🖥️  Enterprise Device Management Service started on port \${port}`);
+      logger.info(`📊 Health check: http://localhost:\${port}/health`);
+      logger.info(`🔌 WebSocket: ws://localhost:\${port}/ws/devices`);
+      logger.info(`📱 Features: Enrollment, Compliance, Remote Actions, Analytics`);
+      logger.info(`🛡️  Security: Threat Detection, Geofencing, Certificate Management`);
     });
   }
 
   gracefulShutdown() {
     logger.info('Starting graceful shutdown...');
-    
-    this.server.close(() => {
+
+    this.server.close(async () => {
       logger.info('HTTP server closed');
-      
+
       // Close WebSocket connections
       this.wss.clients.forEach(client => {
         client.terminate();
       });
-      
+
+      // Close EventBus and RabbitMQ command-bus connections gracefully
+      if (this._eventBus) {
+        await this._eventBus.close().catch(() => {});
+      }
+      if (this.messageBus) {
+        await this.messageBus.close().catch(() => {});
+      }
+
       // Close database connections
       this.db.close();
       this.cache.close();
-      
+
       logger.info('Graceful shutdown completed');
       process.exit(0);
     });
@@ -1467,21 +1999,24 @@ process.on('SIGTERM', () => {
 if (cluster.isMaster && process.env.NODE_ENV === 'production') {
   const numWorkers = process.env.WORKERS || os.cpus().length;
   
-  logger.info(\`Starting \${numWorkers} workers...\`);
+  logger.info(`Starting \${numWorkers} workers...`);
   
   for (let i = 0; i < numWorkers; i++) {
     cluster.fork();
   }
   
   cluster.on('exit', (worker, code, signal) => {
-    logger.error(\`Worker \${worker.process.pid} died\`);
+    logger.error(`Worker \${worker.process.pid} died`);
     cluster.fork();
   });
 } else {
   // Start the service
   const deviceService = new EnterpriseDeviceManagementService();
   global.deviceService = deviceService;
-  deviceService.start();
+  deviceService.start().catch(err => {
+    console.error('Failed to start device service:', err);
+    process.exit(1);
+  });
 }
 
 module.exports = EnterpriseDeviceManagementService;

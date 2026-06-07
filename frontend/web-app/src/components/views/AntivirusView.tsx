@@ -89,66 +89,16 @@ interface AVStatistics {
   signatureVersion: string;
 }
 
-// ── Mock Data ──────────────────────────────────────────────────────────────────
-
-const mockStats: AVStatistics = {
-  totalDevices: 245,
-  protectedDevices: 228,
-  atRiskDevices: 8,
-  outdatedSignatures: 9,
-  totalScansToday: 1420,
-  totalThreatsToday: 7,
-  totalQuarantined: 34,
-  signatureVersion: 'ClamAV 0.104.3 / 27180 / 2026-03-15',
+const emptyStats: AVStatistics = {
+  totalDevices: 0,
+  protectedDevices: 0,
+  atRiskDevices: 0,
+  outdatedSignatures: 0,
+  totalScansToday: 0,
+  totalThreatsToday: 0,
+  totalQuarantined: 0,
+  signatureVersion: '—',
 };
-
-const _mockDevices: DeviceAVStatus[] = [
-  { deviceId: 'd-1', deviceName: 'WS-001', platform: 'windows', clamavVersion: '0.104.3', signatureVersion: '27180', signatureDate: '2026-03-15', lastScan: '2026-03-15T08:00:00Z', lastScanType: 'quick', threatsFound: 0, quarantinedFiles: 0, realtimeProtection: true, status: 'protected' },
-  { deviceId: 'd-2', deviceName: 'LAPTOP-23', platform: 'windows', clamavVersion: '0.104.3', signatureVersion: '27180', signatureDate: '2026-03-15', lastScan: '2026-03-15T07:30:00Z', lastScanType: 'full', threatsFound: 2, quarantinedFiles: 2, realtimeProtection: true, status: 'at_risk' },
-  { deviceId: 'd-3', deviceName: 'SRV-DC01', platform: 'windows', clamavVersion: '0.104.3', signatureVersion: '27180', signatureDate: '2026-03-15', lastScan: '2026-03-15T02:00:00Z', lastScanType: 'full', threatsFound: 0, quarantinedFiles: 0, realtimeProtection: true, status: 'protected' },
-  { deviceId: 'd-4', deviceName: 'MAC-DEV-01', platform: 'macos', clamavVersion: '0.104.3', signatureVersion: '27178', signatureDate: '2026-03-13', lastScan: '2026-03-14T18:00:00Z', lastScanType: 'quick', threatsFound: 0, quarantinedFiles: 0, realtimeProtection: true, status: 'outdated' },
-  { deviceId: 'd-5', deviceName: 'SRV-FILE01', platform: 'linux', clamavVersion: '0.104.3', signatureVersion: '27180', signatureDate: '2026-03-15', lastScan: '2026-03-15T06:00:00Z', lastScanType: 'full', threatsFound: 1, quarantinedFiles: 1, realtimeProtection: true, status: 'protected' },
-  { deviceId: 'd-6', deviceName: 'WS-012', platform: 'windows', clamavVersion: '0.104.2', signatureVersion: '27165', signatureDate: '2026-03-01', lastScan: '2026-03-10T08:00:00Z', lastScanType: 'quick', threatsFound: 0, quarantinedFiles: 0, realtimeProtection: false, status: 'at_risk' },
-  { deviceId: 'd-7', deviceName: 'LINUX-BUILD-01', platform: 'linux', clamavVersion: '0.104.3', signatureVersion: '27180', signatureDate: '2026-03-15', lastScan: '2026-03-15T04:00:00Z', lastScanType: 'full', threatsFound: 0, quarantinedFiles: 0, realtimeProtection: true, status: 'protected' },
-  { deviceId: 'd-8', deviceName: 'MAC-EXEC-01', platform: 'macos', clamavVersion: '0.104.3', signatureVersion: '27180', signatureDate: '2026-03-15', lastScan: '2026-03-15T09:00:00Z', lastScanType: 'quick', threatsFound: 0, quarantinedFiles: 0, realtimeProtection: true, status: 'scanning' },
-];
-
-const _mockScans: ScanJob[] = [
-  { id: 'scan-1', deviceName: 'MAC-EXEC-01', scanType: 'quick', status: 'scanning', progress: 67, filesScanned: 34200, threatsFound: 0, startedAt: '2026-03-15T09:00:00Z', duration: '3m 24s' },
-  { id: 'scan-2', deviceName: 'LAPTOP-23', scanType: 'full', status: 'completed', progress: 100, filesScanned: 892341, threatsFound: 2, startedAt: '2026-03-15T07:30:00Z', duration: '47m 12s' },
-  { id: 'scan-3', deviceName: 'SRV-FILE01', scanType: 'full', status: 'completed', progress: 100, filesScanned: 1245000, threatsFound: 1, startedAt: '2026-03-15T06:00:00Z', duration: '1h 23m' },
-  { id: 'scan-4', deviceName: 'WS-001', scanType: 'quick', status: 'completed', progress: 100, filesScanned: 45200, threatsFound: 0, startedAt: '2026-03-15T08:00:00Z', duration: '5m 8s' },
-  { id: 'scan-5', deviceName: 'SRV-DC01', scanType: 'full', status: 'completed', progress: 100, filesScanned: 567000, threatsFound: 0, startedAt: '2026-03-15T02:00:00Z', duration: '58m 44s' },
-];
-
-const _mockThreats: Threat[] = [
-  { id: 't-1', name: 'Win.Trojan.Agent-798234', severity: 'critical', type: 'Trojan', deviceName: 'LAPTOP-23', filePath: 'C:\\Users\\k.chen\\Downloads\\setup_crack.exe', fileHash: 'a1b2c3d4e5f6...', detectedAt: '2026-03-15T07:45:00Z', action: 'quarantined' },
-  { id: 't-2', name: 'Win.Malware.CoinMiner-9823', severity: 'high', type: 'Cryptominer', deviceName: 'LAPTOP-23', filePath: 'C:\\Users\\k.chen\\AppData\\Local\\Temp\\svchost.exe', fileHash: 'f6e5d4c3b2a1...', detectedAt: '2026-03-15T07:46:00Z', action: 'quarantined' },
-  { id: 't-3', name: 'Unix.Trojan.Mirai-234', severity: 'high', type: 'Trojan', deviceName: 'SRV-FILE01', filePath: '/tmp/.hidden/payload.bin', fileHash: '1a2b3c4d5e6f...', detectedAt: '2026-03-15T06:22:00Z', action: 'quarantined' },
-  { id: 't-4', name: 'Win.Adware.BrowserHelper-12', severity: 'low', type: 'Adware', deviceName: 'WS-007', filePath: 'C:\\Users\\s.patel\\AppData\\Local\\BrowserHelper.dll', fileHash: '9f8e7d6c5b4a...', detectedAt: '2026-03-14T14:30:00Z', action: 'quarantined' },
-  { id: 't-5', name: 'Doc.Exploit.CVE-2024-1234', severity: 'critical', type: 'Exploit', deviceName: 'WS-019', filePath: 'C:\\Users\\m.jones\\Documents\\Invoice_Q1.docx', fileHash: '2b3c4d5e6f7a...', detectedAt: '2026-03-14T10:15:00Z', action: 'quarantined' },
-  { id: 't-6', name: 'Win.PUA.CrackTool-45', severity: 'medium', type: 'PUA', deviceName: 'WS-003', filePath: 'C:\\Users\\temp\\Desktop\\keygen.exe', fileHash: '3c4d5e6f7a8b...', detectedAt: '2026-03-13T16:00:00Z', action: 'deleted' },
-  { id: 't-7', name: 'Phishing.Email.FakeLogin-87', severity: 'medium', type: 'Phishing', deviceName: 'MAC-DEV-01', filePath: '/Users/dev/Mail/Attachments/login_verify.html', fileHash: '4d5e6f7a8b9c...', detectedAt: '2026-03-13T09:20:00Z', action: 'quarantined' },
-];
-
-const _mockQuarantine: QuarantineItem[] = [
-  { id: 'q-1', fileName: 'setup_crack.exe', originalPath: 'C:\\Users\\k.chen\\Downloads\\setup_crack.exe', threatName: 'Win.Trojan.Agent-798234', severity: 'critical', deviceName: 'LAPTOP-23', quarantinedAt: '2026-03-15T07:45:00Z', fileSize: '2.4 MB', sha256: 'a1b2c3d4e5f67890...' },
-  { id: 'q-2', fileName: 'svchost.exe', originalPath: 'C:\\Users\\k.chen\\AppData\\Local\\Temp\\svchost.exe', threatName: 'Win.Malware.CoinMiner-9823', severity: 'high', deviceName: 'LAPTOP-23', quarantinedAt: '2026-03-15T07:46:00Z', fileSize: '856 KB', sha256: 'f6e5d4c3b2a19876...' },
-  { id: 'q-3', fileName: 'payload.bin', originalPath: '/tmp/.hidden/payload.bin', threatName: 'Unix.Trojan.Mirai-234', severity: 'high', deviceName: 'SRV-FILE01', quarantinedAt: '2026-03-15T06:22:00Z', fileSize: '124 KB', sha256: '1a2b3c4d5e6f7890...' },
-  { id: 'q-4', fileName: 'BrowserHelper.dll', originalPath: 'C:\\Users\\s.patel\\AppData\\Local\\BrowserHelper.dll', threatName: 'Win.Adware.BrowserHelper-12', severity: 'low', deviceName: 'WS-007', quarantinedAt: '2026-03-14T14:30:00Z', fileSize: '340 KB', sha256: '9f8e7d6c5b4a3210...' },
-  { id: 'q-5', fileName: 'Invoice_Q1.docx', originalPath: 'C:\\Users\\m.jones\\Documents\\Invoice_Q1.docx', threatName: 'Doc.Exploit.CVE-2024-1234', severity: 'critical', deviceName: 'WS-019', quarantinedAt: '2026-03-14T10:15:00Z', fileSize: '78 KB', sha256: '2b3c4d5e6f7a8b90...' },
-  { id: 'q-6', fileName: 'login_verify.html', originalPath: '/Users/dev/Mail/Attachments/login_verify.html', threatName: 'Phishing.Email.FakeLogin-87', severity: 'medium', deviceName: 'MAC-DEV-01', quarantinedAt: '2026-03-13T09:20:00Z', fileSize: '12 KB', sha256: '4d5e6f7a8b9c0123...' },
-];
-
-const threatTrends = [
-  { date: '2026-03-09', threats: 3 },
-  { date: '2026-03-10', threats: 1 },
-  { date: '2026-03-11', threats: 5 },
-  { date: '2026-03-12', threats: 2 },
-  { date: '2026-03-13', threats: 4 },
-  { date: '2026-03-14', threats: 3 },
-  { date: '2026-03-15', threats: 7 },
-];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -185,62 +135,79 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
   const { isSimple } = useUiMode();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'devices' | 'scans' | 'threats' | 'quarantine' | 'signatures'>('dashboard');
   const [scanning, setScanning] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [usingDemoData, setUsingDemoData] = useState(false);
   const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState('all');
-  const [stats, setStats] = useState<AVStatistics>(mockStats);
-  const [devices, setDevices] = useState<DeviceAVStatus[]>(_mockDevices);
-  const [scans, setScans] = useState<ScanJob[]>(_mockScans);
-  const [threats, setThreats] = useState<Threat[]>(_mockThreats);
-  const [quarantine, setQuarantine] = useState<QuarantineItem[]>(_mockQuarantine);
+  const [stats, setStats] = useState<AVStatistics>(emptyStats);
+  const [devices, setDevices] = useState<DeviceAVStatus[]>([]);
+  const [scans, setScans] = useState<ScanJob[]>([]);
+  const [threats, setThreats] = useState<Threat[]>([]);
+  const [quarantine, setQuarantine] = useState<QuarantineItem[]>([]);
 
   useEffect(() => { loadAntivirusData(); }, []);
 
   const loadAntivirusData = async () => {
+    setLoading(true);
     try {
-      const [threatRes, deviceRes] = await Promise.allSettled([
-        securityApi.getThreatIntel(),
-        deviceApi.getDevices(),
+      const [threatRes, quarantineRes, scansRes, statsRes, devicesRes] = await Promise.allSettled([
+        securityApi.getThreats(),
+        securityApi.getQuarantine(),
+        securityApi.getScans(),
+        securityApi.getAvDashboard(),
+        securityApi.getAvDevices(),
       ]);
 
-      if (threatRes.status === 'fulfilled' && threatRes.value.data) {
+      let apiDataFound = false;
+
+      if (threatRes.status === 'fulfilled') {
         const d = threatRes.value.data;
-        if (d.threats?.length > 0) setThreats(d.threats);
-        if (d.quarantine?.length > 0) setQuarantine(d.quarantine);
-        if (d.scans?.length > 0) setScans(d.scans);
-        if (d.stats) setStats({ ...mockStats, ...d.stats });
+        const list = Array.isArray(d) ? d : d?.threats ?? [];
+        if (list.length > 0) { setThreats(list); apiDataFound = true; }
       }
 
-      if (deviceRes.status === 'fulfilled' && deviceRes.value.data?.length > 0) {
-        const avDevices = deviceRes.value.data
-          .filter((d: any) => d.antivirus || d.clamav)
-          .map((d: any) => ({
-            deviceId: d.id,
-            deviceName: d.name,
-            platform: d.platform || 'windows',
-            clamavVersion: d.antivirus?.version || d.clamav?.version || '0.104.3',
-            signatureVersion: d.antivirus?.signatureVersion || '27180',
-            signatureDate: d.antivirus?.signatureDate || '2026-03-15',
-            lastScan: d.antivirus?.lastScan || new Date().toISOString(),
-            lastScanType: d.antivirus?.lastScanType || 'quick',
-            threatsFound: d.antivirus?.threatsFound || 0,
-            quarantinedFiles: d.antivirus?.quarantinedFiles || 0,
-            realtimeProtection: d.antivirus?.realtimeProtection ?? true,
-            status: d.antivirus?.status || 'protected',
-          }));
-        if (avDevices.length > 0) setDevices(avDevices);
+      if (quarantineRes.status === 'fulfilled') {
+        const d = quarantineRes.value.data;
+        const list = Array.isArray(d) ? d : d?.quarantine ?? [];
+        if (list.length > 0) { setQuarantine(list); apiDataFound = true; }
       }
+
+      if (scansRes.status === 'fulfilled') {
+        const d = scansRes.value.data;
+        const list = Array.isArray(d) ? d : d?.scans ?? [];
+        if (list.length > 0) { setScans(list); apiDataFound = true; }
+      }
+
+      if (statsRes.status === 'fulfilled' && statsRes.value.data) {
+        const d = statsRes.value.data;
+        const s = d.statistics ?? d.stats ?? d;
+        if (s?.totalDevices != null || s?.threatsFound != null) {
+          setStats({ ...emptyStats, ...s });
+          apiDataFound = true;
+        }
+      }
+
+      if (devicesRes.status === 'fulfilled') {
+        const d = devicesRes.value.data;
+        const list = Array.isArray(d) ? d : d?.devices ?? [];
+        if (list.length > 0) { setDevices(list); apiDataFound = true; }
+      }
+
+      setUsingDemoData(!apiDataFound);
     } catch {
-      // Keep mock data as fallback
+      setUsingDemoData(true);
+    } finally {
+      setLoading(false);
     }
   };
 
   const startFleetScan = async () => {
     setScanning(true);
     try {
-      await securityApi.getThreatIntel();
+      await securityApi.startScan(undefined, 'quick');
       await loadAntivirusData();
     } catch {
-      await new Promise(r => setTimeout(r, 2000));
+      // scan queued, reload when done
     } finally {
       setScanning(false);
     }
@@ -326,7 +293,25 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
   // ── Expert Mode ──
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Demo data banner */}
+      {usingDemoData && (
+        <div className="mx-6 mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded-lg flex items-center gap-2 text-yellow-800 text-sm">
+          <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500 shrink-0" />
+          <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
+        </div>
+      )}
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="flex-1 p-6 space-y-4 animate-pulse">
+          <div className="grid grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-gray-200 rounded-xl" />)}
+          </div>
+          <div className="h-40 bg-gray-200 rounded-xl" />
+          <div className="h-32 bg-gray-200 rounded-xl" />
+        </div>
+      )}
+      {/* Header + Tabs + Content (hidden while loading) */}
+      {!loading && <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
@@ -466,6 +451,9 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
             <div className="od-card p-4">
               <h3 className="text-sm font-semibold text-gray-600 mb-3">Recent Threats</h3>
               <div className="space-y-2">
+                {threats.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">Keine Bedrohungen gefunden</p>
+                )}
                 {threats.slice(0, 5).map(t => (
                   <div key={t.id} className="flex items-center gap-3 text-sm p-2 rounded-lg hover:bg-gray-50">
                     <BugAntIcon className={`w-4 h-4 ${t.severity === 'critical' ? 'text-red-500' : t.severity === 'high' ? 'text-orange-500' : 'text-yellow-500'}`} />
@@ -497,6 +485,9 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
                 </tr>
               </thead>
               <tbody>
+                {devices.length === 0 && (
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">Keine Geräte mit Antivirus-Status gefunden</td></tr>
+                )}
                 {devices.map(d => (
                   <tr key={d.deviceId} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900 flex items-center gap-2">
@@ -540,6 +531,9 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
         {/* ── Scans ──────────────────────────────────────────────────────── */}
         {activeTab === 'scans' && (
           <div className="space-y-3">
+            {scans.length === 0 && (
+              <div className="od-card p-8 text-center text-sm text-gray-400">Keine Scan-Jobs gefunden</div>
+            )}
             {scans.map(scan => (
               <div key={scan.id} className={`od-card p-4 ${scan.status === 'scanning' ? 'border-blue-200' : scan.status === 'failed' ? 'border-red-200' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
@@ -579,6 +573,9 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
                 </button>
               ))}
             </div>
+            {filteredThreats.length === 0 && (
+              <div className="od-card p-8 text-center text-sm text-gray-400">Keine Bedrohungen gefunden</div>
+            )}
             {filteredThreats.map(t => (
               <div key={t.id} className="od-card overflow-hidden">
                 <button onClick={() => setExpandedThreat(expandedThreat === t.id ? null : t.id)}
@@ -611,6 +608,9 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
         {activeTab === 'quarantine' && (
           <div className="space-y-3">
             <p className="text-sm text-gray-500">Quarantined files are isolated and cannot execute. Review and take action.</p>
+            {quarantine.length === 0 && (
+              <div className="od-card p-8 text-center text-sm text-gray-400">Keine Dateien in Quarantäne</div>
+            )}
             {quarantine.map(q => (
               <div key={q.id} className="od-card p-4 flex items-start gap-4">
                 <ArchiveBoxIcon className="w-5 h-5 text-amber-500 shrink-0 mt-1" />
@@ -720,6 +720,7 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
           </div>
         )}
       </div>
+      </>}
     </div>
   );
 }

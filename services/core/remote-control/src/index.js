@@ -11,6 +11,15 @@ const path = require('path');
 const fs = require('fs');
 const logger = require('./utils/logger');
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'remote-control' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+
 // Service configurations
 const SERVICES = {
   desktop: {
@@ -97,9 +106,9 @@ class RemoteControlOrchestrator {
         max_concurrent_sessions: 50
       },
       integrations: {
-        mobile_management_url: 'http://mobile-management:3013',
-        license_management_url: 'http://license-management:3018',
-        auth_service_url: 'http://authentication-service:3001'
+        mobile_management_url: 'http://mobile-management',
+        license_management_url: 'http://license-management',
+        auth_service_url: 'http://authentication-service'
       },
       performance: {
         compression_enabled: true,
@@ -162,6 +171,7 @@ class RemoteControlOrchestrator {
 
   async startMaster() {
     logger.info('🎯 Starting as master process...');
+    connectBus();
 
     // Initialize shared configuration
     this.initializeSharedConfiguration();
@@ -207,7 +217,7 @@ class RemoteControlOrchestrator {
       // Register each service with the API Gateway
       for (const [serviceId, service] of Object.entries(SERVICES)) {
         try {
-          await axios.post('http://api-gateway:8080/api/services/register', {
+          await axios.post('http://api-gateway/api/services/register', {
             name: `remote-control-${serviceId}`,
             url: `http://remote-control-${serviceId}:${service.port}`,
             healthPath: '/health',
@@ -271,6 +281,12 @@ class RemoteControlOrchestrator {
           clearTimeout(timeout);
           logger.info(`✅ ${service.name} started successfully on port ${service.port}`);
           resolve();
+        }
+        if (message.type === 'session_started') {
+          publish('remote.session.started', { sessionId: message.sessionId, deviceId: message.deviceId, userId: message.userId });
+        }
+        if (message.type === 'session_ended') {
+          publish('remote.session.ended', { sessionId: message.sessionId, deviceId: message.deviceId });
         }
       });
 
