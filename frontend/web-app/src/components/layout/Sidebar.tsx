@@ -73,6 +73,8 @@ export const NAV_ITEMS: NavEntry[] = [
   { divider: true },
   { id: 'integrations',      label: 'Integrations',        icon: '🔌' },
   { id: 'roadmap',           label: 'Roadmap',             icon: '🚀' },
+  { id: 'simulator',         label: 'Policy Simulator',    icon: '⚗' },
+  { id: 'graph',             label: 'Graph Explorer',      icon: '⬡' },
   { id: 'settings',          label: 'Settings',            icon: '⚙' },
 ];
 

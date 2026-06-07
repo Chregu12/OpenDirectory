@@ -42,6 +42,8 @@ import LDAPSchemaBrowserView from '@/components/views/LDAPSchemaBrowserView';
 import RadiusView from '@/components/views/RadiusView';
 import ServiceHealthView from '@/components/views/ServiceHealthView';
 import ThreatDashboardView from '@/components/views/ThreatDashboardView';
+import GraphExplorerView from '@/components/views/GraphExplorerView';
+import PolicySimulatorView from '@/components/views/PolicySimulatorView';
 
 // ABM-style 3-column views
 import DeviceFleetView from '@/components/views/DeviceFleetView';
@@ -86,6 +88,8 @@ const VALID_VIEWS = new Set([
   'trusts', 'kerberos', 'replication',
   // Automation
   'automation',
+  // Graph Explorer + Policy Simulator
+  'graph', 'simulator',
 ]);
 
 // Views that display the QuickActionsBar
@@ -230,6 +234,8 @@ export default function ViewPage() {
         case 'trusts':            return <TrustManagementView />;
         case 'kerberos':          return <KerberosAdminView />;
         case 'replication':       return <ReplicationView />;
+        case 'graph':             return <GraphExplorerView />;
+        case 'simulator':         return <PolicySimulatorView />;
         case 'settings':
           return (
             <div className="p-6">

@@ -45,6 +45,8 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'backup',            name: 'Backup & DR',         view: 'backup',            type: 'page' },
   { id: 'integrations',      name: 'Integrations',        view: 'integrations',      type: 'page' },
   { id: 'roadmap',           name: 'Roadmap',             view: 'roadmap',           type: 'page' },
+  { id: 'simulator',         name: 'Policy Simulator',    view: 'simulator',         type: 'page' },
+  { id: 'graph',             name: 'Graph Explorer',      view: 'graph',             type: 'page' },
   { id: 'scanner',           name: 'Security Scanner',    view: 'scanner',           type: 'page' },
   { id: 'sync',              name: 'Directory Sync',      view: 'sync',              type: 'page' },
   { id: 'settings',          name: 'Settings',            view: 'settings',          type: 'page' },
