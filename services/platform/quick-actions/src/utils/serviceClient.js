@@ -1,5 +1,7 @@
 'use strict';
 
+const jwt = require('jsonwebtoken');
+
 // Base URLs from env or Kubernetes service names
 const SERVICES = {
   auth:      process.env.AUTH_SERVICE_URL      || 'http://authentication-service',
@@ -14,6 +16,53 @@ const SERVICES = {
 };
 
 const TIMEOUT_MS = 10_000;
+
+// ── Service token cache ────────────────────────────────────────────────────────
+
+/** Cached service token state */
+const _tokenCache = {
+  token: null,
+  expiresAt: 0,   // Unix timestamp (seconds)
+};
+
+const TOKEN_TTL_SECONDS            = 60;
+const TOKEN_REFRESH_BUFFER_SECONDS = 10; // regenerate when within 10s of expiry
+
+/**
+ * Return a short-lived JWT signed with JWT_SECRET that identifies this service.
+ * The token is cached and only regenerated when within TOKEN_REFRESH_BUFFER_SECONDS
+ * of expiry, avoiding unnecessary signing on every request.
+ *
+ * @returns {string|null} Signed JWT, or null if JWT_SECRET is not configured.
+ */
+function getServiceToken() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.warn('[serviceClient] JWT_SECRET not set — outgoing requests will have no auth token');
+    return null;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  // Return cached token if it still has more than BUFFER seconds left
+  if (_tokenCache.token && _tokenCache.expiresAt - nowSeconds > TOKEN_REFRESH_BUFFER_SECONDS) {
+    return _tokenCache.token;
+  }
+
+  // Generate a fresh token
+  const token = jwt.sign(
+    { sub: 'quick-actions-service', role: 'service' },
+    secret,
+    { expiresIn: TOKEN_TTL_SECONDS },
+  );
+
+  _tokenCache.token     = token;
+  _tokenCache.expiresAt = nowSeconds + TOKEN_TTL_SECONDS;
+
+  return token;
+}
+
+// ── HTTP client ────────────────────────────────────────────────────────────────
 
 /**
  * Make an HTTP call to an internal service.
@@ -36,9 +85,17 @@ async function call(service, method, path, body) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
+  const headers = { 'Content-Type': 'application/json' };
+
+  // Attach service-to-service auth token on every outgoing request
+  const serviceToken = getServiceToken();
+  if (serviceToken) {
+    headers['Authorization'] = `Bearer ${serviceToken}`;
+  }
+
   const options = {
     method: method.toUpperCase(),
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     signal: controller.signal,
   };
 
@@ -94,4 +151,4 @@ async function ping(service) {
   }
 }
 
-module.exports = { call, ping, SERVICES };
+module.exports = { call, ping, getServiceToken, SERVICES };

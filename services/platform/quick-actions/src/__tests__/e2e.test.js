@@ -10,6 +10,9 @@
  *   - Send real HTTP requests via supertest against the Express app.
  */
 
+// ── Set JWT_SECRET before loading the app so authMiddleware can verify tokens ─
+process.env.JWT_SECRET = 'test-e2e-jwt-secret';
+
 // ── Set service URLs before any require ──────────────────────────────────────
 process.env.AUTH_SERVICE_URL      = 'http://auth-mock';
 process.env.DIRECTORY_SERVICE_URL = 'http://directory-mock';
@@ -43,11 +46,22 @@ jest.mock('../utils/serviceClient', () => ({
   },
 }));
 
+const jwt         = require('jsonwebtoken');
 const serviceClient = require('../utils/serviceClient');
 const { call, ping } = serviceClient;
 const app = require('../index');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Generate a valid Bearer token for protected routes */
+function authHeader() {
+  const token = jwt.sign(
+    { sub: 'test-e2e-user', role: 'admin' },
+    process.env.JWT_SECRET,
+    { expiresIn: '1h' },
+  );
+  return `Bearer ${token}`;
+}
 
 const isUuid  = (s) => typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 const is64Hex = (s) => typeof s === 'string' && /^[0-9a-f]{64}$/i.test(s);
@@ -110,6 +124,7 @@ describe('Service Principal Lifecycle', () => {
 
     const res = await request(app)
       .post('/api/quick/service-principals')
+      .set('Authorization', authHeader())
       .send({ appName: 'test-app', permissions: ['read-users'] });
 
     expect(res.status).toBe(201);
@@ -128,6 +143,7 @@ describe('Service Principal Lifecycle', () => {
 
     const res = await request(app)
       .post('/api/quick/service-principals')
+      .set('Authorization', authHeader())
       .send({ appName: 'app2', permissions: ['read-users'] });
 
     expect(res.status).toBe(207);
@@ -150,7 +166,8 @@ describe('Service Principal Lifecycle', () => {
     ]));
 
     const res = await request(app)
-      .post(`/api/quick/service-principals/${clientId}/rotate-secret`);
+      .post(`/api/quick/service-principals/${clientId}/rotate-secret`)
+      .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -174,7 +191,9 @@ describe('Service Principal Lifecycle', () => {
       throw new Error(`[mock] Unmatched: ${service} ${method} ${path}`);
     });
 
-    const res = await request(app).delete(`/api/quick/service-principals/${clientId}`);
+    const res = await request(app)
+      .delete(`/api/quick/service-principals/${clientId}`)
+      .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -191,7 +210,9 @@ describe('Service Principal Lifecycle', () => {
       }},
     ]));
 
-    const res = await request(app).get('/api/quick/service-principals');
+    const res = await request(app)
+      .get('/api/quick/service-principals')
+      .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -207,7 +228,9 @@ describe('Service Principal Lifecycle', () => {
       { service: 'pim',  method: 'GET', pathPattern: /\/api\/v1\/permissions\/users\/.+/, response: { permissions: ['read-users'] } },
     ]));
 
-    const res = await request(app).get(`/api/quick/service-principals/${clientId}`);
+    const res = await request(app)
+      .get(`/api/quick/service-principals/${clientId}`)
+      .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -218,7 +241,9 @@ describe('Service Principal Lifecycle', () => {
   test('listServicePrincipals — returns empty array when auth is down', async () => {
     call.mockImplementation(() => { throw new Error('connect ECONNREFUSED'); });
 
-    const res = await request(app).get('/api/quick/service-principals');
+    const res = await request(app)
+      .get('/api/quick/service-principals')
+      .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(false);
@@ -235,6 +260,7 @@ describe('Service Principal Lifecycle', () => {
 
     const res = await request(app)
       .post('/api/quick/service-principals')
+      .set('Authorization', authHeader())
       .send({ appName: 'no-perms' });
 
     expect(res.status).toBe(201);
@@ -285,6 +311,7 @@ describe('Device Enrollment', () => {
 
       const res = await request(app)
         .post('/api/quick/devices/enroll')
+        .set('Authorization', authHeader())
         .send({ platform, deviceName });
 
       expect([200, 201, 207]).toContain(res.status);
@@ -313,6 +340,7 @@ describe('Device Enrollment', () => {
 
     const res = await request(app)
       .post('/api/quick/devices/bulk-enroll')
+      .set('Authorization', authHeader())
       .send({ devices: [
         { platform: 'linux', deviceName: 'bulk-linux-1' },
         { platform: 'linux', deviceName: 'bulk-linux-2' },
@@ -335,7 +363,9 @@ describe('Device Enrollment', () => {
       { service: 'mdm',    method: 'GET', pathPattern: `/api/mdm/devices/${deviceId}/status`, response: { mdmStatus: 'active', managed: true } },
     ]));
 
-    const res = await request(app).get(`/api/quick/devices/${deviceId}/enrollment-status`);
+    const res = await request(app)
+      .get(`/api/quick/devices/${deviceId}/enrollment-status`)
+      .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -356,6 +386,7 @@ describe('Device Enrollment', () => {
 
     const res = await request(app)
       .post(`/api/quick/devices/${deviceId}/unenroll`)
+      .set('Authorization', authHeader())
       .send({ wipe: false });
 
     expect(res.status).toBe(200);
@@ -376,6 +407,7 @@ describe('Device Enrollment', () => {
 
     const res = await request(app)
       .post(`/api/quick/devices/${deviceId}/unenroll`)
+      .set('Authorization', authHeader())
       .send({ wipe: true });
 
     expect(res.status).toBe(200);
@@ -393,7 +425,9 @@ describe('Device Enrollment', () => {
       throw new Error(`[mock] Unmatched: ${service} ${method}`);
     });
 
-    const res = await request(app).get(`/api/quick/devices/${deviceId}/enrollment-status`);
+    const res = await request(app)
+      .get(`/api/quick/devices/${deviceId}/enrollment-status`)
+      .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -436,6 +470,7 @@ describe('User Lifecycle', () => {
 
     const res = await request(app)
       .post('/api/quick/users/onboard')
+      .set('Authorization', authHeader())
       .send({ firstName: 'John', lastName: 'Doe', email: 'john@test.com', department: 'Engineering', role: 'standard' });
 
     expect(res.status).toBe(201);
@@ -449,6 +484,7 @@ describe('User Lifecycle', () => {
 
     const res = await request(app)
       .post('/api/quick/users/onboard')
+      .set('Authorization', authHeader())
       .send({ firstName: 'Jane', lastName: 'Smith', email: 'jane@test.com', department: 'Engineering', role: 'standard' });
 
     expect(res.status).toBe(207);
@@ -462,6 +498,7 @@ describe('User Lifecycle', () => {
 
     const res = await request(app)
       .post('/api/quick/users/onboard')
+      .set('Authorization', authHeader())
       .send({ firstName: 'Bob', lastName: 'Builder', email: 'bob@test.com', department: 'Engineering', role: 'standard' });
 
     expect(res.status).toBe(207);
@@ -485,6 +522,7 @@ describe('User Lifecycle', () => {
 
     const res = await request(app)
       .post(`/api/quick/users/${userId}/offboard`)
+      .set('Authorization', authHeader())
       .send({ revokeDevices: true });
 
     expect(res.status).toBe(200);
@@ -509,6 +547,7 @@ describe('User Lifecycle', () => {
 
     const res = await request(app)
       .post(`/api/quick/users/${userId}/offboard`)
+      .set('Authorization', authHeader())
       .send({ disableOnly: true });
 
     expect(res.status).toBe(200);
@@ -531,6 +570,7 @@ describe('User Lifecycle', () => {
 
     const res = await request(app)
       .post('/api/quick/users/onboard')
+      .set('Authorization', authHeader())
       .send({ firstName: 'Admin', lastName: 'User', email: 'admin@test.com', department: 'IT', role: 'admin' });
 
     expect(res.status).toBe(201);
@@ -556,6 +596,7 @@ describe('Policy Deployment', () => {
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
+      .set('Authorization', authHeader())
       .send({ policyId, targetType: 'ou', targetId: 'ou=engineering,dc=opendirectory,dc=local' });
 
     expect(res.status).toBe(200);
@@ -577,6 +618,7 @@ describe('Policy Deployment', () => {
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
+      .set('Authorization', authHeader())
       .send({ policyId, targetType: 'all' });
 
     expect(res.status).toBe(200);
@@ -601,6 +643,7 @@ describe('Policy Deployment', () => {
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
+      .set('Authorization', authHeader())
       .send({ policyId, targetType: 'ou', targetId: 'ou=test,dc=local', dryRun: true });
 
     expect(res.status).toBe(200);
@@ -624,7 +667,9 @@ describe('Policy Deployment', () => {
       }},
     ]));
 
-    const res = await request(app).get('/api/quick/compliance/snapshot');
+    const res = await request(app)
+      .get('/api/quick/compliance/snapshot')
+      .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -646,6 +691,7 @@ describe('Policy Deployment', () => {
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
+      .set('Authorization', authHeader())
       .send({ policyId, targetType: 'user', targetId: 'user-target-001' });
 
     expect(res.status).toBe(200);
@@ -664,6 +710,7 @@ describe('Policy Deployment', () => {
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
+      .set('Authorization', authHeader())
       .send({ policyId, targetType: 'device', targetId: 'device-target-001' });
 
     expect(res.status).toBe(200);
@@ -682,6 +729,7 @@ describe('Policy Deployment', () => {
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
+      .set('Authorization', authHeader())
       .send({ policyId, targetType: 'group', targetId: 'engineering-group' });
 
     expect(res.status).toBe(200);
@@ -695,6 +743,7 @@ describe('Policy Deployment', () => {
 
     const res = await request(app)
       .post('/api/quick/policies/deploy')
+      .set('Authorization', authHeader())
       .send({ policyId, targetType: 'ou', targetId: 'ou=test' });
 
     expect([207, 500]).toContain(res.status);
@@ -715,13 +764,15 @@ describe('Policy Deployment', () => {
 
     const deployRes = await request(app)
       .post('/api/quick/policies/deploy')
+      .set('Authorization', authHeader())
       .send({ policyId, targetType: 'all' });
 
     expect(deployRes.status).toBe(200);
     const deploymentId = deployRes.body.deploymentId;
 
     const statusRes = await request(app)
-      .get(`/api/quick/policies/deployments/${deploymentId}`);
+      .get(`/api/quick/policies/deployments/${deploymentId}`)
+      .set('Authorization', authHeader());
 
     expect(statusRes.status).toBe(200);
     expect(statusRes.body.success).toBe(true);
@@ -786,7 +837,9 @@ describe('Health and Status', () => {
   });
 
   test('404 for unknown routes', async () => {
-    const res = await request(app).get('/api/quick/does-not-exist');
+    const res = await request(app)
+      .get('/api/quick/does-not-exist')
+      .set('Authorization', authHeader());
     expect(res.status).toBe(404);
     expect(res.body.success).toBe(false);
   });
@@ -803,6 +856,7 @@ describe('Edge Cases', () => {
   test('createServicePrincipal — missing appName returns 500', async () => {
     const res = await request(app)
       .post('/api/quick/service-principals')
+      .set('Authorization', authHeader())
       .send({ description: 'no app name' });
 
     expect(res.status).toBe(500);
@@ -813,6 +867,7 @@ describe('Edge Cases', () => {
   test('enrollDevice — missing platform returns 500', async () => {
     const res = await request(app)
       .post('/api/quick/devices/enroll')
+      .set('Authorization', authHeader())
       .send({ deviceName: 'test-device' });
 
     expect(res.status).toBe(500);
@@ -822,6 +877,7 @@ describe('Edge Cases', () => {
   test('enrollDevice — missing deviceName returns 500', async () => {
     const res = await request(app)
       .post('/api/quick/devices/enroll')
+      .set('Authorization', authHeader())
       .send({ platform: 'linux' });
 
     expect(res.status).toBe(500);
@@ -831,6 +887,7 @@ describe('Edge Cases', () => {
   test('bulk-enroll — empty devices array returns 400', async () => {
     const res = await request(app)
       .post('/api/quick/devices/bulk-enroll')
+      .set('Authorization', authHeader())
       .send({ devices: [] });
 
     expect(res.status).toBe(400);
@@ -840,6 +897,7 @@ describe('Edge Cases', () => {
   test('bulk-enroll — missing devices field returns 400', async () => {
     const res = await request(app)
       .post('/api/quick/devices/bulk-enroll')
+      .set('Authorization', authHeader())
       .send({ platform: 'linux' });
 
     expect(res.status).toBe(400);
@@ -849,6 +907,7 @@ describe('Edge Cases', () => {
   test('deployPolicy — missing policyId returns 500', async () => {
     const res = await request(app)
       .post('/api/quick/policies/deploy')
+      .set('Authorization', authHeader())
       .send({ targetType: 'ou' });
 
     expect(res.status).toBe(500);
@@ -858,6 +917,7 @@ describe('Edge Cases', () => {
   test('deployPolicy — missing targetType returns 500', async () => {
     const res = await request(app)
       .post('/api/quick/policies/deploy')
+      .set('Authorization', authHeader())
       .send({ policyId: 'pol-123' });
 
     expect(res.status).toBe(500);
@@ -867,6 +927,7 @@ describe('Edge Cases', () => {
   test('onboardUser — missing firstName returns 500', async () => {
     const res = await request(app)
       .post('/api/quick/users/onboard')
+      .set('Authorization', authHeader())
       .send({ lastName: 'Doe', email: 'test@test.com' });
 
     expect(res.status).toBe(500);
@@ -876,6 +937,7 @@ describe('Edge Cases', () => {
   test('onboardUser — missing email returns 500', async () => {
     const res = await request(app)
       .post('/api/quick/users/onboard')
+      .set('Authorization', authHeader())
       .send({ firstName: 'John', lastName: 'Doe' });
 
     expect(res.status).toBe(500);

@@ -7,6 +7,7 @@ const compression  = require('compression');
 const rateLimit    = require('express-rate-limit');
 
 const { ping, SERVICES } = require('./utils/serviceClient');
+const authMiddleware                = require('./middleware/auth');
 
 const servicePrincipalOrchestrator  = require('./orchestrators/servicePrincipalOrchestrator');
 const deviceEnrollmentOrchestrator  = require('./orchestrators/deviceEnrollmentOrchestrator');
@@ -39,6 +40,12 @@ app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
 });
+
+// ── Authentication ─────────────────────────────────────────────────────────────
+// Enforces Bearer token auth on all routes except /health, /api/quick/health,
+// and /api/quick/status.  See src/middleware/auth.js for details.
+
+app.use(authMiddleware);
 
 // ── Error wrapper ──────────────────────────────────────────────────────────────
 
