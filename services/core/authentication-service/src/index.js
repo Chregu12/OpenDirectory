@@ -81,6 +81,9 @@ const SessionManager = require('./services/sessionManager');
 const UserService = require('./services/userService');
 const AuditService = require('./services/auditService');
 
+const { createProvider } = require('./oidc/provider');
+const { buildInteractionsRouter } = require('./oidc/interactions');
+
 const logger = require('./utils/logger');
 const config = require('./utils/config');
 
@@ -126,9 +129,35 @@ class UnifiedAuthenticationService {
     this.auditService = new AuditService();
     this.passwordPolicyEnforcer = new PasswordPolicyEnforcer(auditDb);
 
+    // OIDC provider is initialized asynchronously in start()
+    this.oidcProvider = null;
+
     this.initializeMiddleware();
     this.initializePassport();
     this.initializeRoutes();
+  }
+
+  /**
+   * Mount OIDC-related middleware and endpoints.
+   * Called after the provider has been instantiated in start().
+   * @param {import('node-oidc-provider').Provider} oidcProvider
+   */
+  mountOidcRoutes(oidcProvider) {
+    // Interactions router MUST be mounted before the provider callback
+    // so that /interaction/* routes are handled by Express, not the provider.
+    const interactionsRouter = buildInteractionsRouter(oidcProvider, {
+      authManager: this.authManager,
+      userService: this.userService,
+      auditService: this.auditService,
+    });
+    this.app.use(interactionsRouter);
+
+    // Mount the OIDC provider — this registers all standard endpoints:
+    //   /authorize, /token, /userinfo, /jwks,
+    //   /.well-known/openid-configuration, /end_session, /introspect, /revoke
+    this.app.use(oidcProvider.callback());
+
+    logger.info('OIDC provider mounted (issuer: ' + oidcProvider.issuer + ')');
   }
 
   initializeMiddleware() {
@@ -1316,12 +1345,25 @@ class UnifiedAuthenticationService {
     const { UserOnboardingSaga } = require('../../../../packages/service-contracts/src');
     const _userSaga = new UserOnboardingSaga(_bus, { logger });
     setTimeout(() => _userSaga.launch().catch(e => logger.warn('[UserOnboardingSaga] ' + e.message)), 5000);
+
+    // Initialize the OIDC provider before accepting connections
+    const issuer = process.env.ISSUER_URL || `http://localhost:${port}`;
+    try {
+      this.oidcProvider = await createProvider(issuer);
+      this.mountOidcRoutes(this.oidcProvider);
+      logger.info(`OIDC issuer: ${issuer}`);
+    } catch (err) {
+      logger.error('Failed to initialize OIDC provider:', err);
+      throw err;
+    }
+
     this.server = this.app.listen(port, () => {
-      logger.info(`🔐 Unified Authentication Service started on port ${port}`);
-      logger.info(`📊 Health check: http://localhost:${port}/health`);
-      logger.info(`🔑 Auth providers: Local, LDAP, JWT, SSO`);
-      logger.info(`🛡️ Zero-Trust: ${config.zeroTrust.enabled ? 'Enabled' : 'Disabled'}`);
-      logger.info(`📱 MFA: ${config.mfa.enabled ? 'Enabled' : 'Disabled'}`);
+      logger.info(`Unified Authentication Service started on port ${port}`);
+      logger.info(`Health check: http://localhost:${port}/health`);
+      logger.info(`OIDC discovery: ${issuer}/.well-known/openid-configuration`);
+      logger.info(`Auth providers: Local, LDAP, JWT, SSO, OIDC`);
+      logger.info(`Zero-Trust: ${config.zeroTrust.enabled ? 'Enabled' : 'Disabled'}`);
+      logger.info(`MFA: ${config.mfa.enabled ? 'Enabled' : 'Disabled'}`);
       seedAuditEvents().catch(() => {});
     });
   }
