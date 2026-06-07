@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { api } from '@/lib/api';
+import { qaGet, qaDelete, qaPost, RotateSecretResult } from '@/lib/quickActionsApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,15 +15,6 @@ export interface ServicePrincipal {
   status: 'active' | 'disabled';
 }
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_SPS: ServicePrincipal[] = [
-  { id: '1', name: 'inventory-service',    clientId: 'a3f8c2d1-e4b5-4c6d-8e9f-0a1b2c3d4e5f', spn: 'app/inventory-service@opendirectory.local',   createdAt: '2024-01-15', permissions: ['read_users', 'read_devices'],              status: 'active' },
-  { id: '2', name: 'ci-pipeline',          clientId: 'b5c7d9e1-f2a3-4b5c-6d7e-8f9a0b1c2d3e', spn: 'app/ci-pipeline@opendirectory.local',         createdAt: '2024-02-20', permissions: ['read_users', 'api_gateway'],               status: 'active' },
-  { id: '3', name: 'legacy-erp-connector', clientId: 'c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f', spn: 'app/legacy-erp@opendirectory.local',          createdAt: '2023-08-01', permissions: ['read_users', 'write_policies', 'admin_access'], status: 'disabled' },
-  { id: '4', name: 'monitoring-agent',     clientId: 'd4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', spn: 'app/monitoring@opendirectory.local',          createdAt: '2024-03-10', permissions: ['read_devices', 'audit_logs'],              status: 'active' },
-  { id: '5', name: 'backup-service',       clientId: 'e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b', spn: 'app/backup@opendirectory.local',              createdAt: '2024-04-05', permissions: ['read_devices', 'write_backups'],           status: 'active' },
-];
 
 interface ServicePrincipalListColumnProps {
   selectedId: string | null;
@@ -32,30 +23,59 @@ interface ServicePrincipalListColumnProps {
 }
 
 export default function ServicePrincipalListColumn({ selectedId, onSelect, onCreateNew }: ServicePrincipalListColumnProps) {
-  const [sps,        setSps]        = useState<ServicePrincipal[]>(MOCK_SPS);
-  const [search,     setSearch]     = useState('');
-  const [sortOpen,   setSortOpen]   = useState(false);
-  const [sortKey,    setSortKey]    = useState<'name' | 'createdAt' | 'status'>('name');
+  const [sps,          setSps]          = useState<ServicePrincipal[]>([]);
+  const [search,       setSearch]       = useState('');
+  const [sortOpen,     setSortOpen]     = useState(false);
+  const [sortKey,      setSortKey]      = useState<'name' | 'createdAt' | 'status'>('name');
+  const [refreshKey,   setRefreshKey]   = useState(0);
+  const [deletingId,   setDeletingId]   = useState<string | null>(null);
+  const [rotatingId,   setRotatingId]   = useState<string | null>(null);
+  const [rotatedSecret, setRotatedSecret] = useState<RotateSecretResult | null>(null);
 
   const loadSPs = useCallback(async () => {
     try {
-      const res = await api.get('/api/quick/service-principals');
-      const data = Array.isArray(res.data) ? res.data : res.data?.items ?? [];
-      if (data.length > 0) {
-        setSps(data.map((sp: any) => ({
-          id: sp.id,
-          name: sp.name ?? sp.app_name,
-          clientId: sp.client_id ?? sp.clientId,
-          spn: sp.spn,
-          createdAt: sp.created_at ?? sp.createdAt,
-          permissions: sp.permissions ?? [],
-          status: sp.status ?? 'active',
-        })));
-      }
+      const data = await qaGet<ServicePrincipal[] | { items?: ServicePrincipal[] }>('/api/quick/service-principals');
+      const list = Array.isArray(data) ? data : (data.items ?? []);
+      setSps(list.map((sp: any) => ({
+        id:          sp.id          ?? sp.clientId ?? sp.client_id,
+        name:        sp.name        ?? sp.appName  ?? sp.app_name  ?? sp.clientId,
+        clientId:    sp.clientId    ?? sp.client_id,
+        spn:         sp.spn         ?? '',
+        createdAt:   sp.createdAt   ?? sp.created_at ?? '',
+        permissions: sp.permissions ?? [],
+        status:      sp.status      ?? 'active',
+      })));
     } catch {}
   }, []);
 
-  useEffect(() => { loadSPs(); }, [loadSPs]);
+  useEffect(() => { loadSPs(); }, [loadSPs, refreshKey]);
+
+  const handleDelete = async (sp: ServicePrincipal) => {
+    if (!confirm(`Delete service principal "${sp.name}"? This cannot be undone.`)) return;
+    setDeletingId(sp.id);
+    try {
+      await qaDelete(`/api/quick/service-principals/${encodeURIComponent(sp.clientId || sp.id)}`);
+      setRefreshKey(k => k + 1);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleRotateSecret = async (sp: ServicePrincipal) => {
+    setRotatingId(sp.id);
+    try {
+      const result = await qaPost<RotateSecretResult>(
+        `/api/quick/service-principals/${encodeURIComponent(sp.clientId || sp.id)}/rotate-secret`
+      );
+      setRotatedSecret(result);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to rotate secret');
+    } finally {
+      setRotatingId(null);
+    }
+  };
 
   useEffect(() => {
     const handler = () => setSortOpen(false);
@@ -206,14 +226,39 @@ export default function ServicePrincipalListColumn({ selectedId, onSelect, onCre
                 </div>
               </div>
 
-              {/* Status dot */}
-              {!isSelected && (
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%',
-                  background: sp.status === 'active' ? '#22c55e' : '#9CA3AF',
-                  flexShrink: 0,
-                }} />
-              )}
+              {/* Status dot + actions */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                {!isSelected && (
+                  <span style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: sp.status === 'active' ? '#22c55e' : '#9CA3AF',
+                  }} />
+                )}
+                <button
+                  onClick={e => { e.stopPropagation(); handleRotateSecret(sp); }}
+                  disabled={rotatingId === sp.id}
+                  title="Rotate secret"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 2,
+                    color: isSelected ? 'rgba(255,255,255,0.7)' : 'var(--apple-gray-5)',
+                    fontSize: 12, opacity: rotatingId === sp.id ? 0.5 : 1,
+                  }}
+                >
+                  ↻
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDelete(sp); }}
+                  disabled={deletingId === sp.id}
+                  title="Delete"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 2,
+                    color: isSelected ? 'rgba(255,255,255,0.7)' : '#ef4444',
+                    fontSize: 12, opacity: deletingId === sp.id ? 0.5 : 1,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             </button>
           );
         })}
@@ -224,6 +269,32 @@ export default function ServicePrincipalListColumn({ selectedId, onSelect, onCre
           </div>
         )}
       </div>
+
+      {/* Rotated secret modal */}
+      {rotatedSecret && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'white', borderRadius: 14, padding: 24, maxWidth: 420, width: '100%', boxShadow: '0 16px 48px rgba(0,0,0,0.18)' }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>New Client Secret</h3>
+            <p style={{ fontSize: 13, color: '#92400E', background: '#FEF3C7', borderRadius: 8, padding: '8px 12px', marginBottom: 16 }}>
+              Save this secret now — it will not be shown again.
+            </p>
+            <div style={{ fontFamily: 'monospace', fontSize: 13, background: '#F3F4F6', borderRadius: 8, padding: '10px 14px', wordBreak: 'break-all', marginBottom: 16 }}>
+              {rotatedSecret.newClientSecret}
+            </div>
+            {rotatedSecret.rotatedAt && (
+              <p style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>
+                Rotated at: {new Date(rotatedSecret.rotatedAt).toLocaleString()}
+              </p>
+            )}
+            <button
+              onClick={() => setRotatedSecret(null)}
+              style={{ width: '100%', padding: '9px', background: '#AF52DE', color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

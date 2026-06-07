@@ -7,7 +7,7 @@ import {
   CheckCircleIcon,
   ClipboardDocumentIcon,
 } from '@heroicons/react/24/outline';
-import { api } from '@/lib/api';
+import { qaPost } from '@/lib/quickActionsApi';
 import toast from 'react-hot-toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -148,33 +148,30 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
   const handleCreate = async () => {
     setLoading(true);
     try {
-      // TODO: POST http://localhost:3950/api/quick/users/onboard
-      const res = await api.post('/api/quick/users/onboard', {
-        first_name:  form.firstName,
-        last_name:   form.lastName,
-        email:       form.email,
-        job_title:   form.jobTitle,
-        department:  form.department,
-        role:        form.role,
-        manager:     form.manager,
-        device_id:   form.deviceChoice === 'existing' ? form.assignedDevice : null,
+      const data = await qaPost<{
+        userId?: string;
+        username?: string;
+        temporaryPassword?: string; temp_password?: string; password?: string;
+        groupMemberships?: string[];
+        assignedDevice?: unknown;
+      }>('/api/quick/users/onboard', {
+        firstName:      form.firstName,
+        lastName:       form.lastName,
+        email:          form.email,
+        jobTitle:       form.jobTitle,
+        department:     form.department,
+        role:           form.role,
+        assignDeviceId: form.deviceChoice === 'existing' && form.assignedDevice ? form.assignedDevice : undefined,
       });
-      const data = res.data ?? {};
       setCreated({
         displayName:  `${form.firstName} ${form.lastName}`,
         email:        form.email,
-        tempPassword: data.temp_password ?? data.password ?? `Tmp_${Math.random().toString(36).slice(2,10)}!2024`,
+        tempPassword: data.temporaryPassword ?? data.temp_password ?? data.password ?? '',
         username:     data.username ?? form.email.split('@')[0],
       });
       toast.success('User created successfully');
-    } catch {
-      setCreated({
-        displayName:  `${form.firstName} ${form.lastName}`,
-        email:        form.email,
-        tempPassword: `Tmp_${Math.random().toString(36).slice(2,10)}!2024`,
-        username:     form.email.split('@')[0] || form.firstName.toLowerCase(),
-      });
-      toast.success('User created successfully');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'User onboarding failed');
     } finally {
       setLoading(false);
     }

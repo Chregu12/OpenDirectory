@@ -10,7 +10,7 @@ import {
   EyeSlashIcon,
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
-import { api } from '@/lib/api';
+import { qaPost } from '@/lib/quickActionsApi';
 import toast from 'react-hot-toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -140,29 +140,24 @@ export default function ServicePrincipalWizard({ onClose }: ServicePrincipalWiza
     if (!name.trim()) { toast.error('Application name is required'); return; }
     setLoading(true);
     try {
-      // TODO: POST http://localhost:3950/api/quick/service-principals
-      const res = await api.post('/api/quick/service-principals', {
-        name: name.trim(),
+      const data = await qaPost<{
+        clientId?: string; client_id?: string;
+        clientSecret?: string; client_secret?: string;
+        spn?: string;
+      }>('/api/quick/service-principals', {
+        appName:     name.trim(),
         description: desc.trim(),
         permissions: Object.entries(permissions).filter(([, v]) => v).map(([k]) => k),
       });
-      const data = res.data ?? {};
       setCreated({
-        clientId:     data.client_id     ?? data.clientId     ?? `${Math.random().toString(36).slice(2,10)}-${Math.random().toString(36).slice(2,6)}-${Math.random().toString(36).slice(2,6)}`,
-        clientSecret: data.client_secret ?? data.clientSecret ?? `secret_${Math.random().toString(36).slice(2,34)}`,
-        spn:          data.spn           ?? `app/${name.toLowerCase().replace(/\s+/g, '-')}@opendirectory.local`,
+        clientId:     data.clientId     ?? data.client_id     ?? '',
+        clientSecret: data.clientSecret ?? data.client_secret ?? '',
+        spn:          data.spn          ?? `app/${name.toLowerCase().replace(/\s+/g, '-')}@opendirectory.local`,
         name:         name.trim(),
       });
       toast.success('Service Principal created');
-    } catch {
-      // Fallback: generate mock credentials for demo
-      setCreated({
-        clientId:     `${Math.random().toString(36).slice(2,10)}-${Math.random().toString(36).slice(2,6)}-${Math.random().toString(36).slice(2,6)}`,
-        clientSecret: `secret_${Math.random().toString(36).slice(2,34)}`,
-        spn:          `app/${name.toLowerCase().replace(/\s+/g, '-')}@opendirectory.local`,
-        name:         name.trim(),
-      });
-      toast.success('Service Principal created');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create service principal');
     } finally {
       setLoading(false);
     }
