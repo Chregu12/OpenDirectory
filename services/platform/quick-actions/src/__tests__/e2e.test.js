@@ -7,11 +7,14 @@
  *   - jest.mock('../utils/serviceClient') to intercept all downstream HTTP calls.
  *     (The orchestrators use `const { call } = require(...)` so jest.spyOn on the
  *      module export object would not affect the local binding — we need jest.mock.)
+ *   - jest.mock oidcAuth so tests don't require a real JWKS endpoint.
  *   - Send real HTTP requests via supertest against the Express app.
  */
 
-// ── Set JWT_SECRET before loading the app so authMiddleware can verify tokens ─
-process.env.JWT_SECRET = 'test-e2e-jwt-secret';
+// ── Mock oidcAuth before loading the app so authMiddleware uses a no-op verifier ─
+jest.mock('../../../../shared/oidcAuth', () => ({
+  verifyToken: jest.fn().mockResolvedValue({ sub: 'test-e2e-user', role: 'admin', scope: 'openid roles' }),
+}));
 
 // ── Set service URLs before any require ──────────────────────────────────────
 process.env.AUTH_SERVICE_URL      = 'http://auth-mock';
@@ -46,21 +49,15 @@ jest.mock('../utils/serviceClient', () => ({
   },
 }));
 
-const jwt         = require('jsonwebtoken');
 const serviceClient = require('../utils/serviceClient');
 const { call, ping } = serviceClient;
 const app = require('../index');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Generate a valid Bearer token for protected routes */
+/** Return a Bearer token string (value doesn't matter — verifyToken is mocked) */
 function authHeader() {
-  const token = jwt.sign(
-    { sub: 'test-e2e-user', role: 'admin' },
-    process.env.JWT_SECRET,
-    { expiresIn: '1h' },
-  );
-  return `Bearer ${token}`;
+  return 'Bearer test-e2e-token';
 }
 
 const isUuid  = (s) => typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);

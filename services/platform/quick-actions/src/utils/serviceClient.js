@@ -1,7 +1,5 @@
 'use strict';
 
-const jwt = require('jsonwebtoken');
-
 // Base URLs from env or Kubernetes service names
 const SERVICES = {
   auth:      process.env.AUTH_SERVICE_URL      || 'http://authentication-service',
@@ -17,49 +15,75 @@ const SERVICES = {
 
 const TIMEOUT_MS = 10_000;
 
-// ── Service token cache ────────────────────────────────────────────────────────
+// ── Client Credentials token cache ────────────────────────────────────────────
 
-/** Cached service token state */
-const _tokenCache = {
-  token: null,
-  expiresAt: 0,   // Unix timestamp (seconds)
-};
+const TOKEN_ENDPOINT  = process.env.TOKEN_ENDPOINT || 'http://localhost:3001/token';
+const CLIENT_ID       = 'quick-actions';
+const CLIENT_SECRET   = process.env.QA_CLIENT_SECRET;
 
-const TOKEN_TTL_SECONDS            = 60;
-const TOKEN_REFRESH_BUFFER_SECONDS = 10; // regenerate when within 10s of expiry
+/** Cached access token state */
+let _cachedToken   = null;
+let _tokenExpiresAt = 0; // ms since epoch
 
 /**
- * Return a short-lived JWT signed with JWT_SECRET that identifies this service.
- * The token is cached and only regenerated when within TOKEN_REFRESH_BUFFER_SECONDS
- * of expiry, avoiding unnecessary signing on every request.
+ * Obtain a service access token via OAuth 2.0 Client Credentials grant.
+ * The token is cached until it expires (with a 30-second safety buffer).
  *
- * @returns {string|null} Signed JWT, or null if JWT_SECRET is not configured.
+ * @returns {Promise<string>} Bearer access_token
  */
-function getServiceToken() {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    console.warn('[serviceClient] JWT_SECRET not set — outgoing requests will have no auth token');
-    return null;
+async function getServiceToken() {
+  const now = Date.now();
+
+  // Return cached token if still valid
+  if (_cachedToken && now < _tokenExpiresAt) {
+    return _cachedToken;
   }
 
-  const nowSeconds = Math.floor(Date.now() / 1000);
-
-  // Return cached token if it still has more than BUFFER seconds left
-  if (_tokenCache.token && _tokenCache.expiresAt - nowSeconds > TOKEN_REFRESH_BUFFER_SECONDS) {
-    return _tokenCache.token;
+  if (!CLIENT_SECRET) {
+    throw new Error('QA_CLIENT_SECRET environment variable is required for service authentication');
   }
 
-  // Generate a fresh token
-  const token = jwt.sign(
-    { sub: 'quick-actions-service', role: 'service' },
-    secret,
-    { expiresIn: TOKEN_TTL_SECONDS },
-  );
+  const { default: fetch } = await import('node-fetch');
 
-  _tokenCache.token     = token;
-  _tokenCache.expiresAt = nowSeconds + TOKEN_TTL_SECONDS;
+  const body = new URLSearchParams({
+    grant_type:    'client_credentials',
+    client_id:     CLIENT_ID,
+    client_secret: CLIENT_SECRET,
+    scope:         'openid roles',
+  });
 
-  return token;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let res;
+  try {
+    res = await fetch(TOKEN_ENDPOINT, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body:    body.toString(),
+      signal:  controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Token endpoint returned ${res.status}: ${text}`);
+  }
+
+  const data = await res.json();
+  const { access_token, expires_in } = data;
+
+  if (!access_token) {
+    throw new Error('Token endpoint did not return an access_token');
+  }
+
+  _cachedToken    = access_token;
+  // expires_in is in seconds; subtract 30s buffer
+  _tokenExpiresAt = now + ((expires_in || 3600) - 30) * 1000;
+
+  return _cachedToken;
 }
 
 // ── HTTP client ────────────────────────────────────────────────────────────────
@@ -85,13 +109,13 @@ async function call(service, method, path, body) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  const headers = { 'Content-Type': 'application/json' };
+  // Obtain token via Client Credentials before every call (cached internally)
+  const token = await getServiceToken();
 
-  // Attach service-to-service auth token on every outgoing request
-  const serviceToken = getServiceToken();
-  if (serviceToken) {
-    headers['Authorization'] = `Bearer ${serviceToken}`;
-  }
+  const headers = {
+    'Content-Type':  'application/json',
+    'Authorization': `Bearer ${token}`,
+  };
 
   const options = {
     method: method.toUpperCase(),

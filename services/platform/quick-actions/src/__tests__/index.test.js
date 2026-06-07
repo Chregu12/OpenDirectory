@@ -1,7 +1,10 @@
 'use strict';
 
-// Set JWT_SECRET before loading the app so authMiddleware can verify tokens
-process.env.JWT_SECRET = 'test-jwt-secret-for-quick-actions';
+// Mock oidcAuth so tests don't need a real JWKS endpoint.
+// The path resolves to services/shared/oidcAuth (same as the middleware sees it).
+jest.mock('../../../../shared/oidcAuth', () => ({
+  verifyToken: jest.fn().mockResolvedValue({ sub: 'test-user', role: 'admin', scope: 'openid roles' }),
+}));
 
 // Mock all orchestrators before requiring the app
 jest.mock('../orchestrators/servicePrincipalOrchestrator');
@@ -10,7 +13,6 @@ jest.mock('../orchestrators/userOnboardingOrchestrator');
 jest.mock('../orchestrators/policyOrchestrator');
 jest.mock('../utils/serviceClient.js');
 
-const jwt     = require('jsonwebtoken');
 const request = require('supertest');
 const app     = require('../index');
 
@@ -20,14 +22,9 @@ const userOnboardingOrchestrator   = require('../orchestrators/userOnboardingOrc
 const policyOrchestrator           = require('../orchestrators/policyOrchestrator');
 const { ping, SERVICES }           = require('../utils/serviceClient.js');
 
-// Generate a valid Bearer token for protected routes
+// Generate a Bearer token string (value doesn't matter — verifyToken is mocked)
 function authHeader() {
-  const token = jwt.sign(
-    { sub: 'test-user', role: 'admin' },
-    process.env.JWT_SECRET,
-    { expiresIn: '1h' },
-  );
-  return `Bearer ${token}`;
+  return 'Bearer test-token';
 }
 
 beforeEach(() => {
@@ -608,15 +605,18 @@ describe('Auth middleware', () => {
   test('missing token → 401', async () => {
     const res = await request(app).get('/api/quick/service-principals');
     expect(res.status).toBe(401);
-    expect(res.body.success).toBe(false);
+    expect(res.body.error).toBe('unauthorized');
   });
 
   test('invalid token → 403', async () => {
+    const { verifyToken } = require('../../../../shared/oidcAuth');
+    verifyToken.mockRejectedValueOnce(Object.assign(new Error('invalid signature'), { code: 'ERR_JWS_INVALID' }));
+
     const res = await request(app)
       .get('/api/quick/service-principals')
       .set('Authorization', 'Bearer invalid.token.value');
     expect(res.status).toBe(403);
-    expect(res.body.success).toBe(false);
+    expect(res.body.error).toBe('invalid_token');
   });
 
   test('service-account bypass with correct SERVICE_TOKEN → 200', async () => {
