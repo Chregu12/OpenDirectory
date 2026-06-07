@@ -203,6 +203,18 @@ export const deviceApi = {
 
   getEnrollmentToken: (expiresInHours = 24) =>
     api.post('/api/devices/enrollment-token', { expires_in_hours: expiresInHours }),
+
+  getStammdaten: (deviceId: string) =>
+    api.get(`/api/devices/${deviceId}/stammdaten`),
+
+  updateStammdaten: (deviceId: string, data: Record<string, string>) =>
+    api.put(`/api/devices/${deviceId}/stammdaten`, data),
+
+  uploadPhoto: (deviceId: string, photoDataUrl: string) =>
+    api.post(`/api/devices/${deviceId}/photo`, { photo: photoDataUrl }),
+
+  getPhotoUrl: (deviceId: string) =>
+    `/api/devices/${deviceId}/photo`,
 };
 
 // Printer Management API
@@ -469,20 +481,71 @@ export const gatewayApi = {
 
 // Security API
 export const securityApi = {
+  // Antivirus endpoints → antivirus-protection service (/api/antivirus/*)
   getThreatIntel: () =>
-    api.get('/api/security/threats'),
-  
+    api.get('/api/antivirus/threats'),
+
+  getThreats: () =>
+    api.get('/api/antivirus/threats'),
+
+  getScans: () =>
+    api.get('/api/antivirus/scans'),
+
+  getAvDevices: () =>
+    api.get('/api/antivirus/devices'),
+
+  getAvStatistics: () =>
+    api.get('/api/antivirus/statistics'),
+
+  getAvDashboard: () =>
+    api.get('/api/antivirus/dashboard'),
+
+  getQuarantine: () =>
+    api.get('/api/antivirus/quarantine'),
+
+  getSignatures: () =>
+    api.get('/api/antivirus/signatures'),
+
+  updateSignatures: () =>
+    api.post('/api/antivirus/signatures/update', {}),
+
+  startScan: (deviceIds?: string[], scanType?: string) =>
+    api.post('/api/antivirus/scan', { deviceIds, scanType: scanType ?? 'quick' }),
+
+  restoreQuarantine: (fileId: string) =>
+    api.post(`/api/antivirus/quarantine/${fileId}/restore`, {}),
+
+  deleteQuarantine: (fileId: string) =>
+    api.delete(`/api/antivirus/quarantine/${fileId}`),
+
+  // Security scanner endpoints → security-scanner service (/api/scanner/*)
+  getComplianceStatus: () =>
+    api.get('/api/scanner/findings'),
+
+  getFindings: () =>
+    api.get('/api/scanner/findings'),
+
+  getRiskScore: () =>
+    api.get('/api/scanner/risk-score'),
+
+  getTrends: () =>
+    api.get('/api/scanner/trends'),
+
+  getBenchmarks: () =>
+    api.get('/api/scanner/benchmarks'),
+
+  startSecurityScan: (target?: string) =>
+    api.post('/api/scanner/scan', { target }),
+
+  getSecurityAlerts: () =>
+    api.get('/api/scanner/findings'),
+
+  // Legacy paths kept for other callers
   getPAMSessions: () =>
     api.get('/api/security/pam/sessions'),
-  
+
   getDLPPolicies: () =>
     api.get('/api/security/dlp/policies'),
-  
-  getSecurityAlerts: () =>
-    api.get('/api/security/alerts'),
-  
-  getComplianceStatus: () =>
-    api.get('/api/security/compliance'),
 };
 
 // Backup & DR API
@@ -549,6 +612,109 @@ export const aiApi = {
   
   trainModel: (modelData: any) =>
     api.post('/api/ai/models/train', modelData),
+};
+
+// Audit Log API (enterprise-directory service, port 3000)
+const DIRECTORY_BASE = process.env.NEXT_PUBLIC_DIRECTORY_URL || '';
+
+export const auditApi = {
+  getEvents: (params?: {
+    from?: string;
+    to?: string;
+    actorId?: string;
+    targetDn?: string;
+    operation?: string;
+    category?: string;
+    severity?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.from)      query.set('from',      params.from);
+    if (params?.to)        query.set('to',        params.to);
+    if (params?.actorId)   query.set('actorId',   params.actorId);
+    if (params?.targetDn)  query.set('targetDn',  params.targetDn);
+    if (params?.operation) query.set('operation', params.operation);
+    if (params?.category)  query.set('category',  params.category);
+    if (params?.severity)  query.set('severity',  params.severity);
+    if (params?.search)    query.set('search',    params.search);
+    query.set('limit',  String(params?.limit  ?? 100));
+    query.set('offset', String(params?.offset ?? 0));
+    return api.get(`${DIRECTORY_BASE}/api/audit/log?${query.toString()}`);
+  },
+
+  getActorActivity: (actorId: string, params?: { from?: string; to?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.from) query.set('from', params.from);
+    if (params?.to)   query.set('to',   params.to);
+    return api.get(`${DIRECTORY_BASE}/api/audit/actors/${encodeURIComponent(actorId)}/activity?${query.toString()}`);
+  },
+
+  getObjectHistory: (dn: string) =>
+    api.get(`${DIRECTORY_BASE}/api/audit/objects/${encodeURIComponent(dn)}/history`),
+
+  getStats: () =>
+    api.get(`${DIRECTORY_BASE}/api/audit/stats`),
+
+  getIntegrity: () =>
+    api.get(`${DIRECTORY_BASE}/api/audit/integrity`),
+
+  getCorrelations: (correlationId: string) =>
+    api.get(`${DIRECTORY_BASE}/api/audit/correlations/${correlationId}`),
+
+  exportEvents: (params?: { format?: string; category?: string; severity?: string }) =>
+    api.post(`${DIRECTORY_BASE}/api/audit/export`, params),
+};
+
+// PIM Sessions API (conditional-access service, port 3007)
+const PIM_BASE = process.env.NEXT_PUBLIC_PIM_URL || '';
+
+export const pimSessionsApi = {
+  getSessions: () =>
+    api.get(`${PIM_BASE}/api/v1/pim/sessions`),
+
+  getSession: (id: string) =>
+    api.get(`${PIM_BASE}/api/v1/pim/sessions/${id}`),
+
+  getSessionReplay: (id: string) =>
+    api.get(`${PIM_BASE}/api/v1/pim/sessions/${id}/replay`),
+
+  getBreakGlassEvents: () =>
+    api.get(`${PIM_BASE}/api/v1/pim/breakglass`),
+
+  requestBreakGlass: (data: { reason: string; systemsAffected: string; estimatedDuration: number }) =>
+    api.post(`${PIM_BASE}/api/v1/pim/breakglass/request`, data),
+
+  activateBreakGlass: (id: string) =>
+    api.post(`${PIM_BASE}/api/v1/pim/breakglass/${id}/activate`, {}),
+
+  terminateBreakGlass: (id: string) =>
+    api.post(`${PIM_BASE}/api/v1/pim/breakglass/${id}/terminate`, {}),
+};
+
+// Quick Actions API (port 3950)
+const QUICK_ACTIONS_BASE = process.env.NEXT_PUBLIC_QUICK_ACTIONS_URL || '';
+
+export const quickActionsApi = {
+  getComplianceSnapshot: () =>
+    api.get(`${QUICK_ACTIONS_BASE}/api/quick/compliance/snapshot`),
+
+  deployPolicy: (data: {
+    policyId?: string;
+    policy_id?: string;
+    targetType?: string;
+    target_type?: string;
+    targetId?: string;
+    target_value?: string;
+    enforced?: boolean;
+    dryRun?: boolean;
+    dry_run?: boolean;
+  }) =>
+    api.post(`${QUICK_ACTIONS_BASE}/api/quick/policies/deploy`, data),
+
+  getDeployment: (id: string) =>
+    api.get(`${QUICK_ACTIONS_BASE}/api/quick/policies/deployments/${id}`),
 };
 
 // Utility functions
@@ -623,6 +789,42 @@ export const appStoreApi = {
 
   requestUninstall: (data: { appId: string; deviceId: string }) =>
     api.post('/api/store/uninstall', data),
+};
+
+// Groups & Organisational Units API
+export const groupApi = {
+  getGroups: () =>
+    api.get('/api/groups'),
+
+  createGroup: (data: any) =>
+    api.post('/api/groups', data),
+
+  updateGroup: (id: string, data: any) =>
+    api.put(`/api/groups/${id}`, data),
+
+  deleteGroup: (id: string) =>
+    api.delete(`/api/groups/${id}`),
+
+  getGroup: (id: string) =>
+    api.get(`/api/groups/${id}`),
+
+  addMember: (groupId: string, userId: string) =>
+    api.post(`/api/groups/${groupId}/members`, { userId }),
+
+  removeMember: (groupId: string, userId: string) =>
+    api.delete(`/api/groups/${groupId}/members/${userId}`),
+
+  getOUs: () =>
+    api.get('/api/ous'),
+
+  createOU: (data: any) =>
+    api.post('/api/ous', data),
+
+  updateOU: (id: string, data: any) =>
+    api.put(`/api/ous/${id}`, data),
+
+  deleteOU: (id: string) =>
+    api.delete(`/api/ous/${id}`),
 };
 
 export default api;

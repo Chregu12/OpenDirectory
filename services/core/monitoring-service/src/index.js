@@ -31,6 +31,22 @@ const logger = require('./utils/logger');
 const config = require('./config');
 const EventBus = require('./events/eventBus');
 
+// ── RabbitMQ Event Bus ────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'monitoring-service' });
+async function connectBus() { await _bus.connect(); }
+function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+async function subscribeToEvents(queueName, routingKeys, handler) {
+  await _bus.subscribe(queueName, routingKeys, async (payload, meta) => {
+    await handler(meta.routingKey, payload);
+    meta.ack();
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 class EnterpriseMonitoringService {
   constructor() {
     this.app = express();
@@ -361,7 +377,7 @@ class EnterpriseMonitoringService {
         default:
           ws.send(JSON.stringify({
             type: 'error',
-            message: \`Unknown message type: \${type}\`,
+            message: `Unknown message type: ${type}`,
             requestId,
             timestamp: Date.now()
           }));
@@ -526,6 +542,505 @@ class EnterpriseMonitoringService {
     }, config.costAnalysis.reportInterval);
   }
 
+  // ── Alert API Handlers ────────────────────────────────────────────────────
+
+  async getAlerts(req, res) {
+    try {
+      const { status, severity, service, limit, offset } = req.query;
+      const alerts = await this.alertManager.getAllAlerts({
+        status, severity, service,
+        limit: limit ? parseInt(limit) : 100,
+        offset: offset ? parseInt(offset) : 0,
+      });
+      res.json({ success: true, data: alerts, requestId: req.id });
+    } catch (error) {
+      logger.error('Get alerts error:', error);
+      res.status(500).json({ error: 'Failed to get alerts', requestId: req.id });
+    }
+  }
+
+  async createAlert(req, res) {
+    try {
+      const alert = await this.alertManager.trigger(req.body);
+      res.status(201).json({ success: true, data: alert, requestId: req.id });
+    } catch (error) {
+      logger.error('Create alert error:', error);
+      res.status(500).json({ error: 'Failed to create alert', requestId: req.id });
+    }
+  }
+
+  async getAlert(req, res) {
+    try {
+      const alert = await this.alertManager.getAlertById(req.params.alertId);
+      if (!alert) return res.status(404).json({ error: 'Alert not found', requestId: req.id });
+      res.json({ success: true, data: alert, requestId: req.id });
+    } catch (error) {
+      logger.error('Get alert error:', error);
+      res.status(500).json({ error: 'Failed to get alert', requestId: req.id });
+    }
+  }
+
+  async updateAlert(req, res) {
+    try {
+      const alert = await this.alertManager.updateAlert(req.params.alertId, req.body);
+      if (!alert) return res.status(404).json({ error: 'Alert not found', requestId: req.id });
+      res.json({ success: true, data: alert, requestId: req.id });
+    } catch (error) {
+      logger.error('Update alert error:', error);
+      res.status(500).json({ error: 'Failed to update alert', requestId: req.id });
+    }
+  }
+
+  async deleteAlert(req, res) {
+    try {
+      const deleted = await this.alertManager.deleteAlert(req.params.alertId);
+      if (!deleted) return res.status(404).json({ error: 'Alert not found', requestId: req.id });
+      res.json({ success: true, requestId: req.id });
+    } catch (error) {
+      logger.error('Delete alert error:', error);
+      res.status(500).json({ error: 'Failed to delete alert', requestId: req.id });
+    }
+  }
+
+  async acknowledgeAlert(req, res) {
+    try {
+      const { acknowledgedBy } = req.body;
+      const alert = await this.alertManager.acknowledge(req.params.alertId, acknowledgedBy || 'api');
+      if (!alert) return res.status(404).json({ error: 'Alert not found', requestId: req.id });
+      res.json({ success: true, data: alert, requestId: req.id });
+    } catch (error) {
+      logger.error('Acknowledge alert error:', error);
+      res.status(500).json({ error: 'Failed to acknowledge alert', requestId: req.id });
+    }
+  }
+
+  async bulkAcknowledgeAlerts(req, res) {
+    try {
+      const { alertIds, acknowledgedBy } = req.body;
+      if (!Array.isArray(alertIds)) {
+        return res.status(400).json({ error: 'alertIds must be an array', requestId: req.id });
+      }
+      const results = await this.alertManager.bulkAcknowledge(alertIds, acknowledgedBy || 'api');
+      res.json({ success: true, data: results, count: results.length, requestId: req.id });
+    } catch (error) {
+      logger.error('Bulk acknowledge error:', error);
+      res.status(500).json({ error: 'Failed to bulk acknowledge alerts', requestId: req.id });
+    }
+  }
+
+  // ── Performance API Handlers ──────────────────────────────────────────────
+
+  async getServicePerformance(req, res) {
+    try {
+      const data = await this.performanceMonitor.getServicePerformance();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Service performance error:', error);
+      res.status(500).json({ error: 'Failed to get service performance', requestId: req.id });
+    }
+  }
+
+  async getInfrastructurePerformance(req, res) {
+    try {
+      const data = await this.performanceMonitor.getInfrastructurePerformance();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Infrastructure performance error:', error);
+      res.status(500).json({ error: 'Failed to get infrastructure performance', requestId: req.id });
+    }
+  }
+
+  async getApplicationPerformance(req, res) {
+    try {
+      const data = await this.performanceMonitor.getApplicationPerformance();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Application performance error:', error);
+      res.status(500).json({ error: 'Failed to get application performance', requestId: req.id });
+    }
+  }
+
+  async getPerformanceBottlenecks(req, res) {
+    try {
+      const data = await this.performanceMonitor.getBottlenecks();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Bottlenecks error:', error);
+      res.status(500).json({ error: 'Failed to get performance bottlenecks', requestId: req.id });
+    }
+  }
+
+  // ── Log API Handlers ───────────────────────────────────────────────────────
+
+  async searchLogs(req, res) {
+    try {
+      const { query, level, service, startTs, endTs, limit, offset } = req.query;
+      const results = this.logAggregator.search({
+        query, level, service,
+        startTs: startTs ? parseInt(startTs) : undefined,
+        endTs: endTs ? parseInt(endTs) : undefined,
+        limit: limit ? parseInt(limit) : 100,
+        offset: offset ? parseInt(offset) : 0,
+      });
+      res.json({ success: true, data: results, count: results.length, requestId: req.id });
+    } catch (error) {
+      logger.error('Log search error:', error);
+      res.status(500).json({ error: 'Failed to search logs', requestId: req.id });
+    }
+  }
+
+  async streamLogs(req, res) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    const unsubscribe = this.logAggregator.subscribe((log) => {
+      res.write(`data: ${JSON.stringify(log)}\n\n`);
+    });
+
+    req.on('close', unsubscribe);
+    req.on('error', unsubscribe);
+  }
+
+  async streamLogsSSE(req, res) {
+    return this.streamLogs(req, res);
+  }
+
+  async ingestLogs(req, res) {
+    try {
+      const entries = Array.isArray(req.body) ? req.body : [req.body];
+      const results = this.logAggregator.ingestBatch(entries);
+      res.status(201).json({ success: true, count: results.length, requestId: req.id });
+    } catch (error) {
+      logger.error('Log ingest error:', error);
+      res.status(500).json({ error: 'Failed to ingest logs', requestId: req.id });
+    }
+  }
+
+  async getLogAnalysis(req, res) {
+    try {
+      const analysis = this.logAggregator.getAnalysis();
+      res.json({ success: true, data: analysis, requestId: req.id });
+    } catch (error) {
+      logger.error('Log analysis error:', error);
+      res.status(500).json({ error: 'Failed to get log analysis', requestId: req.id });
+    }
+  }
+
+  // ── Analytics API Handlers ────────────────────────────────────────────────
+
+  async getPredictions(req, res) {
+    try {
+      const data = await this.predictiveAnalytics.getPredictions();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Predictions error:', error);
+      res.status(500).json({ error: 'Failed to get predictions', requestId: req.id });
+    }
+  }
+
+  async getTrends(req, res) {
+    try {
+      const data = await this.predictiveAnalytics.getTrends();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Trends error:', error);
+      res.status(500).json({ error: 'Failed to get trends', requestId: req.id });
+    }
+  }
+
+  async getCapacityPredictions(req, res) {
+    try {
+      const data = await this.predictiveAnalytics.getCapacityPredictions();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Capacity predictions error:', error);
+      res.status(500).json({ error: 'Failed to get capacity predictions', requestId: req.id });
+    }
+  }
+
+  async getAnomalies(req, res) {
+    try {
+      const { limit } = req.query;
+      const data = await this.anomalyDetector.getAnomalies({ limit: limit ? parseInt(limit) : 50 });
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Anomalies error:', error);
+      res.status(500).json({ error: 'Failed to get anomalies', requestId: req.id });
+    }
+  }
+
+  // ── SLA API Handlers ───────────────────────────────────────────────────────
+
+  async getSLAStatus(req, res) {
+    try {
+      const data = await this.slaMonitor.getSLAStatus();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('SLA status error:', error);
+      res.status(500).json({ error: 'Failed to get SLA status', requestId: req.id });
+    }
+  }
+
+  async getSLAReports(req, res) {
+    try {
+      const { period } = req.query;
+      const data = await this.slaMonitor.getSLAReports(period || '30d');
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('SLA reports error:', error);
+      res.status(500).json({ error: 'Failed to get SLA reports', requestId: req.id });
+    }
+  }
+
+  async createSLATarget(req, res) {
+    try {
+      const target = this.slaMonitor.createTarget(req.body);
+      res.status(201).json({ success: true, data: target, requestId: req.id });
+    } catch (error) {
+      logger.error('Create SLA target error:', error);
+      res.status(500).json({ error: 'Failed to create SLA target', requestId: req.id });
+    }
+  }
+
+  async updateSLATarget(req, res) {
+    try {
+      const target = this.slaMonitor.updateTarget(req.params.targetId, req.body);
+      if (!target) return res.status(404).json({ error: 'SLA target not found', requestId: req.id });
+      res.json({ success: true, data: target, requestId: req.id });
+    } catch (error) {
+      logger.error('Update SLA target error:', error);
+      res.status(500).json({ error: 'Failed to update SLA target', requestId: req.id });
+    }
+  }
+
+  // ── Cost API Handlers ──────────────────────────────────────────────────────
+
+  async getCostAnalysis(req, res) {
+    try {
+      const data = await this.costAnalyzer.getCostAnalysis();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Cost analysis error:', error);
+      res.status(500).json({ error: 'Failed to get cost analysis', requestId: req.id });
+    }
+  }
+
+  async getCostOptimization(req, res) {
+    try {
+      const data = await this.costAnalyzer.getCostOptimization();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Cost optimization error:', error);
+      res.status(500).json({ error: 'Failed to get cost optimization', requestId: req.id });
+    }
+  }
+
+  async getCostTrends(req, res) {
+    try {
+      const { period } = req.query;
+      const data = await this.costAnalyzer.getCostTrends(period || '30d');
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Cost trends error:', error);
+      res.status(500).json({ error: 'Failed to get cost trends', requestId: req.id });
+    }
+  }
+
+  // ── Report API Handlers ────────────────────────────────────────────────────
+
+  async generateReport(req, res) {
+    try {
+      const report = await this.reportGenerator.generate(req.query);
+      res.json({ success: true, data: report, requestId: req.id });
+    } catch (error) {
+      logger.error('Generate report error:', error);
+      res.status(500).json({ error: 'Failed to generate report', requestId: req.id });
+    }
+  }
+
+  async getScheduledReports(req, res) {
+    try {
+      const data = await this.reportGenerator.getScheduled();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Get scheduled reports error:', error);
+      res.status(500).json({ error: 'Failed to get scheduled reports', requestId: req.id });
+    }
+  }
+
+  async scheduleReport(req, res) {
+    try {
+      const schedule = await this.reportGenerator.schedule(req.body);
+      res.status(201).json({ success: true, data: schedule, requestId: req.id });
+    } catch (error) {
+      logger.error('Schedule report error:', error);
+      res.status(500).json({ error: 'Failed to schedule report', requestId: req.id });
+    }
+  }
+
+  async downloadReport(req, res) {
+    try {
+      const report = await this.reportGenerator.getReport(req.params.reportId);
+      if (!report) return res.status(404).json({ error: 'Report not found', requestId: req.id });
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="report-${req.params.reportId}.json"`);
+      res.send(JSON.stringify(report.data, null, 2));
+    } catch (error) {
+      logger.error('Download report error:', error);
+      res.status(500).json({ error: 'Failed to download report', requestId: req.id });
+    }
+  }
+
+  // ── Notification API Handlers ──────────────────────────────────────────────
+
+  async getNotificationChannels(req, res) {
+    try {
+      const channels = this.notificationService.getChannels();
+      res.json({ success: true, data: channels, requestId: req.id });
+    } catch (error) {
+      logger.error('Get notification channels error:', error);
+      res.status(500).json({ error: 'Failed to get notification channels', requestId: req.id });
+    }
+  }
+
+  async createNotificationChannel(req, res) {
+    try {
+      const channel = this.notificationService.createChannel(req.body);
+      res.status(201).json({ success: true, data: channel, requestId: req.id });
+    } catch (error) {
+      logger.error('Create notification channel error:', error);
+      res.status(500).json({ error: 'Failed to create notification channel', requestId: req.id });
+    }
+  }
+
+  async updateNotificationChannel(req, res) {
+    try {
+      const channel = this.notificationService.updateChannel(req.params.channelId, req.body);
+      if (!channel) return res.status(404).json({ error: 'Channel not found', requestId: req.id });
+      res.json({ success: true, data: channel, requestId: req.id });
+    } catch (error) {
+      logger.error('Update notification channel error:', error);
+      res.status(500).json({ error: 'Failed to update notification channel', requestId: req.id });
+    }
+  }
+
+  async testNotification(req, res) {
+    try {
+      const { channelId } = req.body;
+      if (!channelId) return res.status(400).json({ error: 'channelId is required', requestId: req.id });
+      const result = await this.notificationService.testChannel(channelId);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Test notification error:', error);
+      res.status(500).json({ error: 'Failed to test notification', requestId: req.id });
+    }
+  }
+
+  // ── SSE alert stream ───────────────────────────────────────────────────────
+
+  async streamAlerts(req, res) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    // Send initial active alerts
+    try {
+      const alerts = await this.alertManager.getActiveAlerts();
+      res.write(`data: ${JSON.stringify({ type: 'initial', alerts, timestamp: Date.now() })}\n\n`);
+    } catch { /* ignore */ }
+
+    const onAlert = (data) => {
+      res.write(`data: ${JSON.stringify({ ...data, timestamp: Date.now() })}\n\n`);
+    };
+
+    this.eventBus.on('alert:triggered', onAlert);
+    this.eventBus.on('alert:resolved', onAlert);
+
+    req.on('close', () => {
+      this.eventBus.off('alert:triggered', onAlert);
+      this.eventBus.off('alert:resolved', onAlert);
+    });
+  }
+
+  // ── Custom metrics ingest / dashboard ─────────────────────────────────────
+
+  async getCustomMetrics(req, res) {
+    try {
+      const data = await this.metricsCollector.getCustomMetrics(req.query);
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Custom metrics error:', error);
+      res.status(500).json({ error: 'Failed to get custom metrics', requestId: req.id });
+    }
+  }
+
+  async ingestMetrics(req, res) {
+    try {
+      await this.metricsCollector.ingestMetrics(req.body);
+      res.status(201).json({ success: true, requestId: req.id });
+    } catch (error) {
+      logger.error('Metrics ingest error:', error);
+      res.status(500).json({ error: 'Failed to ingest metrics', requestId: req.id });
+    }
+  }
+
+  async getPerformanceDashboard(req, res) {
+    try {
+      const { timeRange = '1h' } = req.query;
+      const data = await this.dashboardService.getPerformanceDashboard(timeRange);
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Performance dashboard error:', error);
+      res.status(500).json({ error: 'Failed to get performance dashboard', requestId: req.id });
+    }
+  }
+
+  async getSecurityDashboard(req, res) {
+    try {
+      const { timeRange = '1h' } = req.query;
+      const data = await this.dashboardService.getSecurityDashboard(timeRange);
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Security dashboard error:', error);
+      res.status(500).json({ error: 'Failed to get security dashboard', requestId: req.id });
+    }
+  }
+
+  async getInfrastructureDashboard(req, res) {
+    try {
+      const { timeRange = '1h' } = req.query;
+      const data = await this.dashboardService.getInfrastructureDashboard(timeRange);
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Infrastructure dashboard error:', error);
+      res.status(500).json({ error: 'Failed to get infrastructure dashboard', requestId: req.id });
+    }
+  }
+
+  async getCustomDashboard(req, res) {
+    try {
+      const data = await this.dashboardService.getCustomDashboard(req.params.dashboardId);
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Custom dashboard error:', error);
+      res.status(500).json({ error: 'Failed to get custom dashboard', requestId: req.id });
+    }
+  }
+
+  handleUnsubscription(ws, subscription) {
+    ws.subscriptions.delete(subscription);
+    const connection = this.activeConnections.get(ws.id);
+    if (connection) connection.subscriptions.delete(subscription);
+  }
+
+  // ── Original API Handlers ─────────────────────────────────────────────────
   // API Handlers
   async getDashboardOverview(req, res) {
     try {
@@ -619,11 +1134,11 @@ class EnterpriseMonitoringService {
     const sendMetrics = async () => {
       try {
         const metrics = await this.dashboardService.getRealTimeMetrics();
-        res.write(\`data: \${JSON.stringify({
+        res.write(`data: ${JSON.stringify({
           type: 'metrics',
           data: metrics,
           timestamp: Date.now()
-        })}\\n\\n\`);
+        })}\\n\\n`);
       } catch (error) {
         logger.error('SSE metrics stream error:', error);
       }
@@ -662,7 +1177,7 @@ class EnterpriseMonitoringService {
     });
     
     if (count > 0) {
-      logger.debug(\`Broadcast sent to \${count} subscribers\`, { subscription });
+      logger.debug(`Broadcast sent to ${count} subscribers`, { subscription });
     }
   }
 
@@ -686,13 +1201,47 @@ class EnterpriseMonitoringService {
   }
 
   start(port = process.env.PORT || 3009) {
+    // Connect to RabbitMQ event bus (fire and forget)
+    connectBus();
+
+    setTimeout(async () => {
+      await subscribeToEvents('monitoring.events', [
+        'device.non_compliant',
+        'app.install.failed',
+        'system.backup.failed',
+        'system.backup.completed',
+        'compliance.failed',
+        'policy.violated',
+        'identity.login.failed',
+        'admin.#',
+      ], async (routingKey, payload) => {
+        try {
+          const alertData = {
+            id: require('crypto').randomUUID(),
+            title: `Event: ${routingKey}`,
+            message: JSON.stringify(payload),
+            severity: routingKey.includes('failed') ? 'critical' : 'warning',
+            source: payload._source || 'message-bus',
+            status: 'active',
+            created_at: new Date().toISOString(),
+          };
+          if (typeof global.__od_activeAlerts === 'undefined') global.__od_activeAlerts = [];
+          global.__od_activeAlerts.unshift(alertData);
+          if (global.__od_activeAlerts.length > 200) global.__od_activeAlerts.length = 200;
+        } catch (e) {
+          logger.warn('monitoring event handler error:', e.message);
+        }
+      });
+    }, 3000);
+
     this.server.listen(port, () => {
-      logger.info(\`📊 Enterprise Monitoring Service started on port \${port}\`);
-      logger.info(\`🔍 Health check: http://localhost:\${port}/health\`);
-      logger.info(\`📈 Metrics: http://localhost:\${port}/metrics\`);
-      logger.info(\`🔌 WebSocket: ws://localhost:\${port}/ws/monitoring\`);
-      logger.info(\`📺 Features: Real-time Dashboards, Predictive Analytics, SLA Monitoring\`);
-      logger.info(\`🚨 Alerts: Anomaly Detection, Performance Monitoring, Cost Analysis\`);
+      publishEvent('admin.service.health', { service: 'monitoring', status: 'healthy', timestamp: new Date().toISOString() });
+      logger.info(`📊 Enterprise Monitoring Service started on port ${port}`);
+      logger.info(`🔍 Health check: http://localhost:${port}/health`);
+      logger.info(`📈 Metrics: http://localhost:${port}/metrics`);
+      logger.info(`🔌 WebSocket: ws://localhost:${port}/ws/monitoring`);
+      logger.info(`📺 Features: Real-time Dashboards, Predictive Analytics, SLA Monitoring`);
+      logger.info(`🚨 Alerts: Anomaly Detection, Performance Monitoring, Cost Analysis`);
     });
   }
 

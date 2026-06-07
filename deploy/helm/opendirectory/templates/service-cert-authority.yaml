@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: certificate-authority
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cert-authority
+spec:
+  type: {{ .Values.certAuthority.service.type }}
+  ports:
+    - port: {{ .Values.certAuthority.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "opendirectory.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: cert-authority

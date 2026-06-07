@@ -1,0 +1,649 @@
+# Default values for OpenDirectory Helm chart.
+# Override with values.prod.yaml for production deployments.
+
+# ─── Global ───────────────────────────────────────────────────────────────────
+global:
+  image:
+    registry: ghcr.io/opendirectory
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
+
+# ─── Namespace ────────────────────────────────────────────────────────────────
+namespace:
+  create: true
+  name: opendirectory
+
+# ─── API Gateway ──────────────────────────────────────────────────────────────
+apiGateway:
+  replicaCount: 2
+  image:
+    name: api-gateway
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3000
+    grpcPort: 50051
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  env:
+    NODE_ENV: production
+
+# ─── Authentication Service ───────────────────────────────────────────────────
+auth:
+  replicaCount: 2
+  image:
+    name: authentication-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3001
+    grpcPort: 50051
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Identity Service ─────────────────────────────────────────────────────────
+identity:
+  replicaCount: 2
+  image:
+    name: identity-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3002
+    grpcPort: 50051
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Device Service ───────────────────────────────────────────────────────────
+device:
+  replicaCount: 1
+  image:
+    name: device-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3003
+    grpcPort: 50051
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Policy Service ───────────────────────────────────────────────────────────
+policy:
+  replicaCount: 1
+  image:
+    name: policy-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3004
+    grpcPort: 50051
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+
+# ─── Monitoring Service ───────────────────────────────────────────────────────
+monitoring:
+  replicaCount: 1
+  image:
+    name: monitoring-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3005
+    grpcPort: 50051
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── MDM Service ─────────────────────────────────────────────────────────────
+mdm:
+  replicaCount: 1
+  image:
+    name: apple-mdm
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3006
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+
+# ─── Backup Service ───────────────────────────────────────────────────────────
+backup:
+  replicaCount: 1
+  image:
+    name: backup-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3011
+    grpcPort: 50051
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+
+# ─── Notification Service ────────────────────────────────────────────────────
+notification:
+  replicaCount: 1
+  image:
+    name: notification-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3020
+    grpcPort: 50051
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+# ─── App Store ───────────────────────────────────────────────────────────────
+appStore:
+  replicaCount: 1
+  image:
+    name: app-store
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3906
+    grpcPort: 50051
+  persistence:
+    enabled: true
+    size: "20Gi"
+    storageClass: ""
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Certificate Authority ───────────────────────────────────────────────────
+certAuthority:
+  replicaCount: 1
+  image:
+    name: certificate-authority
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3010
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Certificate Network ──────────────────────────────────────────────────────
+certNetwork:
+  replicaCount: 1
+  image:
+    name: certificate-network
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3011
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Configuration Service ────────────────────────────────────────────────────
+configuration:
+  replicaCount: 1
+  image:
+    name: configuration-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3012
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Enterprise Directory ─────────────────────────────────────────────────────
+enterpriseDirectory:
+  replicaCount: 1
+  image:
+    name: enterprise-directory
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3008
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── License Management ───────────────────────────────────────────────────────
+licenseManagement:
+  replicaCount: 1
+  image:
+    name: license-management
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3013
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Network Infrastructure ───────────────────────────────────────────────────
+networkInfra:
+  replicaCount: 1
+  image:
+    name: network-infrastructure
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3014
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── OAuth Provider ───────────────────────────────────────────────────────────
+oauth:
+  replicaCount: 1
+  image:
+    name: oauth-provider
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3015
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Printer Service ──────────────────────────────────────────────────────────
+printer:
+  replicaCount: 1
+  image:
+    name: printer-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3016
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Remote Control ───────────────────────────────────────────────────────────
+remoteControl:
+  replicaCount: 1
+  image:
+    name: remote-control
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3017
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Update Management ────────────────────────────────────────────────────────
+updateManagement:
+  replicaCount: 1
+  image:
+    name: update-management
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3018
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Conditional Access ───────────────────────────────────────────────────────
+conditionalAccess:
+  replicaCount: 1
+  image:
+    name: conditional-access
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3007
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Antivirus Protection ─────────────────────────────────────────────────────
+antivirus:
+  replicaCount: 1
+  image:
+    name: antivirus-protection
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3020
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Audit Service ────────────────────────────────────────────────────────────
+auditService:
+  replicaCount: 1
+  image:
+    name: audit-service
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3021
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Auto Remediation ─────────────────────────────────────────────────────────
+autoRemediation:
+  replicaCount: 1
+  image:
+    name: auto-remediation
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3022
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Compliance Engine ────────────────────────────────────────────────────────
+complianceEngine:
+  replicaCount: 1
+  image:
+    name: compliance-engine
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3023
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Device Lifecycle ─────────────────────────────────────────────────────────
+deviceLifecycle:
+  replicaCount: 1
+  image:
+    name: device-lifecycle
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3024
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Mobile Management ────────────────────────────────────────────────────────
+mobileMgmt:
+  replicaCount: 1
+  image:
+    name: mobile-management
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3025
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Policy Simulator ─────────────────────────────────────────────────────────
+policySimulator:
+  replicaCount: 1
+  image:
+    name: policy-simulator
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3026
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── Security Scanner ─────────────────────────────────────────────────────────
+securityScanner:
+  replicaCount: 1
+  image:
+    name: security-scanner
+  service:
+    type: ClusterIP
+    port: 80
+    appPort: 3027
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ─── RabbitMQ ─────────────────────────────────────────────────────────────────
+rabbitmq:
+  enabled: true
+  storageSize: "5Gi"
+  auth:
+    username: opendirectory
+    password: changeme  # override in production
+
+# ─── Event Bus ───────────────────────────────────────────────────────────────
+eventBus:
+  transport: rabbitmq        # rabbitmq | grpc | memory — overrideable per-env
+  grpcAddress: "event-bus:50050"
+  grpcServerPort: 50050
+  exchange: "opendirectory.events"
+  prefetch: 10
+  reconnectDelayMs: 2000
+  replicaCount: 1
+  backendTransport: rabbitmq
+  image:
+    name: event-bus-service
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+# ─── Ingress ──────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  hostname: opendirectory.local
+  tls:
+    enabled: false
+    secretName: opendirectory-tls
+  annotations: {}
+
+# ─── PostgreSQL ───────────────────────────────────────────────────────────────
+postgresql:
+  enabled: true
+  image: postgres:15-alpine
+  database: opendirectory
+  username: opendirectory
+  storageSize: "10Gi"
+  storageClass: ""
+  service:
+    port: 5432
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+# ─── Persistence ─────────────────────────────────────────────────────────────
+persistence:
+  enabled: true
+  storageClass: ""
+  backupStorageSize: "50Gi"
+
+# ─── Autoscaling ─────────────────────────────────────────────────────────────
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# ─── Pod Disruption Budget ───────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ─── Network Policies ────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+
+# ─── RBAC ─────────────────────────────────────────────────────────────────────
+rbac:
+  create: true
+  serviceAccount:
+    create: true
+    name: ""
+
+# ─── Monitoring / Prometheus ─────────────────────────────────────────────────
+prometheusAnnotations:
+  enabled: true
+  path: /metrics
+  port: "metrics"
+  scrape: "true"
+
+# ─── Pod Security / Affinity ─────────────────────────────────────────────────
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+
+# Prefer spreading pods across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - opendirectory
+          topologyKey: kubernetes.io/hostname

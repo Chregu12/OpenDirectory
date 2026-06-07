@@ -10,11 +10,25 @@ const winston = require('winston');
 const WebSocket = require('ws');
 const http = require('http');
 const promClient = require('prom-client');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 
 const CatalogManager = require('./catalog/catalogManager');
 const ClientDetector = require('./detection/clientDetector');
 const DistributionEngine = require('./distribution/distributionEngine');
 const AssignmentEngine = require('./assignment/assignmentEngine');
+
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'app-store' });
+async function connectBus() { await _bus.connect(); }
+function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
 
 // --- Logger ---
 const logger = winston.createLogger({
@@ -32,7 +46,7 @@ const PORT = parseInt(process.env.PORT, 10) || 3906;
 const DB_CONFIG = {
   host: process.env.DB_HOST || 'postgres',
   port: parseInt(process.env.DB_PORT, 10) || 5432,
-  database: process.env.DB_NAME || 'opendirectory',
+  database: process.env.DB_NAME || 'app_store',
   user: process.env.DB_USER || 'opendirectory',
   password: process.env.DB_PASSWORD || 'opendirectory',
   max: 20,
@@ -70,7 +84,7 @@ pool.on('error', (err) => {
 // Service instances
 const catalogManager = new CatalogManager(pool);
 const clientDetector = new ClientDetector(pool);
-const distributionEngine = new DistributionEngine(pool, wss);
+const distributionEngine = new DistributionEngine(pool, wss, publishEvent);
 const assignmentEngine = new AssignmentEngine(pool, distributionEngine);
 
 // --- Middleware ---
@@ -301,6 +315,7 @@ app.post('/api/store/install', async (req, res) => {
     }
     const userId = req.headers['x-user-id'] || req.body.userId || null;
     const result = await distributionEngine.requestInstall(appId, deviceId, userId);
+    publishEvent('app.install.requested', { appId, deviceId, requestedBy: userId });
     res.status(202).json(result);
   } catch (error) {
     logger.error('Failed to request install', { error: error.message });
@@ -349,6 +364,11 @@ app.put('/api/store/install/:installId/status', async (req, res) => {
     const result = await distributionEngine.updateInstallStatus(
       req.params.installId, status, progress, error
     );
+    if (status === 'completed' || status === 'installed') {
+      publishEvent('app.install.completed', { installId: req.params.installId, progress });
+    } else if (status === 'failed' || status === 'error') {
+      publishEvent('app.install.failed', { installId: req.params.installId, error });
+    }
     res.json(result);
   } catch (error) {
     logger.error('Failed to update install status', { error: error.message });
@@ -510,6 +530,527 @@ app.post('/api/store/shares/:shareId/scan', async (req, res) => {
 });
 
 // ========================================================================
+// /api/appstore — Simplified deployment-oriented API (port-compatible)
+// ========================================================================
+
+const { v4: uuidv4 } = require('uuid');
+
+const DEMO_APPS = [
+  { id: 'slack', name: 'Slack', vendor: 'Salesforce', version: '4.35.131', category: 'Kommunikation', size: '180MB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'per_user', description: 'Team communication and collaboration platform', icon_url: null },
+  { id: 'zoom', name: 'Zoom', vendor: 'Zoom Video', version: '5.17.0', category: 'Kommunikation', size: '95MB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'per_user', description: 'Video conferencing and virtual meetings', icon_url: null },
+  { id: 'chrome', name: 'Google Chrome', vendor: 'Google', version: '122.0.6261', category: 'Browser', size: '280MB', platforms: ['macOS', 'Windows'], license_type: 'free', description: 'Fast and secure web browser by Google', icon_url: null },
+  { id: 'firefox', name: 'Mozilla Firefox', vendor: 'Mozilla', version: '124.0', category: 'Browser', size: '220MB', platforms: ['macOS', 'Windows'], license_type: 'free', description: 'Open-source web browser focused on privacy', icon_url: null },
+  { id: 'vscode', name: 'Visual Studio Code', vendor: 'Microsoft', version: '1.87.0', category: 'Entwicklung', size: '340MB', platforms: ['macOS', 'Windows'], license_type: 'free', description: 'Lightweight but powerful source code editor', icon_url: null },
+  { id: 'office365', name: 'Microsoft 365', vendor: 'Microsoft', version: '16.83', category: 'Produktivität', size: '4.2GB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'subscription', description: 'Microsoft Office suite with cloud services', icon_url: null },
+  { id: '1password', name: '1Password', vendor: '1Password', version: '8.10.28', category: 'Sicherheit', size: '120MB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'per_user', description: 'Password manager and secure digital wallet', icon_url: null },
+  { id: 'jamf-connect', name: 'Jamf Connect', vendor: 'Jamf', version: '2.35.0', category: 'Sicherheit', size: '45MB', platforms: ['macOS'], license_type: 'per_device', description: 'macOS identity management with cloud IdP', icon_url: null },
+];
+
+// In-memory stores (with optional DB persistence)
+const inMemoryCatalog = new Map(DEMO_APPS.map(a => [a.id, {
+  ...a,
+  supported_platforms: a.platforms,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  version_history: [{ version: a.version, released_at: new Date().toISOString(), notes: 'Initial version' }],
+}]));
+const inMemoryDeployments = new Map();
+const inMemoryDeploymentStatus = new Map(); // deploymentId -> [{ device_id, status, installed_at, error }]
+
+// Helper: ensure DB tables exist, fall back gracefully
+async function ensureAppstoreTables() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS app_catalog (
+        id VARCHAR(100) PRIMARY KEY,
+        metadata JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS app_deployments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        app_id VARCHAR(100),
+        targets JSONB,
+        status VARCHAR(50) DEFAULT 'pending',
+        mandatory BOOLEAN DEFAULT false,
+        deadline TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        created_by VARCHAR(255)
+      );
+      CREATE TABLE IF NOT EXISTS deployment_status (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        deployment_id UUID REFERENCES app_deployments(id),
+        device_id VARCHAR(255),
+        status VARCHAR(50) DEFAULT 'pending',
+        installed_at TIMESTAMPTZ,
+        error TEXT
+      );
+    `);
+  } catch (err) {
+    logger.warn('appstore tables setup warning', { error: err.message });
+  }
+}
+
+// GET /api/appstore/apps
+app.get('/api/appstore/apps', async (req, res) => {
+  try {
+    const { category, platform, search } = req.query;
+    let apps = Array.from(inMemoryCatalog.values());
+    if (category) apps = apps.filter(a => a.category === category);
+    if (platform) apps = apps.filter(a => (a.supported_platforms || a.platforms || []).includes(platform));
+    if (search) {
+      const s = search.toLowerCase();
+      apps = apps.filter(a => a.name.toLowerCase().includes(s) || (a.description || '').toLowerCase().includes(s) || a.vendor.toLowerCase().includes(s));
+    }
+    res.json({ apps, total: apps.length });
+  } catch (err) {
+    logger.error('GET /api/appstore/apps error', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/appstore/apps/:id
+app.get('/api/appstore/apps/:id', async (req, res) => {
+  try {
+    const app = inMemoryCatalog.get(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    res.json(app);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/appstore/apps — publish new app (admin only)
+app.post('/api/appstore/apps', async (req, res) => {
+  try {
+    const { id, name, vendor, version, category, size, platforms, license_type, description, icon_url, supported_platforms } = req.body;
+    if (!id || !name || !version) return res.status(400).json({ error: 'id, name and version are required' });
+    const entry = {
+      id, name, vendor: vendor || '', version, category: category || 'Allgemein',
+      size: size || null, platforms: supported_platforms || platforms || [],
+      supported_platforms: supported_platforms || platforms || [],
+      license_type: license_type || 'free', description: description || '', icon_url: icon_url || null,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      version_history: [{ version, released_at: new Date().toISOString(), notes: 'Initial publish' }],
+    };
+    inMemoryCatalog.set(id, entry);
+    try {
+      await pool.query(
+        'INSERT INTO app_catalog (id, metadata) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET metadata = $2',
+        [id, JSON.stringify(entry)]
+      );
+    } catch (_) { /* DB optional */ }
+    publishEvent('app.published', { appId: id, name, version, category: category || 'Allgemein', vendor: vendor || '' });
+    res.status(201).json(entry);
+  } catch (err) {
+    logger.error('POST /api/appstore/apps error', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/appstore/apps/:id — update app metadata
+app.put('/api/appstore/apps/:id', async (req, res) => {
+  try {
+    const existing = inMemoryCatalog.get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'App not found' });
+    const updated = { ...existing, ...req.body, id: req.params.id, updated_at: new Date().toISOString() };
+    if (req.body.version && req.body.version !== existing.version) {
+      updated.version_history = [...(existing.version_history || []), {
+        version: req.body.version, released_at: new Date().toISOString(), notes: req.body.release_notes || ''
+      }];
+    }
+    inMemoryCatalog.set(req.params.id, updated);
+    try {
+      await pool.query(
+        'INSERT INTO app_catalog (id, metadata) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET metadata = $2',
+        [req.params.id, JSON.stringify(updated)]
+      );
+    } catch (_) { /* DB optional */ }
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/appstore/apps/:id/deploy
+app.post('/api/appstore/apps/:id/deploy', async (req, res) => {
+  try {
+    const appEntry = inMemoryCatalog.get(req.params.id);
+    if (!appEntry) return res.status(404).json({ error: 'App not found' });
+    const { targets, version, mandatory, deadline } = req.body;
+    if (!targets || !Array.isArray(targets) || targets.length === 0) {
+      return res.status(400).json({ error: 'targets array is required' });
+    }
+    const deploymentId = uuidv4();
+    const deployment = {
+      id: deploymentId, app_id: req.params.id, app_name: appEntry.name,
+      targets, version: version || appEntry.version,
+      mandatory: mandatory || false, deadline: deadline || null,
+      status: 'pending', created_at: new Date().toISOString(),
+      completed_at: null,
+      created_by: req.headers['x-user-id'] || req.body.created_by || 'admin',
+    };
+    inMemoryDeployments.set(deploymentId, deployment);
+    publishEvent('app.install.requested', { appId: req.params.id, targets, mandatory: mandatory || false, deploymentId });
+    // Initialize per-device status records
+    const deviceStatuses = targets.map(t => ({
+      id: uuidv4(), deployment_id: deploymentId,
+      device_id: t.id || t.name || String(t),
+      target_type: t.type || 'device', status: 'pending',
+      installed_at: null, error: null,
+    }));
+    inMemoryDeploymentStatus.set(deploymentId, deviceStatuses);
+
+    try {
+      await pool.query(
+        `INSERT INTO app_deployments (id, app_id, targets, status, mandatory, deadline, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [deploymentId, req.params.id, JSON.stringify(targets), 'pending', mandatory || false, deadline || null, deployment.created_by]
+      );
+      for (const ds of deviceStatuses) {
+        await pool.query(
+          `INSERT INTO deployment_status (id, deployment_id, device_id, status) VALUES ($1, $2, $3, $4)`,
+          [ds.id, deploymentId, ds.device_id, 'pending']
+        );
+      }
+    } catch (_) { /* DB optional */ }
+
+    res.status(201).json({ deploymentId, deployment });
+  } catch (err) {
+    logger.error('POST /api/appstore/apps/:id/deploy error', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/appstore/deployments
+app.get('/api/appstore/deployments', async (req, res) => {
+  try {
+    const { app_id, status } = req.query;
+    let deployments = Array.from(inMemoryDeployments.values());
+    if (app_id) deployments = deployments.filter(d => d.app_id === app_id);
+    if (status) deployments = deployments.filter(d => d.status === status);
+    // Enrich with progress
+    const enriched = deployments.map(d => {
+      const statuses = inMemoryDeploymentStatus.get(d.id) || [];
+      const total = statuses.length;
+      const installed = statuses.filter(s => s.status === 'installed').length;
+      const failed = statuses.filter(s => s.status === 'failed').length;
+      return { ...d, progress: { total, installed, failed, pending: total - installed - failed } };
+    });
+    res.json({ deployments: enriched, total: enriched.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/appstore/deployments/:id
+app.get('/api/appstore/deployments/:id', async (req, res) => {
+  try {
+    const deployment = inMemoryDeployments.get(req.params.id);
+    if (!deployment) return res.status(404).json({ error: 'Deployment not found' });
+    const statuses = inMemoryDeploymentStatus.get(req.params.id) || [];
+    res.json({ ...deployment, device_statuses: statuses });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/appstore/deployments/:id/cancel
+app.put('/api/appstore/deployments/:id/cancel', async (req, res) => {
+  try {
+    const deployment = inMemoryDeployments.get(req.params.id);
+    if (!deployment) return res.status(404).json({ error: 'Deployment not found' });
+    if (deployment.status === 'completed') {
+      return res.status(409).json({ error: 'Cannot cancel a completed deployment' });
+    }
+    const updated = { ...deployment, status: 'cancelled', completed_at: new Date().toISOString() };
+    inMemoryDeployments.set(req.params.id, updated);
+    // Update pending device statuses to cancelled
+    const statuses = inMemoryDeploymentStatus.get(req.params.id) || [];
+    const updatedStatuses = statuses.map(s => s.status === 'pending' ? { ...s, status: 'cancelled' } : s);
+    inMemoryDeploymentStatus.set(req.params.id, updatedStatuses);
+    try {
+      await pool.query("UPDATE app_deployments SET status = 'cancelled', completed_at = NOW() WHERE id = $1", [req.params.id]);
+    } catch (_) { /* DB optional */ }
+    res.json({ message: 'Deployment cancelled', deployment: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================================================
+// Multi-Platform Package Distribution
+// ========================================================================
+
+const PACKAGES_DIR = process.env.PACKAGES_DIR || path.join(__dirname, '../../../data/packages');
+fs.mkdirSync(PACKAGES_DIR, { recursive: true });
+
+// Platform detection from file extension
+const PLATFORM_MAP = {
+  '.exe': 'windows', '.msi': 'windows', '.msix': 'windows',
+  '.dmg': 'macos',   '.pkg': 'macos',
+  '.deb': 'linux',   '.rpm': 'linux',   '.appimage': 'linux',
+  '.tar.gz': 'linux', '.tar.xz': 'linux',
+};
+const PLATFORM_ICONS = { windows: '🪟', macos: '🍎', linux: '🐧' };
+
+function detectPlatform(filename) {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.tar.gz') || lower.endsWith('.tar.xz')) return 'linux';
+  return PLATFORM_MAP[path.extname(lower)] || 'unknown';
+}
+
+function detectFormat(filename) {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.tar.gz'))  return 'tar.gz';
+  if (lower.endsWith('.tar.xz'))  return 'tar.xz';
+  return path.extname(lower).replace('.', '').toLowerCase();
+}
+
+// Multer storage — files go to PACKAGES_DIR/<appId>/<uuid>-<original>
+const packageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(PACKAGES_DIR, req.params.id || 'unknown');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const uniquePrefix = crypto.randomUUID().split('-')[0];
+    cb(null, `${uniquePrefix}-${file.originalname.replace(/[^a-zA-Z0-9._\-]/g, '_')}`);
+  },
+});
+
+const ALLOWED_EXTS = new Set(['.exe','.msi','.msix','.dmg','.pkg','.deb','.rpm','.appimage','.gz','.xz','.zip']);
+const packageUpload = multer({
+  storage: packageStorage,
+  limits: { fileSize: 4 * 1024 * 1024 * 1024 }, // 4 GB
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname.toLowerCase());
+    if (ALLOWED_EXTS.has(ext) || file.originalname.toLowerCase().endsWith('.tar.gz') || file.originalname.toLowerCase().endsWith('.tar.xz')) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Dateityp nicht erlaubt: ${ext}`));
+    }
+  },
+});
+
+// Compute SHA-256 of a file path
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', d => hash.update(d));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+// In-memory package store (fallback when DB unavailable)
+const inMemoryPackages = new Map(); // packageId → package object
+
+async function ensurePackagesTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS app_packages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        app_id VARCHAR(100) NOT NULL,
+        platform VARCHAR(20) NOT NULL,
+        format VARCHAR(20) NOT NULL,
+        version VARCHAR(100) NOT NULL,
+        filename VARCHAR(500) NOT NULL,
+        filepath TEXT NOT NULL,
+        size_bytes BIGINT,
+        sha256 VARCHAR(64),
+        architecture VARCHAR(20) DEFAULT 'x64',
+        release_notes TEXT,
+        uploaded_by VARCHAR(255),
+        uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+        download_count INTEGER DEFAULT 0,
+        active BOOLEAN DEFAULT true
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_app_packages_app_id ON app_packages(app_id)`);
+  } catch (_) { /* DB optional */ }
+}
+
+// GET /api/appstore/apps/:id/packages — list packages for an app
+app.get('/api/appstore/apps/:id/packages', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let packages = [];
+    try {
+      const result = await pool.query(
+        'SELECT * FROM app_packages WHERE app_id=$1 AND active=true ORDER BY uploaded_at DESC',
+        [id]
+      );
+      packages = result.rows;
+    } catch (_) {
+      packages = [...inMemoryPackages.values()].filter(p => p.app_id === id && p.active);
+    }
+    res.json(packages);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/appstore/apps/:id/packages — upload a package file
+app.post('/api/appstore/apps/:id/packages', packageUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+    const { id } = req.params;
+    const { version = '1.0.0', architecture = 'x64', release_notes = '' } = req.body;
+
+    const platform = detectPlatform(req.file.originalname);
+    const format   = detectFormat(req.file.originalname);
+    const sha256   = await sha256File(req.file.path);
+    const uploadedBy = req.headers['x-user-id'] || 'admin';
+
+    const pkg = {
+      id: crypto.randomUUID(),
+      app_id: id,
+      platform,
+      format,
+      version,
+      filename: req.file.originalname,
+      filepath: req.file.path,
+      size_bytes: req.file.size,
+      sha256,
+      architecture,
+      release_notes,
+      uploaded_by: uploadedBy,
+      uploaded_at: new Date().toISOString(),
+      download_count: 0,
+      active: true,
+    };
+
+    try {
+      const row = await pool.query(
+        `INSERT INTO app_packages
+           (id, app_id, platform, format, version, filename, filepath, size_bytes, sha256, architecture, release_notes, uploaded_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        [pkg.id, pkg.app_id, pkg.platform, pkg.format, pkg.version, pkg.filename,
+         pkg.filepath, pkg.size_bytes, pkg.sha256, pkg.architecture, pkg.release_notes, pkg.uploaded_by]
+      );
+      inMemoryPackages.set(pkg.id, row.rows[0]);
+    } catch (_) {
+      inMemoryPackages.set(pkg.id, pkg);
+    }
+
+    logger.info('Package uploaded', { appId: id, platform, format, version, size: req.file.size });
+    publishEvent('app.package.uploaded', { appId: id, packageId: pkg.id, platform, format, version, size: req.file.size });
+    res.status(201).json(pkg);
+  } catch (err) {
+    // Clean up uploaded file on error
+    if (req.file?.path) try { fs.unlinkSync(req.file.path); } catch (_) {}
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/appstore/packages/:packageId/download — stream file to client
+app.get('/api/appstore/packages/:packageId/download', async (req, res) => {
+  try {
+    const { packageId } = req.params;
+    let pkg = inMemoryPackages.get(packageId);
+    if (!pkg) {
+      try {
+        const result = await pool.query('SELECT * FROM app_packages WHERE id=$1 AND active=true', [packageId]);
+        if (result.rows.length) pkg = result.rows[0];
+      } catch (_) {}
+    }
+    if (!pkg) return res.status(404).json({ error: 'Paket nicht gefunden' });
+    if (!fs.existsSync(pkg.filepath)) return res.status(404).json({ error: 'Datei nicht vorhanden' });
+
+    // Increment download counter
+    try {
+      await pool.query('UPDATE app_packages SET download_count = download_count + 1 WHERE id=$1', [packageId]);
+    } catch (_) {
+      if (inMemoryPackages.has(packageId)) {
+        inMemoryPackages.get(packageId).download_count++;
+      }
+    }
+
+    const stat = fs.statSync(pkg.filepath);
+    res.setHeader('Content-Disposition', `attachment; filename="${pkg.filename}"`);
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('X-SHA256', pkg.sha256 || '');
+    res.setHeader('X-Platform', pkg.platform);
+    res.setHeader('X-Version', pkg.version);
+    // Disable helmet's content-type sniffing for binary downloads
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    const mimeMap = {
+      exe: 'application/vnd.microsoft.portable-executable',
+      msi: 'application/x-msi',
+      msix: 'application/msix',
+      dmg: 'application/x-apple-diskimage',
+      pkg: 'application/x-newton-compatible-pkg',
+      deb: 'application/vnd.debian.binary-package',
+      rpm: 'application/x-rpm',
+      appimage: 'application/x-executable',
+      gz: 'application/gzip',
+      xz: 'application/x-xz',
+      zip: 'application/zip',
+    };
+    res.setHeader('Content-Type', mimeMap[pkg.format] || 'application/octet-stream');
+
+    const readStream = fs.createReadStream(pkg.filepath);
+    readStream.pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/appstore/packages/:packageId — soft-delete a package
+app.delete('/api/appstore/packages/:packageId', async (req, res) => {
+  try {
+    const { packageId } = req.params;
+    let pkg = inMemoryPackages.get(packageId);
+    if (!pkg) {
+      try {
+        const r = await pool.query('SELECT * FROM app_packages WHERE id=$1', [packageId]);
+        if (r.rows.length) pkg = r.rows[0];
+      } catch (_) {}
+    }
+    if (!pkg) return res.status(404).json({ error: 'Paket nicht gefunden' });
+
+    try {
+      await pool.query('UPDATE app_packages SET active=false WHERE id=$1', [packageId]);
+    } catch (_) {}
+    if (inMemoryPackages.has(packageId)) {
+      inMemoryPackages.get(packageId).active = false;
+    }
+    res.json({ message: 'Paket gelöscht' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/appstore/apps/:id/packages/summary — per-platform availability summary
+app.get('/api/appstore/apps/:id/packages/summary', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let packages = [];
+    try {
+      const result = await pool.query(
+        'SELECT platform, format, version, id, sha256, size_bytes, download_count, uploaded_at FROM app_packages WHERE app_id=$1 AND active=true ORDER BY uploaded_at DESC',
+        [id]
+      );
+      packages = result.rows;
+    } catch (_) {
+      packages = [...inMemoryPackages.values()].filter(p => p.app_id === id && p.active);
+    }
+
+    const summary = { windows: null, macos: null, linux: null };
+    for (const p of packages) {
+      if (!summary[p.platform]) summary[p.platform] = p;
+    }
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================================================
 // Startup
 // ========================================================================
 
@@ -539,8 +1080,12 @@ async function start() {
     // Run migrations
     await runMigrations();
 
-    // Initialize messaging
-    await distributionEngine.initializeMessaging();
+    // Ensure appstore tables exist
+    await ensureAppstoreTables();
+    await ensurePackagesTable();
+
+    // Connect to event bus (fire and forget)
+    connectBus().catch(() => {});
 
     // Start HTTP server
     server.listen(PORT, '0.0.0.0', () => {

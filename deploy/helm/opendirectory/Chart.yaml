@@ -1,0 +1,16 @@
+apiVersion: v2
+name: opendirectory
+description: "OpenDirectory - Enterprise Identity & Device Management"
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - identity
+  - ldap
+  - mdm
+  - device-management
+  - enterprise
+home: https://github.com/OpenDirectory/opendirectory
+maintainers:
+  - name: OpenDirectory Team
+    email: team@opendirectory.io

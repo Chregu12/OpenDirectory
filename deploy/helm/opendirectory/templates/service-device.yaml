@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-device
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: device
+spec:
+  type: {{ .Values.device.service.type }}
+  ports:
+    - port: {{ .Values.device.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - name: grpc
+      port: {{ .Values.device.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+  selector:
+    {{- include "opendirectory.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: device

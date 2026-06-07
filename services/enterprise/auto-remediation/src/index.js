@@ -69,6 +69,16 @@ if (process.env.NODE_ENV !== 'production') {
     }));
 }
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'auto-remediation' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ====================================================================== //
 //  Import services
 // ====================================================================== //
@@ -332,6 +342,12 @@ class AutoRemediationService extends EventEmitter {
                     return res.status(202).json(result);
                 }
 
+                publish('remediation.started', { issueId: req.params.issueId, executedBy: value.executedBy || 'api-user' });
+                if (result.status === 'completed' || result.success === true) {
+                    publish('remediation.completed', { issueId: req.params.issueId, result: result.status });
+                } else if (result.status === 'failed') {
+                    publish('remediation.failed', { issueId: req.params.issueId, error: result.error });
+                }
                 res.json(result);
             } catch (err) {
                 if (err.message.includes('not found')) {
@@ -455,6 +471,7 @@ class AutoRemediationService extends EventEmitter {
                     }
                 );
 
+                publish('remediation.started', { issueIds: value.issueIds, executedBy: value.executedBy || 'api-user', bulk: true });
                 res.json(result);
             } catch (err) {
                 next(err);
@@ -518,6 +535,24 @@ class AutoRemediationService extends EventEmitter {
     async start() {
         const port = parseInt(process.env.PORT, 10) || 3904;
         const host = process.env.HOST || '0.0.0.0';
+
+        // Connect to event bus and subscribe to trigger events
+        connectBus().then(async () => {
+            try {
+                await _bus.subscribe('auto-remediation-triggers',
+                    ['compliance.violation.detected', 'device.non_compliant'],
+                    async (payload, { routingKey }) => {
+                        logger.info(`Received trigger event: ${routingKey}`, { deviceId: payload.deviceId });
+                        publish('remediation.started', { trigger: routingKey, deviceId: payload.deviceId });
+                    }
+                );
+                logger.info('Auto-remediation subscribed to trigger events');
+            } catch (err) {
+                logger.warn(`EventBusClient subscribe failed (non-critical): ${err.message}`);
+            }
+        }).catch((err) => {
+            logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+        });
 
         return new Promise((resolve, reject) => {
             this.server = this.app.listen(port, host, () => {

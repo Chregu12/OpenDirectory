@@ -1,0 +1,313 @@
+# OpenDirectory — Event Bus Routing Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# transport: rabbitmq | grpc | memory
+# Override per-environment with EVENT_BUS_TRANSPORT env var.
+# ─────────────────────────────────────────────────────────────────────────────
+
+event_bus:
+  transport: rabbitmq          # default transport
+  grpc_address: event-bus:50050
+  grpc_server_port: 50050
+  rabbitmq_url: amqp://opendirectory:changeme@rabbitmq:5672/
+  exchange: opendirectory.events
+  prefetch: 10
+  reconnect_delay_ms: 2000
+
+services:
+  api-gateway:
+    publishes:
+      - api.request
+
+  authentication-service:
+    publishes:
+      - identity.login.success
+      - identity.login.failed
+      - identity.user.created
+      - identity.user.deleted
+      - identity.token.issued
+      - security.pim.granted
+      - security.pim.revoked
+      - security.mfa.enabled
+      - security.mfa.disabled
+    subscribes: []
+
+  device-service:
+    publishes:
+      - device.enrolled
+      - device.compliant
+      - device.non_compliant
+      - device.retired
+      - device.seen
+      - device.install.job.created
+      - device.install.job.completed
+      - device.install.job.failed
+    subscribes:
+      - policy.created
+      - policy.updated
+      - policy.applied
+      - ad.computer.joined
+      - ad.computer.unjoined
+
+  policy-service:
+    publishes:
+      - policy.created
+      - policy.updated
+      - policy.applied
+      - policy.violated
+      - device.compliance.recheck
+    subscribes:
+      - device.enrolled
+      - device.non_compliant
+
+  monitoring-service:
+    publishes:
+      - monitoring.alert.critical
+      - monitoring.alert.warning
+    subscribes:
+      - device.non_compliant
+      - policy.violated
+      - system.backup.failed
+      - system.backup.completed
+      - identity.login.failed
+      - admin.#
+      - ad.replication.failed
+      - ad.replication.recovered
+
+  notification-service:
+    publishes:
+      - notification.sent
+      - notification.failed
+    subscribes:
+      - notification.send
+      - monitoring.alert.*
+      - notification.alert.critical
+      - security.elevation.#
+      - security.breakglass.#
+      - directory.object.deleted
+      - ad.replication.failed
+      - ad.replication.recovered
+      - ad.trust.created
+      - ad.trust.removed
+
+  identity-service:
+    publishes:
+      - identity.user.created
+      - identity.user.deleted
+      - identity.group.created
+
+  license-management:
+    publishes:
+      - license.assigned
+      - license.revoked
+      - license.expired
+    subscribes:
+      - identity.user.created
+      - identity.user.deleted
+
+  backup-service:
+    publishes:
+      - system.backup.started
+      - system.backup.completed
+      - system.backup.failed
+
+  oauth-provider:
+    publishes:
+      - identity.token.issued
+      - identity.token.revoked
+      - identity.client.registered
+
+  update-management:
+    publishes:
+      - update.deployed
+      - update.failed
+      - update.ring.changed
+
+  apple-mdm:
+    publishes:
+      - mdm.device.enrolled
+      - mdm.command.sent
+      - mdm.profile.pushed
+
+  network-infrastructure:
+    publishes:
+      - network.dns.updated
+      - network.vlan.created
+      - network.dhcp.lease.issued
+
+  certificate-authority:
+    publishes:
+      - certificate.issued
+      - certificate.revoked
+
+  certificate-network:
+    publishes:
+      - network.profile.deployed
+      - network.profile.revoked
+
+  printer-service:
+    publishes:
+      - printer.job.created
+      - printer.job.completed
+      - printer.offline
+
+  remote-control:
+    publishes:
+      - remote.session.started
+      - remote.session.ended
+
+  configuration-service:
+    publishes:
+      - config.updated
+      - config.deleted
+
+  enterprise-directory:
+    publishes:
+      - identity.user.created
+      - identity.user.updated
+      - identity.user.deleted
+      - identity.group.created
+      - identity.group.updated
+      - identity.group.deleted
+      - directory.object.created
+      - directory.object.modified
+      - directory.object.deleted
+      - directory.object.moved
+      - directory.group.member.added
+      - directory.group.member.removed
+      - directory.gpo.applied
+      - directory.gpo.modified
+
+  conditional-access:
+    publishes:
+      - security.elevation.requested
+      - security.elevation.approved
+      - security.elevation.denied
+      - security.elevation.expired
+      - security.elevation.revoked
+      - security.breakglass.activated
+      - security.breakglass.terminated
+    subscribes: []
+
+  kerberos-kdc:
+    publishes:
+      - kerberos.ticket.issued
+      - kerberos.ticket.renewed
+      - kerberos.delegation.granted
+      - kerberos.delegation.denied
+      - kerberos.principal.created
+      - kerberos.principal.deleted
+    subscribes: []
+
+  samba-ad-dc:
+    publishes:
+      - ad.trust.created
+      - ad.trust.removed
+      - ad.trust.verified
+      - ad.computer.joined
+      - ad.computer.unjoined
+      - ad.replication.failed
+      - ad.replication.recovered
+      - ad.laps.password.retrieved
+      - ad.laps.password.rotated
+      - ad.bitlocker.key.retrieved
+    subscribes: []
+
+  antivirus-protection:
+    publishes:
+      - security.scan.completed
+      - security.threat.detected
+    subscribes: []
+
+  app-store:
+    publishes:
+      - app.published
+      - app.install.requested
+      - app.install.completed
+      - app.install.failed
+      - app.package.uploaded
+    subscribes: []
+
+  audit-service:
+    publishes:
+      - audit.event.logged
+      - notification.alert.critical
+    subscribes:
+      - policy.#
+      - device.#
+      - identity.#
+      - app.#
+      - security.#
+      - compliance.#
+      - admin.#
+      - system.#
+      - directory.#
+      - kerberos.#
+      - ad.#
+
+  auto-remediation:
+    publishes:
+      - remediation.started
+      - remediation.completed
+      - remediation.failed
+    subscribes:
+      - compliance.violation.detected
+      - device.non_compliant
+
+  compliance-engine:
+    publishes:
+      - compliance.check.passed
+      - compliance.check.failed
+      - compliance.violation.detected
+    subscribes:
+      - device.enrolled
+      - device.seen
+      - policy.created
+      - compliance.evaluation.*
+      - security.elevation.approved
+      - security.breakglass.activated
+      - directory.object.modified
+      - directory.group.member.added
+      - directory.group.member.removed
+      - directory.gpo.applied
+      - kerberos.delegation.granted
+      - ad.trust.created
+      - ad.trust.removed
+
+  device-lifecycle:
+    publishes:
+      - device.lifecycle.onboarded
+      - device.lifecycle.retired
+    subscribes:
+      - device.enrolled
+      - device.retired
+
+  mobile-management:
+    publishes:
+      - mdm.app.installed
+      - mdm.policy.applied
+    subscribes: []
+
+  policy-simulator:
+    publishes:
+      - policy.simulation.completed
+    subscribes: []
+
+  security-scanner:
+    publishes:
+      - security.scan.started
+      - security.scan.completed
+      - security.vulnerability.found
+    subscribes:
+      - security.breakglass.activated
+      - ad.trust.created
+      - ad.trust.removed
+
+  sync-service:
+    publishes: []
+    subscribes:
+      - directory.object.created
+      - directory.object.modified
+      - directory.object.deleted
+      - directory.object.moved
+      - directory.group.member.added
+      - directory.group.member.removed
