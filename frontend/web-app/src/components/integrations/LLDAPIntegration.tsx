@@ -14,6 +14,9 @@ import {
   DocumentArrowUpIcon,
   ArrowPathIcon,
   SparklesIcon,
+  ExclamationTriangleIcon,
+  ArrowRightOnRectangleIcon,
+  CheckIcon,
 } from '@heroicons/react/24/outline';
 import { lldapApi, api, formatError } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -514,6 +517,170 @@ function GroupModal({ group, allUsers, onClose, onSuccess }: {
   );
 }
 
+// ─── Offboard Modal ────────────────────────────────────────────────────────────
+
+interface OffboardStep {
+  step: string;
+  status: 'success' | 'failed' | 'skipped';
+  detail?: string;
+}
+
+interface OffboardResult {
+  success: boolean;
+  steps?: OffboardStep[];
+  error?: string;
+}
+
+function OffboardModal({ user, onClose, onSuccess }: {
+  user: User;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [transferFilesTo, setTransferFilesTo] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<OffboardResult | null>(null);
+
+  const handleConfirm = async () => {
+    setSubmitting(true);
+    try {
+      const res = await api.post(`/api/quick/users/${user.id}/offboard`, {
+        transferFilesTo: transferFilesTo.trim() || undefined,
+        revokeTokens: true,
+      });
+      const data = res.data;
+      setResult({
+        success: true,
+        steps: data.steps || data.data?.steps || [],
+      });
+      onSuccess();
+    } catch (err: any) {
+      setResult({
+        success: false,
+        error: formatError(err),
+        steps: err.response?.data?.steps,
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const stepStatusIcon = (status: OffboardStep['status']) => {
+    if (status === 'success') return <CheckIcon className="w-4 h-4 text-green-600" />;
+    if (status === 'failed') return <XMarkIcon className="w-4 h-4 text-red-500" />;
+    return <span className="w-4 h-4 text-gray-400 text-xs flex items-center justify-center">—</span>;
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={result ? onClose : onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <ArrowRightOnRectangleIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">Offboard Employee</h2>
+                <p className="text-xs text-gray-500">{user.displayName} ({user.email})</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
+
+          {!result ? (
+            <>
+              {/* Warning */}
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex gap-2">
+                <ExclamationTriangleIcon className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700">
+                  This will <strong>disable the account</strong>, revoke all sessions, transfer files, and remove group memberships.
+                </p>
+              </div>
+
+              {/* Transfer files to */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Transfer files to: <span className="text-gray-400 font-normal">(optional — username or email)</span>
+                </label>
+                <input
+                  type="text"
+                  value={transferFilesTo}
+                  onChange={e => setTransferFilesTo(e.target.value)}
+                  placeholder="e.g. jane.doe or jane@example.com"
+                  className={inputCls}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirm}
+                  disabled={submitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50"
+                >
+                  {submitting ? 'Offboarding…' : 'Confirm Offboard'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Result */}
+              <div className={`rounded-lg p-3 flex gap-2 ${result.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                {result.success
+                  ? <CheckIcon className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  : <ExclamationTriangleIcon className="w-5 h-5 text-red-500 flex-shrink-0" />}
+                <p className={`text-sm font-medium ${result.success ? 'text-green-800' : 'text-red-700'}`}>
+                  {result.success
+                    ? `${user.displayName} has been offboarded successfully.`
+                    : `Offboarding failed: ${result.error}`}
+                </p>
+              </div>
+
+              {result.steps && result.steps.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Steps completed</p>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    {result.steps.map((s, i) => (
+                      <div key={i} className="flex items-start gap-2 px-3 py-2 border-b border-gray-100 last:border-0">
+                        <span className="flex-shrink-0 mt-0.5">{stepStatusIcon(s.status)}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-800">{s.step}</p>
+                          {s.detail && <p className="text-xs text-gray-400">{s.detail}</p>}
+                        </div>
+                        <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                          s.status === 'success' ? 'bg-green-100 text-green-700' :
+                          s.status === 'failed' ? 'bg-red-100 text-red-600' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>{s.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                >
+                  Close
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 type Tab = 'users' | 'groups' | 'stats';
@@ -535,6 +702,7 @@ export default function LLDAPIntegration() {
   const [showImport, setShowImport] = useState(false);
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [editGroup, setEditGroup] = useState<Group | undefined>();
+  const [offboardUser, setOffboardUser] = useState<User | undefined>();
 
   useEffect(() => { fetchData(); }, []);
 
@@ -779,6 +947,13 @@ export default function LLDAPIntegration() {
                               : <NoSymbolIcon className="w-4 h-4" />}
                           </button>
                           <button
+                            onClick={() => setOffboardUser(user)}
+                            title="Offboard employee"
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <ArrowRightOnRectangleIcon className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => handleDeleteUser(user)}
                             title="Delete user"
                             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -913,6 +1088,13 @@ export default function LLDAPIntegration() {
         />
       )}
       {showWizard && <UserManagementWizard onClose={() => setShowWizard(false)} />}
+      {offboardUser && (
+        <OffboardModal
+          user={offboardUser}
+          onClose={() => setOffboardUser(undefined)}
+          onSuccess={fetchData}
+        />
+      )}
     </div>
   );
 }
