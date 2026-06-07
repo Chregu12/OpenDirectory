@@ -237,15 +237,91 @@ class RemoteActionService {
     logger.info('Device isolated', { deviceId, actionId, reason });
   }
 
+  // ─── WinRM execution ──────────────────────────────────────────────────────
+
+  /**
+   * Execute a command on a Windows device via WS-Management (WinRM).
+   *
+   * Constructs a minimal WS-Management SOAP envelope and POSTs it to the
+   * device's WinRM HTTP listener on port 5985.  Times out after 30 seconds.
+   *
+   * @param {{ hostname: string }} device
+   * @param {string} command  Shell command to execute
+   * @returns {{ stdout: string, stderr: string, exitCode: number }}
+   */
+  async _executeWinRM(device, command) {
+    const endpoint = `http://${device.hostname}:5985/wsman`;
+
+    const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope
+  xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+  xmlns:wsman="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd"
+  xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing">
+  <s:Header>
+    <wsa:To>${endpoint}</wsa:To>
+    <wsa:Action>http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Command</wsa:Action>
+    <wsa:MessageID>uuid:${this._generateActionId('winrm')}</wsa:MessageID>
+    <wsa:ReplyTo>
+      <wsa:Address>http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous</wsa:Address>
+    </wsa:ReplyTo>
+    <wsman:ResourceURI>http://schemas.microsoft.com/wbem/wsman/1/windows/shell/cmd</wsman:ResourceURI>
+    <wsman:OperationTimeout>PT30S</wsman:OperationTimeout>
+  </s:Header>
+  <s:Body>
+    <rsp:CommandLine xmlns:rsp="http://schemas.microsoft.com/wbem/wsman/1/windows/shell">
+      <rsp:Command>${command.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</rsp:Command>
+    </rsp:CommandLine>
+  </s:Body>
+</s:Envelope>`;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+      let response;
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/soap+xml; charset=UTF-8' },
+          body: soapEnvelope,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      const responseText = await response.text();
+      return { stdout: responseText, stderr: '', exitCode: 0 };
+    } catch (error) {
+      logger.warn(`WinRM execution failed for ${device.hostname}: ${error.message}`);
+      return { stdout: '', stderr: error.message, exitCode: 1 };
+    }
+  }
+
+
   // ─── Generic remote execute ────────────────────────────────────────────────
 
   async executeAction(deviceId, action, payload = {}) {
     const device = await this._requireDevice(deviceId);
     const actionId = this._generateActionId('cmd');
 
+    // For Windows devices with a known hostname, attempt WinRM first.
+    let winrmResult = null;
+    if (device.platform === 'windows' && device.hostname) {
+      const command = payload.command || action;
+      winrmResult = await this._executeWinRM(device, command);
+      if (winrmResult.exitCode === 0) {
+        await this._recordAction(actionId, deviceId, action, 'completed', { payload, winrm: winrmResult });
+        this.eventBus.emit('device.action', { deviceId, action, actionId, payload });
+        return { actionId, deviceId, action, status: 'completed', winrm: winrmResult };
+      }
+      // WinRM failed — fall through to WebSocket / MDM agent path
+      logger.warn(`WinRM failed for device ${deviceId}, falling back to agent path`);
+    }
+
     this._tryWsPush(deviceId, { type: 'command', command_type: action, data: payload });
     const mdmPush = await this._tryMdmPush(action, deviceId, payload);
-    await this._recordAction(actionId, deviceId, action, 'sent', { payload, mdmPush });
+    await this._recordAction(actionId, deviceId, action, 'sent', { payload, mdmPush, winrm: winrmResult });
 
     this.eventBus.emit('device.action', { deviceId, action, actionId, payload });
     return { actionId, deviceId, action, status: 'sent', mdmPush };
