@@ -38,6 +38,7 @@ import SSPRView from '@/components/views/SSPRView';
 import ConditionalAccessView from '@/components/views/ConditionalAccessView';
 import AlertingView from '@/components/views/AlertingView';
 import CertificatesView from '@/components/views/CertificatesView';
+import LDAPSchemaBrowserView from '@/components/views/LDAPSchemaBrowserView';
 import RadiusView from '@/components/views/RadiusView';
 import ServiceHealthView from '@/components/views/ServiceHealthView';
 import ThreatDashboardView from '@/components/views/ThreatDashboardView';
@@ -77,6 +78,7 @@ const VALID_VIEWS = new Set([
   'antivirus', 'audit', 'backup', 'appstore', 'compliance', 'scanner',
   'blueprints', 'sync', 'integrations', 'roadmap', 'pim', 'licenses',
   'mfa', 'sspr', 'conditionalaccess', 'alerting', 'certificates', 'radius', 'servicehealth',
+  'ldap-schema',
   // ABM-style 3-column views
   'fleet', 'serviceprincipals',
   // Advanced infrastructure views
@@ -218,6 +220,7 @@ export default function ViewPage() {
         case 'conditionalaccess': return <ConditionalAccessView />;
         case 'alerting':          return <AlertingView />;
         case 'certificates':      return <CertificatesView />;
+        case 'ldap-schema':       return <LDAPSchemaBrowserView />;
         case 'radius':            return <RadiusView />;
         case 'servicehealth':     return <ServiceHealthView />;
         case 'trusts':            return <TrustManagementView />;

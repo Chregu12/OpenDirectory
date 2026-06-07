@@ -50,6 +50,7 @@ export const NAV_ITEMS: NavEntry[] = [
   { id: 'compliance',        label: 'Compliance',          icon: '✅' },
   { id: 'conditionalaccess', label: 'Conditional Access',  icon: '🔐' },
   { id: 'certificates',      label: 'Certificates / PKI',  icon: '📜' },
+  { id: 'ldap-schema',       label: 'LDAP Schema',         icon: '🗄' },
   { id: 'scanner',           label: 'Security Scanner',    icon: '🔍' },
   { id: 'security',          label: 'Security',            icon: '🛡' },
   { id: 'threats',           label: 'Threats',             icon: '🐛' },

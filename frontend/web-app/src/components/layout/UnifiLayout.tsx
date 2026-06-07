@@ -34,6 +34,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'sspr',              name: 'Password Reset',      view: 'sspr',              type: 'page' },
   { id: 'conditionalaccess', name: 'Conditional Access',  view: 'conditionalaccess', type: 'page' },
   { id: 'certificates',      name: 'Certificates / PKI',  view: 'certificates',      type: 'page' },
+  { id: 'ldap-schema',       name: 'LDAP Schema Browser', view: 'ldap-schema',       type: 'page' },
   { id: 'radius',            name: 'RADIUS / 802.1X',     view: 'radius',            type: 'page' },
   { id: 'servicehealth',     name: 'Service Health',      view: 'servicehealth',     type: 'page' },
   { id: 'alerting',          name: 'Alerts',              view: 'alerting',          type: 'page' },
