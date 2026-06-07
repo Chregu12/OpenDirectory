@@ -32,6 +32,9 @@ const authMiddleware = require('./middleware/auth');
 const auditMiddleware = require('./middleware/audit');
 const rateLimitMiddleware = require('./middleware/rateLimit');
 
+// Import database pool
+const db = require('./db');
+
 // Import configuration
 const config = require('./config');
 
@@ -60,8 +63,8 @@ class ConditionalAccessService {
         this.emergencyAccessService = new EmergencyAccessService();
         this.auditLogger = new AuditLogger();
 
-        // Session recorder (no DB pool by default; will use in-memory fallback)
-        this.sessionRecorder = new SessionRecorder(null);
+        // Session recorder — pass the real DB pool so sessions are persisted
+        this.sessionRecorder = new SessionRecorder(db);
 
         // PIM service — wire in event bus publisher and session recorder
         this.pimService = new PIMService({
@@ -410,7 +413,15 @@ class ConditionalAccessService {
     startBackgroundServices() {
         this.deviceComplianceEngine.startContinuousMonitoring();
         this.edrIntegration.startThreatMonitoring();
+<<<<<<< HEAD
         this.pimService.startSessionMonitoring();
+=======
+        
+        // Start PIM session monitoring
+        this.pimService.startPeriodicSessionMonitoring();
+        
+        // Start audit log processing
+>>>>>>> 26df081 (fix: wire PasswordPolicyEnforcer into auth flows and connect SessionRecorder DB pool)
         this.auditLogger.startLogProcessing();
         this.logger.info('Background services started');
     }

@@ -72,6 +72,7 @@ async function recordPasswordHash(userId, plaintextPassword) {
   } catch {}
 }
 
+const PasswordPolicyEnforcer = require('./policies/PasswordPolicyEnforcer');
 const AuthenticationManager = require('./services/authenticationManager');
 const TokenService = require('./services/tokenService');
 const MFAService = require('./services/mfaService');
@@ -123,7 +124,8 @@ class UnifiedAuthenticationService {
     this.sessionManager = new SessionManager();
     this.userService = new UserService();
     this.auditService = new AuditService();
-    
+    this.passwordPolicyEnforcer = new PasswordPolicyEnforcer(auditDb);
+
     this.initializeMiddleware();
     this.initializePassport();
     this.initializeRoutes();
@@ -596,6 +598,15 @@ class UnifiedAuthenticationService {
         });
       }
       
+      // Enforce password policy (use domain-wide policy; no userId yet at registration)
+      const policyResult = await this.passwordPolicyEnforcer.validatePassword(null, password);
+      if (!policyResult.valid) {
+        return res.status(400).json({
+          error: 'Password does not meet policy requirements',
+          violations: policyResult.errors
+        });
+      }
+
       // Check if user exists
       const existingUser = await this.userService.getUserByUsername(username);
       if (existingUser) {
@@ -603,7 +614,7 @@ class UnifiedAuthenticationService {
           error: 'User already exists'
         });
       }
-      
+
       // Create user
       const user = await this.userService.createUser({
         username,
@@ -940,6 +951,15 @@ class UnifiedAuthenticationService {
 
       if (!validPassword) {
         return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      // Enforce password policy on the new password
+      const policyResult = await this.passwordPolicyEnforcer.validatePassword(userId, newPassword);
+      if (!policyResult.valid) {
+        return res.status(400).json({
+          error: 'New password does not meet policy requirements',
+          violations: policyResult.errors
+        });
       }
 
       const historyOk = await checkPasswordHistory(userId, newPassword);
