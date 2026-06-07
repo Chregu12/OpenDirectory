@@ -2,9 +2,13 @@
  * PIM Session Recorder
  * Persistent recording and replay of privileged sessions using PostgreSQL.
  * Falls back to in-memory storage when no db pool is provided (test/dev mode).
+ *
+ * Sensitive activity details (commands, keystrokes, etc.) are encrypted at rest
+ * using AES-256-GCM via the shared fieldEncryption utility.
  */
 
 const crypto = require('crypto');
+const { encrypt, decrypt } = require('../crypto/fieldEncryption');
 
 class SessionRecorder {
     /**
@@ -50,12 +54,17 @@ class SessionRecorder {
 
     /**
      * Append a single activity entry to an existing session record.
+     * The `details` field is encrypted before persistence to protect sensitive
+     * data such as commands, keystrokes, or file paths captured during the session.
+     *
      * @param {string} sessionRecordId
      * @param {{ activityType: string, details: object, riskScore: number, timestamp?: Date }} activity
      */
     async recordActivity(sessionRecordId, { activityType, details, riskScore, timestamp }) {
         const ts = timestamp || new Date();
-        const entry = { activityType, details, riskScore, timestamp: ts };
+        // Encrypt the details payload before storing to protect sensitive session data.
+        const encryptedDetails = encrypt(JSON.stringify(details));
+        const entry = { activityType, details: encryptedDetails, riskScore, timestamp: ts };
 
         if (this.db) {
             // Append to JSONB array and update rolling risk score
@@ -78,6 +87,25 @@ class SessionRecorder {
         // Recalculate rolling average risk score
         const total = record.activities.reduce((s, a) => s + (a.riskScore || 0), 0);
         record.totalRiskScore = Math.min(1.0, total / record.activities.length);
+    }
+
+    /**
+     * Decrypt the `details` field of an activity entry.
+     * Used internally when returning activities to callers.
+     * @param {object} activity - Raw activity entry from storage
+     * @returns {object} Activity with `details` decrypted and parsed back to an object
+     */
+    _decryptActivity(activity) {
+        if (!activity || activity.details === null || activity.details === undefined) {
+            return activity;
+        }
+        try {
+            const decryptedStr = decrypt(activity.details);
+            return { ...activity, details: decryptedStr ? JSON.parse(decryptedStr) : null };
+        } catch {
+            // If decryption or parsing fails return the raw value rather than crashing.
+            return activity;
+        }
     }
 
     /**
@@ -104,6 +132,7 @@ class SessionRecorder {
 
     /**
      * Retrieve a full session record including all activities.
+     * Activity `details` fields are decrypted before being returned.
      * @returns {Promise<object>}
      */
     async getSessionRecord(sessionRecordId) {
@@ -117,10 +146,17 @@ class SessionRecorder {
                 [sessionRecordId]
             );
             if (!result.rows.length) return null;
-            return result.rows[0];
+            const row = result.rows[0];
+            row.activities = (row.activities || []).map(a => this._decryptActivity(a));
+            return row;
         }
 
-        return this._records.get(sessionRecordId) || null;
+        const record = this._records.get(sessionRecordId);
+        if (!record) return null;
+        return {
+            ...record,
+            activities: (record.activities || []).map(a => this._decryptActivity(a))
+        };
     }
 
     /**

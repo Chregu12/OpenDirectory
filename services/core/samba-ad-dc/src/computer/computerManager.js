@@ -3,6 +3,7 @@
 const ldap = require('ldapjs');
 const crypto = require('crypto');
 const winston = require('winston');
+const { encrypt, decrypt } = require('../crypto/fieldEncryption');
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -218,8 +219,8 @@ class ComputerManager {
   /**
    * Store a LAPS (Local Administrator Password Solution) password.
    *
-   * The password is encrypted at rest using AES-256-GCM with the key
-   * derived from LAPS_ENCRYPTION_KEY env var (or a fallback for dev).
+   * The password is encrypted at rest using AES-256-GCM via the shared
+   * fieldEncryption utility (key from ENCRYPTION_KEY env var).
    *
    * Also writes ms-Mcs-AdmPwd to the computer's LDAP object when possible.
    *
@@ -234,7 +235,7 @@ class ComputerManager {
     if (!password) throw new Error('password is required');
 
     const expiry = expiresAt ? new Date(expiresAt) : new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const encrypted = this._encryptSecret(password);
+    const encrypted = encrypt(password);
 
     // Persist to DB
     if (this.db) {
@@ -303,7 +304,7 @@ class ComputerManager {
           [computerName.toUpperCase()]
         );
         if (rows.length > 0) {
-          password = this._decryptSecret(rows[0].encrypted_password);
+          password = decrypt(rows[0].encrypted_password);
           expiresAt = rows[0].expires_at;
         }
 
@@ -408,7 +409,7 @@ class ComputerManager {
     if (!recoveryKeyId) throw new Error('recoveryKeyId is required');
     if (!recoveryKey) throw new Error('recoveryKey is required');
 
-    const encrypted = this._encryptSecret(recoveryKey);
+    const encrypted = encrypt(recoveryKey);
 
     if (this.db) {
       try {
@@ -461,7 +462,7 @@ class ComputerManager {
         );
         if (rows.length > 0) {
           keyRecord = rows[0];
-          recoveryKey = this._decryptSecret(keyRecord.encrypted_recovery_key);
+          recoveryKey = decrypt(keyRecord.encrypted_recovery_key);
         }
 
         // Log access
@@ -646,36 +647,6 @@ class ComputerManager {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+';
     const bytes = crypto.randomBytes(length);
     return Array.from(bytes).map(b => chars[b % chars.length]).join('');
-  }
-
-  _getEncryptionKey() {
-    const keyHex = process.env.LAPS_ENCRYPTION_KEY || '0'.repeat(64); // 32-byte zero key (dev only)
-    return Buffer.from(keyHex.slice(0, 64), 'hex');
-  }
-
-  _encryptSecret(plaintext) {
-    const key = this._getEncryptionKey();
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    return Buffer.concat([iv, tag, encrypted]).toString('base64');
-  }
-
-  _decryptSecret(ciphertext) {
-    try {
-      const key = this._getEncryptionKey();
-      const buf = Buffer.from(ciphertext, 'base64');
-      const iv = buf.slice(0, 12);
-      const tag = buf.slice(12, 28);
-      const encrypted = buf.slice(28);
-      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-      decipher.setAuthTag(tag);
-      return decipher.update(encrypted) + decipher.final('utf8');
-    } catch (err) {
-      logger.warn('Failed to decrypt secret', { error: err.message });
-      return null;
-    }
   }
 
   /**
