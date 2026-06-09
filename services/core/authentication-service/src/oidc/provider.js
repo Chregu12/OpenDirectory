@@ -1,6 +1,6 @@
 'use strict';
 
-const { Provider } = require('node-oidc-provider');
+const { Provider } = require('oidc-provider');
 
 const configuration = {
   clients: [
@@ -86,6 +86,16 @@ const configuration = {
     revocation: { enabled: true },
     introspection: { enabled: true },
     rpInitiatedLogout: { enabled: true },
+    // Resource Indicators are required in v9 to issue JWT access tokens
+    resourceIndicators: {
+      enabled: true,
+      defaultResource: () => 'urn:opendirectory:api',
+      getResourceServerInfo: () => ({
+        scope: 'openid profile email roles groups offline_access',
+        accessTokenFormat: 'jwt',
+      }),
+      useGrantedResource: () => true,
+    },
   },
 
   cookies: {
@@ -132,7 +142,7 @@ async function getJWKS() {
   }
 
   // 4. Generate a new RSA-256 key pair
-  const { privateKey } = await generateKeyPair('RS256', { modulusLength: 2048 });
+  const { privateKey } = await generateKeyPair('RS256', { modulusLength: 2048, extractable: true });
   const jwk = await exportJWK(privateKey);
   jwk.kid = 'oidc-signing-key-1';
   jwk.use = 'sig';
