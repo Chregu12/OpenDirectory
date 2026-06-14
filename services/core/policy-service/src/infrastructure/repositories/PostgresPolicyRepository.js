@@ -1,6 +1,7 @@
 'use strict';
 
 const PolicyAggregate = require('../../domain/PolicyAggregate');
+const IPolicyRepository = require('../../domain/repositories/IPolicyRepository');
 
 /**
  * PostgresPolicyRepository — infrastructure implementation of the policy
@@ -9,11 +10,12 @@ const PolicyAggregate = require('../../domain/PolicyAggregate');
  * Returns PolicyAggregate instances so callers always work with domain objects
  * rather than raw DB rows.
  */
-class PostgresPolicyRepository {
+class PostgresPolicyRepository extends IPolicyRepository {
   /**
    * @param {object} db - the postgres db module (exposes db.query)
    */
   constructor(db) {
+    super();
     this._db = db;
   }
 
