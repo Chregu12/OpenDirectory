@@ -1,6 +1,7 @@
 'use strict';
 
 const { call } = require('../utils/serviceClient');
+const { publish } = require('../utils/eventPublisher');
 
 // ─── in-memory deployment tracker ────────────────────────────────────────────
 // For a production deployment this would be a persistent store (Postgres, Redis, etc.).
@@ -205,6 +206,9 @@ async function deployPolicy({ policyId, targetType, targetId, enforced = true, d
   deployments.set(deploymentId, record);
 
   const failed = completedSteps.filter(s => !s.ok);
+
+  await publish('policy.deployed', { policyId, deploymentId: record.deploymentId, _source: 'quick-actions' });
+
   return {
     success: failed.length === 0,
     deployed: true,
@@ -313,6 +317,9 @@ async function rollbackPolicy(deploymentId) {
   ).catch(() => {});
 
   const failed = completedSteps.filter(s => !s.ok);
+
+  await publish('policy.rolledback', { deploymentId, _source: 'quick-actions' });
+
   return {
     success: failed.length === 0,
     deploymentId,

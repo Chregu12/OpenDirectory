@@ -268,6 +268,8 @@ app.use((err, _req, res, _next) => {
 
 // ── Start ──────────────────────────────────────────────────────────────────────
 
+const { connect: connectEventBus } = require('./utils/eventPublisher');
+
 app.listen(PORT, () => {
   console.log(`[quick-actions] Service started on port ${PORT}`);
   console.log(`[quick-actions] Routes available:`);
@@ -288,6 +290,7 @@ app.listen(PORT, () => {
   console.log('  GET    /api/quick/compliance/snapshot');
   console.log('  GET    /api/quick/status');
   console.log('  GET    /health');
+  connectEventBus().catch(() => {});
 });
 
 module.exports = app;

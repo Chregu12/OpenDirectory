@@ -1,6 +1,7 @@
 'use strict';
 
 jest.mock('../utils/serviceClient.js');
+jest.mock('../utils/eventPublisher', () => ({ publish: jest.fn(), connect: jest.fn() }));
 
 const { call } = require('../utils/serviceClient.js');
 
@@ -8,6 +9,7 @@ const { call } = require('../utils/serviceClient.js');
 function freshOrchestrator() {
   jest.resetModules();
   jest.mock('../utils/serviceClient.js');
+  jest.mock('../utils/eventPublisher', () => ({ publish: jest.fn(), connect: jest.fn() }));
   const { call: freshCall } = require('../utils/serviceClient.js');
   const orchestrator = require('../orchestrators/policyOrchestrator');
   return { orchestrator, call: freshCall };
