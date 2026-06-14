@@ -37,9 +37,24 @@ class ComplianceSaga {
     this._subscribeOrRetry('compliance.policy-change', ['policy.created', 'policy.updated'], async (payload) => {
       this._log.info(`[ComplianceSaga] Policy changed: ${payload.policyId} — publishing re-evaluation trigger`);
       try {
-        const devices = await this._db.query(
-          "SELECT id, platform FROM devices WHERE status = 'active' LIMIT 1000"
-        );
+        // HTTP-Call an device-service statt direktem Cross-Service-DB-Zugriff auf devices-Tabelle
+        let devices = { rows: [] };
+        try {
+          const deviceServiceUrl = process.env.DEVICE_SERVICE_URL || 'http://device-service';
+          const res = await fetch(`${deviceServiceUrl}/api/devices?status=active&limit=1000`, {
+            headers: { Authorization: `Bearer ${process.env.SERVICE_TOKEN || ''}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            devices = { rows: Array.isArray(data) ? data : (data.devices || []) };
+          }
+        } catch (err) {
+          this._log.warn(`[ComplianceSaga] Could not fetch devices from device-service: ${err.message}`);
+          // Fallback: use event payload if available
+          if (payload && payload.deviceId) {
+            devices = { rows: [{ id: payload.deviceId, platform: payload.platform }] };
+          }
+        }
         for (const device of devices.rows) {
           // Publish re-evaluation event for each device (batched, fire-and-forget)
           if (this._bus.isConnected()) {

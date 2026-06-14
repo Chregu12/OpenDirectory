@@ -51,6 +51,7 @@ const configuration = {
     accountId: id,
     async claims(use, scope) {
       // Lazy-require to avoid circular dependency issues at module load time
+      // TODO: replace with PostgresUserRepository (requires db instance injection)
       let user = null;
       try {
         const db = require('../db');
