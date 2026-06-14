@@ -22,6 +22,7 @@ const { Events }  = require('../../../../packages/service-contracts/src/events')
 
 // PostgreSQL persistence layer
 const db = require('./db');
+const PostgresDeviceRepository = require('./infrastructure/repositories/PostgresDeviceRepository');
 
 // Import enhanced services
 const DeviceManager = require('./services/deviceManager');
@@ -72,6 +73,9 @@ class EnterpriseDeviceManagementService {
     this.eventBus = new EventBus();
     this.metrics = new MetricsCollector();
     this.circuitBreaker = new CircuitBreaker();
+
+    // Device repository (wraps db module, owns all device SQL)
+    this.deviceRepository = new PostgresDeviceRepository(db);
     
     // Initialize services
     this.deviceManager = new DeviceManager(this.db, this.cache, this.eventBus);
@@ -1027,16 +1031,7 @@ class EnterpriseDeviceManagementService {
   async getStammdaten(req, res) {
     try {
       const { deviceId } = req.params;
-      let stammdaten = {};
-      if (db.isAvailable()) {
-        const r = await db.query(
-          `SELECT metadata FROM devices WHERE id = $1`, [deviceId]
-        );
-        if (r.rows.length) stammdaten = r.rows[0].metadata?.stammdaten || {};
-      } else {
-        const d = db.getMemoryDevice ? db.getMemoryDevice(deviceId) : null;
-        stammdaten = d?.metadata?.stammdaten || {};
-      }
+      const stammdaten = await this.deviceRepository.getStammdaten(deviceId);
       res.json({ success: true, data: stammdaten });
     } catch (err) {
       logger.error('getStammdaten error:', err);
@@ -1050,18 +1045,7 @@ class EnterpriseDeviceManagementService {
       const fields = req.body || {};
       // Sanitise: strip photo from this endpoint (use /photo instead)
       delete fields.photo;
-      if (db.isAvailable()) {
-        await db.query(
-          `UPDATE devices
-           SET metadata = jsonb_set(
-             COALESCE(metadata, '{}'),
-             '{stammdaten}',
-             COALESCE(metadata->'stammdaten', '{}') || $1::jsonb
-           )
-           WHERE id = $2`,
-          [JSON.stringify(fields), deviceId]
-        );
-      }
+      await this.deviceRepository.updateStammdaten(deviceId, fields);
       res.json({ success: true });
     } catch (err) {
       logger.error('updateStammdaten error:', err);
@@ -1079,18 +1063,7 @@ class EnterpriseDeviceManagementService {
       if (Buffer.byteLength(photo, 'utf8') > 512 * 1024) {
         return res.status(413).json({ error: 'Photo too large — max 512 KB' });
       }
-      if (db.isAvailable()) {
-        await db.query(
-          `UPDATE devices
-           SET metadata = jsonb_set(
-             COALESCE(metadata, '{}'),
-             '{stammdaten,photo}',
-             $1::jsonb
-           )
-           WHERE id = $2`,
-          [JSON.stringify(photo), deviceId]
-        );
-      }
+      await this.deviceRepository.uploadPhoto(deviceId, photo);
       res.json({ success: true });
     } catch (err) {
       logger.error('uploadPhoto error:', err);
@@ -1101,12 +1074,7 @@ class EnterpriseDeviceManagementService {
   async getPhoto(req, res) {
     try {
       const { deviceId } = req.params;
-      if (!db.isAvailable()) return res.status(404).json({ error: 'No photo' });
-      const r = await db.query(
-        `SELECT metadata->'stammdaten'->>'photo' AS photo FROM devices WHERE id = $1`,
-        [deviceId]
-      );
-      const photo = r.rows[0]?.photo;
+      const photo = await this.deviceRepository.getPhoto(deviceId);
       if (!photo) return res.status(404).json({ error: 'No photo' });
       // Return as image
       const match = photo.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
