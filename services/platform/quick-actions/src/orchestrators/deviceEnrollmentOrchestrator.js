@@ -1,6 +1,7 @@
 'use strict';
 
 const { call } = require('../utils/serviceClient');
+const { publish } = require('../utils/eventPublisher');
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -224,6 +225,9 @@ async function enrollDevice({ platform, deviceName, serialNumber, enrollmentToke
   }
 
   const failed = completedSteps.filter(s => !s.ok);
+
+  await publish('device.enrolled', { deviceId, hostname: deviceName, platform, _source: 'quick-actions' });
+
   return {
     success: failed.length === 0,
     deviceId,
@@ -294,6 +298,9 @@ async function unenrollDevice(deviceId, { wipe = false } = {}) {
   completedSteps.push(s2);
 
   const failed = completedSteps.filter(s => !s.ok);
+
+  await publish('device.unenrolled', { deviceId, _source: 'quick-actions' });
+
   return {
     success: failed.length === 0,
     deviceId,

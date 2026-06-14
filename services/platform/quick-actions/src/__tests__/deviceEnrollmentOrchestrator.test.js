@@ -1,6 +1,7 @@
 'use strict';
 
 jest.mock('../utils/serviceClient.js');
+jest.mock('../utils/eventPublisher', () => ({ publish: jest.fn(), connect: jest.fn() }));
 
 const { call } = require('../utils/serviceClient.js');
 const {

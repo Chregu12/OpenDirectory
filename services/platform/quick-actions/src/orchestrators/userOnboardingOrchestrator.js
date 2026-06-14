@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { call } = require('../utils/serviceClient');
+const { publish } = require('../utils/eventPublisher');
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -181,6 +182,10 @@ async function onboardUser({ firstName, lastName, email, department = 'General',
   completedSteps.push(s7);
 
   const failed = completedSteps.filter(s => !s.ok);
+
+  const username = email.split('@')[0];
+  await publish('user.onboarded', { userId, username, email, _source: 'quick-actions' });
+
   return {
     success: failed.length === 0,
     userId,
@@ -295,6 +300,9 @@ async function offboardUser(userId, { revokeDevices = true, transferFilesTo, dis
   completedSteps.push(s6);
 
   const failed = completedSteps.filter(s => !s.ok);
+
+  await publish('user.offboarded', { userId, _source: 'quick-actions' });
+
   return {
     disabled: s1.ok || s3.ok,
     userId,
