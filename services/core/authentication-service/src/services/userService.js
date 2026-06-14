@@ -119,8 +119,8 @@ class UserService {
       lastLogin: row.last_login || row.lastLogin || null,
       createdAt: row.created_at || row.createdAt,
       updatedAt: row.updated_at || row.updatedAt,
-      // expose hash only for internal password verification
-      password: row.password_hash || row.password || null,
+      // NOTE: password_hash, mfaSecret, and recoveryCodes are intentionally
+      // omitted here — credential fields must never appear in API responses.
     };
   }
 

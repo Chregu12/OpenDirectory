@@ -237,7 +237,10 @@ const updateRings = new Map([
 [
   {
     clientId:     'grafana-od-client',
-    clientSecret: 'grafana-secret-changeme',
+    clientSecret: process.env.GRAFANA_CLIENT_SECRET || (() => {
+      console.warn('[oauth-provider] GRAFANA_CLIENT_SECRET not set, using insecure default');
+      return 'changeme-grafana-' + Math.random().toString(36).slice(2);
+    })(),
     name:         'Grafana Dashboard',
     redirectUris: ['https://grafana.example.com/login/generic_oauth'],
     scopes:       ['openid', 'profile', 'email', 'groups'],
@@ -245,7 +248,10 @@ const updateRings = new Map([
   },
   {
     clientId:     'devportal-od-client',
-    clientSecret: 'devportal-secret-changeme',
+    clientSecret: process.env.DEVPORTAL_CLIENT_SECRET || (() => {
+      console.warn('[oauth-provider] DEVPORTAL_CLIENT_SECRET not set, using insecure default');
+      return 'changeme-devportal-' + Math.random().toString(36).slice(2);
+    })(),
     name:         'Internal Dev Portal',
     redirectUris: ['https://dev.example.com/auth/callback', 'http://localhost:4000/callback'],
     scopes:       ['openid', 'profile', 'email'],
