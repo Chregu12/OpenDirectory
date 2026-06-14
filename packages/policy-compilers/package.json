@@ -1,0 +1,11 @@
+{
+  "name": "@opendirectory/policy-compilers",
+  "version": "1.0.0",
+  "description": "Shared policy compiler modules for OpenDirectory: compiles platform-agnostic policies into Windows GPO XML, macOS .mobileconfig, Linux config artifacts, and more.",
+  "main": "src/index.js",
+  "license": "MIT",
+  "keywords": ["opendirectory", "policy", "compilers", "gpo"],
+  "exports": {
+    ".": "./src/index.js"
+  }
+}

@@ -465,10 +465,13 @@ class GroupPolicyEngine {
     // Use the split compilers for artifact generation
     let policyCompilers;
     try {
-      policyCompilers = require('../../../../platform/integration-service/src/compilers');
-    } catch (e) {
-      this.logger.warn('Policy compilers not available, using legacy generation:', e.message);
-      return this._legacyGenerateDeploymentPackages(policy);
+      policyCompilers = require('@opendirectory/policy-compilers');
+    } catch (_) {
+      try { policyCompilers = require('../../../../packages/policy-compilers/src'); }
+      catch (e) {
+        this.logger.warn('Policy compilers not available, using legacy generation:', e.message);
+        return this._legacyGenerateDeploymentPackages(policy);
+      }
     }
 
     // Normalize GPO-style policy to compiler-compatible format

@@ -278,10 +278,13 @@ class PrinterPolicyManager {
     // Use the split PrintersCompiler for artifact generation
     let compilePrinters;
     try {
-      ({ compilePrinters } = require('../../../../platform/integration-service/src/compilers'));
-    } catch (e) {
-      this.logger.warn('PrintersCompiler not available, using legacy generation:', e.message);
-      return this._legacyGenerateDeploymentPackages(policy);
+      ({ compilePrinters } = require('@opendirectory/policy-compilers'));
+    } catch (_) {
+      try { ({ compilePrinters } = require('../../../../packages/policy-compilers/src')); }
+      catch (e) {
+        this.logger.warn('PrintersCompiler not available, using legacy generation:', e.message);
+        return this._legacyGenerateDeploymentPackages(policy);
+      }
     }
 
     const compilerPolicy = {

@@ -8,6 +8,11 @@
 
 // ─── Mock ALL external dependencies BEFORE requiring the app ─────────────────
 
+// Mock oidcAuth middleware — jose is ESM-only and cannot be loaded in Jest (CommonJS)
+jest.mock('../middleware/oidcAuth', () => ({
+  oidcAuth: jest.fn(() => (req, res, next) => next()),
+}));
+
 // Mock pg — testConnection() must return false so migrations are skipped
 jest.mock('pg', () => {
   const mockPool = {

@@ -7,6 +7,18 @@
 
 // ─── Mock all external / missing dependencies BEFORE any require ───────────────
 
+// Mock oidc-provider (ESM-only package — must be mocked before any require)
+jest.mock('../oidc/provider', () => ({
+  createProvider: jest.fn().mockResolvedValue({
+    callback: () => (req, res, next) => next(),
+    interactionDetails: jest.fn(),
+    interactionFinished: jest.fn(),
+  }),
+}));
+jest.mock('../oidc/interactions', () => ({
+  buildInteractionsRouter: jest.fn().mockReturnValue(require('express').Router()),
+}));
+
 // Mock pg
 jest.mock('pg', () => ({
   Pool: jest.fn().mockImplementation(() => ({
