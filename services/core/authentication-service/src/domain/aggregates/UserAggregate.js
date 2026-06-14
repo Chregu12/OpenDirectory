@@ -1,12 +1,13 @@
 'use strict';
 const { AuthEvents } = require('../events/AuthEvents');
 const { randomUUID } = require('crypto');
+const Email = require('../value-objects/Email');
 
 class UserAggregate {
   constructor(props) {
     this._id = props.id;
     this._username = props.username;
-    this._email = props.email;
+    this._email = props.email ? new Email(props.email) : null;
     this._passwordHash = props.passwordHash;
     this._roles = props.roles || ['user'];
     this._mfaEnabled = props.mfaEnabled || false;
@@ -118,7 +119,7 @@ class UserAggregate {
 
   get id() { return this._id; }
   get username() { return this._username; }
-  get email() { return this._email; }
+  get email() { return this._email ? this._email.value : null; }
   get passwordHash() { return this._passwordHash; }
   get roles() { return [...this._roles]; }
   get mfaEnabled() { return this._mfaEnabled; }
@@ -135,7 +136,7 @@ class UserAggregate {
   }
 
   toJSON() {
-    return { id: this._id, username: this._username, email: this._email, roles: this._roles, mfaEnabled: this._mfaEnabled, locked: this._locked, lockUntil: this._lockUntil, loginAttempts: this._loginAttempts, createdAt: this._createdAt, updatedAt: this._updatedAt };
+    return { id: this._id, username: this._username, email: this._email ? this._email.value : null, roles: this._roles, mfaEnabled: this._mfaEnabled, locked: this._locked, lockUntil: this._lockUntil, loginAttempts: this._loginAttempts, createdAt: this._createdAt, updatedAt: this._updatedAt };
   }
 }
 

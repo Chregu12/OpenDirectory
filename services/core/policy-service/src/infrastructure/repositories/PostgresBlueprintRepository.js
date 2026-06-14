@@ -1,9 +1,11 @@
 'use strict';
 
 const BlueprintAggregate = require('../../domain/BlueprintAggregate');
+const IBlueprintRepository = require('../../domain/repositories/IBlueprintRepository');
 
-class PostgresBlueprintRepository {
+class PostgresBlueprintRepository extends IBlueprintRepository {
   constructor(db) {
+    super();
     this._db = db;
   }
 
