@@ -55,6 +55,17 @@ interface IntegrityStatus {
   chainLength: number;
 }
 
+// Map LDAP/AD operation strings to a UI category
+function deriveCategory(operation: string): AuditEvent['category'] {
+  const op = operation.toLowerCase();
+  if (['bind', 'unbind', 'login', 'auth', 'mfa'].some(k => op.includes(k))) return 'auth';
+  if (['add', 'delete', 'modify', 'create', 'update', 'rename', 'move'].some(k => op.includes(k))) return 'admin';
+  if (['policy', 'gpo', 'gpupdate'].some(k => op.includes(k))) return 'policy';
+  if (['device', 'computer', 'enroll'].some(k => op.includes(k))) return 'device';
+  if (['malware', 'threat', 'vuln', 'attack'].some(k => op.includes(k))) return 'security';
+  return 'system';
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function AuditView() {
@@ -91,12 +102,32 @@ export default function AuditView() {
       ]);
 
       if (eventsRes?.data) {
-        setEvents(eventsRes.data.events || eventsRes.data || []);
+        const raw: any[] = eventsRes.data.events || (Array.isArray(eventsRes.data) ? eventsRes.data : []);
+        // Normalise both enterprise-directory wire format and legacy format
+        const normalised: AuditEvent[] = raw.map((e: any) => ({
+          id:            e.id            ?? String(Math.random()),
+          timestamp:     e.event_time    ?? e.timestamp ?? new Date().toISOString(),
+          category:      e.category      ?? deriveCategory(e.operation ?? e.action ?? ''),
+          severity:      e.severity      ?? 'info',
+          actor:         e.actor_dn      ?? e.actor_id ?? e.actor ?? 'unknown',
+          action:        e.operation     ?? e.action   ?? 'unknown',
+          target:        e.target_dn     ?? e.target   ?? '',
+          details:       e.attributes_changed ?? e.details,
+          correlationId: e.routing_key   ?? e.correlationId,
+          ipAddress:     e.ipAddress,
+        }));
+        setEvents(normalised.length > 0 ? normalised : getDemoEvents());
       } else {
         setEvents(getDemoEvents());
       }
-      if (statsRes?.data) setStats(statsRes.data);
-      else setStats(getDemoStats());
+      if (statsRes?.data) {
+        const s = statsRes.data;
+        setStats({
+          eventsToday:   s.eventsToday   ?? s.events_today   ?? 0,
+          criticalEvents: s.criticalEvents ?? s.critical_events ?? 0,
+          topActors:     s.topActors     ?? s.top_actors     ?? [],
+        });
+      } else setStats(getDemoStats());
       if (integrityRes?.data) setIntegrity(integrityRes.data);
     } catch {
       setEvents(getDemoEvents());

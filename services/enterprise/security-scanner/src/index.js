@@ -67,6 +67,16 @@ if (process.env.NODE_ENV !== 'production') {
   }));
 }
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'security-scanner' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ====================================================================== //
 //  Import services
 // ====================================================================== //
@@ -851,9 +861,18 @@ class SecurityScannerService extends EventEmitter {
       });
     };
 
-    this.scanner.on('scanStarted', (data) => broadcast('scanStarted', data));
+    this.scanner.on('scanStarted', (data) => {
+      broadcast('scanStarted', data);
+      publish('security.scan.started', { scanId: data.scanId });
+    });
     this.scanner.on('scanProgress', (data) => broadcast('scanProgress', data));
-    this.scanner.on('scanCompleted', (data) => broadcast('scanCompleted', data));
+    this.scanner.on('scanCompleted', (data) => {
+      broadcast('scanCompleted', data);
+      publish('security.scan.completed', { scanId: data.scanId, results: data.results });
+      if (data.results && data.results.totalFindings > 0) {
+        publish('security.vulnerability.found', { scanId: data.scanId, totalFindings: data.results.totalFindings, bySeverity: data.results.bySeverity });
+      }
+    });
     this.scanner.on('scanFailed', (data) => broadcast('scanFailed', data));
     this.scanner.on('scanScheduled', (data) => broadcast('scanScheduled', data));
 
@@ -917,6 +936,11 @@ class SecurityScannerService extends EventEmitter {
   async start() {
     this.port = parseInt(process.env.PORT, 10) || 3902;
     const host = process.env.HOST || '0.0.0.0';
+
+    // Connect to event bus (fire and forget)
+    connectBus().catch((err) => {
+      logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+    });
 
     return new Promise((resolve, reject) => {
       this.server = http.createServer(this.app);

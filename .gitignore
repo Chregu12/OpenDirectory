@@ -276,3 +276,4 @@ customer-data/
 audit-logs/
 *.audit
 *.compliance
+.claude/worktrees/

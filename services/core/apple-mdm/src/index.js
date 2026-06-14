@@ -2,6 +2,15 @@
 'use strict';
 require('dotenv').config();
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'apple-mdm' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -83,7 +92,7 @@ const APNS_TOPIC = process.env.APNS_TOPIC || process.env.MDM_TOPIC || '';
 const pgPool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432', 10),
-  database: process.env.DB_NAME || process.env.POSTGRES_DB || 'auth',
+  database: process.env.DB_NAME || process.env.POSTGRES_DB || 'mdm',
   user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
   password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || '',
   max: 5,
@@ -262,6 +271,7 @@ async function enqueueCommand(udid, requestType, payload) {
     });
   }
   commandQueuedCounter.inc({ request_type: requestType });
+  publish('mdm.command.sent', { deviceId: udid, command: requestType });
   return { id, command_uuid: commandUuid };
 }
 
@@ -549,7 +559,7 @@ const EMPTY_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 // ─── Policy-service helper ────────────────────────────────────────────────────
 
 const http = require('http');
-const POLICY_SERVICE_URL = process.env.POLICY_SERVICE_URL || 'http://localhost:3004';
+const POLICY_SERVICE_URL = process.env.POLICY_SERVICE_URL || 'http://policy-service';
 
 async function fetchBlueprintFromPolicyService(blueprintId) {
   return new Promise((resolve) => {
@@ -732,6 +742,7 @@ app.put('/mdm/checkin', async (req, res) => {
           model: msg.Model,
           os_version: msg.OSVersion,
         }).catch(err => console.error('[apple-mdm] upsertDevice error:', err.message));
+        publish('mdm.device.enrolled', { deviceId: udid, udid, platform: 'ios' });
       }
       res.set('Content-Type', 'text/xml');
       return res.send(EMPTY_PLIST);
@@ -969,6 +980,7 @@ app.post('/api/mdm/devices/:udid/install-profile', async (req, res) => {
       await sendMdmPush(device.push_token).catch(() => {});
     }
 
+    publish('mdm.profile.pushed', { deviceId: udid, profileId: command_uuid });
     res.status(202).json({ queued: true, command: { id, command_uuid, request_type: 'InstallProfile', udid } });
   } catch (err) {
     console.error('[apple-mdm] install-profile error:', err.message);
@@ -1246,6 +1258,7 @@ app.post('/api/mdm/config', async (req, res) => {
 async function start() {
   await initDb();
   apnsProvider = initApns();
+  connectBus();
 
   app.listen(PORT, () => {
     console.log(`[apple-mdm] Apple MDM server listening on port ${PORT}`);

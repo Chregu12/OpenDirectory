@@ -9,6 +9,7 @@ const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
 
+const { oidcAuth } = require('./middleware/oidcAuth');
 const db = require('./db/postgres');
 const { RSOPEngine } = require('./engines/gpoProcessor');
 const { ConflictResolver } = require('./engines/conflictResolver');
@@ -32,6 +33,7 @@ app.use(cors());
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 }));
+app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
 
 // --- Engine singletons ---
 const rsopEngine = new RSOPEngine();
@@ -57,6 +59,16 @@ function loadTemplates() {
   });
   return templateCache;
 }
+
+// --- Event Bus ---
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+
+const _bus = new EventBusClient({ source: 'policy-service' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 
 // --- Audit helper ---
 async function auditLog(policyId, action, actor, changes) {
@@ -171,6 +183,7 @@ app.post('/api/policies', async (req, res) => {
 
     const policy = result.rows[0];
     await auditLog(policy.id, 'created', created_by, { name, type });
+    try { publish('policy.created', { policyId: policy.id, name: policy.name, type: policy.type, createdBy: created_by || null }); } catch (e) {}
     logger.info(`Policy created: ${name} (${type})`, { id: policy.id });
     res.status(201).json(policy);
   } catch (err) {
@@ -219,6 +232,7 @@ app.put('/api/policies/:id', async (req, res) => {
 
     const updated = result.rows[0];
     await auditLog(updated.id, 'updated', req.body.updated_by, { before: old, after: updated });
+    try { publish('policy.updated', { policyId: updated.id, name: updated.name, changes: Object.keys(req.body) }); } catch (e) {}
     res.json(updated);
   } catch (err) {
     logger.error('Failed to update policy', { id: req.params.id, error: err.message });
@@ -322,6 +336,15 @@ app.post('/api/policies/evaluate', async (req, res) => {
     const result = await db.query(
       `SELECT * FROM policies WHERE status = 'active' ORDER BY priority ASC`
     );
+    // Publish violation events for any enforce=true policies when a deviceId is provided
+    if (deviceId && Array.isArray(result.rows)) {
+      for (const p of result.rows) {
+        if (p.enforce && context?.violations?.[p.id]) {
+          const v = context.violations[p.id];
+          try { publish('policy.violated', { policyId: p.id, deviceId, violation: v.violation || 'policy_not_met', severity: v.severity || 'medium' }); } catch (e) {}
+        }
+      }
+    }
     res.json({ applicablePolicies: result.rows, evaluatedAt: new Date().toISOString() });
   } catch (err) {
     logger.error('Failed to evaluate policies', { error: err.message });
@@ -961,7 +984,7 @@ app.post('/api/gpo/:id/apply', async (req, res) => {
   const gpo = gpos.get(req.params.id);
   if (!gpo) return res.status(404).json({ error: 'GPO not found' });
 
-  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://localhost:3010';
+  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider';
 
   try {
     // Get all devices from registry
@@ -1258,7 +1281,7 @@ app.get('/api/blueprints/:id/assignments', async (req, res) => {
 
 // POST /api/blueprints/:id/apply — apply blueprint: push MDM commands to assigned devices
 app.post('/api/blueprints/:id/apply', async (req, res) => {
-  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider:3010';
+  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider';
 
   let blueprint;
   let configs = [];
@@ -1332,7 +1355,7 @@ app.post('/api/blueprints/:id/apply', async (req, res) => {
       const certConfigs = configs.filter(c => c.config_type === 'certificate');
       for (const certConfig of certConfigs) {
         try {
-          const caUrl = process.env.CA_SERVICE_URL || 'http://certificate-authority:3018';
+          const caUrl = process.env.CA_SERVICE_URL || 'http://certificate-authority';
           await fetch(`${caUrl}/api/certificates/issue`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1356,6 +1379,8 @@ app.post('/api/blueprints/:id/apply', async (req, res) => {
     configsCount: configs.length,
     resultsCount: results.length,
   });
+
+  try { publish('policy.applied', { blueprintId: blueprint.id, name: blueprint.name, deviceCount: assignments.filter(a => a.target_type === 'device').length, appliedBy: req.body.applied_by || null }); } catch (e) {}
 
   res.json({
     blueprintId: blueprint.id,
@@ -2009,6 +2034,15 @@ async function start() {
 
   // Pre-load templates
   loadTemplates();
+
+  try { connectBus(); } catch (e) { logger.warn('[bus] startup connect error: ' + e.message); }
+
+  // Wire DDD Application Service + Compliance Saga
+  const PolicyApplicationService = require('./application/PolicyApplicationService');
+  const ComplianceSaga = require('./application/ComplianceSaga');
+  const _policyAppSvc = new PolicyApplicationService({ db, messageBus: _bus, logger });
+  const _complianceSaga = new ComplianceSaga({ messageBus: _bus, policyApplicationService: _policyAppSvc, db, logger });
+  setTimeout(() => _complianceSaga.start(), 4000);
 
   app.listen(PORT, () => {
     logger.info(`Policy Service running on port ${PORT}`);

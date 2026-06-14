@@ -88,6 +88,43 @@ backup:
       cpu: "500m"
       memory: "512Mi"
 
+# ─── Notification Service ────────────────────────────────────────────────────
+notification:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "400m"
+      memory: "512Mi"
+
+# ─── App Store ───────────────────────────────────────────────────────────────
+appStore:
+  replicaCount: 2
+  persistence:
+    enabled: true
+    size: "100Gi"
+    storageClass: "standard"
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+# ─── RabbitMQ ─────────────────────────────────────────────────────────────────
+rabbitmq:
+  enabled: true
+  storageSize: "10Gi"
+
+# ─── Event Bus ───────────────────────────────────────────────────────────────
+eventBus:
+  transport: rabbitmq
+  prefetch: 25
+  reconnectDelayMs: 1000
+
 # ─── Ingress with TLS ─────────────────────────────────────────────────────────
 ingress:
   enabled: true

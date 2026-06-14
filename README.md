@@ -1,360 +1,239 @@
-# 🚀 OpenDirectory - Universal Endpoint Management Platform
+# OpenDirectory
 
-<div align="center">
+Self-hosted, open-source enterprise platform combining Active Directory, MDM, and Privileged Identity Management across all major operating systems.
 
-![OpenDirectory Logo](https://img.shields.io/badge/OpenDirectory-UEM-blue?style=for-the-badge)
-![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=for-the-badge)
-![Node](https://img.shields.io/badge/node-%3E%3D%2018.0.0-brightgreen?style=for-the-badge)
-![Docker](https://img.shields.io/badge/docker-%3E%3D%2020.10-blue?style=for-the-badge)
+## What is OpenDirectory?
 
-**Enterprise-grade Universal Endpoint Management (UEM) platform that replaces Microsoft Intune, Active Directory, and traditional MDM solutions**
+OpenDirectory is an open-source alternative to Microsoft Intune, Azure Active Directory, and Jamf Pro. It gives organisations full control over their directory, device fleet, and identity infrastructure without vendor lock-in or per-seat licensing fees.
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing) • [License](#-license)
+The platform runs on-premises or on Kubernetes and manages the full lifecycle of enterprise IT: domain controllers, user and group provisioning, device enrollment and compliance, group policy, privileged access management, certificate authority, and audit logging — all from a single interface and a unified REST/gRPC API.
 
-</div>
+OpenDirectory is built for teams that need the capabilities of a Microsoft 365 + Intune stack but want to own the data and the deployment. It is not a thin wrapper around existing tools; it ships its own Samba domain controller integration, Kerberos KDC service, LDAP proxy with schema management, GPO engine, and PIM service with session recording.
 
----
+## Architecture
 
-## 🎯 Overview
-
-OpenDirectory is a comprehensive, open-source Universal Endpoint Management platform that provides enterprise-grade device management, security, and automation capabilities across all major platforms. Built with modern microservices architecture, it offers a complete alternative to expensive proprietary solutions like Microsoft Intune, Jamf Pro, and traditional Active Directory.
-
-### 🌟 Key Highlights
-
-- **🌍 True Cross-Platform Support**: Manage Windows, macOS, Linux, iOS, and Android from a single platform
-- **🔐 Zero Trust Security**: Built-in conditional access, device compliance, and modern authentication
-- **🚀 Auto-Scaling Architecture**: Microservices design with automatic service discovery
-- **💰 Cost-Effective**: Open-source alternative to expensive enterprise solutions
-- **🔧 Extensible**: Plugin architecture and comprehensive REST APIs
-
-## ✨ Features
-
-### 📱 Device Management
-- **Multi-Platform MDM**: Complete mobile device management for iOS and Android
-- **Desktop Management**: Full support for Windows 10/11, macOS, and Linux distributions
-- **Zero-Touch Enrollment**: Automated device provisioning and configuration
-- **Remote Actions**: Lock, wipe, restart, and locate devices remotely
-
-### 🔒 Security & Compliance
-- **Zero Trust Architecture**: Conditional access policies with continuous verification
-- **Device Compliance**: Real-time compliance monitoring and automated remediation
-- **BitLocker/FileVault Management**: Full disk encryption management across platforms
-- **Certificate Authority**: Built-in PKI infrastructure with certificate lifecycle management
-
-### 📋 Policy Management
-- **Group Policy Engine**: Windows GPO-compatible policy management for all platforms
-- **Configuration Profiles**: Deploy settings, restrictions, and configurations
-- **Update Management**: Centralized OS and application update control
-- **Software Deployment**: Automated software installation and management
-
-### 🖨️ Infrastructure Services
-- **Print Server**: Centralized print management with driver distribution
-- **Network Configuration**: WiFi, VPN, and email profile deployment
-- **File Sharing**: SMB/CIFS network drive mapping and management
-- **Directory Services**: Complete Active Directory replacement
-
-### 🔍 Unified Endpoint Intelligence (NEW)
-- **AD Graph Explorer**: Neo4j-style relationship visualization of Users, Groups, Devices, Policies, and Update Rings with attack path detection and shadow admin discovery
-- **Policy Simulator**: "What-If" analysis for policy changes showing impact on devices, users, and compliance before applying
-- **Security Exposure Scanner**: CIS/NIST/DISA STIG compliance benchmarking with GPO analysis, privilege escalation detection, and automated remediation scripts
-- **Drift Detection**: Real-time comparison of expected policy state vs actual device configuration
-- **Compliance Timeline**: Full historical compliance tracking per device (enrolled, policy applied, compliance gained/lost, remediated)
-- **Device Lifecycle Manager**: Complete lifecycle state machine (Provisioned → Enrolled → Compliant → Retiring → Retired) with risk scoring (0-100)
-- **Auto Remediation Engine**: Detects compliance issues and generates platform-specific remediation scripts (PowerShell/Bash) with approval workflows
-
-### 🔄 Integration & Automation
-- **API Gateway**: Auto-extending API gateway with service discovery
-- **License Management**: Software license tracking and compliance
-- **Workflow Automation**: Event-driven automation and orchestration
-- **Multi-Tenant Support**: Complete isolation for multiple organizations
-- **Terraform Provider**: Infrastructure-as-code with 8 resources and 2 data sources
-- **Ansible Collection**: 5 modules, inventory plugin, roles, and playbooks for automation
-
-## 🏗️ Architecture
+OpenDirectory is composed of approximately 30 microservices organised into three layers. Services communicate asynchronously through a pluggable gRPC event bus (RabbitMQ by default). Each service exposes a REST API and a `/health` endpoint, and emits Prometheus metrics.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   OpenDirectory Platform                 │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │   Platform    │  │     Core     │  │  Enterprise  │ │
-│  │   Services    │  │   Services   │  │   Services   │ │
-│  ├──────────────┤  ├──────────────┤  ├──────────────┤ │
-│  │ • API Gateway │  │ • Auth       │  │ • Zero Trust │ │
-│  │ • Backend API │  │ • Device Mgmt│  │ • Compliance │ │
-│  │ • Integration │  │ • Policy     │  │ • Analytics  │ │
-│  └──────────────┘  └──────────────┘  └──────────────┘ │
-│                                                          │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │            Supported Platforms                    │  │
-│  ├──────────────────────────────────────────────────┤  │
-│  │ Windows 10/11 │ macOS │ Linux │ iOS │ Android   │  │
-│  └──────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+Core Services                Enterprise Services          Platform Services
+─────────────────────────    ─────────────────────────    ─────────────────────────
+authentication-service       compliance-engine            api-gateway
+enterprise-directory         audit-service                quick-actions
+device-service               security-scanner             event-bus
+policy-service               mobile-management            integration-service
+conditional-access           app-store                    api-backend
+least-privilege              graph-explorer
+samba-ad-dc                  automation
+kerberos-kdc                 policy-engine
+ldap-proxy                   policy-simulator
+notification-service         ai-analytics
+certificate-authority        antivirus-protection
+monitoring-service           auto-remediation
+update-management            multi-tenant
+backup-service               disaster-recovery
+remote-control
+oauth-provider
+identity-service
 ```
 
-## 🚀 Quick Start
+**Databases:** PostgreSQL (primary operational store), MongoDB (directory objects and GPO data), Redis (session cache, distributed locks).
+
+**Frontend:** Next.js / React 18 single-page application with an Apple Business Manager-style three-column layout.
+
+## Features
+
+### Active Directory and Identity
+
+- Samba AD DC integration — full domain controller, LDAP, Kerberos
+- LDAP proxy with schema management and a full LDAP REST gateway (RFC 4515 filter support)
+- Kerberos KDC with constrained delegation (S4U2Self, S4U2Proxy, RBCD), ticket policies, and Protected Users group enforcement
+- Forest and trust management — external, forest, shortcut, and Kerberos realm trust types
+- Multi-DC replication monitoring with USN tracking and force-sync
+- Fine-grained password policies and account lockout enforcement
+- Organisational Units, Groups, Computer accounts (domain join and unjoin)
+- LAPS (Local Administrator Password Solution) — per-device admin passwords, rotation, and audit log
+- BitLocker recovery key escrow and retrieval with full audit trail
+
+### Device Management (MDM)
+
+- Unified device management across Windows, macOS, Linux, iOS, and Android
+- Zero-touch enrollment per platform: APNS for macOS/iOS, WinRM for Windows, SSSD for Linux, QR code for mobile
+- Bulk enrollment for fleet operations
+- Remote actions: lock, wipe, restart, remote command execution
+- Device compliance scanning and violation tracking
+- Software deployment via enterprise app store
+- Network profile deployment (Wi-Fi, VPN, email configuration)
+- Backup and disaster recovery, per-device and domain-wide
+- Geofencing zones with location-aware conditional access
+
+### Group Policy and Configuration
+
+- GPO engine compatible with Windows Group Policy concepts
+- Resultant Set of Policy (RSoP) calculation per user or OU
+- GPO enforcement with inheritance and Block Inheritance support
+- Fine-grained account and password policies
+- Configuration profiles for all managed platforms
+- Update management: Windows Update, WinGet, macOS Software Update
+- Policy baselines and blueprints
+
+### Privileged Identity Management (PIM)
+
+- Role-based just-in-time (JIT) access with configurable maximum duration
+- Multi-level approval chains (sequential approvers per tier)
+- Risk scoring based on time-of-day, request frequency, role sensitivity, and active elevations
+- Break-glass emergency access with dual-control activation
+- Session recording: every privileged action logged with risk score
+- Session replay: full activity timeline for an elevation window
+- Automatic AD group membership sync on elevation grant and revoke
+- Event bus integration (`security.elevation.*` events)
+
+### Security and Compliance
+
+- Conditional access policies evaluated on device health, identity, location, and time
+- Zero-trust scoring combining device, identity, network, and behavioural signals
+- Compliance engine with baseline definitions and waiver management
+- Security scanner for vulnerability assessment
+- Antivirus protection management
+- Auto-remediation for compliance violations
+- Certificate authority: issue, renew, revoke
+- Audit trail covering every directory change, authentication event, and GPO application
+
+### Authentication and SSO
+
+- Multi-factor authentication (TOTP, recovery codes)
+- Single Sign-On via OIDC, SAML, and OAuth 2.0
+- Session management: list, revoke, revoke-all
+- Password reset workflows (SSPR)
+- Service Principal management — create an application identity with ClientID, ClientSecret, and a Kerberos SPN in a single operation
+
+### Developer Platform
+
+- REST API across all services (400+ endpoints)
+- gRPC event bus with pluggable transports (RabbitMQ, gRPC, in-memory for tests)
+- Event routing registry (`config/event-routing.yaml`) with 50+ routing keys
+- API gateway for unified external access
+- Microsoft Graph-compatible API layer (graph-explorer service)
+- Integration service for third-party systems
+- Webhook and automation support
+
+### UI
+
+The frontend uses an Apple Business Manager-style three-column layout: sidebar navigation, item list, and detail panel.
+
+- Device Fleet view: per-OS cards (macOS, Windows, Linux, iOS, Android) with click-to-filter and compliance indicators
+- Enrollment Wizard: 4-step, OS-aware flow with platform-specific setup instructions
+- Service Principal Wizard: one-click create returning ClientID, masked ClientSecret with reveal, and `.env` download
+- User Onboarding Wizard: 4-step new-employee flow with temporary password reveal
+- Policy Deploy Wizard: target by OS, OU, Group, Device, or User; dry-run mode; progress bar
+- PIM view: Roles, Requests, Active Elevations, Session Replay, Break-Glass
+- Audit Log view: filterable, paginated, severity colour-coded
+- Compliance Snapshot: donut chart, top violations, devices needing attention
+- Trust Management view: forest trust graph with verify, rotate, and remove actions
+- Kerberos Admin view: delegation configuration, Protected Users group, ticket policies
+- Replication Dashboard: per-DC health, USN tracking, force-sync, 30-second auto-refresh
+- LAPS and BitLocker in device detail: password reveal with audit, key recovery modal
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Node.js 18+, Express 4 |
+| Event Bus | gRPC + RabbitMQ (pluggable via `@opendirectory/grpc-event-bus`) |
+| Databases | PostgreSQL (primary), MongoDB (directory/GPO), Redis (cache/sessions) |
+| AD/LDAP | Samba 4, LLDAP, ldapts |
+| Kerberos | MIT Kerberos (kadmin API) |
+| Frontend | Next.js, React 18, TypeScript |
+| Container | Docker, Kubernetes (Helm chart included) |
+| Monitoring | Prometheus metrics on every service, `/health` endpoints |
+| Testing | Jest (unit + integration), nock (HTTP mocking), React Testing Library |
+
+## Quick Start
 
 ### Prerequisites
 
-- Docker 20.10+ and Docker Compose
-- Node.js 18+ (for development)
-- 8GB RAM minimum (16GB recommended)
-- 50GB available storage
+- Docker and Docker Compose >= 20.10
+- Node.js >= 18 (for local development)
 
-### 🐳 Docker Deployment (Recommended)
+### Run with Docker Compose
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/opendirectory.git
-cd opendirectory
-
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your settings
-nano .env
-
-# Start all services
-docker-compose up -d
-
-# Check service health
-docker-compose ps
-
-# Access the web interface
-# http://localhost:3000
+git clone https://github.com/Chregu12/OpenDirectory
+cd OpenDirectory
+docker compose up -d
+# UI:          http://localhost:3000
+# API Gateway: http://localhost:8080
 ```
 
-### 💻 Local Development
+### Run on Kubernetes
 
 ```bash
-# Install dependencies
-npm install
-
-# Initialize database
-npm run db:init
-
-# Start development servers
-npm run dev
-
-# In another terminal, start the frontend
-cd frontend/web-app
-npm install
-npm run dev
+helm install opendirectory ./deploy/helm/opendirectory \
+  --set global.domain=opendirectory.local \
+  --set postgresql.auth.password=<password> \
+  --namespace opendirectory --create-namespace
 ```
 
-## 📚 Documentation
+## Services
 
-### Getting Started
-- [Installation Guide](docs/installation.md)
-- [Configuration](docs/configuration.md)
-- [First Device Enrollment](docs/enrollment.md)
+| Service | Port | Description |
+|---|---|---|
+| authentication-service | 3001 | User auth, MFA, SSO, session management |
+| enterprise-directory | 3000 | AD-compatible directory, GPO, OU management |
+| device-service | 3003 | MDM, device lifecycle, compliance, remote actions |
+| policy-service | 3004 | Policy engine, RSoP, templates, blueprints |
+| conditional-access | 3007 | Conditional access evaluation, zero-trust scoring |
+| least-privilege | 3011 | Permission matrix, PIM role management |
+| samba-ad-dc | 3010 | Domain controller (Samba), trusts, LAPS, replication |
+| kerberos-kdc | 3013 | Kerberos KDC, delegation, ticket policies |
+| ldap-proxy | 8389 | LDAP proxy and schema management REST API |
+| notification-service | 3006 | Email and push notifications |
+| certificate-authority | 3015 | PKI, certificate lifecycle |
+| compliance-engine | 3907 | Baseline evaluation, waivers, trend analysis |
+| audit-service | 3908 | Event collection, audit log aggregation |
+| security-scanner | — | Vulnerability assessment |
+| mobile-management | — | iOS/Android MDM, Apple Business Manager integration |
+| app-store | — | Enterprise app store |
+| api-gateway | 8080 | Unified external API |
+| quick-actions | 3950 | Orchestration: one-click SP, enroll, onboard, deploy |
+| integration-service | — | Third-party integrations |
+| monitoring-service | — | Prometheus metrics aggregation |
 
-### Administration
-- [Policy Management](docs/policies.md)
-- [User Management](docs/users.md)
-- [Device Management](docs/devices.md)
-- [Security Configuration](docs/security.md)
+## Event Bus
 
-### Platform Guides
-- [Windows Management](docs/platforms/windows.md)
-- [macOS Management](docs/platforms/macos.md)
-- [Linux Management](docs/platforms/linux.md)
-- [Mobile Management](docs/platforms/mobile.md)
+Events are exchanged via `@opendirectory/grpc-event-bus`. The routing table lives in `config/event-routing.yaml`. Key namespaces:
 
-### API Reference
-- [REST API Documentation](docs/api/README.md)
-- [Authentication](docs/api/auth.md)
-- [Webhooks](docs/api/webhooks.md)
+| Namespace | Events |
+|---|---|
+| `device.*` | enrollment, compliance, commands |
+| `policy.*` | create, activate, evaluate |
+| `security.elevation.*` | PIM JIT grant and revoke |
+| `security.breakglass.*` | emergency access activation |
+| `directory.object.*` | AD CRUD events |
+| `kerberos.*` | ticket and delegation events |
+| `ad.trust.*` | trust create, verify, remove |
+| `ad.replication.*` | DC sync and health events |
+| `identity.*` | login, token, MFA events |
 
-## 🛠️ Services
+## Testing
 
-### Platform Services (`/services/platform`)
-- **API Gateway**: Intelligent routing and service discovery
-- **Backend API**: Core REST API endpoints
-- **Integration Service**: External system connectors
-
-### Core Services (`/services/core`)
-- **Authentication Service**: Identity and access management
-- **Device Service**: Device lifecycle management
-- **Policy Service**: Policy engine and enforcement
-- **Certificate Network**: PKI and network profiles
-- **Update Management**: OS and application updates
-- **Conditional Access**: Zero trust implementation
-
-### Enterprise Services (`/services/enterprise`)
-- **Mobile Management**: iOS and Android MDM
-- **License Management**: Software asset management
-- **Analytics**: Advanced reporting and insights
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Create a `.env` file in the root directory:
-
-```env
-# Database
-DATABASE_URL=postgresql://user:password@localhost/opendirectory
-REDIS_URL=redis://localhost:6379
-
-# Security
-JWT_SECRET=your-secret-key-here
-ENCRYPTION_KEY=your-encryption-key-here
-
-# Services
-API_GATEWAY_PORT=3000
-BACKEND_PORT=8080
-
-# External Services (Optional)
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USER=notifications@example.com
-SMTP_PASS=password
-```
-
-### Docker Compose Override
-
-For production deployments, create `docker-compose.override.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  api-gateway:
-    environment:
-      - NODE_ENV=production
-    deploy:
-      replicas: 3
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Code Style
-
-- Use ESLint configuration provided
-- Follow conventional commits specification
-- Write tests for new features
-- Update documentation
-
-## 🧪 Testing
+- 780+ tests across all packages and services
+- Unit tests: DDD aggregates, value objects, application services
+- Integration tests: EventBusClient flows, saga patterns
+- E2E API tests: all REST endpoints with supertest and nock
+- Frontend component tests: React Testing Library
 
 ```bash
 # Run all tests
-npm test
+npm test --workspaces
 
-# Run specific service tests
-npm run test:device-service
-
-# Run integration tests
-npm run test:integration
-
-# Generate coverage report
-npm run test:coverage
+# Run a specific service
+cd services/core/authentication-service && npm test
 ```
 
-## 🚢 Deployment
+## Contributing
 
-### Production with Docker
+Pull requests are welcome. Please open an issue first for significant changes. All services follow the same pattern: Express router, application service layer, domain model, and Jest tests.
 
-```bash
-# Build production images
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml build
+## License
 
-# Deploy with scaling
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --scale api-gateway=3
-
-# View logs
-docker-compose logs -f api-gateway
-```
-
-### Kubernetes Deployment
-
-```bash
-# Apply Kubernetes manifests
-kubectl apply -f infrastructure/kubernetes/
-
-# Check deployment status
-kubectl get pods -n opendirectory
-
-# Access via port-forward (development)
-kubectl port-forward -n opendirectory svc/api-gateway 3000:3000
-```
-
-## 📊 Monitoring
-
-- **Health Check**: `http://localhost:3000/health`
-- **Metrics**: `http://localhost:3000/metrics`
-- **API Documentation**: `http://localhost:3000/api-docs`
-
-## 🔒 Security
-
-- All communications encrypted with TLS
-- JWT-based authentication
-- Role-based access control (RBAC)
-- Audit logging for all actions
-- Regular security updates
-
-For security issues, please email security@opendirectory.io instead of using issue tracker.
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built with Node.js, Express, React, and Docker
-- Inspired by enterprise management needs
-- Community-driven development
-
-## 💬 Community & Support
-
-- **Documentation**: [https://docs.opendirectory.io](https://docs.opendirectory.io)
-- **Discord**: [Join our community](https://discord.gg/opendirectory)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/opendirectory/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/opendirectory/discussions)
-
-## 🗺️ Roadmap
-
-- [x] Backup and disaster recovery
-- [x] Advanced reporting dashboard
-- [x] Machine learning for threat detection
-- [x] GraphQL API support
-- [x] Terraform provider
-- [x] Ansible collection
-- [x] AD Graph Explorer with attack path detection
-- [x] Policy Simulator with what-if analysis
-- [x] Security Exposure Scanner (CIS/NIST/STIG)
-- [x] Drift Detection and Compliance Timeline
-- [x] Device Lifecycle Management
-- [x] Auto Remediation Engine
-- [ ] SaaS multi-tenant deployment
-- [ ] Mobile app for admins (iOS/Android)
-- [ ] AI-powered anomaly detection
-- [ ] SIEM/Splunk native integration
-- [ ] Terraform provider
-- [ ] Ansible modules
-
----
-
-<div align="center">
-Made with ❤️ by the OpenDirectory Community
-
-**[Website](https://opendirectory.io)** • **[Documentation](https://docs.opendirectory.io)** • **[Blog](https://blog.opendirectory.io)**
-</div>
+MIT

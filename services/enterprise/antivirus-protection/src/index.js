@@ -71,6 +71,16 @@ if (process.env.NODE_ENV !== 'production') {
     }));
 }
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'antivirus-protection' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ====================================================================== //
 //  Import services
 // ====================================================================== //
@@ -535,6 +545,12 @@ class AntivirusProtectionService extends EventEmitter {
                 }
 
                 logger.info('Received AV scan report', { deviceId, threatCount: threats ? threats.length : 0, clean });
+                publish('security.scan.completed', { deviceId, scanId, threatCount: threats ? threats.length : 0, clean: !!clean });
+                if (threats && threats.length > 0) {
+                    for (const threat of threats) {
+                        publish('security.threat.detected', { deviceId, scanId, threat });
+                    }
+                }
                 res.json({ received: true, scanId, timestamp: new Date().toISOString() });
             } catch (err) {
                 next(err);
@@ -889,6 +905,11 @@ class AntivirusProtectionService extends EventEmitter {
     async start() {
         const port = parseInt(process.env.PORT, 10) || 3905;
         const host = process.env.HOST || '0.0.0.0';
+
+        // Connect to event bus (fire and forget)
+        connectBus().catch((err) => {
+            logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+        });
 
         // Initialize database (run migrations); log but don't fatal on failure
         try {

@@ -10,13 +10,30 @@ import {
   ClipboardDocumentIcon,
   PlusIcon,
   CommandLineIcon,
+  TableCellsIcon,
+  ExclamationTriangleIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
-import { deviceApi } from '@/lib/api';
+import { deviceApi, api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import WizardLayout from '@/components/shared/WizardLayout';
 
 type Platform = 'windows' | 'macos' | 'linux' | 'printer';
 type WizardStep = 1 | 2;
+type EnrollMode = 'single' | 'bulk';
+
+interface BulkDevice {
+  deviceName: string;
+  platform: string;
+  serialNumber: string;
+}
+
+interface BulkEnrollResult {
+  deviceName: string;
+  status: 'success' | 'failed';
+  steps?: string[];
+  error?: string;
+}
 
 const STEPS = [{ n: 1 as const, label: 'Plattform' }, { n: 2 as const, label: 'Einrichten' }];
 
@@ -311,6 +328,14 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
   const [loadingToken, setLoadingToken] = useState(false);
   const [enrolledCount, setEnrolledCount] = useState(0);
 
+  // Bulk enrollment state
+  const [enrollMode, setEnrollMode] = useState<EnrollMode>('single');
+  const [bulkCsv, setBulkCsv] = useState('');
+  const [bulkParsed, setBulkParsed] = useState<BulkDevice[]>([]);
+  const [bulkParseError, setBulkParseError] = useState('');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkResults, setBulkResults] = useState<BulkEnrollResult[] | null>(null);
+
   // Generate enrollment token when platform is selected
   useEffect(() => {
     if (selectedPlatform && selectedPlatform !== 'printer') {
@@ -345,10 +370,59 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
     setEnrolledCount(prev => prev + 1);
   };
 
+  const parseBulkCsv = (csv: string) => {
+    setBulkParseError('');
+    const lines = csv.trim().split('\n').filter(l => l.trim());
+    if (!lines.length) { setBulkParsed([]); return; }
+    // Skip header line if it starts with 'deviceName' (case-insensitive)
+    const firstLower = lines[0].toLowerCase();
+    const startIdx = firstLower.startsWith('devicename') ? 1 : 0;
+    const parsed: BulkDevice[] = [];
+    const errors: string[] = [];
+    lines.slice(startIdx).forEach((line, i) => {
+      const cols = line.split(',').map(c => c.trim());
+      if (cols.length < 2) { errors.push(`Line ${startIdx + i + 1}: need at least deviceName,platform`); return; }
+      const [deviceName, platform, serialNumber = ''] = cols;
+      if (!deviceName || !platform) { errors.push(`Line ${startIdx + i + 1}: missing deviceName or platform`); return; }
+      parsed.push({ deviceName, platform, serialNumber });
+    });
+    if (errors.length) setBulkParseError(errors.join('; '));
+    setBulkParsed(parsed);
+  };
+
+  const handleBulkCsvChange = (val: string) => {
+    setBulkCsv(val);
+    parseBulkCsv(val);
+  };
+
+  const handleBulkEnroll = async () => {
+    if (!bulkParsed.length) return;
+    setBulkSubmitting(true);
+    setBulkResults(null);
+    try {
+      const res = await api.post('/api/quick/devices/bulk-enroll', { devices: bulkParsed });
+      const data = res.data;
+      const results: BulkEnrollResult[] = (data.results || data.data?.results || bulkParsed.map(d => ({ deviceName: d.deviceName, status: 'success' as const })));
+      setBulkResults(results);
+      const successCount = results.filter(r => r.status === 'success').length;
+      if (successCount === results.length) {
+        toast.success(`All ${successCount} devices enrolled successfully!`);
+      } else {
+        toast.error(`${successCount}/${results.length} devices enrolled. Check results for details.`);
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || 'Bulk enrollment failed';
+      toast.error(msg);
+      setBulkResults(bulkParsed.map(d => ({ deviceName: d.deviceName, status: 'failed', error: msg })));
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
   const platformInfo = PLATFORMS.find(p => p.id === selectedPlatform);
 
-  const title = step === 1 ? 'Gerät hinzufügen' : (platformInfo?.icon + ' ' + platformInfo?.name + ' einrichten');
-  const subtitle = enrolledCount > 0 ? `${enrolledCount} Gerät(e) bereits hinzugefügt` : 'Registriere deine Geräte bei OpenDirectory';
+  const title = enrollMode === 'bulk' ? 'Bulk Enrollment' : (step === 1 ? 'Gerät hinzufügen' : (platformInfo?.icon + ' ' + platformInfo?.name + ' einrichten'));
+  const subtitle = enrollMode === 'bulk' ? 'Enroll multiple devices via CSV' : (enrolledCount > 0 ? `${enrolledCount} Gerät(e) bereits hinzugefügt` : 'Registriere deine Geräte bei OpenDirectory');
 
   return (
     <WizardLayout
@@ -364,8 +438,27 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
       completeLabel="Fertig"
       maxWidth="max-w-2xl"
     >
-      {/* Step: Platform selection */}
+      {/* Mode toggle — shown on step 1 */}
       {step === 1 && (
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setEnrollMode('single')}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition-all ${enrollMode === 'single' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+          >
+            Single Device
+          </button>
+          <button
+            onClick={() => { setEnrollMode('bulk'); setBulkResults(null); setBulkCsv(''); setBulkParsed([]); }}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition-all flex items-center justify-center gap-1.5 ${enrollMode === 'bulk' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+          >
+            <TableCellsIcon className="h-4 w-4" />
+            Bulk Enroll
+          </button>
+        </div>
+      )}
+
+      {/* Step: Platform selection (single mode) */}
+      {step === 1 && enrollMode === 'single' && (
         <div className="space-y-4">
           <p className="text-sm text-gray-500">Welche Art von Gerät möchtest du hinzufügen?</p>
 
@@ -382,6 +475,127 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Step: Bulk Enrollment (bulk mode) */}
+      {step === 1 && enrollMode === 'bulk' && (
+        <div className="space-y-4">
+          {!bulkResults ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">CSV Input</label>
+                <textarea
+                  value={bulkCsv}
+                  onChange={e => handleBulkCsvChange(e.target.value)}
+                  rows={8}
+                  placeholder={`deviceName,platform,serialNumber\nworkstation-01,windows,SN12345\nlaptop-02,macos,SN67890\nserver-03,linux,`}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500 resize-y"
+                  spellCheck={false}
+                />
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Format: <code className="bg-gray-100 px-1 rounded">deviceName,platform,serialNumber</code> — one device per line.
+                  Platform: <code className="bg-gray-100 px-1 rounded">windows</code> | <code className="bg-gray-100 px-1 rounded">macos</code> | <code className="bg-gray-100 px-1 rounded">linux</code>.
+                  serialNumber is optional.
+                </p>
+              </div>
+
+              {bulkParseError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex gap-2">
+                  <ExclamationTriangleIcon className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-700">{bulkParseError}</p>
+                </div>
+              )}
+
+              {bulkParsed.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-600 mb-1.5">{bulkParsed.length} device(s) ready to enroll:</p>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          {['Device Name', 'Platform', 'Serial'].map(h => (
+                            <th key={h} className="px-3 py-2 text-left font-medium text-gray-500">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {bulkParsed.map((d, i) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-3 py-1.5 font-mono text-gray-800">{d.deviceName}</td>
+                            <td className="px-3 py-1.5 text-gray-600">{d.platform}</td>
+                            <td className="px-3 py-1.5 text-gray-400">{d.serialNumber || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <button
+                  onClick={handleBulkEnroll}
+                  disabled={bulkSubmitting || bulkParsed.length === 0}
+                  className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {bulkSubmitting ? 'Enrolling…' : `Enroll ${bulkParsed.length > 0 ? bulkParsed.length : ''} Device${bulkParsed.length !== 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm font-medium text-gray-700">Enrollment Results</p>
+                <button
+                  onClick={() => { setBulkResults(null); setBulkCsv(''); setBulkParsed([]); }}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  Enroll more
+                </button>
+              </div>
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {['Device Name', 'Status', 'Steps / Error'].map(h => (
+                        <th key={h} className="px-3 py-2 text-left font-medium text-gray-500">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {bulkResults.map((r, i) => (
+                      <tr key={i} className={r.status === 'failed' ? 'bg-red-50' : 'bg-white'}>
+                        <td className="px-3 py-2 font-mono text-gray-800">{r.deviceName}</td>
+                        <td className="px-3 py-2">
+                          <span className={`px-1.5 py-0.5 rounded font-medium ${r.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-500">
+                          {r.error ? (
+                            <span className="text-red-600">{r.error}</span>
+                          ) : r.steps && r.steps.length > 0 ? (
+                            <span>{r.steps.join(' → ')}</span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                >
+                  Done
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 

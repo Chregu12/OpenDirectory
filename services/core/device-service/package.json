@@ -24,12 +24,21 @@
     "uuid": "^9.0.1",
     "joi": "^17.11.0",
     "axios": "^1.6.2",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "amqplib": "^0.10.3",
+    "jose": "^5.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",
     "jest": "^29.7.0",
-    "eslint": "^8.54.0"
+    "eslint": "^8.54.0",
+    "supertest": "^6.3.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/__tests__/**/*.test.js", "**/__tests__/**/*.e2e.test.js"],
+    "testTimeout": 15000,
+    "transform": {}
   },
   "author": "OpenDirectory Team",
   "license": "MIT",

@@ -1,0 +1,17 @@
+syntax = "proto3";
+package opendirectory;
+
+service DeviceService {
+  rpc GetDevice (GetDeviceRequest) returns (DeviceResponse);
+  rpc ListDevices (ListDevicesRequest) returns (ListDevicesResponse);
+  rpc GetDeviceCompliance (GetDeviceRequest) returns (ComplianceResponse);
+  rpc QueueCommand (QueueCommandRequest) returns (CommandResponse);
+}
+
+message GetDeviceRequest { string device_id = 1; }
+message ListDevicesRequest { string org_id = 1; int32 limit = 2; int32 offset = 3; }
+message DeviceResponse { string id = 1; string hostname = 2; string platform = 3; string status = 4; bool is_compliant = 5; string last_seen = 6; }
+message ListDevicesResponse { repeated DeviceResponse devices = 1; int32 total = 2; }
+message ComplianceResponse { string device_id = 1; bool is_compliant = 2; repeated string violations = 3; string checked_at = 4; }
+message QueueCommandRequest { string device_id = 1; string command_type = 2; string payload_json = 3; }
+message CommandResponse { string command_id = 1; string status = 2; bool delivered = 3; }

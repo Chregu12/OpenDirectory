@@ -12,6 +12,58 @@ const moment = require('moment');
 const axios = require('axios');
 const winston = require('winston');
 
+// ─── Event Bus ───────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'license-management' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+async function subscribeToEvents(queueName, routingKeys, handler) {
+  await _bus.subscribe(queueName, routingKeys, async (payload, meta) => {
+    await handler(meta.routingKey, payload);
+    meta.ack();
+  });
+}
+
+connectBus();
+
+// Subscribe per event-routing.yaml: identity.user.created / identity.user.deleted
+// so the license service can react to user lifecycle events (e.g. auto-revoke).
+setTimeout(async () => {
+  try {
+    await subscribeToEvents('license.identity.events', [
+      'identity.user.created',
+      'identity.user.deleted',
+    ], async (routingKey, payload) => {
+      try {
+        if (routingKey === 'identity.user.deleted' && payload.userId) {
+          // Revoke all licenses assigned to the deleted user
+          if (global.licenseService) {
+            for (const license of global.licenseService.licenses.values()) {
+              const assignments = license.assignments || [];
+              const hasAssignment = assignments.some(a => a.userId === payload.userId);
+              if (hasAssignment) {
+                license.assignments = assignments.filter(a => a.userId !== payload.userId);
+                license.updatedAt = new Date().toISOString();
+                global.licenseService.licenses.set(license.id, license);
+                publish('license.revoked', { licenseId: license.id, userId: payload.userId, reason: 'user_deleted' });
+              }
+            }
+          }
+        }
+        // identity.user.created — no automatic action needed; licenses are assigned explicitly
+      } catch (e) {
+        // log but don't crash
+        console.warn('[license-management] identity event handler error:', e.message);
+      }
+    });
+  } catch (e) {
+    console.warn('[license-management] subscribeToEvents error:', e.message);
+  }
+}, 3000);
+
 /**
  * Enterprise License Management Service
  * Comprehensive software license tracking, compliance monitoring, and optimization
@@ -39,7 +91,7 @@ class LicenseManagementService {
     this.config = {
       servicePort: process.env.LICENSE_SERVICE_PORT || 3018,
       databaseUrl: process.env.DATABASE_URL || 'postgresql://localhost/opendirectory_licenses',
-      mobileManagementServiceUrl: process.env.MOBILE_SERVICE_URL || 'http://mobile-management:3013',
+      mobileManagementServiceUrl: process.env.MOBILE_SERVICE_URL || 'http://mobile-management',
       alertingEnabled: process.env.ALERTING_ENABLED === 'true',
       emailConfig: {
         smtp: {
@@ -590,6 +642,70 @@ class LicenseManagementService {
     }
   }
 
+  async assignLicense(req, res) {
+    try {
+      const { licenseId } = req.params;
+      const { userId, deviceId } = req.body;
+
+      if (!userId && !deviceId) {
+        return res.status(400).json({
+          error: 'Missing required fields: userId or deviceId',
+          requestId: req.id
+        });
+      }
+
+      const license = this.licenses.get(licenseId);
+      if (!license) {
+        return res.status(404).json({ error: 'License not found', requestId: req.id });
+      }
+
+      const assignedAt = new Date().toISOString();
+      license.assignments = license.assignments || [];
+      license.assignments.push({ userId, deviceId, assignedAt });
+      license.updatedAt = assignedAt;
+      this.licenses.set(licenseId, license);
+
+      this.logAuditEvent('license_assigned', { licenseId, userId, deviceId, assignedAt });
+
+      publish('license.assigned', { licenseId, deviceId, userId, assignedAt });
+
+      res.json({ success: true, data: { licenseId, userId, deviceId, assignedAt }, requestId: req.id });
+    } catch (error) {
+      this.logger.error('Assign license error', { error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to assign license', details: error.message, requestId: req.id });
+    }
+  }
+
+  async revokeLicense(req, res) {
+    try {
+      const { licenseId } = req.params;
+      const { userId, deviceId } = req.body;
+
+      const license = this.licenses.get(licenseId);
+      if (!license) {
+        return res.status(404).json({ error: 'License not found', requestId: req.id });
+      }
+
+      const revokedAt = new Date().toISOString();
+      if (license.assignments) {
+        license.assignments = license.assignments.filter(
+          a => !(a.userId === userId && a.deviceId === deviceId)
+        );
+      }
+      license.updatedAt = revokedAt;
+      this.licenses.set(licenseId, license);
+
+      this.logAuditEvent('license_revoked', { licenseId, userId, deviceId, revokedAt });
+
+      publish('license.revoked', { licenseId, deviceId, revokedAt });
+
+      res.json({ success: true, data: { licenseId, userId, deviceId, revokedAt }, requestId: req.id });
+    } catch (error) {
+      this.logger.error('Revoke license error', { error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to revoke license', details: error.message, requestId: req.id });
+    }
+  }
+
   async trackUsage(req, res) {
     try {
       const { licenseId, userId, deviceId, action, metadata = {} } = req.body;
@@ -1095,6 +1211,7 @@ class LicenseManagementService {
         expiryDate: license.expiryDate
       });
       isCompliant = false;
+      publish('license.expired', { licenseId, expiresAt: license.expiryDate });
     }
 
     // Check usage limits

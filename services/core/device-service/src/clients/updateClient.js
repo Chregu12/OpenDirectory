@@ -7,7 +7,7 @@
  * All methods return null on network failure so callers can respond with 503.
  */
 
-const BASE = process.env.UPDATE_SERVICE_URL || 'http://update-management:3010';
+const BASE = process.env.UPDATE_SERVICE_URL || 'http://update-management';
 const TIMEOUT_MS = 5000;
 
 async function _request(method, path, body) {

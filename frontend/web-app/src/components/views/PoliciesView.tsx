@@ -29,6 +29,7 @@ import {
   ArrowPathIcon,
   ExclamationTriangleIcon,
   UserGroupIcon,
+  ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { useUiMode } from '@/lib/ui-mode';
@@ -869,6 +870,130 @@ function ArtifactViewer({ compiled, policyId }: { compiled: CompiledResult; poli
   );
 }
 
+// ── Rollback Modal ────────────────────────────────────────────────────────────
+interface RollbackStep {
+  step: string;
+  status: 'success' | 'failed' | 'skipped';
+  detail?: string;
+}
+
+interface RollbackModalProps {
+  deploymentId: string;
+  policyName?: string;
+  onClose: () => void;
+  onRollback: (deploymentId: string) => Promise<{ success: boolean; steps?: RollbackStep[] }>;
+}
+
+function RollbackModal({ deploymentId, policyName, onClose, onRollback }: RollbackModalProps) {
+  const [rolling, setRolling] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; steps?: RollbackStep[] } | null>(null);
+
+  const handleConfirm = async () => {
+    setRolling(true);
+    const res = await onRollback(deploymentId);
+    setResult(res);
+    setRolling(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={result ? onClose : undefined}>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <ArrowUturnLeftIcon className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">Roll Back Deployment</h2>
+                {policyName && <p className="text-xs text-gray-500">{policyName}</p>}
+              </div>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
+
+          {!result ? (
+            <>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
+                <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-700">
+                  Roll back this deployment? The policy will be reverted to its previous state and changes applied to endpoints will be undone.
+                </p>
+              </div>
+              <p className="text-xs text-gray-400">Deployment ID: <code className="bg-gray-100 px-1 rounded font-mono">{deploymentId}</code></p>
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirm}
+                  disabled={rolling}
+                  className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg disabled:opacity-50"
+                >
+                  {rolling ? 'Rolling back…' : 'Confirm Rollback'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={`rounded-lg p-3 flex gap-2 ${result.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                {result.success
+                  ? <CheckIcon className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  : <ExclamationTriangleIcon className="w-5 h-5 text-red-500 flex-shrink-0" />}
+                <p className={`text-sm font-medium ${result.success ? 'text-green-800' : 'text-red-700'}`}>
+                  {result.success ? 'Rollback completed successfully.' : 'Rollback failed. Check logs for details.'}
+                </p>
+              </div>
+
+              {result.steps && result.steps.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Steps reversed</p>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                    {result.steps.map((s, i) => (
+                      <div key={i} className="flex items-start gap-2 px-3 py-2 border-b border-gray-100 last:border-0">
+                        <span className="flex-shrink-0 mt-0.5">
+                          {s.status === 'success'
+                            ? <CheckIcon className="w-4 h-4 text-green-600" />
+                            : s.status === 'failed'
+                            ? <XMarkIcon className="w-4 h-4 text-red-500" />
+                            : <span className="w-4 h-4 text-gray-400 text-xs flex items-center justify-center">—</span>}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-800">{s.step}</p>
+                          {s.detail && <p className="text-xs text-gray-400">{s.detail}</p>}
+                        </div>
+                        <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                          s.status === 'success' ? 'bg-green-100 text-green-700' :
+                          s.status === 'failed' ? 'bg-red-100 text-red-600' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>{s.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                >
+                  Close
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -896,6 +1021,12 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
   const [settings,   setSettings]     = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [recompiling, setRecompiling] = useState<string | null>(null);
+
+  // Rollback state
+  const [lastDeploymentId, setLastDeploymentId] = useState<string | null>(null);
+  const [lastDeployedPolicyId, setLastDeployedPolicyId] = useState<string | null>(null);
+  const [showRollbackModal, setShowRollbackModal] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
 
   // Detail view state
   const [detailTab, setDetailTab] = useState<'artifacts' | 'history' | 'quotas' | 'compliance'>('artifacts');
@@ -1088,6 +1219,12 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
       const r = await fetch(`/api/policies/${policyId}/deploy/windows`, { method: 'POST' });
       if (r.ok) {
         const data = await r.json();
+        // Capture deployment ID for rollback
+        const deployId = data.deploymentId || data.deployment_id || data.data?.deploymentId;
+        if (deployId) {
+          setLastDeploymentId(deployId);
+          setLastDeployedPolicyId(policyId);
+        }
         if (data.success && data.auto) {
           toast.success(`GPO automatisch deployed! GUID: ${data.gpo_guid}`);
           loadPolicies();
@@ -1100,6 +1237,33 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
       } else { toast.error('Deploy fehlgeschlagen'); }
     } catch { toast.error('Netzwerkfehler beim Deploy'); }
     finally { setDeploying(false); }
+  };
+
+  const handleRollback = async (deploymentId: string) => {
+    setRollingBack(true);
+    try {
+      const r = await fetch(`/api/quick/policies/deployments/${deploymentId}/rollback`, { method: 'POST' });
+      if (r.ok) {
+        const data = await r.json();
+        const steps = data.steps || data.data?.steps || [];
+        const stepsText = steps.length > 0 ? ` (${steps.length} steps reversed)` : '';
+        toast.success(`Rollback successful${stepsText}`);
+        setShowRollbackModal(false);
+        setLastDeploymentId(null);
+        setLastDeployedPolicyId(null);
+        loadPolicies();
+        return { success: true, steps };
+      } else {
+        const errData = await r.json().catch(() => ({}));
+        toast.error(errData.message || 'Rollback failed');
+        return { success: false };
+      }
+    } catch {
+      toast.error('Network error during rollback');
+      return { success: false };
+    } finally {
+      setRollingBack(false);
+    }
   };
 
   if (loading) {
@@ -1628,6 +1792,15 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
                       <button onClick={() => handleDeploy(policy.id)} disabled={deploying} className="text-green-400 hover:text-green-600 p-1.5 rounded hover:bg-green-50" title="Deploy">
                         <PlayIcon className="h-4 w-4" />
                       </button>
+                      {lastDeployedPolicyId === policy.id && lastDeploymentId && (
+                        <button
+                          onClick={() => setShowRollbackModal(true)}
+                          title="Roll back last deployment"
+                          className="text-amber-400 hover:text-amber-600 p-1.5 rounded hover:bg-amber-50"
+                        >
+                          <ArrowUturnLeftIcon className="h-4 w-4" />
+                        </button>
+                      )}
                       <button onClick={() => handleDeletePolicy(policy.id)} className="text-red-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50" title="Löschen">
                         <TrashIcon className="h-4 w-4" />
                       </button>
@@ -1690,6 +1863,16 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
             </div>
           </div>
         )}
+
+        {/* Rollback Modal (list view) */}
+        {showRollbackModal && lastDeploymentId && (
+          <RollbackModal
+            deploymentId={lastDeploymentId}
+            policyName={policies.find(p => p.id === lastDeployedPolicyId)?.name}
+            onClose={() => setShowRollbackModal(false)}
+            onRollback={handleRollback}
+          />
+        )}
       </div>
     );
   }
@@ -1716,6 +1899,26 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
               Neu kompilieren
             </button>
           )}
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => handleDeploy(selectedPolicy.id)}
+              disabled={deploying}
+              className="flex items-center gap-1.5 text-xs bg-green-600 text-white px-3 py-1.5 rounded hover:bg-green-700 disabled:opacity-60"
+            >
+              <PlayIcon className="h-3.5 w-3.5" />
+              {deploying ? 'Deploying…' : 'Deploy'}
+            </button>
+            {lastDeployedPolicyId === selectedPolicy.id && lastDeploymentId && (
+              <button
+                onClick={() => setShowRollbackModal(true)}
+                className="flex items-center gap-1.5 text-xs bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded hover:bg-amber-200"
+                title="Roll back last deployment"
+              >
+                <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
+                Rollback
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
@@ -1877,6 +2080,16 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
             </div>
           );
         })()}
+
+        {/* Rollback Modal (detail view) */}
+        {showRollbackModal && lastDeploymentId && (
+          <RollbackModal
+            deploymentId={lastDeploymentId}
+            policyName={selectedPolicy.name}
+            onClose={() => setShowRollbackModal(false)}
+            onRollback={handleRollback}
+          />
+        )}
       </div>
     );
   }

@@ -4,6 +4,14 @@ const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { EventEmitter } = require('events');
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'update-management' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 
 // Import services
 const WindowsUpdateService = require('./services/WindowsUpdateService');
@@ -358,6 +366,17 @@ class UpdateManagementService extends EventEmitter {
         this.services.updateRings.on('deploymentScheduled', (deployment) => {
             logger.info(`Deployment scheduled: ${deployment.name}`);
             this.emit('deploymentScheduled', deployment);
+            publish('update.deployed', { deviceId: deployment.deviceId, version: deployment.version, deployedAt: deployment.scheduledAt || new Date().toISOString() });
+        });
+
+        this.services.updateRings.on('deploymentFailed', (deployment) => {
+            logger.info(`Deployment failed: ${deployment.name}`);
+            publish('update.failed', { deviceId: deployment.deviceId, version: deployment.version, error: deployment.error });
+        });
+
+        this.services.updateRings.on('ringUpdated', (ring) => {
+            logger.info(`Update ring changed: ${ring.name}`);
+            publish('update.ring.changed', { ringId: ring.id, deviceIds: ring.deviceIds || [] });
         });
 
         // Remote actions service events
@@ -508,6 +527,8 @@ class UpdateManagementService extends EventEmitter {
      */
     async start() {
         try {
+            connectBus();
+
             const port = config.port || 3000;
             const host = config.host || '0.0.0.0';
 

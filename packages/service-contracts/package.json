@@ -4,11 +4,28 @@
   "description": "Shared service contracts for OpenDirectory microservices: event constants, error types, and base HTTP client utilities",
   "main": "src/index.js",
   "license": "MIT",
-  "keywords": ["opendirectory", "microservices", "contracts"],
+  "keywords": [
+    "opendirectory",
+    "microservices",
+    "contracts"
+  ],
   "exports": {
     ".": "./src/index.js",
     "./events": "./src/events.js",
     "./errors": "./src/errors.js",
     "./httpClient": "./src/httpClient.js"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "amqplib": "^2.0.1",
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/__tests__/**/*.test.js"
+    ]
   }
 }

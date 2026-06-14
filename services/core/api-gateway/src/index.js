@@ -11,7 +11,7 @@ const { Pool } = require('pg');
 const pgPool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || process.env.POSTGRES_DB || 'auth',
+  database: process.env.DB_NAME || process.env.POSTGRES_DB || 'api_gateway',
   user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
   password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || '',
   max: 5,
@@ -60,6 +60,16 @@ pgPool.query('SELECT 1').then(() => {
 }).catch(() => {});
 
 const logger = require('./config/logger');
+
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'api-gateway' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+
 const serviceDiscovery = require('./discovery/serviceDiscovery');
 const authMiddleware = require('./middleware/auth');
 const routingMiddleware = require('./middleware/routing');
@@ -281,6 +291,16 @@ class APIGateway {
     this.app.post('/api/gateway/webhooks/:webhookId/test', this.testWebhook.bind(this));
     this.app.get('/api/gateway/webhooks/:webhookId/deliveries', this.getWebhookDeliveries.bind(this));
 
+    // RabbitMQ audit logging for API requests
+    this.app.use((req, res, next) => {
+      res.on('finish', () => {
+        if (req.path !== '/health' && req.path !== '/metrics') {
+          publish('api.request', { method: req.method, path: req.path, status: res.statusCode, ip: req.ip });
+        }
+      });
+      next();
+    });
+
     // Dynamic proxy setup for enabled modules
     this.setupDynamicProxies();
 
@@ -305,198 +325,198 @@ class APIGateway {
     const connectedServices = [];
 
     // Core services (always enabled)
-    this.setupServiceProxy('authentication', 'http://authentication-service:3001', '/api/auth');
-    this.setupServiceProxy('pim', 'http://authentication-service:3001', '/api/pim');
-    this.setupServiceProxy('configuration', 'http://configuration-service:3002', '/api/config');
+    this.setupServiceProxy('authentication', 'http://authentication-service', '/api/auth');
+    this.setupServiceProxy('pim', 'http://authentication-service', '/api/pim');
+    this.setupServiceProxy('configuration', 'http://configuration-service', '/api/config');
     connectedServices.push('authentication', 'pim', 'configuration');
 
     // Health service (if exists)
-    this.setupServiceProxy('health', 'http://health-service:3020', '/api/health');
+    this.setupServiceProxy('health', 'http://health-service', '/api/health');
     connectedServices.push('health');
 
     // Module-based proxies - ALL available modules
     if (enabledModules.includes('network-infrastructure')) {
-      this.setupServiceProxy('network', 'http://network-infrastructure:3007', '/api/network');
+      this.setupServiceProxy('network', 'http://network-infrastructure', '/api/network');
       connectedServices.push('network-infrastructure');
     }
 
     if (enabledModules.includes('security-suite')) {
-      this.setupServiceProxy('security', 'http://security-suite:3008', '/api/security');
+      this.setupServiceProxy('security', 'http://security-suite', '/api/security');
       connectedServices.push('security-suite');
     }
 
     if (enabledModules.includes('printer-service')) {
-      this.setupServiceProxy('printer', 'http://printer-service:3006', '/api/printer');
-      this.setupServiceProxy('printers', 'http://printer-service:3006', '/api/printers'); // Alternative route
+      this.setupServiceProxy('printer', 'http://printer-service', '/api/printer');
+      this.setupServiceProxy('printers', 'http://printer-service', '/api/printers'); // Alternative route
       connectedServices.push('printer-service');
     }
 
     if (enabledModules.includes('monitoring-analytics')) {
-      this.setupServiceProxy('monitoring', 'http://monitoring-analytics:3009', '/api/monitoring');
-      this.setupServiceProxy('analytics', 'http://monitoring-analytics:3009', '/api/analytics');
+      this.setupServiceProxy('monitoring', 'http://monitoring-analytics', '/api/monitoring');
+      this.setupServiceProxy('analytics', 'http://monitoring-analytics', '/api/analytics');
       connectedServices.push('monitoring-analytics');
     }
 
     if (enabledModules.includes('device-management')) {
-      this.setupServiceProxy('devices', 'http://device-service:3003', '/api/devices');
-      this.setupServiceProxy('device', 'http://device-service:3003', '/api/device'); // Singular route
+      this.setupServiceProxy('devices', 'http://device-service', '/api/devices');
+      this.setupServiceProxy('device', 'http://device-service', '/api/device'); // Singular route
       connectedServices.push('device-management');
     }
 
     if (enabledModules.includes('policy-compliance')) {
-      this.setupServiceProxy('policy', 'http://policy-compliance:3010', '/api/policy');
-      this.setupServiceProxy('compliance', 'http://policy-compliance:3010', '/api/compliance');
+      this.setupServiceProxy('policy', 'http://policy-compliance', '/api/policy');
+      this.setupServiceProxy('compliance', 'http://policy-compliance', '/api/compliance');
       connectedServices.push('policy-compliance');
     }
 
     if (enabledModules.includes('backup-disaster')) {
-      this.setupServiceProxy('backup', 'http://backup-disaster:3011', '/api/backup');
-      this.setupServiceProxy('disaster-recovery', 'http://backup-disaster:3011', '/api/dr');
+      this.setupServiceProxy('backup', 'http://backup-disaster', '/api/backup');
+      this.setupServiceProxy('disaster-recovery', 'http://backup-disaster', '/api/dr');
       connectedServices.push('backup-disaster');
     }
 
     if (enabledModules.includes('automation-workflows')) {
-      this.setupServiceProxy('automation', 'http://automation-workflows:3012', '/api/automation');
-      this.setupServiceProxy('workflows', 'http://automation-workflows:3012', '/api/workflows');
+      this.setupServiceProxy('automation', 'http://automation-workflows', '/api/automation');
+      this.setupServiceProxy('workflows', 'http://automation-workflows', '/api/workflows');
       connectedServices.push('automation-workflows');
     }
 
     if (enabledModules.includes('container-orchestration')) {
-      this.setupServiceProxy('containers', 'http://container-orchestration:3013', '/api/containers');
-      this.setupServiceProxy('kubernetes', 'http://container-orchestration:3013', '/api/k8s');
-      this.setupServiceProxy('docker', 'http://container-orchestration:3013', '/api/docker');
+      this.setupServiceProxy('containers', 'http://container-orchestration', '/api/containers');
+      this.setupServiceProxy('kubernetes', 'http://container-orchestration', '/api/k8s');
+      this.setupServiceProxy('docker', 'http://container-orchestration', '/api/docker');
       connectedServices.push('container-orchestration');
     }
 
     if (enabledModules.includes('enterprise-integrations')) {
-      this.setupServiceProxy('integrations', 'http://enterprise-integrations:3014', '/api/integrations');
-      this.setupServiceProxy('erp', 'http://enterprise-integrations:3014', '/api/erp');
-      this.setupServiceProxy('sap', 'http://enterprise-integrations:3014', '/api/sap');
-      this.setupServiceProxy('o365', 'http://enterprise-integrations:3014', '/api/o365');
+      this.setupServiceProxy('integrations', 'http://enterprise-integrations', '/api/integrations');
+      this.setupServiceProxy('erp', 'http://enterprise-integrations', '/api/erp');
+      this.setupServiceProxy('sap', 'http://enterprise-integrations', '/api/sap');
+      this.setupServiceProxy('o365', 'http://enterprise-integrations', '/api/o365');
       connectedServices.push('enterprise-integrations');
     }
 
     if (enabledModules.includes('ai-intelligence')) {
-      this.setupServiceProxy('ai', 'http://ai-intelligence:3015', '/api/ai');
-      this.setupServiceProxy('ml', 'http://ai-intelligence:3015', '/api/ml');
-      this.setupServiceProxy('predictions', 'http://ai-intelligence:3015', '/api/predictions');
+      this.setupServiceProxy('ai', 'http://ai-intelligence', '/api/ai');
+      this.setupServiceProxy('ml', 'http://ai-intelligence', '/api/ml');
+      this.setupServiceProxy('predictions', 'http://ai-intelligence', '/api/predictions');
       connectedServices.push('ai-intelligence');
     }
 
     // Legacy API Backend (if still needed)
     if (enabledModules.includes('api-backend')) {
-      this.setupServiceProxy('legacy', 'http://api-backend:8081', '/api/legacy');
+      this.setupServiceProxy('legacy', 'http://api-backend', '/api/legacy');
       connectedServices.push('api-backend');
     }
 
     // Integration Service (for external services)
     if (enabledModules.includes('integration-service')) {
-      this.setupServiceProxy('external', 'http://integration-service:3005', '/api/external');
-      this.setupServiceProxy('lldap', 'http://integration-service:3005', '/api/lldap');
-      this.setupServiceProxy('grafana', 'http://integration-service:3005', '/api/grafana');
-      this.setupServiceProxy('prometheus', 'http://integration-service:3005', '/api/prometheus');
-      this.setupServiceProxy('vault', 'http://integration-service:3005', '/api/vault');
+      this.setupServiceProxy('external', 'http://integration-service', '/api/external');
+      this.setupServiceProxy('lldap', 'http://integration-service', '/api/lldap');
+      this.setupServiceProxy('grafana', 'http://integration-service', '/api/grafana');
+      this.setupServiceProxy('prometheus', 'http://integration-service', '/api/prometheus');
+      this.setupServiceProxy('vault', 'http://integration-service', '/api/vault');
       connectedServices.push('integration-service');
     }
 
     // Identity and Policy services from core
     if (enabledModules.includes('identity-service')) {
-      this.setupServiceProxy('identity', 'http://identity-service:3001', '/api/identity');
-      this.setupServiceProxy('users', 'http://identity-service:3001', '/api/users');
-      this.setupServiceProxy('groups', 'http://identity-service:3001', '/api/groups');
+      this.setupServiceProxy('identity', 'http://identity-service', '/api/identity');
+      this.setupServiceProxy('users', 'http://identity-service', '/api/users');
+      this.setupServiceProxy('groups', 'http://identity-service', '/api/groups');
       connectedServices.push('identity-service');
     }
 
     if (enabledModules.includes('policy-service')) {
-      this.setupServiceProxy('policies', 'http://policy-service:3004', '/api/policies');
-      this.setupServiceProxy('blueprints', 'http://policy-service:3004', '/api/blueprints');
-      this.setupServiceProxy('licenses', 'http://policy-service:3004', '/api/licenses');
+      this.setupServiceProxy('policies', 'http://policy-service', '/api/policies');
+      this.setupServiceProxy('blueprints', 'http://policy-service', '/api/blueprints');
+      this.setupServiceProxy('licenses', 'http://policy-service', '/api/licenses');
       connectedServices.push('policy-service');
     }
 
     // Notification Service
     if (enabledModules.includes('notification-service')) {
-      this.setupServiceProxy('notifications', 'http://notification-service:3016', '/api/notifications');
-      this.setupServiceProxy('alerts', 'http://notification-service:3016', '/api/alerts');
+      this.setupServiceProxy('notifications', 'http://notification-service', '/api/notifications');
+      this.setupServiceProxy('alerts', 'http://notification-service', '/api/alerts');
       connectedServices.push('notification-service');
     }
 
     // Deployment Service
     if (enabledModules.includes('deployment-service')) {
-      this.setupServiceProxy('deployment', 'http://deployment-service:3017', '/api/deployment');
-      this.setupServiceProxy('apps', 'http://deployment-service:3017', '/api/apps');
+      this.setupServiceProxy('deployment', 'http://deployment-service', '/api/deployment');
+      this.setupServiceProxy('apps', 'http://deployment-service', '/api/apps');
       connectedServices.push('deployment-service');
     }
 
     // License Management Service
     if (enabledModules.includes('license-management')) {
-      this.setupServiceProxy('license', 'http://license-management:3018', '/api/license');
-      this.setupServiceProxy('licenses', 'http://license-management:3018', '/api/license'); // Alternative route
+      this.setupServiceProxy('license', 'http://license-management', '/api/license');
+      this.setupServiceProxy('licenses', 'http://license-management', '/api/license'); // Alternative route
       connectedServices.push('license-management');
     }
 
     // Certificate Authority service (always enabled)
-    this.app.use('/api/ca', createProxyMiddleware({ target: 'http://certificate-authority:3012', changeOrigin: true, pathRewrite: { '^/api/ca': '/ca' } }));
+    this.app.use('/api/ca', createProxyMiddleware({ target: 'http://certificate-authority', changeOrigin: true, pathRewrite: { '^/api/ca': '/ca' } }));
     connectedServices.push('certificate-authority');
 
     // Kerberos KDC REST API (always enabled)
-    this.app.use('/api/kerberos', createProxyMiddleware({ target: 'http://kerberos-kdc:3013', changeOrigin: true }));
+    this.app.use('/api/kerberos', createProxyMiddleware({ target: 'http://kerberos-kdc', changeOrigin: true }));
     connectedServices.push('kerberos-kdc');
 
     // Apple MDM server (always enabled — enrollment, APNs push, command delivery)
-    this.app.use('/api/mdm', createProxyMiddleware({ target: 'http://apple-mdm:3014', changeOrigin: true }));
-    this.app.use('/mdm', createProxyMiddleware({ target: 'http://apple-mdm:3014', changeOrigin: true }));
+    this.app.use('/api/mdm', createProxyMiddleware({ target: 'http://apple-mdm', changeOrigin: true }));
+    this.app.use('/mdm', createProxyMiddleware({ target: 'http://apple-mdm', changeOrigin: true }));
     connectedServices.push('apple-mdm');
 
     // Intelligence Services (always enabled - core platform value)
-    this.setupServiceProxy('graph', 'http://graph-explorer:3900', '/api/graph');
-    this.setupServiceProxy('graph-explorer', 'http://graph-explorer:3900', '/api/graph-explorer');
+    this.setupServiceProxy('graph', 'http://graph-explorer', '/api/graph');
+    this.setupServiceProxy('graph-explorer', 'http://graph-explorer', '/api/graph-explorer');
     connectedServices.push('graph-explorer');
 
-    this.setupServiceProxy('simulator', 'http://policy-simulator:3901', '/api/simulator');
-    this.setupServiceProxy('drift', 'http://policy-simulator:3901', '/api/drift');
-    this.setupServiceProxy('timeline', 'http://policy-simulator:3901', '/api/timeline');
+    this.setupServiceProxy('simulator', 'http://policy-simulator', '/api/simulator');
+    this.setupServiceProxy('drift', 'http://policy-simulator', '/api/drift');
+    this.setupServiceProxy('timeline', 'http://policy-simulator', '/api/timeline');
     connectedServices.push('policy-simulator');
 
-    this.setupServiceProxy('scanner', 'http://security-scanner:3902', '/api/scanner');
-    this.setupServiceProxy('security-scan', 'http://security-scanner:3902', '/api/security-scan');
+    this.setupServiceProxy('scanner', 'http://security-scanner', '/api/scanner');
+    this.setupServiceProxy('security-scan', 'http://security-scanner', '/api/security-scan');
     connectedServices.push('security-scanner');
 
-    this.setupServiceProxy('lifecycle', 'http://device-lifecycle:3903', '/api/lifecycle');
-    this.setupServiceProxy('device-lifecycle', 'http://device-lifecycle:3903', '/api/device-lifecycle');
+    this.setupServiceProxy('lifecycle', 'http://device-lifecycle', '/api/lifecycle');
+    this.setupServiceProxy('device-lifecycle', 'http://device-lifecycle', '/api/device-lifecycle');
     connectedServices.push('device-lifecycle');
 
-    this.setupServiceProxy('remediation', 'http://auto-remediation:3904', '/api/remediation');
-    this.setupServiceProxy('auto-remediation', 'http://auto-remediation:3904', '/api/auto-remediation');
+    this.setupServiceProxy('remediation', 'http://auto-remediation', '/api/remediation');
+    this.setupServiceProxy('auto-remediation', 'http://auto-remediation', '/api/auto-remediation');
     connectedServices.push('auto-remediation');
 
-    this.setupServiceProxy('antivirus', 'http://antivirus-protection:3905', '/api/antivirus');
-    this.setupServiceProxy('clamav', 'http://antivirus-protection:3905', '/api/clamav');
+    this.setupServiceProxy('antivirus', 'http://antivirus-protection', '/api/antivirus');
+    this.setupServiceProxy('clamav', 'http://antivirus-protection', '/api/clamav');
     connectedServices.push('antivirus-protection');
 
     // App Store
-    this.setupServiceProxy('appstore', 'http://app-store:3906', '/api/appstore');
+    this.setupServiceProxy('appstore', 'http://app-store', '/api/appstore');
     connectedServices.push('app-store');
 
     // Notification / Alerting service
-    this.setupServiceProxy('notification', 'http://notification-service:3020', '/api/notification');
+    this.setupServiceProxy('notification', 'http://notification-service', '/api/notification');
     connectedServices.push('notification-service');
 
     // Backup service
-    this.setupServiceProxy('backup-jobs', 'http://backup-service:3011', '/api/backup');
+    this.setupServiceProxy('backup-jobs', 'http://backup-service', '/api/backup');
     connectedServices.push('backup-service');
 
     // MDM (Apple MDM)
-    this.setupServiceProxy('mdm', 'http://apple-mdm:3014', '/api/mdm');
+    this.setupServiceProxy('mdm', 'http://apple-mdm', '/api/mdm');
     connectedServices.push('apple-mdm');
 
     // Certificate Authority
-    this.setupServiceProxy('ca', 'http://certificate-authority:3012', '/api/ca');
-    this.setupServiceProxy('certificates', 'http://certificate-authority:3012', '/api/certificates');
+    this.setupServiceProxy('ca', 'http://certificate-authority', '/api/ca');
+    this.setupServiceProxy('certificates', 'http://certificate-authority', '/api/certificates');
     connectedServices.push('certificate-authority');
 
     // Conditional Access
-    this.setupServiceProxy('conditional-access', 'http://conditional-access:3007', '/api/conditional-access');
+    this.setupServiceProxy('conditional-access', 'http://conditional-access', '/api/conditional-access');
     connectedServices.push('conditional-access');
 
     logger.info(`API Gateway configured with ${connectedServices.length} services`);
@@ -1049,6 +1069,7 @@ class APIGateway {
   }
 
   start(port = process.env.PORT || 8080) {
+    connectBus();
     this.server.listen(port, () => {
       logger.info(`🚀 OpenDirectory API Gateway started on port ${port}`);
       logger.info(`📊 Health check available at: http://localhost:${port}/health`);

@@ -614,6 +614,109 @@ export const aiApi = {
     api.post('/api/ai/models/train', modelData),
 };
 
+// Audit Log API (enterprise-directory service, port 3000)
+const DIRECTORY_BASE = process.env.NEXT_PUBLIC_DIRECTORY_URL || '';
+
+export const auditApi = {
+  getEvents: (params?: {
+    from?: string;
+    to?: string;
+    actorId?: string;
+    targetDn?: string;
+    operation?: string;
+    category?: string;
+    severity?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.from)      query.set('from',      params.from);
+    if (params?.to)        query.set('to',        params.to);
+    if (params?.actorId)   query.set('actorId',   params.actorId);
+    if (params?.targetDn)  query.set('targetDn',  params.targetDn);
+    if (params?.operation) query.set('operation', params.operation);
+    if (params?.category)  query.set('category',  params.category);
+    if (params?.severity)  query.set('severity',  params.severity);
+    if (params?.search)    query.set('search',    params.search);
+    query.set('limit',  String(params?.limit  ?? 100));
+    query.set('offset', String(params?.offset ?? 0));
+    return api.get(`${DIRECTORY_BASE}/api/audit/log?${query.toString()}`);
+  },
+
+  getActorActivity: (actorId: string, params?: { from?: string; to?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.from) query.set('from', params.from);
+    if (params?.to)   query.set('to',   params.to);
+    return api.get(`${DIRECTORY_BASE}/api/audit/actors/${encodeURIComponent(actorId)}/activity?${query.toString()}`);
+  },
+
+  getObjectHistory: (dn: string) =>
+    api.get(`${DIRECTORY_BASE}/api/audit/objects/${encodeURIComponent(dn)}/history`),
+
+  getStats: () =>
+    api.get(`${DIRECTORY_BASE}/api/audit/stats`),
+
+  getIntegrity: () =>
+    api.get(`${DIRECTORY_BASE}/api/audit/integrity`),
+
+  getCorrelations: (correlationId: string) =>
+    api.get(`${DIRECTORY_BASE}/api/audit/correlations/${correlationId}`),
+
+  exportEvents: (params?: { format?: string; category?: string; severity?: string }) =>
+    api.post(`${DIRECTORY_BASE}/api/audit/export`, params),
+};
+
+// PIM Sessions API (conditional-access service, port 3007)
+const PIM_BASE = process.env.NEXT_PUBLIC_PIM_URL || '';
+
+export const pimSessionsApi = {
+  getSessions: () =>
+    api.get(`${PIM_BASE}/api/v1/pim/sessions`),
+
+  getSession: (id: string) =>
+    api.get(`${PIM_BASE}/api/v1/pim/sessions/${id}`),
+
+  getSessionReplay: (id: string) =>
+    api.get(`${PIM_BASE}/api/v1/pim/sessions/${id}/replay`),
+
+  getBreakGlassEvents: () =>
+    api.get(`${PIM_BASE}/api/v1/pim/breakglass`),
+
+  requestBreakGlass: (data: { reason: string; systemsAffected: string; estimatedDuration: number }) =>
+    api.post(`${PIM_BASE}/api/v1/pim/breakglass/request`, data),
+
+  activateBreakGlass: (id: string) =>
+    api.post(`${PIM_BASE}/api/v1/pim/breakglass/${id}/activate`, {}),
+
+  terminateBreakGlass: (id: string) =>
+    api.post(`${PIM_BASE}/api/v1/pim/breakglass/${id}/terminate`, {}),
+};
+
+// Quick Actions API (port 3950)
+const QUICK_ACTIONS_BASE = process.env.NEXT_PUBLIC_QUICK_ACTIONS_URL || '';
+
+export const quickActionsApi = {
+  getComplianceSnapshot: () =>
+    api.get(`${QUICK_ACTIONS_BASE}/api/quick/compliance/snapshot`),
+
+  deployPolicy: (data: {
+    policyId?: string;
+    policy_id?: string;
+    targetType?: string;
+    target_type?: string;
+    targetId?: string;
+    target_value?: string;
+    enforced?: boolean;
+    dryRun?: boolean;
+    dry_run?: boolean;
+  }) =>
+    api.post(`${QUICK_ACTIONS_BASE}/api/quick/policies/deploy`, data),
+
+  getDeployment: (id: string) =>
+    api.get(`${QUICK_ACTIONS_BASE}/api/quick/policies/deployments/${id}`),
+};
+
 // Utility functions
 export const formatError = (error: any): string => {
   if (error.response?.data?.error) {

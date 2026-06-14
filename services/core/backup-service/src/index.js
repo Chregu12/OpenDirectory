@@ -25,7 +25,7 @@ try {
   pgPool = new pg.Pool({
     host: process.env.POSTGRES_HOST || 'postgresql',
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    database: process.env.POSTGRES_DB || 'opendirectory',
+    database: process.env.POSTGRES_DB || 'backup',
     user: process.env.POSTGRES_USER || 'opendirectory',
     password: process.env.POSTGRES_PASSWORD || 'opendirectory',
     connectionTimeoutMillis: 3000,
@@ -35,6 +35,15 @@ try {
 } catch (_) {
   // pg not installed — use in-memory store
 }
+
+// ─── RabbitMQ message bus ─────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'backup-service' });
+async function connectBus() { await _bus.connect(); }
+function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 
 // ─── In-memory store (fallback) ───────────────────────────────────────────────
 const memoryStore = {
@@ -383,6 +392,9 @@ async function executeBackup(jobId) {
 
   console.log(`[backup-service] Starting backup: ${job.name} (run ${run.id})`);
 
+  // On backup started:
+  publishEvent('system.backup.started', { jobId, jobName: job.name, target: job.target });
+
   // Simulate backup duration (2–5 seconds)
   const durationMs = randomBetween(2000, 5000);
   await new Promise(resolve => setTimeout(resolve, durationMs));
@@ -401,6 +413,14 @@ async function executeBackup(jobId) {
   backupDurationSeconds.observe(elapsed);
   backupRunsTotal.inc({ status: success ? 'success' : 'failed' });
   if (sizeBytes) backupSizeBytes.inc(sizeBytes);
+
+  if (success) {
+    // On backup success:
+    publishEvent('system.backup.completed', { jobId, jobName: job.name, target: job.target, sizeBytes, durationMs: elapsed * 1000 });
+  } else {
+    // On backup failure:
+    publishEvent('system.backup.failed', { jobId, jobName: job.name, target: job.target, error: error });
+  }
 
   console.log(`[backup-service] Backup ${success ? 'succeeded' : 'FAILED'}: ${job.name} in ${elapsed.toFixed(1)}s`);
 }
@@ -679,6 +699,7 @@ const PORT = parseInt(process.env.PORT || '3011');
 
 async function start() {
   await initDatabase();
+  connectBus();
   await initCronJobs();
 
   app.listen(PORT, '0.0.0.0', () => {
