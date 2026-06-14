@@ -1,42 +1,172 @@
 'use strict';
 
+const PolicyAggregate = require('../domain/PolicyAggregate');
+
+/**
+ * PolicyApplicationService — orchestrates policy use-cases.
+ *
+ * All persistence is delegated to the injected policyRepository.
+ * No direct db.query() calls are allowed here.
+ */
 class PolicyApplicationService {
-  constructor({ policyRepository, blueprintRepository, messageBus, db, logger }) {
-    this._policyRepo = policyRepository;
-    this._blueprintRepo = blueprintRepository;
-    this._bus = messageBus;
-    this._db = db;
-    this._log = logger || console;
+  /**
+   * @param {object} deps
+   * @param {object} deps.policyRepository  - PostgresPolicyRepository instance
+   * @param {object} [deps.blueprintRepository] - optional BlueprintRepository
+   * @param {object} [deps.messageBus]      - optional event bus
+   * @param {object} [deps.logger]          - optional logger
+   */
+  constructor({ policyRepository, blueprintRepository, messageBus, logger } = {}) {
+    if (!policyRepository) throw new Error('policyRepository is required');
+    this._policyRepo      = policyRepository;
+    this._blueprintRepo   = blueprintRepository || null;
+    this._bus             = messageBus || null;
+    this._log             = logger || console;
   }
 
-  async createPolicy({ name, description, type, platform, rules, settings, priority, enforce, createdBy }) {
-    // Use existing DB for persistence (repositories wrap the db)
-    const result = await this._db.query(
-      `INSERT INTO policies (name, description, type, platform, rules, settings, priority, enforce, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [name, description || null, type, platform || 'all',
-       JSON.stringify(rules || []), JSON.stringify(settings || {}),
-       priority || 100, enforce || false, createdBy || null]
-    );
-    const policy = result.rows[0];
-    this._publish('policy.created', { policyId: policy.id, name: policy.name, type: policy.type, createdBy });
-    return policy;
+  // ── Query methods ─────────────────────────────────────────────────────────
+
+  /**
+   * List policies with optional filters and pagination.
+   * @param {object} filters   - { type, platform, status }
+   * @param {object} pagination - { limit, offset }
+   * @returns {Promise<{policies: object[], total: number}>}
+   */
+  async listPolicies(filters = {}, pagination = {}) {
+    const { policies, total } = await this._policyRepo.findAll(filters, pagination);
+    return { policies: policies.map(p => p.toJSON()), total };
   }
 
+  /**
+   * Get a single policy by id.
+   * @param {string} id
+   * @returns {Promise<object|null>}
+   */
+  async getPolicy(id) {
+    const policy = await this._policyRepo.findById(id);
+    return policy ? policy.toJSON() : null;
+  }
+
+  /**
+   * Get all active policies.
+   * @returns {Promise<object[]>}
+   */
+  async getActivePolicies() {
+    const policies = await this._policyRepo.findActive();
+    return policies.map(p => p.toJSON());
+  }
+
+  // ── Command methods ───────────────────────────────────────────────────────
+
+  /**
+   * Create a new policy.
+   * @param {object} data - policy creation payload
+   * @returns {Promise<object>} persisted policy as plain object
+   */
+  async createPolicy(data) {
+    const aggregate = PolicyAggregate.create(data);
+    // Copy extra fields not on the base aggregate that the DB schema expects
+    aggregate.description      = data.description || null;
+    aggregate.enforce          = data.enforce || false;
+    aggregate.block_inheritance = data.block_inheritance || false;
+    aggregate.wmi_filter       = data.wmi_filter || null;
+    aggregate.security_filter  = data.security_filter || null;
+    aggregate.created_by       = data.created_by || null;
+    aggregate.status           = data.status || 'draft';
+
+    const saved = await this._policyRepo.save(aggregate);
+    await this._dispatchEvents(aggregate);
+    return saved.toJSON();
+  }
+
+  /**
+   * Update an existing policy.
+   * @param {string} id
+   * @param {object} changes
+   * @returns {Promise<object>} updated policy as plain object
+   * @throws {Error} if not found
+   */
+  async updatePolicy(id, changes) {
+    const policy = await this._policyRepo.findById(id);
+    if (!policy) throw Object.assign(new Error('Policy not found'), { statusCode: 404 });
+
+    // Apply domain changes for tracked fields
+    const domainFields = ['name', 'type', 'platform', 'settings', 'priority'];
+    const domainChanges = {};
+    for (const key of domainFields) {
+      if (key in changes) domainChanges[key] = changes[key];
+    }
+    if (Object.keys(domainChanges).length) policy.update(domainChanges);
+
+    // Carry over all raw changes so the repository can persist them
+    Object.assign(policy, changes);
+
+    const saved = await this._policyRepo.save(policy);
+    await this._dispatchEvents(policy);
+    return saved.toJSON();
+  }
+
+  /**
+   * Delete a policy by id.
+   * @param {string} id
+   * @returns {Promise<boolean>}
+   * @throws {Error} if not found
+   */
+  async deletePolicy(id) {
+    const deleted = await this._policyRepo.delete(id);
+    if (!deleted) throw Object.assign(new Error('Policy not found'), { statusCode: 404 });
+    return true;
+  }
+
+  /**
+   * Activate a policy.
+   * @param {string} id
+   * @returns {Promise<object>}
+   * @throws {Error} if not found
+   */
+  async activatePolicy(id) {
+    const policy = await this._policyRepo.activate(id);
+    if (!policy) throw Object.assign(new Error('Policy not found'), { statusCode: 404 });
+    policy.enable();
+    await this._dispatchEvents(policy);
+    return policy.toJSON();
+  }
+
+  /**
+   * Deactivate a policy.
+   * @param {string} id
+   * @returns {Promise<object>}
+   * @throws {Error} if not found
+   */
+  async deactivatePolicy(id) {
+    const policy = await this._policyRepo.deactivate(id);
+    if (!policy) throw Object.assign(new Error('Policy not found'), { statusCode: 404 });
+    policy.disable();
+    await this._dispatchEvents(policy);
+    return policy.toJSON();
+  }
+
+  /**
+   * Evaluate compliance for a device against all active enforce policies.
+   * @param {object} params - { deviceId, devicePlatform, deviceProperties }
+   * @returns {Promise<object>}
+   */
   async evaluateCompliance({ deviceId, devicePlatform, deviceProperties }) {
-    // Load all active enforce policies matching the platform
-    const result = await this._db.query(
-      `SELECT * FROM policies WHERE status = 'active' AND enforce = true AND (platform = $1 OR platform = 'all') ORDER BY priority ASC`,
-      [devicePlatform || 'all']
-    );
+    const policies = await this._policyRepo.findActive();
 
     const violations = [];
-    for (const policy of result.rows) {
-      const rules = Array.isArray(policy.rules) ? policy.rules : (JSON.parse(policy.rules || '[]'));
+    for (const policy of policies) {
+      const policyData = policy.toJSON();
+      const rules = Array.isArray(policyData.rules) ? policyData.rules : [];
       for (const rule of rules) {
         const violated = this._checkRule(rule, deviceProperties || {});
         if (violated) {
-          violations.push({ policyId: policy.id, policyName: policy.name, rule: rule.type || rule.key, severity: rule.severity || 'medium' });
+          violations.push({
+            policyId: policyData.id,
+            policyName: policyData.name,
+            rule: rule.type || rule.key,
+            severity: rule.severity || 'medium'
+          });
         }
       }
     }
@@ -52,28 +182,7 @@ class PolicyApplicationService {
     return { deviceId, isCompliant, violations, evaluatedAt: new Date().toISOString() };
   }
 
-  async deployBlueprint({ blueprintId, targetDeviceIds, targetGroupIds, appliedBy }) {
-    const blueprint = await this._db.query('SELECT * FROM blueprints WHERE id = $1', [blueprintId]);
-    if (!blueprint.rows[0]) throw new Error(`Blueprint not found: ${blueprintId}`);
-    const bp = blueprint.rows[0];
-
-    // Get policies linked to blueprint
-    const linked = await this._db.query(
-      'SELECT p.* FROM policies p JOIN blueprint_policies bp ON p.id = bp.policy_id WHERE bp.blueprint_id = $1',
-      [blueprintId]
-    );
-
-    const results = [];
-    for (const deviceId of (targetDeviceIds || [])) {
-      for (const policy of linked.rows) {
-        results.push({ deviceId, policyId: policy.id, policyName: policy.name, applied: true });
-      }
-    }
-
-    this._publish('policy.applied', { blueprintId, name: bp.name, deviceCount: (targetDeviceIds || []).length, appliedBy });
-
-    return { blueprintId, name: bp.name, results, appliedAt: new Date().toISOString() };
-  }
+  // ── Private helpers ───────────────────────────────────────────────────────
 
   _checkRule(rule, properties) {
     if (!rule || !rule.key) return false;
@@ -88,8 +197,20 @@ class PolicyApplicationService {
   }
 
   _publish(routingKey, payload) {
-    if (!this._bus || !this._bus.isConnected()) return;
+    if (!this._bus) return;
     try { this._bus.publish(routingKey, { ...payload, _source: 'policy-service' }); } catch (_) {}
+  }
+
+  async _dispatchEvents(aggregate) {
+    if (!this._bus) return;
+    const events = aggregate.getAndClearDomainEvents();
+    for (const event of events) {
+      try {
+        await this._bus.publish(event.type, event.payload);
+      } catch (err) {
+        this._log.error('Failed to publish domain event', { type: event.type, error: err.message });
+      }
+    }
   }
 }
 

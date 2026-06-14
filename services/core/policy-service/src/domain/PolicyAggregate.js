@@ -1,6 +1,5 @@
 'use strict';
 
-const { EventEmitter } = require('events');
 const {
   POLICY_CREATED,
   POLICY_UPDATED,
@@ -17,24 +16,36 @@ const {
  * Encapsulates all validation rules, state transitions, and domain events for
  * a policy.  Consumers should always go through the public methods rather than
  * mutating properties directly so that domain events are recorded correctly.
+ *
+ * Domain events are collected in _domainEvents and dispatched externally by the
+ * application service after persistence.  This aggregate does NOT extend
+ * EventEmitter — it is a plain class.
  */
-class PolicyAggregate extends EventEmitter {
+class PolicyAggregate {
   /**
    * @param {object} data - raw policy data (from DB row or creation payload)
    */
   constructor(data) {
-    super();
     this._validate(data);
-    this.id        = data.id || null;
-    this.name      = data.name;
-    this.type      = data.type;
-    this.platform  = data.platform || 'all';
-    this.rules     = Array.isArray(data.rules) ? [...data.rules] : [];
-    this.settings  = data.settings || {};
-    this.enabled   = data.enabled !== undefined ? !!data.enabled : true;
-    this.priority  = typeof data.priority === 'number' ? data.priority : 50;
-    this.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
-    this.updatedAt = data.updatedAt ? new Date(data.updatedAt) : new Date();
+    this.id               = data.id || null;
+    this.name             = data.name;
+    this.type             = data.type;
+    this.platform         = data.platform || 'all';
+    this.rules            = Array.isArray(data.rules) ? [...data.rules] : [];
+    this.settings         = data.settings || {};
+    this.enabled          = data.enabled !== undefined ? !!data.enabled : true;
+    this.priority         = typeof data.priority === 'number' ? data.priority : 50;
+    this.status           = data.status || 'draft';
+    this.description      = data.description || null;
+    this.enforce          = data.enforce !== undefined ? !!data.enforce : false;
+    this.block_inheritance = data.block_inheritance !== undefined ? !!data.block_inheritance : false;
+    this.wmi_filter       = data.wmi_filter || null;
+    this.security_filter  = data.security_filter || null;
+    this.created_by       = data.created_by || null;
+    this.activated_at     = data.activated_at || null;
+    this.version          = data.version || 1;
+    this.createdAt        = data.createdAt ? new Date(data.createdAt) : new Date();
+    this.updatedAt        = data.updatedAt ? new Date(data.updatedAt) : new Date();
     this._domainEvents = [];
   }
 
@@ -63,16 +74,25 @@ class PolicyAggregate extends EventEmitter {
    */
   static fromRow(row) {
     return new PolicyAggregate({
-      id:        row.id,
-      name:      row.name,
-      type:      row.type,
-      platform:  row.platform,
-      rules:     row.rules || [],
-      settings:  row.settings || {},
-      enabled:   row.enabled,
-      priority:  row.priority,
-      createdAt: row.created_at || row.createdAt,
-      updatedAt: row.updated_at || row.updatedAt
+      id:               row.id,
+      name:             row.name,
+      type:             row.type,
+      platform:         row.platform,
+      rules:            row.rules || [],
+      settings:         row.settings || {},
+      enabled:          row.enabled,
+      priority:         row.priority,
+      status:           row.status,
+      description:      row.description,
+      enforce:          row.enforce,
+      block_inheritance: row.block_inheritance,
+      wmi_filter:       row.wmi_filter,
+      security_filter:  row.security_filter,
+      created_by:       row.created_by,
+      activated_at:     row.activated_at,
+      version:          row.version,
+      createdAt:        row.created_at || row.createdAt,
+      updatedAt:        row.updated_at || row.updatedAt
     });
   }
 
@@ -159,19 +179,28 @@ class PolicyAggregate extends EventEmitter {
 
   // ── Serialisation ──────────────────────────────────────────────────────────
 
-  /** Return a plain object suitable for persistence. */
+  /** Return a plain object suitable for API responses and persistence. */
   toJSON() {
     return {
-      id:        this.id,
-      name:      this.name,
-      type:      this.type,
-      platform:  this.platform,
-      rules:     this.rules,
-      settings:  this.settings,
-      enabled:   this.enabled,
-      priority:  this.priority,
-      createdAt: this.createdAt,
-      updatedAt: this.updatedAt
+      id:               this.id,
+      name:             this.name,
+      type:             this.type,
+      platform:         this.platform,
+      rules:            this.rules,
+      settings:         this.settings,
+      enabled:          this.enabled,
+      priority:         this.priority,
+      status:           this.status,
+      description:      this.description,
+      enforce:          this.enforce,
+      block_inheritance: this.block_inheritance,
+      wmi_filter:       this.wmi_filter,
+      security_filter:  this.security_filter,
+      created_by:       this.created_by,
+      activated_at:     this.activated_at,
+      version:          this.version,
+      created_at:       this.createdAt,
+      updated_at:       this.updatedAt
     };
   }
 
