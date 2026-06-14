@@ -9,6 +9,9 @@ const logger = require('../utils/logger');
  * Persists authentication and security events to the database when available,
  * and falls back to in-memory storage (with structured log output) when the DB
  * is offline.  All methods are async to make the call-site uniform.
+ *
+ * The audit_events table is created by migration 001_audit_log.sql and extended
+ * by 006_audit_events_v2.sql — no DDL here.
  */
 class AuditService {
   constructor() {
@@ -30,7 +33,6 @@ class AuditService {
         : true;
 
       if (this._dbAvailable) {
-        await this._ensureSchema();
         logger.info('AuditService: database backend ready');
       } else {
         logger.warn('AuditService: database not available, using in-memory fallback');
@@ -38,31 +40,6 @@ class AuditService {
     } catch (err) {
       logger.warn('AuditService: db module not found, using in-memory fallback', { error: err.message });
       this._dbAvailable = false;
-    }
-  }
-
-  async _ensureSchema() {
-    if (!this._dbAvailable || !this._db) return;
-    try {
-      await this._db.query(`
-        CREATE TABLE IF NOT EXISTS audit_events (
-          id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          event_type  VARCHAR(64)  NOT NULL,
-          user_id     VARCHAR(128),
-          username    VARCHAR(256),
-          ip_address  VARCHAR(64),
-          user_agent  TEXT,
-          metadata    JSONB,
-          created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-        )
-      `);
-      await this._db.query(`
-        CREATE INDEX IF NOT EXISTS idx_audit_user_id   ON audit_events(user_id);
-        CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_events(event_type);
-        CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_events(created_at DESC);
-      `);
-    } catch (err) {
-      logger.warn('AuditService: schema init warning', { error: err.message });
     }
   }
 

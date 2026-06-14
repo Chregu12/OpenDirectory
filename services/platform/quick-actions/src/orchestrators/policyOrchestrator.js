@@ -3,12 +3,68 @@
 const { call } = require('../utils/serviceClient');
 const { publish } = require('../utils/eventPublisher');
 
-// ─── in-memory deployment tracker ────────────────────────────────────────────
-// For a production deployment this would be a persistent store (Postgres, Redis, etc.).
-// Here we use a simple in-process Map so the service is self-contained and
-// stateless from the caller's perspective (no DB dependency).
+// ─── persistent deployment store (Redis + in-memory fallback) ─────────────────
+// Redis is the primary store so deployment state survives process restarts.
+// If Redis is unavailable at startup or drops mid-run, all operations fall back
+// to the in-process Map without throwing so the service stays operational.
 
-const deployments = new Map(); // deploymentId → deployment record
+let deploymentsCache = new Map(); // in-process fallback
+let redis = null;
+try {
+  const Redis = require('ioredis');
+  redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+    lazyConnect: false,
+    enableReadyCheck: true,
+    maxRetriesPerRequest: 1,
+  });
+  redis.on('error', (err) => {
+    console.warn('[policyOrchestrator] Redis error, falling back to in-memory store:', err.message);
+    redis = null;
+  });
+  redis.on('connect', () => {
+    console.log('[policyOrchestrator] Redis connected');
+  });
+} catch (_) {
+  console.warn('[policyOrchestrator] ioredis not available, using in-memory store');
+  redis = null;
+}
+
+// TTL of 24 hours for deployment records stored in Redis
+const DEPLOYMENT_TTL_S = 86400;
+
+async function setDeployment(id, data) {
+  if (redis) {
+    await redis.set(`deployment:${id}`, JSON.stringify(data), 'EX', DEPLOYMENT_TTL_S).catch((err) => {
+      console.warn('[policyOrchestrator] Redis set failed:', err.message);
+    });
+  }
+  // Always keep a copy in-memory too (fast read path and offline fallback)
+  deploymentsCache.set(id, data);
+}
+
+async function getDeployment(id) {
+  if (redis) {
+    try {
+      const val = await redis.get(`deployment:${id}`);
+      if (val) return JSON.parse(val);
+    } catch (err) {
+      console.warn('[policyOrchestrator] Redis get failed:', err.message);
+    }
+  }
+  return deploymentsCache.get(id) || null;
+}
+
+async function hasDeployment(id) {
+  if (redis) {
+    try {
+      const exists = await redis.exists(`deployment:${id}`);
+      if (exists) return true;
+    } catch (err) {
+      console.warn('[policyOrchestrator] Redis exists check failed:', err.message);
+    }
+  }
+  return deploymentsCache.has(id);
+}
 
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -188,7 +244,7 @@ async function deployPolicy({ policyId, targetType, targetId, enforced = true, d
   );
   completedSteps.push(s3);
 
-  // Record locally for status lookups
+  // Record in persistent store for status lookups
   const record = {
     deploymentId,
     policyId,
@@ -203,7 +259,7 @@ async function deployPolicy({ policyId, targetType, targetId, enforced = true, d
     completedSteps: completedSteps.map(s => ({ name: s.name, ok: s.ok, error: s.error })),
     policySnapshot: policy,
   };
-  deployments.set(deploymentId, record);
+  await setDeployment(deploymentId, record);
 
   const failed = completedSteps.filter(s => !s.ok);
 
@@ -232,9 +288,9 @@ async function deployPolicy({ policyId, targetType, targetId, enforced = true, d
 async function getPolicyDeploymentStatus(deploymentId) {
   if (!deploymentId) throw new Error('deploymentId is required');
 
-  // Try local store first (fast path)
-  if (deployments.has(deploymentId)) {
-    const record = deployments.get(deploymentId);
+  // Try persistent store first (fast path — survives restarts)
+  if (await hasDeployment(deploymentId)) {
+    const record = await getDeployment(deploymentId);
     return { success: true, ...record };
   }
 
@@ -253,9 +309,9 @@ async function getPolicyDeploymentStatus(deploymentId) {
 async function rollbackPolicy(deploymentId) {
   if (!deploymentId) throw new Error('deploymentId is required');
 
-  const record = deployments.get(deploymentId);
+  const record = await getDeployment(deploymentId);
   if (!record) {
-    return { success: false, deploymentId, error: 'Deployment not found in local store; manual rollback may be needed.' };
+    return { success: false, deploymentId, error: 'Deployment not found in store; manual rollback may be needed.' };
   }
 
   const completedSteps = [];
@@ -303,10 +359,10 @@ async function rollbackPolicy(deploymentId) {
     }
   }
 
-  // Update local record
+  // Update persistent record
   record.status     = 'rolled-back';
   record.rolledBackAt = new Date().toISOString();
-  deployments.set(deploymentId, record);
+  await setDeployment(deploymentId, record);
 
   // Notify policy-service
   await step('record-rollback', () =>
