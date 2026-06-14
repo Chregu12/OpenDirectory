@@ -48,6 +48,30 @@ class DeviceAggregate {
     return this;
   }
 
+  lock(reason) {
+    this._status = 'locked';
+    this._domainEvents.push({ type: DeviceEvents.DEVICE_LOCKED, payload: { deviceId: this._id, reason }, occurredAt: new Date(), eventId: randomUUID() });
+    return this;
+  }
+
+  wipe(reason) {
+    this._status = 'wiped';
+    this._domainEvents.push({ type: DeviceEvents.DEVICE_WIPED, payload: { deviceId: this._id, reason }, occurredAt: new Date(), eventId: randomUUID() });
+    return this;
+  }
+
+  isolate(reason) {
+    this._status = 'isolated';
+    this._domainEvents.push({ type: DeviceEvents.DEVICE_ISOLATED, payload: { deviceId: this._id, reason }, occurredAt: new Date(), eventId: randomUUID() });
+    return this;
+  }
+
+  reconnect() {
+    this._status = 'active';
+    this._domainEvents.push({ type: DeviceEvents.DEVICE_RECONNECTED, payload: { deviceId: this._id }, occurredAt: new Date(), eventId: randomUUID() });
+    return this;
+  }
+
   get id() { return this._id; }
   get hostname() { return this._hostname; }
   get platform() { return this._platform; }

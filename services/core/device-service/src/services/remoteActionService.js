@@ -7,18 +7,24 @@ const logger = require('../utils/logger');
  * RemoteActionService — lock, unlock, wipe, and isolate devices.
  *
  * For each action the service:
- *   1. Verifies the device exists.
- *   2. Updates device status in the DB.
- *   3. Publishes an event on the eventBus.
- *   4. Attempts an MDM HTTP push (if MDM_PUSH_URL is configured).
- *      The MDM push is best-effort: DB update + event succeed even if the push fails.
- *   5. Sends a WebSocket command directly to any connected agent (via wss).
+ *   1. Loads the DeviceAggregate via IDeviceRepository.
+ *   2. Calls the appropriate command method on the aggregate (lock/wipe/isolate/reconnect).
+ *   3. Persists the aggregate back via IDeviceRepository.save().
+ *   4. Dispatches domain events collected on the aggregate via eventBus.publish().
+ *   5. Attempts an MDM HTTP push (best-effort).
+ *   6. Sends a WebSocket command directly to any connected agent (via wss).
+ *
+ * Falls back to the legacy db path for each operation when no deviceRepository
+ * has been injected (backwards-compatibility during migration).
+ *
+ * Non-device tables (e.g. remote_actions log) continue to use this._db.
  */
 class RemoteActionService {
   constructor(wss, eventBus) {
     this.wss = wss;
     this.eventBus = eventBus;
-    this._db = null; // injected after construction via setDb()
+    this._db = null;               // injected after construction via setDb()
+    this._deviceRepository = null; // injected via setDeviceRepository()
     this._config = null;
     this._pendingActions = new Map(); // actionId → { deviceId, type, status, ... }
   }
@@ -28,6 +34,11 @@ class RemoteActionService {
     this._db = db;
   }
 
+  /** Inject the IDeviceRepository implementation. */
+  setDeviceRepository(deviceRepository) {
+    this._deviceRepository = deviceRepository;
+  }
+
   _cfg() {
     if (!this._config) this._config = require('../config');
     return this._config;
@@ -35,6 +46,17 @@ class RemoteActionService {
 
   _generateActionId(prefix = 'act') {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Publish all domain events collected on a DeviceAggregate and clear them.
+   * Fire-and-forget: errors are suppressed so they never block the action.
+   * @param {import('../domain/aggregates/DeviceAggregate')} device
+   */
+  _dispatchDomainEvents(device) {
+    for (const event of device.getAndClearDomainEvents()) {
+      this.eventBus?.publish(event.type, event.payload).catch(() => {});
+    }
   }
 
   /**
@@ -73,7 +95,22 @@ class RemoteActionService {
     return sent;
   }
 
+  /**
+   * Load a device via the repository (preferred) or legacy db.
+   * Throws with statusCode 404 if the device does not exist.
+   */
   async _requireDevice(deviceId) {
+    if (this._deviceRepository) {
+      const device = await this._deviceRepository.findById(deviceId);
+      if (!device) {
+        const err = new Error(`Device not found: ${deviceId}`);
+        err.statusCode = 404;
+        throw err;
+      }
+      return device;
+    }
+
+    // Legacy fallback
     if (!this._db) throw new Error('RemoteActionService: db not initialised');
     const device = await this._db.findById('devices', deviceId);
     if (!device) {
@@ -100,32 +137,43 @@ class RemoteActionService {
   // ─── Lock ──────────────────────────────────────────────────────────────────
 
   /**
-   * Lock a device: update DB status, publish event, attempt MDM push.
+   * Lock a device: update aggregate status, persist, publish events, attempt MDM push.
    * @param {string} deviceId
    * @param {string} [reason]  Human-readable reason for the lock
    * @returns {{ actionId, deviceId, status, mdmPush }}
    */
   async lockDevice(deviceId, reason = '') {
-    const device = await this._requireDevice(deviceId);
     const actionId = this._generateActionId('lock');
 
-    // 1. Update device status in DB
-    await this._db.update('devices', deviceId, {
-      status: 'locked',
-      lockedAt: new Date().toISOString(),
-      lockReason: reason || null
-    });
+    if (this._deviceRepository) {
+      const device = await this._requireDevice(deviceId);
 
-    // 2. Publish event
-    this.eventBus.emit('device.locked', { deviceId, reason, actionId, device });
+      // 1. Mutate aggregate
+      device.lock(reason);
 
-    // 3. MDM push (best-effort)
+      // 2. Persist
+      await this._deviceRepository.save(device);
+
+      // 3. Dispatch domain events
+      this._dispatchDomainEvents(device);
+    } else {
+      // Legacy path
+      await this._requireDevice(deviceId);
+      await this._db.update('devices', deviceId, {
+        status: 'locked',
+        lockedAt: new Date().toISOString(),
+        lockReason: reason || null
+      });
+      this.eventBus.emit('device.locked', { deviceId, reason, actionId });
+    }
+
+    // 4. MDM push (best-effort)
     const mdmPush = await this._tryMdmPush('lock', deviceId, { reason });
 
-    // 4. WebSocket push to connected agent
+    // 5. WebSocket push to connected agent
     this._tryWsPush(deviceId, { type: 'command', command_type: 'lock_device', data: { reason } });
 
-    // 5. Record action
+    // 6. Record action
     await this._recordAction(actionId, deviceId, 'lock', 'completed', { reason, mdmPush });
 
     logger.info('Device locked', { deviceId, actionId, reason });
@@ -140,26 +188,37 @@ class RemoteActionService {
    * @returns {{ actionId, deviceId, status, mdmPush }}
    */
   async unlockDevice(deviceId) {
-    const device = await this._requireDevice(deviceId);
     const actionId = this._generateActionId('unlk');
 
-    // 1. Update device status in DB
-    await this._db.update('devices', deviceId, {
-      status: 'active',
-      unlockedAt: new Date().toISOString(),
-      lockReason: null
-    });
+    if (this._deviceRepository) {
+      const device = await this._requireDevice(deviceId);
 
-    // 2. Publish event
-    this.eventBus.emit('device.unlocked', { deviceId, actionId, device });
+      // 1. Mutate aggregate
+      device.reconnect();
 
-    // 3. MDM push (best-effort)
+      // 2. Persist
+      await this._deviceRepository.save(device);
+
+      // 3. Dispatch domain events
+      this._dispatchDomainEvents(device);
+    } else {
+      // Legacy path
+      await this._requireDevice(deviceId);
+      await this._db.update('devices', deviceId, {
+        status: 'active',
+        unlockedAt: new Date().toISOString(),
+        lockReason: null
+      });
+      this.eventBus.emit('device.unlocked', { deviceId, actionId });
+    }
+
+    // 4. MDM push (best-effort)
     const mdmPush = await this._tryMdmPush('unlock', deviceId);
 
-    // 4. WebSocket push to connected agent
+    // 5. WebSocket push to connected agent
     this._tryWsPush(deviceId, { type: 'command', command_type: 'unlock_device', data: {} });
 
-    // 5. Record action
+    // 6. Record action
     await this._recordAction(actionId, deviceId, 'unlock', 'completed', { mdmPush });
 
     logger.info('Device unlocked', { deviceId, actionId });
@@ -175,27 +234,38 @@ class RemoteActionService {
    * @returns {{ actionId, deviceId, wipeType, status, mdmPush }}
    */
   async wipeDevice(deviceId, options = {}) {
-    const device = await this._requireDevice(deviceId);
     const wipeType = options.type || 'full';
     const actionId = this._generateActionId('wipe');
 
-    // 1. Update device status in DB
-    await this._db.update('devices', deviceId, {
-      status: 'wiped',
-      wipedAt: new Date().toISOString(),
-      wipeType
-    });
+    if (this._deviceRepository) {
+      const device = await this._requireDevice(deviceId);
 
-    // 2. Publish event
-    this.eventBus.emit('device.wiped', { deviceId, wipeType, actionId, device });
+      // 1. Mutate aggregate
+      device.wipe(wipeType);
 
-    // 3. MDM push (best-effort)
+      // 2. Persist
+      await this._deviceRepository.save(device);
+
+      // 3. Dispatch domain events
+      this._dispatchDomainEvents(device);
+    } else {
+      // Legacy path
+      await this._requireDevice(deviceId);
+      await this._db.update('devices', deviceId, {
+        status: 'wiped',
+        wipedAt: new Date().toISOString(),
+        wipeType
+      });
+      this.eventBus.emit('device.wiped', { deviceId, wipeType, actionId });
+    }
+
+    // 4. MDM push (best-effort)
     const mdmPush = await this._tryMdmPush('wipe', deviceId, { wipeType });
 
-    // 4. WebSocket push to connected agent
+    // 5. WebSocket push to connected agent
     this._tryWsPush(deviceId, { type: 'command', command_type: 'wipe_device', data: { wipeType } });
 
-    // 5. Record action
+    // 6. Record action
     await this._recordAction(actionId, deviceId, 'wipe', 'completed', { wipeType, mdmPush });
 
     logger.info('Device wiped', { deviceId, actionId, wipeType });
@@ -223,13 +293,25 @@ class RemoteActionService {
 
     const actionId = this._generateActionId('isol');
 
-    await this._db.update('devices', deviceId, {
-      status: 'isolated',
-      isolatedAt: new Date().toISOString(),
-      isolationReason: reason
-    });
+    if (this._deviceRepository) {
+      // 1. Mutate aggregate
+      device.isolate(reason);
 
-    this.eventBus.emit('device.isolated', { deviceId, reason, actionId, device });
+      // 2. Persist
+      await this._deviceRepository.save(device);
+
+      // 3. Dispatch domain events
+      this._dispatchDomainEvents(device);
+    } else {
+      // Legacy path
+      await this._db.update('devices', deviceId, {
+        status: 'isolated',
+        isolatedAt: new Date().toISOString(),
+        isolationReason: reason
+      });
+      this.eventBus.emit('device.isolated', { deviceId, reason, actionId, device });
+    }
+
     await this._tryMdmPush('isolate', deviceId, { reason });
     this._tryWsPush(deviceId, { type: 'command', command_type: 'isolate_device', data: { reason } });
     await this._recordAction(actionId, deviceId, 'isolate', 'completed', { reason });
@@ -250,7 +332,8 @@ class RemoteActionService {
    * @returns {{ stdout: string, stderr: string, exitCode: number }}
    */
   async _executeWinRM(device, command) {
-    const endpoint = `http://${device.hostname}:5985/wsman`;
+    const hostname = device.hostname || (typeof device.toJSON === 'function' ? device.toJSON().hostname : null);
+    const endpoint = `http://${hostname}:5985/wsman`;
 
     const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
 <s:Envelope
@@ -293,7 +376,7 @@ class RemoteActionService {
       const responseText = await response.text();
       return { stdout: responseText, stderr: '', exitCode: 0 };
     } catch (error) {
-      logger.warn(`WinRM execution failed for ${device.hostname}: ${error.message}`);
+      logger.warn(`WinRM execution failed for ${hostname}: ${error.message}`);
       return { stdout: '', stderr: error.message, exitCode: 1 };
     }
   }
@@ -306,8 +389,11 @@ class RemoteActionService {
     const actionId = this._generateActionId('cmd');
 
     // For Windows devices with a known hostname, attempt WinRM first.
+    // DeviceAggregate exposes .platform and .hostname as getters.
+    const platform = device.platform;
+    const hostname = device.hostname;
     let winrmResult = null;
-    if (device.platform === 'windows' && device.hostname) {
+    if (platform === 'windows' && hostname) {
       const command = payload.command || action;
       winrmResult = await this._executeWinRM(device, command);
       if (winrmResult.exitCode === 0) {

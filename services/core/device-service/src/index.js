@@ -85,6 +85,7 @@ class EnterpriseDeviceManagementService {
     this.inventoryService = new InventoryService(this.db, this.cache);
     this.remoteActionService = new RemoteActionService(this.wss, this.eventBus);
     this.remoteActionService.setDb(this.db);
+    this.remoteActionService.setDeviceRepository(this.deviceRepository);
     this.geofencingService = new GeofencingService(this.db, this.eventBus);
     this.certificateManager = new CertificateManager(this.db, this.eventBus);
     this.threatDetector = new ThreatDetector(this.db, this.eventBus);
