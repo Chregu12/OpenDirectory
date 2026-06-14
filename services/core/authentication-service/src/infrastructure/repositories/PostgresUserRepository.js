@@ -55,8 +55,6 @@ class PostgresUserRepository extends IUserRepository {
     return r.rows.length > 0;
   }
 
-<<<<<<< HEAD
-=======
   /**
    * Persist a TOTP secret and hashed recovery codes for a user (pending MFA enable).
    *
@@ -108,7 +106,6 @@ class PostgresUserRepository extends IUserRepository {
     );
   }
 
->>>>>>> 78b9935 (fix: DDD quality improvements — domain event timestamps, MFA repository, security hardening)
   _toAggregate(row) {
     return new UserAggregate({
       id: row.id, username: row.username, email: row.email,

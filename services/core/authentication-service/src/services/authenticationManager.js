@@ -11,98 +11,69 @@ const config = require('../utils/config');
  * AuthenticationManager
  *
  * Handles local password authentication, LDAP user mapping, LDAP user creation,
- * and SSO provider management.  Uses bcryptjs for password hashing/verification.
+ * and SSO provider management.
+ *
+ * All users-table access goes through the injected userRepository (IUserRepository).
+ * The db connection is kept only for LDAP operations that do not touch the users table.
  */
 class AuthenticationManager {
-  constructor() {
-    this._db = null;
-    this._dbAvailable = false;
-    // In-memory fallback store keyed by username (lower-cased)
+  /**
+   * @param {{ db?: object, userRepository?: import('../domain/repositories/IUserRepository'), logger?: object }} opts
+   */
+  constructor({ db, userRepository, logger: log } = {}) {
+    this._db = db || null;
+    this._userRepository = userRepository || null;
+    this._logger = log || logger;
+    // In-memory fallback when neither DB nor repository is available
     this._users = new Map();
-    this._initDb();
-  }
-
-  // ── Initialisation ──────────────────────────────────────────────────────────
-
-  async _initDb() {
-    try {
-      const db = require('../db');
-      this._db = db;
-      this._dbAvailable = typeof db.isAvailable === 'function'
-        ? await db.isAvailable()
-        : true;
-
-      if (this._dbAvailable) {
-        await this._ensureSchema();
-        logger.info('AuthenticationManager: database backend ready');
-      } else {
-        logger.warn('AuthenticationManager: database not available, using in-memory fallback');
-      }
-    } catch (err) {
-      logger.warn('AuthenticationManager: db module not found, using in-memory fallback', { error: err.message });
-      this._dbAvailable = false;
-    }
-  }
-
-  async _ensureSchema() {
-    if (!this._dbAvailable || !this._db) return;
-    try {
-      await this._db.query(`
-        CREATE TABLE IF NOT EXISTS users (
-          id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          username          VARCHAR(256) UNIQUE NOT NULL,
-          email             VARCHAR(512) UNIQUE,
-          password_hash     TEXT,
-          first_name        VARCHAR(256),
-          last_name         VARCHAR(256),
-          roles             JSONB        NOT NULL DEFAULT '["user"]',
-          permissions       JSONB        NOT NULL DEFAULT '[]',
-          provider          VARCHAR(64)  NOT NULL DEFAULT 'local',
-          mfa_enabled       BOOLEAN      NOT NULL DEFAULT FALSE,
-          mfa_secret        TEXT,
-          is_locked         BOOLEAN      NOT NULL DEFAULT FALSE,
-          lock_reason       TEXT,
-          locked_until      TIMESTAMPTZ,
-          password_changed_at TIMESTAMPTZ DEFAULT NOW(),
-          last_login        TIMESTAMPTZ,
-          created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-          updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-        )
-      `);
-      logger.info('AuthenticationManager: schema verified');
-    } catch (err) {
-      logger.warn('AuthenticationManager: schema init warning', { error: err.message });
-    }
   }
 
   // ── Internal helpers ────────────────────────────────────────────────────────
 
-  _safeUser(row) {
-    if (!row) return null;
-    // Never expose the password hash upstream
-    const { password_hash, mfa_secret, ...safe } = row;
-    // Normalise column names to camelCase expected by the rest of the service
+  /**
+   * Convert a UserAggregate (or plain row from the in-memory fallback) to the
+   * public shape expected by the rest of the service.
+   */
+  _aggregateToPublic(aggregate) {
+    if (!aggregate) return null;
+    // UserAggregate has getters; plain objects have properties
+    const isAggregate = typeof aggregate.toJSON === 'function';
+    if (isAggregate) {
+      return {
+        id: aggregate.id,
+        username: aggregate.username,
+        email: aggregate.email,
+        firstName: null,
+        lastName: null,
+        roles: aggregate.roles,
+        permissions: [],
+        provider: 'local',
+        mfaEnabled: aggregate.mfaEnabled,
+        isLocked: aggregate.isLocked ? aggregate.isLocked() : aggregate.locked,
+        lockReason: null,
+        lockedUntil: aggregate.lockUntil,
+        lastLogin: null,
+        // Expose hash for in-code bcrypt comparison (e.g., disableMFA / changePassword)
+        password: aggregate.passwordHash,
+      };
+    }
+    // In-memory plain object fallback
+    const { password_hash, mfa_secret, ...safe } = aggregate;
     return {
       id: safe.id,
       username: safe.username,
-      email: safe.email,
-      firstName: safe.first_name || safe.firstName,
-      lastName: safe.last_name || safe.lastName,
+      email: safe.email || null,
+      firstName: safe.first_name || safe.firstName || null,
+      lastName: safe.last_name || safe.lastName || null,
       roles: Array.isArray(safe.roles) ? safe.roles : (safe.roles ? JSON.parse(safe.roles) : ['user']),
       permissions: Array.isArray(safe.permissions) ? safe.permissions : (safe.permissions ? JSON.parse(safe.permissions) : []),
-      provider: safe.provider,
+      provider: safe.provider || 'local',
       mfaEnabled: safe.mfa_enabled || safe.mfaEnabled || false,
       isLocked: safe.is_locked || safe.isLocked || false,
       lockReason: safe.lock_reason || safe.lockReason || null,
       lockedUntil: safe.locked_until || safe.lockedUntil || null,
-      passwordChangedAt: safe.password_changed_at || safe.passwordChangedAt || null,
       lastLogin: safe.last_login || safe.lastLogin || null,
-      createdAt: safe.created_at || safe.createdAt,
-      updatedAt: safe.updated_at || safe.updatedAt,
-      // Expose hash only internally — callers that need it (disableMFA/changePassword)
-      // will fetch the full row via a DB query; this field is stripped from the public
-      // shape but the password hash IS stored in DB as password_hash.
-      password: password_hash, // kept for in-code bcrypt comparison only
+      password: password_hash,
     };
   }
 
@@ -110,55 +81,55 @@ class AuthenticationManager {
 
   /**
    * Authenticate a user with username + password (local strategy).
+   * Uses userRepository.findByUsername() when available.
    * Returns the sanitised user object on success, null on failure.
    */
   async authenticateLocal(username, password) {
     if (!username || !password) return null;
 
-    let userRow = null;
+    let aggregate = null;
 
-    if (this._dbAvailable && this._db) {
+    if (this._userRepository) {
       try {
-        const { rows } = await this._db.query(
-          'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND provider = $2 LIMIT 1',
-          [username, 'local']
-        );
-        userRow = rows[0] || null;
+        aggregate = await this._userRepository.findByUsername(username);
       } catch (err) {
-        logger.warn('AuthenticationManager.authenticateLocal: DB query failed, falling back to memory', { error: err.message });
-        this._dbAvailable = false;
+        this._logger.warn('AuthenticationManager.authenticateLocal: repository query failed, falling back to memory', { error: err.message });
       }
     }
 
-    if (!userRow && !this._dbAvailable) {
+    if (!aggregate) {
       // In-memory fallback
-      userRow = this._users.get(username.toLowerCase()) || null;
+      const row = this._users.get(username.toLowerCase()) || null;
+      if (!row) {
+        // Dummy compare to prevent timing attacks
+        await bcrypt.compare(password, '$2a$12$invalidhashpadding000000000000000000000000000000000000');
+        return null;
+      }
+      aggregate = row;
     }
 
-    if (!userRow) {
-      // Run a dummy compare to prevent timing attacks
-      await bcrypt.compare(password, '$2a$12$invalidhashpadding000000000000000000000000000000000000');
-      return null;
-    }
+    // Get password hash — aggregate vs plain object
+    const hash = (typeof aggregate.passwordHash !== 'undefined')
+      ? aggregate.passwordHash
+      : (aggregate.password_hash || aggregate.password);
 
-    const hash = userRow.password_hash || userRow.password;
     if (!hash) return null;
 
     const valid = await bcrypt.compare(password, hash);
     if (!valid) return null;
 
     // Check account lock
-    const isLocked = userRow.is_locked || userRow.isLocked;
-    const lockedUntil = userRow.locked_until || userRow.lockedUntil;
-    if (isLocked && (!lockedUntil || new Date(lockedUntil) > new Date())) {
-      logger.warn(`AuthenticationManager: login attempt on locked account ${username}`);
+    const locked = (typeof aggregate.isLocked === 'function')
+      ? aggregate.isLocked()
+      : (aggregate.is_locked || aggregate.locked || false);
+    const lockedUntil = aggregate.lockUntil || aggregate.locked_until || null;
+
+    if (locked && (!lockedUntil || new Date(lockedUntil) > new Date())) {
+      this._logger.warn(`AuthenticationManager: login attempt on locked account ${username}`);
       return null;
     }
 
-    // Update last_login
-    await this._updateLastLogin(username);
-
-    return this._safeUser(userRow);
+    return this._aggregateToPublic(aggregate);
   }
 
   /**
@@ -177,7 +148,7 @@ class AuthenticationManager {
   }
 
   /**
-   * Map an LDAP user object to a local user shape, upserting into the DB.
+   * Map an LDAP user object to a local user shape, upserting via userRepository.
    */
   async mapLdapUser(ldapUser) {
     if (!ldapUser) throw new Error('No LDAP user provided');
@@ -189,46 +160,13 @@ class AuthenticationManager {
 
     if (!username) throw new Error('LDAP user missing uid/sAMAccountName');
 
-    if (this._dbAvailable && this._db) {
-      try {
-        // Upsert
-        const { rows } = await this._db.query(
-          `INSERT INTO users (username, email, first_name, last_name, provider, roles, permissions)
-           VALUES ($1, $2, $3, $4, 'ldap', $5, $6)
-           ON CONFLICT (username) DO UPDATE SET
-             email      = EXCLUDED.email,
-             first_name = EXCLUDED.first_name,
-             last_name  = EXCLUDED.last_name,
-             updated_at = NOW()
-           RETURNING *`,
-          [username, email || null, firstName, lastName, JSON.stringify(['user']), JSON.stringify([])]
-        );
-        return this._safeUser(rows[0]);
-      } catch (err) {
-        logger.warn('AuthenticationManager.mapLdapUser: DB upsert failed', { error: err.message });
-      }
-    }
-
-    // In-memory fallback
-    const existing = this._users.get(username.toLowerCase());
-    if (existing) return this._safeUser(existing);
-
-    const user = {
-      id: uuidv4(),
+    return this._upsertSSOUser({
       username,
       email: email || null,
-      first_name: firstName,
-      last_name: lastName,
-      roles: ['user'],
-      permissions: [],
+      firstName,
+      lastName,
       provider: 'ldap',
-      mfa_enabled: false,
-      is_locked: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    this._users.set(username.toLowerCase(), user);
-    return this._safeUser(user);
+    });
   }
 
   /**
@@ -241,7 +179,7 @@ class AuthenticationManager {
       client.bind(config.ldap.bindDN, config.ldap.bindPassword, (bindErr) => {
         if (bindErr) {
           client.destroy();
-          logger.error('AuthenticationManager.createLdapUser: bind failed', { error: bindErr.message });
+          this._logger.error('AuthenticationManager.createLdapUser: bind failed', { error: bindErr.message });
           return reject(bindErr);
         }
 
@@ -261,15 +199,14 @@ class AuthenticationManager {
           client.unbind();
           client.destroy();
           if (addErr) {
-            // LDAP_ALREADY_EXISTS (68) is acceptable — user was already there
             if (addErr.code === 68) {
-              logger.info(`AuthenticationManager.createLdapUser: user ${user.username} already exists in LDAP`);
+              this._logger.info(`AuthenticationManager.createLdapUser: user ${user.username} already exists in LDAP`);
               return resolve(true);
             }
-            logger.error('AuthenticationManager.createLdapUser: add failed', { error: addErr.message });
+            this._logger.error('AuthenticationManager.createLdapUser: add failed', { error: addErr.message });
             return reject(addErr);
           }
-          logger.info(`AuthenticationManager.createLdapUser: created ${dn}`);
+          this._logger.info(`AuthenticationManager.createLdapUser: created ${dn}`);
           resolve(true);
         });
       });
@@ -316,7 +253,7 @@ class AuthenticationManager {
     const { code, error } = query;
 
     if (error) {
-      logger.warn(`AuthenticationManager.handleSSOCallback: provider returned error: ${error}`);
+      this._logger.warn(`AuthenticationManager.handleSSOCallback: provider returned error: ${error}`);
       return { success: false, error };
     }
 
@@ -326,7 +263,6 @@ class AuthenticationManager {
     }
 
     try {
-      // Exchange code for tokens
       const tokenResponse = await axios.post(providerConfig.tokenUrl, {
         grant_type: 'authorization_code',
         code,
@@ -335,9 +271,8 @@ class AuthenticationManager {
         client_secret: providerConfig.clientSecret,
       });
 
-      const { access_token: accessToken, id_token: idToken } = tokenResponse.data;
+      const { access_token: accessToken } = tokenResponse.data;
 
-      // Fetch user info
       const userInfoResponse = await axios.get(providerConfig.userInfoUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -345,7 +280,6 @@ class AuthenticationManager {
       const profile = userInfoResponse.data;
       const username = profile.preferred_username || profile.email || profile.sub;
 
-      // Upsert local user record
       const user = await this._upsertSSOUser({
         username,
         email: profile.email,
@@ -355,7 +289,6 @@ class AuthenticationManager {
         externalId: profile.sub,
       });
 
-      // Generate a short-lived access token for the redirect
       const jwt = require('jsonwebtoken');
       const token = jwt.sign(
         { sub: user.id, username: user.username, roles: user.roles },
@@ -365,7 +298,7 @@ class AuthenticationManager {
 
       return { success: true, user, token };
     } catch (err) {
-      logger.error('AuthenticationManager.handleSSOCallback: failed', { error: err.message });
+      this._logger.error('AuthenticationManager.handleSSOCallback: failed', { error: err.message });
       return { success: false, error: err.message };
     }
   }
@@ -373,7 +306,6 @@ class AuthenticationManager {
   // ── Private helpers ─────────────────────────────────────────────────────────
 
   _getSSOProviderConfig(provider) {
-    // Allow per-provider env-var overrides
     const clientId = process.env[`SSO_${provider.toUpperCase()}_CLIENT_ID`];
     const clientSecret = process.env[`SSO_${provider.toUpperCase()}_CLIENT_SECRET`];
     const authorizationUrl = process.env[`SSO_${provider.toUpperCase()}_AUTH_URL`];
@@ -387,30 +319,57 @@ class AuthenticationManager {
     return { clientId, clientSecret, authorizationUrl, tokenUrl, userInfoUrl, callbackUrl };
   }
 
-  async _upsertSSOUser({ username, email, firstName, lastName, provider, externalId }) {
-    if (this._dbAvailable && this._db) {
+  /**
+   * Upsert an SSO/LDAP user via userRepository (findByUsername + save) or in-memory fallback.
+   */
+  async _upsertSSOUser({ username, email, firstName, lastName, provider }) {
+    const UserAggregate = require('../domain/aggregates/UserAggregate');
+
+    if (this._userRepository) {
       try {
-        const { rows } = await this._db.query(
-          `INSERT INTO users (username, email, first_name, last_name, provider, roles, permissions)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (username) DO UPDATE SET
-             email      = EXCLUDED.email,
-             first_name = EXCLUDED.first_name,
-             last_name  = EXCLUDED.last_name,
-             updated_at = NOW()
-           RETURNING *`,
-          [username, email || null, firstName, lastName, provider, JSON.stringify(['user']), JSON.stringify([])]
-        );
-        return this._safeUser(rows[0]);
+        let aggregate = await this._userRepository.findByUsername(username);
+        if (aggregate) {
+          // User exists — update email/name via save (aggregate doesn't have a dedicated
+          // "updateProfile" method, so we mutate directly through a new aggregate)
+          const updated = new UserAggregate({
+            id: aggregate.id,
+            username: aggregate.username,
+            email: email || aggregate.email,
+            passwordHash: aggregate.passwordHash,
+            roles: aggregate.roles,
+            mfaEnabled: aggregate.mfaEnabled,
+            mfaSecret: aggregate.mfaSecret,
+            recoveryCodes: aggregate.recoveryCodes,
+            locked: aggregate.locked,
+            lockUntil: aggregate.lockUntil,
+            loginAttempts: aggregate.loginAttempts,
+            createdAt: aggregate.toJSON().createdAt,
+            updatedAt: new Date(),
+          });
+          await this._userRepository.save(updated);
+          return this._aggregateToPublic(updated);
+        }
+
+        // New user
+        const newAggregate = UserAggregate.create({
+          id: uuidv4(),
+          username,
+          email: email || null,
+          passwordHash: null,
+          roles: ['user'],
+          provider,
+        });
+        await this._userRepository.save(newAggregate);
+        return this._aggregateToPublic(newAggregate);
       } catch (err) {
-        logger.warn('AuthenticationManager._upsertSSOUser: DB failed', { error: err.message });
+        this._logger.warn('AuthenticationManager._upsertSSOUser: repository failed, using memory fallback', { error: err.message });
       }
     }
 
     // In-memory fallback
     const key = username.toLowerCase();
     const existing = this._users.get(key);
-    if (existing) return this._safeUser(existing);
+    if (existing) return this._aggregateToPublic(existing);
 
     const user = {
       id: uuidv4(),
@@ -427,27 +386,7 @@ class AuthenticationManager {
       updated_at: new Date().toISOString(),
     };
     this._users.set(key, user);
-    return this._safeUser(user);
-  }
-
-  async _updateLastLogin(username) {
-    if (this._dbAvailable && this._db) {
-      try {
-        await this._db.query(
-          'UPDATE users SET last_login = NOW() WHERE LOWER(username) = LOWER($1)',
-          [username]
-        );
-      } catch (err) {
-        logger.warn('AuthenticationManager._updateLastLogin: DB update failed', { error: err.message });
-      }
-    } else {
-      const key = username.toLowerCase();
-      const user = this._users.get(key);
-      if (user) {
-        user.last_login = new Date().toISOString();
-        this._users.set(key, user);
-      }
-    }
+    return this._aggregateToPublic(user);
   }
 }
 

@@ -9,80 +9,31 @@ const config = require('../utils/config');
 /**
  * UserService
  *
- * CRUD operations for users.  Uses the DB when available and falls back to an
- * in-memory store so the service stays operational without a database.
+ * CRUD operations for users.  All users-table access goes through the injected
+ * userRepository (IUserRepository / PostgresUserRepository).  A db connection is
+ * accepted for audit-log queries only — never for direct users-table access.
  *
- * Password hashing is handled here (bcryptjs) whenever a new user is created or
- * a password is changed.  The plaintext password is never stored.
+ * Falls back to an in-memory store when the repository is unavailable so the
+ * service stays operational without a database.
  */
 class UserService {
-  constructor() {
-    this._db = null;
-    this._dbAvailable = false;
-    // In-memory store: Map<userId, userObject>
-    this._users = new Map();
-    // Secondary index: Map<username_lower, userId>
-    this._byUsername = new Map();
-    // Secondary index: Map<email_lower, userId>
-    this._byEmail = new Map();
+  /**
+   * @param {{ db?: object, userRepository?: import('../domain/repositories/IUserRepository'), logger?: object }} opts
+   */
+  constructor({ db, userRepository, logger: log } = {}) {
+    this._db = db || null;                    // kept for audit log queries only
+    this._userRepository = userRepository || null;
+    this._logger = log || logger;
 
-    this._initDb();
+    // In-memory fallback store: Map<userId, userObject>
+    this._users = new Map();
+    this._byUsername = new Map();             // Map<username_lower, userId>
+    this._byEmail = new Map();                // Map<email_lower, userId>
+
     this._mailer = this._createMailer();
   }
 
   // ── Initialisation ──────────────────────────────────────────────────────────
-
-  async _initDb() {
-    try {
-      const db = require('../db');
-      this._db = db;
-      this._dbAvailable = typeof db.isAvailable === 'function'
-        ? await db.isAvailable()
-        : true;
-
-      if (this._dbAvailable) {
-        await this._ensureSchema();
-        logger.info('UserService: database backend ready');
-      } else {
-        logger.warn('UserService: database not available, using in-memory fallback');
-      }
-    } catch (err) {
-      logger.warn('UserService: db module not found, using in-memory fallback', { error: err.message });
-      this._dbAvailable = false;
-    }
-  }
-
-  async _ensureSchema() {
-    if (!this._dbAvailable || !this._db) return;
-    try {
-      // Table may already exist (created by AuthenticationManager); use IF NOT EXISTS
-      await this._db.query(`
-        CREATE TABLE IF NOT EXISTS users (
-          id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          username            VARCHAR(256) UNIQUE NOT NULL,
-          email               VARCHAR(512) UNIQUE,
-          password_hash       TEXT,
-          first_name          VARCHAR(256),
-          last_name           VARCHAR(256),
-          roles               JSONB        NOT NULL DEFAULT '["user"]',
-          permissions         JSONB        NOT NULL DEFAULT '[]',
-          provider            VARCHAR(64)  NOT NULL DEFAULT 'local',
-          mfa_enabled         BOOLEAN      NOT NULL DEFAULT FALSE,
-          mfa_secret          TEXT,
-          is_locked           BOOLEAN      NOT NULL DEFAULT FALSE,
-          lock_reason         TEXT,
-          locked_until        TIMESTAMPTZ,
-          password_changed_at TIMESTAMPTZ  DEFAULT NOW(),
-          last_login          TIMESTAMPTZ,
-          created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-          updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-        )
-      `);
-      logger.info('UserService: schema verified');
-    } catch (err) {
-      logger.warn('UserService: schema init warning', { error: err.message });
-    }
-  }
 
   _createMailer() {
     try {
@@ -93,34 +44,63 @@ class UserService {
         auth: config.email.user ? { user: config.email.user, pass: config.email.password } : undefined,
       });
     } catch (err) {
-      logger.warn('UserService: failed to create mailer', { error: err.message });
+      this._logger.warn('UserService: failed to create mailer', { error: err.message });
       return null;
     }
   }
 
   // ── Shape helpers ───────────────────────────────────────────────────────────
 
-  _toPublic(row) {
-    if (!row) return null;
+  /**
+   * Convert a UserAggregate or plain in-memory object to the public API shape.
+   * Password hashes and MFA secrets are intentionally excluded.
+   */
+  _toPublic(source) {
+    if (!source) return null;
+
+    const isAggregate = typeof source.toJSON === 'function';
+    if (isAggregate) {
+      const j = source.toJSON();
+      return {
+        id: j.id,
+        username: j.username,
+        email: j.email || null,
+        firstName: null,
+        lastName: null,
+        roles: j.roles,
+        permissions: [],
+        provider: 'local',
+        mfaEnabled: j.mfaEnabled,
+        isLocked: typeof source.isLocked === 'function' ? source.isLocked() : j.locked,
+        lockReason: null,
+        lockedUntil: j.lockUntil || null,
+        passwordChangedAt: null,
+        lastLogin: null,
+        createdAt: j.createdAt,
+        updatedAt: j.updatedAt,
+        // NOTE: password_hash / mfaSecret / recoveryCodes are intentionally omitted
+      };
+    }
+
+    // Plain in-memory object
     return {
-      id: row.id,
-      username: row.username,
-      email: row.email || null,
-      firstName: row.first_name || row.firstName || null,
-      lastName: row.last_name || row.lastName || null,
-      roles: this._parseJson(row.roles, ['user']),
-      permissions: this._parseJson(row.permissions, []),
-      provider: row.provider || 'local',
-      mfaEnabled: row.mfa_enabled || row.mfaEnabled || false,
-      isLocked: row.is_locked || row.isLocked || false,
-      lockReason: row.lock_reason || row.lockReason || null,
-      lockedUntil: row.locked_until || row.lockedUntil || null,
-      passwordChangedAt: row.password_changed_at || row.passwordChangedAt || null,
-      lastLogin: row.last_login || row.lastLogin || null,
-      createdAt: row.created_at || row.createdAt,
-      updatedAt: row.updated_at || row.updatedAt,
-      // NOTE: password_hash, mfaSecret, and recoveryCodes are intentionally
-      // omitted here — credential fields must never appear in API responses.
+      id: source.id,
+      username: source.username,
+      email: source.email || null,
+      firstName: source.first_name || source.firstName || null,
+      lastName: source.last_name || source.lastName || null,
+      roles: this._parseJson(source.roles, ['user']),
+      permissions: this._parseJson(source.permissions, []),
+      provider: source.provider || 'local',
+      mfaEnabled: source.mfa_enabled || source.mfaEnabled || false,
+      isLocked: source.is_locked || source.isLocked || false,
+      lockReason: source.lock_reason || source.lockReason || null,
+      lockedUntil: source.locked_until || source.lockedUntil || null,
+      passwordChangedAt: source.password_changed_at || source.passwordChangedAt || null,
+      lastLogin: source.last_login || source.lastLogin || null,
+      createdAt: source.created_at || source.createdAt,
+      updatedAt: source.updated_at || source.updatedAt,
+      // NOTE: password_hash is intentionally omitted
     };
   }
 
@@ -162,31 +142,30 @@ class UserService {
   }
 
   /**
-   * Create a new user.  Hashes the password before persisting.
+   * Create a new user via UserAggregate.create() + userRepository.save().
    */
   async createUser({ username, email, password, firstName, lastName, provider = 'local', roles, permissions }) {
+    const UserAggregate = require('../domain/aggregates/UserAggregate');
+
     const passwordHash = password
       ? await bcrypt.hash(password, config.security.bcryptRounds || 12)
       : null;
 
-    const rolesJson = JSON.stringify(roles || ['user']);
-    const permissionsJson = JSON.stringify(permissions || []);
-
-    if (this._dbAvailable && this._db) {
+    if (this._userRepository) {
       try {
-        const { rows } = await this._db.query(
-          `INSERT INTO users
-             (username, email, password_hash, first_name, last_name, provider, roles, permissions)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           RETURNING *`,
-          [username, email || null, passwordHash, firstName || null, lastName || null,
-           provider, rolesJson, permissionsJson]
-        );
-        return this._toPublic(rows[0]);
+        const aggregate = UserAggregate.create({
+          id: uuidv4(),
+          username,
+          email: email || null,
+          passwordHash,
+          roles: roles || ['user'],
+          provider,
+        });
+        await this._userRepository.save(aggregate);
+        return this._toPublic(aggregate);
       } catch (err) {
-        logger.warn('UserService.createUser: DB insert failed', { error: err.message });
+        this._logger.warn('UserService.createUser: repository save failed', { error: err.message });
         if (err.code === '23505') {
-          // Unique violation
           throw Object.assign(new Error('User already exists'), { status: 409 });
         }
         throw err;
@@ -208,8 +187,8 @@ class UserService {
       password_hash: passwordHash,
       first_name: firstName || null,
       last_name: lastName || null,
-      roles: JSON.parse(rolesJson),
-      permissions: JSON.parse(permissionsJson),
+      roles: roles || ['user'],
+      permissions: permissions || [],
       provider,
       mfa_enabled: false,
       is_locked: false,
@@ -225,17 +204,17 @@ class UserService {
   }
 
   /**
-   * Find a user by ID.
+   * Find a user by ID via userRepository.findById().
    */
   async getUserById(id) {
     if (!id) return null;
 
-    if (this._dbAvailable && this._db) {
+    if (this._userRepository) {
       try {
-        const { rows } = await this._db.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [id]);
-        return this._toPublic(rows[0] || null);
+        const aggregate = await this._userRepository.findById(id);
+        return this._toPublic(aggregate);
       } catch (err) {
-        logger.warn('UserService.getUserById: DB query failed', { error: err.message });
+        this._logger.warn('UserService.getUserById: repository query failed', { error: err.message });
       }
     }
 
@@ -243,20 +222,17 @@ class UserService {
   }
 
   /**
-   * Find a user by username (case-insensitive).
+   * Find a user by username via userRepository.findByUsername().
    */
   async getUserByUsername(username) {
     if (!username) return null;
 
-    if (this._dbAvailable && this._db) {
+    if (this._userRepository) {
       try {
-        const { rows } = await this._db.query(
-          'SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
-          [username]
-        );
-        return this._toPublic(rows[0] || null);
+        const aggregate = await this._userRepository.findByUsername(username);
+        return this._toPublic(aggregate);
       } catch (err) {
-        logger.warn('UserService.getUserByUsername: DB query failed', { error: err.message });
+        this._logger.warn('UserService.getUserByUsername: repository query failed', { error: err.message });
       }
     }
 
@@ -265,20 +241,17 @@ class UserService {
   }
 
   /**
-   * Find a user by email (case-insensitive).
+   * Find a user by email via userRepository.findByEmail().
    */
   async getUserByEmail(email) {
     if (!email) return null;
 
-    if (this._dbAvailable && this._db) {
+    if (this._userRepository) {
       try {
-        const { rows } = await this._db.query(
-          'SELECT * FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1',
-          [email]
-        );
-        return this._toPublic(rows[0] || null);
+        const aggregate = await this._userRepository.findByEmail(email);
+        return this._toPublic(aggregate);
       } catch (err) {
-        logger.warn('UserService.getUserByEmail: DB query failed', { error: err.message });
+        this._logger.warn('UserService.getUserByEmail: repository query failed', { error: err.message });
       }
     }
 
@@ -287,9 +260,7 @@ class UserService {
   }
 
   /**
-   * Update user fields.  Protected fields (id, username, password, roles) are
-   * stripped upstream in the route handler before reaching here; we strip them
-   * again defensively.
+   * Update user fields.  Loads the aggregate via findById(), updates fields, saves.
    */
   async updateUser(id, updates) {
     if (!id) throw new Error('User ID required');
@@ -297,48 +268,37 @@ class UserService {
     // Strip fields that should never be updated via this method
     const { password, password_hash, id: _id, ...safe } = updates;
 
-    if (this._dbAvailable && this._db) {
+    const UserAggregate = require('../domain/aggregates/UserAggregate');
+
+    if (this._userRepository) {
       try {
-        const setClauses = [];
-        const params = [];
-        let idx = 1;
+        const aggregate = await this._userRepository.findById(id);
+        if (!aggregate) return null;
 
-        const columnMap = {
-          email: 'email',
-          firstName: 'first_name',
-          lastName: 'last_name',
-          roles: 'roles',
-          permissions: 'permissions',
-          provider: 'provider',
-          mfaEnabled: 'mfa_enabled',
-          isLocked: 'is_locked',
-          lockReason: 'lock_reason',
-          lockedUntil: 'locked_until',
-          lastLogin: 'last_login',
-        };
+        // Build an updated aggregate with allowed field changes.
+        // UserAggregate doesn't have a generic setField() method, so we rebuild it
+        // with merged props while preserving identity/security fields.
+        const json = aggregate.toJSON();
+        const updatedAggregate = new UserAggregate({
+          id: json.id,
+          username: json.username,
+          email: safe.email !== undefined ? safe.email : aggregate.email,
+          passwordHash: aggregate.passwordHash,
+          roles: safe.roles !== undefined ? safe.roles : aggregate.roles,
+          mfaEnabled: safe.mfaEnabled !== undefined ? safe.mfaEnabled : aggregate.mfaEnabled,
+          mfaSecret: aggregate.mfaSecret,
+          recoveryCodes: aggregate.recoveryCodes,
+          locked: safe.isLocked !== undefined ? safe.isLocked : aggregate.locked,
+          lockUntil: safe.lockedUntil !== undefined ? safe.lockedUntil : aggregate.lockUntil,
+          loginAttempts: aggregate.loginAttempts,
+          createdAt: json.createdAt,
+          updatedAt: new Date(),
+        });
 
-        for (const [key, col] of Object.entries(columnMap)) {
-          if (Object.prototype.hasOwnProperty.call(safe, key)) {
-            setClauses.push(`${col} = $${idx++}`);
-            const value = (key === 'roles' || key === 'permissions')
-              ? JSON.stringify(safe[key])
-              : safe[key];
-            params.push(value);
-          }
-        }
-
-        if (setClauses.length === 0) return this.getUserById(id);
-
-        setClauses.push(`updated_at = NOW()`);
-        params.push(id);
-
-        const { rows } = await this._db.query(
-          `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *`,
-          params
-        );
-        return this._toPublic(rows[0] || null);
+        await this._userRepository.save(updatedAggregate);
+        return this._toPublic(updatedAggregate);
       } catch (err) {
-        logger.warn('UserService.updateUser: DB update failed', { error: err.message });
+        this._logger.warn('UserService.updateUser: repository update failed', { error: err.message });
         throw err;
       }
     }
@@ -368,17 +328,17 @@ class UserService {
   }
 
   /**
-   * Delete a user by ID.
+   * Delete a user by ID via userRepository.delete().
    */
   async deleteUser(id) {
     if (!id) throw new Error('User ID required');
 
-    if (this._dbAvailable && this._db) {
+    if (this._userRepository) {
       try {
-        const { rowCount } = await this._db.query('DELETE FROM users WHERE id = $1', [id]);
-        return rowCount > 0;
+        await this._userRepository.delete(id);
+        return true;
       } catch (err) {
-        logger.warn('UserService.deleteUser: DB delete failed', { error: err.message });
+        this._logger.warn('UserService.deleteUser: repository delete failed', { error: err.message });
         throw err;
       }
     }
@@ -397,37 +357,28 @@ class UserService {
   async listUsers({ page = 1, limit = 50, search } = {}) {
     const offset = (Math.max(1, page) - 1) * limit;
 
-    if (this._dbAvailable && this._db) {
+    if (this._userRepository) {
       try {
-        const params = [];
-        let where = '';
+        const filters = { limit, offset };
+        const aggregates = await this._userRepository.findAll(filters);
+        // findAll doesn't support search filtering natively — apply in-process
+        let users = aggregates.map(a => this._toPublic(a));
         if (search) {
-          where = `WHERE username ILIKE $1 OR email ILIKE $1`;
-          params.push(`%${search}%`);
+          const q = search.toLowerCase();
+          users = users.filter(u =>
+            (u.username || '').toLowerCase().includes(q) ||
+            (u.email || '').toLowerCase().includes(q)
+          );
         }
-        params.push(limit);
-        params.push(offset);
-
-        const [{ rows }, { rows: countRows }] = await Promise.all([
-          this._db.query(
-            `SELECT * FROM users ${where} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
-            params
-          ),
-          this._db.query(
-            `SELECT COUNT(*) AS total FROM users ${where}`,
-            search ? [`%${search}%`] : []
-          ),
-        ]);
-
         return {
-          users: rows.map(r => this._toPublic(r)),
-          total: parseInt(countRows[0].total, 10),
+          users,
+          total: users.length,
           page,
           limit,
-          pages: Math.ceil(parseInt(countRows[0].total, 10) / limit),
+          pages: Math.ceil(users.length / limit),
         };
       } catch (err) {
-        logger.warn('UserService.listUsers: DB query failed', { error: err.message });
+        this._logger.warn('UserService.listUsers: repository query failed', { error: err.message });
       }
     }
 
@@ -453,91 +404,113 @@ class UserService {
   }
 
   /**
-   * Change a user's password.  Hashes the new password and bumps passwordChangedAt.
+   * Change a user's password.  Loads aggregate, calls changePassword(), saves.
    */
   async changePassword(id, newPassword) {
     if (!id) throw new Error('User ID required');
     if (!newPassword) throw new Error('New password required');
 
     const hash = await bcrypt.hash(newPassword, config.security.bcryptRounds || 12);
-    const now = new Date().toISOString();
 
-    if (this._dbAvailable && this._db) {
+    if (this._userRepository) {
       try {
-        await this._db.query(
-          'UPDATE users SET password_hash = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2',
-          [hash, id]
-        );
+        const aggregate = await this._userRepository.findById(id);
+        if (!aggregate) throw new Error('User not found');
+        aggregate.changePassword(hash);
+        await this._userRepository.save(aggregate);
         return true;
       } catch (err) {
-        logger.warn('UserService.changePassword: DB update failed', { error: err.message });
+        this._logger.warn('UserService.changePassword: repository update failed', { error: err.message });
         throw err;
       }
     }
 
+    // In-memory fallback
     const user = this._users.get(id);
     if (!user) throw new Error('User not found');
     user.password_hash = hash;
-    user.password_changed_at = now;
-    user.updated_at = now;
-    this._users.set(id, user);
-    return true;
-  }
-
-  /**
-   * Lock a user account.
-   * @param {string} id
-   * @param {string} reason
-   * @param {number|null} durationMs  Duration in ms; null = permanent until unlocked.
-   */
-  async lockUser(id, reason = 'admin lock', durationMs = null) {
-    if (!id) throw new Error('User ID required');
-    const lockedUntil = durationMs ? new Date(Date.now() + durationMs).toISOString() : null;
-
-    if (this._dbAvailable && this._db) {
-      try {
-        await this._db.query(
-          `UPDATE users SET is_locked = TRUE, lock_reason = $1, locked_until = $2, updated_at = NOW()
-           WHERE id = $3`,
-          [reason, lockedUntil, id]
-        );
-        return true;
-      } catch (err) {
-        logger.warn('UserService.lockUser: DB update failed', { error: err.message });
-        throw err;
-      }
-    }
-
-    const user = this._users.get(id);
-    if (!user) throw new Error('User not found');
-    user.is_locked = true;
-    user.lock_reason = reason;
-    user.locked_until = lockedUntil;
+    user.password_changed_at = new Date().toISOString();
     user.updated_at = new Date().toISOString();
     this._users.set(id, user);
     return true;
   }
 
   /**
-   * Unlock a user account.
+   * Lock a user account.  Loads aggregate, calls recordLoginFailure() iteratively
+   * (or directly sets locked via aggregate rebuild), saves.
+   *
+   * @param {string} id
+   * @param {string} reason
+   * @param {number|null} durationMs  Duration in ms; null = permanent until unlocked.
    */
-  async unlockUser(id) {
+  async lockUser(id, reason = 'admin lock', durationMs = null) {
     if (!id) throw new Error('User ID required');
 
-    if (this._dbAvailable && this._db) {
+    const lockedUntil = durationMs ? new Date(Date.now() + durationMs) : null;
+
+    const UserAggregate = require('../domain/aggregates/UserAggregate');
+
+    if (this._userRepository) {
       try {
-        await this._db.query(
-          `UPDATE users SET is_locked = FALSE, lock_reason = NULL, locked_until = NULL, updated_at = NOW()
-           WHERE id = $1`,
-          [id]
-        );
+        const aggregate = await this._userRepository.findById(id);
+        if (!aggregate) throw new Error('User not found');
+
+        // Rebuild aggregate with lock applied
+        const json = aggregate.toJSON();
+        const locked = new UserAggregate({
+          id: json.id,
+          username: json.username,
+          email: aggregate.email,
+          passwordHash: aggregate.passwordHash,
+          roles: aggregate.roles,
+          mfaEnabled: aggregate.mfaEnabled,
+          mfaSecret: aggregate.mfaSecret,
+          recoveryCodes: aggregate.recoveryCodes,
+          locked: true,
+          lockUntil: lockedUntil,
+          loginAttempts: aggregate.loginAttempts,
+          createdAt: json.createdAt,
+          updatedAt: new Date(),
+        });
+        await this._userRepository.save(locked);
         return true;
       } catch (err) {
-        logger.warn('UserService.unlockUser: DB update failed', { error: err.message });
+        this._logger.warn('UserService.lockUser: repository update failed', { error: err.message });
         throw err;
       }
     }
 
+    // In-memory fallback
+    const user = this._users.get(id);
+    if (!user) throw new Error('User not found');
+    user.is_locked = true;
+    user.lock_reason = reason;
+    user.locked_until = lockedUntil ? lockedUntil.toISOString() : null;
+    user.updated_at = new Date().toISOString();
+    this._users.set(id, user);
+    return true;
+  }
+
+  /**
+   * Unlock a user account.  Loads aggregate, calls unlock(), saves.
+   */
+  async unlockUser(id) {
+    if (!id) throw new Error('User ID required');
+
+    if (this._userRepository) {
+      try {
+        const aggregate = await this._userRepository.findById(id);
+        if (!aggregate) throw new Error('User not found');
+        aggregate.unlock();
+        await this._userRepository.save(aggregate);
+        return true;
+      } catch (err) {
+        this._logger.warn('UserService.unlockUser: repository update failed', { error: err.message });
+        throw err;
+      }
+    }
+
+    // In-memory fallback
     const user = this._users.get(id);
     if (!user) throw new Error('User not found');
     user.is_locked = false;
@@ -553,7 +526,7 @@ class UserService {
    */
   async sendPasswordResetEmail(email, resetToken) {
     if (!this._mailer) {
-      logger.warn('UserService.sendPasswordResetEmail: no mailer configured');
+      this._logger.warn('UserService.sendPasswordResetEmail: no mailer configured');
       return false;
     }
 
@@ -569,10 +542,10 @@ class UserService {
                <p><a href="${resetUrl}">Reset your password</a> (valid for 1 hour)</p>
                <p>If you did not request this, ignore this email.</p>`,
       });
-      logger.info(`UserService.sendPasswordResetEmail: sent to ${email}`);
+      this._logger.info(`UserService.sendPasswordResetEmail: sent to ${email}`);
       return true;
     } catch (err) {
-      logger.error('UserService.sendPasswordResetEmail: send failed', { error: err.message });
+      this._logger.error('UserService.sendPasswordResetEmail: send failed', { error: err.message });
       return false;
     }
   }
