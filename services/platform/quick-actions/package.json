@@ -1,0 +1,33 @@
+{
+  "name": "@opendirectory/quick-actions",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --no-coverage --forceExit --runInBand"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/__tests__/**/*.test.js"
+    ],
+    "testTimeout": 30000,
+    "transform": {}
+  },
+  "dependencies": {
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.0.0",
+    "helmet": "^7.0.0",
+    "jose": "^6.2.3",
+    "ioredis": "^5.3.2",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2",
+    "nock": "^14.0.15",
+    "supertest": "^7.2.2"
+  }
+}
