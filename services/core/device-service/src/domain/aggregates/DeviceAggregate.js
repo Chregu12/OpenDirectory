@@ -1,5 +1,6 @@
 'use strict';
 const { DeviceEvents } = require('../events/DeviceEvents');
+const { randomUUID } = require('crypto');
 
 class DeviceAggregate {
   constructor(props) {
@@ -16,7 +17,7 @@ class DeviceAggregate {
 
   static create(props) {
     const device = new DeviceAggregate({ ...props, status: 'active', enrolledAt: new Date() });
-    device._domainEvents.push({ type: DeviceEvents.DEVICE_ENROLLED, payload: { deviceId: props.id, hostname: props.hostname, platform: props.platform } });
+    device._domainEvents.push({ type: DeviceEvents.DEVICE_ENROLLED, payload: { deviceId: props.id, hostname: props.hostname, platform: props.platform }, occurredAt: new Date(), eventId: randomUUID() });
     return device;
   }
 
@@ -24,7 +25,7 @@ class DeviceAggregate {
     if (!this._isCompliant) {
       this._isCompliant = true;
       this._complianceViolations = [];
-      this._domainEvents.push({ type: DeviceEvents.DEVICE_COMPLIANT, payload: { deviceId: this._id } });
+      this._domainEvents.push({ type: DeviceEvents.DEVICE_COMPLIANT, payload: { deviceId: this._id }, occurredAt: new Date(), eventId: randomUUID() });
     }
     return this;
   }
@@ -32,7 +33,7 @@ class DeviceAggregate {
   markNonCompliant(violations = []) {
     this._isCompliant = false;
     this._complianceViolations = violations;
-    this._domainEvents.push({ type: DeviceEvents.DEVICE_NON_COMPLIANT, payload: { deviceId: this._id, violations } });
+    this._domainEvents.push({ type: DeviceEvents.DEVICE_NON_COMPLIANT, payload: { deviceId: this._id, violations }, occurredAt: new Date(), eventId: randomUUID() });
     return this;
   }
 
@@ -43,7 +44,7 @@ class DeviceAggregate {
 
   retire() {
     this._status = 'retired';
-    this._domainEvents.push({ type: DeviceEvents.DEVICE_RETIRED, payload: { deviceId: this._id } });
+    this._domainEvents.push({ type: DeviceEvents.DEVICE_RETIRED, payload: { deviceId: this._id }, occurredAt: new Date(), eventId: randomUUID() });
     return this;
   }
 

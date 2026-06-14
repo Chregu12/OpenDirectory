@@ -70,7 +70,8 @@ class AuthApplicationService {
     if (this._sessionRepo) await this._sessionRepo.save(session);
     await this._publishDomainEvents(session);
 
-    return { user: user.toJSON(), token, expiresAt, mfaRequired: user.mfaEnabled };
+    const userJson = user.toJSON();
+    return { user: { ...userJson, id: String(userJson.id) }, token, expiresAt, mfaRequired: user.mfaEnabled };
   }
 
   async logout(token) {
@@ -88,7 +89,7 @@ class AuthApplicationService {
       const payload = jwt.verify(token, this._jwtSecret);
       const user = await this._userRepo.findById(payload.userId);
       if (!user || user.isLocked()) return null;
-      return { valid: true, userId: user.id, username: user.username, roles: user.roles, expiresAt: new Date(payload.exp * 1000).toISOString() };
+      return { valid: true, userId: String(user.id), username: user.username, roles: user.roles, expiresAt: new Date(payload.exp * 1000).toISOString() };
     } catch (e) {
       return null;
     }

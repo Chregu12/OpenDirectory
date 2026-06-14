@@ -6,6 +6,11 @@
  * Uses speakeasy for TOTP secret generation and code verification,
  * and qrcode for otpauth QR images. Falls back to an in-memory Map
  * when PostgreSQL is unavailable.
+ *
+ * When a userRepository is provided (PostgresUserRepository), all mfa_secrets
+ * persistence is delegated to the repository. Otherwise the legacy direct
+ * db.query() helpers are used as a fallback so existing deployments without
+ * DI wiring continue to work.
  */
 
 const speakeasy = require('speakeasy');
@@ -34,7 +39,7 @@ function hashCode(code) {
   return crypto.createHash('sha256').update(code).digest('hex');
 }
 
-// ─── Database helpers (fail-silent) ───────────────────────────────────────────
+// ─── Legacy direct-DB helpers (used only when no repository is injected) ──────
 
 async function dbSaveSecret(userId, secret, recoveryCodes) {
   if (!db.isAvailable()) return;
@@ -132,6 +137,67 @@ async function dbConsumeRecoveryCode(userId, code) {
 
 class MFAService {
   /**
+   * @param {object} [options]
+   * @param {object} [options.userRepository] - PostgresUserRepository instance.
+   *   When provided, all mfa_secrets persistence is routed through the repository
+   *   instead of calling db.query() directly.
+   */
+  constructor({ userRepository } = {}) {
+    this._repo = userRepository || null;
+  }
+
+  // ── Repository-aware persistence helpers ────────────────────────────────────
+
+  async _saveSecret(userId, secret, hashedCodes) {
+    if (this._repo) {
+      try { await this._repo.saveMFASecret(userId, secret, hashedCodes); } catch (err) {
+        console.warn('[mfa] saveMFASecret error:', err.message);
+      }
+    } else {
+      await dbSaveSecret(userId, secret, hashedCodes.map(() => '').length ? hashedCodes : []);
+    }
+  }
+
+  async _enableMFAInDB(userId) {
+    if (this._repo) {
+      try {
+        await this._repo._db.query(
+          `UPDATE mfa_secrets SET enabled = true, updated_at = NOW() WHERE user_id = $1`,
+          [userId]
+        );
+        await this._repo._db.query(
+          `UPDATE users SET mfa_enabled = true WHERE id = $1`,
+          [userId]
+        );
+      } catch (err) {
+        console.warn('[mfa] enableMFA repo error:', err.message);
+      }
+    } else {
+      await dbEnableMFA(userId);
+    }
+  }
+
+  async _disableMFAInDB(userId) {
+    if (this._repo) {
+      try { await this._repo.disableMFA(userId); } catch (err) {
+        console.warn('[mfa] disableMFA repo error:', err.message);
+      }
+    } else {
+      await dbDisableMFA(userId);
+    }
+  }
+
+  async _getSecretFromDB(userId) {
+    if (this._repo) {
+      try { return await this._repo.getMFASecret(userId); } catch (err) {
+        console.warn('[mfa] getMFASecret repo error:', err.message);
+        return null;
+      }
+    }
+    return dbGetSecret(userId);
+  }
+
+  /**
    * Generate a new TOTP secret for the user, persist it (pending confirmation),
    * and return the secret, a QR code data-URL, and recovery codes.
    *
@@ -150,11 +216,10 @@ class MFAService {
 
     // Generate recovery codes (plain-text returned to user once)
     const recoveryCodes = generateRecoveryCodes(10);
+    const hashedCodes = recoveryCodes.map(hashCode);
 
     // Persist (not yet enabled — user must verify first)
-    if (db.isAvailable()) {
-      await dbSaveSecret(userId, secret, recoveryCodes);
-    }
+    await this._saveSecret(userId, secret, hashedCodes);
 
     // Always keep in-memory copy (acts as authoritative fallback)
     inMemorySecrets.set(String(userId), secret);
@@ -204,8 +269,8 @@ class MFAService {
     // ── Try recovery code ─────────────────────────────────────────────────────
     const normalised = String(code).toUpperCase().replace(/[^A-F0-9]/g, '');
     if (normalised.length === 8) {
-      // DB attempt first
-      const consumed = await dbConsumeRecoveryCode(uid, normalised);
+      // DB attempt first (via repository if available)
+      const consumed = await this._consumeRecoveryCode(uid, normalised);
       if (consumed) return true;
 
       // In-memory fallback
@@ -237,7 +302,7 @@ class MFAService {
       global.__od_userMfaSecrets.set(uid, secret);
     }
 
-    await dbEnableMFA(uid);
+    await this._enableMFAInDB(uid);
   }
 
   /**
@@ -254,7 +319,7 @@ class MFAService {
     // Remove from global in-memory TOTP store
     if (global.__od_userMfaSecrets) global.__od_userMfaSecrets.delete(uid);
 
-    await dbDisableMFA(uid);
+    await this._disableMFAInDB(uid);
   }
 
   /**
@@ -276,17 +341,15 @@ class MFAService {
     }
 
     // If DB available return count of remaining codes (not their values)
-    if (db.isAvailable()) {
-      try {
-        const row = await dbGetSecret(uid);
-        if (row && row.recovery_codes) {
-          let codes;
-          try { codes = JSON.parse(row.recovery_codes); } catch { codes = []; }
-          // Return placeholders so the caller knows how many codes remain
-          return codes.map((_, i) => `****-CODE-${i + 1}`);
-        }
-      } catch { /* fall through */ }
-    }
+    try {
+      const row = await this._getSecretFromDB(uid);
+      if (row && row.recovery_codes) {
+        let codes;
+        try { codes = JSON.parse(row.recovery_codes); } catch { codes = []; }
+        // Return placeholders so the caller knows how many codes remain
+        return codes.map((_, i) => `****-CODE-${i + 1}`);
+      }
+    } catch { /* fall through */ }
 
     return [];
   }
@@ -303,7 +366,7 @@ class MFAService {
     // In-memory is authoritative while DB is unavailable
     if (inMemoryEnabled.has(uid)) return inMemoryEnabled.get(uid);
 
-    const row = await dbGetSecret(uid);
+    const row = await this._getSecretFromDB(uid);
     if (row) {
       inMemoryEnabled.set(uid, row.enabled);
       if (row.enabled && row.totp_secret) {
@@ -323,14 +386,41 @@ class MFAService {
     // In-memory first
     if (inMemorySecrets.has(userId)) return inMemorySecrets.get(userId);
 
-    // DB fallback
-    const row = await dbGetSecret(userId);
+    // DB fallback (via repository if available)
+    const row = await this._getSecretFromDB(userId);
     if (row && row.totp_secret) {
       inMemorySecrets.set(userId, row.totp_secret);
       return row.totp_secret;
     }
 
     return null;
+  }
+
+  async _consumeRecoveryCode(userId, code) {
+    if (this._repo) {
+      try {
+        const row = await this._repo.getMFASecret(userId);
+        if (!row || !row.recovery_codes) return false;
+
+        let codes;
+        try { codes = JSON.parse(row.recovery_codes); } catch { return false; }
+
+        const hashed = hashCode(code.toUpperCase().replace(/-/g, ''));
+        const idx = codes.indexOf(hashed);
+        if (idx === -1) return false;
+
+        codes.splice(idx, 1);
+        await this._repo._db.query(
+          `UPDATE mfa_secrets SET recovery_codes = $1, updated_at = NOW() WHERE user_id = $2`,
+          [JSON.stringify(codes), userId]
+        );
+        return true;
+      } catch (err) {
+        console.warn('[mfa] consumeRecoveryCode repo error:', err.message);
+        return false;
+      }
+    }
+    return dbConsumeRecoveryCode(userId, code);
   }
 }
 

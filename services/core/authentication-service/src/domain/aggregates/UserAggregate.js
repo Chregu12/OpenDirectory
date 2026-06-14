@@ -1,5 +1,6 @@
 'use strict';
 const { AuthEvents } = require('../events/AuthEvents');
+const { randomUUID } = require('crypto');
 
 class UserAggregate {
   constructor(props) {
@@ -21,7 +22,7 @@ class UserAggregate {
 
   static create(props) {
     const user = new UserAggregate({ ...props, createdAt: new Date(), updatedAt: new Date() });
-    user._domainEvents.push({ type: AuthEvents.USER_CREATED, payload: { userId: props.id, username: props.username, email: props.email, roles: props.roles || ['user'] } });
+    user._domainEvents.push({ type: AuthEvents.USER_CREATED, payload: { userId: props.id, username: props.username, email: props.email, roles: props.roles || ['user'] }, occurredAt: new Date(), eventId: randomUUID() });
     return user;
   }
 
@@ -30,18 +31,18 @@ class UserAggregate {
     this._locked = false;
     this._lockUntil = null;
     this._updatedAt = new Date();
-    this._domainEvents.push({ type: AuthEvents.LOGIN_SUCCESS, payload: { userId: this._id, username: this._username, ip } });
+    this._domainEvents.push({ type: AuthEvents.LOGIN_SUCCESS, payload: { userId: this._id, username: this._username, ip }, occurredAt: new Date(), eventId: randomUUID() });
     return this;
   }
 
   recordLoginFailure(ip, maxAttempts = 5) {
     this._loginAttempts += 1;
     this._updatedAt = new Date();
-    this._domainEvents.push({ type: AuthEvents.LOGIN_FAILED, payload: { userId: this._id, username: this._username, ip, attempts: this._loginAttempts } });
+    this._domainEvents.push({ type: AuthEvents.LOGIN_FAILED, payload: { userId: this._id, username: this._username, ip, attempts: this._loginAttempts }, occurredAt: new Date(), eventId: randomUUID() });
     if (this._loginAttempts >= maxAttempts) {
       this._locked = true;
       this._lockUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 min
-      this._domainEvents.push({ type: AuthEvents.USER_LOCKED, payload: { userId: this._id, username: this._username, ip, lockUntil: this._lockUntil } });
+      this._domainEvents.push({ type: AuthEvents.USER_LOCKED, payload: { userId: this._id, username: this._username, ip, lockUntil: this._lockUntil }, occurredAt: new Date(), eventId: randomUUID() });
     }
     return this;
   }
@@ -51,7 +52,7 @@ class UserAggregate {
     this._mfaSecret = secret;
     this._recoveryCodes = recoveryCodes;
     this._updatedAt = new Date();
-    this._domainEvents.push({ type: AuthEvents.MFA_ENABLED, payload: { userId: this._id, method: 'totp' } });
+    this._domainEvents.push({ type: AuthEvents.MFA_ENABLED, payload: { userId: this._id, method: 'totp' }, occurredAt: new Date(), eventId: randomUUID() });
     return this;
   }
 
@@ -60,14 +61,14 @@ class UserAggregate {
     this._mfaSecret = null;
     this._recoveryCodes = [];
     this._updatedAt = new Date();
-    this._domainEvents.push({ type: AuthEvents.MFA_DISABLED, payload: { userId: this._id } });
+    this._domainEvents.push({ type: AuthEvents.MFA_DISABLED, payload: { userId: this._id }, occurredAt: new Date(), eventId: randomUUID() });
     return this;
   }
 
   changePassword(newHash) {
     this._passwordHash = newHash;
     this._updatedAt = new Date();
-    this._domainEvents.push({ type: AuthEvents.PASSWORD_CHANGED, payload: { userId: this._id } });
+    this._domainEvents.push({ type: AuthEvents.PASSWORD_CHANGED, payload: { userId: this._id }, occurredAt: new Date(), eventId: randomUUID() });
     return this;
   }
 
@@ -77,7 +78,7 @@ class UserAggregate {
     this._locked = false;
     this._lockUntil = null;
     this._updatedAt = new Date();
-    this._domainEvents.push({ type: AuthEvents.PASSWORD_RESET, payload: { userId: this._id } });
+    this._domainEvents.push({ type: AuthEvents.PASSWORD_RESET, payload: { userId: this._id }, occurredAt: new Date(), eventId: randomUUID() });
     return this;
   }
 
@@ -85,7 +86,7 @@ class UserAggregate {
     this._locked = false;
     this._lockUntil = null;
     this._loginAttempts = 0;
-    this._domainEvents.push({ type: AuthEvents.USER_UNLOCKED, payload: { userId: this._id } });
+    this._domainEvents.push({ type: AuthEvents.USER_UNLOCKED, payload: { userId: this._id }, occurredAt: new Date(), eventId: randomUUID() });
     return this;
   }
 

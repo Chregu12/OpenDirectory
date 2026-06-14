@@ -55,6 +55,60 @@ class PostgresUserRepository extends IUserRepository {
     return r.rows.length > 0;
   }
 
+<<<<<<< HEAD
+=======
+  /**
+   * Persist a TOTP secret and hashed recovery codes for a user (pending MFA enable).
+   *
+   * @param {string} userId
+   * @param {string} secret      - base32 TOTP secret
+   * @param {string[]} recoveryCodes - hashed recovery codes
+   */
+  async saveMFASecret(userId, secret, recoveryCodes) {
+    await this._db.query(
+      `INSERT INTO mfa_secrets (user_id, totp_secret, recovery_codes, enabled, created_at, updated_at)
+       VALUES ($1, $2, $3, false, NOW(), NOW())
+       ON CONFLICT (user_id) DO UPDATE
+         SET totp_secret    = EXCLUDED.totp_secret,
+             recovery_codes = EXCLUDED.recovery_codes,
+             enabled        = false,
+             updated_at     = NOW()`,
+      [userId, secret, JSON.stringify(recoveryCodes)]
+    );
+  }
+
+  /**
+   * Retrieve the stored MFA secret row for a user.
+   *
+   * @param {string} userId
+   * @returns {{ totp_secret: string, enabled: boolean, recovery_codes: string } | null}
+   */
+  async getMFASecret(userId) {
+    const r = await this._db.query(
+      `SELECT totp_secret, enabled, recovery_codes FROM mfa_secrets WHERE user_id = $1`,
+      [userId]
+    );
+    return r.rows[0] || null;
+  }
+
+  /**
+   * Clear the MFA secret and disable MFA for a user.
+   *
+   * @param {string} userId
+   */
+  async disableMFA(userId) {
+    await this._db.query(
+      `UPDATE mfa_secrets SET enabled = false, totp_secret = NULL, recovery_codes = '[]', updated_at = NOW()
+       WHERE user_id = $1`,
+      [userId]
+    );
+    await this._db.query(
+      `UPDATE users SET mfa_enabled = false WHERE id = $1`,
+      [userId]
+    );
+  }
+
+>>>>>>> 78b9935 (fix: DDD quality improvements — domain event timestamps, MFA repository, security hardening)
   _toAggregate(row) {
     return new UserAggregate({
       id: row.id, username: row.username, email: row.email,

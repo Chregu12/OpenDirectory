@@ -164,7 +164,7 @@ async function onboardUser({ firstName, lastName, email, department = 'General',
   });
   completedSteps.push(s6);
 
-  // Step 7 – Send welcome notification
+  // Step 7 – Send welcome notification (delivers temporaryPassword via email)
   const s7 = await step('send-welcome-notification', () =>
     call('auth', 'POST', '/api/notifications', {
       userId,
@@ -186,12 +186,12 @@ async function onboardUser({ firstName, lastName, email, department = 'General',
   const username = email.split('@')[0];
   await publish('user.onboarded', { userId, username, email, _source: 'quick-actions' });
 
+  // temporaryPassword is sent via welcome notification (Step 7) — never returned in API response
   return {
     success: failed.length === 0,
     userId,
     userDn,
     email,
-    temporaryPassword: s2.ok ? temporaryPwd : null,
     assignedDevice,
     groupMemberships,
     policiesApplied,
