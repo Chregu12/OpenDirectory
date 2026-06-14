@@ -78,9 +78,9 @@ class EnterpriseDeviceManagementService {
     this.deviceRepository = new PostgresDeviceRepository(db);
     
     // Initialize services
-    this.deviceManager = new DeviceManager(this.db, this.cache, this.eventBus);
+    this.deviceManager = new DeviceManager({ db: this.db, deviceRepository: this.deviceRepository, cache: this.cache, eventBus: this.eventBus });
     this.policyEngine = new PolicyEngine(this.db, this.eventBus);
-    this.complianceScanner = new ComplianceScanner(this.db, this.eventBus);
+    this.complianceScanner = new ComplianceScanner({ db: this.db, deviceRepository: this.deviceRepository, eventBus: this.eventBus });
     this.enrollmentService = new EnrollmentService(this.db, this.eventBus);
     this.inventoryService = new InventoryService(this.db, this.cache);
     this.remoteActionService = new RemoteActionService(this.wss, this.eventBus);

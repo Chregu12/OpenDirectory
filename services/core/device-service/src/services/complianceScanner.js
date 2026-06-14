@@ -7,10 +7,20 @@ const logger = require('../utils/logger');
  *
  * scanDevice(deviceId) is the primary entry-point called by the API route handler.
  * It returns a structured result including compliant flag, score, and violations.
+ *
+ * Uses IDeviceRepository (via deviceRepository) for device reads/writes.
+ * The legacy db wrapper is kept only for compliance_results (no repo for that table yet).
  */
 class ComplianceScanner {
-  constructor(db, eventBus) {
+  /**
+   * @param {object} options
+   * @param {object} options.db              - legacy db wrapper (for compliance_results / compliance_rules)
+   * @param {object} options.deviceRepository - IDeviceRepository implementation
+   * @param {object} options.eventBus
+   */
+  constructor({ db, deviceRepository, eventBus } = {}) {
     this.db = db;
+    this.deviceRepository = deviceRepository || null;
     this.eventBus = eventBus;
   }
 
@@ -22,8 +32,14 @@ class ComplianceScanner {
   async scanDevice(deviceId) {
     logger.info('Compliance scan started', { deviceId });
 
-    // Load device
-    const device = await this.db.findById('devices', deviceId);
+    // Load device via repository (falls back to legacy db if no repo)
+    let device;
+    if (this.deviceRepository) {
+      device = await this.deviceRepository.findById(deviceId);
+    } else {
+      device = await this.db.findById('devices', deviceId);
+    }
+
     if (!device) {
       const err = new Error(`Device not found: ${deviceId}`);
       err.statusCode = 404;
@@ -57,14 +73,30 @@ class ComplianceScanner {
 
     const scanResult = { deviceId, compliant, score, violations, scannedAt, totalChecks: total, passedChecks };
 
-    // Persist latest compliance result
-    await this.db.update('devices', deviceId, {
-      complianceStatus: compliant ? 'compliant' : 'non-compliant',
-      lastComplianceScan: scannedAt,
-      complianceScore: score
-    });
+    // Persist compliance state via aggregate / repository
+    if (this.deviceRepository) {
+      if (compliant) {
+        device.markCompliant();
+      } else {
+        device.markNonCompliant(violations);
+      }
+      await this.deviceRepository.save(device);
 
-    // Store full result
+      // Dispatch domain events if eventBus supports it
+      const domainEvents = device.getAndClearDomainEvents();
+      for (const event of domainEvents) {
+        this.eventBus.emit(event.type, event.payload);
+      }
+    } else {
+      // Legacy fallback: update via db wrapper
+      await this.db.update('devices', deviceId, {
+        complianceStatus: compliant ? 'compliant' : 'non-compliant',
+        lastComplianceScan: scannedAt,
+        complianceScore: score
+      });
+    }
+
+    // Store full scan result (no repo for compliance_results yet)
     await this.db.insert('compliance_results', { ...scanResult, id: `cres-${deviceId}-${Date.now()}` });
 
     // Emit violation events
@@ -79,14 +111,16 @@ class ComplianceScanner {
   async _getRulesForDevice(device) {
     const rules = await this.db.find('compliance_rules', {});
     // Return rules that apply to this platform or all platforms
-    return rules.filter(r => !r.platform || r.platform === device.platform || r.platform === 'all');
+    const platform = device.platform !== undefined ? device.platform : (device._platform);
+    return rules.filter(r => !r.platform || r.platform === platform || r.platform === 'all');
   }
 
   _evaluateRule(rule, device) {
     // Default: pass if no custom evaluator
     if (!rule.field) return { passed: true };
 
-    const value = device[rule.field];
+    // Support both plain objects and DeviceAggregate instances
+    const value = device[rule.field] !== undefined ? device[rule.field] : (device.toJSON ? device.toJSON()[rule.field] : undefined);
     switch (rule.operator) {
       case 'exists': return { passed: value !== undefined && value !== null, description: `Field ${rule.field} must exist` };
       case 'eq':     return { passed: value === rule.expected, description: `${rule.field} must be ${rule.expected}, got ${value}` };
@@ -98,6 +132,18 @@ class ComplianceScanner {
   }
 
   async updateComplianceStatus(deviceId, complianceData) {
+    if (this.deviceRepository) {
+      const device = await this.deviceRepository.findById(deviceId);
+      if (device) {
+        if (complianceData.compliant) {
+          device.markCompliant();
+        } else {
+          device.markNonCompliant(complianceData.violations || []);
+        }
+        await this.deviceRepository.save(device);
+      }
+      return;
+    }
     await this.db.update('devices', deviceId, {
       complianceStatus: complianceData.compliant ? 'compliant' : 'non-compliant',
       lastComplianceScan: new Date().toISOString()
@@ -114,6 +160,11 @@ class ComplianceScanner {
   }
 
   async getViolationCount() {
+    if (this.deviceRepository) {
+      // Count via repo: get all non-compliant devices
+      const devices = await this.deviceRepository.findAll({ status: 'active' });
+      return devices.filter(d => !d.isCompliant).length;
+    }
     const devices = await this.db.find('devices', { complianceStatus: 'non-compliant' });
     return devices.length;
   }
@@ -137,7 +188,13 @@ class ComplianceScanner {
   }
 
   async performScheduledScan() {
-    const devices = await this.db.find('devices', { status: 'active' });
+    let devices;
+    if (this.deviceRepository) {
+      const aggregates = await this.deviceRepository.findAll({ status: 'active' });
+      devices = aggregates.map(a => a.toJSON());
+    } else {
+      devices = await this.db.find('devices', { status: 'active' });
+    }
     logger.info(`Scheduled compliance scan: ${devices.length} devices`);
     for (const device of devices) {
       try {
