@@ -30,6 +30,9 @@ const PolicyEngine = require('./services/policyEngine');
 const ComplianceScanner = require('./services/complianceScanner');
 const EnrollmentService = require('./services/enrollmentService');
 const InventoryService = require('./services/inventoryService');
+
+// DDD infrastructure
+const PostgresEnrollmentRepository = require('./infrastructure/repositories/PostgresEnrollmentRepository');
 const RemoteActionService = require('./services/remoteActionService');
 const GeofencingService = require('./services/geofencingService');
 const CertificateManager = require('./services/certificateManager');
@@ -81,7 +84,8 @@ class EnterpriseDeviceManagementService {
     this.deviceManager = new DeviceManager({ db: this.db, deviceRepository: this.deviceRepository, cache: this.cache, eventBus: this.eventBus });
     this.policyEngine = new PolicyEngine(this.db, this.eventBus);
     this.complianceScanner = new ComplianceScanner({ db: this.db, deviceRepository: this.deviceRepository, eventBus: this.eventBus });
-    this.enrollmentService = new EnrollmentService(this.db, this.eventBus);
+    this.enrollmentRepository = new PostgresEnrollmentRepository(db);
+    this.enrollmentService = new EnrollmentService(this.db, this.eventBus, this.enrollmentRepository);
     this.inventoryService = new InventoryService(this.db, this.cache);
     this.remoteActionService = new RemoteActionService(this.wss, this.eventBus);
     this.remoteActionService.setDb(this.db);
