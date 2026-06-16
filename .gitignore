@@ -260,6 +260,9 @@ samconfig.toml
 # OpenDirectory installation state
 .od-config
 
+# Claude Code agent worktrees (temporary parallel workspaces)
+.claude/worktrees/
+
 # Custom OpenDirectory specific
 /services/*/node_modules/
 /services/*/dist/
