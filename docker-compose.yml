@@ -282,34 +282,38 @@ services:
   
   api-gateway:
     build:
-      context: ./services/platform/api-gateway
+      context: ./services/core/api-gateway
       dockerfile: Dockerfile
     container_name: od-api-gateway
     restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
-      - API_GATEWAY_PORT=3000
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+      - PORT=8080
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB:-opendirectory}
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      - INTEGRATION_HUB_HOST=integration-hub
+      - INTEGRATION_HUB_GRAPHQL_PORT=3001
       - LOG_LEVEL=info
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001}
     ports:
-      - "3010:3000"
-      - "3011:3001"  # WebSocket
+      - "3010:8080"
     networks:
       - opendirectory
     depends_on:
-      redis:
+      postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
     volumes:
-      - ./services/platform/api-gateway:/app
+      - ./services/core/api-gateway:/app
       - /app/node_modules
 
   api-backend:
