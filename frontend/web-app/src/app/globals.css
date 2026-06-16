@@ -2,6 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Dark mode CSS custom properties ─────────────────────────────────────── */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f7;
+  --bg-sidebar: #1c1c1e;
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --border-color: #d2d2d7;
+  --accent-blue: #0066CC;
+  --accent-blue-hover: #0055aa;
+  --danger: #ff3b30;
+  --success: #34c759;
+  --warning: #ff9500;
+  --card-bg: #ffffff;
+  --input-bg: #ffffff;
+  --shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+[data-theme="dark"] {
+  --bg-primary: #000000;
+  --bg-secondary: #1c1c1e;
+  --bg-sidebar: #000000;
+  --text-primary: #f5f5f7;
+  --text-secondary: #98989d;
+  --border-color: #38383a;
+  --accent-blue: #0a84ff;
+  --accent-blue-hover: #409cff;
+  --danger: #ff453a;
+  --success: #30d158;
+  --warning: #ffd60a;
+  --card-bg: #1c1c1e;
+  --input-bg: #2c2c2e;
+  --shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 :root {
   --apple-blue: #0071E3;
   --apple-blue-hover: #0077ED;

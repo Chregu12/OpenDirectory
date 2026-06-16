@@ -5,6 +5,16 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { EventEmitter } = require('events');
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'device-lifecycle' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 const LifecycleManager = require('./services/lifecycleManager');
 const RiskScorer = require('./services/riskScorer');
 
@@ -171,6 +181,11 @@ class DeviceLifecycleService extends EventEmitter {
                     { performedBy: performedBy || 'api-user', reason: reason || '' }
                 );
 
+                if (targetState === 'active' || targetState === 'onboarded') {
+                    publish('device.lifecycle.onboarded', { deviceId: req.params.id, performedBy: performedBy || 'api-user' });
+                } else if (targetState === 'retired' || targetState === 'decommissioned') {
+                    publish('device.lifecycle.retired', { deviceId: req.params.id, performedBy: performedBy || 'api-user' });
+                }
                 res.json(result);
             } catch (error) {
                 if (error.message.includes('not found')) {
@@ -334,6 +349,28 @@ class DeviceLifecycleService extends EventEmitter {
         try {
             const port = parseInt(process.env.PORT) || 3020;
             const host = process.env.HOST || '0.0.0.0';
+
+            // Connect to event bus and subscribe to trigger events
+            connectBus().then(async () => {
+                try {
+                    await _bus.subscribe('device-lifecycle-triggers',
+                        ['device.enrolled', 'device.retired'],
+                        async (payload, { routingKey }) => {
+                            console.log(`Received trigger event: ${routingKey}`, { deviceId: payload.deviceId });
+                            if (routingKey === 'device.enrolled') {
+                                publish('device.lifecycle.onboarded', { deviceId: payload.deviceId, trigger: routingKey });
+                            } else if (routingKey === 'device.retired') {
+                                publish('device.lifecycle.retired', { deviceId: payload.deviceId, trigger: routingKey });
+                            }
+                        }
+                    );
+                    console.log('Device lifecycle subscribed to trigger events');
+                } catch (err) {
+                    console.warn(`EventBusClient subscribe failed (non-critical): ${err.message}`);
+                }
+            }).catch((err) => {
+                console.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+            });
 
             this.server = this.app.listen(port, host, () => {
                 console.log(`OpenDirectory Device Lifecycle Manager started on ${host}:${port}`);

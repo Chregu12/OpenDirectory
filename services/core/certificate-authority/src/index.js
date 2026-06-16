@@ -36,6 +36,15 @@ app.use(cors());
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'certificate-authority' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+
 // ─── Prometheus metrics middleware ────────────────────────────────────────────
 app.use((req, res, next) => {
   const start = Date.now();
@@ -64,7 +73,7 @@ const CA_VALIDITY_YEARS = parseInt(process.env.CA_VALIDITY_YEARS || '10');
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'auth',
+  database: process.env.DB_NAME || 'certs',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || '',
   max: 5,
@@ -216,6 +225,7 @@ app.post('/ca/issue', async (req, res) => {
   }
 
   certsIssuedCounter.inc({ type });
+  publish('certificate.issued', { certId: id, subject: commonName, expiresAt: result.expiresAt });
   res.status(201).json({ id, commonName, certificate: result.certificate, privateKey: result.privateKey, serialNumber: result.serialNumber, expiresAt: result.expiresAt, caCertificate: caCertPem });
 });
 
@@ -234,6 +244,8 @@ app.post('/ca/revoke/:id', async (req, res) => {
     await pool.query('UPDATE ca_certificates SET revoked=true, revoked_at=NOW() WHERE id=$1', [req.params.id]).catch(() => {});
   }
   certsRevokedCounter.inc();
+  const revokedAt = new Date().toISOString();
+  publish('certificate.revoked', { certId: req.params.id, revokedAt });
   res.json({ success: true });
 });
 
@@ -247,5 +259,8 @@ app.get('/health', (req, res) => res.json({ status: 'ok', caReady: !!caCert }));
 
 initCA();
 initDb().then(() => {
-  app.listen(PORT, () => console.log(`[certificate-authority] listening on :${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`[certificate-authority] listening on :${PORT}`);
+    connectBus();
+  });
 });

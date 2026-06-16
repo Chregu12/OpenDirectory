@@ -1,0 +1,18 @@
+{{- if .Values.rabbitmq.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  labels: {{- include "opendirectory.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: {{ include "opendirectory.fullname" . }}-rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: management
+      port: 15672
+      targetPort: 15672
+  clusterIP: None  # headless for StatefulSet
+{{- end }}

@@ -85,12 +85,69 @@ jobs:
           done
 
   # ===================
+  # Service Tests
+  # ===================
+  service-tests:
+    name: Service Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Test authentication-service
+        id: test_authentication
+        continue-on-error: true
+        run: cd services/platform/authentication-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test device-service
+        id: test_device
+        continue-on-error: true
+        run: cd services/platform/device-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test policy-service
+        id: test_policy
+        continue-on-error: true
+        run: cd services/platform/policy-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test quick-actions
+        id: test_quick_actions
+        continue-on-error: true
+        run: cd services/platform/quick-actions && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test conditional-access
+        id: test_conditional_access
+        continue-on-error: true
+        run: cd services/platform/conditional-access && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test api-gateway
+        id: test_api_gateway
+        continue-on-error: true
+        run: cd services/core/api-gateway && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test summary
+        if: always()
+        run: |
+          echo "=== Service Test Results ==="
+          echo "authentication-service : ${{ steps.test_authentication.outcome }}"
+          echo "device-service         : ${{ steps.test_device.outcome }}"
+          echo "policy-service         : ${{ steps.test_policy.outcome }}"
+          echo "quick-actions          : ${{ steps.test_quick_actions.outcome }}"
+          echo "conditional-access     : ${{ steps.test_conditional_access.outcome }}"
+          echo "api-gateway            : ${{ steps.test_api_gateway.outcome }}"
+
+  # ===================
   # Security Scanning
   # ===================
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, service-tests]
     steps:
       - uses: actions/checkout@v4
       

@@ -15,10 +15,11 @@ import {
   BoltIcon,
   TrashIcon,
   PencilIcon,
-  EyeIcon,
+  PlayIcon,
+  FireIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckSolid } from '@heroicons/react/24/solid';
-import { api } from '@/lib/api';
+import { api, pimSessionsApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,7 +53,50 @@ interface PIMRequest {
   expires_at?: string;
 }
 
-type Tab = 'rollen' | 'anfragen' | 'aktiv' | 'anfordern';
+interface PIMSession {
+  id: string;
+  userId?: string;
+  user_id?: string;
+  userName?: string;
+  user_name?: string;
+  roleId?: string;
+  role_id?: string;
+  roleName?: string;
+  role_name?: string;
+  startedAt?: string;
+  started_at?: string;
+  endedAt?: string;
+  ended_at?: string;
+  status?: string;
+  riskScore?: number;
+  risk_score?: number;
+  duration?: number;
+}
+
+interface SessionActivity {
+  activityType: string;
+  activity_type?: string;
+  details: Record<string, unknown>;
+  riskScore: number;
+  risk_score?: number;
+  timestamp: string;
+}
+
+interface BreakGlassEvent {
+  id: string;
+  requestedBy?: string;
+  requested_by?: string;
+  reason: string;
+  systemsAffected?: string;
+  systems_affected?: string;
+  status?: string;
+  requestedAt?: string;
+  requested_at?: string;
+  activatedAt?: string;
+  activated_at?: string;
+}
+
+type Tab = 'rollen' | 'anfragen' | 'aktiv' | 'anfordern' | 'sessions' | 'breakglass';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-50 text-yellow-700 border-yellow-200',
@@ -60,14 +104,6 @@ const STATUS_COLORS: Record<string, string> = {
   denied:  'bg-red-50    text-red-700    border-red-200',
   expired: 'bg-gray-50   text-gray-600   border-gray-200',
   revoked: 'bg-gray-50   text-gray-500   border-gray-200',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Ausstehend',
-  active:  'Aktiv',
-  denied:  'Abgelehnt',
-  expired: 'Abgelaufen',
-  revoked: 'Widerrufen',
 };
 
 function timeLeft(expires_at?: string): string {
@@ -82,6 +118,12 @@ function timeLeft(expires_at?: string): string {
 function fmtDate(s?: string) {
   if (!s) return '—';
   return new Date(s).toLocaleString('de-CH', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function riskColor(score: number): string {
+  if (score >= 0.7) return 'text-red-600 bg-red-50';
+  if (score >= 0.4) return 'text-orange-600 bg-orange-50';
+  return 'text-green-600 bg-green-50';
 }
 
 // ─── Role Form Modal ──────────────────────────────────────────────────────────
@@ -179,7 +221,7 @@ function RoleFormModal({ role, onClose, onSaved }: {
             <button onClick={onClose} className="px-4 py-2 text-sm text-[#3C3C43] bg-[#F2F2F7] rounded-lg hover:bg-[#E5E5EA]">Abbrechen</button>
             <button onClick={save} disabled={saving}
               className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED] disabled:opacity-60">
-              {saving ? 'Speichern…' : 'Speichern'}
+              {saving ? 'Speichern...' : 'Speichern'}
             </button>
           </div>
         </div>
@@ -213,7 +255,6 @@ function RequestModal({ roles, onClose, onSubmitted }: {
         role_id: roleId,
         justification,
         requested_duration_hours: hours,
-        // In real deployment, user_id/user_name come from JWT
         user_id: 'current-user',
         user_name: 'Aktueller Benutzer',
       });
@@ -246,7 +287,7 @@ function RequestModal({ roles, onClose, onSubmitted }: {
             <div className="bg-[#F2F2F7] rounded-xl p-4 space-y-1 text-sm">
               <p className="text-[#3C3C43]">{selectedRole.description}</p>
               <p className="text-xs text-[#8E8E93]">
-                {selectedRole.requires_approval ? '⏳ Genehmigung erforderlich' : '⚡ Sofortiger Zugriff'}
+                {selectedRole.requires_approval ? 'Genehmigung erforderlich' : 'Sofortiger Zugriff'}
                 {' · '}Max. {selectedRole.max_duration_hours}h
               </p>
             </div>
@@ -265,9 +306,227 @@ function RequestModal({ roles, onClose, onSubmitted }: {
             <button onClick={onClose} className="px-4 py-2 text-sm text-[#3C3C43] bg-[#F2F2F7] rounded-lg hover:bg-[#E5E5EA]">Abbrechen</button>
             <button onClick={submit} disabled={submitting}
               className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED] disabled:opacity-60">
-              {submitting ? 'Einreichen…' : 'Zugriff anfordern'}
+              {submitting ? 'Einreichen...' : 'Zugriff anfordern'}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Session Replay Modal ─────────────────────────────────────────────────────
+
+function SessionReplayModal({ session, onClose }: { session: PIMSession; onClose: () => void }) {
+  const [activities, setActivities] = useState<SessionActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    pimSessionsApi.getSessionReplay(session.id)
+      .then(res => {
+        const data = res.data;
+        setActivities(data?.activities ?? data ?? []);
+      })
+      .catch(err => setError(err.message ?? 'Failed to load replay'))
+      .finally(() => setLoading(false));
+  }, [session.id]);
+
+  const activityRiskColor = (score: number) => {
+    if (score >= 0.7) return { bg: '#FEF2F2', text: '#DC2626', label: 'HIGH' };
+    if (score >= 0.4) return { bg: '#FFF7ED', text: '#D97706', label: 'MED' };
+    return { bg: '#F0FDF4', text: '#16A34A', label: 'LOW' };
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-gray-200">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Session Replay</h2>
+            <p className="text-sm text-gray-500">
+              {session.userName ?? session.user_name ?? session.userId ?? session.user_id}
+              {' — '}
+              {session.roleName ?? session.role_name}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <XMarkIcon className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {loading && (
+            <div className="flex items-center justify-center py-16">
+              <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-500" />
+            </div>
+          )}
+          {error && (
+            <div className="text-center py-16 text-red-600">
+              <ExclamationTriangleIcon className="w-10 h-10 mx-auto mb-3" />
+              <p>{error}</p>
+            </div>
+          )}
+          {!loading && !error && activities.length === 0 && (
+            <div className="text-center py-16 text-gray-400">
+              <PlayIcon className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p>No activity recorded for this session</p>
+            </div>
+          )}
+          {!loading && activities.length > 0 && (
+            <div className="space-y-2">
+              {activities.map((act, i) => {
+                const risk = act.riskScore ?? act.risk_score ?? 0;
+                const rc = activityRiskColor(risk);
+                const type = act.activityType ?? act.activity_type ?? 'UNKNOWN';
+                return (
+                  <div key={i} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50">
+                    <span className="text-xs text-gray-400 w-16 flex-shrink-0 pt-0.5 font-mono">
+                      {new Date(act.timestamp).toLocaleTimeString()}
+                    </span>
+                    <span
+                      className="text-xs font-mono font-semibold px-1.5 py-0.5 rounded flex-shrink-0"
+                      style={{ background: '#F3F4F6', color: '#374151' }}
+                    >
+                      {type}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-700 font-mono truncate">
+                        {typeof act.details === 'string'
+                          ? act.details
+                          : (act.details?.command ?? act.details?.path ?? act.details?.target ?? JSON.stringify(act.details))}
+                      </p>
+                    </div>
+                    <span
+                      className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ background: rc.bg, color: rc.text }}
+                    >
+                      {risk.toFixed(1)} {rc.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Break-Glass Request Modal ────────────────────────────────────────────────
+
+function BreakGlassRequestModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitted: (id: string) => void }) {
+  const [reason, setReason] = useState('');
+  const [systemsAffected, setSystemsAffected] = useState('');
+  const [estimatedDuration, setEstimatedDuration] = useState(60);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ id: string } | null>(null);
+
+  const submit = async () => {
+    if (!reason.trim()) {
+      toast.error('Reason is required');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await pimSessionsApi.requestBreakGlass({
+        reason,
+        systemsAffected,
+        estimatedDuration,
+      });
+      const data = res.data ?? {};
+      const id = data.id ?? data.breakGlassId ?? data.breakglass_id ?? `bg-${Date.now()}`;
+      setResult({ id });
+      onSubmitted(id);
+    } catch (err: any) {
+      toast.error(err.message ?? 'Break-glass request failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-t-2xl p-5 text-white">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <FireIcon className="w-5 h-5" />
+              <h2 className="text-base font-bold">Emergency Access Request</h2>
+            </div>
+            <button onClick={onClose} className="text-white/70 hover:text-white">
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-xs text-red-200">This action will be logged and requires manager approval.</p>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {result ? (
+            <div className="text-center py-4">
+              <CheckCircleIcon className="w-12 h-12 text-green-500 mx-auto mb-3" />
+              <h3 className="text-base font-semibold text-gray-900 mb-2">Request Submitted</h3>
+              <p className="text-sm text-gray-500 mb-3">
+                Break-glass ID: <span className="font-mono font-semibold text-gray-700">{result.id}</span>
+              </p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                Awaiting second manager approval. You will be notified when access is granted.
+              </div>
+              <button onClick={onClose} className="mt-4 px-6 py-2 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-700">
+                Close
+              </button>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Reason *</label>
+                <textarea
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                  rows={3}
+                  placeholder="Why is emergency access needed?"
+                  className="input-apple w-full resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Systems Affected</label>
+                <input
+                  value={systemsAffected}
+                  onChange={e => setSystemsAffected(e.target.value)}
+                  placeholder="e.g. DC01, FILESERVER-01, Production DB"
+                  className="input-apple w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Estimated Duration (minutes)</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={480}
+                  value={estimatedDuration}
+                  onChange={e => setEstimatedDuration(Number(e.target.value))}
+                  className="input-apple w-full"
+                />
+              </div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+                Emergency access bypasses normal approval workflows. All activity will be recorded and audited.
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                  Cancel
+                </button>
+                <button
+                  onClick={submit}
+                  disabled={submitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-60"
+                >
+                  {submitting ? 'Submitting...' : 'Request Emergency Access'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -280,10 +539,16 @@ export default function PIMView() {
   const [tab, setTab]           = useState<Tab>('anfragen');
   const [roles, setRoles]       = useState<PIMRole[]>([]);
   const [requests, setRequests] = useState<PIMRequest[]>([]);
+  const [sessions, setSessions] = useState<PIMSession[]>([]);
+  const [breakGlassEvents, setBreakGlassEvents] = useState<BreakGlassEvent[]>([]);
   const [loading, setLoading]   = useState(true);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [bgLoading, setBgLoading] = useState(false);
   const [showRoleForm, setShowRoleForm] = useState(false);
   const [editRole, setEditRole] = useState<PIMRole | undefined>();
   const [showRequest, setShowRequest] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<PIMSession | null>(null);
+  const [showBGRequest, setShowBGRequest] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -299,7 +564,37 @@ export default function PIMView() {
     }
   }, []);
 
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const res = await pimSessionsApi.getSessions();
+      setSessions(res.data?.sessions ?? res.data ?? []);
+    } catch {
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  const loadBreakGlass = useCallback(async () => {
+    setBgLoading(true);
+    try {
+      const res = await pimSessionsApi.getBreakGlassEvents();
+      setBreakGlassEvents(res.data?.events ?? res.data ?? []);
+    } catch {
+      setBreakGlassEvents([]);
+    } finally {
+      setBgLoading(false);
+    }
+  }, []);
+
   useEffect(() => { load(); }, [load]);
+
+  // Lazy-load sessions/break-glass when tab is activated
+  useEffect(() => {
+    if (tab === 'sessions') loadSessions();
+    if (tab === 'breakglass') loadBreakGlass();
+  }, [tab, loadSessions, loadBreakGlass]);
 
   const approve = async (id: string) => {
     await api.post(`/api/pim/requests/${id}/approve`);
@@ -322,14 +617,26 @@ export default function PIMView() {
     load();
   };
 
+  const terminateSession = async (id: string) => {
+    try {
+      await pimSessionsApi.terminateBreakGlass(id);
+      toast.success('Session terminated');
+      loadSessions();
+    } catch {
+      toast.error('Failed to terminate session');
+    }
+  };
+
   const pending = requests.filter(r => r.status === 'pending');
   const active  = requests.filter(r => r.status === 'active');
 
   const TABS: { key: Tab; label: string; badge?: number }[] = [
-    { key: 'anfragen', label: 'Anfragen', badge: pending.length },
-    { key: 'aktiv',    label: 'Aktiv',    badge: active.length },
-    { key: 'rollen',   label: 'Rollen' },
-    { key: 'anfordern',label: 'Zugriff anfordern' },
+    { key: 'anfragen',   label: 'Anfragen',     badge: pending.length },
+    { key: 'aktiv',      label: 'Aktiv',         badge: active.length },
+    { key: 'rollen',     label: 'Rollen' },
+    { key: 'anfordern',  label: 'Zugriff anfordern' },
+    { key: 'sessions',   label: 'Sessions' },
+    { key: 'breakglass', label: 'Break-Glass' },
   ];
 
   return (
@@ -356,8 +663,8 @@ export default function PIMView() {
       <div className="grid grid-cols-4 gap-4">
         {[
           { label: 'Aktive Sessions', value: active.length, color: 'text-[#34C759]', icon: ShieldCheckIcon },
-          { label: 'Ausstehend', value: pending.length, color: 'text-[#FF9500]', icon: ClockIcon },
-          { label: 'PIM-Rollen', value: roles.length, color: 'text-[#0071E3]', icon: KeyIcon },
+          { label: 'Ausstehend',      value: pending.length, color: 'text-[#FF9500]', icon: ClockIcon },
+          { label: 'PIM-Rollen',      value: roles.length,   color: 'text-[#0071E3]', icon: KeyIcon },
           { label: 'Heute genehmigt', value: requests.filter(r => r.decided_at && new Date(r.decided_at).toDateString() === new Date().toDateString() && r.status === 'active').length, color: 'text-[#34C759]', icon: CheckCircleIcon },
         ].map(({ label, value, color, icon: Icon }) => (
           <div key={label} className="bg-white rounded-xl border border-[#E5E5EA] p-4">
@@ -371,10 +678,10 @@ export default function PIMView() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-[#E5E5EA]">
+      <div className="flex border-b border-[#E5E5EA] overflow-x-auto">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               tab === t.key ? 'border-[#0071E3] text-[#0071E3]' : 'border-transparent text-[#8E8E93] hover:text-[#3C3C43]'
             }`}>
             {t.label}
@@ -407,13 +714,9 @@ export default function PIMView() {
                       <p className="text-sm font-medium text-[#1D1D1F]">{r.user_name}</p>
                       <p className="text-xs text-[#8E8E93]">{r.user_email || r.user_id}</p>
                     </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm text-[#1D1D1F]">{r.role_name}</p>
-                    </td>
+                    <td className="px-4 py-3"><p className="text-sm text-[#1D1D1F]">{r.role_name}</p></td>
                     <td className="px-4 py-3 text-sm text-[#3C3C43]">{r.requested_duration_hours}h</td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm text-[#3C3C43] max-w-xs truncate">{r.justification || '—'}</p>
-                    </td>
+                    <td className="px-4 py-3"><p className="text-sm text-[#3C3C43] max-w-xs truncate">{r.justification || '—'}</p></td>
                     <td className="px-4 py-3 text-xs text-[#8E8E93] whitespace-nowrap">{fmtDate(r.requested_at)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
@@ -453,12 +756,8 @@ export default function PIMView() {
               <tbody className="divide-y divide-[#F2F2F7]">
                 {active.map(r => (
                   <tr key={r.id} className="hover:bg-[#F9F9F9]">
-                    <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-[#1D1D1F]">{r.user_name}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm text-[#1D1D1F]">{r.role_name}</p>
-                    </td>
+                    <td className="px-4 py-3"><p className="text-sm font-medium text-[#1D1D1F]">{r.user_name}</p></td>
+                    <td className="px-4 py-3"><p className="text-sm text-[#1D1D1F]">{r.role_name}</p></td>
                     <td className="px-4 py-3">
                       <span className={`text-sm font-medium ${timeLeft(r.expires_at) === 'Abgelaufen' ? 'text-red-500' : 'text-[#FF9500]'}`}>
                         {timeLeft(r.expires_at)}
@@ -555,13 +854,13 @@ export default function PIMView() {
                       <UserGroupIcon className="w-5 h-5 text-[#0071E3]" />
                       <span className="text-sm font-medium text-[#1D1D1F]">{role.name}</span>
                       {!role.requires_approval
-                        ? <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full">⚡ Sofort</span>
-                        : <span className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2 py-0.5 rounded-full">⏳ Genehmigung</span>}
+                        ? <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full">Sofort</span>
+                        : <span className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2 py-0.5 rounded-full">Genehmigung</span>}
                     </div>
                     <p className="text-xs text-[#8E8E93]">{role.description}</p>
                     <p className="text-xs text-[#8E8E93] mt-1">Gruppe: <span className="text-[#3C3C43]">{role.target_group_name}</span> · Max. <span className="text-[#3C3C43]">{role.max_duration_hours}h</span></p>
                   </div>
-                  <button onClick={() => { setShowRequest(true); }}
+                  <button onClick={() => setShowRequest(true)}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#0071E3] border border-[#0071E3] rounded-lg hover:bg-[#EAF4FF] transition-colors flex-shrink-0">
                     <BoltIcon className="w-4 h-4" />
                     Anfordern
@@ -573,12 +872,156 @@ export default function PIMView() {
         </div>
       )}
 
+      {/* ── Sessions Tab ── */}
+      {tab === 'sessions' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-[#8E8E93]">Session recordings from the conditional-access service.</p>
+            <button onClick={loadSessions} className="p-2 rounded-lg hover:bg-[#F2F2F7]">
+              <ArrowPathIcon className={`w-4 h-4 text-[#8E8E93] ${sessionsLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          <div className="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden">
+            {sessionsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-500" />
+              </div>
+            ) : sessions.length === 0 ? (
+              <div className="text-center py-16">
+                <PlayIcon className="w-10 h-10 mx-auto mb-3 text-[#8E8E93] opacity-40" />
+                <p className="text-sm text-[#8E8E93]">No session recordings found</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-[#F9F9F9] border-b border-[#F2F2F7]">
+                  <tr>{['User', 'Role', 'Duration', 'Risk Score', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#8E8E93] uppercase tracking-wider">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-[#F2F2F7]">
+                  {sessions.map(s => {
+                    const risk = s.riskScore ?? s.risk_score ?? 0;
+                    const rc = riskColor(risk);
+                    const startTime = s.startedAt ?? s.started_at;
+                    const endTime   = s.endedAt   ?? s.ended_at;
+                    let durationStr = '—';
+                    if (startTime && endTime) {
+                      const ms = new Date(endTime).getTime() - new Date(startTime).getTime();
+                      const m = Math.round(ms / 60000);
+                      durationStr = m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+                    }
+                    return (
+                      <tr key={s.id} className="hover:bg-[#F9F9F9]">
+                        <td className="px-4 py-3 text-sm text-[#1D1D1F]">{s.userName ?? s.user_name ?? s.userId ?? s.user_id ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-[#1D1D1F]">{s.roleName ?? s.role_name ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-[#3C3C43]">{durationStr}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${rc}`}>
+                            {risk.toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_COLORS[s.status ?? 'expired'] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                            {s.status ?? 'ended'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => setSelectedSession(s)}
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#0071E3] bg-blue-50 rounded-lg hover:bg-blue-100"
+                          >
+                            <PlayIcon className="w-3.5 h-3.5" /> Replay
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Break-Glass Tab ── */}
+      {tab === 'breakglass' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Emergency Access (Break-Glass)</p>
+              <p className="text-xs text-[#8E8E93]">Use only in critical situations. All access is audited.</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={loadBreakGlass} className="p-2 rounded-lg hover:bg-[#F2F2F7]">
+                <ArrowPathIcon className={`w-4 h-4 text-[#8E8E93] ${bgLoading ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={() => setShowBGRequest(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+              >
+                <FireIcon className="w-4 h-4" />
+                Request Emergency Access
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden">
+            {bgLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <ArrowPathIcon className="w-8 h-8 animate-spin text-red-500" />
+              </div>
+            ) : breakGlassEvents.length === 0 ? (
+              <div className="text-center py-16">
+                <ShieldCheckIcon className="w-10 h-10 mx-auto mb-3 text-green-400 opacity-60" />
+                <p className="text-sm text-[#8E8E93]">No break-glass events recorded</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-[#F9F9F9] border-b border-[#F2F2F7]">
+                  <tr>{['Requested By', 'Reason', 'Systems', 'Status', 'Requested At'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#8E8E93] uppercase tracking-wider">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-[#F2F2F7]">
+                  {breakGlassEvents.map(ev => (
+                    <tr key={ev.id} className="hover:bg-[#F9F9F9]">
+                      <td className="px-4 py-3 text-sm text-[#1D1D1F]">{ev.requestedBy ?? ev.requested_by ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm text-[#3C3C43] max-w-xs truncate">{ev.reason}</p>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-[#8E8E93]">{ev.systemsAffected ?? ev.systems_affected ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_COLORS[ev.status ?? 'expired'] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                          {ev.status ?? 'unknown'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-[#8E8E93] whitespace-nowrap">
+                        {fmtDate(ev.requestedAt ?? ev.requested_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Modals */}
       {showRoleForm && (
         <RoleFormModal role={editRole} onClose={() => setShowRoleForm(false)} onSaved={load} />
       )}
       {showRequest && (
         <RequestModal roles={roles} onClose={() => setShowRequest(false)} onSubmitted={load} />
+      )}
+      {selectedSession && (
+        <SessionReplayModal session={selectedSession} onClose={() => setSelectedSession(null)} />
+      )}
+      {showBGRequest && (
+        <BreakGlassRequestModal
+          onClose={() => setShowBGRequest(false)}
+          onSubmitted={(_id) => { setShowBGRequest(false); loadBreakGlass(); }}
+        />
       )}
 
       <style jsx global>{`

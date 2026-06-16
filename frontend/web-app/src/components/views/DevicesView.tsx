@@ -23,6 +23,8 @@ import {
   PlusCircleIcon,
   MinusCircleIcon,
   ExclamationTriangleIcon,
+  EyeSlashIcon,
+  KeyIcon,
 } from '@heroicons/react/24/outline';
 import { deviceApi, api } from '@/lib/api';
 import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
@@ -50,7 +52,7 @@ function resizeImage(file: File, maxPx: number): Promise<string> {
 
 type StatusFilter   = 'all' | 'online' | 'offline';
 type PlatformFilter = 'all' | 'linux' | 'macos' | 'windows';
-type DeviceTab      = 'details' | 'apps' | 'hardware' | 'network' | 'history' | 'stammdaten';
+type DeviceTab      = 'details' | 'apps' | 'hardware' | 'network' | 'history' | 'stammdaten' | 'laps' | 'bitlocker';
 
 interface Stammdaten {
   custom_name?: string;
@@ -66,6 +68,85 @@ interface Stammdaten {
 }
 
 type HistoryEventType = 'enrolled' | 'app_installed' | 'app_removed' | 'app_updated' | 'policy_applied' | 'decommissioned';
+
+// ─── LAPS / BitLocker types ────────────────────────────────────────────────────
+
+const SAMBA_URL = process.env.NEXT_PUBLIC_SAMBA_URL || 'http://samba-ad-dc:3010';
+
+interface LapsPassword {
+  password: string;
+  expiresAt?: string;
+  retrievedBy?: string;
+  retrievedAt?: string;
+}
+
+interface BitLockerKey {
+  keyId: string;
+  volumeLabel?: string;
+  escrowedAt?: string;
+  recoveryKey?: string;
+}
+
+// ─── BitLocker Retrieve Modal ──────────────────────────────────────────────────
+
+function BitLockerKeyModal({ keyId, deviceName, onClose }: { keyId: string; deviceName: string; onClose: () => void }) {
+  const [key,     setKey]     = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+  const [copied,  setCopied]  = useState(false);
+
+  useEffect(() => {
+    api.get(`${SAMBA_URL}/api/computers/${encodeURIComponent(deviceName)}/bitlocker-keys/${encodeURIComponent(keyId)}`)
+      .then(res => setKey(res.data?.recoveryKey || res.data?.key || res.data || null))
+      .catch(err => setError(err?.response?.data?.error || err?.message || 'Failed to retrieve key'))
+      .finally(() => setLoading(false));
+  }, [keyId, deviceName]);
+
+  const handleCopy = () => {
+    if (!key) return;
+    navigator.clipboard.writeText(key);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success('Recovery key copied');
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[70]" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-gray-900">BitLocker Recovery Key</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
+          </div>
+          <p className="text-xs text-gray-500 font-mono">Key ID: {keyId}</p>
+          {loading ? (
+            <div className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+              <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" /> {error}
+            </div>
+          ) : (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Recovery Key</span>
+                <button onClick={handleCopy} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg">
+                  {copied ? <><CheckIcon className="w-3.5 h-3.5" />Copied!</> : <><ClipboardDocumentIcon className="w-3.5 h-3.5" />Copy</>}
+                </button>
+              </div>
+              <code className="block text-sm font-mono text-gray-900 break-all">{key}</code>
+            </div>
+          )}
+          <div className="bg-yellow-50 border border-yellow-100 rounded-lg px-3 py-2">
+            <p className="text-xs text-yellow-800">This access has been logged. Handle the recovery key securely.</p>
+          </div>
+          <div className="flex justify-end">
+            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface DeviceHistoryEntry {
   id: string;
@@ -379,11 +460,11 @@ function AddAppModal({ device, installedIds, onAdd, onClose }: {
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="add-app-modal-title" className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-gray-900">Add Application</h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
+            <h3 id="add-app-modal-title" className="text-base font-semibold text-gray-900">Add Application</h3>
+            <button onClick={onClose} aria-label="Close dialog" className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
           </div>
 
           {available.length === 0 ? (
@@ -437,14 +518,14 @@ function DecommissionModal({ device, apps, onConfirm, onCancel }: {
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[60]" onClick={onCancel}>
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="decommission-modal-title" className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
         <div className="p-6">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <TrashIcon className="w-5 h-5 text-red-600" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-gray-900">Decommission {device.name}</h3>
+              <h3 id="decommission-modal-title" className="text-base font-semibold text-gray-900">Decommission {device.name}</h3>
               <p className="text-xs text-gray-500">This will restore the device to its original enrollment state</p>
             </div>
           </div>
@@ -580,6 +661,18 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
   const [loadingSd, setLoadingSd]         = useState(false);
   const [savingSd, setSavingSd]           = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  // LAPS tab
+  const [lapsData, setLapsData]           = useState<LapsPassword | null>(null);
+  const [loadingLaps, setLoadingLaps]     = useState(false);
+  const [lapsError, setLapsError]         = useState<string | null>(null);
+  const [lapsRevealed, setLapsRevealed]   = useState(false);
+  const [rotatingLaps, setRotatingLaps]   = useState(false);
+  const [lapsRotateMsg, setLapsRotateMsg] = useState<string | null>(null);
+  // BitLocker tab
+  const [blKeys, setBlKeys]               = useState<BitLockerKey[]>([]);
+  const [loadingBl, setLoadingBl]         = useState(false);
+  const [blError, setBlError]             = useState<string | null>(null);
+  const [blRetrieveKey, setBlRetrieveKey] = useState<BitLockerKey | null>(null);
 
   // Wrapper: update local state + notify parent cache
   const setApps = (updater: (prev: InstalledApp[]) => InstalledApp[]) => {
@@ -683,6 +776,51 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
     }
   };
 
+  // Lazy-load LAPS data when tab is first opened
+  useEffect(() => {
+    if (deviceTab !== 'laps' || lapsData !== null || loadingLaps) return;
+    const computerName = detail.name;
+    if (!computerName) return;
+    setLoadingLaps(true);
+    setLapsError(null);
+    api.get(`${SAMBA_URL}/api/computers/${encodeURIComponent(computerName)}/laps-password`)
+      .then(res => setLapsData(res.data?.data || res.data || null))
+      .catch(err => setLapsError(err?.response?.data?.error || err?.message || 'Failed to load LAPS data'))
+      .finally(() => setLoadingLaps(false));
+  }, [deviceTab, detail.name]);
+
+  // Lazy-load BitLocker keys when tab is first opened
+  useEffect(() => {
+    if (deviceTab !== 'bitlocker' || blKeys.length > 0 || loadingBl) return;
+    const computerName = detail.name;
+    if (!computerName) return;
+    setLoadingBl(true);
+    setBlError(null);
+    api.get(`${SAMBA_URL}/api/computers/${encodeURIComponent(computerName)}/bitlocker-keys`)
+      .then(res => setBlKeys(res.data?.keys || res.data || []))
+      .catch(err => setBlError(err?.response?.data?.error || err?.message || 'Failed to load BitLocker keys'))
+      .finally(() => setLoadingBl(false));
+  }, [deviceTab, detail.name]);
+
+  const handleLapsRotate = async () => {
+    const computerName = detail.name;
+    if (!computerName) return;
+    setRotatingLaps(true);
+    setLapsRotateMsg(null);
+    try {
+      const res = await api.post(`${SAMBA_URL}/api/computers/${encodeURIComponent(computerName)}/laps-rotate`);
+      const newData: LapsPassword = res.data?.data || res.data || {};
+      setLapsData(newData);
+      setLapsRevealed(true);
+      setLapsRotateMsg('Password rotated. Save it now.');
+      toast.success('LAPS password rotated');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to rotate password');
+    } finally {
+      setRotatingLaps(false);
+    }
+  };
+
   const updateApp = async (id: string) => {
     const appEntry = apps.find(a => a.id === id);
     setUpdatingIds(prev => new Set(prev).add(id));
@@ -749,7 +887,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
   return (
     <>
       <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div role="dialog" aria-modal="true" aria-labelledby="device-detail-modal-title" className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
 
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-0">
@@ -760,7 +898,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                   : <DeviceThumbnail platform={detail.platform} size="md" />}
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-[#1D1D1F]">
+                <h2 id="device-detail-modal-title" className="text-lg font-semibold text-[#1D1D1F]">
                   {stammdaten.custom_name || detail.name || 'Unknown Device'}
                 </h2>
                 <div className="flex items-center gap-2 mt-0.5">
@@ -778,7 +916,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                 </div>
               </div>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <button onClick={onClose} aria-label="Close dialog" className="text-gray-400 hover:text-gray-600">
               <XMarkIcon className="w-6 h-6" />
             </button>
           </div>
@@ -786,12 +924,16 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
           {/* Tab bar */}
           <div className="flex border-b border-gray-100 px-6 mt-4 overflow-x-auto">
             {([
-              { key: 'details'     as DeviceTab, label: 'Details' },
+              { key: 'details'    as DeviceTab, label: 'Details' },
               { key: 'stammdaten' as DeviceTab, label: 'Stammdaten' },
               { key: 'apps'       as DeviceTab, label: `Apps (${apps.length})` },
               { key: 'hardware'   as DeviceTab, label: 'Hardware' },
               { key: 'network'    as DeviceTab, label: 'Network' },
               { key: 'history'    as DeviceTab, label: 'History' },
+              ...(detail.platform === 'windows' || detail.platform === 'macos' ? [
+                { key: 'laps'       as DeviceTab, label: 'LAPS' },
+                { key: 'bitlocker'  as DeviceTab, label: 'BitLocker' },
+              ] : []),
             ]).map(t => (
               <button key={t.key} onClick={() => setDeviceTab(t.key)}
                 className={`py-2 px-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
@@ -1013,6 +1155,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                             </div>
                           ) : (
                             <button onClick={() => removeApp(app.id)}
+                              aria-label={`Remove ${app.name}`}
                               className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
                               <TrashIcon className="w-4 h-4" />
                             </button>
@@ -1214,6 +1357,150 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                 </div>
               );
             })()}
+
+            {/* ── LAPS Tab ── */}
+            {deviceTab === 'laps' && (
+              <div className="space-y-5">
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Local Admin Password
+                    </span>
+                    <div className="flex-1 h-px bg-gray-100" />
+                  </div>
+                  {loadingLaps ? (
+                    <div className="animate-pulse space-y-3">
+                      {[...Array(3)].map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded-lg" />)}
+                    </div>
+                  ) : lapsError ? (
+                    <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+                      <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" /> {lapsError}
+                    </div>
+                  ) : lapsData ? (
+                    <div className="space-y-4">
+                      {lapsRotateMsg && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800 font-medium">
+                          ✅ {lapsRotateMsg}
+                        </div>
+                      )}
+                      <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                        {/* Password row */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-medium text-gray-500 mb-1">Password</p>
+                            <p className="text-sm font-mono text-gray-900">
+                              {lapsRevealed ? lapsData.password : '●●●●●●●●●●●●'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => setLapsRevealed(v => !v)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg">
+                              {lapsRevealed
+                                ? <><EyeSlashIcon className="w-3.5 h-3.5" />Hide</>
+                                : <><EyeIcon className="w-3.5 h-3.5" />Reveal</>}
+                            </button>
+                            {lapsRevealed && (
+                              <button onClick={() => { navigator.clipboard.writeText(lapsData.password); toast.success('Password copied'); }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg">
+                                <ClipboardDocumentIcon className="w-3.5 h-3.5" />Copy
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {/* Expires */}
+                        <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                          <p className="text-xs font-medium text-gray-500">Expires</p>
+                          <p className="text-sm text-gray-700">
+                            {lapsData.expiresAt ? new Date(lapsData.expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                          </p>
+                        </div>
+                        {/* Retrieved */}
+                        <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                          <p className="text-xs font-medium text-gray-500">Last Retrieved</p>
+                          <p className="text-sm text-gray-700">
+                            {lapsData.retrievedAt
+                              ? `${lapsData.retrievedBy ?? 'Unknown'} — ${new Date(lapsData.retrievedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                              : 'Never'}
+                          </p>
+                        </div>
+                      </div>
+                      {/* Actions */}
+                      <div className="flex items-center gap-2">
+                        <button onClick={handleLapsRotate} disabled={rotatingLaps}
+                          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-60">
+                          <ArrowPathIcon className={`w-4 h-4 ${rotatingLaps ? 'animate-spin' : ''}`} />
+                          {rotatingLaps ? 'Rotating…' : 'Rotate Password'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-10 text-gray-400">
+                      <KeyIcon className="w-10 h-10 mx-auto mb-2" />
+                      <p className="text-sm">No LAPS password found for this device</p>
+                      <p className="text-xs mt-1">Ensure the device is domain-joined and LAPS is configured</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── BitLocker Tab ── */}
+            {deviceTab === 'bitlocker' && (
+              <div className="space-y-5">
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      BitLocker Recovery Keys
+                    </span>
+                    <div className="flex-1 h-px bg-gray-100" />
+                  </div>
+                  {loadingBl ? (
+                    <div className="animate-pulse space-y-3">
+                      {[...Array(3)].map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded-lg" />)}
+                    </div>
+                  ) : blError ? (
+                    <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+                      <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" /> {blError}
+                    </div>
+                  ) : blKeys.length === 0 ? (
+                    <div className="text-center py-10 text-gray-400">
+                      <ShieldCheckIcon className="w-10 h-10 mx-auto mb-2" />
+                      <p className="text-sm">No BitLocker recovery keys escrowed for this device</p>
+                      <p className="text-xs mt-1">Keys are uploaded when BitLocker is enabled on a domain-joined device</p>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 border-b border-gray-100">
+                          <tr>
+                            {['Volume', 'Recovery Key ID', 'Escrowed', 'Actions'].map(h => (
+                              <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {blKeys.map(k => (
+                            <tr key={k.keyId} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-gray-700">{k.volumeLabel || '—'}</td>
+                              <td className="px-4 py-3 font-mono text-xs text-gray-600">{k.keyId}</td>
+                              <td className="px-4 py-3 text-gray-500">
+                                {k.escrowedAt ? new Date(k.escrowedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                              </td>
+                              <td className="px-4 py-3">
+                                <button onClick={() => setBlRetrieveKey(k)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg">
+                                  <KeyIcon className="w-3.5 h-3.5" />Retrieve Key
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
@@ -1270,6 +1557,13 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
             onClose();
           }}
           onCancel={() => setShowDecommission(false)}
+        />
+      )}
+      {blRetrieveKey && (
+        <BitLockerKeyModal
+          keyId={blRetrieveKey.keyId}
+          deviceName={detail.name}
+          onClose={() => setBlRetrieveKey(null)}
         />
       )}
     </>
@@ -1348,11 +1642,11 @@ function EnrollModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="enroll-modal-title" className="bg-white rounded-xl shadow-xl max-w-2xl w-full" onClick={e => e.stopPropagation()}>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Enroll a Device</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
+            <h2 id="enroll-modal-title" className="text-lg font-semibold text-gray-900">Enroll a Device</h2>
+            <button onClick={onClose} aria-label="Close dialog" className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
           </div>
 
           {/* Method tabs */}

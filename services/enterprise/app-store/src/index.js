@@ -20,6 +20,16 @@ const ClientDetector = require('./detection/clientDetector');
 const DistributionEngine = require('./distribution/distributionEngine');
 const AssignmentEngine = require('./assignment/assignmentEngine');
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'app-store' });
+async function connectBus() { await _bus.connect(); }
+function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 // --- Logger ---
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -36,7 +46,7 @@ const PORT = parseInt(process.env.PORT, 10) || 3906;
 const DB_CONFIG = {
   host: process.env.DB_HOST || 'postgres',
   port: parseInt(process.env.DB_PORT, 10) || 5432,
-  database: process.env.DB_NAME || 'opendirectory',
+  database: process.env.DB_NAME || 'app_store',
   user: process.env.DB_USER || 'opendirectory',
   password: process.env.DB_PASSWORD || 'opendirectory',
   max: 20,
@@ -74,7 +84,7 @@ pool.on('error', (err) => {
 // Service instances
 const catalogManager = new CatalogManager(pool);
 const clientDetector = new ClientDetector(pool);
-const distributionEngine = new DistributionEngine(pool, wss);
+const distributionEngine = new DistributionEngine(pool, wss, publishEvent);
 const assignmentEngine = new AssignmentEngine(pool, distributionEngine);
 
 // --- Middleware ---
@@ -305,6 +315,7 @@ app.post('/api/store/install', async (req, res) => {
     }
     const userId = req.headers['x-user-id'] || req.body.userId || null;
     const result = await distributionEngine.requestInstall(appId, deviceId, userId);
+    publishEvent('app.install.requested', { appId, deviceId, requestedBy: userId });
     res.status(202).json(result);
   } catch (error) {
     logger.error('Failed to request install', { error: error.message });
@@ -353,6 +364,11 @@ app.put('/api/store/install/:installId/status', async (req, res) => {
     const result = await distributionEngine.updateInstallStatus(
       req.params.installId, status, progress, error
     );
+    if (status === 'completed' || status === 'installed') {
+      publishEvent('app.install.completed', { installId: req.params.installId, progress });
+    } else if (status === 'failed' || status === 'error') {
+      publishEvent('app.install.failed', { installId: req.params.installId, error });
+    }
     res.json(result);
   } catch (error) {
     logger.error('Failed to update install status', { error: error.message });
@@ -624,6 +640,7 @@ app.post('/api/appstore/apps', async (req, res) => {
         [id, JSON.stringify(entry)]
       );
     } catch (_) { /* DB optional */ }
+    publishEvent('app.published', { appId: id, name, version, category: category || 'Allgemein', vendor: vendor || '' });
     res.status(201).json(entry);
   } catch (err) {
     logger.error('POST /api/appstore/apps error', { error: err.message });
@@ -674,6 +691,7 @@ app.post('/api/appstore/apps/:id/deploy', async (req, res) => {
       created_by: req.headers['x-user-id'] || req.body.created_by || 'admin',
     };
     inMemoryDeployments.set(deploymentId, deployment);
+    publishEvent('app.install.requested', { appId: req.params.id, targets, mandatory: mandatory || false, deploymentId });
     // Initialize per-device status records
     const deviceStatuses = targets.map(t => ({
       id: uuidv4(), deployment_id: deploymentId,
@@ -919,6 +937,7 @@ app.post('/api/appstore/apps/:id/packages', packageUpload.single('file'), async 
     }
 
     logger.info('Package uploaded', { appId: id, platform, format, version, size: req.file.size });
+    publishEvent('app.package.uploaded', { appId: id, packageId: pkg.id, platform, format, version, size: req.file.size });
     res.status(201).json(pkg);
   } catch (err) {
     // Clean up uploaded file on error
@@ -1065,8 +1084,8 @@ async function start() {
     await ensureAppstoreTables();
     await ensurePackagesTable();
 
-    // Initialize messaging
-    await distributionEngine.initializeMessaging();
+    // Connect to event bus (fire and forget)
+    connectBus().catch(() => {});
 
     // Start HTTP server
     server.listen(PORT, '0.0.0.0', () => {

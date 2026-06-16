@@ -21,6 +21,15 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'printer-service' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+
 // Lightweight in-memory job log (survives restarts via DB if needed later)
 const jobLog = [];
 function addJobLog(entry) {
@@ -90,8 +99,11 @@ wss.on('connection', (ws) => {
 
 // Broadcast printer status updates
 function broadcastPrinterStatus(printerId, status) {
+  if (status === 'offline') {
+    publish('printer.offline', { printerId });
+  }
   wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN && 
+    if (client.readyState === WebSocket.OPEN &&
         client.printerSubscriptions?.includes(printerId)) {
       client.send(JSON.stringify({
         type: 'printer_status',
@@ -629,11 +641,14 @@ app.post('/api/print', async (req, res) => {
       priority
     });
     
+    publish('printer.job.created', { jobId: job.id, printerId, userId });
+
     // Process job asynchronously
     printQueue.processJob(job.id).then(result => {
       broadcastJobStatus(job.id, result.status);
+      publish('printer.job.completed', { jobId: job.id, printerId });
     });
-    
+
     res.json({ success: true, jobId: job.id });
   } catch (error) {
     logger.error('Print error:', error);
@@ -962,6 +977,7 @@ server.listen(PORT, () => {
   printerManager.startMonitoring();
   printQueue.startProcessor();
   quota.startQuotaReset();
+  connectBus();
 });
 
 function shutdown(signal) {

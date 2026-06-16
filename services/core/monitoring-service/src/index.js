@@ -31,6 +31,22 @@ const logger = require('./utils/logger');
 const config = require('./config');
 const EventBus = require('./events/eventBus');
 
+// ── RabbitMQ Event Bus ────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'monitoring-service' });
+async function connectBus() { await _bus.connect(); }
+function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+async function subscribeToEvents(queueName, routingKeys, handler) {
+  await _bus.subscribe(queueName, routingKeys, async (payload, meta) => {
+    await handler(meta.routingKey, payload);
+    meta.ack();
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 class EnterpriseMonitoringService {
   constructor() {
     this.app = express();
@@ -1185,7 +1201,41 @@ class EnterpriseMonitoringService {
   }
 
   start(port = process.env.PORT || 3009) {
+    // Connect to RabbitMQ event bus (fire and forget)
+    connectBus();
+
+    setTimeout(async () => {
+      await subscribeToEvents('monitoring.events', [
+        'device.non_compliant',
+        'app.install.failed',
+        'system.backup.failed',
+        'system.backup.completed',
+        'compliance.failed',
+        'policy.violated',
+        'identity.login.failed',
+        'admin.#',
+      ], async (routingKey, payload) => {
+        try {
+          const alertData = {
+            id: require('crypto').randomUUID(),
+            title: `Event: ${routingKey}`,
+            message: JSON.stringify(payload),
+            severity: routingKey.includes('failed') ? 'critical' : 'warning',
+            source: payload._source || 'message-bus',
+            status: 'active',
+            created_at: new Date().toISOString(),
+          };
+          if (typeof global.__od_activeAlerts === 'undefined') global.__od_activeAlerts = [];
+          global.__od_activeAlerts.unshift(alertData);
+          if (global.__od_activeAlerts.length > 200) global.__od_activeAlerts.length = 200;
+        } catch (e) {
+          logger.warn('monitoring event handler error:', e.message);
+        }
+      });
+    }, 3000);
+
     this.server.listen(port, () => {
+      publishEvent('admin.service.health', { service: 'monitoring', status: 'healthy', timestamp: new Date().toISOString() });
       logger.info(`📊 Enterprise Monitoring Service started on port ${port}`);
       logger.info(`🔍 Health check: http://localhost:${port}/health`);
       logger.info(`📈 Metrics: http://localhost:${port}/metrics`);

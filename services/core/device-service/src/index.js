@@ -8,8 +8,21 @@ const WebSocket = require('ws');
 const cluster = require('cluster');
 const os = require('os');
 
+// Generic event bus (publish / subscribe)
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+
+// RabbitMQ MessageBus — kept only for device-command-queue operations
+// (consumeDeviceCommands / queueDeviceCommand) which are not part of
+// the generic EventBusClient contract.
+const MessageBus = require('../../../../packages/service-contracts/src/messageBus');
+const { Events }  = require('../../../../packages/service-contracts/src/events');
+
 // PostgreSQL persistence layer
 const db = require('./db');
+const PostgresDeviceRepository = require('./infrastructure/repositories/PostgresDeviceRepository');
 
 // Import enhanced services
 const DeviceManager = require('./services/deviceManager');
@@ -17,6 +30,9 @@ const PolicyEngine = require('./services/policyEngine');
 const ComplianceScanner = require('./services/complianceScanner');
 const EnrollmentService = require('./services/enrollmentService');
 const InventoryService = require('./services/inventoryService');
+
+// DDD infrastructure
+const PostgresEnrollmentRepository = require('./infrastructure/repositories/PostgresEnrollmentRepository');
 const RemoteActionService = require('./services/remoteActionService');
 const GeofencingService = require('./services/geofencingService');
 const CertificateManager = require('./services/certificateManager');
@@ -32,6 +48,9 @@ const backupClient = require('./clients/backupClient');
 
 // Enterprise services (local only)
 const { AnalyticsBridge } = require('./analytics-bridge');
+
+// OIDC Authentication
+const { oidcAuth } = require('./middleware/oidcAuth');
 
 // Utilities
 const logger = require('./utils/logger');
@@ -57,14 +76,20 @@ class EnterpriseDeviceManagementService {
     this.eventBus = new EventBus();
     this.metrics = new MetricsCollector();
     this.circuitBreaker = new CircuitBreaker();
+
+    // Device repository (wraps db module, owns all device SQL)
+    this.deviceRepository = new PostgresDeviceRepository(db);
     
     // Initialize services
-    this.deviceManager = new DeviceManager(this.db, this.cache, this.eventBus);
+    this.deviceManager = new DeviceManager({ db: this.db, deviceRepository: this.deviceRepository, cache: this.cache, eventBus: this.eventBus });
     this.policyEngine = new PolicyEngine(this.db, this.eventBus);
-    this.complianceScanner = new ComplianceScanner(this.db, this.eventBus);
-    this.enrollmentService = new EnrollmentService(this.db, this.eventBus);
+    this.complianceScanner = new ComplianceScanner({ db: this.db, deviceRepository: this.deviceRepository, eventBus: this.eventBus });
+    this.enrollmentRepository = new PostgresEnrollmentRepository(db);
+    this.enrollmentService = new EnrollmentService(this.db, this.eventBus, this.enrollmentRepository);
     this.inventoryService = new InventoryService(this.db, this.cache);
     this.remoteActionService = new RemoteActionService(this.wss, this.eventBus);
+    this.remoteActionService.setDb(this.db);
+    this.remoteActionService.setDeviceRepository(this.deviceRepository);
     this.geofencingService = new GeofencingService(this.db, this.eventBus);
     this.certificateManager = new CertificateManager(this.db, this.eventBus);
     this.threatDetector = new ThreatDetector(this.db, this.eventBus);
@@ -79,6 +104,19 @@ class EnterpriseDeviceManagementService {
 
     // Analytics Bridge (connects agent events to AI/ML analytics)
     this.analyticsBridge = new AnalyticsBridge();
+
+    // Generic event bus — used for all domain-event publishing/subscribing
+    this._eventBus = new EventBusClient({ source: 'device-service' });
+    this._eventBus.connect().catch(err => {
+      logger.warn('EventBus connect failed at startup (will retry in background)', { error: err.message });
+    });
+
+    // RabbitMQ command bus — kept only for per-device command-queue operations
+    // (consumeDeviceCommands / queueDeviceCommand). Not used for domain events.
+    this.messageBus = new MessageBus();
+    this.messageBus.connect(process.env.RABBITMQ_URL || 'amqp://rabbitmq:5672').catch(err => {
+      logger.warn('RabbitMQ unavailable, falling back to Redis cache for command queue', { error: err.message });
+    });
 
     // Connected agent registry: deviceId -> WebSocket connection
     this.connectedAgents = new Map();
@@ -155,6 +193,9 @@ class EnterpriseDeviceManagementService {
       limit: '10mb' 
     }));
 
+    // OIDC token verification (RS256 via JWKS)
+    this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
+
     // Request ID middleware
     this.app.use((req, res, next) => {
       req.id = req.headers['x-request-id'] || this.generateRequestId();
@@ -167,7 +208,7 @@ class EnterpriseDeviceManagementService {
       const start = Date.now();
       res.on('finish', () => {
         const duration = Date.now() - start;
-        res.setHeader('X-Response-Time', \`\${duration}ms\`);
+        res.setHeader('X-Response-Time', `\${duration}ms`);
         this.metrics.recordResponseTime(req.route?.path || req.path, duration);
       });
       next();
@@ -175,7 +216,7 @@ class EnterpriseDeviceManagementService {
 
     // Logging middleware
     this.app.use((req, res, next) => {
-      logger.info(\`\${req.method} \${req.path}\`, {
+      logger.info(`\${req.method} \${req.path}`, {
         requestId: req.id,
         userAgent: req.headers['user-agent'],
         ip: req.ip,
@@ -708,6 +749,17 @@ class EnterpriseDeviceManagementService {
           }
         }
 
+        // Drain RabbitMQ device command queue for this agent
+        if (this.messageBus && this.messageBus.isConnected() && ws.deviceId) {
+          this.messageBus.consumeDeviceCommands(ws.deviceId, (cmd) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ ...cmd, timestamp: new Date().toISOString() }));
+            }
+          }, { once: true }).catch(err => {
+            logger.warn(`Failed to drain RabbitMQ command queue for ${ws.deviceId}: ${err.message}`);
+          });
+        }
+
         logger.info(`Agent registered: ${ws.deviceId} (${ws.platform})`);
         break;
 
@@ -729,7 +781,7 @@ class EnterpriseDeviceManagementService {
         break;
 
       case 'command_result':
-        logger.info(\`Command result from \${ws.deviceId}: \${data.commandId} - \${data.status}\`);
+        logger.info(`Command result from \${ws.deviceId}: \${data.commandId} - \${data.status}`);
         // Forward results to the correct service based on command prefix
         if (data.commandId && data.commandId.startsWith('pol-')) {
           this.policyAgentService.handleCommandResult(ws.deviceId, data);
@@ -755,14 +807,14 @@ class EnterpriseDeviceManagementService {
       case 'inventory_report':
         if (ws.deviceId && data.inventory) {
           await this.inventoryService.updateInventory(ws.deviceId, data.inventory);
-          logger.info(\`Inventory updated: \${ws.deviceId}\`);
+          logger.info(`Inventory updated: \${ws.deviceId}`);
         }
         break;
 
       default:
         ws.send(JSON.stringify({
           type: 'error',
-          message: \`Unknown message type: \${type}\`,
+          message: `Unknown message type: \${type}`,
           requestId
         }));
     }
@@ -984,16 +1036,7 @@ class EnterpriseDeviceManagementService {
   async getStammdaten(req, res) {
     try {
       const { deviceId } = req.params;
-      let stammdaten = {};
-      if (db.isAvailable()) {
-        const r = await db.query(
-          `SELECT metadata FROM devices WHERE id = $1`, [deviceId]
-        );
-        if (r.rows.length) stammdaten = r.rows[0].metadata?.stammdaten || {};
-      } else {
-        const d = db.getMemoryDevice ? db.getMemoryDevice(deviceId) : null;
-        stammdaten = d?.metadata?.stammdaten || {};
-      }
+      const stammdaten = await this.deviceRepository.getStammdaten(deviceId);
       res.json({ success: true, data: stammdaten });
     } catch (err) {
       logger.error('getStammdaten error:', err);
@@ -1007,18 +1050,7 @@ class EnterpriseDeviceManagementService {
       const fields = req.body || {};
       // Sanitise: strip photo from this endpoint (use /photo instead)
       delete fields.photo;
-      if (db.isAvailable()) {
-        await db.query(
-          `UPDATE devices
-           SET metadata = jsonb_set(
-             COALESCE(metadata, '{}'),
-             '{stammdaten}',
-             COALESCE(metadata->'stammdaten', '{}') || $1::jsonb
-           )
-           WHERE id = $2`,
-          [JSON.stringify(fields), deviceId]
-        );
-      }
+      await this.deviceRepository.updateStammdaten(deviceId, fields);
       res.json({ success: true });
     } catch (err) {
       logger.error('updateStammdaten error:', err);
@@ -1036,18 +1068,7 @@ class EnterpriseDeviceManagementService {
       if (Buffer.byteLength(photo, 'utf8') > 512 * 1024) {
         return res.status(413).json({ error: 'Photo too large — max 512 KB' });
       }
-      if (db.isAvailable()) {
-        await db.query(
-          `UPDATE devices
-           SET metadata = jsonb_set(
-             COALESCE(metadata, '{}'),
-             '{stammdaten,photo}',
-             $1::jsonb
-           )
-           WHERE id = $2`,
-          [JSON.stringify(photo), deviceId]
-        );
-      }
+      await this.deviceRepository.uploadPhoto(deviceId, photo);
       res.json({ success: true });
     } catch (err) {
       logger.error('uploadPhoto error:', err);
@@ -1058,12 +1079,7 @@ class EnterpriseDeviceManagementService {
   async getPhoto(req, res) {
     try {
       const { deviceId } = req.params;
-      if (!db.isAvailable()) return res.status(404).json({ error: 'No photo' });
-      const r = await db.query(
-        `SELECT metadata->'stammdaten'->>'photo' AS photo FROM devices WHERE id = $1`,
-        [deviceId]
-      );
-      const photo = r.rows[0]?.photo;
+      const photo = await this.deviceRepository.getPhoto(deviceId);
       if (!photo) return res.status(404).json({ error: 'No photo' });
       // Return as image
       const match = photo.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
@@ -1082,7 +1098,7 @@ class EnterpriseDeviceManagementService {
   // Event handlers
   async handleDeviceEnrolled(event) {
     const { device } = event;
-    
+
     // Broadcast to WebSocket clients
     this.broadcastToSubscribers('device_events', {
       type: 'device_enrolled',
@@ -1094,9 +1110,17 @@ class EnterpriseDeviceManagementService {
       }
     });
 
+    // Publish domain event via generic EventBusClient (fire-and-forget)
+    this._eventBus.publish(Events.DEVICE_ENROLLED, {
+      deviceId:   device.id,
+      hostname:   device.name,
+      platform:   device.platform,
+      enrolledAt: device.enrolledAt,
+    }).catch(() => {});
+
     // Auto-assign default policies
     await this.policyEngine.assignDefaultPolicies(device.id);
-    
+
     logger.info('Device enrolled successfully', { deviceId: device.id });
   }
 
@@ -1119,6 +1143,16 @@ class EnterpriseDeviceManagementService {
       body: violation.description || violation.rule,
       data: { rule: violation.rule, details: violation.details, severity: violation.severity }
     });
+
+    // Publish domain event via generic EventBusClient (fire-and-forget)
+    this._eventBus.publish(Events.DEVICE_NON_COMPLIANT, {
+      deviceId,
+      violation: {
+        rule:     violation.rule,
+        severity: violation.severity,
+        details:  violation.details,
+      },
+    }).catch(() => {});
 
     if (violation.autoRemediable) {
       await this.complianceScanner.autoRemediate(violation.id);
@@ -1199,14 +1233,14 @@ class EnterpriseDeviceManagementService {
       };
 
       const delivered = this.sendToDevice(deviceId, notifMessage);
-      logger.info(\`Notification \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${notification.category}\`);
+      logger.info(`Notification \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${notification.category}`);
 
       // If device offline, queue in cache for delivery on reconnect
       if (!delivered && this.cache) {
-        const existing = await this.cache.get(\`pending:\${deviceId}\`);
+        const existing = await this.cache.get(`pending:\${deviceId}`);
         const pending = existing ? JSON.parse(existing) : [];
         pending.push(notifMessage);
-        await this.cache.set(\`pending:\${deviceId}\`, JSON.stringify(pending), 'EX', 86400);
+        await this.cache.set(`pending:\${deviceId}`, JSON.stringify(pending), 'EX', 86400);
       }
 
       res.json({
@@ -1239,7 +1273,7 @@ class EnterpriseDeviceManagementService {
         results = { sent, offline: 0 };
       }
 
-      logger.info(\`Broadcast: \${results.sent} delivered, \${results.offline} offline\`);
+      logger.info(`Broadcast: \${results.sent} delivered, \${results.offline} offline`);
 
       res.json({
         status: 'broadcast_sent',
@@ -1265,7 +1299,7 @@ class EnterpriseDeviceManagementService {
       }
 
       // Build the download URL if only packageId given
-      const APP_STORE_URL = process.env.APP_STORE_URL || 'http://app-store:3906';
+      const APP_STORE_URL = process.env.APP_STORE_URL || 'http://app-store';
       const pkgDownloadUrl = downloadUrl || `${APP_STORE_URL}/api/appstore/packages/${packageId}/download`;
 
       const jobId = `install-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -1297,13 +1331,22 @@ class EnterpriseDeviceManagementService {
         status: 'queued', queuedAt: new Date().toISOString(),
       });
 
-      // Push via WebSocket — if offline, cache queues automatically
+      // Push via WebSocket — if offline, queue via RabbitMQ (preferred) or Redis (fallback)
       const delivered = this.sendToDevice(deviceId, command);
-      if (!delivered && this.cache) {
-        const existing = await this.cache.get(`pending:${deviceId}`).catch(() => null);
-        const pending = existing ? JSON.parse(existing) : [];
-        pending.push(command);
-        await this.cache.set(`pending:${deviceId}`, JSON.stringify(pending), 'EX', 86400).catch(() => {});
+      if (!delivered) {
+        let mqQueued = false;
+        if (this.messageBus && this.messageBus.isConnected()) {
+          mqQueued = await this.messageBus.queueDeviceCommand(deviceId, command).catch(err => {
+            logger.warn('RabbitMQ queueDeviceCommand failed, falling back to Redis cache', { error: err.message, deviceId });
+            return false;
+          });
+        }
+        if (!mqQueued && this.cache) {
+          const existing = await this.cache.get(`pending:${deviceId}`).catch(() => null);
+          const pending = existing ? JSON.parse(existing) : [];
+          pending.push(command);
+          await this.cache.set(`pending:${deviceId}`, JSON.stringify(pending), 'EX', 86400).catch(() => {});
+        }
       }
 
       logger.info(`install-app ${delivered ? 'pushed live' : 'queued offline'}: device=${deviceId} app=${appId} job=${jobId}`);
@@ -1332,10 +1375,28 @@ class EnterpriseDeviceManagementService {
   async reportInstallResult(req, res) {
     const { jobId } = req.params;
     const { status, output, error } = req.body;
+    let job = null;
     if (global.__od_installJobs?.has(jobId)) {
-      const job = global.__od_installJobs.get(jobId);
+      job = global.__od_installJobs.get(jobId);
       Object.assign(job, { status, output, error, completedAt: new Date().toISOString() });
     }
+
+    // Publish install result event via generic EventBusClient (fire-and-forget)
+    if (job) {
+      const routingKey = status === 'success'
+        ? Events.APP_INSTALL_COMPLETED
+        : Events.APP_INSTALL_FAILED;
+      this._eventBus.publish(routingKey, {
+        jobId,
+        deviceId: job.deviceId,
+        appId:    job.appId,
+        appName:  job.appName,
+        status,
+        output,
+        error,
+      }).catch(() => {});
+    }
+
     res.json({ ok: true });
   }
 
@@ -1350,14 +1411,23 @@ class EnterpriseDeviceManagementService {
       };
 
       const delivered = this.sendToDevice(deviceId, cmdMessage);
-      logger.info(\`Command \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${command.type}\`);
+      logger.info(`Command \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${command.type}`);
 
-      // If device offline, queue for delivery on reconnect
-      if (!delivered && this.cache) {
-        const existing = await this.cache.get(\`pending:\${deviceId}\`);
-        const pending = existing ? JSON.parse(existing) : [];
-        pending.push(cmdMessage);
-        await this.cache.set(\`pending:\${deviceId}\`, JSON.stringify(pending), 'EX', 86400);
+      // If device offline, queue via RabbitMQ (preferred) or Redis (fallback)
+      if (!delivered) {
+        let mqQueued = false;
+        if (this.messageBus && this.messageBus.isConnected()) {
+          mqQueued = await this.messageBus.queueDeviceCommand(deviceId, cmdMessage).catch(err => {
+            logger.warn('RabbitMQ queueDeviceCommand failed, falling back to Redis cache', { error: err.message, deviceId });
+            return false;
+          });
+        }
+        if (!mqQueued && this.cache) {
+          const existing = await this.cache.get(`pending:\${deviceId}`);
+          const pending = existing ? JSON.parse(existing) : [];
+          pending.push(cmdMessage);
+          await this.cache.set(`pending:\${deviceId}`, JSON.stringify(pending), 'EX', 86400);
+        }
       }
 
       res.json({
@@ -1404,16 +1474,16 @@ class EnterpriseDeviceManagementService {
 
       const agent = agentFiles[platform];
       if (!agent) {
-        return res.status(400).json({ error: \`Unknown platform: \${platform}. Use: windows, macos, linux\` });
+        return res.status(400).json({ error: `Unknown platform: \${platform}. Use: windows, macos, linux` });
       }
 
       const agentPath = path.join(__dirname, '../../../../clients', agent.dir, agent.file);
       if (fs.existsSync(agentPath)) {
         res.setHeader('Content-Type', 'application/octet-stream');
-        res.setHeader('Content-Disposition', \`attachment; filename="\${agent.file}"\`);
+        res.setHeader('Content-Disposition', `attachment; filename="\${agent.file}"`);
         fs.createReadStream(agentPath).pipe(res);
       } else {
-        res.status(404).json({ error: \`Agent for \${platform} not found\` });
+        res.status(404).json({ error: `Agent for \${platform} not found` });
       }
     } catch (error) {
       logger.error('Agent download error:', error);
@@ -1551,6 +1621,587 @@ class EnterpriseDeviceManagementService {
     }
   }
 
+  // ── Device CRUD (continued) ───────────────────────────────────────────────
+
+  async updateDevice(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const device = await this.deviceManager.updateDevice(deviceId, req.body);
+      if (!device) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
+      res.json({ success: true, data: device, requestId: req.id });
+    } catch (error) {
+      logger.error('Update device error:', error);
+      res.status(500).json({ error: 'Failed to update device', requestId: req.id });
+    }
+  }
+
+  async deleteDevice(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const deleted = await this.deviceManager.deleteDevice(deviceId);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
+      res.json({ success: true, requestId: req.id });
+    } catch (error) {
+      logger.error('Delete device error:', error);
+      res.status(500).json({ error: 'Failed to delete device', requestId: req.id });
+    }
+  }
+
+  // ── Remote Actions: Lock / Unlock / Wipe ─────────────────────────────────
+
+  /**
+   * POST /api/devices/:deviceId/lock
+   * Body: { reason?: string }
+   */
+  async lockDevice(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const reason = req.body?.reason || '';
+      const result = await this.remoteActionService.lockDevice(deviceId, reason);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Lock device error:', error);
+      if (error.statusCode === 404) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
+      res.status(500).json({ error: 'Failed to lock device', details: error.message, requestId: req.id });
+    }
+  }
+
+  /**
+   * POST /api/devices/:deviceId/unlock
+   */
+  async unlockDevice(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const result = await this.remoteActionService.unlockDevice(deviceId);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Unlock device error:', error);
+      if (error.statusCode === 404) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
+      res.status(500).json({ error: 'Failed to unlock device', details: error.message, requestId: req.id });
+    }
+  }
+
+  /**
+   * POST /api/devices/:deviceId/wipe
+   * Body: { type?: 'full' | 'selective' }
+   */
+  async wipeDevice(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const options = { type: req.body?.type || 'full' };
+      const result = await this.remoteActionService.wipeDevice(deviceId, options);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Wipe device error:', error);
+      if (error.statusCode === 404) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
+      res.status(500).json({ error: 'Failed to wipe device', details: error.message, requestId: req.id });
+    }
+  }
+
+  // ── Enrollment Handlers ───────────────────────────────────────────────────
+
+  async initiateEnrollment(req, res) {
+    try {
+      const enrollment = await this.enrollmentService.initiateEnrollment(req.body);
+      res.status(201).json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Initiate enrollment error:', error);
+      res.status(500).json({ error: 'Failed to initiate enrollment', requestId: req.id });
+    }
+  }
+
+  async completeEnrollment(req, res) {
+    try {
+      const { enrollmentId, ...deviceData } = req.body;
+      if (!enrollmentId) return res.status(400).json({ error: 'enrollmentId required', requestId: req.id });
+      const enrollment = await this.enrollmentService.completeEnrollment(enrollmentId, deviceData);
+      if (!enrollment) return res.status(404).json({ error: 'Enrollment not found', requestId: req.id });
+      res.json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Complete enrollment error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to complete enrollment', requestId: req.id });
+    }
+  }
+
+  async verifyEnrollment(req, res) {
+    try {
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: 'token required', requestId: req.id });
+      const enrollment = await this.enrollmentService.verifyEnrollment(token);
+      if (!enrollment) return res.status(404).json({ error: 'Enrollment not found', requestId: req.id });
+      res.json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Verify enrollment error:', error);
+      res.status(500).json({ error: 'Failed to verify enrollment', requestId: req.id });
+    }
+  }
+
+  async getEnrollmentStatus(req, res) {
+    try {
+      const { enrollmentId } = req.params;
+      const enrollment = await this.enrollmentService.getEnrollmentStatus(enrollmentId);
+      if (!enrollment) return res.status(404).json({ error: 'Enrollment not found', requestId: req.id });
+      res.json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Get enrollment status error:', error);
+      res.status(500).json({ error: 'Failed to get enrollment status', requestId: req.id });
+    }
+  }
+
+  async approveEnrollment(req, res) {
+    try {
+      const { enrollmentId } = req.params;
+      const enrollment = await this.enrollmentService.approveEnrollment(enrollmentId);
+      if (!enrollment) return res.status(404).json({ error: 'Enrollment not found', requestId: req.id });
+      res.json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Approve enrollment error:', error);
+      res.status(500).json({ error: 'Failed to approve enrollment', requestId: req.id });
+    }
+  }
+
+  async rejectEnrollment(req, res) {
+    try {
+      const { enrollmentId } = req.params;
+      const { reason } = req.body;
+      const enrollment = await this.enrollmentService.rejectEnrollment(enrollmentId, reason);
+      if (!enrollment) return res.status(404).json({ error: 'Enrollment not found', requestId: req.id });
+      res.json({ success: true, data: enrollment, requestId: req.id });
+    } catch (error) {
+      logger.error('Reject enrollment error:', error);
+      res.status(500).json({ error: 'Failed to reject enrollment', requestId: req.id });
+    }
+  }
+
+  // ── Policy Handlers ───────────────────────────────────────────────────────
+
+  async getPolicies(req, res) {
+    try {
+      const { page = 1, limit = 50 } = req.query;
+      const result = await this.policyEngine.getPolicies({ page: parseInt(page), limit: parseInt(limit) });
+      res.json({ success: true, ...result, requestId: req.id });
+    } catch (error) {
+      logger.error('Get policies error:', error);
+      res.status(500).json({ error: 'Failed to retrieve policies', requestId: req.id });
+    }
+  }
+
+  async createPolicy(req, res) {
+    try {
+      const policy = await this.policyEngine.createPolicy(req.body, req.user);
+      res.status(201).json({ success: true, data: policy, requestId: req.id });
+    } catch (error) {
+      logger.error('Create policy error:', error);
+      res.status(500).json({ error: 'Failed to create policy', requestId: req.id });
+    }
+  }
+
+  async getPolicy(req, res) {
+    try {
+      const policy = await this.policyEngine.getPolicy(req.params.policyId);
+      if (!policy) return res.status(404).json({ error: 'Policy not found', requestId: req.id });
+      res.json({ success: true, data: policy, requestId: req.id });
+    } catch (error) {
+      logger.error('Get policy error:', error);
+      res.status(500).json({ error: 'Failed to retrieve policy', requestId: req.id });
+    }
+  }
+
+  async updatePolicy(req, res) {
+    try {
+      const policy = await this.policyEngine.updatePolicy(req.params.policyId, req.body);
+      if (!policy) return res.status(404).json({ error: 'Policy not found', requestId: req.id });
+      res.json({ success: true, data: policy, requestId: req.id });
+    } catch (error) {
+      logger.error('Update policy error:', error);
+      res.status(500).json({ error: 'Failed to update policy', requestId: req.id });
+    }
+  }
+
+  async deletePolicy(req, res) {
+    try {
+      const ok = await this.policyEngine.deletePolicy(req.params.policyId);
+      if (!ok) return res.status(404).json({ error: 'Policy not found', requestId: req.id });
+      res.json({ success: true, requestId: req.id });
+    } catch (error) {
+      logger.error('Delete policy error:', error);
+      res.status(500).json({ error: 'Failed to delete policy', requestId: req.id });
+    }
+  }
+
+  async assignPolicy(req, res) {
+    try {
+      const result = await this.policyEngine.assignPolicy(req.params.policyId, req.body);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Assign policy error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to assign policy', requestId: req.id });
+    }
+  }
+
+  async deployPolicy(req, res) {
+    try {
+      const result = await this.policyEngine.deployPolicy(req.params.policyId, req.body);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Deploy policy error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to deploy policy', requestId: req.id });
+    }
+  }
+
+  // ── Compliance Handlers ───────────────────────────────────────────────────
+
+  /**
+   * GET /api/compliance/scan/:deviceId
+   * Runs a real compliance scan via complianceScanner.scanDevice().
+   * Returns 404 if device not found, 500 on unexpected errors.
+   */
+  async scanDeviceCompliance(req, res) {
+    try {
+      const { deviceId } = req.params;
+      const result = await this.complianceScanner.scanDevice(deviceId);
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Compliance scan error:', error);
+      if (error.statusCode === 404) {
+        return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      }
+      res.status(500).json({ error: 'Compliance scan failed', details: error.message, requestId: req.id });
+    }
+  }
+
+  async getComplianceViolations(req, res) {
+    try {
+      const { page = 1, limit = 50, severity, deviceId } = req.query;
+      const result = await this.complianceScanner.getViolations({ page: parseInt(page), limit: parseInt(limit), severity, deviceId });
+      res.json({ success: true, ...result, requestId: req.id });
+    } catch (error) {
+      logger.error('Get compliance violations error:', error);
+      res.status(500).json({ error: 'Failed to retrieve violations', requestId: req.id });
+    }
+  }
+
+  async remediateViolation(req, res) {
+    try {
+      const { violationId } = req.params;
+      await this.complianceScanner.autoRemediate(violationId);
+      res.json({ success: true, violationId, requestId: req.id });
+    } catch (error) {
+      logger.error('Remediate violation error:', error);
+      res.status(500).json({ error: 'Failed to remediate violation', requestId: req.id });
+    }
+  }
+
+  async getComplianceReports(req, res) {
+    try {
+      const { page = 1, limit = 20 } = req.query;
+      const result = await this.complianceScanner.getReports({ page: parseInt(page), limit: parseInt(limit) });
+      res.json({ success: true, ...result, requestId: req.id });
+    } catch (error) {
+      logger.error('Get compliance reports error:', error);
+      res.status(500).json({ error: 'Failed to retrieve compliance reports', requestId: req.id });
+    }
+  }
+
+  // ── Remote Action Handlers ────────────────────────────────────────────────
+
+  async executeRemoteAction(req, res) {
+    try {
+      const { deviceId, action, payload } = req.body;
+      if (!deviceId || !action) return res.status(400).json({ error: 'deviceId and action required', requestId: req.id });
+      const result = await this.remoteActionService.executeAction(deviceId, action, payload || {});
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Execute remote action error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: 'Device not found', requestId: req.id });
+      res.status(500).json({ error: 'Failed to execute remote action', requestId: req.id });
+    }
+  }
+
+  async getActionStatus(req, res) {
+    try {
+      const { actionId } = req.params;
+      const status = await this.remoteActionService.getActionStatus(actionId);
+      if (!status) return res.status(404).json({ error: 'Action not found', requestId: req.id });
+      res.json({ success: true, data: status, requestId: req.id });
+    } catch (error) {
+      logger.error('Get action status error:', error);
+      res.status(500).json({ error: 'Failed to get action status', requestId: req.id });
+    }
+  }
+
+  async executeBulkAction(req, res) {
+    try {
+      const { deviceIds, action, payload } = req.body;
+      if (!deviceIds || !action) return res.status(400).json({ error: 'deviceIds and action required', requestId: req.id });
+      const results = await this.remoteActionService.executeBulkAction(deviceIds, action, payload || {});
+      res.json({ success: true, data: results, requestId: req.id });
+    } catch (error) {
+      logger.error('Bulk action error:', error);
+      res.status(500).json({ error: 'Failed to execute bulk action', requestId: req.id });
+    }
+  }
+
+  // ── Analytics Handlers ────────────────────────────────────────────────────
+
+  async getAnalyticsDashboard(req, res) {
+    try {
+      const data = await this.analyticsEngine.getDashboard();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Analytics dashboard error:', error);
+      res.status(500).json({ error: 'Failed to retrieve analytics dashboard', requestId: req.id });
+    }
+  }
+
+  async getDeviceTrends(req, res) {
+    try {
+      const data = await this.analyticsEngine.getDeviceTrends(req.query);
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Device trends error:', error);
+      res.status(500).json({ error: 'Failed to retrieve device trends', requestId: req.id });
+    }
+  }
+
+  async getComplianceMetrics(req, res) {
+    try {
+      const data = await this.analyticsEngine.getComplianceMetrics();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Compliance metrics error:', error);
+      res.status(500).json({ error: 'Failed to retrieve compliance metrics', requestId: req.id });
+    }
+  }
+
+  async getSecurityInsights(req, res) {
+    try {
+      const data = await this.analyticsEngine.getSecurityInsights();
+      res.json({ success: true, data, requestId: req.id });
+    } catch (error) {
+      logger.error('Security insights error:', error);
+      res.status(500).json({ error: 'Failed to retrieve security insights', requestId: req.id });
+    }
+  }
+
+  // ── Certificate Handlers ──────────────────────────────────────────────────
+
+  async getCertificates(req, res) {
+    try {
+      const { page = 1, limit = 50 } = req.query;
+      const result = await this.certificateManager.getCertificates({ page: parseInt(page), limit: parseInt(limit) });
+      res.json({ success: true, ...result, requestId: req.id });
+    } catch (error) {
+      logger.error('Get certificates error:', error);
+      res.status(500).json({ error: 'Failed to retrieve certificates', requestId: req.id });
+    }
+  }
+
+  async issueCertificate(req, res) {
+    try {
+      const cert = await this.certificateManager.issueCertificate(req.body);
+      res.status(201).json({ success: true, data: cert, requestId: req.id });
+    } catch (error) {
+      logger.error('Issue certificate error:', error);
+      res.status(500).json({ error: 'Failed to issue certificate', requestId: req.id });
+    }
+  }
+
+  async renewCertificate(req, res) {
+    try {
+      const cert = await this.certificateManager.renewCertificate(req.params.certId);
+      res.json({ success: true, data: cert, requestId: req.id });
+    } catch (error) {
+      logger.error('Renew certificate error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to renew certificate', requestId: req.id });
+    }
+  }
+
+  async revokeCertificate(req, res) {
+    try {
+      const cert = await this.certificateManager.revokeCertificate(req.params.certId, req.body?.reason);
+      res.json({ success: true, data: cert, requestId: req.id });
+    } catch (error) {
+      logger.error('Revoke certificate error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to revoke certificate', requestId: req.id });
+    }
+  }
+
+  // ── Geofencing Handlers ───────────────────────────────────────────────────
+
+  async getGeofencingZones(req, res) {
+    try {
+      const { page = 1, limit = 50 } = req.query;
+      const result = await this.geofencingService.getZones({ page: parseInt(page), limit: parseInt(limit) });
+      res.json({ success: true, ...result, requestId: req.id });
+    } catch (error) {
+      logger.error('Get geofencing zones error:', error);
+      res.status(500).json({ error: 'Failed to retrieve geofencing zones', requestId: req.id });
+    }
+  }
+
+  async createGeofencingZone(req, res) {
+    try {
+      const zone = await this.geofencingService.createZone(req.body);
+      res.status(201).json({ success: true, data: zone, requestId: req.id });
+    } catch (error) {
+      logger.error('Create geofencing zone error:', error);
+      res.status(500).json({ error: 'Failed to create geofencing zone', requestId: req.id });
+    }
+  }
+
+  async updateGeofencingZone(req, res) {
+    try {
+      const zone = await this.geofencingService.updateZone(req.params.zoneId, req.body);
+      if (!zone) return res.status(404).json({ error: 'Zone not found', requestId: req.id });
+      res.json({ success: true, data: zone, requestId: req.id });
+    } catch (error) {
+      logger.error('Update geofencing zone error:', error);
+      res.status(500).json({ error: 'Failed to update geofencing zone', requestId: req.id });
+    }
+  }
+
+  async deleteGeofencingZone(req, res) {
+    try {
+      const ok = await this.geofencingService.deleteZone(req.params.zoneId);
+      if (!ok) return res.status(404).json({ error: 'Zone not found', requestId: req.id });
+      res.json({ success: true, requestId: req.id });
+    } catch (error) {
+      logger.error('Delete geofencing zone error:', error);
+      res.status(500).json({ error: 'Failed to delete geofencing zone', requestId: req.id });
+    }
+  }
+
+  // ── Bulk Operations ───────────────────────────────────────────────────────
+
+  async bulkImportDevices(req, res) {
+    try {
+      const { devices } = req.body;
+      if (!devices || !Array.isArray(devices)) return res.status(400).json({ error: 'devices array required', requestId: req.id });
+      const results = await Promise.allSettled(devices.map(d => this.deviceManager.createDevice(d, req.user)));
+      const imported = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+      const failed = results.filter(r => r.status === 'rejected').map((r, i) => ({ index: i, error: r.reason?.message }));
+      res.json({ success: true, imported: imported.length, failed: failed.length, failures: failed, requestId: req.id });
+    } catch (error) {
+      logger.error('Bulk import devices error:', error);
+      res.status(500).json({ error: 'Failed to bulk import devices', requestId: req.id });
+    }
+  }
+
+  async bulkUpdatePolicies(req, res) {
+    try {
+      const { deviceIds, policyId } = req.body;
+      if (!deviceIds || !policyId) return res.status(400).json({ error: 'deviceIds and policyId required', requestId: req.id });
+      const result = await this.policyEngine.assignPolicy(policyId, { deviceIds });
+      res.json({ success: true, data: result, requestId: req.id });
+    } catch (error) {
+      logger.error('Bulk update policies error:', error);
+      if (error.statusCode === 404) return res.status(404).json({ error: error.message, requestId: req.id });
+      res.status(500).json({ error: 'Failed to bulk update policies', requestId: req.id });
+    }
+  }
+
+  async bulkComplianceScan(req, res) {
+    try {
+      const { deviceIds } = req.body;
+      if (!deviceIds || !Array.isArray(deviceIds)) return res.status(400).json({ error: 'deviceIds array required', requestId: req.id });
+      const results = await Promise.allSettled(deviceIds.map(id => this.complianceScanner.scanDevice(id)));
+      const scanned = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+      const failed = results.filter(r => r.status === 'rejected').map((r, i) => ({ deviceId: deviceIds[i], error: r.reason?.message }));
+      res.json({ success: true, scanned: scanned.length, failed: failed.length, failures: failed, results: scanned, requestId: req.id });
+    } catch (error) {
+      logger.error('Bulk compliance scan error:', error);
+      res.status(500).json({ error: 'Failed to bulk compliance scan', requestId: req.id });
+    }
+  }
+
+  async getBulkOperationStatus(req, res) {
+    try {
+      const { operationId } = req.params;
+      // Bulk ops are fire-and-forget in the current implementation; return a placeholder
+      res.json({ success: true, data: { operationId, status: 'completed' }, requestId: req.id });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get bulk operation status', requestId: req.id });
+    }
+  }
+
+  // ── Event Handler: Geofence Violation ────────────────────────────────────
+
+  async handleGeofenceViolation(event) {
+    const { deviceId, violation } = event;
+    this.broadcastToSubscribers('compliance_alerts', {
+      type: 'geofence_violation',
+      deviceId,
+      violation,
+      timestamp: new Date().toISOString()
+    });
+    this.sendToDevice(deviceId, {
+      type: 'notification',
+      category: 'geofence_violation',
+      title: 'Geofence-Verletzung erkannt',
+      body: violation?.description || 'Device outside allowed zone',
+      data: { violation }
+    });
+  }
+
+  async handlePolicyDeployed(event) {
+    const { policy, deployment } = event;
+    this.broadcastToSubscribers('device_events', {
+      type: 'policy_deployed',
+      policy: { id: policy?.id, name: policy?.name },
+      deployment,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // ── Agent Command Queue ───────────────────────────────────────────────────
+
+  async getPendingCommands(req, res) {
+    try {
+      const { deviceId } = req.params;
+      let pending = [];
+      if (this.cache) {
+        const data = await this.cache.get(`pending:${deviceId}`);
+        if (data) pending = JSON.parse(data);
+      }
+      res.json({ commands: pending, timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('Get pending commands error:', error);
+      res.status(500).json({ error: 'Failed to get pending commands' });
+    }
+  }
+
+  async handleCommandResult(req, res) {
+    try {
+      const { deviceId, commandId } = req.params;
+      const result = req.body;
+      logger.info(`Command result via HTTP: device=${deviceId} command=${commandId} status=${result.status}`);
+      // Forward to the appropriate agent service by command prefix
+      if (commandId.startsWith('pol-')) {
+        this.policyAgentService.handleCommandResult(deviceId, { commandId, ...result });
+      }
+      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    } catch (error) {
+      logger.error('Handle command result error:', error);
+      res.status(500).json({ error: 'Failed to handle command result' });
+    }
+  }
+
   broadcastToSubscribers(subscription, data) {
     this.wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN && client.subscriptions.has(subscription)) {
@@ -1589,29 +2240,37 @@ class EnterpriseDeviceManagementService {
     });
 
     this.server.listen(port, () => {
-      logger.info(\`🖥️  Enterprise Device Management Service started on port \${port}\`);
-      logger.info(\`📊 Health check: http://localhost:\${port}/health\`);
-      logger.info(\`🔌 WebSocket: ws://localhost:\${port}/ws/devices\`);
-      logger.info(\`📱 Features: Enrollment, Compliance, Remote Actions, Analytics\`);
-      logger.info(\`🛡️  Security: Threat Detection, Geofencing, Certificate Management\`);
+      logger.info(`🖥️  Enterprise Device Management Service started on port \${port}`);
+      logger.info(`📊 Health check: http://localhost:\${port}/health`);
+      logger.info(`🔌 WebSocket: ws://localhost:\${port}/ws/devices`);
+      logger.info(`📱 Features: Enrollment, Compliance, Remote Actions, Analytics`);
+      logger.info(`🛡️  Security: Threat Detection, Geofencing, Certificate Management`);
     });
   }
 
   gracefulShutdown() {
     logger.info('Starting graceful shutdown...');
-    
-    this.server.close(() => {
+
+    this.server.close(async () => {
       logger.info('HTTP server closed');
-      
+
       // Close WebSocket connections
       this.wss.clients.forEach(client => {
         client.terminate();
       });
-      
+
+      // Close EventBus and RabbitMQ command-bus connections gracefully
+      if (this._eventBus) {
+        await this._eventBus.close().catch(() => {});
+      }
+      if (this.messageBus) {
+        await this.messageBus.close().catch(() => {});
+      }
+
       // Close database connections
       this.db.close();
       this.cache.close();
-      
+
       logger.info('Graceful shutdown completed');
       process.exit(0);
     });
@@ -1637,14 +2296,14 @@ process.on('SIGTERM', () => {
 if (cluster.isMaster && process.env.NODE_ENV === 'production') {
   const numWorkers = process.env.WORKERS || os.cpus().length;
   
-  logger.info(\`Starting \${numWorkers} workers...\`);
+  logger.info(`Starting \${numWorkers} workers...`);
   
   for (let i = 0; i < numWorkers; i++) {
     cluster.fork();
   }
   
   cluster.on('exit', (worker, code, signal) => {
-    logger.error(\`Worker \${worker.process.pid} died\`);
+    logger.error(`Worker \${worker.process.pid} died`);
     cluster.fork();
   });
 } else {

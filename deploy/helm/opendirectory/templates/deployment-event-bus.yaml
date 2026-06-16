@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-event-bus
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: event-bus
+spec:
+  replicas: {{ .Values.eventBus.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "opendirectory.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: event-bus
+  template:
+    metadata:
+      labels:
+        {{- include "opendirectory.labels" . | nindent 8 }}
+        app.kubernetes.io/component: event-bus
+    spec:
+      serviceAccountName: {{ include "opendirectory.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: event-bus
+          image: {{ include "opendirectory.image" (dict "root" . "name" .Values.eventBus.image.name) }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3030
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.eventBus.grpcServerPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "opendirectory.fullname" . }}-config
+            - secretRef:
+                name: {{ include "opendirectory.fullname" . }}-secret
+          env:
+            - name: PORT
+              value: "3030"
+            - name: GRPC_PORT
+              value: {{ .Values.eventBus.grpcServerPort | quote }}
+            - name: BACKEND_TRANSPORT
+              value: {{ .Values.eventBus.backendTransport | default "rabbitmq" | quote }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml (.Values.eventBus.resources | default (dict "requests" (dict "cpu" "50m" "memory" "64Mi") "limits" (dict "cpu" "200m" "memory" "256Mi"))) | nindent 12 }}

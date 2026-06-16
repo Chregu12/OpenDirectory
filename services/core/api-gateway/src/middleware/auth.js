@@ -8,7 +8,7 @@ class AuthenticationMiddleware {
       throw new Error('JWT_SECRET environment variable is required in production');
     }
     this.jwtSecret = process.env.JWT_SECRET || 'dev-jwt-secret-not-for-production';
-    this.authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://authentication-service:3002';
+    this.authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://authentication-service';
     this.publicPaths = [
       '/health',
       '/health/*',

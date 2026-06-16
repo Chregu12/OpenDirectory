@@ -9,6 +9,7 @@ const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
 
+const { oidcAuth } = require('./middleware/oidcAuth');
 const db = require('./db/postgres');
 const { RSOPEngine } = require('./engines/gpoProcessor');
 const { ConflictResolver } = require('./engines/conflictResolver');
@@ -16,6 +17,9 @@ const { InheritanceEngine } = require('./engines/inheritanceEngine');
 const { WindowsPolicyCompiler } = require('./compilers/windowsCompiler');
 const { MacOSPolicyCompiler } = require('./compilers/macosCompiler');
 const { LinuxPolicyCompiler } = require('./compilers/linuxCompiler');
+
+const PostgresPolicyRepository = require('./infrastructure/repositories/PostgresPolicyRepository');
+const PolicyApplicationService = require('./application/PolicyApplicationService');
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -32,6 +36,7 @@ app.use(cors());
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 }));
+app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
 
 // --- Engine singletons ---
 const rsopEngine = new RSOPEngine();
@@ -57,6 +62,24 @@ function loadTemplates() {
   });
   return templateCache;
 }
+
+// --- Event Bus ---
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+
+const _bus = new EventBusClient({ source: 'policy-service' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+
+// --- DDD infrastructure & application service ---
+const policyRepo = new PostgresPolicyRepository(db);
+const policyAppService = new PolicyApplicationService({
+  policyRepository: policyRepo,
+  messageBus: _bus,
+  logger
+});
 
 // --- Audit helper ---
 async function auditLog(policyId, action, actor, changes) {
@@ -96,36 +119,13 @@ app.get('/api/policies', async (req, res) => {
     const limitNum = Math.min(200, Math.max(1, Number(limit)));
     const offset = (pageNum - 1) * limitNum;
 
-    let where = '';
-    const params = [];
-    const conditions = [];
+    const filters = {};
+    if (type) filters.type = type;
+    if (status) filters.status = status;
+    if (platform) filters.platform = platform;
 
-    if (type) {
-      params.push(type);
-      conditions.push(`type = $${params.length}`);
-    }
-    if (status) {
-      params.push(status);
-      conditions.push(`status = $${params.length}`);
-    }
-    if (platform) {
-      params.push(platform);
-      conditions.push(`(platform = $${params.length} OR platform = 'all')`);
-    }
-    if (conditions.length > 0) {
-      where = 'WHERE ' + conditions.join(' AND ');
-    }
-
-    const countResult = await db.query(`SELECT COUNT(*) AS total FROM policies ${where}`, params);
-    const total = parseInt(countResult.rows[0].total, 10);
-
-    params.push(limitNum, offset);
-    const dataResult = await db.query(
-      `SELECT * FROM policies ${where} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params
-    );
-
-    res.json({ policies: dataResult.rows, total, page: pageNum, limit: limitNum });
+    const { policies, total } = await policyAppService.listPolicies(filters, { limit: limitNum, offset });
+    res.json({ policies, total, page: pageNum, limit: limitNum });
   } catch (err) {
     logger.error('Failed to list policies', { error: err.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -135,9 +135,9 @@ app.get('/api/policies', async (req, res) => {
 // Get single policy
 app.get('/api/policies/:id', async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM policies WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Policy not found' });
-    res.json(result.rows[0]);
+    const policy = await policyAppService.getPolicy(req.params.id);
+    if (!policy) return res.status(404).json({ error: 'Policy not found' });
+    res.json(policy);
   } catch (err) {
     logger.error('Failed to get policy', { id: req.params.id, error: err.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -155,22 +155,13 @@ app.post('/api/policies', async (req, res) => {
       return res.status(400).json({ error: `type must be one of: ${validTypes.join(', ')}` });
     }
 
-    const result = await db.query(
-      `INSERT INTO policies (name, description, type, platform, rules, settings, priority, enforce, block_inheritance, wmi_filter, security_filter, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-       RETURNING *`,
-      [
-        name, description || null, type, platform || 'all',
-        JSON.stringify(rules || []), JSON.stringify(settings || {}),
-        priority || 100, enforce || false, block_inheritance || false,
-        wmi_filter ? JSON.stringify(wmi_filter) : null,
-        security_filter ? JSON.stringify(security_filter) : null,
-        created_by || null
-      ]
-    );
+    const policy = await policyAppService.createPolicy({
+      name, description, type, platform, rules, settings,
+      priority, enforce, block_inheritance, wmi_filter, security_filter, created_by
+    });
 
-    const policy = result.rows[0];
     await auditLog(policy.id, 'created', created_by, { name, type });
+    try { publish('policy.created', { policyId: policy.id, name: policy.name, type: policy.type, createdBy: created_by || null }); } catch (e) {}
     logger.info(`Policy created: ${name} (${type})`, { id: policy.id });
     res.status(201).json(policy);
   } catch (err) {
@@ -182,45 +173,18 @@ app.post('/api/policies', async (req, res) => {
 // Update policy
 app.put('/api/policies/:id', async (req, res) => {
   try {
-    const existing = await db.query('SELECT * FROM policies WHERE id = $1', [req.params.id]);
-    if (existing.rows.length === 0) return res.status(404).json({ error: 'Policy not found' });
+    const { name, description, type, platform, rules, settings, priority, enforce, block_inheritance, wmi_filter, security_filter, updated_by } = req.body;
 
-    const old = existing.rows[0];
-    const { name, description, type, platform, rules, settings, priority, enforce, block_inheritance, wmi_filter, security_filter } = req.body;
+    const updated = await policyAppService.updatePolicy(req.params.id, {
+      name, description, type, platform, rules, settings,
+      priority, enforce, block_inheritance, wmi_filter, security_filter
+    });
 
-    const result = await db.query(
-      `UPDATE policies SET
-        name = COALESCE($1, name),
-        description = COALESCE($2, description),
-        type = COALESCE($3, type),
-        platform = COALESCE($4, platform),
-        rules = COALESCE($5, rules),
-        settings = COALESCE($6, settings),
-        priority = COALESCE($7, priority),
-        enforce = COALESCE($8, enforce),
-        block_inheritance = COALESCE($9, block_inheritance),
-        wmi_filter = COALESCE($10, wmi_filter),
-        security_filter = COALESCE($11, security_filter),
-        version = version + 1,
-        updated_at = NOW()
-       WHERE id = $12
-       RETURNING *`,
-      [
-        name || null, description !== undefined ? description : null,
-        type || null, platform || null,
-        rules ? JSON.stringify(rules) : null, settings ? JSON.stringify(settings) : null,
-        priority || null, enforce !== undefined ? enforce : null,
-        block_inheritance !== undefined ? block_inheritance : null,
-        wmi_filter ? JSON.stringify(wmi_filter) : null,
-        security_filter ? JSON.stringify(security_filter) : null,
-        req.params.id
-      ]
-    );
-
-    const updated = result.rows[0];
-    await auditLog(updated.id, 'updated', req.body.updated_by, { before: old, after: updated });
+    await auditLog(updated.id, 'updated', updated_by, { after: updated });
+    try { publish('policy.updated', { policyId: updated.id, name: updated.name, changes: Object.keys(req.body) }); } catch (e) {}
     res.json(updated);
   } catch (err) {
+    if (err.statusCode === 404) return res.status(404).json({ error: 'Policy not found' });
     logger.error('Failed to update policy', { id: req.params.id, error: err.message });
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -229,11 +193,11 @@ app.put('/api/policies/:id', async (req, res) => {
 // Delete policy
 app.delete('/api/policies/:id', async (req, res) => {
   try {
-    const result = await db.query('DELETE FROM policies WHERE id = $1 RETURNING id', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Policy not found' });
+    await policyAppService.deletePolicy(req.params.id);
     await auditLog(req.params.id, 'deleted', req.query.actor);
     res.status(204).send();
   } catch (err) {
+    if (err.statusCode === 404) return res.status(404).json({ error: 'Policy not found' });
     logger.error('Failed to delete policy', { id: req.params.id, error: err.message });
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -244,15 +208,11 @@ app.delete('/api/policies/:id', async (req, res) => {
 // ============================
 app.post('/api/policies/:id/activate', async (req, res) => {
   try {
-    const result = await db.query(
-      `UPDATE policies SET status = 'active', activated_at = NOW(), updated_at = NOW()
-       WHERE id = $1 RETURNING *`,
-      [req.params.id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Policy not found' });
+    const policy = await policyAppService.activatePolicy(req.params.id);
     await auditLog(req.params.id, 'activated', req.body.actor);
-    res.json(result.rows[0]);
+    res.json(policy);
   } catch (err) {
+    if (err.statusCode === 404) return res.status(404).json({ error: 'Policy not found' });
     logger.error('Failed to activate policy', { id: req.params.id, error: err.message });
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -260,15 +220,11 @@ app.post('/api/policies/:id/activate', async (req, res) => {
 
 app.post('/api/policies/:id/deactivate', async (req, res) => {
   try {
-    const result = await db.query(
-      `UPDATE policies SET status = 'inactive', updated_at = NOW()
-       WHERE id = $1 RETURNING *`,
-      [req.params.id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Policy not found' });
+    const policy = await policyAppService.deactivatePolicy(req.params.id);
     await auditLog(req.params.id, 'deactivated', req.body.actor);
-    res.json(result.rows[0]);
+    res.json(policy);
   } catch (err) {
+    if (err.statusCode === 404) return res.status(404).json({ error: 'Policy not found' });
     logger.error('Failed to deactivate policy', { id: req.params.id, error: err.message });
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -322,6 +278,15 @@ app.post('/api/policies/evaluate', async (req, res) => {
     const result = await db.query(
       `SELECT * FROM policies WHERE status = 'active' ORDER BY priority ASC`
     );
+    // Publish violation events for any enforce=true policies when a deviceId is provided
+    if (deviceId && Array.isArray(result.rows)) {
+      for (const p of result.rows) {
+        if (p.enforce && context?.violations?.[p.id]) {
+          const v = context.violations[p.id];
+          try { publish('policy.violated', { policyId: p.id, deviceId, violation: v.violation || 'policy_not_met', severity: v.severity || 'medium' }); } catch (e) {}
+        }
+      }
+    }
     res.json({ applicablePolicies: result.rows, evaluatedAt: new Date().toISOString() });
   } catch (err) {
     logger.error('Failed to evaluate policies', { error: err.message });
@@ -961,7 +926,7 @@ app.post('/api/gpo/:id/apply', async (req, res) => {
   const gpo = gpos.get(req.params.id);
   if (!gpo) return res.status(404).json({ error: 'GPO not found' });
 
-  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://localhost:3010';
+  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider';
 
   try {
     // Get all devices from registry
@@ -1258,7 +1223,7 @@ app.get('/api/blueprints/:id/assignments', async (req, res) => {
 
 // POST /api/blueprints/:id/apply — apply blueprint: push MDM commands to assigned devices
 app.post('/api/blueprints/:id/apply', async (req, res) => {
-  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider:3010';
+  const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider';
 
   let blueprint;
   let configs = [];
@@ -1332,7 +1297,7 @@ app.post('/api/blueprints/:id/apply', async (req, res) => {
       const certConfigs = configs.filter(c => c.config_type === 'certificate');
       for (const certConfig of certConfigs) {
         try {
-          const caUrl = process.env.CA_SERVICE_URL || 'http://certificate-authority:3018';
+          const caUrl = process.env.CA_SERVICE_URL || 'http://certificate-authority';
           await fetch(`${caUrl}/api/certificates/issue`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1356,6 +1321,8 @@ app.post('/api/blueprints/:id/apply', async (req, res) => {
     configsCount: configs.length,
     resultsCount: results.length,
   });
+
+  try { publish('policy.applied', { blueprintId: blueprint.id, name: blueprint.name, deviceCount: assignments.filter(a => a.target_type === 'device').length, appliedBy: req.body.applied_by || null }); } catch (e) {}
 
   res.json({
     blueprintId: blueprint.id,
@@ -2009,6 +1976,15 @@ async function start() {
 
   // Pre-load templates
   loadTemplates();
+
+  try { connectBus(); } catch (e) { logger.warn('[bus] startup connect error: ' + e.message); }
+
+  // Start Compliance Saga (uses the module-level policyAppService already wired with policyRepository)
+  try {
+    const ComplianceSaga = require('./application/ComplianceSaga');
+    const _complianceSaga = new ComplianceSaga({ messageBus: _bus, policyApplicationService: policyAppService, logger });
+    setTimeout(() => _complianceSaga.start(), 4000);
+  } catch (e) { logger.warn('[saga] ComplianceSaga not available: ' + e.message); }
 
   app.listen(PORT, () => {
     logger.info(`Policy Service running on port ${PORT}`);

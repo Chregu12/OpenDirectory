@@ -39,7 +39,10 @@
     "moment": "^2.29.4",
     "ip": "^1.1.8",
     "geoip-lite": "^1.4.8",
-    "ua-parser-js": "^1.0.35"
+    "ua-parser-js": "^1.0.35",
+    "amqplib": "^0.10.3",
+    "pg": "^8.11.3",
+    "jose": "^5.0.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.22",

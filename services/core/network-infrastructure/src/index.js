@@ -11,6 +11,14 @@ const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const ioredis = require('ioredis');
 const { v4: uuidv4 } = require('uuid');
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'network-infrastructure' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 
 const logger = require('./utils/logger');
 const config = require('./utils/config');
@@ -550,11 +558,13 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     this.dnsManager.on('recordCreated', (record) => {
       this.broadcast('dnsRecordCreated', record);
       this.auditLog('DNS_RECORD_CREATED', record);
+      publish('network.dns.updated', { record, action: 'created' });
     });
-    
+
     this.dnsManager.on('recordUpdated', (record) => {
       this.broadcast('dnsRecordUpdated', record);
       this.auditLog('DNS_RECORD_UPDATED', record);
+      publish('network.dns.updated', { record, action: 'updated' });
     });
     
     this.dnsManager.on('recordDeleted', (recordId) => {
@@ -566,6 +576,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     this.dhcpManager.on('leaseAssigned', (lease) => {
       this.broadcast('dhcpLeaseAssigned', lease);
       this.auditLog('DHCP_LEASE_ASSIGNED', lease);
+      publish('network.dhcp.lease.issued', { deviceId: lease.deviceId || lease.hostname, ip: lease.ip || lease.ipAddress, mac: lease.mac || lease.macAddress });
     });
     
     this.dhcpManager.on('leaseExpired', (lease) => {
@@ -1142,6 +1153,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     // Initialize database (non-fatal – falls back to in-memory on failure)
     await db.initDb();
     await this.loadDbCacheIntoMemory();
+    connectBus();
 
     this.server = this.app.listen(port, () => {
       logger.info(`🌐 Enterprise Network Infrastructure Service started on port ${port}`);
@@ -1332,10 +1344,12 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         const record = await db.upsertDnsRecord(req.body);
         this.auditLog('DNS_RECORD_CREATED', record);
         this.broadcast('dnsRecordCreated', record);
+        publish('network.dns.updated', { record, action: 'created' });
         return res.status(201).json({ record, source: 'db', timestamp: new Date().toISOString() });
       }
       // In-memory fallback
       const record = await this.dnsManager.createRecord(req.body);
+      publish('network.dns.updated', { record, action: 'created' });
       res.status(201).json({ record, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('createDNSRecord error:', error);
@@ -1350,9 +1364,11 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         const record = await db.upsertDnsRecord(payload);
         this.auditLog('DNS_RECORD_UPDATED', record);
         this.broadcast('dnsRecordUpdated', record);
+        publish('network.dns.updated', { record, action: 'updated' });
         return res.json({ record, source: 'db', timestamp: new Date().toISOString() });
       }
       const record = await this.dnsManager.updateRecord(req.params.id, req.body);
+      publish('network.dns.updated', { record, action: 'updated' });
       res.json({ record, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('updateDNSRecord error:', error);
@@ -1426,9 +1442,11 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         const lease = await db.upsertDhcpLease(req.body);
         this.auditLog('DHCP_LEASE_CREATED', lease);
         this.broadcast('dhcpLeaseAssigned', lease);
+        publish('network.dhcp.lease.issued', { deviceId: lease.deviceId || lease.hostname, ip: lease.ip || lease.ip_address, mac: lease.mac || lease.mac_address });
         return res.status(201).json({ lease, source: 'db', timestamp: new Date().toISOString() });
       }
       const lease = await this.dhcpManager.createLease ? this.dhcpManager.createLease(req.body) : req.body;
+      publish('network.dhcp.lease.issued', { deviceId: lease.deviceId || lease.hostname, ip: lease.ip || lease.ip_address, mac: lease.mac || lease.mac_address });
       res.status(201).json({ lease, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('createDHCPLease error:', error);
@@ -1499,9 +1517,11 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
       if (db.isAvailable()) {
         const vlan = await db.upsertVlan(req.body);
         this.auditLog('VLAN_CREATED', vlan);
+        publish('network.vlan.created', { vlanId: vlan.id || vlan.vlan_id, name: vlan.name });
         return res.status(201).json({ vlan, source: 'db', timestamp: new Date().toISOString() });
       }
       const vlan = await this.vlanManager.createVlan ? this.vlanManager.createVlan(req.body) : req.body;
+      publish('network.vlan.created', { vlanId: vlan.id || vlan.vlan_id, name: vlan.name });
       res.status(201).json({ vlan, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('createVLAN error:', error);

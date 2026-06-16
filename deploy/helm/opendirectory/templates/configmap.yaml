@@ -27,3 +27,9 @@ data:
   MONITORING_SERVICE_URL: "http://{{ include "opendirectory.fullname" . }}-monitoring:{{ .Values.monitoring.service.port }}"
   MDM_SERVICE_URL: "http://{{ include "opendirectory.fullname" . }}-mdm:{{ .Values.mdm.service.port }}"
   BACKUP_SERVICE_URL: "http://{{ include "opendirectory.fullname" . }}-backup:{{ .Values.backup.service.port }}"
+  EVENT_BUS_TRANSPORT: {{ .Values.eventBus.transport | quote }}
+  EVENT_BUS_GRPC_ADDRESS: {{ .Values.eventBus.grpcAddress | quote }}
+  EVENT_BUS_GRPC_PORT: {{ .Values.eventBus.grpcServerPort | quote }}
+  EVENT_BUS_EXCHANGE: {{ .Values.eventBus.exchange | quote }}
+  EVENT_BUS_PREFETCH: {{ .Values.eventBus.prefetch | quote }}
+  EVENT_BUS_RECONNECT_MS: {{ .Values.eventBus.reconnectDelayMs | quote }}

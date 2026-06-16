@@ -15,6 +15,7 @@ const EncryptionManager = require('./services/EncryptionManager');
 const AutopilotDeployment = require('./deployment/AutopilotDeployment');
 const EDRIntegration = require('./edr/EDRIntegration');
 const PIMService = require('./pim/PIMService');
+const SessionRecorder = require('./pim/sessionRecorder');
 const EmergencyAccessService = require('./services/EmergencyAccessService');
 const AuditLogger = require('./audit/AuditLogger');
 
@@ -27,32 +28,53 @@ const PIMController = require('./controllers/PIMController');
 const EmergencyAccessController = require('./controllers/EmergencyAccessController');
 
 // Import middleware
-const authMiddleware = require('./middleware/auth');
+const { oidcAuth } = require('./middleware/oidcAuth');
 const auditMiddleware = require('./middleware/audit');
 const rateLimitMiddleware = require('./middleware/rateLimit');
 
+// Import database pool
+const db = require('./db');
+
 // Import configuration
 const config = require('./config');
+
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'conditional-access' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ConditionalAccessService {
     constructor() {
         this.app = express();
         this.port = process.env.PORT || 3007;
         this.logger = this.setupLogger();
-        
+
         // Initialize core engines
         this.conditionalAccessEngine = new ConditionalAccessEngine();
         this.deviceComplianceEngine = new DeviceComplianceEngine();
         this.encryptionManager = new EncryptionManager();
         this.autopilotDeployment = new AutopilotDeployment();
         this.edrIntegration = new EDRIntegration();
-        this.pimService = new PIMService();
         this.emergencyAccessService = new EmergencyAccessService();
         this.auditLogger = new AuditLogger();
-        
+
+        // Session recorder — pass the real DB pool so sessions are persisted
+        this.sessionRecorder = new SessionRecorder(db);
+
+        // PIM service — wire in event bus publisher and session recorder
+        this.pimService = new PIMService({
+            publishFn: publish,
+            sessionRecorder: this.sessionRecorder
+        });
+
         // Initialize controllers
         this.setupControllers();
-        
+
         this.setupMiddleware();
         this.setupRoutes();
         this.setupErrorHandling();
@@ -68,12 +90,12 @@ class ConditionalAccessService {
             ),
             defaultMeta: { service: 'conditional-access' },
             transports: [
-                new winston.transports.File({ 
-                    filename: 'logs/conditional-access-error.log', 
-                    level: 'error' 
+                new winston.transports.File({
+                    filename: 'logs/conditional-access-error.log',
+                    level: 'error'
                 }),
-                new winston.transports.File({ 
-                    filename: 'logs/conditional-access.log' 
+                new winston.transports.File({
+                    filename: 'logs/conditional-access.log'
                 }),
                 new winston.transports.Console({
                     format: winston.format.simple()
@@ -84,33 +106,32 @@ class ConditionalAccessService {
 
     setupControllers() {
         this.conditionalAccessController = new ConditionalAccessController(
-            this.conditionalAccessEngine, 
+            this.conditionalAccessEngine,
             this.auditLogger
         );
         this.deviceComplianceController = new DeviceComplianceController(
-            this.deviceComplianceEngine, 
+            this.deviceComplianceEngine,
             this.auditLogger
         );
         this.encryptionController = new EncryptionController(
-            this.encryptionManager, 
+            this.encryptionManager,
             this.auditLogger
         );
         this.deploymentController = new DeploymentController(
-            this.autopilotDeployment, 
+            this.autopilotDeployment,
             this.auditLogger
         );
         this.pimController = new PIMController(
-            this.pimService, 
+            this.pimService,
             this.auditLogger
         );
         this.emergencyAccessController = new EmergencyAccessController(
-            this.emergencyAccessService, 
+            this.emergencyAccessService,
             this.auditLogger
         );
     }
 
     setupMiddleware() {
-        // Security middleware
         this.app.use(helmet({
             contentSecurityPolicy: {
                 directives: {
@@ -127,23 +148,20 @@ class ConditionalAccessService {
                 preload: true
             }
         }));
-        
+
         this.app.use(cors({
             origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
             credentials: true
         }));
-        
+
         this.app.use(express.json({ limit: '10mb' }));
         this.app.use(express.urlencoded({ extended: true }));
-        
-        // Rate limiting
+
         this.app.use(rateLimitMiddleware);
-        
-        // Audit middleware
         this.app.use(auditMiddleware(this.auditLogger));
-        
-        // Authentication middleware (applied to protected routes)
-        this.app.use('/api/v1', authMiddleware);
+
+        // Authentication middleware — OIDC/RS256 via JWKS (replaces shared JWT_SECRET)
+        this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics', '/discovery'] }));
     }
 
     setupRoutes() {
@@ -159,25 +177,118 @@ class ConditionalAccessService {
 
         // API routes
         const apiV1 = express.Router();
-        
-        // Conditional Access routes
+
         apiV1.use('/conditional-access', this.conditionalAccessController.getRouter());
-        
-        // Device Compliance routes
         apiV1.use('/device-compliance', this.deviceComplianceController.getRouter());
-        
-        // Encryption Management routes
         apiV1.use('/encryption', this.encryptionController.getRouter());
-        
-        // Deployment routes
         apiV1.use('/deployment', this.deploymentController.getRouter());
-        
-        // PIM routes
+
+        // PIM routes (existing controller)
         apiV1.use('/pim', this.pimController.getRouter());
-        
+
+        // ── PIM session recording endpoints ──────────────────────────────────
+        const pim = apiV1; // mount under /pim prefix via the router below
+
+        apiV1.get('/pim/sessions', async (req, res, next) => {
+            try {
+                const { userId, roleId, from, to, limit } = req.query;
+                const records = await this.sessionRecorder.listSessionRecords({
+                    userId,
+                    roleId,
+                    from: from ? new Date(from) : undefined,
+                    to: to ? new Date(to) : undefined,
+                    limit: limit ? parseInt(limit, 10) : 100
+                });
+                res.json({ sessions: records, total: records.length });
+            } catch (err) {
+                next(err);
+            }
+        });
+
+        apiV1.get('/pim/sessions/:id', async (req, res, next) => {
+            try {
+                const record = await this.sessionRecorder.getSessionRecord(req.params.id);
+                if (!record) {
+                    return res.status(404).json({ error: 'Session record not found' });
+                }
+                res.json(record);
+            } catch (err) {
+                next(err);
+            }
+        });
+
+        apiV1.get('/pim/sessions/:id/replay', async (req, res, next) => {
+            try {
+                const activities = await this.sessionRecorder.replaySession(req.params.id);
+                res.json({ sessionRecordId: req.params.id, activities, total: activities.length });
+            } catch (err) {
+                next(err);
+            }
+        });
+
+        // ── Break-glass endpoints ─────────────────────────────────────────────
+        apiV1.post('/pim/breakglass/request', async (req, res, next) => {
+            try {
+                const { userId, reason, systemsAffected, estimatedDuration } = req.body;
+                if (!userId || !reason || !estimatedDuration) {
+                    return res.status(400).json({ error: 'userId, reason, and estimatedDuration are required' });
+                }
+                const result = await this.pimService.requestBreakGlass(userId, {
+                    reason,
+                    systemsAffected,
+                    estimatedDuration
+                });
+                res.status(201).json(result);
+            } catch (err) {
+                next(err);
+            }
+        });
+
+        apiV1.post('/pim/breakglass/:id/activate', async (req, res, next) => {
+            try {
+                const { managerId } = req.body;
+                if (!managerId) {
+                    return res.status(400).json({ error: 'managerId is required' });
+                }
+                const result = await this.pimService.activateBreakGlass(req.params.id, managerId);
+                res.json(result);
+            } catch (err) {
+                next(err);
+            }
+        });
+
+        apiV1.post('/pim/breakglass/:id/terminate', async (req, res, next) => {
+            try {
+                const { terminatedBy, outcome } = req.body;
+                if (!terminatedBy) {
+                    return res.status(400).json({ error: 'terminatedBy is required' });
+                }
+                const result = await this.pimService.terminateBreakGlass(req.params.id, {
+                    terminatedBy,
+                    outcome: outcome || 'Manual termination'
+                });
+                res.json(result);
+            } catch (err) {
+                next(err);
+            }
+        });
+
+        apiV1.get('/pim/breakglass', async (req, res, next) => {
+            try {
+                const { from, to } = req.query;
+                const events = await this.pimService.listBreakGlassEvents({
+                    from: from ? new Date(from) : undefined,
+                    to: to ? new Date(to) : undefined
+                });
+                res.json({ events, total: events.length });
+            } catch (err) {
+                next(err);
+            }
+        });
+
         // Emergency Access routes
         apiV1.use('/emergency-access', this.emergencyAccessController.getRouter());
-        
+
         this.app.use('/api/v1', apiV1);
 
         // Service discovery endpoint
@@ -192,6 +303,8 @@ class ConditionalAccessService {
                     encryption: '/api/v1/encryption',
                     deployment: '/api/v1/deployment',
                     pim: '/api/v1/pim',
+                    pimSessions: '/api/v1/pim/sessions',
+                    pimBreakGlass: '/api/v1/pim/breakglass',
                     emergencyAccess: '/api/v1/emergency-access'
                 },
                 capabilities: [
@@ -201,6 +314,9 @@ class ConditionalAccessService {
                     'autopilot-deployment',
                     'edr-integration',
                     'privileged-identity-management',
+                    'pim-session-recording',
+                    'pim-break-glass',
+                    'pim-multi-approver-chains',
                     'emergency-access',
                     'comprehensive-auditing'
                 ]
@@ -209,7 +325,6 @@ class ConditionalAccessService {
     }
 
     setupErrorHandling() {
-        // 404 handler
         this.app.use((req, res) => {
             res.status(404).json({
                 error: 'Not Found',
@@ -218,7 +333,6 @@ class ConditionalAccessService {
             });
         });
 
-        // Global error handler
         this.app.use((err, req, res, next) => {
             this.logger.error('Unhandled error:', {
                 error: err.message,
@@ -231,8 +345,8 @@ class ConditionalAccessService {
 
             res.status(err.statusCode || 500).json({
                 error: err.name || 'Internal Server Error',
-                message: process.env.NODE_ENV === 'production' 
-                    ? 'An error occurred while processing your request' 
+                message: process.env.NODE_ENV === 'production'
+                    ? 'An error occurred while processing your request'
                     : err.message,
                 timestamp: new Date().toISOString()
             });
@@ -241,9 +355,8 @@ class ConditionalAccessService {
 
     async initialize() {
         try {
-            this.logger.info('🔐 Initializing Conditional Access Service...');
-            
-            // Initialize core engines
+            this.logger.info('Initializing Conditional Access Service...');
+
             await this.conditionalAccessEngine.initialize();
             await this.deviceComplianceEngine.initialize();
             await this.encryptionManager.initialize();
@@ -252,65 +365,97 @@ class ConditionalAccessService {
             await this.pimService.initialize();
             await this.emergencyAccessService.initialize();
             await this.auditLogger.initialize();
-            
-            this.logger.info('✅ All engines initialized successfully');
-            
+
+            this.logger.info('All engines initialized successfully');
+
+            // Wire up EventBus publish calls for security decisions
+            this.conditionalAccessEngine.on('accessEvaluated', (ev) => {
+                const decision = ev.accessDecision && ev.accessDecision.action;
+                const payload = {
+                    userId: ev.userId,
+                    deviceId: ev.deviceId,
+                    resource: ev.application,
+                    timestamp: ev.timestamp instanceof Date ? ev.timestamp.toISOString() : ev.timestamp,
+                };
+                if (decision === 'ALLOW') {
+                    publish('security.access.granted', payload);
+                } else if (decision === 'DENY' || decision === 'BLOCK') {
+                    publish('security.access.denied', { ...payload, reason: ev.accessDecision.reasons && ev.accessDecision.reasons[0] });
+                }
+            });
+
+            this.pimService.on('elevationApproved', (ev) => {
+                publish('security.pim.granted', {
+                    userId: ev.userId,
+                    role: ev.roleId,
+                    justification: ev.approvalReason,
+                    timestamp: new Date().toISOString(),
+                });
+            });
+
+            this.emergencyAccessService.on('emergencyAccessGranted', (ev) => {
+                publish('security.emergency.access.activated', {
+                    userId: ev.requester,
+                    activatedBy: ev.emergencyAccount,
+                    timestamp: new Date().toISOString(),
+                });
+            });
+
             // Start background services
             this.startBackgroundServices();
-            
-            this.logger.info('🚀 Conditional Access Service ready');
-            
+
+            this.logger.info('Conditional Access Service ready');
+
         } catch (error) {
-            this.logger.error('❌ Failed to initialize Conditional Access Service:', error);
+            this.logger.error('Failed to initialize Conditional Access Service:', error);
             throw error;
         }
     }
 
     startBackgroundServices() {
-        // Start continuous compliance monitoring
         this.deviceComplianceEngine.startContinuousMonitoring();
-        
-        // Start EDR monitoring
         this.edrIntegration.startThreatMonitoring();
+<<<<<<< HEAD
+        this.pimService.startSessionMonitoring();
+=======
         
         // Start PIM session monitoring
-        this.pimService.startSessionMonitoring();
+        this.pimService.startPeriodicSessionMonitoring();
         
         // Start audit log processing
+>>>>>>> 26df081 (fix: wire PasswordPolicyEnforcer into auth flows and connect SessionRecorder DB pool)
         this.auditLogger.startLogProcessing();
-        
-        this.logger.info('🔄 Background services started');
+        this.logger.info('Background services started');
     }
 
     async start() {
         try {
+            connectBus().catch(err => this.logger.warn(`EventBusClient connect failed: ${err.message}`));
             await this.initialize();
-            
+
             this.server = this.app.listen(this.port, () => {
-                this.logger.info(`🔐 Conditional Access Service listening on port ${this.port}`);
-                this.logger.info(`📊 Health check: http://localhost:${this.port}/health`);
-                this.logger.info(`🔍 Service discovery: http://localhost:${this.port}/discovery`);
+                this.logger.info(`Conditional Access Service listening on port ${this.port}`);
+                this.logger.info(`Health check: http://localhost:${this.port}/health`);
+                this.logger.info(`Service discovery: http://localhost:${this.port}/discovery`);
             });
-            
-            // Graceful shutdown
+
             this.setupGracefulShutdown();
-            
+
         } catch (error) {
-            this.logger.error('❌ Failed to start Conditional Access Service:', error);
+            this.logger.error('Failed to start Conditional Access Service:', error);
             process.exit(1);
         }
     }
 
     setupGracefulShutdown() {
         const shutdown = async (signal) => {
-            this.logger.info(`🛑 Received ${signal}. Starting graceful shutdown...`);
-            
+            this.logger.info(`Received ${signal}. Starting graceful shutdown...`);
+
             if (this.server) {
                 this.server.close(async () => {
-                    this.logger.info('✅ HTTP server closed');
-                    
+                    this.logger.info('HTTP server closed');
+
                     try {
-                        // Cleanup resources
                         await this.conditionalAccessEngine.shutdown();
                         await this.deviceComplianceEngine.shutdown();
                         await this.encryptionManager.shutdown();
@@ -319,11 +464,11 @@ class ConditionalAccessService {
                         await this.pimService.shutdown();
                         await this.emergencyAccessService.shutdown();
                         await this.auditLogger.shutdown();
-                        
-                        this.logger.info('✅ All services shut down successfully');
+
+                        this.logger.info('All services shut down successfully');
                         process.exit(0);
                     } catch (error) {
-                        this.logger.error('❌ Error during shutdown:', error);
+                        this.logger.error('Error during shutdown:', error);
                         process.exit(1);
                     }
                 });
