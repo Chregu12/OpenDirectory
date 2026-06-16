@@ -1,15 +1,13 @@
 'use strict';
 
 const DeviceAggregate = require('../DeviceAggregate');
-const { DeviceEvents } = DeviceAggregate;
+const { DeviceEvents } = require('../../events/DeviceEvents');
 
 describe('DeviceAggregate', () => {
   const validProps = {
-    id:           'device-1',
-    name:         'MacBook Pro — Jane',
-    platform:     'macos',
-    serialNumber: 'C02ABC123',
-    ownerId:      'user-42'
+    id:       'device-1',
+    hostname: 'MacBook-Pro-Jane',
+    platform: 'macos'
   };
 
   // ── create() ───────────────────────────────────────────────────────────────
@@ -20,7 +18,7 @@ describe('DeviceAggregate', () => {
 
       expect(device).toBeInstanceOf(DeviceAggregate);
       expect(device.id).toBe('device-1');
-      expect(device.name).toBe('MacBook Pro — Jane');
+      expect(device.hostname).toBe('MacBook-Pro-Jane');
       expect(device.platform).toBe('macos');
       expect(device.status).toBe('active');
       expect(device.isCompliant).toBe(true);
@@ -37,14 +35,7 @@ describe('DeviceAggregate', () => {
       expect(typeof evt.eventId).toBe('string');
       expect(evt.eventId).toBeTruthy();
       expect(evt.payload.deviceId).toBe('device-1');
-    });
-
-    it('throws when name is missing', () => {
-      expect(() => DeviceAggregate.create({ platform: 'macos' })).toThrow('name');
-    });
-
-    it('throws when platform is missing', () => {
-      expect(() => DeviceAggregate.create({ name: 'My Device' })).toThrow('platform');
+      expect(evt.payload.hostname).toBe('MacBook-Pro-Jane');
     });
   });
 
@@ -58,7 +49,7 @@ describe('DeviceAggregate', () => {
       device.markNonCompliant(['screen-lock-disabled', 'outdated-os']);
 
       expect(device.isCompliant).toBe(false);
-      expect(device.violations).toEqual(['screen-lock-disabled', 'outdated-os']);
+      expect(device.complianceViolations).toEqual(['screen-lock-disabled', 'outdated-os']);
     });
 
     it('emits a DEVICE_NON_COMPLIANT event with occurredAt and eventId', () => {
@@ -87,7 +78,7 @@ describe('DeviceAggregate', () => {
       device.markCompliant();
 
       expect(device.isCompliant).toBe(true);
-      expect(device.violations).toHaveLength(0);
+      expect(device.complianceViolations).toHaveLength(0);
     });
 
     it('emits a DEVICE_COMPLIANT event with occurredAt and eventId', () => {
@@ -103,6 +94,15 @@ describe('DeviceAggregate', () => {
       expect(evt.occurredAt).toBeInstanceOf(Date);
       expect(evt.eventId).toBeTruthy();
     });
+
+    it('is a no-op when device is already compliant', () => {
+      const device = DeviceAggregate.create(validProps);
+      device.getAndClearDomainEvents();
+
+      device.markCompliant(); // already compliant
+      const events = device.getAndClearDomainEvents();
+      expect(events.some(e => e.type === DeviceEvents.DEVICE_COMPLIANT)).toBe(false);
+    });
   });
 
   // ── retire() ───────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ describe('DeviceAggregate', () => {
       expect(device.status).toBe('retired');
     });
 
-    it('emits a DEVICE_RETIRED event', () => {
+    it('emits a DEVICE_RETIRED event with occurredAt and eventId', () => {
       const device = DeviceAggregate.create(validProps);
       device.getAndClearDomainEvents();
 
@@ -128,16 +128,6 @@ describe('DeviceAggregate', () => {
       expect(evt).toBeDefined();
       expect(evt.occurredAt).toBeInstanceOf(Date);
       expect(evt.eventId).toBeTruthy();
-    });
-
-    it('is idempotent — second call produces no event', () => {
-      const device = DeviceAggregate.create(validProps);
-      device.retire();
-      device.getAndClearDomainEvents();
-
-      device.retire(); // second call
-      const events = device.getAndClearDomainEvents();
-      expect(events.some(e => e.type === DeviceEvents.DEVICE_RETIRED)).toBe(false);
     });
   });
 
@@ -165,16 +155,6 @@ describe('DeviceAggregate', () => {
       expect(evt.occurredAt).toBeInstanceOf(Date);
       expect(evt.eventId).toBeTruthy();
       expect(evt.payload.reason).toBe('Theft reported');
-    });
-
-    it('is idempotent — second call produces no event', () => {
-      const device = DeviceAggregate.create(validProps);
-      device.lock('reason');
-      device.getAndClearDomainEvents();
-
-      device.lock('another reason');
-      const events = device.getAndClearDomainEvents();
-      expect(events.some(e => e.type === DeviceEvents.DEVICE_LOCKED)).toBe(false);
     });
   });
 

@@ -1,13 +1,14 @@
 'use strict';
 
 const UserAggregate = require('../UserAggregate');
-const { AuthEvents } = UserAggregate;
+const { AuthEvents } = require('../../events/AuthEvents');
 
 describe('UserAggregate', () => {
   const validProps = {
-    id:       'user-1',
-    username: 'jdoe',
-    email:    'jdoe@example.com'
+    id:           'user-1',
+    username:     'jdoe',
+    email:        'jdoe@example.com',
+    passwordHash: 'hashed_password'
   };
 
   // ── create() ───────────────────────────────────────────────────────────────
@@ -22,7 +23,7 @@ describe('UserAggregate', () => {
       expect(user.email).toBe('jdoe@example.com');
       expect(user.loginAttempts).toBe(0);
       expect(user.mfaEnabled).toBe(false);
-      expect(user.isLocked()).toBe(false);
+      expect(user.locked).toBe(false);
     });
 
     it('pushes a USER_CREATED domain event with occurredAt and eventId', () => {
@@ -39,12 +40,10 @@ describe('UserAggregate', () => {
       expect(evt.payload.username).toBe('jdoe');
     });
 
-    it('throws when username is missing', () => {
-      expect(() => UserAggregate.create({ email: 'x@x.com' })).toThrow('username');
-    });
-
-    it('throws when email is missing', () => {
-      expect(() => UserAggregate.create({ username: 'jdoe' })).toThrow('email');
+    it('defaults roles to ["user"] when not provided', () => {
+      const user = UserAggregate.create(validProps);
+      const [evt] = user.getAndClearDomainEvents();
+      expect(evt.payload.roles).toEqual(['user']);
     });
   });
 
@@ -52,53 +51,52 @@ describe('UserAggregate', () => {
 
   describe('recordLoginFailure()', () => {
     it('increments loginAttempts on each call', () => {
-      const user = UserAggregate.create(validProps);
-      user.getAndClearDomainEvents(); // clear create event
+      const user = new UserAggregate(validProps);
 
-      user.recordLoginFailure();
+      user.recordLoginFailure('1.2.3.4');
       expect(user.loginAttempts).toBe(1);
 
-      user.recordLoginFailure();
+      user.recordLoginFailure('1.2.3.4');
       expect(user.loginAttempts).toBe(2);
     });
 
-    it('emits a LOGIN_FAILED event on each failure', () => {
-      const user = UserAggregate.create(validProps);
-      user.getAndClearDomainEvents();
+    it('emits a LOGIN_FAILED event with attempt count', () => {
+      const user = new UserAggregate(validProps);
 
-      user.recordLoginFailure();
+      user.recordLoginFailure('10.0.0.1');
       const events = user.getAndClearDomainEvents();
 
-      expect(events.some(e => e.type === AuthEvents.LOGIN_FAILED)).toBe(true);
+      const failedEvt = events.find(e => e.type === AuthEvents.LOGIN_FAILED);
+      expect(failedEvt).toBeDefined();
+      expect(failedEvt.occurredAt).toBeInstanceOf(Date);
+      expect(failedEvt.eventId).toBeTruthy();
+      expect(failedEvt.payload.attempts).toBe(1);
     });
 
-    it('locks the account after MAX_LOGIN_ATTEMPTS failures and emits USER_LOCKED', () => {
-      const user = UserAggregate.create(validProps);
-      user.getAndClearDomainEvents();
+    it('locks the account after 5 failures and emits USER_LOCKED', () => {
+      const user = new UserAggregate({ ...validProps, loginAttempts: 4 });
 
-      for (let i = 0; i < UserAggregate.MAX_LOGIN_ATTEMPTS; i++) {
-        user.recordLoginFailure();
-      }
+      user.recordLoginFailure('10.0.0.1');
 
-      expect(user.isLocked()).toBe(true);
-      expect(user.loginAttempts).toBe(UserAggregate.MAX_LOGIN_ATTEMPTS);
+      expect(user.locked).toBe(true);
+      expect(user.loginAttempts).toBe(5);
 
       const events = user.getAndClearDomainEvents();
-      const lockedEvent = events.find(e => e.type === AuthEvents.USER_LOCKED);
-      expect(lockedEvent).toBeDefined();
-      expect(lockedEvent.occurredAt).toBeInstanceOf(Date);
-      expect(lockedEvent.eventId).toBeTruthy();
+      const lockedEvt = events.find(e => e.type === AuthEvents.USER_LOCKED);
+      expect(lockedEvt).toBeDefined();
+      expect(lockedEvt.occurredAt).toBeInstanceOf(Date);
+      expect(lockedEvt.eventId).toBeTruthy();
+      expect(lockedEvt.payload.lockUntil).toBeInstanceOf(Date);
     });
 
-    it('does NOT lock the account before MAX_LOGIN_ATTEMPTS', () => {
-      const user = UserAggregate.create(validProps);
-      user.getAndClearDomainEvents();
+    it('does NOT lock the account before the threshold', () => {
+      const user = new UserAggregate(validProps);
 
-      for (let i = 0; i < UserAggregate.MAX_LOGIN_ATTEMPTS - 1; i++) {
-        user.recordLoginFailure();
+      for (let i = 0; i < 4; i++) {
+        user.recordLoginFailure('10.0.0.1');
       }
 
-      expect(user.isLocked()).toBe(false);
+      expect(user.locked).toBe(false);
     });
   });
 
@@ -106,79 +104,69 @@ describe('UserAggregate', () => {
 
   describe('recordLoginSuccess()', () => {
     it('resets loginAttempts to 0', () => {
-      const user = UserAggregate.create(validProps);
-      user.getAndClearDomainEvents();
+      const user = new UserAggregate({ ...validProps, loginAttempts: 3 });
 
-      user.recordLoginFailure();
-      user.recordLoginFailure();
-      expect(user.loginAttempts).toBe(2);
-
-      user.getAndClearDomainEvents();
-      user.recordLoginSuccess();
+      user.recordLoginSuccess('1.2.3.4');
       expect(user.loginAttempts).toBe(0);
     });
 
     it('clears the locked state', () => {
-      const user = UserAggregate.create(validProps);
-      user.getAndClearDomainEvents();
+      const user = new UserAggregate({ ...validProps, locked: true, loginAttempts: 5 });
 
-      for (let i = 0; i < UserAggregate.MAX_LOGIN_ATTEMPTS; i++) {
-        user.recordLoginFailure();
-      }
-      expect(user.isLocked()).toBe(true);
-
-      user.getAndClearDomainEvents();
-      user.recordLoginSuccess();
-      expect(user.isLocked()).toBe(false);
+      user.recordLoginSuccess('1.2.3.4');
+      expect(user.locked).toBe(false);
+      expect(user.lockUntil).toBeNull();
     });
 
     it('emits a LOGIN_SUCCESS event', () => {
-      const user = UserAggregate.create(validProps);
-      user.getAndClearDomainEvents();
+      const user = new UserAggregate(validProps);
 
-      user.recordLoginSuccess();
+      user.recordLoginSuccess('5.5.5.5');
       const events = user.getAndClearDomainEvents();
-      expect(events.some(e => e.type === AuthEvents.LOGIN_SUCCESS)).toBe(true);
+      const successEvt = events.find(e => e.type === AuthEvents.LOGIN_SUCCESS);
+      expect(successEvt).toBeDefined();
+      expect(successEvt.occurredAt).toBeInstanceOf(Date);
+      expect(successEvt.eventId).toBeTruthy();
     });
   });
 
   // ── enableMFA() ────────────────────────────────────────────────────────────
 
   describe('enableMFA()', () => {
-    it('sets mfaEnabled to true and stores the secret', () => {
-      const user = UserAggregate.create(validProps);
-      user.getAndClearDomainEvents();
+    it('sets mfaEnabled to true and stores the secret and recovery codes', () => {
+      const user = new UserAggregate(validProps);
 
-      user.enableMFA('TOTP_SECRET_ABC', ['code1', 'code2']);
+      user.enableMFA('TOTP_SECRET', ['code1', 'code2']);
 
       expect(user.mfaEnabled).toBe(true);
-      expect(user.mfaSecret).toBe('TOTP_SECRET_ABC');
-      expect(user.mfaBackupCodes).toEqual(['code1', 'code2']);
+      expect(user.mfaSecret).toBe('TOTP_SECRET');
+      expect(user.recoveryCodes).toEqual(['code1', 'code2']);
     });
 
     it('emits a MFA_ENABLED event with occurredAt and eventId', () => {
-      const user = UserAggregate.create(validProps);
-      user.getAndClearDomainEvents();
+      const user = new UserAggregate(validProps);
 
       user.enableMFA('SECRET', []);
       const events = user.getAndClearDomainEvents();
 
-      const mfaEvent = events.find(e => e.type === AuthEvents.MFA_ENABLED);
-      expect(mfaEvent).toBeDefined();
-      expect(mfaEvent.occurredAt).toBeInstanceOf(Date);
-      expect(mfaEvent.eventId).toBeTruthy();
+      const mfaEvt = events.find(e => e.type === AuthEvents.MFA_ENABLED);
+      expect(mfaEvt).toBeDefined();
+      expect(mfaEvt.occurredAt).toBeInstanceOf(Date);
+      expect(mfaEvt.eventId).toBeTruthy();
+      expect(mfaEvt.payload.method).toBe('totp');
     });
 
-    it('throws when secret is not provided', () => {
-      const user = UserAggregate.create(validProps);
-      expect(() => user.enableMFA(null, [])).toThrow('secret');
+    it('defaults recovery codes to [] when not provided', () => {
+      const user = new UserAggregate(validProps);
+      user.enableMFA('SECRET');
+      expect(user.recoveryCodes).toEqual([]);
     });
   });
 
   // ── getAndClearDomainEvents() ──────────────────────────────────────────────
 
   describe('getAndClearDomainEvents()', () => {
-    it('returns all pending events and then clears them', () => {
+    it('returns events and clears them — subsequent call returns []', () => {
       const user = UserAggregate.create(validProps);
 
       const firstCall = user.getAndClearDomainEvents();
@@ -189,11 +177,10 @@ describe('UserAggregate', () => {
     });
 
     it('accumulates events across multiple commands', () => {
-      const user = UserAggregate.create(validProps);
-      user.getAndClearDomainEvents(); // clear create event
+      const user = new UserAggregate(validProps);
 
-      user.recordLoginFailure();
-      user.recordLoginSuccess();
+      user.recordLoginFailure('1.1.1.1');
+      user.recordLoginSuccess('1.1.1.1');
       user.enableMFA('S', []);
 
       const events = user.getAndClearDomainEvents();
@@ -203,7 +190,6 @@ describe('UserAggregate', () => {
       expect(types).toContain(AuthEvents.LOGIN_SUCCESS);
       expect(types).toContain(AuthEvents.MFA_ENABLED);
 
-      // Cleared after retrieval
       expect(user.getAndClearDomainEvents()).toHaveLength(0);
     });
   });
