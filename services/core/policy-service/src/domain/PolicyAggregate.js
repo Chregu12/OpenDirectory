@@ -200,7 +200,9 @@ class PolicyAggregate {
       activated_at:     this.activated_at,
       version:          this.version,
       created_at:       this.createdAt,
-      updated_at:       this.updatedAt
+      updated_at:       this.updatedAt,
+      createdAt:        this.createdAt,
+      updatedAt:        this.updatedAt
     };
   }
 
