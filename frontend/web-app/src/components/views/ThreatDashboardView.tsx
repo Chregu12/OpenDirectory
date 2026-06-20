@@ -38,10 +38,10 @@ interface Anomaly {
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
 const SEVERITY_COLORS: Record<Severity, { bg: string; text: string; border: string }> = {
-  critical: { bg: '#fef2f2', text: '#991b1b', border: '#fca5a5' },
-  high:     { bg: '#fff7ed', text: '#9a3412', border: '#fdba74' },
-  medium:   { bg: '#fefce8', text: '#854d0e', border: '#fde68a' },
-  low:      { bg: '#f0fdf4', text: '#14532d', border: '#86efac' },
+  critical: { bg: 'var(--danger-light)',   text: 'var(--danger)',  border: 'rgba(248,81,73,0.3)' },
+  high:     { bg: 'rgba(234,88,12,0.15)', text: '#f97316',        border: 'rgba(234,88,12,0.3)' },
+  medium:   { bg: 'var(--warning-light)', text: 'var(--warning)', border: 'rgba(210,153,34,0.3)' },
+  low:      { bg: 'var(--success-light)', text: 'var(--success)', border: 'rgba(63,185,80,0.3)' },
 };
 
 function SeverityBadge({ severity }: { severity: Severity }) {
@@ -75,9 +75,9 @@ function formatTs(ts: string): string {
 }
 
 function statusLabel(status: Threat['status']): { label: string; color: string } {
-  if (status === 'resolved')     return { label: 'Resolved',     color: '#15803d' };
-  if (status === 'investigating') return { label: 'Investigating', color: '#b45309' };
-  return { label: 'Active', color: '#dc2626' };
+  if (status === 'resolved')     return { label: 'Resolved',     color: 'var(--success)' };
+  if (status === 'investigating') return { label: 'Investigating', color: 'var(--warning)' };
+  return { label: 'Active', color: 'var(--danger)' };
 }
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ function SkeletonRows({ cols, rows = 3 }: { cols: number; rows?: number }) {
         <tr key={i} style={{ animation: 'pulse 1.5s ease-in-out infinite' }}>
           {[...Array(cols)].map((_, j) => (
             <td key={j} style={{ padding: '10px 14px' }}>
-              <div style={{ height: 14, background: '#e5e7eb', borderRadius: 6 }} />
+              <div style={{ height: 14, background: 'var(--bg-surface-raised)', borderRadius: 6 }} />
             </td>
           ))}
         </tr>
@@ -229,16 +229,16 @@ export default function ThreatDashboardView() {
     fontWeight: 600,
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
-    color: '#6b7280',
-    background: '#f9fafb',
-    borderBottom: '1px solid #f3f4f6',
+    color: 'var(--text-muted)',
+    background: 'var(--bg-surface-raised)',
+    borderBottom: '1px solid var(--border)',
     whiteSpace: 'nowrap',
   };
   const tdStyle: React.CSSProperties = {
     padding: '10px 14px',
     fontSize: 13,
-    color: '#374151',
-    borderBottom: '1px solid #f9fafb',
+    color: 'var(--text-secondary)',
+    borderBottom: '1px solid var(--border)',
     verticalAlign: 'middle',
   };
 
@@ -248,10 +248,10 @@ export default function ThreatDashboardView() {
       {/* ── Page Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <ShieldExclamationIcon style={{ width: 28, height: 28, color: '#dc2626' }} />
+          <ShieldExclamationIcon style={{ width: 28, height: 28, color: 'var(--danger)' }} />
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#111827', margin: 0 }}>Threat Detection</h1>
-            <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Threat Detection</h1>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
               Auto-refreshes every 30 s &nbsp;·&nbsp; Last updated {lastRefresh.toLocaleTimeString()}
             </p>
           </div>
@@ -261,12 +261,12 @@ export default function ThreatDashboardView() {
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '8px 14px', borderRadius: 8,
-            background: '#fff', border: '1px solid #e5e7eb',
-            fontSize: 13, fontWeight: 500, color: '#374151',
+            background: 'var(--bg-surface-raised)', border: '1px solid var(--border)',
+            fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)',
             cursor: 'pointer',
           }}
         >
-          <ArrowPathIcon style={{ width: 15, height: 15, color: loading ? '#2563eb' : '#6b7280' }} />
+          <ArrowPathIcon style={{ width: 15, height: 15, color: loading ? 'var(--accent)' : 'var(--text-muted)' }} />
           Refresh
         </button>
       </div>
@@ -274,49 +274,49 @@ export default function ThreatDashboardView() {
       {/* ── Summary Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
         {[
-          { label: 'Active Threats',   value: loading ? '—' : String(counts.active),   dot: '#6b7280' },
-          { label: 'Critical',          value: loading ? '—' : String(counts.critical), dot: '#dc2626' },
-          { label: 'High',              value: loading ? '—' : String(counts.high),     dot: '#ea580c' },
-          { label: 'Anomalies',         value: loading ? '—' : String(anomalies.length), dot: '#d97706' },
+          { label: 'Active Threats', value: loading ? '—' : String(counts.active),    dot: 'var(--text-muted)' },
+          { label: 'Critical',        value: loading ? '—' : String(counts.critical),  dot: 'var(--danger)' },
+          { label: 'High',            value: loading ? '—' : String(counts.high),      dot: '#f97316' },
+          { label: 'Anomalies',       value: loading ? '—' : String(anomalies.length), dot: 'var(--warning)' },
         ].map(({ label, value, dot }) => (
           <div key={label} style={{
-            background: '#fff', borderRadius: 12, border: '1px solid #f3f4f6',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '16px 18px',
+            background: 'var(--bg-surface)', borderRadius: 12, border: '1px solid var(--border)',
+            boxShadow: 'var(--card-shadow)', padding: '16px 18px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0 }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
             </div>
-            <p style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>{value}</p>
+            <p style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{value}</p>
           </div>
         ))}
       </div>
 
       {/* ── Active Threats ── */}
-      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-surface)', borderRadius: 12, border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)', overflow: 'hidden' }}>
         {/* Section header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f3f4f6', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <ExclamationTriangleIcon style={{ width: 18, height: 18, color: '#dc2626' }} />
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>Active Threats</span>
+            <ExclamationTriangleIcon style={{ width: 18, height: 18, color: 'var(--danger)' }} />
+            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Active Threats</span>
             {!loading && (
-              <span style={{ fontSize: 11, background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 9999, fontWeight: 600 }}>
+              <span style={{ fontSize: 11, background: 'var(--danger-light)', color: 'var(--danger)', padding: '2px 8px', borderRadius: 9999, fontWeight: 600 }}>
                 {filteredThreats.length}
               </span>
             )}
           </div>
           {/* Severity filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <FunnelIcon style={{ width: 14, height: 14, color: '#9ca3af' }} />
-            <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500 }}>Severity:</span>
+            <FunnelIcon style={{ width: 14, height: 14, color: 'var(--text-muted)' }} />
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Severity:</span>
             {(['all', 'critical', 'high', 'medium', 'low'] as SeverityFilter[]).map(s => (
               <button key={s} onClick={() => setSeverityFilter(s)} style={{
                 padding: '3px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600,
                 cursor: 'pointer', border: '1px solid',
                 textTransform: 'capitalize',
-                background: severityFilter === s ? '#2563eb' : '#fff',
-                color:      severityFilter === s ? '#fff'    : '#6b7280',
-                borderColor: severityFilter === s ? '#2563eb' : '#e5e7eb',
+                background: severityFilter === s ? 'var(--accent)' : 'var(--bg-surface-raised)',
+                color:      severityFilter === s ? '#fff'         : 'var(--text-muted)',
+                borderColor: severityFilter === s ? 'var(--accent)' : 'var(--border)',
               }}>
                 {s === 'all' ? 'All' : s}
               </button>
@@ -338,8 +338,8 @@ export default function ThreatDashboardView() {
                 <SkeletonRows cols={6} rows={4} />
               ) : filteredThreats.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '40px 14px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
-                    <CheckCircleIcon style={{ width: 36, height: 36, color: '#d1d5db', margin: '0 auto 8px' }} />
+                  <td colSpan={6} style={{ padding: '40px 14px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                    <CheckCircleIcon style={{ width: 36, height: 36, color: 'var(--border-strong)', margin: '0 auto 8px' }} />
                     No threats match the current filter.
                   </td>
                 </tr>
@@ -352,7 +352,7 @@ export default function ThreatDashboardView() {
                       <td style={tdStyle}><SeverityBadge severity={threat.severity} /></td>
                       <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{threat.device}</td>
                       <td style={tdStyle}>{threat.type}</td>
-                      <td style={{ ...tdStyle, color: '#6b7280', whiteSpace: 'nowrap' }}>{formatTs(threat.detectedAt)}</td>
+                      <td style={{ ...tdStyle, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatTs(threat.detectedAt)}</td>
                       <td style={tdStyle}>
                         <span style={{ fontSize: 12, fontWeight: 600, color: s.color }}>{s.label}</span>
                       </td>
@@ -364,10 +364,10 @@ export default function ThreatDashboardView() {
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: 4,
                               padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                              background: resolving.has(threat.id) ? '#f3f4f6' : '#f0fdf4',
-                              color: resolving.has(threat.id) ? '#9ca3af' : '#15803d',
+                              background: resolving.has(threat.id) ? 'var(--bg-surface-raised)' : 'var(--success-light)',
+                              color: resolving.has(threat.id) ? 'var(--text-muted)' : 'var(--success)',
                               border: '1px solid',
-                              borderColor: resolving.has(threat.id) ? '#e5e7eb' : '#86efac',
+                              borderColor: resolving.has(threat.id) ? 'var(--border)' : 'rgba(63,185,80,0.3)',
                               cursor: resolving.has(threat.id) ? 'not-allowed' : 'pointer',
                               whiteSpace: 'nowrap',
                             }}
@@ -387,12 +387,12 @@ export default function ThreatDashboardView() {
       </div>
 
       {/* ── Anomalies ── */}
-      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
-          <ChartBarIcon style={{ width: 18, height: 18, color: '#d97706' }} />
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>Anomalies</span>
+      <div style={{ background: 'var(--bg-surface)', borderRadius: 12, border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+          <ChartBarIcon style={{ width: 18, height: 18, color: 'var(--warning)' }} />
+          <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Anomalies</span>
           {!loading && (
-            <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 9999, fontWeight: 600 }}>
+            <span style={{ fontSize: 11, background: 'var(--warning-light)', color: 'var(--warning)', padding: '2px 8px', borderRadius: 9999, fontWeight: 600 }}>
               {anomalies.length}
             </span>
           )}
@@ -411,27 +411,27 @@ export default function ThreatDashboardView() {
                 <SkeletonRows cols={4} rows={3} />
               ) : anomalies.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ padding: '40px 14px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+                  <td colSpan={4} style={{ padding: '40px 14px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
                     No anomalies detected.
                   </td>
                 </tr>
               ) : (
                 anomalies.map(a => {
                   const pct = Math.round(a.score * 100);
-                  const scoreColor = a.score >= 0.9 ? '#dc2626' : a.score >= 0.7 ? '#ea580c' : '#d97706';
+                  const scoreColor = a.score >= 0.9 ? 'var(--danger)' : a.score >= 0.7 ? '#f97316' : 'var(--warning)';
                   return (
                     <tr key={a.id}>
                       <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{a.device}</td>
                       <td style={tdStyle}>{a.anomalyType}</td>
                       <td style={tdStyle}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ flex: 1, height: 6, background: '#f3f4f6', borderRadius: 9999, overflow: 'hidden', minWidth: 60 }}>
+                          <div style={{ flex: 1, height: 6, background: 'var(--bg-surface-raised)', borderRadius: 9999, overflow: 'hidden', minWidth: 60 }}>
                             <div style={{ height: '100%', width: `${pct}%`, background: scoreColor, borderRadius: 9999 }} />
                           </div>
                           <span style={{ fontSize: 12, fontWeight: 700, color: scoreColor, minWidth: 34, textAlign: 'right' }}>{pct}%</span>
                         </div>
                       </td>
-                      <td style={{ ...tdStyle, color: '#6b7280', whiteSpace: 'nowrap' }}>{formatTs(a.timestamp)}</td>
+                      <td style={{ ...tdStyle, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatTs(a.timestamp)}</td>
                     </tr>
                   );
                 })
@@ -442,26 +442,26 @@ export default function ThreatDashboardView() {
       </div>
 
       {/* ── Recommendations ── */}
-      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
-          <LightBulbIcon style={{ width: 18, height: 18, color: '#2563eb' }} />
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>Recommendations</span>
+      <div style={{ background: 'var(--bg-surface)', borderRadius: 12, border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+          <LightBulbIcon style={{ width: 18, height: 18, color: 'var(--accent)' }} />
+          <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Recommendations</span>
         </div>
         <ul style={{ margin: 0, padding: '12px 20px 16px 20px', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {loading ? (
             [1, 2, 3].map(i => (
               <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#e5e7eb', flexShrink: 0 }} />
-                <div style={{ height: 13, background: '#e5e7eb', borderRadius: 6, flex: 1 }} />
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--bg-surface-raised)', flexShrink: 0 }} />
+                <div style={{ height: 13, background: 'var(--bg-surface-raised)', borderRadius: 6, flex: 1 }} />
               </li>
             ))
           ) : recommendations.length === 0 ? (
-            <li style={{ fontSize: 13, color: '#9ca3af', padding: '8px 0' }}>No recommendations at this time.</li>
+            <li style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 0' }}>No recommendations at this time.</li>
           ) : (
             recommendations.map((rec, i) => (
-              <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#374151' }}>
+              <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
                 <div style={{
-                  width: 6, height: 6, borderRadius: '50%', background: '#2563eb',
+                  width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)',
                   flexShrink: 0, marginTop: 5,
                 }} />
                 {rec}

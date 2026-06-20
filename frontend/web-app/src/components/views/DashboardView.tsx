@@ -192,12 +192,12 @@ function statusLabel(status: ServiceStatus): string {
   }
 }
 
-function statusLabelColor(status: ServiceStatus): string {
+function statusLabelColor(status: ServiceStatus): React.CSSProperties {
   switch (status) {
-    case 'healthy': return 'text-green-700 bg-green-50';
-    case 'degraded': return 'text-yellow-700 bg-yellow-50';
-    case 'unhealthy': return 'text-red-700 bg-red-50';
-    default: return 'text-gray-600 bg-gray-100';
+    case 'healthy': return { color: 'var(--success)', background: 'var(--success-light)' };
+    case 'degraded': return { color: 'var(--warning)', background: 'var(--warning-light)' };
+    case 'unhealthy': return { color: 'var(--danger)', background: 'var(--danger-light)' };
+    default: return { color: 'var(--text-muted)', background: 'var(--bg-surface-raised)' };
   }
 }
 
@@ -207,26 +207,26 @@ function statusLabelColor(status: ServiceStatus): string {
 
 function SkeletonCard() {
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 animate-pulse">
+    <div className="rounded-xl p-6 animate-pulse" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-gray-200" />
+        <div className="w-12 h-12 rounded-xl" style={{ background: 'var(--bg-surface-raised)' }} />
         <div className="flex-1 space-y-2">
-          <div className="h-3 bg-gray-200 rounded w-1/2" />
-          <div className="h-7 bg-gray-200 rounded w-1/3" />
+          <div className="h-3 rounded w-1/2" style={{ background: 'var(--bg-surface-raised)' }} />
+          <div className="h-7 rounded w-1/3" style={{ background: 'var(--bg-surface-raised)' }} />
         </div>
       </div>
-      <div className="mt-4 h-2 bg-gray-200 rounded" />
+      <div className="mt-4 h-2 rounded" style={{ background: 'var(--bg-surface-raised)' }} />
     </div>
   );
 }
 
 function SkeletonPanel({ tall = false }: { tall?: boolean }) {
   return (
-    <div className={`bg-white rounded-xl border border-gray-100 shadow-sm p-6 animate-pulse ${tall ? 'h-80' : 'h-56'}`}>
-      <div className="h-4 bg-gray-200 rounded w-1/3 mb-4" />
+    <div className={`rounded-xl p-6 animate-pulse ${tall ? 'h-80' : 'h-56'}`} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+      <div className="h-4 rounded w-1/3 mb-4" style={{ background: 'var(--bg-surface-raised)' }} />
       <div className="space-y-3">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-3 bg-gray-200 rounded" />
+          <div key={i} className="h-3 rounded" style={{ background: 'var(--bg-surface-raised)' }} />
         ))}
       </div>
     </div>
@@ -245,15 +245,21 @@ interface KpiCardProps {
 
 function KpiCard({ icon, iconBg, label, value, subtitle, footer, alert }: KpiCardProps) {
   return (
-    <div className={`bg-white rounded-xl border shadow-sm p-6 transition-shadow hover:shadow-md ${alert ? 'border-red-200' : 'border-gray-100'}`}>
+    <div
+      className={`rounded-xl p-6 transition-shadow hover:shadow-md ${alert ? 'border-red-200' : ''}`}
+      style={alert
+        ? { background: 'var(--bg-surface)', border: '1px solid #f85149', boxShadow: 'var(--card-shadow)' }
+        : { background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }
+      }
+    >
       <div className="flex items-start gap-4">
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
           {icon}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-500 truncate">{label}</p>
-          <div className="text-2xl font-semibold text-gray-900 mt-0.5 leading-tight">{value}</div>
-          {subtitle && <div className="text-xs text-gray-400 mt-0.5">{subtitle}</div>}
+          <p className="text-sm font-medium truncate" style={{ color: 'var(--text-muted)' }}>{label}</p>
+          <div className="text-2xl font-semibold mt-0.5 leading-tight" style={{ color: 'var(--text-primary)' }}>{value}</div>
+          {subtitle && <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{subtitle}</div>}
         </div>
       </div>
       {footer && <div className="mt-4">{footer}</div>}
@@ -270,7 +276,7 @@ interface ProgressBarProps {
 function ProgressBar({ value, colorClass, height = 'h-2' }: ProgressBarProps) {
   const clamped = Math.min(100, Math.max(0, value));
   return (
-    <div className={`w-full bg-gray-100 rounded-full ${height} overflow-hidden`}>
+    <div className={`w-full rounded-full ${height} overflow-hidden`} style={{ background: 'var(--bg-surface-raised)' }}>
       <div
         className={`${height} rounded-full transition-all duration-500 ${colorClass}`}
         style={{ width: `${clamped}%` }}
@@ -640,10 +646,10 @@ export default function DashboardView() {
         {/* Header skeleton */}
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <div className="h-7 w-56 bg-gray-200 rounded animate-pulse" />
-            <div className="h-4 w-80 bg-gray-200 rounded animate-pulse" />
+            <div className="h-7 w-56 rounded animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />
+            <div className="h-4 w-80 rounded animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />
           </div>
-          <div className="h-5 w-28 bg-gray-200 rounded animate-pulse" />
+          <div className="h-5 w-28 rounded animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />
         </div>
         {/* KPI rows */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -690,8 +696,8 @@ export default function DashboardView() {
       {/* ------------------------------------------------------------------ */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Übersicht</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Übersicht</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
             Echtzeit-Status deiner OpenDirectory-Infrastruktur
           </p>
         </div>
@@ -703,10 +709,10 @@ export default function DashboardView() {
             <SparklesIcon className="w-4 h-4" />
             Backup Wizard
           </button>
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-muted)' }}>
             <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             <span>Auto-refresh every 30s</span>
-            <span className="text-gray-300 mx-1">|</span>
+            <span className="mx-1" style={{ color: 'var(--text-muted)' }}>|</span>
             <span>
               Last updated{' '}
               {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -719,26 +725,26 @@ export default function DashboardView() {
       {/* Quick Stats Row (German, simplified)                                */}
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 font-medium">Geräte gesamt</p>
-          <p className="text-3xl font-bold text-gray-900 mt-1">{kpi.totalDevices ?? '—'}</p>
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Geräte gesamt</p>
+          <p className="text-3xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>{kpi.totalDevices ?? '—'}</p>
           <p className="text-xs text-green-600 mt-1">{kpi.onlineDevices ?? 0} online</p>
         </div>
-        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 font-medium">Compliant %</p>
-          <p className="text-3xl font-bold text-gray-900 mt-1">
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Compliant %</p>
+          <p className="text-3xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>
             {deviceCompliance && deviceCompliance.total > 0 ? `${Math.round((deviceCompliance.compliant / deviceCompliance.total) * 100)}%` : '—'}
           </p>
-          <p className="text-xs text-gray-400 mt-1">Konformitatsquote</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Konformitatsquote</p>
         </div>
-        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 font-medium">Nutzer aktiv</p>
-          <p className="text-3xl font-bold text-gray-900 mt-1">{kpi.totalUsers ?? '—'}</p>
-          <p className="text-xs text-gray-400 mt-1">{kpi.totalGroups ?? 0} Gruppen</p>
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Nutzer aktiv</p>
+          <p className="text-3xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>{kpi.totalUsers ?? '—'}</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{kpi.totalGroups ?? 0} Gruppen</p>
         </div>
-        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 font-medium">Apps verbunden</p>
-          <p className="text-3xl font-bold text-gray-900 mt-1">2</p>
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Apps verbunden</p>
+          <p className="text-3xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>2</p>
           <p className="text-xs text-blue-600 mt-1">SSO aktiv</p>
         </div>
       </div>
@@ -748,8 +754,8 @@ export default function DashboardView() {
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Compliance Donut (CSS/SVG) */}
-        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Compliance Verteilung</h2>
+        <div className="rounded-xl p-6" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Compliance Verteilung</h2>
           {deviceCompliance && deviceCompliance.total > 0 ? (
             <div className="flex flex-col items-center">
               {/* SVG Donut */}
@@ -779,59 +785,59 @@ export default function DashboardView() {
                     return el;
                   });
                 })()}
-                <text x="60" y="64" textAnchor="middle" className="fill-gray-900 font-bold" style={{ fontSize: 18, transform: 'rotate(90deg)', transformOrigin: '60px 60px' }}>
+                <text x="60" y="64" textAnchor="middle" style={{ fill: 'var(--text-primary)', fontWeight: 'bold', fontSize: 18, transform: 'rotate(90deg)', transformOrigin: '60px 60px' }}>
                   {deviceCompliance.total}
                 </text>
               </svg>
               <div className="mt-3 space-y-1 text-xs w-full">
                 {[{ label: 'Konform', count: deviceCompliance.compliant, color: 'bg-green-500' }, { label: 'Gefährdet', count: deviceCompliance.atRisk, color: 'bg-yellow-400' }, { label: 'Nicht konform', count: deviceCompliance.nonCompliant, color: 'bg-red-500' }, { label: 'Keine Daten', count: deviceCompliance.noData, color: 'bg-gray-300' }].map(row => (
                   <div key={row.label} className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.color}`} /><span className="text-gray-600">{row.label}</span></div>
-                    <span className="font-medium text-gray-700">{row.count}</span>
+                    <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.color}`} /><span style={{ color: 'var(--text-secondary)' }}>{row.label}</span></div>
+                    <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>{row.count}</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400 text-sm">Keine Gerätedaten</div>
+            <div className="text-center py-8 text-sm" style={{ color: 'var(--text-muted)' }}>Keine Gerätedaten</div>
           )}
         </div>
 
         {/* Platform breakdown bars */}
-        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Plattform-Verteilung</h2>
+        <div className="rounded-xl p-6" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Plattform-Verteilung</h2>
           <div className="space-y-4">
             {platformBreakdown.length > 0 ? platformBreakdown.map(p => {
               const total = platformBreakdown.reduce((s, x) => s + x.count, 0);
               const pct = Math.round((p.count / total) * 100);
               return (
                 <div key={p.label}>
-                  <div className="flex justify-between text-xs text-gray-600 mb-1"><span>{p.label}</span><span>{p.count} Geräte</span></div>
-                  <div className="w-full bg-gray-100 rounded-full h-2"><div className={`h-2 rounded-full ${p.color}`} style={{ width: `${pct}%` }} /></div>
+                  <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--text-secondary)' }}><span>{p.label}</span><span>{p.count} Geräte</span></div>
+                  <div className="w-full rounded-full h-2" style={{ background: 'var(--bg-surface-raised)' }}><div className={`h-2 rounded-full ${p.color}`} style={{ width: `${pct}%` }} /></div>
                 </div>
               );
             }) : (
-              <div className="text-center py-4 text-gray-400 text-xs">Keine Gerätedaten</div>
+              <div className="text-center py-4 text-xs" style={{ color: 'var(--text-muted)' }}>Keine Gerätedaten</div>
             )}
           </div>
         </div>
 
         {/* Activity Feed */}
-        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Letzte Aktivitäten</h2>
+        <div className="rounded-xl p-6" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Letzte Aktivitäten</h2>
           <div className="space-y-2.5">
             {activityEvents && activityEvents.length > 0 ? (
               activityEvents.map(evt => (
                 <div key={evt.id} className="flex items-start gap-2 text-xs">
                   <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${evt.type === 'success' ? 'bg-green-500' : evt.type === 'warning' ? 'bg-yellow-400' : evt.type === 'error' ? 'bg-red-500' : 'bg-blue-400'}`} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-gray-700 leading-snug">{evt.message}</p>
-                    <p className="text-gray-400 mt-0.5">{new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    <p className="leading-snug" style={{ color: 'var(--text-secondary)' }}>{evt.message}</p>
+                    <p className="mt-0.5" style={{ color: 'var(--text-muted)' }}>{new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-center py-8 text-gray-500 text-sm">
+              <div className="text-center py-8 text-sm" style={{ color: 'var(--text-muted)' }}>
                 {activityError ? 'Audit-Log nicht verfügbar' : 'Keine Ereignisse'}
               </div>
             )}
@@ -872,7 +878,7 @@ export default function DashboardView() {
               : 'Groups unavailable'
           }
           footer={
-            <div className="flex items-center gap-1.5 text-xs text-gray-400">
+            <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
               <UsersIcon className="w-3.5 h-3.5" />
               <span>Directory accounts</span>
             </div>
@@ -900,14 +906,14 @@ export default function DashboardView() {
                 {kpi.totalDevices - kpi.onlineDevices > 0 && (
                   <>
                     <span className="inline-block w-2 h-2 rounded-full bg-gray-300" />
-                    <span className="text-gray-400">
+                    <span style={{ color: 'var(--text-muted)' }}>
                       {kpi.totalDevices - kpi.onlineDevices} offline
                     </span>
                   </>
                 )}
               </div>
             ) : (
-              <div className="text-xs text-gray-400">No device data</div>
+              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>No device data</div>
             )
           }
         />
@@ -946,7 +952,7 @@ export default function DashboardView() {
           iconBg={kpi.openAlerts ? 'bg-red-50' : 'bg-orange-50'}
           label="Security Alerts"
           value={
-            <span className={kpi.openAlerts ? 'text-red-600' : 'text-gray-900'}>
+            <span className={kpi.openAlerts ? 'text-red-600' : ''} style={kpi.openAlerts ? {} : { color: 'var(--text-primary)' }}>
               {kpi.openAlerts !== null ? kpi.openAlerts : '—'}
             </span>
           }
@@ -965,7 +971,7 @@ export default function DashboardView() {
                 </div>
               )
             ) : (
-              <div className="text-xs text-gray-400">Data unavailable</div>
+              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Data unavailable</div>
             )
           }
         />
@@ -1006,7 +1012,7 @@ export default function DashboardView() {
           value={kpi.uptime ?? '—'}
           subtitle="Gateway runtime"
           footer={
-            <div className="flex items-center gap-1.5 text-xs text-gray-400">
+            <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
               <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
               <span>Running stable</span>
             </div>
@@ -1031,7 +1037,7 @@ export default function DashboardView() {
                 colorClass={metricBarColor(kpi.memoryPercent)}
               />
             ) : (
-              <div className="text-xs text-gray-400">Prometheus unavailable</div>
+              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Prometheus unavailable</div>
             )
           }
         />
@@ -1058,13 +1064,13 @@ export default function DashboardView() {
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Service Health Grid (2/3) */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="lg:col-span-2 rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Service Health</h2>
-              <p className="text-xs text-gray-400 mt-0.5">All infrastructure services</p>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Service Health</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>All infrastructure services</p>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-400">
+            <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
               <SignalIcon className="w-4 h-4" />
               <span>
                 Checked at{' '}
@@ -1076,7 +1082,8 @@ export default function DashboardView() {
             {serviceCards.map((svc) => (
               <div
                 key={svc.id}
-                className="flex items-center gap-3 p-4 rounded-lg border border-gray-100 bg-gray-50 hover:bg-white hover:border-gray-200 transition-colors"
+                className="flex items-center gap-3 p-4 rounded-lg transition-colors"
+                style={{ border: '1px solid var(--border)', background: 'var(--bg-surface-raised)' }}
               >
                 {/* Status dot */}
                 <div className="relative shrink-0">
@@ -1087,21 +1094,21 @@ export default function DashboardView() {
                 </div>
                 {/* Info */}
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">{svc.label}</p>
+                  <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{svc.label}</p>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${statusLabelColor(svc.status)}`}>
+                    <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={statusLabelColor(svc.status)}>
                       {statusLabel(svc.status)}
                     </span>
                     {svc.responseTime !== undefined && (
-                      <span className="text-xs text-gray-400">{svc.responseTime}ms</span>
+                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{svc.responseTime}ms</span>
                     )}
                     {svc.responseTime === undefined && svc.status === 'healthy' && (
-                      <span className="text-xs text-gray-400">N/A</span>
+                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>N/A</span>
                     )}
                   </div>
                 </div>
                 {/* Last checked */}
-                <div className="text-xs text-gray-400 shrink-0 text-right">
+                <div className="text-xs shrink-0 text-right" style={{ color: 'var(--text-muted)' }}>
                   <ClockIcon className="w-3.5 h-3.5 inline-block mr-0.5 -mt-0.5" />
                   {svc.checkedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
@@ -1111,20 +1118,20 @@ export default function DashboardView() {
         </div>
 
         {/* Recent Activity Feed (1/3) */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="text-base font-semibold text-gray-900">Recent Activity</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Audit log & alerts</p>
+        <div className="rounded-xl flex flex-col" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <div className="px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+            <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Recent Activity</h2>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Audit log & alerts</p>
           </div>
           <div className="flex-1 p-6 overflow-y-auto">
             {activityError || activityEvents === null ? (
               /* Empty state */
               <div className="flex flex-col items-center justify-center h-full min-h-[160px] text-center px-4">
-                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-                  <DocumentTextIcon className="w-6 h-6 text-gray-400" />
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: 'var(--bg-surface-raised)' }}>
+                  <DocumentTextIcon className="w-6 h-6" style={{ color: 'var(--text-muted)' }} />
                 </div>
-                <p className="text-sm font-medium text-gray-600">No activity yet</p>
-                <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+                <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>No activity yet</p>
+                <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
                   Audit log integration coming soon. Events will appear here automatically.
                 </p>
               </div>
@@ -1145,13 +1152,13 @@ export default function DashboardView() {
                     <li key={evt.id} className="flex items-start gap-2.5">
                       <div className="mt-0.5 shrink-0">{iconEl}</div>
                       <div className="min-w-0">
-                        <p className="text-xs text-gray-700 leading-snug">{evt.message}</p>
+                        <p className="text-xs leading-snug" style={{ color: 'var(--text-secondary)' }}>{evt.message}</p>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {evt.user && (
-                            <span className="text-xs text-gray-400 font-medium">{evt.user}</span>
+                            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{evt.user}</span>
                           )}
-                          {evt.user && <span className="text-gray-300">·</span>}
-                          <span className="text-xs text-gray-400">
+                          {evt.user && <span style={{ color: 'var(--text-muted)' }}>·</span>}
+                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                             {new Date(evt.timestamp).toLocaleTimeString([], {
                               hour: '2-digit',
                               minute: '2-digit',
@@ -1173,13 +1180,13 @@ export default function DashboardView() {
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* System Resources */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
             <div>
-              <h2 className="text-base font-semibold text-gray-900">System Resources</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Live metrics via Prometheus</p>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>System Resources</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Live metrics via Prometheus</p>
             </div>
-            <CpuChipIcon className="w-5 h-5 text-gray-300" />
+            <CpuChipIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
           </div>
           <div className="p-6 space-y-5">
             {resources.map((metric) => {
@@ -1191,30 +1198,33 @@ export default function DashboardView() {
                 : 'bg-gray-200';
               const colorText = metric.hasData && metric.value !== null
                 ? metricTextColor(metric.value)
-                : 'text-gray-400';
+                : '';
               return (
                 <div key={metric.label}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">{metric.label}</span>
-                    <span className={`text-sm font-semibold ${colorText}`}>
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{metric.label}</span>
+                    <span
+                      className={`text-sm font-semibold ${colorText}`}
+                      style={metric.hasData && metric.value !== null ? {} : { color: 'var(--text-muted)' }}
+                    >
                       {metric.hasData && metric.value !== null
                         ? `${metric.value.toFixed(1)}%`
                         : 'No data'}
                     </span>
                   </div>
                   <ProgressBar value={displayVal} colorClass={colorBar} height="h-3" />
-                  <div className="flex justify-between mt-1 text-xs text-gray-300">
+                  <div className="flex justify-between mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
                     <span>0%</span>
                     <span className="text-yellow-400">60%</span>
                     <span className="text-red-400">85%</span>
-                    <span>100%</span>
+                    <span style={{ color: 'var(--text-muted)' }}>100%</span>
                   </div>
                 </div>
               );
             })}
           </div>
           {/* Legend */}
-          <div className="px-6 pb-4 flex items-center gap-4 text-xs text-gray-400">
+          <div className="px-6 pb-4 flex items-center gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
             <span className="flex items-center gap-1">
               <span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-500" /> Normal (&lt;60%)
             </span>
@@ -1228,20 +1238,20 @@ export default function DashboardView() {
         </div>
 
         {/* Device Compliance */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Device Compliance</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Based on compliance score</p>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Device Compliance</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Based on compliance score</p>
             </div>
-            <ShieldCheckIcon className="w-5 h-5 text-gray-300" />
+            <ShieldCheckIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
           </div>
           <div className="p-6">
             {deviceCompliance === null ? (
               <div className="flex flex-col items-center justify-center h-40 text-center">
-                <ComputerDesktopIcon className="w-10 h-10 text-gray-200 mb-3" />
-                <p className="text-sm text-gray-500 font-medium">No device data</p>
-                <p className="text-xs text-gray-400 mt-1">Enroll devices to see compliance status</p>
+                <ComputerDesktopIcon className="w-10 h-10 mb-3" style={{ color: 'var(--text-muted)' }} />
+                <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>No device data</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Enroll devices to see compliance status</p>
               </div>
             ) : (
               <>
@@ -1309,22 +1319,22 @@ export default function DashboardView() {
                       label: 'No Data',
                       count: deviceCompliance.noData,
                       color: 'bg-gray-300',
-                      text: 'text-gray-500',
+                      text: '',
                       desc: 'Score unavailable',
                     },
                   ].map((row) => (
                     <div key={row.label} className="flex items-center gap-2.5">
                       <span className={`w-3 h-3 rounded-sm shrink-0 ${row.color}`} />
-                      <span className="text-sm text-gray-700 flex-1">{row.label}</span>
-                      <span className="text-xs text-gray-400">{row.desc}</span>
-                      <span className={`text-sm font-semibold ml-2 min-w-[2rem] text-right ${row.text}`}>
+                      <span className="text-sm flex-1" style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
+                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{row.desc}</span>
+                      <span className={`text-sm font-semibold ml-2 min-w-[2rem] text-right ${row.text}`} style={row.text ? {} : { color: 'var(--text-muted)' }}>
                         {row.count}
                       </span>
                     </div>
                   ))}
-                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                    <span className="text-xs text-gray-400 font-medium">Total devices</span>
-                    <span className="text-sm font-semibold text-gray-900">{deviceCompliance.total}</span>
+                  <div className="pt-2 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
+                    <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Total devices</span>
+                    <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{deviceCompliance.total}</span>
                   </div>
                 </div>
               </>

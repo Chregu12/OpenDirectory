@@ -85,18 +85,18 @@ function fmtTime(ts: string) {
   });
 }
 
-const SEVERITY_STYLES: Record<Severity, { badge: string; dot: string; label: string }> = {
-  critical: { badge: 'bg-red-100 text-red-800 border-red-200',         dot: 'bg-red-500',    label: 'Critical' },
-  high:     { badge: 'bg-orange-100 text-orange-800 border-orange-200', dot: 'bg-orange-500', label: 'High' },
-  medium:   { badge: 'bg-yellow-100 text-yellow-800 border-yellow-200', dot: 'bg-yellow-500', label: 'Medium' },
-  low:      { badge: 'bg-blue-100 text-blue-800 border-blue-200',       dot: 'bg-blue-400',   label: 'Low' },
-  info:     { badge: 'bg-gray-100 text-gray-700 border-gray-200',       dot: 'bg-gray-400',   label: 'Info' },
+const SEVERITY_STYLES: Record<Severity, { badge: React.CSSProperties; dot: string; label: string }> = {
+  critical: { badge: { background: 'var(--danger-light)', color: 'var(--danger)', border: '1px solid rgba(248,81,73,0.3)' },         dot: 'bg-red-500',    label: 'Critical' },
+  high:     { badge: { background: 'rgba(234,88,12,0.15)', color: '#f97316', border: '1px solid rgba(234,88,12,0.3)' },               dot: 'bg-orange-500', label: 'High' },
+  medium:   { badge: { background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid rgba(210,153,34,0.3)' },       dot: 'bg-yellow-500', label: 'Medium' },
+  low:      { badge: { background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid rgba(0,111,255,0.3)' },          dot: 'bg-blue-400',   label: 'Low' },
+  info:     { badge: { background: 'var(--bg-surface-raised)', color: 'var(--text-muted)', border: '1px solid var(--border)' },       dot: 'bg-gray-400',   label: 'Info' },
 };
 
 function SeverityBadge({ sev }: { sev: Severity }) {
   const s = SEVERITY_STYLES[sev] ?? SEVERITY_STYLES['info'];
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${s.badge}`}>
+    <span style={{ ...s.badge, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 9999, fontSize: 12, fontWeight: 500 }}>
       <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
       {s.label}
     </span>
@@ -108,10 +108,10 @@ function ComplianceBar({ passed, total }: { passed: number; total: number }) {
   const color = pct >= 90 ? 'bg-green-500' : pct >= 70 ? 'bg-yellow-400' : 'bg-red-400';
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+      <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-surface-raised)' }}>
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs font-medium text-gray-600 w-10 text-right">{pct}%</span>
+      <span className="text-xs font-medium w-10 text-right" style={{ color: 'var(--text-secondary)' }}>{pct}%</span>
     </div>
   );
 }
@@ -121,9 +121,9 @@ function ComplianceBar({ passed, total }: { passed: number; total: number }) {
 function LoadingSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
-      <div className="h-10 bg-gray-200 rounded-xl" />
-      <div className="h-10 bg-gray-200 rounded-xl" />
-      <div className="h-10 bg-gray-200 rounded-xl" />
+      <div className="h-10 rounded-xl" style={{ background: 'var(--bg-surface-raised)' }} />
+      <div className="h-10 rounded-xl" style={{ background: 'var(--bg-surface-raised)' }} />
+      <div className="h-10 rounded-xl" style={{ background: 'var(--bg-surface-raised)' }} />
     </div>
   );
 }
@@ -155,12 +155,12 @@ function OverviewTab({
       : 0;
 
   const kpis = [
-    { label: 'Active Alerts',  value: active.length,                      color: 'text-gray-900',   bg: 'bg-gray-50',    icon: ShieldExclamationIcon },
-    { label: 'Critical',       value: critical,                            color: 'text-red-700',    bg: 'bg-red-50',     icon: ExclamationTriangleIcon },
-    { label: 'High',           value: high,                                color: 'text-orange-700', bg: 'bg-orange-50',  icon: ShieldExclamationIcon },
-    { label: 'Medium',         value: medium,                              color: 'text-yellow-700', bg: 'bg-yellow-50',  icon: BugAntIcon },
-    { label: 'Agents Online',  value: `${agentsUp}/${agents.length}`,      color: 'text-green-700',  bg: 'bg-green-50',   icon: ServerIcon },
-    { label: 'Avg Compliance', value: `${avgCompliance}%`,                 color: 'text-blue-700',   bg: 'bg-blue-50',    icon: ShieldCheckIcon },
+    { label: 'Active Alerts',  value: active.length,                      style: { color: 'var(--text-primary)',   background: 'var(--bg-surface-raised)' },  icon: ShieldExclamationIcon },
+    { label: 'Critical',       value: critical,                            style: { color: 'var(--danger)',          background: 'var(--danger-light)' },        icon: ExclamationTriangleIcon },
+    { label: 'High',           value: high,                                style: { color: '#f97316',               background: 'rgba(234,88,12,0.15)' },       icon: ShieldExclamationIcon },
+    { label: 'Medium',         value: medium,                              style: { color: 'var(--warning)',         background: 'var(--warning-light)' },       icon: BugAntIcon },
+    { label: 'Agents Online',  value: `${agentsUp}/${agents.length}`,      style: { color: 'var(--success)',         background: 'var(--success-light)' },       icon: ServerIcon },
+    { label: 'Avg Compliance', value: `${avgCompliance}%`,                 style: { color: 'var(--accent)',          background: 'var(--accent-light)' },        icon: ShieldCheckIcon },
   ];
 
   return (
@@ -168,40 +168,40 @@ function OverviewTab({
       {/* KPI row */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {kpis.map(k => (
-          <div key={k.label} className={`${k.bg} rounded-xl p-4`}>
+          <div key={k.label} style={{ background: k.style.background, borderRadius: 12, padding: 16 }}>
             <div className="flex items-center justify-between mb-1">
-              <p className={`text-xs font-medium ${k.color}`}>{k.label}</p>
-              <k.icon className={`h-4 w-4 ${k.color}`} />
+              <p className="text-xs font-medium" style={{ color: k.style.color }}>{k.label}</p>
+              <k.icon style={{ width: 16, height: 16, color: k.style.color }} />
             </div>
-            <p className={`text-2xl font-bold ${k.color}`}>{k.value}</p>
+            <p className="text-2xl font-bold" style={{ color: k.style.color }}>{k.value}</p>
           </div>
         ))}
       </div>
 
       {/* Recent alerts */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-700">Recent Active Alerts</h3>
-          <span className="text-xs text-gray-400">{active.length} open</span>
+      <div className="rounded-xl" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Recent Active Alerts</h3>
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{active.length} open</span>
         </div>
-        <div className="divide-y divide-gray-50">
+        <div>
           {active.slice(0, 6).map(alert => (
-            <div key={alert.id} className="flex items-start gap-3 px-5 py-3 hover:bg-gray-50">
+            <div key={alert.id} className="flex items-start gap-3 px-5 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
               <div className="mt-0.5 flex-shrink-0">
                 <SeverityBadge sev={alert.severity} />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-800">{alert.rule}</p>
-                <p className="text-xs text-gray-500 truncate">{alert.description}</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{alert.rule}</p>
+                <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{alert.description}</p>
               </div>
               <div className="flex-shrink-0 text-right">
-                <p className="text-xs text-gray-500">{alert.device}</p>
-                <p className="text-xs text-gray-400">{fmtTime(alert.timestamp)}</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{alert.device}</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{fmtTime(alert.timestamp)}</p>
               </div>
             </div>
           ))}
           {active.length === 0 && (
-            <div className="flex items-center gap-2 px-5 py-6 text-green-600">
+            <div className="flex items-center gap-2 px-5 py-6" style={{ color: 'var(--success)' }}>
               <CheckCircleIcon className="w-5 h-5" />
               <span className="text-sm font-medium">No active alerts — system is clean</span>
             </div>
@@ -210,19 +210,19 @@ function OverviewTab({
       </div>
 
       {/* Compliance summary */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-700">Compliance Overview</h3>
+      <div className="rounded-xl" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
+        <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Compliance Overview</h3>
         </div>
         {compliance.length === 0 ? (
-          <div className="px-5 py-6 text-sm text-gray-400">No compliance data</div>
+          <div className="px-5 py-6 text-sm" style={{ color: 'var(--text-muted)' }}>No compliance data</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
             {compliance.map(c => (
               <div key={c.id} className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">{c.name}</span>
-                  <span className="text-xs text-gray-500">{c.passed}/{c.total} checks</span>
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{c.name}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{c.passed}/{c.total} checks</span>
                 </div>
                 <ComplianceBar passed={c.passed} total={c.total} />
               </div>
@@ -267,12 +267,13 @@ function AlertsTab({ initialAlerts }: { initialAlerts: Alert[] }) {
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-48">
-          <MagnifyingGlassIcon className="absolute left-3 inset-y-0 my-auto h-4 w-4 text-gray-400" />
+          <MagnifyingGlassIcon className="absolute left-3 inset-y-0 my-auto h-4 w-4" style={{ color: 'var(--text-muted)' }} />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search alerts…"
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full pl-9 pr-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
           />
         </div>
         <div className="flex items-center gap-1.5">
@@ -281,14 +282,15 @@ function AlertsTab({ initialAlerts }: { initialAlerts: Alert[] }) {
               key={s}
               onClick={() => setSevFilter(s)}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg capitalize transition-colors ${
-                sevFilter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                sevFilter === s ? 'bg-blue-600 text-white' : ''
               }`}
+              style={sevFilter === s ? {} : { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
             >
               {s}
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
+        <label className="flex items-center gap-1.5 text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
           <input
             type="checkbox"
             checked={showResolved}
@@ -300,44 +302,45 @@ function AlertsTab({ initialAlerts }: { initialAlerts: Alert[] }) {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
         {alerts.length === 0 ? (
-          <div className="px-5 py-10 text-center text-sm text-gray-400">No alerts detected</div>
+          <div className="px-5 py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No alerts detected</div>
         ) : (
           <table className="min-w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead style={{ background: 'var(--bg-surface-raised)', borderBottom: '1px solid var(--border)' }}>
               <tr>
                 {['Severity', 'Rule', 'Description', 'Device', 'Category', 'Time', ''].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody>
               {filtered.map(alert => (
-                <tr key={alert.id} className={`hover:bg-gray-50 transition-colors ${alert.resolved ? 'opacity-50' : ''}`}>
+                <tr key={alert.id} className={`transition-colors ${alert.resolved ? 'opacity-50' : ''}`} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td className="px-4 py-3 whitespace-nowrap"><SeverityBadge sev={alert.severity} /></td>
                   <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-gray-800 whitespace-nowrap">{alert.rule}</p>
-                    <p className="text-xs text-gray-400">Rule {alert.ruleId}</p>
+                    <p className="text-sm font-medium whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>{alert.rule}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Rule {alert.ruleId}</p>
                   </td>
                   <td className="px-4 py-3 max-w-xs">
-                    <p className="text-sm text-gray-600 truncate">{alert.description}</p>
+                    <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>{alert.description}</p>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{alert.device}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm" style={{ color: 'var(--text-secondary)' }}>{alert.device}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{alert.category}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }}>{alert.category}</span>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-400">{fmtTime(alert.timestamp)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-xs" style={{ color: 'var(--text-muted)' }}>{fmtTime(alert.timestamp)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {!alert.resolved ? (
                       <button
                         onClick={() => resolve(alert.id)}
-                        className="px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-colors"
+                        className="px-2.5 py-1 text-xs font-medium rounded-lg transition-colors"
+                        style={{ color: 'var(--success)', background: 'var(--success-light)', border: '1px solid rgba(63,185,80,0.3)' }}
                       >
                         Resolve
                       </button>
                     ) : (
-                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                      <span className="text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
                         <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" /> Resolved
                       </span>
                     )}
@@ -346,7 +349,7 @@ function AlertsTab({ initialAlerts }: { initialAlerts: Alert[] }) {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-sm text-gray-400">
+                  <td colSpan={7} className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
                     No alerts match the current filter
                   </td>
                 </tr>
@@ -363,52 +366,53 @@ function AgentsTab({ agents }: { agents: Agent[] }) {
   const activeCount = agents.filter(a => a.status === 'active').length;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Wazuh Agents</h3>
-        <span className="text-xs text-gray-400">
+    <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
+      <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Wazuh Agents</h3>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
           {activeCount}/{agents.length} active
         </span>
       </div>
       {agents.length === 0 ? (
-        <div className="px-5 py-10 text-center text-sm text-gray-400">No agents enrolled</div>
+        <div className="px-5 py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No agents enrolled</div>
       ) : (
         <table className="min-w-full">
-          <thead className="bg-gray-50 border-b border-gray-100">
+          <thead style={{ background: 'var(--bg-surface-raised)', borderBottom: '1px solid var(--border)' }}>
             <tr>
               {['Agent', 'Platform', 'Version', 'IP Address', 'Status', 'Last Active'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
+                <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody>
             {agents.map(agent => (
-              <tr key={agent.id} className="hover:bg-gray-50">
+              <tr key={agent.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <ComputerDesktopIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <ComputerDesktopIcon className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{agent.name}</p>
-                      <p className="text-xs text-gray-400">ID: {agent.id}</p>
+                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{agent.name}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>ID: {agent.id}</p>
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600">{agent.platform}</td>
+                <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-secondary)' }}>{agent.platform}</td>
                 <td className="px-4 py-3">
-                  <span className="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded">v{agent.version}</span>
+                  <span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }}>v{agent.version}</span>
                 </td>
-                <td className="px-4 py-3 text-sm font-mono text-gray-600">{agent.ip}</td>
+                <td className="px-4 py-3 text-sm font-mono" style={{ color: 'var(--text-secondary)' }}>{agent.ip}</td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                    agent.status === 'active'
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '2px 8px', borderRadius: 9999, fontSize: 12, fontWeight: 500,
+                    background: agent.status === 'active' ? 'var(--success-light)' : 'var(--bg-surface-raised)',
+                    color: agent.status === 'active' ? 'var(--success)' : 'var(--text-muted)',
+                  }}>
                     <span className={`w-1.5 h-1.5 rounded-full ${agent.status === 'active' ? 'bg-green-500' : 'bg-gray-400'}`} />
                     {agent.status === 'active' ? 'Active' : 'Disconnected'}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-xs text-gray-400">{fmtTime(agent.lastKeepAlive)}</td>
+                <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtTime(agent.lastKeepAlive)}</td>
               </tr>
             ))}
           </tbody>
@@ -422,38 +426,39 @@ function ComplianceTab({ compliance }: { compliance: Compliance[] }) {
   return (
     <div className="space-y-4">
       {compliance.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-5 py-10 text-center text-sm text-gray-400">
+        <div className="rounded-xl px-5 py-10 text-center text-sm" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
           No compliance data
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {compliance.map(c => {
             const pct   = c.total > 0 ? Math.round((c.passed / c.total) * 100) : 0;
-            const color = pct >= 90 ? 'text-green-700' : pct >= 70 ? 'text-yellow-700' : 'text-red-700';
-            const bg    = pct >= 90 ? 'bg-green-50 border-green-100' : pct >= 70 ? 'bg-yellow-50 border-yellow-100' : 'bg-red-50 border-red-100';
+            const colorStyle =
+              pct >= 90 ? { color: 'var(--success)', background: 'var(--success-light)', border: '1px solid rgba(63,185,80,0.3)' } :
+              pct >= 70 ? { color: 'var(--warning)', background: 'var(--warning-light)', border: '1px solid rgba(210,153,34,0.3)' } :
+                          { color: 'var(--danger)',  background: 'var(--danger-light)',  border: '1px solid rgba(248,81,73,0.3)' };
             const label = pct >= 90 ? 'Compliant' : pct >= 70 ? 'Partial' : 'Non-Compliant';
             const Icon  = pct >= 90 ? CheckCircleIcon : pct >= 70 ? ExclamationTriangleIcon : XCircleIcon;
 
             return (
-              <div key={c.id} className={`rounded-xl border p-5 ${bg}`}>
+              <div key={c.id} style={{ borderRadius: 12, padding: 20, background: colorStyle.background, border: colorStyle.border }}>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <h3 className={`text-base font-semibold ${color}`}>{c.name}</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{c.passed} / {c.total} checks passed</p>
+                    <h3 className="text-base font-semibold" style={{ color: colorStyle.color }}>{c.name}</h3>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{c.passed} / {c.total} checks passed</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-xl font-bold ${color}`}>{pct}%</span>
-                    <Icon className={`w-5 h-5 ${color}`} />
+                    <span className="text-xl font-bold" style={{ color: colorStyle.color }}>{pct}%</span>
+                    <Icon style={{ width: 20, height: 20, color: colorStyle.color }} />
                   </div>
                 </div>
                 <ComplianceBar passed={c.passed} total={c.total} />
                 <div className="mt-3 flex items-center justify-between">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                    pct >= 90 ? 'bg-green-100 text-green-700 border-green-200' :
-                    pct >= 70 ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                                'bg-red-100 text-red-700 border-red-200'
-                  }`}>{label}</span>
-                  <span className="text-xs text-gray-400">{c.total - c.passed} checks failing</span>
+                  <span style={{
+                    fontSize: 12, fontWeight: 500, padding: '2px 8px', borderRadius: 9999,
+                    ...colorStyle,
+                  }}>{label}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{c.total - c.passed} checks failing</span>
                 </div>
               </div>
             );
@@ -542,15 +547,15 @@ export default function SecurityView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-red-50 border border-red-100 rounded-lg flex items-center justify-center">
-            <ShieldExclamationIcon className="w-5 h-5 text-red-600" />
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'var(--danger-light)', border: '1px solid rgba(248,81,73,0.3)' }}>
+            <ShieldExclamationIcon className="w-5 h-5" style={{ color: 'var(--danger)' }} />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Security Suite</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Security Suite</h1>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
               Powered by Wazuh · {activeAlerts} active alert{activeAlerts !== 1 ? 's' : ''}
               {critAlerts > 0 && (
-                <span className="ml-1.5 text-red-600 font-medium">· {critAlerts} critical</span>
+                <span className="ml-1.5 font-medium" style={{ color: 'var(--danger)' }}>· {critAlerts} critical</span>
               )}
             </p>
           </div>
@@ -558,7 +563,8 @@ export default function SecurityView() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowWizard(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            style={{ color: '#a855f7', background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)' }}
           >
             <SparklesIcon className="w-4 h-4" />
             Security Wizard
@@ -567,7 +573,8 @@ export default function SecurityView() {
             href="https://siem.heusser.local"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface-raised)', border: '1px solid var(--border)' }}
           >
             <LinkIcon className="w-4 h-4" />
             Open Wazuh
@@ -576,21 +583,22 @@ export default function SecurityView() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <nav className="flex border-b border-gray-100 px-5">
+      <div className="rounded-xl" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
+        <nav className="flex px-5" style={{ borderBottom: '1px solid var(--border)' }}>
           {tabs.map(t => (
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
               className={`py-3 px-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
                 activeTab === t.key
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-blue-500'
+                  : 'border-transparent'
               }`}
+              style={{ color: activeTab === t.key ? 'var(--accent)' : 'var(--text-muted)' }}
             >
               {t.label}
               {t.badge !== undefined && t.badge > 0 && (
-                <span className="bg-red-100 text-red-700 text-xs font-medium px-1.5 py-0.5 rounded-full">
+                <span style={{ background: 'var(--danger-light)', color: 'var(--danger)', fontSize: 12, fontWeight: 500, padding: '2px 6px', borderRadius: 9999 }}>
                   {t.badge}
                 </span>
               )}
