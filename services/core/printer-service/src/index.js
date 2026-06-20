@@ -16,6 +16,8 @@ let PrinterDeployment; try { PrinterDeployment = require('./services/deployment'
 const PrinterAgentService = require('./services/PrinterAgentService');
 const QuotaManager = require('./services/quota');
 const PrintAnalytics = require('./services/analytics');
+const ScanDestinationManager = require('./services/scanDestinationManager');
+const PrintPoolManager = require('./services/printPool');
 
 const app = express();
 const server = createServer(app);
@@ -63,6 +65,21 @@ const permissions = new PermissionManager();
 const deployment = new PrinterDeployment();
 const quota = new QuotaManager();
 const analytics = new PrintAnalytics();
+
+// ─── PostgreSQL Pool ─────────────────────────────────────────────────────────
+const { Pool } = require('pg');
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgres://opendirectory:changeme@localhost/printers',
+});
+
+// ─── Scan Destination Manager ────────────────────────────────────────────────
+const scanDestMgr = new ScanDestinationManager({ db });
+scanDestMgr.initDatabase().catch(err => logger.warn('scan_destinations init:', err.message));
+scanner.setDestinationManager(scanDestMgr);
+
+// ─── Print Pool Manager ──────────────────────────────────────────────────────
+const printPoolMgr = new PrintPoolManager({ db, cupsService: cups, printerManager });
+printPoolMgr.initDatabase().catch(err => logger.warn('print_pools init:', err.message));
 
 // PrinterAgentService – generic server-push printer management via device-service WebSocket
 // deviceService is injected when available (passed via environment or inter-service communication)
@@ -723,6 +740,208 @@ app.post('/api/scan', async (req, res) => {
     res.json({ success: true, scanJob });
   } catch (error) {
     logger.error('Scan error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Scan Destination Routes ─────────────────────────────────────────────────
+
+// GET /api/scan-destinations — list all (admin)
+app.get('/api/scan-destinations', async (req, res) => {
+  try {
+    const destinations = await scanDestMgr.listAll();
+    res.json({ success: true, destinations });
+  } catch (error) {
+    logger.error('List scan destinations error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/scan-destinations/user/:userId
+app.get('/api/scan-destinations/user/:userId', async (req, res) => {
+  try {
+    const destination = await scanDestMgr.getUserDestination(req.params.userId);
+    if (!destination) return res.status(404).json({ error: 'No destination configured for this user' });
+    res.json({ success: true, destination });
+  } catch (error) {
+    logger.error('Get user scan destination error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/scan-destinations/user/:userId
+app.put('/api/scan-destinations/user/:userId', async (req, res) => {
+  try {
+    const destination = await scanDestMgr.setUserDestination(req.params.userId, req.body);
+    res.json({ success: true, destination });
+  } catch (error) {
+    logger.error('Set user scan destination error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /api/scan-destinations/user/:userId
+app.delete('/api/scan-destinations/user/:userId', async (req, res) => {
+  try {
+    const deleted = await scanDestMgr.deleteDestination('user', req.params.userId);
+    if (!deleted) return res.status(404).json({ error: 'Destination not found' });
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Delete user scan destination error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/scan-destinations/group/:groupId
+app.get('/api/scan-destinations/group/:groupId', async (req, res) => {
+  try {
+    const destination = await scanDestMgr.getGroupDestination(req.params.groupId);
+    if (!destination) return res.status(404).json({ error: 'No destination configured for this group' });
+    res.json({ success: true, destination });
+  } catch (error) {
+    logger.error('Get group scan destination error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/scan-destinations/group/:groupId
+app.put('/api/scan-destinations/group/:groupId', async (req, res) => {
+  try {
+    const destination = await scanDestMgr.setGroupDestination(req.params.groupId, req.body);
+    res.json({ success: true, destination });
+  } catch (error) {
+    logger.error('Set group scan destination error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /api/scan-destinations/group/:groupId
+app.delete('/api/scan-destinations/group/:groupId', async (req, res) => {
+  try {
+    const deleted = await scanDestMgr.deleteDestination('group', req.params.groupId);
+    if (!deleted) return res.status(404).json({ error: 'Destination not found' });
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Delete group scan destination error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/scan/with-destination — scan + auto-resolve destination for user
+app.post('/api/scan/with-destination', async (req, res) => {
+  try {
+    const {
+      scannerId,
+      userId,
+      userGroups = [],
+      format = 'pdf',
+      resolution = 300,
+      color = true,
+      duplex = false,
+      ocr = false,
+    } = req.body;
+
+    const scanJob = await scanner.scan({
+      scannerId,
+      userId,
+      userGroups,
+      format,
+      resolution,
+      color,
+      duplex,
+      ocr,
+    });
+
+    res.json({ success: true, scanJob });
+  } catch (error) {
+    logger.error('Scan with destination error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Print Pool Routes ───────────────────────────────────────────────────────
+
+// GET /api/print-pools — list all pools
+app.get('/api/print-pools', async (req, res) => {
+  try {
+    const pools = await printPoolMgr.listPools();
+    res.json({ success: true, pools });
+  } catch (error) {
+    logger.error('List print pools error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/print-pools — create pool
+app.post('/api/print-pools', async (req, res) => {
+  try {
+    const { name, displayName, algorithm, description, cupsQueueName } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    const pool = await printPoolMgr.createPool({ name, displayName, algorithm, description, cupsQueueName });
+    res.status(201).json({ success: true, pool });
+  } catch (error) {
+    logger.error('Create print pool error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/print-pools/:poolId — get pool with members
+app.get('/api/print-pools/:poolId', async (req, res) => {
+  try {
+    const pool = await printPoolMgr.getPool(req.params.poolId);
+    if (!pool) return res.status(404).json({ error: 'Pool not found' });
+    res.json({ success: true, pool });
+  } catch (error) {
+    logger.error('Get print pool error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /api/print-pools/:poolId — delete pool
+app.delete('/api/print-pools/:poolId', async (req, res) => {
+  try {
+    const deleted = await printPoolMgr.deletePool(req.params.poolId);
+    if (!deleted) return res.status(404).json({ error: 'Pool not found' });
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Delete print pool error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/print-pools/:poolId/members — add member
+app.post('/api/print-pools/:poolId/members', async (req, res) => {
+  try {
+    const { printerId, printerName, printerUri, weight, priority } = req.body;
+    if (!printerId) return res.status(400).json({ error: 'printerId is required' });
+    const member = await printPoolMgr.addMember(req.params.poolId, { printerId, printerName, printerUri, weight, priority });
+    res.status(201).json({ success: true, member });
+  } catch (error) {
+    logger.error('Add pool member error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /api/print-pools/:poolId/members/:printerId — remove member
+app.delete('/api/print-pools/:poolId/members/:printerId', async (req, res) => {
+  try {
+    const removed = await printPoolMgr.removeMember(req.params.poolId, req.params.printerId);
+    if (!removed) return res.status(404).json({ error: 'Member not found' });
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Remove pool member error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/print-pools/:poolId/test-route — dry run routing (no job increment)
+app.post('/api/print-pools/:poolId/test-route', async (req, res) => {
+  try {
+    const member = await printPoolMgr.selectPrinter(req.params.poolId);
+    if (!member) return res.status(404).json({ error: 'No active members in pool' });
+    res.json({ success: true, selectedMember: member });
+  } catch (error) {
+    logger.error('Test route error:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -29,7 +29,7 @@ import PrinterSetupWizard from '@/components/setup/PrinterSetupWizard';
 type PrinterProtocol = 'IPP' | 'LPD' | 'SMB';
 type PrinterStatus   = 'online' | 'offline' | 'error';
 type JobStatus       = 'pending' | 'printing' | 'completed' | 'failed' | 'cancelled';
-type PrinterTab      = 'printers' | 'scanners' | 'jobs' | 'quotas';
+type PrinterTab      = 'printers' | 'scanners' | 'jobs' | 'quotas' | 'scan-destinations' | 'print-pools';
 
 interface Printer {
   id: string;
@@ -1360,10 +1360,12 @@ export default function PrintersView() {
   // ── Tab bar ──────────────────────────────────────────────────────────────
 
   const TABS: { id: PrinterTab; label: string; count?: number }[] = [
-    { id: 'printers', label: 'Printers',   count: printers.length },
-    { id: 'scanners', label: 'Scanners',   count: scanners.length },
-    { id: 'jobs',     label: 'Print Jobs', count: jobs.length },
-    { id: 'quotas',   label: 'Quotas',     count: quotas.length },
+    { id: 'printers',          label: 'Printers',           count: printers.length },
+    { id: 'scanners',          label: 'Scanners',           count: scanners.length },
+    { id: 'jobs',              label: 'Print Jobs',         count: jobs.length },
+    { id: 'quotas',            label: 'Quotas',             count: quotas.length },
+    { id: 'scan-destinations', label: 'Scan Destinations' },
+    { id: 'print-pools',       label: 'Print Pools' },
   ];
 
   if (loading) {
@@ -1790,6 +1792,12 @@ export default function PrintersView() {
           )
       )}
 
+      {/* ── SCAN DESTINATIONS TAB ─────────────────────────────────────────── */}
+      {activeTab === 'scan-destinations' && <ScanDestinationsTab />}
+
+      {/* ── PRINT POOLS TAB ──────────────────────────────────────────────── */}
+      {activeTab === 'print-pools' && <PrintPoolsTab />}
+
       {/* Modals */}
       {showAddPrinter && (
         <AddPrinterWizard
@@ -1813,6 +1821,839 @@ export default function PrintersView() {
         />
       )}
       {showSetupWizard && <PrinterSetupWizard onClose={() => setShowSetupWizard(false)} />}
+    </div>
+  );
+}
+
+// ─── Types for new features ──────────────────────────────────────────────────
+
+interface ScanDestination {
+  id: string;
+  entityType: 'user' | 'group';
+  entityId: string;
+  type: string;
+  smbServer?: string;
+  smbShare?: string;
+  smbPath?: string;
+  smbUsername?: string;
+  smbDomain?: string;
+  localPath?: string;
+  label?: string;
+}
+
+interface DestinationFormState {
+  entityType: 'user' | 'group';
+  entityId: string;
+  type: 'smb' | 'local';
+  smbServer: string;
+  smbShare: string;
+  smbPath: string;
+  smbUsername: string;
+  smbPassword: string;
+  smbDomain: string;
+  localPath: string;
+  label: string;
+}
+
+const BLANK_DEST_FORM: DestinationFormState = {
+  entityType: 'user',
+  entityId: '',
+  type: 'smb',
+  smbServer: '',
+  smbShare: '',
+  smbPath: '',
+  smbUsername: '',
+  smbPassword: '',
+  smbDomain: '',
+  localPath: '',
+  label: '',
+};
+
+interface PrintPool {
+  id: string;
+  name: string;
+  display_name?: string;
+  description?: string;
+  algorithm: string;
+  active: boolean;
+  member_count: number;
+}
+
+interface PoolMember {
+  id: string;
+  pool_id: string;
+  printer_id: string;
+  printer_name?: string;
+  printer_uri?: string;
+  weight: number;
+  priority: number;
+  active: boolean;
+  current_jobs: number;
+  total_jobs: number;
+  last_used_at?: string;
+}
+
+interface PoolWithMembers extends PrintPool {
+  members: PoolMember[];
+}
+
+// ─── Scan Destinations Tab ───────────────────────────────────────────────────
+
+export function ScanDestinationsTab() {
+  const [destinations, setDestinations] = useState<ScanDestination[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showDialog, setShowDialog] = useState(false);
+  const [editTarget, setEditTarget] = useState<ScanDestination | null>(null);
+  const [form, setForm] = useState<DestinationFormState>(BLANK_DEST_FORM);
+  const [saving, setSaving] = useState(false);
+
+  const BASE = '/api/printer/scan-destinations';
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(BASE);
+      const data = await res.json();
+      setDestinations(data.destinations ?? []);
+    } catch {
+      toast.error('Failed to load scan destinations');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openAdd = () => {
+    setEditTarget(null);
+    setForm(BLANK_DEST_FORM);
+    setShowDialog(true);
+  };
+
+  const openEdit = (dest: ScanDestination) => {
+    setEditTarget(dest);
+    setForm({
+      entityType: dest.entityType,
+      entityId:   dest.entityId,
+      type:       (dest.type as 'smb' | 'local') || 'smb',
+      smbServer:  dest.smbServer ?? '',
+      smbShare:   dest.smbShare ?? '',
+      smbPath:    dest.smbPath ?? '',
+      smbUsername: dest.smbUsername ?? '',
+      smbPassword: '',
+      smbDomain:  dest.smbDomain ?? '',
+      localPath:  dest.localPath ?? '',
+      label:      dest.label ?? '',
+    });
+    setShowDialog(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.entityId.trim()) { toast.error('Entity ID is required'); return; }
+    setSaving(true);
+    try {
+      const url = form.entityType === 'user'
+        ? `${BASE}/user/${encodeURIComponent(form.entityId)}`
+        : `${BASE}/group/${encodeURIComponent(form.entityId)}`;
+      const body: Record<string, string> = {
+        type: form.type,
+        smbServer: form.smbServer,
+        smbShare: form.smbShare,
+        smbPath: form.smbPath,
+        smbUsername: form.smbUsername,
+        smbDomain: form.smbDomain,
+        localPath: form.localPath,
+        label: form.label,
+      };
+      if (form.smbPassword) body.smbPassword = form.smbPassword;
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed');
+      toast.success('Destination saved');
+      setShowDialog(false);
+      load();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (dest: ScanDestination) => {
+    if (!confirm(`Delete destination for ${dest.entityType} "${dest.entityId}"?`)) return;
+    try {
+      const url = dest.entityType === 'user'
+        ? `${BASE}/user/${encodeURIComponent(dest.entityId)}`
+        : `${BASE}/group/${encodeURIComponent(dest.entityId)}`;
+      const res = await fetch(url, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Delete failed');
+      toast.success('Destination deleted');
+      load();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <ArrowPathIcon className="w-6 h-6 text-gray-400 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">Configure per-user and per-group scan destinations (SMB or local).</p>
+        <button
+          onClick={openAdd}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+        >
+          <PlusIcon className="w-4 h-4" />
+          Add Destination
+        </button>
+      </div>
+
+      {destinations.length === 0 ? (
+        <EmptyState
+          icon={FolderIcon}
+          title="No scan destinations configured"
+          description="Add per-user or per-group SMB / local destinations for scanned files."
+        />
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['Type', 'Entity ID', 'Destination', 'Server / Share', 'Path', 'Label', 'Actions'].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {destinations.map(dest => (
+                <tr key={dest.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${dest.entityType === 'user' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                      {dest.entityType}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{dest.entityId}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${dest.type === 'smb' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700'}`}>
+                      {dest.type?.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-gray-600 text-xs">
+                    {dest.smbServer ? `//${dest.smbServer}/${dest.smbShare}` : dest.localPath ?? '—'}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{dest.smbPath || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600">{dest.label || '—'}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEdit(dest)}
+                        className="text-xs px-2 py-1 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg"
+                      >Edit</button>
+                      <button
+                        onClick={() => handleDelete(dest)}
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        <TrashIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Add / Edit Dialog */}
+      {showDialog && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">{editTarget ? 'Edit' : 'Add'} Scan Destination</h2>
+              <button onClick={() => setShowDialog(false)} className="p-1 rounded hover:bg-gray-100">
+                <XMarkIcon className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* Entity Type */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Entity Type</label>
+                <select
+                  value={form.entityType}
+                  onChange={e => setForm(f => ({ ...f, entityType: e.target.value as 'user' | 'group' }))}
+                  disabled={!!editTarget}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                >
+                  <option value="user">User</option>
+                  <option value="group">Group</option>
+                </select>
+              </div>
+
+              {/* Entity ID */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Entity ID</label>
+                <input
+                  type="text"
+                  placeholder="user@domain.com or group-name"
+                  value={form.entityId}
+                  onChange={e => setForm(f => ({ ...f, entityId: e.target.value }))}
+                  disabled={!!editTarget}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                />
+              </div>
+
+              {/* Destination Type */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Destination Type</label>
+                <select
+                  value={form.type}
+                  onChange={e => setForm(f => ({ ...f, type: e.target.value as 'smb' | 'local' }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="smb">SMB</option>
+                  <option value="local">Local</option>
+                </select>
+              </div>
+
+              {/* Label */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Label</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Marketing Scans"
+                  value={form.label}
+                  onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {form.type === 'smb' && (
+                <>
+                  {/* SMB Server */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">SMB Server</label>
+                    <input
+                      type="text"
+                      placeholder="192.168.1.10"
+                      value={form.smbServer}
+                      onChange={e => setForm(f => ({ ...f, smbServer: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* SMB Share */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Share Name</label>
+                    <input
+                      type="text"
+                      placeholder="scans"
+                      value={form.smbShare}
+                      onChange={e => setForm(f => ({ ...f, smbShare: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* SMB Path */}
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-xs font-medium text-gray-600">Sub-path (optional)</label>
+                    <input
+                      type="text"
+                      placeholder="Marketing/Incoming"
+                      value={form.smbPath}
+                      onChange={e => setForm(f => ({ ...f, smbPath: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* SMB Username */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Username</label>
+                    <input
+                      type="text"
+                      placeholder="scanuser"
+                      value={form.smbUsername}
+                      onChange={e => setForm(f => ({ ...f, smbUsername: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* SMB Password */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Password{editTarget ? ' (leave blank to keep)' : ''}</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={form.smbPassword}
+                      onChange={e => setForm(f => ({ ...f, smbPassword: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* SMB Domain */}
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-xs font-medium text-gray-600">Domain (optional)</label>
+                    <input
+                      type="text"
+                      placeholder="CORP"
+                      value={form.smbDomain}
+                      onChange={e => setForm(f => ({ ...f, smbDomain: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </>
+              )}
+
+              {form.type === 'local' && (
+                <div className="space-y-1 col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Local Path</label>
+                  <input
+                    type="text"
+                    placeholder="/mnt/storage/scans"
+                    value={form.localPath}
+                    onChange={e => setForm(f => ({ ...f, localPath: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowDialog(false)}
+                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+              >Cancel</button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              >{saving ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Print Pools Tab ─────────────────────────────────────────────────────────
+
+export function PrintPoolsTab() {
+  const [pools, setPools]               = useState<PrintPool[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [selectedPool, setSelectedPool] = useState<PoolWithMembers | null>(null);
+  const [loadingPool, setLoadingPool]   = useState(false);
+  const [showAddPool, setShowAddPool]   = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [poolForm, setPoolForm] = useState({ name: '', displayName: '', algorithm: 'round_robin', description: '' });
+  const [memberForm, setMemberForm] = useState({ printerId: '', printerName: '', printerUri: '', weight: '1', priority: '100' });
+  const [saving, setSaving] = useState(false);
+
+  const BASE = '/api/printer/print-pools';
+
+  const loadPools = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(BASE);
+      const data = await res.json();
+      setPools(data.pools ?? []);
+    } catch {
+      toast.error('Failed to load print pools');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadPools(); }, [loadPools]);
+
+  const loadPool = async (poolId: string) => {
+    setLoadingPool(true);
+    try {
+      const res = await fetch(`${BASE}/${poolId}`);
+      const data = await res.json();
+      setSelectedPool(data.pool ?? null);
+    } catch {
+      toast.error('Failed to load pool details');
+    } finally {
+      setLoadingPool(false);
+    }
+  };
+
+  const handleCreatePool = async () => {
+    if (!poolForm.name.trim()) { toast.error('Pool name is required'); return; }
+    setSaving(true);
+    try {
+      const res = await fetch(BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(poolForm),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed');
+      toast.success('Pool created');
+      setShowAddPool(false);
+      setPoolForm({ name: '', displayName: '', algorithm: 'round_robin', description: '' });
+      loadPools();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeletePool = async (pool: PrintPool) => {
+    if (!confirm(`Delete pool "${pool.display_name || pool.name}"?`)) return;
+    try {
+      const res = await fetch(`${BASE}/${pool.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Delete failed');
+      toast.success('Pool deleted');
+      if (selectedPool?.id === pool.id) setSelectedPool(null);
+      loadPools();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleAddMember = async () => {
+    if (!selectedPool || !memberForm.printerId.trim()) { toast.error('Printer ID is required'); return; }
+    setSaving(true);
+    try {
+      const body = {
+        printerId: memberForm.printerId,
+        printerName: memberForm.printerName,
+        printerUri: memberForm.printerUri,
+        weight: parseInt(memberForm.weight, 10) || 1,
+        priority: parseInt(memberForm.priority, 10) || 100,
+      };
+      const res = await fetch(`${BASE}/${selectedPool.id}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Add member failed');
+      toast.success('Member added');
+      setShowAddMember(false);
+      setMemberForm({ printerId: '', printerName: '', printerUri: '', weight: '1', priority: '100' });
+      loadPool(selectedPool.id);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveMember = async (member: PoolMember) => {
+    if (!selectedPool || !confirm(`Remove "${member.printer_name || member.printer_id}" from pool?`)) return;
+    try {
+      const res = await fetch(`${BASE}/${selectedPool.id}/members/${encodeURIComponent(member.printer_id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Remove failed');
+      toast.success('Member removed');
+      loadPool(selectedPool.id);
+      loadPools();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleTestRoute = async (poolId: string) => {
+    try {
+      const res = await fetch(`${BASE}/${poolId}/test-route`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Route test failed');
+      const m = data.selectedMember;
+      toast.success(`Would route to: ${m.printer_name || m.printer_id}`, { duration: 4000 });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const ALGO_LABELS: Record<string, string> = {
+    round_robin: 'Round Robin',
+    least_jobs:  'Least Jobs',
+    priority:    'Priority',
+    failover:    'Failover',
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <ArrowPathIcon className="w-6 h-6 text-gray-400 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">Group printers into pools with automatic job routing algorithms.</p>
+        <button
+          onClick={() => setShowAddPool(true)}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+        >
+          <PlusIcon className="w-4 h-4" />
+          Add Pool
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Pool list */}
+        <div className="lg:col-span-1 space-y-2">
+          {pools.length === 0 ? (
+            <EmptyState
+              icon={PrinterIcon}
+              title="No print pools"
+              description="Create a pool to group printers for load balancing or failover."
+            />
+          ) : (
+            pools.map(pool => (
+              <div
+                key={pool.id}
+                onClick={() => loadPool(pool.id)}
+                className={`p-4 rounded-xl border cursor-pointer transition-shadow hover:shadow-sm ${
+                  selectedPool?.id === pool.id ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900 text-sm">{pool.display_name || pool.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{ALGO_LABELS[pool.algorithm] ?? pool.algorithm}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block w-2 h-2 rounded-full ${pool.active ? 'bg-green-500' : 'bg-gray-400'}`} />
+                    <button
+                      onClick={e => { e.stopPropagation(); handleTestRoute(pool.id); }}
+                      className="text-xs px-2 py-1 text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg"
+                      title="Test routing"
+                    >Test</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDeletePool(pool); }}
+                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <TrashIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">{pool.member_count} member{pool.member_count !== 1 ? 's' : ''}</p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Pool detail */}
+        <div className="lg:col-span-2">
+          {loadingPool ? (
+            <div className="flex items-center justify-center h-40">
+              <ArrowPathIcon className="w-6 h-6 text-gray-400 animate-spin" />
+            </div>
+          ) : selectedPool ? (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <h3 className="font-medium text-gray-900">{selectedPool.display_name || selectedPool.name}</h3>
+                <button
+                  onClick={() => setShowAddMember(true)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  Add Member
+                </button>
+              </div>
+              {selectedPool.members.length === 0 ? (
+                <div className="p-8 text-center text-sm text-gray-500">No members yet. Add a printer to this pool.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      {['Printer', 'Weight', 'Priority', 'Current Jobs', 'Total Jobs', ''].map(h => (
+                        <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {selectedPool.members.map(m => (
+                      <tr key={m.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{m.printer_name || m.printer_id}</p>
+                          {m.printer_uri && <p className="text-xs text-gray-500 font-mono">{m.printer_uri}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{m.weight}</td>
+                        <td className="px-4 py-3 text-gray-600">{m.priority}</td>
+                        <td className="px-4 py-3">
+                          <span className={`font-medium ${m.current_jobs > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
+                            {m.current_jobs}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{m.total_jobs}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => handleRemoveMember(m)}
+                            className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                          >
+                            <TrashIcon className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+              Select a pool to view its members.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add Pool Dialog */}
+      {showAddPool && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Add Print Pool</h2>
+              <button onClick={() => setShowAddPool(false)} className="p-1 rounded hover:bg-gray-100">
+                <XMarkIcon className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Name (unique identifier)</label>
+                <input
+                  type="text"
+                  placeholder="floor2-pool"
+                  value={poolForm.name}
+                  onChange={e => setPoolForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Display Name</label>
+                <input
+                  type="text"
+                  placeholder="Floor 2 Printer Pool"
+                  value={poolForm.displayName}
+                  onChange={e => setPoolForm(f => ({ ...f, displayName: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Algorithm</label>
+                <select
+                  value={poolForm.algorithm}
+                  onChange={e => setPoolForm(f => ({ ...f, algorithm: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="round_robin">Round Robin</option>
+                  <option value="least_jobs">Least Jobs</option>
+                  <option value="priority">Priority</option>
+                  <option value="failover">Failover</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Description (optional)</label>
+                <input
+                  type="text"
+                  placeholder="Printers on floor 2"
+                  value={poolForm.description}
+                  onChange={e => setPoolForm(f => ({ ...f, description: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setShowAddPool(false)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">Cancel</button>
+              <button
+                onClick={handleCreatePool}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              >{saving ? 'Creating…' : 'Create Pool'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Member Dialog */}
+      {showAddMember && selectedPool && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Add Pool Member</h2>
+              <button onClick={() => setShowAddMember(false)} className="p-1 rounded hover:bg-gray-100">
+                <XMarkIcon className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Printer ID</label>
+                <input
+                  type="text"
+                  placeholder="printer-uuid-or-cups-name"
+                  value={memberForm.printerId}
+                  onChange={e => setMemberForm(f => ({ ...f, printerId: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Printer Name (display)</label>
+                <input
+                  type="text"
+                  placeholder="HP LaserJet 4100"
+                  value={memberForm.printerName}
+                  onChange={e => setMemberForm(f => ({ ...f, printerName: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Printer URI (optional)</label>
+                <input
+                  type="text"
+                  placeholder="ipp://192.168.1.20/ipp/print"
+                  value={memberForm.printerUri}
+                  onChange={e => setMemberForm(f => ({ ...f, printerUri: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Weight</label>
+                  <input
+                    type="number" min="1"
+                    value={memberForm.weight}
+                    onChange={e => setMemberForm(f => ({ ...f, weight: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Priority</label>
+                  <input
+                    type="number" min="1"
+                    value={memberForm.priority}
+                    onChange={e => setMemberForm(f => ({ ...f, priority: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setShowAddMember(false)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">Cancel</button>
+              <button
+                onClick={handleAddMember}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              >{saving ? 'Adding…' : 'Add Member'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
