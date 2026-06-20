@@ -77,17 +77,17 @@ function ConnectWizard({ app, onClose, onConnected }: { app: SsoApp; onClose: ()
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+      <div className="rounded-xl shadow-xl max-w-lg w-full" style={{ background: 'var(--bg-surface)' }} onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+        <div className="p-6 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3">
             <span className="text-3xl">{app.logo}</span>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">{app.name} verbinden</h2>
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{app.name} verbinden</h2>
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PROTOCOL_BADGE[app.protocol] ?? 'bg-gray-100 text-gray-600'}`}>{app.protocol.toUpperCase()}</span>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
+          <button onClick={onClose} style={{ color: 'var(--text-muted)' }} className="hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
         </div>
 
         {/* Step indicator */}
@@ -100,12 +100,12 @@ function ConnectWizard({ app, onClose, onConnected }: { app: SsoApp; onClose: ()
         <div className="p-6">
           {step === 1 && (
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">Schritt 1: Protokoll</h3>
-              <p className="text-sm text-gray-600 mb-4">{app.description}</p>
-              <div className="bg-gray-50 rounded-lg p-4 text-sm">
-                <p className="font-medium text-gray-700 mb-1">Authentifizierungsprotokoll:</p>
+              <h3 className="font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Schritt 1: Protokoll</h3>
+              <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>{app.description}</p>
+              <div className="rounded-lg p-4 text-sm" style={{ background: 'var(--bg-surface-raised)' }}>
+                <p className="font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Authentifizierungsprotokoll:</p>
                 <span className={`px-3 py-1 rounded-full font-semibold text-sm ${PROTOCOL_BADGE[app.protocol] ?? ''}`}>{app.protocol.toUpperCase()}</span>
-                <p className="mt-3 text-gray-600">Scopes: <span className="font-mono text-xs">{app.defaultScopes.join(', ') || 'n/a'}</span></p>
+                <p className="mt-3" style={{ color: 'var(--text-secondary)' }}>Scopes: <span className="font-mono text-xs">{app.defaultScopes.join(', ') || 'n/a'}</span></p>
               </div>
               <button onClick={() => setStep(2)} className="mt-4 w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Weiter</button>
             </div>
@@ -113,11 +113,11 @@ function ConnectWizard({ app, onClose, onConnected }: { app: SsoApp; onClose: ()
 
           {step === 2 && (
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">Schritt 2: App-URL eingeben</h3>
-              <p className="text-sm text-gray-600 mb-3">Gib die URL deiner {app.name}-Installation ein.</p>
-              <input value={appUrl} onChange={e => setAppUrl(e.target.value)} placeholder={app.defaultRedirectUriPattern} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <h3 className="font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Schritt 2: App-URL eingeben</h3>
+              <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>Gib die URL deiner {app.name}-Installation ein.</p>
+              <input value={appUrl} onChange={e => setAppUrl(e.target.value)} placeholder={app.defaultRedirectUriPattern} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }} />
               <div className="flex gap-2">
-                <button onClick={() => setStep(1)} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Zurück</button>
+                <button onClick={() => setStep(1)} className="flex-1 py-2 rounded-lg text-sm hover:bg-gray-50" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Zurück</button>
                 <button onClick={() => setStep(3)} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Weiter</button>
               </div>
             </div>
@@ -125,13 +125,13 @@ function ConnectWizard({ app, onClose, onConnected }: { app: SsoApp; onClose: ()
 
           {step === 3 && (
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">Schritt 3: Konfiguration kopieren</h3>
-              <p className="text-sm text-gray-600 mb-3">Füge diese Konfiguration in {app.name} ein.</p>
+              <h3 className="font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Schritt 3: Konfiguration kopieren</h3>
+              <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>Füge diese Konfiguration in {app.name} ein.</p>
               <div className="bg-gray-900 text-gray-100 rounded-lg p-4 text-xs font-mono overflow-auto max-h-40 mb-4">
                 {JSON.stringify(app.configTemplate, null, 2)}
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setStep(2)} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Zurück</button>
+                <button onClick={() => setStep(2)} className="flex-1 py-2 rounded-lg text-sm hover:bg-gray-50" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Zurück</button>
                 <button onClick={() => { navigator.clipboard?.writeText(JSON.stringify(app.configTemplate, null, 2)).catch(() => {}); toast.success('Kopiert!'); setStep(4); }} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Kopieren &amp; Weiter</button>
               </div>
             </div>
@@ -139,16 +139,16 @@ function ConnectWizard({ app, onClose, onConnected }: { app: SsoApp; onClose: ()
 
           {step === 4 && (
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">Schritt 4: Verbindung testen</h3>
-              <p className="text-sm text-gray-600 mb-4">Teste die Verbindung zu {app.name}.</p>
+              <h3 className="font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Schritt 4: Verbindung testen</h3>
+              <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Teste die Verbindung zu {app.name}.</p>
               {testPassed ? (
-                <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-100 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 rounded-lg p-3 mb-4" style={{ color: 'var(--success)', background: 'var(--success-light)', border: '1px solid var(--border)' }}>
                   <CheckCircleIcon className="w-5 h-5 shrink-0" />
                   <span className="text-sm font-medium">Verbindung erfolgreich!</span>
                 </div>
               ) : null}
               <div className="flex gap-2">
-                <button onClick={() => setStep(3)} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Zurück</button>
+                <button onClick={() => setStep(3)} className="flex-1 py-2 rounded-lg text-sm hover:bg-gray-50" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Zurück</button>
                 <button onClick={handleTest} disabled={testing || testPassed} className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-60">
                   {testing ? 'Teste…' : testPassed ? 'Verbunden!' : 'Verbindung testen'}
                 </button>
@@ -183,7 +183,7 @@ function SsoCatalogTab() {
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(8)].map((_, i) => <div key={i} className="h-36 bg-gray-100 rounded-xl animate-pulse" />)}
+        {[...Array(8)].map((_, i) => <div key={i} className="h-36 rounded-xl animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />)}
       </div>
     );
   }
@@ -194,18 +194,19 @@ function SsoCatalogTab() {
         {catalog.map(app => {
           const isConnected = connected.has(app.id);
           return (
-            <div key={app.id} className={`bg-white border rounded-xl p-4 hover:shadow-md transition-all ${isConnected ? 'border-green-300 bg-green-50' : 'border-gray-100'}`}>
+            <div key={app.id} className="rounded-xl p-4 hover:shadow-md transition-all" style={{ background: isConnected ? 'var(--success-light)' : 'var(--bg-surface)', border: isConnected ? '1px solid var(--success)' : '1px solid var(--border)' }}>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-2xl">{app.logo}</span>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 truncate">{app.name}</p>
+                  <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{app.name}</p>
                   <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${PROTOCOL_BADGE[app.protocol] ?? 'bg-gray-100 text-gray-600'}`}>{app.protocol.toUpperCase()}</span>
                 </div>
               </div>
-              <p className="text-xs text-gray-500 mb-3 line-clamp-2">{app.description}</p>
+              <p className="text-xs mb-3 line-clamp-2" style={{ color: 'var(--text-muted)' }}>{app.description}</p>
               <button
                 onClick={() => !isConnected && setSelectedApp(app)}
-                className={`w-full py-1.5 text-xs font-medium rounded-lg transition-colors ${isConnected ? 'bg-green-100 text-green-700 cursor-default' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                className={`w-full py-1.5 text-xs font-medium rounded-lg transition-colors ${isConnected ? 'cursor-default' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                style={isConnected ? { color: 'var(--success)', background: 'var(--success-light)' } : undefined}
               >
                 {isConnected ? '✓ Verbunden' : 'Verbinden'}
               </button>
@@ -216,12 +217,12 @@ function SsoCatalogTab() {
 
       {connected.size > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Verbundene Apps ({connected.size})</h3>
+          <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>Verbundene Apps ({connected.size})</h3>
           <div className="flex flex-wrap gap-2">
             {[...connected].map(id => {
               const a = catalog.find(c => c.id === id);
               return a ? (
-                <span key={id} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full text-xs font-medium text-green-700">
+                <span key={id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium" style={{ color: 'var(--success)', background: 'var(--success-light)', border: '1px solid var(--border)' }}>
                   {a.logo} {a.name}
                   <CheckCircleIcon className="w-3.5 h-3.5" />
                 </span>
@@ -564,20 +565,20 @@ function DeployModal({ app, onClose }: { app: ClientApp; onClose: () => void }) 
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col" style={{ background: 'var(--bg-surface)' }} onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 shrink-0">
+        <div className="p-6 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 ${colors.bg} rounded-lg flex items-center justify-center`}>
                 <app.icon className={`w-6 h-6 ${colors.text}`} />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{app.name}</h2>
-                <p className="text-sm text-gray-500">v{app.version} · {app.category}</p>
+                <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{app.name}</h2>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>v{app.version} · {app.category}</p>
               </div>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <button onClick={onClose} style={{ color: 'var(--text-muted)' }} className="hover:text-gray-600">
               <XMarkIcon className="w-6 h-6" />
             </button>
           </div>

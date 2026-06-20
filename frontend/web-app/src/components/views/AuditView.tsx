@@ -55,17 +55,6 @@ interface IntegrityStatus {
   chainLength: number;
 }
 
-// Map LDAP/AD operation strings to a UI category
-function deriveCategory(operation: string): AuditEvent['category'] {
-  const op = operation.toLowerCase();
-  if (['bind', 'unbind', 'login', 'auth', 'mfa'].some(k => op.includes(k))) return 'auth';
-  if (['add', 'delete', 'modify', 'create', 'update', 'rename', 'move'].some(k => op.includes(k))) return 'admin';
-  if (['policy', 'gpo', 'gpupdate'].some(k => op.includes(k))) return 'policy';
-  if (['device', 'computer', 'enroll'].some(k => op.includes(k))) return 'device';
-  if (['malware', 'threat', 'vuln', 'attack'].some(k => op.includes(k))) return 'security';
-  return 'system';
-}
-
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function AuditView() {
@@ -102,32 +91,12 @@ export default function AuditView() {
       ]);
 
       if (eventsRes?.data) {
-        const raw: any[] = eventsRes.data.events || (Array.isArray(eventsRes.data) ? eventsRes.data : []);
-        // Normalise both enterprise-directory wire format and legacy format
-        const normalised: AuditEvent[] = raw.map((e: any) => ({
-          id:            e.id            ?? String(Math.random()),
-          timestamp:     e.event_time    ?? e.timestamp ?? new Date().toISOString(),
-          category:      e.category      ?? deriveCategory(e.operation ?? e.action ?? ''),
-          severity:      e.severity      ?? 'info',
-          actor:         e.actor_dn      ?? e.actor_id ?? e.actor ?? 'unknown',
-          action:        e.operation     ?? e.action   ?? 'unknown',
-          target:        e.target_dn     ?? e.target   ?? '',
-          details:       e.attributes_changed ?? e.details,
-          correlationId: e.routing_key   ?? e.correlationId,
-          ipAddress:     e.ipAddress,
-        }));
-        setEvents(normalised.length > 0 ? normalised : getDemoEvents());
+        setEvents(eventsRes.data.events || eventsRes.data || []);
       } else {
         setEvents(getDemoEvents());
       }
-      if (statsRes?.data) {
-        const s = statsRes.data;
-        setStats({
-          eventsToday:   s.eventsToday   ?? s.events_today   ?? 0,
-          criticalEvents: s.criticalEvents ?? s.critical_events ?? 0,
-          topActors:     s.topActors     ?? s.top_actors     ?? [],
-        });
-      } else setStats(getDemoStats());
+      if (statsRes?.data) setStats(statsRes.data);
+      else setStats(getDemoStats());
       if (integrityRes?.data) setIntegrity(integrityRes.data);
     } catch {
       setEvents(getDemoEvents());
@@ -183,9 +152,9 @@ export default function AuditView() {
 
   const getSeverityBadge = (severity: string) => {
     switch (severity) {
-      case 'critical': return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">Critical</span>;
-      case 'warning': return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">Warning</span>;
-      default: return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">Info</span>;
+      case 'critical': return <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ color: 'var(--danger)', background: 'var(--danger-light)' }}>Critical</span>;
+      case 'warning': return <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ color: 'var(--warning)', background: 'var(--warning-light)' }}>Warning</span>;
+      default: return <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ color: 'var(--accent)', background: 'var(--accent-light)' }}>Info</span>;
     }
   };
 
@@ -231,28 +200,29 @@ export default function AuditView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
-          <p className="text-sm text-gray-500 mt-1">Track and review all system activity</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Audit Log</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Track and review all system activity</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setLiveStream(!liveStream)}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
-              liveStream ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              liveStream ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'hover:bg-gray-200'
             }`}
+            style={!liveStream ? { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' } : undefined}
           >
             {liveStream ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
             {liveStream ? 'Live' : 'Paused'}
           </button>
           <div className="flex gap-1">
-            <button onClick={() => handleExport('csv')} className="flex items-center gap-1 px-3 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+            <button onClick={() => handleExport('csv')} className="flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-gray-50 text-sm" style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
               <DocumentArrowDownIcon className="w-4 h-4" /> CSV
             </button>
-            <button onClick={() => handleExport('pdf')} className="flex items-center gap-1 px-3 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+            <button onClick={() => handleExport('pdf')} className="flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-gray-50 text-sm" style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
               <DocumentArrowDownIcon className="w-4 h-4" /> PDF
             </button>
           </div>
-          <button onClick={loadData} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+          <button onClick={loadData} className="p-2 rounded-lg hover:bg-gray-100" style={{ color: 'var(--text-muted)' }}>
             <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
@@ -260,26 +230,26 @@ export default function AuditView() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="flex items-center gap-2 mb-1">
             <ChartBarIcon className="w-5 h-5 text-blue-500" />
-            <span className="text-sm font-medium text-gray-600">Events Today</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Events Today</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.eventsToday}</p>
+          <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{stats.eventsToday}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="flex items-center gap-2 mb-1">
             <ExclamationTriangleIcon className="w-5 h-5 text-red-500" />
-            <span className="text-sm font-medium text-gray-600">Critical Events</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Critical Events</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.criticalEvents}</p>
+          <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{stats.criticalEvents}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="flex items-center gap-2 mb-1">
             <ShieldCheckIcon className="w-5 h-5 text-green-500" />
-            <span className="text-sm font-medium text-gray-600">Integrity</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Integrity</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
+          <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
             <span className={`inline-flex items-center gap-1 ${integrity.status === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
               {integrity.status === 'ok' ? <CheckCircleIcon className="w-6 h-6" /> : <ExclamationTriangleIcon className="w-6 h-6" />}
               {integrity.status === 'ok' ? 'OK' : 'BROKEN'}
@@ -290,14 +260,14 @@ export default function AuditView() {
 
       {/* Top Actors */}
       {stats.topActors.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Top Actors</h3>
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-secondary)' }}>Top Actors</h3>
           <div className="flex gap-3 overflow-x-auto">
             {stats.topActors.map(a => (
-              <div key={a.actor} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm flex-shrink-0">
-                <UserIcon className="w-4 h-4 text-gray-400" />
-                <span className="font-medium text-gray-700">{a.actor}</span>
-                <span className="text-gray-400">{a.count}</span>
+              <div key={a.actor} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm flex-shrink-0" style={{ background: 'var(--bg-surface-raised)' }}>
+                <UserIcon className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>{a.actor}</span>
+                <span style={{ color: 'var(--text-muted)' }}>{a.count}</span>
               </div>
             ))}
           </div>
@@ -305,9 +275,9 @@ export default function AuditView() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center bg-white rounded-xl border border-gray-200 p-4">
-        <FunnelIcon className="w-5 h-5 text-gray-400" />
-        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+      <div className="flex flex-wrap gap-3 items-center rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+        <FunnelIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
+        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" style={{ border: '1px solid var(--border)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}>
           <option value="all">All Categories</option>
           <option value="auth">Auth</option>
           <option value="device">Device</option>
@@ -316,22 +286,23 @@ export default function AuditView() {
           <option value="system">System</option>
           <option value="security">Security</option>
         </select>
-        <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+        <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} className="rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" style={{ border: '1px solid var(--border)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}>
           <option value="all">All Severities</option>
           <option value="info">Info</option>
           <option value="warning">Warning</option>
           <option value="critical">Critical</option>
         </select>
-        <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="From" />
-        <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="To" />
+        <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" style={{ border: '1px solid var(--border)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }} placeholder="From" />
+        <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" style={{ border: '1px solid var(--border)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }} placeholder="To" />
         <div className="relative flex-1 min-w-[200px]">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
           <input
             type="text"
             placeholder="Search events..."
             value={filterSearch}
             onChange={e => setFilterSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full pl-9 pr-3 py-1.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            style={{ border: '1px solid var(--border)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}
           />
         </div>
       </div>
@@ -340,32 +311,33 @@ export default function AuditView() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><ArrowPathIcon className="w-8 h-8 animate-spin text-blue-500" /></div>
       ) : events.length === 0 ? (
-        <div className="text-center py-20 text-gray-500">
-          <DocumentMagnifyingGlassIcon className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+        <div className="text-center py-20" style={{ color: 'var(--text-muted)' }}>
+          <DocumentMagnifyingGlassIcon className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
           <p>No audit events found</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-          {events.map(event => (
+        <div className="rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          {events.map((event, idx) => (
             <div
               key={event.id}
               onClick={() => handleSelectEvent(event)}
               className="px-6 py-4 hover:bg-gray-50 cursor-pointer flex items-center gap-4"
+              style={idx > 0 ? { borderTop: '1px solid var(--border)' } : undefined}
             >
               <div className="flex-shrink-0">{getCategoryIcon(event.category)}</div>
-              <div className="flex-shrink-0 w-36 text-xs text-gray-500">
+              <div className="flex-shrink-0 w-36 text-xs" style={{ color: 'var(--text-muted)' }}>
                 <ClockIcon className="w-3 h-3 inline mr-1" />
                 {new Date(event.timestamp).toLocaleString()}
               </div>
               <div className="flex-shrink-0">{getSeverityBadge(event.severity)}</div>
               <div className="flex-1 min-w-0">
-                <span className="text-sm text-gray-900 font-medium">{event.action}</span>
-                {event.target && <span className="text-sm text-gray-500 ml-1">on {event.target}</span>}
+                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{event.action}</span>
+                {event.target && <span className="text-sm ml-1" style={{ color: 'var(--text-muted)' }}>on {event.target}</span>}
               </div>
-              <div className="flex-shrink-0 text-xs text-gray-500 flex items-center gap-1">
+              <div className="flex-shrink-0 text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
                 <UserIcon className="w-3 h-3" /> {event.actor}
               </div>
-              {event.correlationId && <LinkIcon className="w-4 h-4 text-gray-300 flex-shrink-0" />}
+              {event.correlationId && <LinkIcon className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-muted)' }} />}
             </div>
           ))}
         </div>
@@ -374,62 +346,62 @@ export default function AuditView() {
       {/* Event Detail Modal */}
       {selectedEvent && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedEvent(null)}>
-          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <div className="rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} onClick={e => e.stopPropagation()}>
+            <div className="p-6 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
               <div className="flex items-center gap-2">
                 {getCategoryIcon(selectedEvent.category)}
-                <h2 className="text-lg font-bold text-gray-900">Event Details</h2>
+                <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Event Details</h2>
               </div>
-              <button onClick={() => setSelectedEvent(null)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
+              <button onClick={() => setSelectedEvent(null)} style={{ color: 'var(--text-muted)' }}><XMarkIcon className="w-6 h-6" /></button>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase">Timestamp</h4>
-                  <p className="text-sm text-gray-900">{new Date(selectedEvent.timestamp).toLocaleString()}</p>
+                  <h4 className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>Timestamp</h4>
+                  <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{new Date(selectedEvent.timestamp).toLocaleString()}</p>
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase">Severity</h4>
+                  <h4 className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>Severity</h4>
                   {getSeverityBadge(selectedEvent.severity)}
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase">Category</h4>
-                  <p className="text-sm text-gray-900 capitalize">{selectedEvent.category}</p>
+                  <h4 className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>Category</h4>
+                  <p className="text-sm capitalize" style={{ color: 'var(--text-primary)' }}>{selectedEvent.category}</p>
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase">Actor</h4>
-                  <p className="text-sm text-gray-900">{selectedEvent.actor}</p>
+                  <h4 className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>Actor</h4>
+                  <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{selectedEvent.actor}</p>
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase">Action</h4>
-                  <p className="text-sm text-gray-900">{selectedEvent.action}</p>
+                  <h4 className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>Action</h4>
+                  <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{selectedEvent.action}</p>
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase">Target</h4>
-                  <p className="text-sm text-gray-900">{selectedEvent.target}</p>
+                  <h4 className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>Target</h4>
+                  <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{selectedEvent.target}</p>
                 </div>
               </div>
               {selectedEvent.ipAddress && (
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase">IP Address</h4>
-                  <p className="text-sm text-gray-900">{selectedEvent.ipAddress}</p>
+                  <h4 className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>IP Address</h4>
+                  <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{selectedEvent.ipAddress}</p>
                 </div>
               )}
               {selectedEvent.details && Object.keys(selectedEvent.details).length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1">Details</h4>
-                  <pre className="text-xs bg-gray-50 rounded-lg p-3 overflow-x-auto">{JSON.stringify(selectedEvent.details, null, 2)}</pre>
+                  <h4 className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Details</h4>
+                  <pre className="text-xs rounded-lg p-3 overflow-x-auto" style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }}>{JSON.stringify(selectedEvent.details, null, 2)}</pre>
                 </div>
               )}
               {correlatedEvents.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Correlated Events</h4>
+                  <h4 className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Correlated Events</h4>
                   <div className="space-y-2">
                     {correlatedEvents.map(ce => (
-                      <div key={ce.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 text-sm">
+                      <div key={ce.id} className="flex items-center gap-2 rounded-lg p-2 text-sm" style={{ background: 'var(--bg-surface-raised)' }}>
                         {getCategoryIcon(ce.category)}
-                        <span className="text-gray-700">{ce.action}</span>
-                        <span className="text-gray-400 text-xs ml-auto">{new Date(ce.timestamp).toLocaleTimeString()}</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>{ce.action}</span>
+                        <span className="text-xs ml-auto" style={{ color: 'var(--text-muted)' }}>{new Date(ce.timestamp).toLocaleTimeString()}</span>
                       </div>
                     ))}
                   </div>

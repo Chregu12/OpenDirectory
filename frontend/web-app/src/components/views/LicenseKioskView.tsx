@@ -61,13 +61,13 @@ interface LicenseRequest {
 
 type Tab = 'kiosk' | 'verwaltung' | 'anfragen';
 
-const CATEGORY_COLORS: Record<string, string> = {
-  'Productivity': 'bg-blue-50   text-blue-700',
-  'Design':       'bg-purple-50 text-purple-700',
-  'Developer':    'bg-gray-50   text-gray-700',
-  'Security':     'bg-red-50    text-red-700',
-  'Monitoring':   'bg-yellow-50 text-yellow-700',
-  'Network':      'bg-green-50  text-green-700',
+const CATEGORY_COLORS: Record<string, { color: string; background: string }> = {
+  'Productivity': { color: 'var(--accent)',   background: 'var(--accent-light)' },
+  'Design':       { color: '#a78bfa',         background: 'rgba(167,139,250,0.15)' },
+  'Developer':    { color: 'var(--text-secondary)', background: 'var(--bg-overlay)' },
+  'Security':     { color: 'var(--danger)',   background: 'var(--danger-light)' },
+  'Monitoring':   { color: 'var(--warning)',  background: 'var(--warning-light)' },
+  'Network':      { color: 'var(--success)',  background: 'var(--success-light)' },
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -132,37 +132,36 @@ function RequestModal({ license, onClose, onSubmitted }: {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+      <div className="rounded-2xl w-full max-w-md" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-5 pb-0">
           <div>
-            <h2 className="text-base font-semibold text-[#1D1D1F]">{license.name} bestellen</h2>
-            <p className="text-xs text-[#8E8E93]">{license.vendor} · {fmtCHF(license.cost_per_seat, license.currency)}/Lizenz</p>
+            <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{license.name} bestellen</h2>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{license.vendor} · {fmtCHF(license.cost_per_seat, license.currency)}/Lizenz</p>
           </div>
-          <button onClick={onClose}><XMarkIcon className="w-5 h-5 text-[#8E8E93]" /></button>
+          <button onClick={onClose}><XMarkIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} /></button>
         </div>
         <div className="p-6 space-y-4">
           {available <= 0 && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-              <ExclamationTriangleIcon className="w-5 h-5 text-red-500 flex-shrink-0" />
-              <p className="text-sm text-red-700">Keine Lizenzen verfügbar — Anfrage trotzdem möglich</p>
+            <div className="flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: 'var(--danger-light)', border: '1px solid var(--danger)' }}>
+              <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--danger)' }} />
+              <p className="text-sm" style={{ color: 'var(--danger)' }}>Keine Lizenzen verfügbar — Anfrage trotzdem möglich</p>
             </div>
           )}
           {license.auto_approve && (
-            <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-              <CheckCircleIcon className="w-5 h-5 text-green-500 flex-shrink-0" />
-              <p className="text-sm text-green-700">Wird sofort zugewiesen — keine Genehmigung nötig</p>
+            <div className="flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: 'var(--success-light)', border: '1px solid var(--success)' }}>
+              <CheckCircleIcon className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--success)' }} />
+              <p className="text-sm" style={{ color: 'var(--success)' }}>Wird sofort zugewiesen — keine Genehmigung nötig</p>
             </div>
           )}
           <div>
-            <label className="block text-xs font-medium text-[#3C3C43] mb-1">Für wen?</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Für wen?</label>
             <div className="flex gap-2">
               {(['user', 'group', 'device'] as const).map(t => (
                 <button key={t} onClick={() => setForm(p => ({ ...p, assignee_type: t }))}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition-colors ${
-                    form.assignee_type === t
-                      ? 'border-[#0071E3] bg-[#EAF4FF] text-[#0071E3]'
-                      : 'border-[#E5E5EA] text-[#3C3C43] hover:bg-[#F2F2F7]'
-                  }`}>
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition-colors"
+                  style={form.assignee_type === t
+                    ? { border: '1px solid var(--accent)', background: 'var(--accent-light)', color: 'var(--accent)' }
+                    : { border: '1px solid var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}>
                   {t === 'user'   && <UserIcon className="w-4 h-4" />}
                   {t === 'group'  && <UserGroupIcon className="w-4 h-4" />}
                   {t === 'device' && <ComputerDesktopIcon className="w-4 h-4" />}
@@ -173,25 +172,25 @@ function RequestModal({ license, onClose, onSubmitted }: {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">ID / Username</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>ID / Username</label>
               <input value={form.assignee_id} onChange={e => setForm(p => ({ ...p, assignee_id: e.target.value }))}
                 placeholder="user123" className="input-apple w-full" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Anzeigename</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Anzeigename</label>
               <input value={form.assignee_name} onChange={e => setForm(p => ({ ...p, assignee_name: e.target.value }))}
                 placeholder="Anna Meier" className="input-apple w-full" />
             </div>
           </div>
           {!license.auto_approve && (
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Begründung</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Begründung</label>
               <textarea value={form.justification} onChange={e => setForm(p => ({ ...p, justification: e.target.value }))}
                 rows={3} placeholder="Warum wird diese Lizenz benötigt?" className="input-apple w-full resize-none" />
             </div>
           )}
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-[#3C3C43] bg-[#F2F2F7] rounded-lg">Abbrechen</button>
+            <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg" style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface-raised)' }}>Abbrechen</button>
             <button onClick={submit} disabled={submitting}
               className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED] disabled:opacity-60">
               {submitting ? 'Einreichen…' : 'Bestellen'}

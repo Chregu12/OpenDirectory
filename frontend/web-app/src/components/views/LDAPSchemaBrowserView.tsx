@@ -82,15 +82,15 @@ function AddObjectClassModal({
   };
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '8px 12px', border: '1px solid #d1d5db',
+    width: '100%', padding: '8px 12px', border: '1px solid var(--border-strong)',
     borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box',
-    fontFamily: 'inherit',
+    fontFamily: 'inherit', background: 'var(--bg-overlay)', color: 'var(--text-primary)',
   };
   const labelStyle: React.CSSProperties = {
-    display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 4,
+    display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 4,
   };
   const hintStyle: React.CSSProperties = {
-    fontSize: 11, color: '#9ca3af', marginTop: 3,
+    fontSize: 11, color: 'var(--text-muted)', marginTop: 3,
   };
 
   return (
@@ -99,12 +99,13 @@ function AddObjectClassModal({
       background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{
-        background: '#fff', borderRadius: 12, padding: 28, width: 520, maxWidth: '95vw',
+        background: 'var(--bg-surface)', borderRadius: 12, padding: 28, width: 520, maxWidth: '95vw',
         boxShadow: '0 20px 60px rgba(0,0,0,0.18)', maxHeight: '90vh', overflowY: 'auto',
+        border: '1px solid var(--border)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#111827', margin: 0 }}>Add Object Class</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Add Object Class</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
             <XCircleIcon style={{ width: 22, height: 22 }} />
           </button>
         </div>
@@ -146,8 +147,8 @@ function AddObjectClassModal({
 
           {error && (
             <div style={{
-              background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 8,
-              padding: '10px 12px', color: '#b91c1c', fontSize: 13,
+              background: 'var(--danger-light)', border: '1px solid var(--danger)', borderRadius: 8,
+              padding: '10px 12px', color: 'var(--danger)', fontSize: 13,
             }}>
               {error}
             </div>
@@ -155,8 +156,8 @@ function AddObjectClassModal({
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
             <button type="button" onClick={onClose} style={{
-              padding: '8px 18px', borderRadius: 8, border: '1px solid #d1d5db',
-              background: '#fff', color: '#374151', fontSize: 14, fontWeight: 500, cursor: 'pointer',
+              padding: '8px 18px', borderRadius: 8, border: '1px solid var(--border-strong)',
+              background: 'var(--bg-overlay)', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500, cursor: 'pointer',
             }}>Cancel</button>
             <button type="submit" disabled={submitting} style={{
               padding: '8px 18px', borderRadius: 8, border: 'none',
@@ -221,12 +222,12 @@ function AddAttributeTypeModal({
   };
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '8px 12px', border: '1px solid #d1d5db',
+    width: '100%', padding: '8px 12px', border: '1px solid var(--border-strong)',
     borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box',
-    fontFamily: 'inherit',
+    fontFamily: 'inherit', background: 'var(--bg-overlay)', color: 'var(--text-primary)',
   };
   const labelStyle: React.CSSProperties = {
-    display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 4,
+    display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 4,
   };
 
   return (
@@ -235,12 +236,13 @@ function AddAttributeTypeModal({
       background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{
-        background: '#fff', borderRadius: 12, padding: 28, width: 520, maxWidth: '95vw',
+        background: 'var(--bg-surface)', borderRadius: 12, padding: 28, width: 520, maxWidth: '95vw',
         boxShadow: '0 20px 60px rgba(0,0,0,0.18)', maxHeight: '90vh', overflowY: 'auto',
+        border: '1px solid var(--border)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#111827', margin: 0 }}>Add Attribute Type</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Add Attribute Type</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
             <XCircleIcon style={{ width: 22, height: 22 }} />
           </button>
         </div>
@@ -267,7 +269,7 @@ function AddAttributeTypeModal({
               onChange={e => setForm(f => ({ ...f, syntax: e.target.value }))} />
           </div>
           <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#374151', fontWeight: 500 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: 'var(--text-secondary)', fontWeight: 500 }}>
               <input
                 type="checkbox"
                 checked={form.singleValue}
@@ -297,8 +299,8 @@ function AddAttributeTypeModal({
 
           {error && (
             <div style={{
-              background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 8,
-              padding: '10px 12px', color: '#b91c1c', fontSize: 13,
+              background: 'var(--danger-light)', border: '1px solid var(--danger)', borderRadius: 8,
+              padding: '10px 12px', color: 'var(--danger)', fontSize: 13,
             }}>
               {error}
             </div>
@@ -306,8 +308,8 @@ function AddAttributeTypeModal({
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
             <button type="button" onClick={onClose} style={{
-              padding: '8px 18px', borderRadius: 8, border: '1px solid #d1d5db',
-              background: '#fff', color: '#374151', fontSize: 14, fontWeight: 500, cursor: 'pointer',
+              padding: '8px 18px', borderRadius: 8, border: '1px solid var(--border-strong)',
+              background: 'var(--bg-overlay)', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500, cursor: 'pointer',
             }}>Cancel</button>
             <button type="submit" disabled={submitting} style={{
               padding: '8px 18px', borderRadius: 8, border: 'none',
@@ -338,51 +340,51 @@ function ObjectClassDetail({ oc }: { oc: ObjectClass }) {
 
   const row = (label: string, value: React.ReactNode) => (
     <div key={label} style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-      <span style={{ fontSize: 12, fontWeight: 500, color: '#9ca3af', minWidth: 110, textTransform: 'uppercase', letterSpacing: '0.04em', paddingTop: 2 }}>
+      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', minWidth: 110, textTransform: 'uppercase', letterSpacing: '0.04em', paddingTop: 2 }}>
         {label}
       </span>
-      <div style={{ fontSize: 13, color: '#111827', flex: 1 }}>{value}</div>
+      <div style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>{value}</div>
     </div>
   );
 
   return (
     <div style={{ padding: '20px 24px' }}>
-      <h3 style={{ fontSize: 16, fontWeight: 600, color: '#111827', margin: '0 0 4px' }}>{oc.name}</h3>
-      <p style={{ fontSize: 12, fontFamily: 'monospace', color: '#6b7280', margin: '0 0 20px' }}>{oc.oid}</p>
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>{oc.name}</h3>
+      <p style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-muted)', margin: '0 0 20px' }}>{oc.oid}</p>
 
       {oc.description && (
         <div style={{
-          background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8,
+          background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', borderRadius: 8,
           padding: '10px 14px', marginBottom: 20,
         }}>
-          <p style={{ fontSize: 13, color: '#374151', margin: 0, lineHeight: 1.5 }}>{oc.description}</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>{oc.description}</p>
         </div>
       )}
 
       {row('Type', oc.type ? (
         <span style={{
           display: 'inline-block', padding: '2px 10px', borderRadius: 9999, fontSize: 12, fontWeight: 500,
-          background: oc.type === 'STRUCTURAL' ? '#eff6ff' : oc.type === 'AUXILIARY' ? '#f0fdf4' : '#fafafa',
-          color: oc.type === 'STRUCTURAL' ? '#1d4ed8' : oc.type === 'AUXILIARY' ? '#166534' : '#6b7280',
-          border: `1px solid ${oc.type === 'STRUCTURAL' ? '#bfdbfe' : oc.type === 'AUXILIARY' ? '#bbf7d0' : '#e5e7eb'}`,
+          background: oc.type === 'STRUCTURAL' ? 'var(--accent-light)' : oc.type === 'AUXILIARY' ? 'var(--success-light)' : 'var(--bg-overlay)',
+          color: oc.type === 'STRUCTURAL' ? 'var(--accent)' : oc.type === 'AUXILIARY' ? 'var(--success)' : 'var(--text-muted)',
+          border: `1px solid ${oc.type === 'STRUCTURAL' ? 'var(--accent)' : oc.type === 'AUXILIARY' ? 'var(--success)' : 'var(--border)'}`,
         }}>
           {oc.type}
         </span>
-      ) : <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>)}
+      ) : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>)}
 
       {row('Superclasses', oc.superClasses && oc.superClasses.length > 0
-        ? <div>{oc.superClasses.map(sc => chip(sc, '#f3f4f6', '#374151'))}</div>
-        : <span style={{ color: '#9ca3af', fontSize: 13 }}>None</span>
+        ? <div>{oc.superClasses.map(sc => chip(sc, 'var(--bg-overlay)', 'var(--text-secondary)'))}</div>
+        : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>None</span>
       )}
 
       {row('Must Have', oc.must && oc.must.length > 0
-        ? <div>{oc.must.map(a => chip(a, '#fef2f2', '#b91c1c'))}</div>
-        : <span style={{ color: '#9ca3af', fontSize: 13 }}>None</span>
+        ? <div>{oc.must.map(a => chip(a, 'var(--danger-light)', 'var(--danger)'))}</div>
+        : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>None</span>
       )}
 
       {row('May Have', oc.may && oc.may.length > 0
-        ? <div>{oc.may.map(a => chip(a, '#f0fdf4', '#166534'))}</div>
-        : <span style={{ color: '#9ca3af', fontSize: 13 }}>None</span>
+        ? <div>{oc.may.map(a => chip(a, 'var(--success-light)', 'var(--success)'))}</div>
+        : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>None</span>
       )}
     </div>
   );
@@ -393,47 +395,47 @@ function ObjectClassDetail({ oc }: { oc: ObjectClass }) {
 function AttributeTypeDetail({ at }: { at: AttributeType }) {
   const row = (label: string, value: React.ReactNode) => (
     <div key={label} style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-      <span style={{ fontSize: 12, fontWeight: 500, color: '#9ca3af', minWidth: 110, textTransform: 'uppercase', letterSpacing: '0.04em', paddingTop: 2 }}>
+      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', minWidth: 110, textTransform: 'uppercase', letterSpacing: '0.04em', paddingTop: 2 }}>
         {label}
       </span>
-      <div style={{ fontSize: 13, color: '#111827', flex: 1 }}>{value}</div>
+      <div style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>{value}</div>
     </div>
   );
 
   const mono = (text: string) => (
-    <code style={{ fontFamily: 'monospace', fontSize: 12, background: '#f3f4f6', padding: '2px 6px', borderRadius: 4, color: '#374151' }}>
+    <code style={{ fontFamily: 'monospace', fontSize: 12, background: 'var(--bg-overlay)', padding: '2px 6px', borderRadius: 4, color: 'var(--text-secondary)' }}>
       {text}
     </code>
   );
 
   return (
     <div style={{ padding: '20px 24px' }}>
-      <h3 style={{ fontSize: 16, fontWeight: 600, color: '#111827', margin: '0 0 4px' }}>{at.name}</h3>
-      <p style={{ fontSize: 12, fontFamily: 'monospace', color: '#6b7280', margin: '0 0 20px' }}>{at.oid}</p>
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>{at.name}</h3>
+      <p style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-muted)', margin: '0 0 20px' }}>{at.oid}</p>
 
       {at.description && (
         <div style={{
-          background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8,
+          background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', borderRadius: 8,
           padding: '10px 14px', marginBottom: 20,
         }}>
-          <p style={{ fontSize: 13, color: '#374151', margin: 0, lineHeight: 1.5 }}>{at.description}</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>{at.description}</p>
         </div>
       )}
 
-      {row('Syntax', at.syntax ? mono(at.syntax) : <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>)}
+      {row('Syntax', at.syntax ? mono(at.syntax) : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>)}
       {row('Single-valued', (
         <span style={{
           display: 'inline-block', padding: '2px 10px', borderRadius: 9999, fontSize: 12, fontWeight: 500,
-          background: at.singleValue ? '#eff6ff' : '#f9fafb',
-          color: at.singleValue ? '#1d4ed8' : '#6b7280',
-          border: `1px solid ${at.singleValue ? '#bfdbfe' : '#e5e7eb'}`,
+          background: at.singleValue ? 'var(--accent-light)' : 'var(--bg-overlay)',
+          color: at.singleValue ? 'var(--accent)' : 'var(--text-muted)',
+          border: `1px solid ${at.singleValue ? 'var(--accent)' : 'var(--border)'}`,
         }}>
           {at.singleValue ? 'Yes' : 'No'}
         </span>
       ))}
-      {row('Equality', at.equality ? mono(at.equality) : <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>)}
-      {row('Ordering', at.ordering ? mono(at.ordering) : <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>)}
-      {row('Substrings', at.substrings ? mono(at.substrings) : <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>)}
+      {row('Equality', at.equality ? mono(at.equality) : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>)}
+      {row('Ordering', at.ordering ? mono(at.ordering) : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>)}
+      {row('Substrings', at.substrings ? mono(at.substrings) : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>)}
     </div>
   );
 }
@@ -525,14 +527,14 @@ export default function LDAPSchemaBrowserView() {
     padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
     fontSize: 14, fontWeight: 500,
     background: active ? '#0066CC' : 'transparent',
-    color: active ? '#fff' : '#6b7280',
+    color: active ? '#fff' : 'var(--text-muted)',
     transition: 'background 0.15s, color 0.15s',
   });
 
   const listItemStyle = (selected: boolean): React.CSSProperties => ({
-    padding: '10px 16px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6',
-    background: selected ? '#eff6ff' : '#fff',
-    borderLeft: selected ? '3px solid #0066CC' : '3px solid transparent',
+    padding: '10px 16px', cursor: 'pointer', borderBottom: '1px solid var(--border)',
+    background: selected ? 'var(--accent-light)' : 'var(--bg-surface)',
+    borderLeft: selected ? '3px solid var(--accent)' : '3px solid transparent',
     transition: 'background 0.1s',
   });
 
@@ -542,14 +544,14 @@ export default function LDAPSchemaBrowserView() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
-            width: 36, height: 36, background: '#eff6ff', border: '1px solid #dbeafe',
+            width: 36, height: 36, background: 'var(--accent-light)', border: '1px solid var(--accent)',
             borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <CircleStackIcon style={{ width: 20, height: 20, color: '#0066CC' }} />
           </div>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 600, color: '#111827', margin: 0 }}>LDAP Schema Browser</h1>
-            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>LDAP Schema Browser</h1>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
               {objectClasses.length} object classes · {attributeTypes.length} attribute types
             </p>
           </div>
@@ -588,7 +590,7 @@ export default function LDAPSchemaBrowserView() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: 20, gap: 16,
       }}>
-        <div style={{ display: 'flex', gap: 4, background: '#f3f4f6', borderRadius: 10, padding: 4 }}>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--bg-surface-raised)', borderRadius: 10, padding: 4 }}>
           <button
             style={tabStyle(tab === 'objectClasses')}
             onClick={() => { setTab('objectClasses'); setSearch(''); }}
@@ -609,16 +611,16 @@ export default function LDAPSchemaBrowserView() {
         <div style={{ position: 'relative', width: 280 }}>
           <MagnifyingGlassIcon style={{
             position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-            width: 16, height: 16, color: '#9ca3af', pointerEvents: 'none',
+            width: 16, height: 16, color: 'var(--text-muted)', pointerEvents: 'none',
           }} />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={tab === 'objectClasses' ? 'Search object classes…' : 'Search attribute types…'}
             style={{
-              width: '100%', padding: '8px 12px 8px 32px', border: '1px solid #d1d5db',
+              width: '100%', padding: '8px 12px 8px 32px', border: '1px solid var(--border-strong)',
               borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box',
-              fontFamily: 'inherit',
+              fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--text-primary)',
             }}
           />
         </div>
@@ -627,7 +629,7 @@ export default function LDAPSchemaBrowserView() {
       {/* Main panel — list + detail */}
       <div style={{
         display: 'grid', gridTemplateColumns: '300px 1fr', gap: 0,
-        background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb',
+        background: 'var(--bg-surface)', borderRadius: 10, border: '1px solid var(--border)',
         overflow: 'hidden', minHeight: 480,
       }}>
 
@@ -635,18 +637,18 @@ export default function LDAPSchemaBrowserView() {
         {tab === 'objectClasses' && (
           <>
             {/* List */}
-            <div style={{ borderRight: '1px solid #e5e7eb', overflowY: 'auto', maxHeight: 600 }}>
+            <div style={{ borderRight: '1px solid var(--border)', overflowY: 'auto', maxHeight: 600 }}>
               {loadingOC ? (
-                <div style={{ padding: 32, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Loading…</div>
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>Loading…</div>
               ) : errorOC ? (
                 <div style={{ padding: 24 }}>
-                  <p style={{ color: '#b91c1c', fontSize: 13, marginBottom: 8 }}>{errorOC}</p>
-                  <button onClick={fetchObjectClasses} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', background: '#fff' }}>
+                  <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{errorOC}</p>
+                  <button onClick={fetchObjectClasses} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid var(--border-strong)', borderRadius: 6, cursor: 'pointer', background: 'var(--bg-overlay)', color: 'var(--text-secondary)' }}>
                     Retry
                   </button>
                 </div>
               ) : filteredOC.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
                   {search ? 'No results found.' : 'No object classes.'}
                 </div>
               ) : (
@@ -656,8 +658,8 @@ export default function LDAPSchemaBrowserView() {
                     style={listItemStyle(selectedOC?.oid === oc.oid)}
                     onClick={() => setSelectedOC(oc)}
                   >
-                    <p style={{ fontSize: 13, fontWeight: 500, color: '#111827', margin: 0 }}>{oc.name}</p>
-                    <p style={{ fontSize: 11, fontFamily: 'monospace', color: '#9ca3af', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>{oc.name}</p>
+                    <p style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {oc.oid}
                     </p>
                   </div>
@@ -670,7 +672,7 @@ export default function LDAPSchemaBrowserView() {
               {selectedOC ? (
                 <ObjectClassDetail oc={selectedOC} />
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', gap: 8 }}>
                   <InformationCircleIcon style={{ width: 32, height: 32 }} />
                   <p style={{ fontSize: 14, margin: 0 }}>Select an object class to view details</p>
                 </div>
@@ -683,18 +685,18 @@ export default function LDAPSchemaBrowserView() {
         {tab === 'attributeTypes' && (
           <>
             {/* List */}
-            <div style={{ borderRight: '1px solid #e5e7eb', overflowY: 'auto', maxHeight: 600 }}>
+            <div style={{ borderRight: '1px solid var(--border)', overflowY: 'auto', maxHeight: 600 }}>
               {loadingAT ? (
-                <div style={{ padding: 32, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Loading…</div>
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>Loading…</div>
               ) : errorAT ? (
                 <div style={{ padding: 24 }}>
-                  <p style={{ color: '#b91c1c', fontSize: 13, marginBottom: 8 }}>{errorAT}</p>
-                  <button onClick={fetchAttributeTypes} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', background: '#fff' }}>
+                  <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{errorAT}</p>
+                  <button onClick={fetchAttributeTypes} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid var(--border-strong)', borderRadius: 6, cursor: 'pointer', background: 'var(--bg-overlay)', color: 'var(--text-secondary)' }}>
                     Retry
                   </button>
                 </div>
               ) : filteredAT.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
                   {search ? 'No results found.' : 'No attribute types.'}
                 </div>
               ) : (
@@ -704,8 +706,8 @@ export default function LDAPSchemaBrowserView() {
                     style={listItemStyle(selectedAT?.oid === at.oid)}
                     onClick={() => setSelectedAT(at)}
                   >
-                    <p style={{ fontSize: 13, fontWeight: 500, color: '#111827', margin: 0 }}>{at.name}</p>
-                    <p style={{ fontSize: 11, fontFamily: 'monospace', color: '#9ca3af', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>{at.name}</p>
+                    <p style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {at.oid}
                     </p>
                   </div>
@@ -718,7 +720,7 @@ export default function LDAPSchemaBrowserView() {
               {selectedAT ? (
                 <AttributeTypeDetail at={selectedAT} />
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', gap: 8 }}>
                   <InformationCircleIcon style={{ width: 32, height: 32 }} />
                   <p style={{ fontSize: 14, margin: 0 }}>Select an attribute type to view details</p>
                 </div>
