@@ -11,11 +11,11 @@ export interface StatCard {
 }
 
 const colorMap: Record<string, { text: string; bg: string; iconColor: string }> = {
-  blue:   { text: 'var(--ms-blue, #0078d4)',   bg: 'var(--ms-blue-light, #eff6fc)',   iconColor: 'var(--ms-blue, #0078d4)' },
-  green:  { text: 'var(--success, #107c10)',    bg: 'var(--success-light, #dff6dd)',   iconColor: 'var(--success, #107c10)' },
-  red:    { text: 'var(--danger, #a4262c)',     bg: 'var(--danger-light, #fde7e9)',    iconColor: 'var(--danger, #a4262c)' },
-  orange: { text: 'var(--warning, #d83b01)',    bg: 'var(--warning-light, #fed9cc)',   iconColor: 'var(--warning, #d83b01)' },
-  purple: { text: 'var(--ms-purple, #7c4fba)', bg: 'var(--ms-purple-light, #f4eefb)', iconColor: 'var(--ms-purple, #7c4fba)' },
+  blue:   { text: '#0071E3', bg: '#EAF4FF', iconColor: '#0071E3' },
+  green:  { text: '#1c7c2e', bg: '#e8f8eb', iconColor: '#1c7c2e' },
+  red:    { text: '#c0392b', bg: '#fdecea', iconColor: '#c0392b' },
+  orange: { text: '#b34700', bg: '#fff0e6', iconColor: '#b34700' },
+  purple: { text: '#6441a5', bg: '#f0ebf8', iconColor: '#6441a5' },
 };
 
 export function StatCards({ cards }: { cards: StatCard[] }) {
@@ -31,7 +31,7 @@ export function StatCards({ cards }: { cards: StatCard[] }) {
             style={{ cursor: card.onClick ? 'pointer' : 'default' }}
           >
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--apple-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 {card.label}
               </span>
               {card.icon && (
@@ -40,7 +40,7 @@ export function StatCards({ cards }: { cards: StatCard[] }) {
                 </div>
               )}
             </div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>
+            <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--apple-text-primary)', lineHeight: 1 }}>
               {card.value.toLocaleString()}
             </div>
             {card.trend && (

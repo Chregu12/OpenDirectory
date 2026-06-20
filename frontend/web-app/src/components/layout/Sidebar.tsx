@@ -168,7 +168,7 @@ export default function Sidebar({
           top: 0,
           left: 0,
           bottom: 0,
-          width: 'var(--sidebar-width)',
+          width: 'var(--apple-sidebar-width)',
           background: 'var(--bg-sidebar)',
           borderRight: '1px solid var(--border-color)',
           zIndex: 50,
@@ -180,7 +180,7 @@ export default function Sidebar({
         {/* Org header / logo */}
         <div
           style={{
-            height: 'var(--topbar-height)',
+            height: 'var(--apple-topbar-height)',
             borderBottom: '1px solid var(--border-color)',
             padding: '0 16px',
             display: 'flex',
@@ -238,7 +238,7 @@ export default function Sidebar({
               return (
                 <div
                   key={`divider-${idx}`}
-                  style={{ height: 1, background: 'var(--border-color)', margin: '4px 12px' }}
+                  style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '4px 12px' }}
                 />
               );
             }
@@ -253,24 +253,23 @@ export default function Sidebar({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
-                  width: '100%',
-                  padding: '6px 12px',
-                  paddingLeft: isActive ? 9 : 12,
-                  background: isActive ? 'var(--bg-sidebar-active)' : 'transparent',
-                  borderLeft: isActive ? '3px solid var(--sidebar-active-bar)' : '3px solid transparent',
-                  color: isActive ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                  width: 'calc(100% - 16px)',
+                  margin: '1px 8px',
+                  padding: '6px 10px',
+                  background: isActive ? 'var(--apple-blue)' : 'transparent',
                   border: 'none',
-                  borderRadius: 0,
+                  borderRadius: 7,
                   cursor: 'pointer',
                   fontSize: 13,
                   fontWeight: isActive ? 600 : 400,
+                  color: isActive ? '#ffffff' : 'rgba(255,255,255,0.75)',
                   textAlign: 'left',
-                  transition: 'background 0.1s, color 0.1s',
+                  transition: 'background 0.15s',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-sidebar-hover)'; }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.08)'; }}
                 onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
               >
                 <entry.icon style={{ width: 16, height: 16, flexShrink: 0 }} />
