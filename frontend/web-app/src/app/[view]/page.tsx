@@ -49,6 +49,16 @@ import PolicySimulatorView from '@/components/views/PolicySimulatorView';
 import DeviceFleetView from '@/components/views/DeviceFleetView';
 import ServicePrincipalsView from '@/components/views/ServicePrincipalsView';
 
+// New ABM×UniFi views
+import SubscriptionView from '@/components/views/SubscriptionView';
+import ActivityView from '@/components/views/ActivityView';
+import LocationsView from '@/components/views/LocationsView';
+import UserGroupsView from '@/components/views/UserGroupsView';
+import RolesView from '@/components/views/RolesView';
+import AssignmentView from '@/components/views/AssignmentView';
+import AppsBooksView from '@/components/views/AppsBooksView';
+import GPOView from '@/components/views/GPOView';
+
 // Quick actions + wizards
 import QuickActionsBar from '@/components/views/QuickActionsBar';
 import EnrollmentWizard from '@/components/views/EnrollmentWizard';
@@ -258,14 +268,14 @@ export default function ViewPage() {
         case 'replication':       return <ReplicationView />;
         case 'graph':             return <GraphExplorerView />;
         case 'simulator':         return <PolicySimulatorView />;
-        case 'subscription':      return <PlaceholderView title="Subscription" />;
-        case 'activity':          return <PlaceholderView title="Activity" />;
-        case 'locations':         return <PlaceholderView title="Locations" />;
-        case 'usergroups':        return <PlaceholderView title="User Groups" />;
-        case 'roles':             return <PlaceholderView title="Roles" />;
-        case 'assignment':        return <PlaceholderView title="Assignment History" />;
-        case 'appsbooks':         return <PlaceholderView title="Apps and Books" />;
-        case 'gpo':               return <PlaceholderView title="Group Policy" />;
+        case 'subscription':      return <SubscriptionView />;
+        case 'activity':          return <ActivityView />;
+        case 'locations':         return <LocationsView />;
+        case 'usergroups':        return <UserGroupsView />;
+        case 'roles':             return <RolesView />;
+        case 'assignment':        return <AssignmentView />;
+        case 'appsbooks':         return <AppsBooksView />;
+        case 'gpo':               return <GPOView />;
         case 'settings':
           return (
             <div className="p-6">
