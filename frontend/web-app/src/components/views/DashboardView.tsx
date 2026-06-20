@@ -19,6 +19,8 @@ import {
   Cog6ToothIcon,
   DocumentTextIcon,
   LockClosedIcon,
+  PlusIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import {
   lldapApi,
@@ -32,6 +34,7 @@ import {
 } from '@/lib/api';
 import BackupRecoveryWizard from '@/components/setup/BackupRecoveryWizard';
 import toast from 'react-hot-toast';
+import { StatCards, StatCard, CommandBar } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -677,14 +680,64 @@ export default function DashboardView() {
       ? Math.round((kpi.healthyServices / kpi.totalServices) * 100)
       : 0;
 
+  const statCards: StatCard[] = [
+    {
+      label: 'Total Users',
+      value: kpi.totalUsers ?? '–',
+      icon: UsersIcon,
+      color: 'blue',
+    },
+    {
+      label: 'Devices Online',
+      value: kpi.onlineDevices != null && kpi.totalDevices != null
+        ? `${kpi.onlineDevices}/${kpi.totalDevices}`
+        : '–',
+      icon: ComputerDesktopIcon,
+      color: 'green',
+    },
+    {
+      label: 'Open Alerts',
+      value: kpi.openAlerts ?? '–',
+      icon: BellAlertIcon,
+      color: kpi.openAlerts != null && kpi.openAlerts > 0 ? 'red' : 'green',
+    },
+    {
+      label: 'Active Policies',
+      value: kpi.activePolicies ?? '–',
+      icon: ShieldCheckIcon,
+      color: 'purple',
+    },
+  ];
+
   return (
-    <div className="p-6 space-y-6">
+    <div style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', padding: '20px 24px' }} className="space-y-6">
       {usingDemoData && (
         <div className="mx-6 mt-4 p-3 bg-yellow-900/50 border border-yellow-600 rounded-lg flex items-center gap-2 text-yellow-300 text-sm">
           <span className="text-yellow-400">⚠</span>
           <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
         </div>
       )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Command Bar                                                         */}
+      {/* ------------------------------------------------------------------ */}
+      <CommandBar
+        primary={{ label: 'New User', icon: PlusIcon, onClick: () => {} }}
+        actions={[
+          { label: 'Refresh', icon: ArrowPathIcon, onClick: loadData },
+        ]}
+        rightContent={
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            Last updated: {new Date().toLocaleTimeString()}
+          </span>
+        }
+      />
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Stat Cards                                                          */}
+      {/* ------------------------------------------------------------------ */}
+      <StatCards cards={statCards} />
+
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                              */}
       {/* ------------------------------------------------------------------ */}
@@ -1061,8 +1114,8 @@ export default function DashboardView() {
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Service Health</h2>
-              <p className="text-xs text-gray-400 mt-0.5">All infrastructure services</p>
+              <h2 className="fluent-section-header">Service Health</h2>
+              <p className="fluent-section-sub">All infrastructure services</p>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-gray-400">
               <SignalIcon className="w-4 h-4" />
@@ -1113,8 +1166,8 @@ export default function DashboardView() {
         {/* Recent Activity Feed (1/3) */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col">
           <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="text-base font-semibold text-gray-900">Recent Activity</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Audit log & alerts</p>
+            <h2 className="fluent-section-header">Recent Activity</h2>
+            <p className="fluent-section-sub">Audit log &amp; alerts</p>
           </div>
           <div className="flex-1 p-6 overflow-y-auto">
             {activityError || activityEvents === null ? (
@@ -1176,8 +1229,8 @@ export default function DashboardView() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold text-gray-900">System Resources</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Live metrics via Prometheus</p>
+              <h2 className="fluent-section-header">System Resources</h2>
+              <p className="fluent-section-sub">Live metrics via Prometheus</p>
             </div>
             <CpuChipIcon className="w-5 h-5 text-gray-300" />
           </div>
@@ -1231,8 +1284,8 @@ export default function DashboardView() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Device Compliance</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Based on compliance score</p>
+              <h2 className="fluent-section-header">Device Compliance</h2>
+              <p className="fluent-section-sub">Based on compliance score</p>
             </div>
             <ShieldCheckIcon className="w-5 h-5 text-gray-300" />
           </div>

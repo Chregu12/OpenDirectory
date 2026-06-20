@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { DataTable, Column, CommandBar } from '@/components/ui';
+import { PlusIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,157 +100,107 @@ export default function UserListColumn({ selectedId, onSelect, onCreateNew }: Us
 
   const FILTER_LABELS: Record<typeof filter, string> = { all: 'All', active: 'Active', inactive: 'Inactive', admin: 'Admins' };
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header */}
-      <div style={{ padding: '16px 16px 10px 16px', borderBottom: '1px solid var(--apple-gray-2)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--apple-text-primary)', margin: 0 }}>Users</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, color: 'var(--apple-text-secondary)' }}>{filtered.length}</span>
-            {onCreateNew && (
-              <button
-                onClick={onCreateNew}
-                style={{
-                  width: 24, height: 24, borderRadius: '50%',
-                  background: 'var(--apple-blue)', color: 'white',
-                  border: 'none', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 16, flexShrink: 0,
-                }}
-                title="New User"
-              >
-                +
-              </button>
-            )}
-          </div>
+  const columns: Column<DirectoryUser>[] = [
+    {
+      key: 'name',
+      header: 'Name',
+      sortable: true,
+      render: (u) => (
+        <div>
+          <div style={{ fontWeight: 500 }}>{u.name}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{u.email}</div>
         </div>
+      ),
+    },
+    {
+      key: 'role',
+      header: 'Role',
+      sortable: true,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 90,
+      render: (u) => (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontSize: 12, fontWeight: 600,
+          color: u.status === 'active' ? 'var(--success)' : 'var(--danger)',
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
+          {u.status === 'active' ? 'Active' : 'Disabled'}
+        </span>
+      ),
+    },
+    {
+      key: 'groups',
+      header: 'Groups',
+      width: 80,
+      render: (u) => (
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          {Array.isArray(u.groups) ? u.groups.length : 0}
+        </span>
+      ),
+    },
+  ];
 
-        {/* Search + Filter */}
-        <div style={{ display: 'flex', gap: 6 }}>
+  return (
+    <div style={{ background: 'var(--bg-primary)', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* CommandBar */}
+      <CommandBar
+        primary={{ label: 'New User', icon: PlusIcon, onClick: () => onCreateNew?.() }}
+        actions={[
+          { label: 'Export', icon: ArrowDownTrayIcon, onClick: () => {} },
+        ]}
+        onRefresh={loadUsers}
+        rightContent={
           <input
-            type="text"
-            placeholder="Search users..."
+            type="search"
+            placeholder="Search users…"
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
-              flex: 1, padding: '5px 10px', border: '1px solid var(--apple-gray-2)',
-              borderRadius: 6, fontSize: 12, outline: 'none', background: 'var(--apple-gray-1)',
-              color: 'var(--apple-text-primary)',
+              padding: '4px 10px', border: '1px solid var(--border-color)',
+              borderRadius: 'var(--border-radius)', fontSize: 13,
+              background: 'var(--input-bg)', color: 'var(--text-primary)',
+              width: 200,
             }}
           />
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={e => { e.stopPropagation(); setFilterOpen(o => !o); }}
-              style={{
-                padding: '5px 10px', border: '1px solid var(--apple-gray-2)',
-                borderRadius: 6, background: filter !== 'all' ? 'var(--apple-blue-light)' : '#fff',
-                fontSize: 12, color: filter !== 'all' ? 'var(--apple-blue)' : 'var(--apple-text-secondary)',
-                cursor: 'pointer', fontWeight: 500,
-              }}
-            >
-              {FILTER_LABELS[filter]}
-            </button>
-            {filterOpen && (
-              <div
-                style={{
-                  position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 20,
-                  background: 'white', border: '1px solid var(--apple-gray-2)',
-                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', overflow: 'hidden', minWidth: 120,
-                }}
-                onClick={e => e.stopPropagation()}
-              >
-                {(Object.keys(FILTER_LABELS) as Array<typeof filter>).map(key => (
-                  <button
-                    key={key}
-                    onClick={() => { setFilter(key); setFilterOpen(false); }}
-                    style={{
-                      display: 'block', width: '100%', padding: '7px 12px', fontSize: 13,
-                      background: filter === key ? 'var(--apple-blue-light)' : 'none',
-                      color: filter === key ? 'var(--apple-blue)' : 'var(--apple-text-primary)',
-                      border: 'none', cursor: 'pointer', textAlign: 'left',
-                    }}
-                    onMouseEnter={e => { if (filter !== key) (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
-                    onMouseLeave={e => { if (filter !== key) (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
-                  >
-                    {FILTER_LABELS[key]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        }
+      />
+
+      {/* Filter bar */}
+      <div style={{ padding: '0 16px 8px 16px', display: 'flex', gap: 6, flexShrink: 0 }}>
+        {(Object.keys(FILTER_LABELS) as Array<typeof filter>).map(key => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            style={{
+              padding: '4px 10px', fontSize: 12, borderRadius: 6, cursor: 'pointer',
+              border: '1px solid var(--border-color)',
+              background: filter === key ? 'var(--accent-blue)' : 'var(--bg-primary)',
+              color: filter === key ? '#fff' : 'var(--text-secondary)',
+              fontWeight: filter === key ? 600 : 400,
+            }}
+          >
+            {FILTER_LABELS[key]}
+          </button>
+        ))}
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-secondary)', alignSelf: 'center' }}>
+          {filtered.length} user{filtered.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
-      {/* User list */}
+      {/* DataTable */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {filtered.map(user => {
-          const isSelected = user.id === selectedId;
-          const color = avatarColor(user.id);
-          return (
-            <button
-              key={user.id}
-              onClick={() => onSelect(user)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                width: '100%', padding: '11px 16px',
-                borderBottom: '1px solid var(--apple-gray-2)',
-                background: isSelected ? 'var(--apple-blue)' : 'transparent',
-                border: 'none',
-                borderBottomColor: 'var(--apple-gray-2)',
-                borderBottomWidth: 1, borderBottomStyle: 'solid',
-                cursor: 'pointer', textAlign: 'left',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
-              onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-            >
-              {/* Avatar */}
-              <div style={{
-                width: 34, height: 34, borderRadius: '50%',
-                background: isSelected ? 'rgba(255,255,255,0.25)' : color,
-                color: 'white', fontSize: 13, fontWeight: 700,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-              }}>
-                {getInitials(user.name)}
-              </div>
-
-              {/* Text */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: 13, fontWeight: 600,
-                  color: isSelected ? '#ffffff' : 'var(--apple-text-primary)',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {user.name}
-                </div>
-                <div style={{
-                  fontSize: 11, marginTop: 2,
-                  color: isSelected ? 'rgba(255,255,255,0.75)' : 'var(--apple-text-secondary)',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {user.email}
-                </div>
-              </div>
-
-              {/* Status dot */}
-              {!isSelected && (
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%',
-                  background: user.status === 'active' ? '#22c55e' : '#9CA3AF',
-                  flexShrink: 0,
-                }} />
-              )}
-            </button>
-          );
-        })}
-
-        {filtered.length === 0 && (
-          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--apple-text-tertiary)', fontSize: 13 }}>
-            No users found.
-          </div>
-        )}
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          getRowId={(u) => u.id}
+          onRowClick={onSelect}
+          activeRowId={selectedId ?? undefined}
+          emptyMessage="No users found."
+        />
       </div>
     </div>
   );

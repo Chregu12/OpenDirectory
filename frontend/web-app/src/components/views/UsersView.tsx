@@ -23,7 +23,7 @@ export default function UsersView({ onCreateNew }: UsersViewProps) {
         />
       }
       detailPanel={
-        <UserDetailPanel user={selectedUser} />
+        <UserDetailPanel user={selectedUser} onClose={() => setSelectedUser(null)} />
       }
     />
   );

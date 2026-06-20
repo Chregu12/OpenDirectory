@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { DirectoryUser } from './UserListColumn';
 import toast from 'react-hot-toast';
+import { DetailPanel } from '@/components/ui';
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
@@ -68,121 +69,146 @@ const ROLE_LABELS: Record<DirectoryUser['role'], string> = {
 
 interface UserDetailPanelProps {
   user: DirectoryUser | null;
+  onClose?: () => void;
 }
 
-export default function UserDetailPanel({ user }: UserDetailPanelProps) {
-  if (!user) {
-    return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, color: 'var(--apple-text-tertiary)' }}>
-        <span style={{ fontSize: 48 }}>👤</span>
-        <p style={{ fontSize: 14, margin: 0 }}>Select a user to view details</p>
-      </div>
-    );
-  }
+export default function UserDetailPanel({ user, onClose }: UserDetailPanelProps) {
+  const [activeTab, setActiveTab] = useState('overview');
 
-  const color = avatarColor(user.id);
+  const color = user ? avatarColor(user.id) : '#0071e3';
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28 }}>
-        <ActionBtn icon="✏️" label="Edit User"       onClick={() => toast.success('Edit user')} />
-        <ActionBtn icon="🔒" label="Reset Password"  onClick={() => toast.success('Password reset link sent')} />
-        <ActionBtn icon="📱" label="Manage MFA"      onClick={() => toast.success('MFA management')} />
-        <ActionBtn icon="🚫" label="Disable Account" onClick={() => { if (confirm(`Disable ${user.name}?`)) toast.success('Account disabled'); }} danger />
-      </div>
-
-      {/* Avatar + name */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
-        <div style={{
-          width: 96, height: 96, borderRadius: '50%',
-          background: color,
-          color: 'white', fontSize: 36, fontWeight: 700,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          marginBottom: 14,
-        }}>
-          {getInitials(user.name)}
-        </div>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--apple-text-primary)', margin: '0 0 4px 0', textAlign: 'center' }}>
-          {user.name}
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--apple-text-secondary)', margin: '0 0 8px 0' }}>{user.email}</p>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <span style={{
-            padding: '3px 10px', borderRadius: 999,
-            background: user.status === 'active' ? '#D1FAE5' : '#F3F4F6',
-            color: user.status === 'active' ? '#065F46' : '#6B7280',
-            fontSize: 12, fontWeight: 500,
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-          }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: user.status === 'active' ? '#22c55e' : '#9CA3AF' }} />
-            {user.status === 'active' ? 'Active' : 'Inactive'}
-          </span>
-          <span style={{
-            padding: '3px 10px', borderRadius: 999,
-            background: 'var(--apple-gray-1)',
-            color: 'var(--apple-text-secondary)',
-            fontSize: 12, fontWeight: 500,
-          }}>
-            {ROLE_LABELS[user.role]}
-          </span>
-        </div>
-      </div>
-
-      {/* Overview section */}
-      <section style={{ marginBottom: 28 }}>
-        <SectionHeading>Overview</SectionHeading>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-          <DetailItem label="Department"   value={user.department} />
-          <DetailItem label="Role"         value={ROLE_LABELS[user.role]} />
-          <DetailItem label="MFA Enabled"  value={user.mfa ? 'Yes' : 'No'} />
-        </div>
-      </section>
-
-      <div style={{ height: 1, background: 'var(--apple-gray-2)', marginBottom: 24 }} />
-
-      {/* Groups section */}
-      {user.groups && user.groups.length > 0 && (
+    <DetailPanel
+      open={user !== null}
+      onClose={() => onClose?.()}
+      title={user?.name || ''}
+      subtitle={user?.email || ''}
+      tabs={[
+        { id: 'overview', label: 'Overview' },
+        { id: 'groups', label: 'Groups' },
+        { id: 'devices', label: 'Devices' },
+        { id: 'audit', label: 'Audit' },
+      ]}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      actions={
         <>
-          <section style={{ marginBottom: 28 }}>
-            <SectionHeading>Groups</SectionHeading>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {user.groups.map(g => (
-                <span key={g} style={{ padding: '4px 10px', borderRadius: 6, background: 'var(--apple-gray-1)', color: 'var(--apple-text-secondary)', fontSize: 12, fontWeight: 500 }}>
-                  {g}
-                </span>
-              ))}
-            </div>
-          </section>
-          <div style={{ height: 1, background: 'var(--apple-gray-2)', marginBottom: 24 }} />
+          <button className="fluent-btn-primary" onClick={() => toast.success('Edit user')}>Edit</button>
+          <button className="fluent-btn-secondary" onClick={() => toast.success('Password reset link sent')}>Reset Password</button>
         </>
-      )}
-
-      {/* Devices section */}
-      {user.devices && user.devices.length > 0 && (
+      }
+    >
+      {!user ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, color: 'var(--text-secondary)', padding: '40px 0' }}>
+          <span style={{ fontSize: 48 }}>👤</span>
+          <p style={{ fontSize: 14, margin: 0 }}>Select a user to view details</p>
+        </div>
+      ) : (
         <>
-          <section style={{ marginBottom: 28 }}>
-            <SectionHeading>Assigned Devices</SectionHeading>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {user.devices.map(d => (
-                <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'var(--apple-gray-1)' }}>
-                  <span>💻</span>
-                  <span style={{ fontSize: 13, color: 'var(--apple-text-primary)' }}>{d}</span>
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28 }}>
+            <ActionBtn icon="✏️" label="Edit User"       onClick={() => toast.success('Edit user')} />
+            <ActionBtn icon="🔒" label="Reset Password"  onClick={() => toast.success('Password reset link sent')} />
+            <ActionBtn icon="📱" label="Manage MFA"      onClick={() => toast.success('MFA management')} />
+            <ActionBtn icon="🚫" label="Disable Account" onClick={() => { if (confirm(`Disable ${user.name}?`)) toast.success('Account disabled'); }} danger />
+          </div>
+
+          {/* Avatar + name */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
+            <div style={{
+              width: 96, height: 96, borderRadius: '50%',
+              background: color,
+              color: 'white', fontSize: 36, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              marginBottom: 14,
+            }}>
+              {getInitials(user.name)}
+            </div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px 0', textAlign: 'center' }}>
+              {user.name}
+            </h1>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 8px 0' }}>{user.email}</p>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <span style={{
+                padding: '3px 10px', borderRadius: 999,
+                background: user.status === 'active' ? '#D1FAE5' : '#F3F4F6',
+                color: user.status === 'active' ? '#065F46' : '#6B7280',
+                fontSize: 12, fontWeight: 500,
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: user.status === 'active' ? '#22c55e' : '#9CA3AF' }} />
+                {user.status === 'active' ? 'Active' : 'Inactive'}
+              </span>
+              <span style={{
+                padding: '3px 10px', borderRadius: 999,
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-secondary)',
+                fontSize: 12, fontWeight: 500,
+              }}>
+                {ROLE_LABELS[user.role]}
+              </span>
+            </div>
+          </div>
+
+          {/* Overview section */}
+          {(activeTab === 'overview') && (
+            <section style={{ marginBottom: 28 }}>
+              <SectionHeading>Overview</SectionHeading>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
+                <DetailItem label="Department"   value={user.department} />
+                <DetailItem label="Role"         value={ROLE_LABELS[user.role]} />
+                <DetailItem label="MFA Enabled"  value={user.mfa ? 'Yes' : 'No'} />
+                <DetailItem label="Last Sign-in" value={user.lastActive} />
+              </div>
+            </section>
+          )}
+
+          {/* Groups section */}
+          {(activeTab === 'groups') && (
+            <section style={{ marginBottom: 28 }}>
+              <SectionHeading>Groups</SectionHeading>
+              {user.groups && user.groups.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {user.groups.map(g => (
+                    <span key={g} style={{ padding: '4px 10px', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500 }}>
+                      {g}
+                    </span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </section>
-          <div style={{ height: 1, background: 'var(--apple-gray-2)', marginBottom: 24 }} />
+              ) : (
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No groups assigned.</p>
+              )}
+            </section>
+          )}
+
+          {/* Devices section */}
+          {(activeTab === 'devices') && (
+            <section style={{ marginBottom: 28 }}>
+              <SectionHeading>Assigned Devices</SectionHeading>
+              {user.devices && user.devices.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {user.devices.map(d => (
+                    <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'var(--bg-secondary)' }}>
+                      <span>💻</span>
+                      <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{d}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No devices assigned.</p>
+              )}
+            </section>
+          )}
+
+          {/* Audit section */}
+          {(activeTab === 'audit') && (
+            <section style={{ marginBottom: 28 }}>
+              <SectionHeading>Audit Log</SectionHeading>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Audit log integration coming soon.</p>
+            </section>
+          )}
         </>
       )}
-
-      {/* Activity section */}
-      <section style={{ marginBottom: 28 }}>
-        <SectionHeading>Activity</SectionHeading>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-          <DetailItem label="Last Sign-in" value={user.lastActive} />
-        </div>
-      </section>
-    </div>
+    </DetailPanel>
   );
 }
