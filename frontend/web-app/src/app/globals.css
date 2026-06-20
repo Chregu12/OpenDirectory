@@ -2,130 +2,163 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Dark mode CSS custom properties ─────────────────────────────────────── */
+/* ── ABM × UniFi Design System ──────────────────────────────────────────── */
 :root {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f7;
-  --bg-sidebar: #1c1c1e;
-  --text-primary: #1d1d1f;
-  --text-secondary: #6e6e73;
-  --border-color: #d2d2d7;
-  --accent-blue: #0066CC;
-  --accent-blue-hover: #0055aa;
-  --danger: #ff3b30;
-  --success: #34c759;
-  --warning: #ff9500;
-  --card-bg: #ffffff;
-  --input-bg: #ffffff;
-  --shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-[data-theme="dark"] {
-  --bg-primary: #000000;
-  --bg-secondary: #1c1c1e;
-  --bg-sidebar: #000000;
-  --text-primary: #f5f5f7;
-  --text-secondary: #98989d;
-  --border-color: #38383a;
-  --accent-blue: #0a84ff;
-  --accent-blue-hover: #409cff;
-  --danger: #ff453a;
-  --success: #30d158;
-  --warning: #ffd60a;
-  --card-bg: #1c1c1e;
-  --input-bg: #2c2c2e;
-  --shadow: 0 1px 3px rgba(0,0,0,0.5);
-}
-/* ─────────────────────────────────────────────────────────────────────────── */
+  /* Core palette — dark first (UniFi-inspired) */
+  --bg-base:          #0e1115;
+  --bg-surface:       #161b22;
+  --bg-surface-raised:#1c2128;
+  --bg-overlay:       #252c37;
 
-:root {
-  --apple-blue: #0071E3;
-  --apple-blue-hover: #0077ED;
-  --apple-blue-light: #EAF4FF;
-  --apple-gray-1: #F2F2F7;
-  --apple-gray-2: #E5E5EA;
-  --apple-gray-3: #D1D1D6;
-  --apple-gray-4: #C7C7CC;
-  --apple-gray-5: #AEAEB2;
-  --apple-gray-6: #6E6E73;
-  --apple-text-primary: #1D1D1F;
-  --apple-text-secondary: #6E6E73;
-  --apple-text-tertiary: #AEAEB2;
-  --apple-sidebar-width: 240px;
-  --apple-topbar-height: 52px;
+  --bg-sidebar:       #0a0d10;
+  --bg-sidebar-hover: rgba(255,255,255,0.05);
+  --bg-sidebar-active:#006FFF;
+
+  --bg-topbar:        #0a0d10;
+  --bg-input:         #1c2128;
+
+  --border:           rgba(255,255,255,0.07);
+  --border-subtle:    rgba(255,255,255,0.04);
+  --border-strong:    rgba(255,255,255,0.14);
+
+  --text-primary:     #e4e6ea;
+  --text-secondary:   #8b949e;
+  --text-muted:       #6e7681;
+  --text-on-accent:   #ffffff;
+  --text-link:        #58a6ff;
+
+  --accent:           #006FFF;
+  --accent-hover:     #0058d6;
+  --accent-light:     rgba(0, 111, 255, 0.15);
+  --accent-glow:      rgba(0, 111, 255, 0.25);
+
+  --success:          #3fb950;
+  --success-light:    rgba(63, 185, 80, 0.15);
+  --danger:           #f85149;
+  --danger-light:     rgba(248, 81, 73, 0.15);
+  --warning:          #d29922;
+  --warning-light:    rgba(210, 153, 34, 0.15);
+  --info:             #58a6ff;
+  --info-light:       rgba(88, 166, 255, 0.15);
+
+  --card-bg:          #161b22;
+  --card-border:      rgba(255,255,255,0.07);
+  --card-shadow:      0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
+  --card-shadow-hover:0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,111,255,0.3);
+
+  --radius-sm:        6px;
+  --radius:           10px;
+  --radius-lg:        14px;
+
+  --sidebar-width:    240px;
+  --topbar-height:    52px;
+  --detail-panel-w:   420px;
+
+  /* Legacy compat aliases */
+  --bg-primary:       var(--bg-base);
+  --bg-secondary:     var(--bg-surface);
+  --input-bg:         var(--bg-input);
+  --border-color:     var(--border);
+  --accent-blue:      var(--accent);
+  --accent-blue-hover:var(--accent-hover);
+  --shadow:           var(--card-shadow);
+
+  /* Apple compat aliases (used by existing views) */
+  --apple-blue:       var(--accent);
+  --apple-blue-hover: var(--accent-hover);
+  --apple-blue-light: var(--accent-light);
+  --apple-gray-1:     var(--bg-surface);
+  --apple-gray-2:     var(--border);
+  --apple-gray-3:     var(--border-strong);
+  --apple-gray-4:     #484f58;
+  --apple-gray-5:     #6e7681;
+  --apple-gray-6:     #8b949e;
+  --apple-text-primary:  var(--text-primary);
+  --apple-text-secondary:var(--text-secondary);
+  --apple-text-tertiary: var(--text-muted);
+  --apple-sidebar-width: var(--sidebar-width);
+  --apple-topbar-height: var(--topbar-height);
+
+  /* od- compat */
+  --od-bg-primary:    var(--bg-base);
+  --od-bg-card:       var(--bg-surface);
+  --od-bg-secondary:  var(--bg-surface);
+  --od-bg-hover:      var(--bg-overlay);
+  --od-border:        var(--border);
+  --od-border-light:  var(--border-subtle);
+  --od-text-primary:  var(--text-primary);
+  --od-text-secondary:var(--text-secondary);
+  --od-text-muted:    var(--text-muted);
+  --od-accent:        var(--accent);
+  --od-accent-light:  var(--accent-light);
 }
 
 * { box-sizing: border-box; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-  background: var(--apple-gray-1);
-  color: var(--apple-text-primary);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
   font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Apple-style scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--apple-gray-4); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--apple-gray-5); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
 
 @layer base {
   :root {
-    /* Background */
-    --od-bg-primary: #F2F2F7;
-    --od-bg-card: #FFFFFF;
-    --od-bg-secondary: #F2F2F7;
-    --od-bg-hover: #F5F5F7;
-
-    /* Borders */
-    --od-border: #E5E5EA;
-    --od-border-light: #E5E5EA;
-
-    /* Text */
-    --od-text-primary: #1D1D1F;
-    --od-text-secondary: #6E6E73;
-    --od-text-muted: #AEAEB2;
-
-    /* Accent */
-    --od-accent: #0071E3;
-    --od-accent-light: #EAF4FF;
+    /* od- vars already defined above, kept for @layer base compat */
   }
 }
 
 @layer components {
   /* Unified card style */
   .od-card {
-    @apply bg-white rounded-xl border;
-    border-color: var(--apple-gray-2);
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--card-shadow);
   }
 
-  /* Severity badges - light theme */
+  /* Severity badges */
   .od-badge-critical {
-    @apply bg-red-100 text-red-700;
+    background: var(--danger-light);
+    color: var(--danger);
   }
   .od-badge-high {
-    @apply bg-orange-100 text-orange-700;
+    background: var(--warning-light);
+    color: var(--warning);
   }
   .od-badge-medium {
-    @apply bg-yellow-100 text-yellow-700;
+    background: var(--warning-light);
+    color: var(--warning);
   }
   .od-badge-low {
-    @apply bg-blue-100 text-blue-700;
+    background: var(--info-light);
+    color: var(--info);
   }
 
   /* Status badges */
   .od-badge-success {
-    @apply bg-green-100 text-green-800;
+    background: var(--success-light);
+    color: var(--success);
   }
   .od-badge-warning {
-    @apply bg-yellow-100 text-yellow-800;
+    background: var(--warning-light);
+    color: var(--warning);
   }
   .od-badge-danger {
-    @apply bg-red-100 text-red-800;
+    background: var(--danger-light);
+    color: var(--danger);
   }
   .od-badge-info {
-    @apply bg-blue-100 text-blue-800;
+    background: var(--info-light);
+    color: var(--info);
   }
 
   /* Tab styles */
@@ -133,131 +166,129 @@ body {
     @apply px-4 py-2 text-sm rounded-t-lg transition-colors;
   }
   .od-tab-active {
-    @apply bg-white text-gray-900 border-t border-x border-gray-200 shadow-sm;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-top: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
   }
   .od-tab-inactive {
-    @apply text-gray-500 hover:text-gray-700 hover:bg-gray-100;
+    color: var(--text-secondary);
+  }
+  .od-tab-inactive:hover {
+    color: var(--text-primary);
+    background: var(--bg-surface-raised);
   }
 }
 
-/* ── Shared UI component utilities (ABM style) ──────────────────────────── */
+/* ── Shared UI component utilities (ABM × UniFi style) ──────────────────── */
 
-/* CommandBar */
 .fluent-command-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--apple-gray-2);
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--border);
   margin-bottom: 16px;
 }
 .fluent-btn-primary {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 14px;
-  background: var(--apple-blue);
-  color: #fff;
-  border: none; border-radius: 8px;
+  padding: 7px 16px;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: var(--radius);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.fluent-btn-primary:hover { background: var(--accent-hover); box-shadow: 0 0 0 3px var(--accent-glow); }
+.fluent-btn-primary:disabled { opacity: 0.4; cursor: default; }
+.fluent-btn-secondary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px;
+  background: var(--bg-surface-raised); color: var(--text-primary);
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  font-size: 13px; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.fluent-btn-secondary:hover { background: var(--bg-overlay); border-color: var(--accent); }
+.fluent-btn-secondary:disabled { opacity: 0.4; cursor: default; }
+.fluent-btn-ghost {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  background: transparent; color: var(--text-secondary);
+  border: none; border-radius: var(--radius);
+  font-size: 13px; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.fluent-btn-ghost:hover { background: var(--bg-surface-raised); color: var(--text-primary); }
+.fluent-btn-danger {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px;
+  background: var(--danger-light); color: var(--danger);
+  border: 1px solid var(--danger); border-radius: var(--radius);
   font-size: 13px; font-weight: 600; cursor: pointer;
   transition: background 0.15s;
 }
-.fluent-btn-primary:hover { background: var(--apple-blue-hover); }
-.fluent-btn-primary:disabled { opacity: 0.5; cursor: default; }
-.fluent-btn-secondary {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 14px;
-  background: transparent;
-  color: var(--apple-text-primary);
-  border: 1px solid var(--apple-gray-3); border-radius: 8px;
-  font-size: 13px; cursor: pointer;
-  transition: background 0.15s;
-}
-.fluent-btn-secondary:hover { background: var(--apple-gray-1); }
-.fluent-btn-secondary:disabled { opacity: 0.5; cursor: default; }
-.fluent-btn-ghost {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 10px;
-  background: transparent;
-  color: var(--apple-text-secondary);
-  border: none; border-radius: 8px;
-  font-size: 13px; cursor: pointer;
-  transition: background 0.15s;
-}
-.fluent-btn-ghost:hover { background: var(--apple-gray-1); color: var(--apple-text-primary); }
+.fluent-btn-danger:hover { background: var(--danger); color: #fff; }
 
-/* Stat card */
 .fluent-stat-card {
-  background: #fff;
-  border: 1px solid var(--apple-gray-2);
-  border-radius: 12px;
-  padding: 16px 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  transition: box-shadow 0.2s;
-}
-.fluent-stat-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-[data-theme="dark"] .fluent-stat-card {
   background: var(--card-bg);
-  border-color: var(--border-color);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.2s, border-color 0.2s;
 }
+.fluent-stat-card:hover { box-shadow: var(--card-shadow-hover); border-color: var(--accent); }
 
-/* Table */
 .fluent-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .fluent-table th {
-  text-align: left; padding: 8px 12px;
-  font-weight: 600; font-size: 11px;
-  color: var(--apple-text-secondary);
-  text-transform: uppercase; letter-spacing: 0.4px;
-  border-bottom: 1px solid var(--apple-gray-2);
+  text-align: left; padding: 9px 14px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
   white-space: nowrap; cursor: pointer; user-select: none;
 }
-.fluent-table th:hover { background: var(--apple-gray-1); }
+.fluent-table th:hover { background: var(--bg-surface-raised); color: var(--text-secondary); }
 .fluent-table td {
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--apple-gray-1);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
   vertical-align: middle;
-  color: var(--apple-text-primary);
 }
-.fluent-table tr:hover td { background: var(--apple-gray-1); }
-.fluent-table tr.selected td { background: var(--apple-blue-light); }
+.fluent-table tr:hover td { background: var(--bg-surface-raised); }
+.fluent-table tr.selected td { background: var(--accent-light); }
 
-/* Breadcrumb */
 .fluent-breadcrumb {
   display: flex; align-items: center; gap: 4px;
-  font-size: 12px; color: var(--apple-text-secondary);
-  margin-bottom: 12px;
+  font-size: 12px; color: var(--text-muted); margin-bottom: 14px;
 }
-.fluent-breadcrumb a { color: var(--apple-blue); text-decoration: none; }
+.fluent-breadcrumb a { color: var(--accent); text-decoration: none; }
 .fluent-breadcrumb a:hover { text-decoration: underline; }
-.fluent-breadcrumb-sep { color: var(--apple-gray-4); }
 
-/* Detail panel */
 .fluent-detail-panel {
-  position: fixed;
-  top: var(--apple-topbar-height);
-  right: 0;
-  bottom: 0;
-  background: #fff;
-  border-left: 1px solid var(--apple-gray-2);
-  box-shadow: -4px 0 20px rgba(0,0,0,0.08);
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  position: fixed; top: var(--topbar-height); right: 0; bottom: 0;
+  width: var(--detail-panel-w);
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+  z-index: 30; display: flex; flex-direction: column; overflow: hidden;
   transform: translateX(100%);
-  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
 }
 .fluent-detail-panel.open { transform: translateX(0); }
-[data-theme="dark"] .fluent-detail-panel {
-  background: var(--card-bg);
-  border-color: var(--border-color);
-}
 
-/* Section typography */
-.fluent-section-header {
-  font-size: 17px; font-weight: 600;
-  color: var(--apple-text-primary);
-  margin-bottom: 4px;
-}
-.fluent-section-sub {
-  font-size: 13px; color: var(--apple-text-secondary);
-  margin-bottom: 16px;
-}
+.fluent-section-header { font-size: 17px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.fluent-section-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+
+/* Status dot */
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.status-dot.online  { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.status-dot.offline { background: var(--text-muted); }
+.status-dot.warning { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+.status-dot.error   { background: var(--danger);  box-shadow: 0 0 6px var(--danger); }
+
+/* Badge chips */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.badge-success { background: var(--success-light); color: var(--success); }
+.badge-danger  { background: var(--danger-light);  color: var(--danger); }
+.badge-warning { background: var(--warning-light); color: var(--warning); }
+.badge-info    { background: var(--info-light);    color: var(--info); }
+.badge-neutral { background: var(--bg-overlay);   color: var(--text-secondary); }

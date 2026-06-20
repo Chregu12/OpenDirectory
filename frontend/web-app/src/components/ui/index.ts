@@ -7,3 +7,4 @@ export { DataTable } from './DataTable';
 export type { Column } from './DataTable';
 export { Breadcrumb } from './Breadcrumb';
 export type { BreadcrumbItem } from './Breadcrumb';
+export { ViewShell } from './ViewShell';

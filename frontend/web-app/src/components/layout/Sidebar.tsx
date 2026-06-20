@@ -168,9 +168,9 @@ export default function Sidebar({
           top: 0,
           left: 0,
           bottom: 0,
-          width: 'var(--apple-sidebar-width)',
-          background: 'var(--bg-sidebar)',
-          borderRight: '1px solid var(--border-color)',
+          width: 'var(--sidebar-width)',
+          background: '#0a0d10',
+          borderRight: '1px solid rgba(255,255,255,0.07)',
           zIndex: 50,
           transition: 'transform 0.3s ease',
           display: 'flex',
@@ -180,8 +180,8 @@ export default function Sidebar({
         {/* Org header / logo */}
         <div
           style={{
-            height: 'var(--apple-topbar-height)',
-            borderBottom: '1px solid var(--border-color)',
+            height: 'var(--topbar-height)',
+            borderBottom: '1px solid rgba(255,255,255,0.07)',
             padding: '0 16px',
             display: 'flex',
             alignItems: 'center',
@@ -193,7 +193,7 @@ export default function Sidebar({
             style={{
               width: 32,
               height: 32,
-              background: 'var(--accent-blue)',
+              background: '#006FFF',
               borderRadius: 4,
               display: 'flex',
               alignItems: 'center',
@@ -201,14 +201,14 @@ export default function Sidebar({
               flexShrink: 0,
             }}
           >
-            <span style={{ color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 12 }}>OD</span>
+            <span style={{ color: '#ffffff', fontWeight: 700, fontSize: 12 }}>OD</span>
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
             <p
               style={{
                 fontSize: 13,
                 fontWeight: 600,
-                color: 'var(--text-primary)',
+                color: '#e4e6ea',
                 lineHeight: 1.2,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
@@ -217,7 +217,7 @@ export default function Sidebar({
             >
               OpenDirectory
             </p>
-            <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.2 }}>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.2 }}>
               opendirectory.local
             </p>
           </div>
@@ -238,7 +238,7 @@ export default function Sidebar({
               return (
                 <div
                   key={`divider-${idx}`}
-                  style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '4px 12px' }}
+                  style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '4px 12px' }}
                 />
               );
             }
@@ -256,20 +256,20 @@ export default function Sidebar({
                   width: 'calc(100% - 16px)',
                   margin: '1px 8px',
                   padding: '6px 10px',
-                  background: isActive ? 'var(--apple-blue)' : 'transparent',
+                  background: isActive ? '#006FFF' : 'transparent',
                   border: 'none',
-                  borderRadius: 7,
+                  borderRadius: 8,
                   cursor: 'pointer',
                   fontSize: 13,
                   fontWeight: isActive ? 600 : 400,
-                  color: isActive ? '#ffffff' : 'rgba(255,255,255,0.75)',
+                  color: isActive ? '#ffffff' : 'rgba(255,255,255,0.6)',
                   textAlign: 'left',
                   transition: 'background 0.15s',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.08)'; }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
                 onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
               >
                 <entry.icon style={{ width: 16, height: 16, flexShrink: 0 }} />
@@ -282,7 +282,7 @@ export default function Sidebar({
         {/* Dark mode toggle + user footer */}
         <div
           style={{
-            borderTop: '1px solid var(--border-color)',
+            borderTop: '1px solid rgba(255,255,255,0.07)',
             flexShrink: 0,
           }}
         >
@@ -299,10 +299,10 @@ export default function Sidebar({
                 width: '100%',
                 padding: '6px 12px',
                 fontSize: 12,
-                color: 'var(--text-secondary)',
+                color: 'rgba(255,255,255,0.7)',
                 background: 'none',
                 border: 'none',
-                borderRadius: 'var(--border-radius)',
+                borderRadius: 'var(--radius)',
                 cursor: 'pointer',
               }}
             >
@@ -323,8 +323,8 @@ export default function Sidebar({
                 width: 30,
                 height: 30,
                 borderRadius: '50%',
-                background: 'var(--accent-blue)',
-                color: 'var(--text-on-accent)',
+                background: '#006FFF',
+                color: '#ffffff',
                 fontSize: 11,
                 fontWeight: 700,
                 display: 'flex',
@@ -340,7 +340,7 @@ export default function Sidebar({
                 style={{
                   fontSize: 12,
                   fontWeight: 500,
-                  color: 'var(--text-primary)',
+                  color: 'rgba(255,255,255,0.7)',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -351,7 +351,7 @@ export default function Sidebar({
               <p
                 style={{
                   fontSize: 11,
-                  color: 'var(--text-secondary)',
+                  color: 'rgba(255,255,255,0.7)',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',

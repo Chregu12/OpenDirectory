@@ -64,6 +64,19 @@ import KerberosAdminView from '@/components/views/KerberosAdminView';
 import ReplicationView from '@/components/views/ReplicationView';
 import AutomationView from '@/components/views/AutomationView';
 
+// ─── Placeholder for views not yet implemented ────────────────────────────────
+
+function PlaceholderView({ title }: { title: string }) {
+  return (
+    <div style={{ padding: '32px 28px', minHeight: '100vh', background: 'var(--bg-base)' }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{title}</h1>
+      <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8 }}>
+        This view is under construction.
+      </p>
+    </div>
+  );
+}
+
 // ─── Module gating ────────────────────────────────────────────────────────────
 
 const MODULE_NAV_MAP: Record<string, string> = {
@@ -90,6 +103,9 @@ const VALID_VIEWS = new Set([
   'automation',
   // Graph Explorer + Policy Simulator
   'graph', 'simulator',
+  // ABM×UniFi new views
+  'subscription', 'activity', 'locations', 'usergroups', 'roles',
+  'assignment', 'appsbooks', 'gpo',
 ]);
 
 // Views that display the QuickActionsBar
@@ -242,6 +258,14 @@ export default function ViewPage() {
         case 'replication':       return <ReplicationView />;
         case 'graph':             return <GraphExplorerView />;
         case 'simulator':         return <PolicySimulatorView />;
+        case 'subscription':      return <PlaceholderView title="Subscription" />;
+        case 'activity':          return <PlaceholderView title="Activity" />;
+        case 'locations':         return <PlaceholderView title="Locations" />;
+        case 'usergroups':        return <PlaceholderView title="User Groups" />;
+        case 'roles':             return <PlaceholderView title="Roles" />;
+        case 'assignment':        return <PlaceholderView title="Assignment History" />;
+        case 'appsbooks':         return <PlaceholderView title="Apps and Books" />;
+        case 'gpo':               return <PlaceholderView title="Group Policy" />;
         case 'settings':
           return (
             <div className="p-6">
