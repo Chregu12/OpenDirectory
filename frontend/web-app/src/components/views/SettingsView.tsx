@@ -114,11 +114,11 @@ function MdmSettingsTab() {
     <div className="space-y-8 p-6">
       {/* APNs Certificate section */}
       <div>
-        <h3 className="text-base font-semibold text-gray-900 mb-1">Apple MDM Push Certificate</h3>
-        <p className="text-sm text-gray-500 mb-4">
+        <h3 className="text-base font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Apple MDM Push Certificate</h3>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
           Apple MDM benötigt ein spezielles <strong>MDM Push Certificate</strong> — kein normales APNs-Zertifikat.{' '}
           Bezug über{' '}
-          <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">
+          <span className="font-mono text-xs px-1 py-0.5 rounded" style={{ background: 'var(--bg-surface-raised)' }}>
             https://identity.apple.com/pushcert/
           </span>{' '}
           mit einer Apple-ID, die an deine Organisation gebunden ist.
@@ -136,40 +136,43 @@ function MdmSettingsTab() {
 
         <div className="grid grid-cols-1 gap-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
               APNs Topic (Bundle ID des MDM Push Certs)
             </label>
             <input
               value={apnsTopic}
               onChange={e => setApnsTopic(e.target.value)}
               placeholder="com.apple.mgmt.External.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ borderColor: 'var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}
             />
-            <p className="text-xs text-gray-400 mt-1">Im Zertifikat unter UID= zu finden</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Im Zertifikat unter UID= zu finden</p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">MDM Server URL</label>
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>MDM Server URL</label>
             <input
               value={mdmServerUrl}
               onChange={e => setMdmServerUrl(e.target.value)}
               placeholder="https://mdm.deine-domain.local"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ borderColor: 'var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Organisation</label>
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Organisation</label>
             <input
               value={mdmOrgName}
               onChange={e => setMdmOrgName(e.target.value)}
               placeholder="Meine Firma GmbH"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ borderColor: 'var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
               MDM Push Certificate (.pem) — PEM-Inhalt einfügen
             </label>
             <textarea
@@ -177,12 +180,13 @@ function MdmSettingsTab() {
               onChange={e => setApnsCert(e.target.value)}
               rows={5}
               placeholder={'-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----'}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ borderColor: 'var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
               Privater Schlüssel (.key) — PEM-Inhalt einfügen
             </label>
             <textarea
@@ -190,9 +194,10 @@ function MdmSettingsTab() {
               onChange={e => setApnsKey(e.target.value)}
               rows={5}
               placeholder={'-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----'}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ borderColor: 'var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}
             />
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
               Der Schlüssel wird Base64-verschlüsselt gespeichert und verlässt den Server nicht.
             </p>
           </div>
@@ -211,21 +216,21 @@ function MdmSettingsTab() {
 
       {/* Enrolled Apple Devices */}
       <div>
-        <h3 className="text-base font-semibold text-gray-900 mb-3">
+        <h3 className="text-base font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
           Eingeschriebene Apple-Geräte ({mdmDevices.length})
         </h3>
         {devLoading ? (
-          <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-10 bg-gray-100 rounded animate-pulse" />)}</div>
+          <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-10 rounded animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />)}</div>
         ) : mdmDevices.length === 0 ? (
-          <div className="text-center py-8 text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">
+          <div className="text-center py-8 text-sm rounded-lg" style={{ color: 'var(--text-muted)', border: '1px dashed var(--border-strong)' }}>
             Noch keine Apple-Geräte via MDM eingeschrieben.{' '}
             Enrollment-Link: <span className="font-mono text-xs">/mdm/enroll</span>
           </div>
         ) : (
-          <div className="overflow-hidden border border-gray-200 rounded-lg">
+          <div className="overflow-hidden rounded-lg" style={{ border: '1px solid var(--border)' }}>
             <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr className="text-gray-500 text-xs">
+              <thead style={{ background: 'var(--bg-surface-raised)' }}>
+                <tr className="text-xs" style={{ color: 'var(--text-muted)' }}>
                   <th className="px-4 py-3 text-left">Gerät</th>
                   <th className="px-4 py-3 text-left">UDID</th>
                   <th className="px-4 py-3 text-left">OS</th>
@@ -233,13 +238,13 @@ function MdmSettingsTab() {
                   <th className="px-4 py-3 text-left"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {mdmDevices.map((d: any) => (
-                  <tr key={d.udid} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{d.device_name ?? d.udid}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-500">{d.udid.slice(0, 16)}…</td>
-                    <td className="px-4 py-3 text-gray-500">{d.os_version ?? '—'}</td>
-                    <td className="px-4 py-3 text-gray-500">
+                  <tr key={d.udid} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td className="px-4 py-3 font-medium" style={{ color: 'var(--text-primary)' }}>{d.device_name ?? d.udid}</td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{d.udid.slice(0, 16)}…</td>
+                    <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{d.os_version ?? '—'}</td>
+                    <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>
                       {d.last_seen ? new Date(d.last_seen).toLocaleString('de-CH') : '—'}
                     </td>
                     <td className="px-4 py-3">
@@ -271,38 +276,38 @@ function DisableConfirmModal({ moduleName, step, onNext, onCancel }: {
 }) {
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onCancel}>
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+      <div className="rounded-xl shadow-xl max-w-md w-full" style={{ background: 'var(--bg-surface)' }} onClick={e => e.stopPropagation()}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-lg bg-yellow-50 flex items-center justify-center flex-shrink-0">
                 <ExclamationTriangleIcon className="w-5 h-5 text-yellow-600" />
               </div>
-              <h2 className="text-base font-semibold text-gray-900">
+              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {step === 1 ? 'Disable Module?' : 'Confirm Disable'}
               </h2>
             </div>
-            <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
+            <button onClick={onCancel} style={{ color: 'var(--text-muted)' }}>
               <XMarkIcon className="w-5 h-5" />
             </button>
           </div>
 
           {step === 1 ? (
             <>
-              <p className="text-sm text-gray-700 mb-2">
+              <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>
                 You are about to disable <strong>{moduleName}</strong>.
               </p>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
                 This will <strong>hide it from the navigation</strong>. All settings and data
                 are preserved — you can re-enable the module at any time from Settings.
               </p>
             </>
           ) : (
             <>
-              <p className="text-sm text-gray-700 mb-2">
+              <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>
                 Are you absolutely sure you want to disable <strong>{moduleName}</strong>?
               </p>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
                 The navigation item will disappear immediately. No data will be deleted.
               </p>
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mb-4">
@@ -315,7 +320,8 @@ function DisableConfirmModal({ moduleName, step, onNext, onCancel }: {
 
           <div className="flex justify-end gap-3">
             <button onClick={onCancel}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
+              className="px-4 py-2 text-sm font-medium rounded-lg"
+              style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface-raised)' }}>
               Cancel
             </button>
             <button onClick={onNext}
@@ -458,17 +464,17 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
 
   return (
     <>
-      <div className="bg-white rounded-lg shadow">
+      <div className="rounded-lg" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }}>
         {/* Header */}
-        <div className="border-b border-gray-200">
+        <div style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Cog6ToothIcon className="h-6 w-6 text-blue-600" />
-                <h2 className="text-lg font-medium text-gray-900">Settings</h2>
+                <h2 className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>Settings</h2>
               </div>
               {!loading && (
-                <div className="text-sm text-gray-500">
+                <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
                   {healthyServices}/{services.length} services healthy · Uptime {uptime}
                 </div>
               )}
@@ -480,8 +486,9 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                 className={`${
                   activeTab === tab.key
                     ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}>
+                    : 'border-transparent hover:border-gray-300'
+                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
+                style={activeTab !== tab.key ? { color: 'var(--text-muted)' } : {}}>
                 <tab.icon className="h-4 w-4" />
                 <span>{tab.label}</span>
               </button>
@@ -520,15 +527,15 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
               {/* Module Management */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium text-gray-700">Module Management</h3>
-                  <p className="text-xs text-gray-400">Disabled modules are hidden from the navigation</p>
+                  <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Module Management</h3>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Disabled modules are hidden from the navigation</p>
                 </div>
                 {loading ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {[...Array(6)].map((_, i) => (
-                      <div key={i} className="border border-gray-200 rounded-lg p-4 animate-pulse">
-                        <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
-                        <div className="h-3 bg-gray-200 rounded w-1/2" />
+                      <div key={i} className="rounded-lg p-4 animate-pulse" style={{ border: '1px solid var(--border)' }}>
+                        <div className="h-4 rounded w-3/4 mb-2" style={{ background: 'var(--bg-surface-raised)' }} />
+                        <div className="h-3 rounded w-1/2" style={{ background: 'var(--bg-surface-raised)' }} />
                       </div>
                     ))}
                   </div>
@@ -539,21 +546,24 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                       const isCore = isCoreModule(module.id);
                       const hasNav = HAS_NAV_ITEM.has(module.id);
                       return (
-                        <div key={module.id} className={`border rounded-lg p-4 ${
-                          module.enabled ? 'border-gray-200' : 'border-gray-100 bg-gray-50 opacity-75'
-                        }`}>
+                        <div key={module.id} className="rounded-lg p-4" style={{
+                          border: '1px solid var(--border)',
+                          background: module.enabled ? 'transparent' : 'var(--bg-surface-raised)',
+                          opacity: module.enabled ? 1 : 0.75,
+                        }}>
                           <div className="flex items-start justify-between">
                             <div className="flex items-center space-x-3">
-                              <div className={`p-2 rounded-lg ${module.enabled ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                              <div className={`p-2 rounded-lg ${module.enabled ? 'bg-green-100 text-green-600' : 'text-gray-400'}`}
+                                style={!module.enabled ? { background: 'var(--bg-overlay)' } : {}}>
                                 {getModuleIcon(module.id)}
                               </div>
                               <div>
-                                <h4 className="text-sm font-medium text-gray-900">{module.name}</h4>
-                                <p className="text-xs text-gray-500">Port {module.port}</p>
+                                <h4 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{module.name}</h4>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Port {module.port}</p>
                                 {service && (
                                   <div className="flex items-center space-x-1 mt-1">
                                     {getStatusIcon(service.status)}
-                                    <span className="text-xs text-gray-500 capitalize">{service.status}</span>
+                                    <span className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>{service.status}</span>
                                   </div>
                                 )}
                                 {hasNav && !module.enabled && (
@@ -572,13 +582,16 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                                 disabled={isCore}
                                 onChange={e => handleToggleRequest(module, e.target.checked)}
                               />
-                              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                              <div className="w-11 h-6 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
+                                style={{ background: module.enabled ? undefined : 'var(--bg-overlay)' }} />
                             </label>
                           </div>
                           {module.enabled && Object.keys(module.features || {}).length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-1">
                               {Object.entries(module.features).slice(0, 3).map(([feat, on]) => (
-                                <span key={feat} className={`px-2 py-0.5 text-xs rounded-full ${on ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                <span key={feat} className="px-2 py-0.5 text-xs rounded-full" style={on
+                                  ? { background: 'var(--success-light)', color: 'var(--success)' }
+                                  : { background: 'var(--bg-overlay)', color: 'var(--text-muted)' }}>
                                   {feat}
                                 </span>
                               ))}
@@ -594,20 +607,20 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
               {/* Service Status Table */}
               {services.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Service Status</h3>
-                  <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-                    <table className="min-w-full divide-y divide-gray-300">
-                      <thead className="bg-gray-50">
+                  <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Service Status</h3>
+                  <div className="overflow-hidden md:rounded-lg" style={{ boxShadow: 'var(--card-shadow)' }}>
+                    <table className="min-w-full">
+                      <thead style={{ background: 'var(--bg-surface-raised)' }}>
                         <tr>
                           {['Service', 'Status', 'Port', 'Response', 'Last Check'].map(h => (
-                            <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
+                            <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody style={{ background: 'var(--bg-surface)' }}>
                         {services.map((svc, i) => (
-                          <tr key={svc.name} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{svc.name}</td>
+                          <tr key={svc.name} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-surface-raised)' }}>
+                            <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{svc.name}</td>
                             <td className="px-4 py-3">
                               <div className="flex items-center space-x-1">
                                 {getStatusIcon(svc.status)}
@@ -617,9 +630,9 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                                 }`}>{svc.status}</span>
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-500">{svc.port || '—'}</td>
-                            <td className="px-4 py-3 text-sm text-gray-500">{svc.responseTime ? `${svc.responseTime}ms` : '—'}</td>
-                            <td className="px-4 py-3 text-sm text-gray-500">
+                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-muted)' }}>{svc.port || '—'}</td>
+                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-muted)' }}>{svc.responseTime ? `${svc.responseTime}ms` : '—'}</td>
+                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-muted)' }}>
                               {svc.lastCheck ? new Date(svc.lastCheck).toLocaleTimeString() : '—'}
                             </td>
                           </tr>
@@ -636,8 +649,8 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
           {activeTab === 'setup' && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-sm font-medium text-gray-700">Setup & Configuration Wizards</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Verwende die Wizards um Module und Dienste nachträglich zu konfigurieren.</p>
+                <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Setup & Configuration Wizards</h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Verwende die Wizards um Module und Dienste nachträglich zu konfigurieren.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -648,8 +661,8 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                       <SparklesIcon className="w-5 h-5 text-blue-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold text-gray-900">Initial Setup Wizard</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">Module aktivieren, Gerätezahlen anpassen, Organisationsname ändern.</p>
+                      <h4 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Initial Setup Wizard</h4>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Module aktivieren, Gerätezahlen anpassen, Organisationsname ändern.</p>
                     </div>
                   </div>
                   <button
@@ -661,14 +674,14 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                 </div>
 
                 {/* User Management */}
-                <div className="border border-gray-200 rounded-xl p-5 hover:border-indigo-200 hover:bg-indigo-50 transition-colors">
+                <div className="rounded-xl p-5 transition-colors" style={{ border: '1px solid var(--border)' }}>
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
                       <PlayIcon className="w-5 h-5 text-indigo-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold text-gray-900">User Management</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">Benutzer und Gruppen anlegen, LDAP-Einstellungen konfigurieren.</p>
+                      <h4 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>User Management</h4>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Benutzer und Gruppen anlegen, LDAP-Einstellungen konfigurieren.</p>
                     </div>
                   </div>
                   <button
@@ -680,14 +693,14 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                 </div>
 
                 {/* Device Enrollment */}
-                <div className="border border-gray-200 rounded-xl p-5 hover:border-teal-200 hover:bg-teal-50 transition-colors">
+                <div className="rounded-xl p-5 transition-colors" style={{ border: '1px solid var(--border)' }}>
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
                       <ComputerDesktopIcon className="w-5 h-5 text-teal-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold text-gray-900">Device Enrollment</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">Geräte registrieren, Enrollment-Profile und Richtlinien einrichten.</p>
+                      <h4 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Device Enrollment</h4>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Geräte registrieren, Enrollment-Profile und Richtlinien einrichten.</p>
                     </div>
                   </div>
                   <button
@@ -699,14 +712,14 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                 </div>
 
                 {/* Monitoring */}
-                <div className="border border-gray-200 rounded-xl p-5 hover:border-purple-200 hover:bg-purple-50 transition-colors">
+                <div className="rounded-xl p-5 transition-colors" style={{ border: '1px solid var(--border)' }}>
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
                       <ChartBarIcon className="w-5 h-5 text-purple-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold text-gray-900">Monitoring & Alerting</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">Grafana-Dashboards, Prometheus-Alerts und Benachrichtigungen einrichten.</p>
+                      <h4 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Monitoring & Alerting</h4>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Grafana-Dashboards, Prometheus-Alerts und Benachrichtigungen einrichten.</p>
                     </div>
                   </div>
                   <button
@@ -718,14 +731,14 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                 </div>
 
                 {/* Security */}
-                <div className="border border-gray-200 rounded-xl p-5 hover:border-red-200 hover:bg-red-50 transition-colors">
+                <div className="rounded-xl p-5 transition-colors" style={{ border: '1px solid var(--border)' }}>
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
                       <ShieldCheckIcon className="w-5 h-5 text-red-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold text-gray-900">Security Setup</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">Wazuh, Vault, MFA und Sicherheitsrichtlinien konfigurieren.</p>
+                      <h4 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Security Setup</h4>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Wazuh, Vault, MFA und Sicherheitsrichtlinien konfigurieren.</p>
                     </div>
                   </div>
                   <button
@@ -737,14 +750,14 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                 </div>
 
                 {/* Network */}
-                <div className="border border-gray-200 rounded-xl p-5 hover:border-cyan-200 hover:bg-cyan-50 transition-colors">
+                <div className="rounded-xl p-5 transition-colors" style={{ border: '1px solid var(--border)' }}>
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-lg bg-cyan-100 flex items-center justify-center flex-shrink-0">
                       <WifiIcon className="w-5 h-5 text-cyan-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold text-gray-900">Network Configuration</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">DNS, DHCP, VLANs und Netzwerkinfrastruktur einrichten.</p>
+                      <h4 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Network Configuration</h4>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>DNS, DHCP, VLANs und Netzwerkinfrastruktur einrichten.</p>
                     </div>
                   </div>
                   <button
@@ -756,14 +769,14 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                 </div>
 
                 {/* Printer */}
-                <div className="border border-gray-200 rounded-xl p-5 hover:border-orange-200 hover:bg-orange-50 transition-colors">
+                <div className="rounded-xl p-5 transition-colors" style={{ border: '1px solid var(--border)' }}>
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
                       <PrinterIcon className="w-5 h-5 text-orange-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold text-gray-900">Printer Setup</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">Drucker hinzufügen, Protokolle konfigurieren und Treiber installieren.</p>
+                      <h4 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Printer Setup</h4>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Drucker hinzufügen, Protokolle konfigurieren und Treiber installieren.</p>
                     </div>
                   </div>
                   <button
@@ -784,8 +797,8 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
           {activeTab === 'system' && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">Gateway</h3>
+                <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
+                  <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>Gateway</h3>
                   <dl className="space-y-2">
                     {[
                       { label: 'Status',      value: healthData?.status || '—' },
@@ -794,14 +807,14 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                       { label: 'Environment', value: healthData?.gateway?.environment || 'production' },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex justify-between text-sm">
-                        <dt className="text-gray-500">{label}</dt>
-                        <dd className="font-medium text-gray-900 capitalize">{value}</dd>
+                        <dt style={{ color: 'var(--text-muted)' }}>{label}</dt>
+                        <dd className="font-medium capitalize" style={{ color: 'var(--text-primary)' }}>{value}</dd>
                       </div>
                     ))}
                   </dl>
                 </div>
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">About OpenDirectory</h3>
+                <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
+                  <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>About OpenDirectory</h3>
                   <dl className="space-y-2">
                     {[
                       { label: 'Version',   value: healthData?.gateway?.version || '1.0.0' },
@@ -810,8 +823,8 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                       { label: 'Host',      value: typeof window !== 'undefined' ? window.location.hostname : '—' },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex justify-between text-sm">
-                        <dt className="text-gray-500">{label}</dt>
-                        <dd className="font-medium text-gray-900 font-mono text-xs">{value}</dd>
+                        <dt style={{ color: 'var(--text-muted)' }}>{label}</dt>
+                        <dd className="font-medium font-mono text-xs" style={{ color: 'var(--text-primary)' }}>{value}</dd>
                       </div>
                     ))}
                   </dl>
