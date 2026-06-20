@@ -1,7 +1,22 @@
 'use client';
 
 import React from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import {
+  HomeIcon, CreditCardIcon, BoltIcon, MapPinIcon,
+  UserIcon, UsersIcon, ShieldCheckIcon, KeyIcon,
+  ShieldExclamationIcon, LockClosedIcon, ArrowPathIcon,
+  IdentificationIcon, ArrowsRightLeftIcon,
+  ComputerDesktopIcon, DevicePhoneMobileIcon,
+  ClipboardDocumentListIcon, DocumentDuplicateIcon,
+  PrinterIcon, ShoppingBagIcon, TagIcon, CubeIcon,
+  BookOpenIcon, CheckBadgeIcon, LockOpenIcon,
+  DocumentTextIcon, CircleStackIcon, MagnifyingGlassIcon,
+  ExclamationTriangleIcon, DocumentIcon, DocumentCheckIcon,
+  ChartBarIcon, BellIcon, HeartIcon, ArchiveBoxIcon,
+  GlobeAltIcon, ServerIcon, SignalIcon, TicketIcon,
+  PuzzlePieceIcon, RocketLaunchIcon, BeakerIcon,
+  SparklesIcon, Cog6ToothIcon, XMarkIcon,
+} from '@heroicons/react/24/outline';
 import { useTheme } from '@/hooks/useTheme';
 
 // ─── Navigation definition ────────────────────────────────────────────────────
@@ -9,7 +24,7 @@ import { useTheme } from '@/hooks/useTheme';
 export interface NavItemDef {
   id: string;
   label: string;
-  icon: string;
+  icon: React.FC<React.SVGProps<SVGSVGElement>>;
   hasList?: boolean;
 }
 
@@ -20,63 +35,63 @@ export interface NavDividerDef {
 export type NavEntry = NavItemDef | NavDividerDef;
 
 export const NAV_ITEMS: NavEntry[] = [
-  { id: 'dashboard',         label: 'Dashboard',          icon: '🏠' },
-  { id: 'subscription',      label: 'Subscription',        icon: '💳' },
-  { id: 'activity',          label: 'Activity',            icon: '⚡' },
-  { id: 'locations',         label: 'Locations',           icon: '📍' },
+  { id: 'dashboard',         label: 'Dashboard',          icon: HomeIcon },
+  { id: 'subscription',      label: 'Subscription',        icon: CreditCardIcon },
+  { id: 'activity',          label: 'Activity',            icon: BoltIcon },
+  { id: 'locations',         label: 'Locations',           icon: MapPinIcon },
   { divider: true },
-  { id: 'users',             label: 'Users',               icon: '👤', hasList: true },
-  { id: 'usergroups',        label: 'User Groups',         icon: '👥' },
-  { id: 'roles',             label: 'Roles',               icon: '🎭' },
-  { id: 'permissions',       label: 'Privileges',          icon: '🔐' },
-  { id: 'pim',               label: 'Privileged Access',   icon: '🛡' },
-  { id: 'mfa',               label: 'MFA / 2FA',           icon: '🔒' },
-  { id: 'sspr',              label: 'Password Reset',      icon: '↩' },
-  { id: 'identity',          label: 'Identity Provider',   icon: '🪪' },
-  { id: 'sync',              label: 'Directory Sync',      icon: '🔄' },
+  { id: 'users',             label: 'Users',               icon: UserIcon, hasList: true },
+  { id: 'usergroups',        label: 'User Groups',         icon: UsersIcon },
+  { id: 'roles',             label: 'Roles',               icon: ShieldCheckIcon },
+  { id: 'permissions',       label: 'Privileges',          icon: KeyIcon },
+  { id: 'pim',               label: 'Privileged Access',   icon: ShieldExclamationIcon },
+  { id: 'mfa',               label: 'MFA / 2FA',           icon: LockClosedIcon },
+  { id: 'sspr',              label: 'Password Reset',      icon: ArrowPathIcon },
+  { id: 'identity',          label: 'Identity Provider',   icon: IdentificationIcon },
+  { id: 'sync',              label: 'Directory Sync',      icon: ArrowsRightLeftIcon },
   { divider: true },
-  { id: 'fleet',             label: 'Devices',             icon: '💻', hasList: true },
-  { id: 'enrollment',        label: 'Enrollment',          icon: '📲' },
-  { id: 'assignment',        label: 'Assignment History',  icon: '📋' },
-  { id: 'blueprints',        label: 'Blueprints',          icon: '🗂' },
-  { id: 'antivirus',         label: 'Antivirus',           icon: '🛡' },
-  { id: 'printers',          label: 'Printers',            icon: '🖨' },
+  { id: 'fleet',             label: 'Devices',             icon: ComputerDesktopIcon, hasList: true },
+  { id: 'enrollment',        label: 'Enrollment',          icon: DevicePhoneMobileIcon },
+  { id: 'assignment',        label: 'Assignment History',  icon: ClipboardDocumentListIcon },
+  { id: 'blueprints',        label: 'Blueprints',          icon: DocumentDuplicateIcon },
+  { id: 'antivirus',         label: 'Antivirus',           icon: ShieldCheckIcon },
+  { id: 'printers',          label: 'Printers',            icon: PrinterIcon },
   { divider: true },
-  { id: 'serviceprincipals', label: 'Service Principals',  icon: '🔑', hasList: true },
-  { id: 'appsbooks',         label: 'Apps and Books',      icon: '📚' },
-  { id: 'appstore',          label: 'App Store',           icon: '🛍' },
-  { id: 'licenses',          label: 'License Kiosk',       icon: '🏷' },
-  { id: 'applications',      label: 'Applications',        icon: '📦' },
+  { id: 'serviceprincipals', label: 'Service Principals',  icon: KeyIcon, hasList: true },
+  { id: 'appsbooks',         label: 'Apps and Books',      icon: BookOpenIcon },
+  { id: 'appstore',          label: 'App Store',           icon: ShoppingBagIcon },
+  { id: 'licenses',          label: 'License Kiosk',       icon: TagIcon },
+  { id: 'applications',      label: 'Applications',        icon: CubeIcon },
   { divider: true },
-  { id: 'compliance',        label: 'Compliance',          icon: '✅' },
-  { id: 'conditionalaccess', label: 'Conditional Access',  icon: '🔐' },
-  { id: 'certificates',      label: 'Certificates / PKI',  icon: '📜' },
-  { id: 'ldap-schema',       label: 'LDAP Schema',         icon: '🗄' },
-  { id: 'scanner',           label: 'Security Scanner',    icon: '🔍' },
-  { id: 'security',          label: 'Security',            icon: '🛡' },
-  { id: 'threats',           label: 'Threats',             icon: '🐛' },
-  { id: 'secrets',           label: 'Secrets',             icon: '🔏' },
+  { id: 'compliance',        label: 'Compliance',          icon: CheckBadgeIcon },
+  { id: 'conditionalaccess', label: 'Conditional Access',  icon: LockOpenIcon },
+  { id: 'certificates',      label: 'Certificates / PKI',  icon: DocumentTextIcon },
+  { id: 'ldap-schema',       label: 'LDAP Schema',         icon: CircleStackIcon },
+  { id: 'scanner',           label: 'Security Scanner',    icon: MagnifyingGlassIcon },
+  { id: 'security',          label: 'Security',            icon: ShieldCheckIcon },
+  { id: 'threats',           label: 'Threats',             icon: ExclamationTriangleIcon },
+  { id: 'secrets',           label: 'Secrets',             icon: LockClosedIcon },
   { divider: true },
-  { id: 'gpo',               label: 'Group Policy',        icon: '📋' },
-  { id: 'policies',          label: 'Policies',            icon: '📄' },
-  { id: 'automation',        label: 'Automation',          icon: '⚡' },
-  { id: 'audit',             label: 'Audit Log',           icon: '🔍' },
-  { id: 'monitoring',        label: 'Monitoring',          icon: '📊' },
-  { id: 'alerting',          label: 'Alerts',              icon: '🔔' },
-  { id: 'servicehealth',     label: 'Service Health',      icon: '💓' },
-  { id: 'backup',            label: 'Backup & DR',         icon: '🗄' },
-  { id: 'topology',          label: 'Network',             icon: '🌐' },
-  { id: 'infrastructure',    label: 'Infrastructure',      icon: '🖥' },
-  { id: 'radius',            label: 'RADIUS / 802.1X',     icon: '📡' },
-  { id: 'trusts',            label: 'Forest & Trusts',     icon: '🌐' },
-  { id: 'kerberos',          label: 'Kerberos Admin',      icon: '🎫' },
-  { id: 'replication',       label: 'Replication',         icon: '🔄' },
+  { id: 'gpo',               label: 'Group Policy',        icon: DocumentCheckIcon },
+  { id: 'policies',          label: 'Policies',            icon: DocumentIcon },
+  { id: 'automation',        label: 'Automation',          icon: BoltIcon },
+  { id: 'audit',             label: 'Audit Log',           icon: MagnifyingGlassIcon },
+  { id: 'monitoring',        label: 'Monitoring',          icon: ChartBarIcon },
+  { id: 'alerting',          label: 'Alerts',              icon: BellIcon },
+  { id: 'servicehealth',     label: 'Service Health',      icon: HeartIcon },
+  { id: 'backup',            label: 'Backup & DR',         icon: ArchiveBoxIcon },
+  { id: 'topology',          label: 'Network',             icon: GlobeAltIcon },
+  { id: 'infrastructure',    label: 'Infrastructure',      icon: ServerIcon },
+  { id: 'radius',            label: 'RADIUS / 802.1X',     icon: SignalIcon },
+  { id: 'trusts',            label: 'Forest & Trusts',     icon: GlobeAltIcon },
+  { id: 'kerberos',          label: 'Kerberos Admin',      icon: TicketIcon },
+  { id: 'replication',       label: 'Replication',         icon: ArrowPathIcon },
   { divider: true },
-  { id: 'integrations',      label: 'Integrations',        icon: '🔌' },
-  { id: 'roadmap',           label: 'Roadmap',             icon: '🚀' },
-  { id: 'simulator',         label: 'Policy Simulator',    icon: '⚗' },
-  { id: 'graph',             label: 'Graph Explorer',      icon: '⬡' },
-  { id: 'settings',          label: 'Settings',            icon: '⚙' },
+  { id: 'integrations',      label: 'Integrations',        icon: PuzzlePieceIcon },
+  { id: 'roadmap',           label: 'Roadmap',             icon: RocketLaunchIcon },
+  { id: 'simulator',         label: 'Policy Simulator',    icon: BeakerIcon },
+  { id: 'graph',             label: 'Graph Explorer',      icon: SparklesIcon },
+  { id: 'settings',          label: 'Settings',            icon: Cog6ToothIcon },
 ];
 
 // ─── Module gating ────────────────────────────────────────────────────────────
@@ -153,7 +168,7 @@ export default function Sidebar({
           top: 0,
           left: 0,
           bottom: 0,
-          width: 'var(--apple-sidebar-width)',
+          width: 'var(--sidebar-width)',
           background: 'var(--bg-sidebar)',
           borderRight: '1px solid var(--border-color)',
           zIndex: 50,
@@ -165,7 +180,7 @@ export default function Sidebar({
         {/* Org header / logo */}
         <div
           style={{
-            height: 'var(--apple-topbar-height)',
+            height: 'var(--topbar-height)',
             borderBottom: '1px solid var(--border-color)',
             padding: '0 16px',
             display: 'flex',
@@ -178,15 +193,15 @@ export default function Sidebar({
             style={{
               width: 32,
               height: 32,
-              background: 'var(--apple-blue)',
-              borderRadius: 8,
+              background: 'var(--accent-blue)',
+              borderRadius: 4,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
             }}
           >
-            <span style={{ color: 'white', fontWeight: 700, fontSize: 12 }}>OD</span>
+            <span style={{ color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 12 }}>OD</span>
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
             <p
@@ -223,11 +238,7 @@ export default function Sidebar({
               return (
                 <div
                   key={`divider-${idx}`}
-                  style={{
-                    height: 1,
-                    background: 'var(--border-color)',
-                    margin: '6px 12px',
-                  }}
+                  style={{ height: 1, background: 'var(--border-color)', margin: '4px 12px' }}
                 />
               );
             }
@@ -242,37 +253,28 @@ export default function Sidebar({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
-                  width: 'calc(100% - 12px)',
+                  width: '100%',
                   padding: '6px 12px',
-                  margin: '1px 6px',
-                  fontSize: 13,
-                  fontWeight: isActive ? 500 : 400,
-                  textAlign: 'left',
-                  background: isActive ? 'var(--apple-blue)' : 'transparent',
-                  color: isActive ? '#ffffff' : 'var(--text-primary)',
+                  paddingLeft: isActive ? 9 : 12,
+                  background: isActive ? 'var(--bg-sidebar-active)' : 'transparent',
+                  borderLeft: isActive ? '3px solid var(--sidebar-active-bar)' : '3px solid transparent',
+                  color: isActive ? 'var(--accent-blue)' : 'var(--text-secondary)',
                   border: 'none',
-                  borderRadius: 7,
+                  borderRadius: 0,
                   cursor: 'pointer',
-                  transition: 'background 0.12s, color 0.12s',
-                  boxSizing: 'border-box',
+                  fontSize: 13,
+                  fontWeight: isActive ? 600 : 400,
+                  textAlign: 'left',
+                  transition: 'background 0.1s, color 0.1s',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
-                onMouseEnter={e => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,0,0,0.06)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-                  }
-                }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-sidebar-hover)'; }}
+                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
               >
-                <span style={{ fontSize: 14, flexShrink: 0, lineHeight: 1, width: 18, textAlign: 'center' }}>
-                  {entry.icon}
-                </span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {entry.label}
-                </span>
+                <entry.icon style={{ width: 16, height: 16, flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
               </button>
             );
           })}
@@ -301,7 +303,7 @@ export default function Sidebar({
                 color: 'var(--text-secondary)',
                 background: 'none',
                 border: 'none',
-                borderRadius: 7,
+                borderRadius: 'var(--border-radius)',
                 cursor: 'pointer',
               }}
             >
@@ -322,8 +324,8 @@ export default function Sidebar({
                 width: 30,
                 height: 30,
                 borderRadius: '50%',
-                background: 'var(--apple-blue)',
-                color: 'white',
+                background: 'var(--accent-blue)',
+                color: 'var(--text-on-accent)',
                 fontSize: 11,
                 fontWeight: 700,
                 display: 'flex',
