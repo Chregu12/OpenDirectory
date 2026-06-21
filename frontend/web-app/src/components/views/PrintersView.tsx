@@ -1112,7 +1112,8 @@ function PrintServerInfoModal({ printer, onClose }: { printer: { name: string };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4"
+        className="rounded-xl shadow-xl w-full max-w-lg mx-4"
+        style={{ background: 'var(--bg-surface, #161b22)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -1439,7 +1440,7 @@ export default function PrintersView() {
             <button
               onClick={handleDiscover}
               disabled={discovering}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.05)] rounded-lg disabled:opacity-50" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}
             >
               <MagnifyingGlassIcon className="w-4 h-4" />
               {discovering ? 'Discovering…' : 'Discover'}
@@ -1490,7 +1491,7 @@ export default function PrintersView() {
           : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {printers.map(printer => (
-                <div key={printer.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 hover:shadow-sm transition-shadow">
+                <div key={printer.id} className="border border-[rgba(255,255,255,0.07)] rounded-xl p-4 space-y-3 hover:shadow-sm transition-shadow" style={{ background: 'var(--bg-surface, #161b22)' }}>
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
                       <StatusDot status={printer.status} />
@@ -1577,7 +1578,7 @@ export default function PrintersView() {
               description="Scanner devices are auto-discovered from multifunction printers registered in the system."
             />
           : (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -1645,7 +1646,7 @@ export default function PrintersView() {
                 <button
                   key={p}
                   onClick={() => setJobPeriod(p)}
-                  className={`px-3 py-1.5 transition-colors ${jobPeriod === p ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  className={`px-3 py-1.5 transition-colors ${jobPeriod === p ? 'bg-[#006FFF] text-white' : 'text-gray-400 hover:bg-[rgba(255,255,255,0.05)]'}`}
                 >
                   {p === 'today' ? 'Heute' : p === 'week' ? 'Diese Woche' : 'Alle'}
                 </button>
@@ -1674,7 +1675,7 @@ export default function PrintersView() {
                   const maxPages = userStats[0][1].pages || 1;
                   const pct = Math.round((pages / maxPages) * 100);
                   return (
-                    <div key={user} className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 min-w-[160px]">
+                    <div key={user} className="flex items-center gap-2 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 min-w-[160px]" style={{ background: 'var(--bg-surface, #161b22)' }}>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-gray-800 truncate">{user}</p>
                         <div className="flex items-center gap-1.5 mt-1">
@@ -1699,7 +1700,7 @@ export default function PrintersView() {
                 description={filterPrinter ? `Keine Aufträge für ${filterPrinter} im gewählten Zeitraum.` : 'Noch keine Druckaufträge im Verlauf.'}
               />
             : (
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div className="border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
@@ -1751,7 +1752,7 @@ export default function PrintersView() {
               description="Print quotas will appear here once configured in the printer management service."
             />
           : (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -2043,7 +2044,7 @@ export function ScanDestinationsTab() {
           description="Add per-user or per-group SMB / local destinations for scanned files."
         />
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -2095,7 +2096,7 @@ export function ScanDestinationsTab() {
       {/* Add / Edit Dialog */}
       {showDialog && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4">
+          <div className="rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4" style={{ background: 'var(--bg-surface, #161b22)' }}>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">{editTarget ? 'Edit' : 'Add'} Scan Destination</h2>
               <button onClick={() => setShowDialog(false)} className="p-1 rounded hover:bg-gray-100">
@@ -2437,8 +2438,9 @@ export function PrintPoolsTab() {
                 key={pool.id}
                 onClick={() => loadPool(pool.id)}
                 className={`p-4 rounded-xl border cursor-pointer transition-shadow hover:shadow-sm ${
-                  selectedPool?.id === pool.id ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white'
+                  selectedPool?.id === pool.id ? 'border-blue-400' : 'border-[rgba(255,255,255,0.07)]'
                 }`}
+                style={{ background: selectedPool?.id === pool.id ? 'rgba(0,111,255,0.15)' : 'var(--bg-surface, #161b22)' }}
               >
                 <div className="flex items-start justify-between">
                   <div>
@@ -2473,7 +2475,7 @@ export function PrintPoolsTab() {
               <ArrowPathIcon className="w-6 h-6 text-gray-400 animate-spin" />
             </div>
           ) : selectedPool ? (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                 <h3 className="font-medium text-gray-900">{selectedPool.display_name || selectedPool.name}</h3>
                 <button
@@ -2535,7 +2537,7 @@ export function PrintPoolsTab() {
       {/* Add Pool Dialog */}
       {showAddPool && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+          <div className="rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" style={{ background: 'var(--bg-surface, #161b22)' }}>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Add Print Pool</h2>
               <button onClick={() => setShowAddPool(false)} className="p-1 rounded hover:bg-gray-100">
@@ -2602,7 +2604,7 @@ export function PrintPoolsTab() {
       {/* Add Member Dialog */}
       {showAddMember && selectedPool && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+          <div className="rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" style={{ background: 'var(--bg-surface, #161b22)' }}>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Add Pool Member</h2>
               <button onClick={() => setShowAddMember(false)} className="p-1 rounded hover:bg-gray-100">

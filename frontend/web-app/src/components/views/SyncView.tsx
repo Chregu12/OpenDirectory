@@ -509,28 +509,28 @@ export default function SyncView() {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {conflicts.map(conflict => (
-                    <div key={conflict.id} style={{ background: '#fff', borderRadius: 12, border: '1px solid #FEE2E2', padding: 16 }}>
+                    <div key={conflict.id} style={{ background: 'var(--bg-surface, #161b22)', borderRadius: 12, border: '1px solid rgba(248,81,73,0.3)', padding: 16 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
                         <div>
-                          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#111' }}>Benutzer: {conflict.userId}</p>
-                          <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9CA3AF' }}>Typ: {conflict.conflictType} · {new Date(conflict.createdAt).toLocaleString('de-CH')}</p>
+                          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>Benutzer: {conflict.userId}</p>
+                          <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted, #6e7681)' }}>Typ: {conflict.conflictType} · {new Date(conflict.createdAt).toLocaleString('de-CH')}</p>
                         </div>
-                        <ExclamationCircleIcon style={{ width: 20, height: 20, color: '#DC2626', flexShrink: 0 }} />
+                        <ExclamationCircleIcon style={{ width: 20, height: 20, color: '#f85149', flexShrink: 0 }} />
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                        <div style={{ background: '#F9FAFB', borderRadius: 8, padding: 12 }}>
+                        <div style={{ background: 'var(--bg-surface-raised, #1c2128)', borderRadius: 8, padding: 12 }}>
                           <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)' }}>Lokale Daten</p>
-                          <pre style={{ margin: 0, fontSize: 11, color: '#6B7280', overflow: 'auto', maxHeight: 80 }}>{JSON.stringify(conflict.localData, null, 2)}</pre>
+                          <pre style={{ margin: 0, fontSize: 11, color: 'var(--text-muted, #6e7681)', overflow: 'auto', maxHeight: 80 }}>{JSON.stringify(conflict.localData, null, 2)}</pre>
                         </div>
-                        <div style={{ background: '#F9FAFB', borderRadius: 8, padding: 12 }}>
+                        <div style={{ background: 'var(--bg-surface-raised, #1c2128)', borderRadius: 8, padding: 12 }}>
                           <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)' }}>Remote-Daten</p>
-                          <pre style={{ margin: 0, fontSize: 11, color: '#6B7280', overflow: 'auto', maxHeight: 80 }}>{JSON.stringify(conflict.remoteData, null, 2)}</pre>
+                          <pre style={{ margin: 0, fontSize: 11, color: 'var(--text-muted, #6e7681)', overflow: 'auto', maxHeight: 80 }}>{JSON.stringify(conflict.remoteData, null, 2)}</pre>
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={() => handleResolveConflict(conflict.id, 'keep_local')} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>Lokal behalten</button>
-                        <button onClick={() => handleResolveConflict(conflict.id, 'use_remote')} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>Remote übernehmen</button>
-                        <button onClick={() => handleResolveConflict(conflict.id, 'merge')} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#2563EB', color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>Zusammenführen</button>
+                        <button onClick={() => handleResolveConflict(conflict.id, 'keep_local')} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.07)', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-secondary, #8b949e)', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>Lokal behalten</button>
+                        <button onClick={() => handleResolveConflict(conflict.id, 'use_remote')} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.07)', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-secondary, #8b949e)', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>Remote übernehmen</button>
+                        <button onClick={() => handleResolveConflict(conflict.id, 'merge')} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#006FFF', color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>Zusammenführen</button>
                       </div>
                     </div>
                   ))}

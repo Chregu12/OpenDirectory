@@ -112,7 +112,7 @@ function BitLockerKeyModal({ keyId, deviceName, onClose }: { keyId: string; devi
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[70]" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+      <div className="rounded-xl shadow-xl w-full max-w-lg" style={{ background: 'var(--bg-surface, #161b22)' }} onClick={e => e.stopPropagation()}>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-base font-semibold text-gray-900">BitLocker Recovery Key</h3>
@@ -460,7 +460,7 @@ function AddAppModal({ device, installedIds, onAdd, onClose }: {
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-labelledby="add-app-modal-title" className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="add-app-modal-title" className="rounded-xl shadow-xl max-w-md w-full" style={{ background: 'var(--bg-surface, #161b22)' }} onClick={e => e.stopPropagation()}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 id="add-app-modal-title" className="text-base font-semibold text-gray-900">Add Application</h3>
@@ -518,7 +518,7 @@ function DecommissionModal({ device, apps, onConfirm, onCancel }: {
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[60]" onClick={onCancel}>
-      <div role="dialog" aria-modal="true" aria-labelledby="decommission-modal-title" className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="decommission-modal-title" className="rounded-xl shadow-xl max-w-md w-full" style={{ background: 'var(--bg-surface, #161b22)' }} onClick={e => e.stopPropagation()}>
         <div className="p-6">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -887,7 +887,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
   return (
     <>
       <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-        <div role="dialog" aria-modal="true" aria-labelledby="device-detail-modal-title" className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div role="dialog" aria-modal="true" aria-labelledby="device-detail-modal-title" className="rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" style={{ background: 'var(--bg-surface, #161b22)' }} onClick={e => e.stopPropagation()}>
 
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-0">
@@ -974,7 +974,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                             : <DeviceThumbnail platform={detail.platform} size="md" />}
                         </div>
                         <div className="space-y-2">
-                          <label className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingPhoto ? 'bg-gray-100 text-gray-400' : 'bg-[#0071E3] text-white hover:bg-[#0077ED]'}`}>
+                          <label className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingPhoto ? 'bg-gray-100 text-gray-400' : 'bg-[#006FFF] text-white hover:bg-[#005ED9]'}`}>
                             {uploadingPhoto ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <></>}
                             {uploadingPhoto ? 'Lädt hoch…' : 'Foto hochladen'}
                             <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={uploadingPhoto} />
@@ -1031,7 +1031,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                               value={(stammdatenDraft[f.key] as string) || ''}
                               onChange={e => setStammdatenDraft(p => ({ ...p, [f.key]: e.target.value }))}
                               placeholder={f.placeholder}
-                              className="w-full px-3 py-2 text-sm border border-[#E5E5EA] rounded-lg focus:outline-none focus:border-[#0071E3] focus:ring-1 focus:ring-[#0071E3] bg-white"
+                              className="w-full px-3 py-2 text-sm border border-[rgba(255,255,255,0.07)] rounded-lg focus:outline-none focus:border-[#006FFF] focus:ring-1 focus:ring-[#006FFF] bg-[var(--bg-surface,#161b22)]"
                             />
                           </div>
                         ))}
@@ -1042,14 +1042,14 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                             onChange={e => setStammdatenDraft(p => ({ ...p, notes: e.target.value }))}
                             placeholder="Interne Notizen zum Gerät…"
                             rows={3}
-                            className="w-full px-3 py-2 text-sm border border-[#E5E5EA] rounded-lg focus:outline-none focus:border-[#0071E3] focus:ring-1 focus:ring-[#0071E3] bg-white resize-none"
+                            className="w-full px-3 py-2 text-sm border border-[rgba(255,255,255,0.07)] rounded-lg focus:outline-none focus:border-[#006FFF] focus:ring-1 focus:ring-[#006FFF] bg-[var(--bg-surface,#161b22)] resize-none"
                           />
                         </div>
                       </div>
                     </div>
 
                     <button onClick={saveStammdaten} disabled={savingSd}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-white bg-[#0071E3] hover:bg-[#0077ED] rounded-lg transition-colors disabled:opacity-60">
+                      className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#005ED9] rounded-lg transition-colors disabled:opacity-60">
                       {savingSd ? <><ArrowPathIcon className="w-4 h-4 animate-spin" />Speichern…</> : 'Stammdaten speichern'}
                     </button>
                   </>
@@ -1185,7 +1185,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                         { label: 'Usage',  value: hardware?.cpu?.usage != null ? `${hardware.cpu.usage}%` : hardware?.cpu_usage != null ? `${hardware.cpu_usage}%` : '—' },
                         { label: 'Arch',   value: hardware?.cpu?.arch    || hardware?.arch         || detail.platform === 'linux' ? 'x86_64' : '—' },
                       ].map(({ label, value }) => (
-                        <div key={label} className="bg-white rounded-lg px-3 py-2.5">
+                        <div key={label} className="rounded-lg px-3 py-2.5" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                           <p className="text-xs text-gray-400 mb-0.5">{label}</p>
                           <p className="text-sm font-medium text-gray-900">{String(value)}</p>
                         </div>
@@ -1206,7 +1206,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                           <div className="grid grid-cols-3 gap-2">
                             {[{ label: 'Total', value: `${totalGB} GB` }, { label: 'Used', value: `${usedGB} GB` }, { label: 'Free', value: `${freeGB} GB` }]
                               .map(({ label, value }) => (
-                                <div key={label} className="bg-white rounded-lg px-3 py-2">
+                                <div key={label} className="rounded-lg px-3 py-2" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                                   <p className="text-xs text-gray-400 mb-0.5">{label}</p>
                                   <p className="text-sm font-medium text-gray-900">{value}</p>
                                 </div>
@@ -1235,7 +1235,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                           const usedGB  = ((disk.used  || 0) / 1e9).toFixed(0);
                           const pct     = disk.total ? Math.round((disk.used / disk.total) * 100) : 0;
                           return (
-                            <div key={i} className="bg-white rounded-lg px-3 py-2.5">
+                            <div key={i} className="rounded-lg px-3 py-2.5" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                               <div className="flex justify-between items-center mb-1.5">
                                 <span className="text-sm font-medium text-gray-800 font-mono">{disk.mountpoint || disk.device || `/dev/sd${String.fromCharCode(97 + i)}`}</span>
                                 <span className="text-xs text-gray-500">{usedGB} / {totalGB} GB</span>
@@ -1273,7 +1273,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                         { label: 'Gateway',     value: netInfo?.gateway || '—', mono: true },
                         { label: 'DNS Servers', value: Array.isArray(netInfo?.dns) ? netInfo.dns.join(', ') : netInfo?.dns || '—', mono: true },
                       ].map(({ label, value, mono }) => (
-                        <div key={label} className="bg-white rounded-lg px-3 py-2.5">
+                        <div key={label} className="rounded-lg px-3 py-2.5" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                           <p className="text-xs text-gray-400 mb-0.5">{label}</p>
                           <p className={`text-sm font-medium text-gray-900 truncate ${mono ? 'font-mono' : ''}`}>{String(value)}</p>
                         </div>
@@ -1287,7 +1287,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                     {netInfo?.interfaces?.length ? (
                       <div className="space-y-2">
                         {(netInfo.interfaces as any[]).map((iface: any, i: number) => (
-                          <div key={i} className="bg-white rounded-lg px-3 py-2.5 flex items-center gap-3">
+                          <div key={i} className="rounded-lg px-3 py-2.5 flex items-center gap-3" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${iface.state === 'up' || iface.up ? 'bg-green-500' : 'bg-gray-300'}`} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
@@ -1469,7 +1469,7 @@ function DeviceDetailModal({ device, initialApps, onAppsChange, onClose, onRemov
                       <p className="text-xs mt-1">Keys are uploaded when BitLocker is enabled on a domain-joined device</p>
                     </div>
                   ) : (
-                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="rounded-xl border border-[rgba(255,255,255,0.07)] shadow-sm overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50 border-b border-gray-100">
                           <tr>
@@ -1642,7 +1642,7 @@ function EnrollModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-labelledby="enroll-modal-title" className="bg-white rounded-xl shadow-xl max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="enroll-modal-title" className="rounded-xl shadow-xl max-w-2xl w-full" style={{ background: 'var(--bg-surface, #161b22)' }} onClick={e => e.stopPropagation()}>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 id="enroll-modal-title" className="text-lg font-semibold text-gray-900">Enroll a Device</h2>
@@ -2019,7 +2019,7 @@ export default function DevicesView() {
           { label: 'Offline',        value: offline,        dot: 'bg-gray-400' },
           { label: 'Avg. Compliance',value: `${avgCompliance}%` },
         ].map(({ label, value, dot }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+          <div key={label} className="rounded-xl border border-[rgba(255,255,255,0.07)] shadow-sm p-4" style={{ background: 'var(--bg-surface, #161b22)' }}>
             <div className="flex items-center gap-2">
               {dot && <div className={`w-2.5 h-2.5 rounded-full ${dot}`} />}
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{label}</p>
@@ -2032,7 +2032,7 @@ export default function DevicesView() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-[rgba(255,255,255,0.07)] shadow-sm overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">

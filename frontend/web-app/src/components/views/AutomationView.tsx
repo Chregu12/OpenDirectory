@@ -270,7 +270,7 @@ function ToggleSwitch({ checked, onChange, small }: ToggleSwitchProps) {
         width: w,
         height: h,
         borderRadius: h / 2,
-        backgroundColor: checked ? '#0066CC' : '#D1D5DB',
+        backgroundColor: checked ? '#006FFF' : '#D1D5DB',
         border: 'none',
         cursor: 'pointer',
         position: 'relative',
@@ -307,14 +307,14 @@ interface ActionEditorProps {
 function ActionEditor({ action, onChange, onRemove }: ActionEditorProps) {
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    border: '1px solid #D1D5DB',
+    border: '1px solid rgba(255,255,255,0.07)',
     borderRadius: 6,
     padding: '6px 10px',
     fontSize: 13,
     outline: 'none',
     boxSizing: 'border-box',
     color: '#111827',
-    background: '#fff',
+    background: 'var(--bg-surface, #161b22)',
   };
 
   const selectStyle: React.CSSProperties = {
@@ -416,9 +416,9 @@ function ActionEditor({ action, onChange, onRemove }: ActionEditorProps) {
       gap: 8,
       alignItems: 'flex-start',
       padding: '10px 12px',
-      background: '#F9FAFB',
+      background: 'var(--bg-surface-raised, #1c2128)',
       borderRadius: 8,
-      border: '1px solid #E5E7EB',
+      border: '1px solid rgba(255,255,255,0.07)',
     }}>
       <select
         style={{ ...inputStyle, width: 160, flexShrink: 0 }}
@@ -462,13 +462,13 @@ interface ConditionEditorProps {
 
 function ConditionEditor({ condition, onChange, onRemove }: ConditionEditorProps) {
   const inputStyle: React.CSSProperties = {
-    border: '1px solid #D1D5DB',
+    border: '1px solid rgba(255,255,255,0.07)',
     borderRadius: 6,
     padding: '6px 10px',
     fontSize: 13,
     outline: 'none',
     color: '#111827',
-    background: '#fff',
+    background: 'var(--bg-surface, #161b22)',
     width: '100%',
     boxSizing: 'border-box',
   };
@@ -543,13 +543,13 @@ function RuleListItem({ rule, isSelected, onSelect, onToggle, onEdit, onDelete }
       style={{
         padding: '10px 14px',
         cursor: 'pointer',
-        borderLeft: isSelected ? '3px solid #0066CC' : '3px solid transparent',
-        background: isSelected ? '#EFF6FF' : '#fff',
-        borderBottom: '1px solid #F3F4F6',
+        borderLeft: isSelected ? '3px solid #006FFF' : '3px solid transparent',
+        background: isSelected ? 'rgba(0,111,255,0.15)' : 'var(--bg-surface, #161b22)',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
         transition: 'background 0.1s',
       }}
-      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#F9FAFB'; }}
-      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = '#fff'; }}
+      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface-raised, #1c2128)'; }}
+      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface, #161b22)'; }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <TriggerIcon style={{ width: 16, height: 16, color: '#6B7280', flexShrink: 0 }} />
@@ -580,7 +580,7 @@ function RuleListItem({ rule, isSelected, onSelect, onToggle, onEdit, onDelete }
             onClick={onEdit}
             title="Edit"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', padding: '2px', borderRadius: 4, lineHeight: 1 }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#0066CC')}
+            onMouseEnter={e => (e.currentTarget.style.color = '#006FFF')}
             onMouseLeave={e => (e.currentTarget.style.color = '#6B7280')}
           >
             <PencilIcon style={{ width: 14, height: 14 }} />
@@ -612,16 +612,16 @@ interface RuleEditorProps {
 
 function RuleEditor({ rule, onChange, onSave, onCancel, saving }: RuleEditorProps) {
   const sectionStyle: React.CSSProperties = {
-    border: '1px solid #E5E7EB',
+    border: '1px solid rgba(255,255,255,0.07)',
     borderRadius: 10,
     overflow: 'hidden',
-    background: '#fff',
+    background: 'var(--bg-surface, #161b22)',
   };
 
   const sectionHeaderStyle: React.CSSProperties = {
     padding: '10px 16px',
-    background: '#F9FAFB',
-    borderBottom: '1px solid #E5E7EB',
+    background: 'var(--bg-surface-raised, #1c2128)',
+    borderBottom: '1px solid rgba(255,255,255,0.07)',
     display: 'flex',
     alignItems: 'center',
     gap: 8,
@@ -635,13 +635,13 @@ function RuleEditor({ rule, onChange, onSave, onCancel, saving }: RuleEditorProp
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    border: '1px solid #D1D5DB',
+    border: '1px solid rgba(255,255,255,0.07)',
     borderRadius: 6,
     padding: '7px 11px',
     fontSize: 13,
     outline: 'none',
     color: '#111827',
-    background: '#fff',
+    background: 'var(--bg-surface, #161b22)',
     boxSizing: 'border-box',
   };
 
@@ -653,7 +653,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, saving }: RuleEditorProp
     gap: 6,
     fontSize: 12,
     fontWeight: 500,
-    color: '#0066CC',
+    color: '#006FFF',
     background: 'none',
     border: '1px dashed #93C5FD',
     borderRadius: 6,
@@ -783,9 +783,9 @@ function RuleEditor({ rule, onChange, onSave, onCancel, saving }: RuleEditorProp
                     borderRadius: 4,
                     border: '1px solid',
                     cursor: 'pointer',
-                    borderColor: rule.conditionJoin === j ? '#0066CC' : '#D1D5DB',
-                    background: rule.conditionJoin === j ? '#EFF6FF' : '#fff',
-                    color: rule.conditionJoin === j ? '#0066CC' : '#6B7280',
+                    borderColor: rule.conditionJoin === j ? '#006FFF' : '#D1D5DB',
+                    background: rule.conditionJoin === j ? 'rgba(0,111,255,0.15)' : 'var(--bg-surface, #161b22)',
+                    color: rule.conditionJoin === j ? '#006FFF' : '#6B7280',
                   }}
                 >
                   {j}
@@ -819,7 +819,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, saving }: RuleEditorProp
           <button
             style={addBtnStyle}
             onClick={addCondition}
-            onMouseEnter={e => (e.currentTarget.style.background = '#EFF6FF')}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,111,255,0.15)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}
           >
             <PlusIcon style={{ width: 13, height: 13 }} />
@@ -869,8 +869,8 @@ function RuleEditor({ rule, onChange, onSave, onCancel, saving }: RuleEditorProp
             fontSize: 13,
             fontWeight: 500,
             borderRadius: 7,
-            border: '1px solid #D1D5DB',
-            background: '#fff',
+            border: '1px solid rgba(255,255,255,0.07)',
+            background: 'var(--bg-surface, #161b22)',
             color: '#374151',
             cursor: 'pointer',
           }}
@@ -889,7 +889,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, saving }: RuleEditorProp
             fontWeight: 600,
             borderRadius: 7,
             border: 'none',
-            background: saving ? '#93C5FD' : '#0066CC',
+            background: saving ? '#93C5FD' : '#006FFF',
             color: '#fff',
             cursor: saving ? 'default' : 'pointer',
           }}
@@ -923,8 +923,8 @@ function RuleDetail({ rule, onEdit, onToggle, onRunNow, running }: RuleDetailPro
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Header */}
       <div style={{
-        background: '#fff',
-        border: '1px solid #E5E7EB',
+        background: 'var(--bg-surface, #161b22)',
+        border: '1px solid rgba(255,255,255,0.07)',
         borderRadius: 10,
         padding: '16px 20px',
       }}>
@@ -954,7 +954,7 @@ function RuleDetail({ rule, onEdit, onToggle, onRunNow, running }: RuleDetailPro
                 fontWeight: 600,
                 borderRadius: 7,
                 border: '1px solid #D1D5DB',
-                background: running ? '#F9FAFB' : '#fff',
+                background: running ? 'var(--bg-surface-raised, #1c2128)' : 'var(--bg-surface, #161b22)',
                 color: running ? '#9CA3AF' : '#374151',
                 cursor: running ? 'default' : 'pointer',
               }}
@@ -975,7 +975,7 @@ function RuleDetail({ rule, onEdit, onToggle, onRunNow, running }: RuleDetailPro
                 fontWeight: 600,
                 borderRadius: 7,
                 border: 'none',
-                background: '#0066CC',
+                background: '#006FFF',
                 color: '#fff',
                 cursor: 'pointer',
               }}
@@ -997,18 +997,18 @@ function RuleDetail({ rule, onEdit, onToggle, onRunNow, running }: RuleDetailPro
       </div>
 
       {/* Trigger card */}
-      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 16px', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ padding: '10px 16px', background: 'var(--bg-surface-raised, #1c2128)', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <BoltIcon style={{ width: 14, height: 14, color: '#6366F1' }} />
           <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Trigger</span>
         </div>
         <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 8,
-            background: '#EFF6FF',
+            background: 'rgba(0,111,255,0.15)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
-            <TriggerIcon style={{ width: 18, height: 18, color: '#0066CC' }} />
+            <TriggerIcon style={{ width: 18, height: 18, color: '#006FFF' }} />
           </div>
           <div>
             <p style={{ fontSize: 13, fontWeight: 600, color: '#111827', margin: 0 }}>
@@ -1032,8 +1032,8 @@ function RuleDetail({ rule, onEdit, onToggle, onRunNow, running }: RuleDetailPro
 
       {/* Conditions card */}
       {rule.conditions.length > 0 && (
-        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
-          <div style={{ padding: '10px 16px', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ padding: '10px 16px', background: 'var(--bg-surface-raised, #1c2128)', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <CheckIcon style={{ width: 14, height: 14, color: '#10B981' }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
               Conditions
@@ -1064,8 +1064,8 @@ function RuleDetail({ rule, onEdit, onToggle, onRunNow, running }: RuleDetailPro
       )}
 
       {/* Actions card */}
-      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 16px', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ padding: '10px 16px', background: 'var(--bg-surface-raised, #1c2128)', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <PlayIcon style={{ width: 14, height: 14, color: '#F59E0B' }} />
           <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Actions</span>
         </div>
@@ -1108,11 +1108,11 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <div style={{
         width: 64, height: 64,
         borderRadius: 16,
-        background: '#EFF6FF',
+        background: 'rgba(0,111,255,0.15)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         marginBottom: 16,
       }}>
-        <BoltIcon style={{ width: 30, height: 30, color: '#0066CC' }} />
+        <BoltIcon style={{ width: 30, height: 30, color: '#006FFF' }} />
       </div>
       <h3 style={{ fontSize: 16, fontWeight: 600, color: '#111827', margin: '0 0 8px' }}>
         No rule selected
@@ -1127,7 +1127,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
           padding: '9px 20px',
           fontSize: 13, fontWeight: 600,
           borderRadius: 8, border: 'none',
-          background: '#0066CC', color: '#fff',
+          background: '#006FFF', color: '#fff',
           cursor: 'pointer',
         }}
       >
@@ -1322,7 +1322,7 @@ export default function AutomationView() {
         <div style={{
           width: 32, height: 32, borderRadius: '50%',
           border: '3px solid #E5E7EB',
-          borderTopColor: '#0066CC',
+          borderTopColor: '#006FFF',
           animation: 'spin 0.8s linear infinite',
         }} />
       </div>
@@ -1330,7 +1330,7 @@ export default function AutomationView() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%', background: '#F3F4F6', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100%', background: 'var(--bg-surface-raised, #1c2128)', overflow: 'hidden' }}>
       {/* Spinner keyframe */}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
@@ -1338,8 +1338,8 @@ export default function AutomationView() {
       <div style={{
         width: 280,
         flexShrink: 0,
-        background: '#fff',
-        borderRight: '1px solid #E5E7EB',
+        background: 'var(--bg-surface, #161b22)',
+        borderRight: '1px solid rgba(255,255,255,0.07)',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
@@ -1348,15 +1348,15 @@ export default function AutomationView() {
         {/* Panel header */}
         <div style={{
           padding: '14px 16px',
-          borderBottom: '1px solid #E5E7EB',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: '#fff',
+          background: 'var(--bg-surface, #161b22)',
           flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <BoltIcon style={{ width: 18, height: 18, color: '#0066CC' }} />
+            <BoltIcon style={{ width: 18, height: 18, color: '#006FFF' }} />
             <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Automation Rules</span>
           </div>
           <button
@@ -1367,7 +1367,7 @@ export default function AutomationView() {
               padding: '5px 10px',
               fontSize: 12, fontWeight: 600,
               borderRadius: 6, border: 'none',
-              background: '#0066CC', color: '#fff',
+              background: '#006FFF', color: '#fff',
               cursor: 'pointer',
             }}
           >
@@ -1402,8 +1402,8 @@ export default function AutomationView() {
         {/* Footer stats */}
         <div style={{
           padding: '10px 16px',
-          borderTop: '1px solid #F3F4F6',
-          background: '#F9FAFB',
+          borderTop: '1px solid rgba(255,255,255,0.07)',
+          background: 'var(--bg-surface-raised, #1c2128)',
           flexShrink: 0,
         }}>
           <p style={{ fontSize: 11, color: '#9CA3AF', margin: 0 }}>
