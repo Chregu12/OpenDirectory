@@ -99,19 +99,19 @@ export default function UserListColumn({ selectedId, onSelect, onCreateNew }: Us
   const FILTER_LABELS: Record<typeof filter, string> = { all: 'All', active: 'Active', inactive: 'Inactive', admin: 'Admins' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-surface, #161b22)', borderRight: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
       {/* Header */}
-      <div style={{ padding: '16px 16px 10px 16px', borderBottom: '1px solid var(--apple-gray-2)', flexShrink: 0 }}>
+      <div style={{ padding: '16px 16px 10px 16px', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--apple-text-primary)', margin: 0 }}>Users</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)', margin: 0 }}>Users</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, color: 'var(--apple-text-secondary)' }}>{filtered.length}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary, #8b949e)' }}>{filtered.length}</span>
             {onCreateNew && (
               <button
                 onClick={onCreateNew}
                 style={{
                   width: 24, height: 24, borderRadius: '50%',
-                  background: 'var(--apple-blue)', color: 'white',
+                  background: '#006FFF', color: 'white',
                   border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 16, flexShrink: 0,
@@ -132,18 +132,21 @@ export default function UserListColumn({ selectedId, onSelect, onCreateNew }: Us
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
-              flex: 1, padding: '5px 10px', border: '1px solid var(--apple-gray-2)',
-              borderRadius: 6, fontSize: 12, outline: 'none', background: 'var(--apple-gray-1)',
-              color: 'var(--apple-text-primary)',
+              flex: 1, padding: '5px 10px',
+              border: '1px solid var(--border, rgba(255,255,255,0.07))',
+              borderRadius: 6, fontSize: 12, outline: 'none',
+              background: 'var(--bg-surface-raised, #1c2128)',
+              color: 'var(--text-primary, #e4e6ea)',
             }}
           />
           <div style={{ position: 'relative' }}>
             <button
               onClick={e => { e.stopPropagation(); setFilterOpen(o => !o); }}
               style={{
-                padding: '5px 10px', border: '1px solid var(--apple-gray-2)',
-                borderRadius: 6, background: filter !== 'all' ? 'var(--apple-blue-light)' : '#fff',
-                fontSize: 12, color: filter !== 'all' ? 'var(--apple-blue)' : 'var(--apple-text-secondary)',
+                padding: '5px 10px', border: '1px solid var(--border, rgba(255,255,255,0.07))',
+                borderRadius: 6,
+                background: filter !== 'all' ? 'rgba(0,111,255,0.15)' : 'var(--bg-surface-raised, #1c2128)',
+                fontSize: 12, color: filter !== 'all' ? '#006FFF' : 'var(--text-secondary, #8b949e)',
                 cursor: 'pointer', fontWeight: 500,
               }}
             >
@@ -153,8 +156,8 @@ export default function UserListColumn({ selectedId, onSelect, onCreateNew }: Us
               <div
                 style={{
                   position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 20,
-                  background: 'white', border: '1px solid var(--apple-gray-2)',
-                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', overflow: 'hidden', minWidth: 120,
+                  background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))',
+                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.4)', overflow: 'hidden', minWidth: 120,
                 }}
                 onClick={e => e.stopPropagation()}
               >
@@ -164,11 +167,11 @@ export default function UserListColumn({ selectedId, onSelect, onCreateNew }: Us
                     onClick={() => { setFilter(key); setFilterOpen(false); }}
                     style={{
                       display: 'block', width: '100%', padding: '7px 12px', fontSize: 13,
-                      background: filter === key ? 'var(--apple-blue-light)' : 'none',
-                      color: filter === key ? 'var(--apple-blue)' : 'var(--apple-text-primary)',
+                      background: filter === key ? 'rgba(0,111,255,0.15)' : 'none',
+                      color: filter === key ? '#006FFF' : 'var(--text-primary, #e4e6ea)',
                       border: 'none', cursor: 'pointer', textAlign: 'left',
                     }}
-                    onMouseEnter={e => { if (filter !== key) (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
+                    onMouseEnter={e => { if (filter !== key) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
                     onMouseLeave={e => { if (filter !== key) (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
                   >
                     {FILTER_LABELS[key]}
@@ -192,15 +195,13 @@ export default function UserListColumn({ selectedId, onSelect, onCreateNew }: Us
               style={{
                 display: 'flex', alignItems: 'center', gap: 12,
                 width: '100%', padding: '11px 16px',
-                borderBottom: '1px solid var(--apple-gray-2)',
-                background: isSelected ? 'var(--apple-blue)' : 'transparent',
+                background: isSelected ? '#006FFF' : 'transparent',
                 border: 'none',
-                borderBottomColor: 'var(--apple-gray-2)',
-                borderBottomWidth: 1, borderBottomStyle: 'solid',
+                borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))',
                 cursor: 'pointer', textAlign: 'left',
                 transition: 'background 0.1s',
               }}
-              onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
+              onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
               onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
             >
               {/* Avatar */}
@@ -218,14 +219,14 @@ export default function UserListColumn({ selectedId, onSelect, onCreateNew }: Us
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
                   fontSize: 13, fontWeight: 600,
-                  color: isSelected ? '#ffffff' : 'var(--apple-text-primary)',
+                  color: isSelected ? '#ffffff' : 'var(--text-primary, #e4e6ea)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {user.name}
                 </div>
                 <div style={{
                   fontSize: 11, marginTop: 2,
-                  color: isSelected ? 'rgba(255,255,255,0.75)' : 'var(--apple-text-secondary)',
+                  color: isSelected ? 'rgba(255,255,255,0.75)' : 'var(--text-secondary, #8b949e)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {user.email}
@@ -236,7 +237,7 @@ export default function UserListColumn({ selectedId, onSelect, onCreateNew }: Us
               {!isSelected && (
                 <span style={{
                   width: 7, height: 7, borderRadius: '50%',
-                  background: user.status === 'active' ? '#22c55e' : '#9CA3AF',
+                  background: user.status === 'active' ? '#22c55e' : '#6e7681',
                   flexShrink: 0,
                 }} />
               )}
@@ -245,7 +246,7 @@ export default function UserListColumn({ selectedId, onSelect, onCreateNew }: Us
         })}
 
         {filtered.length === 0 && (
-          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--apple-text-tertiary)', fontSize: 13 }}>
+          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted, #6e7681)', fontSize: 13 }}>
             No users found.
           </div>
         )}

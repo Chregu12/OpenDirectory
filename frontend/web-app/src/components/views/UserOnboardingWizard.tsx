@@ -57,7 +57,7 @@ function StepIndicator({ current }: { current: Step }) {
       {STEPS.map((s, i) => (
         <React.Fragment key={s.n}>
           {i > 0 && (
-            <div style={{ flex: 1, height: 2, background: s.n <= current ? '#34C759' : 'var(--apple-gray-3)' }} />
+            <div style={{ flex: 1, height: 2, background: s.n <= current ? '#34C759' : 'rgba(255,255,255,0.1)' }} />
           )}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
             <div
@@ -65,8 +65,8 @@ function StepIndicator({ current }: { current: Step }) {
                 width: 28,
                 height: 28,
                 borderRadius: '50%',
-                background: s.n < current ? '#34C759' : s.n === current ? '#34C759' : 'var(--apple-gray-3)',
-                color: s.n <= current ? 'white' : 'var(--apple-gray-5)',
+                background: s.n < current ? '#34C759' : s.n === current ? '#34C759' : 'rgba(255,255,255,0.1)',
+                color: s.n <= current ? 'white' : 'var(--text-muted, #6e7681)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -76,7 +76,7 @@ function StepIndicator({ current }: { current: Step }) {
             >
               {s.n < current ? <CheckIcon style={{ width: 14, height: 14 }} /> : s.n}
             </div>
-            <span style={{ fontSize: 11, color: s.n === current ? '#34C759' : 'var(--apple-text-tertiary)', fontWeight: s.n === current ? 600 : 400, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 11, color: s.n === current ? '#34C759' : 'var(--text-muted, #6e7681)', fontWeight: s.n === current ? 600 : 400, whiteSpace: 'nowrap' }}>
               {s.label}
             </span>
           </div>
@@ -91,7 +91,7 @@ function StepIndicator({ current }: { current: Step }) {
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--apple-text-primary)', marginBottom: 6 }}>
+      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', marginBottom: 6 }}>
         {label} {required && <span style={{ color: '#DC2626' }}>*</span>}
       </label>
       {children}
@@ -102,12 +102,12 @@ function Field({ label, required, children }: { label: string; required?: boolea
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '9px 12px',
-  border: '1px solid var(--apple-gray-2)',
+  border: '1px solid var(--border, rgba(255,255,255,0.07))',
   borderRadius: 8,
   fontSize: 14,
   outline: 'none',
-  color: 'var(--apple-text-primary)',
-  background: 'white',
+  color: 'var(--text-primary, #e4e6ea)',
+  background: 'var(--bg-surface-raised, #1c2128)',
   boxSizing: 'border-box',
 };
 
@@ -179,11 +179,11 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={onClose}
     >
       <div
-        style={{ background: 'white', borderRadius: 16, boxShadow: '0 24px 64px rgba(0,0,0,0.18)', width: '100%', maxWidth: 520, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 16, boxShadow: '0 24px 64px rgba(0,0,0,0.5)', width: '100%', maxWidth: 520, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -208,44 +208,44 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
                 <CheckCircleIcon style={{ width: 28, height: 28, color: '#22c55e', flexShrink: 0 }} />
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--apple-text-primary)' }}>{created.displayName}</div>
-                  <div style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>{created.email}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>{created.displayName}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>{created.email}</div>
                 </div>
               </div>
 
-              <div style={{ background: 'var(--apple-gray-1)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--apple-text-secondary)', marginBottom: 8 }}>Account Details</div>
+              <div style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 8 }}>Account Details</div>
                 {[
                   { label: 'Username', value: created.username },
                   { label: 'Email', value: created.email },
                 ].map(row => (
-                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--apple-gray-2)' }}>
-                    <span style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>{row.label}</span>
-                    <span style={{ fontSize: 13, color: 'var(--apple-text-primary)', fontWeight: 500 }}>{row.value}</span>
+                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>{row.label}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-primary, #e4e6ea)', fontWeight: 500 }}>{row.value}</span>
                   </div>
                 ))}
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--apple-text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Temporary Password
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--apple-gray-1)', border: '1px solid var(--apple-gray-2)', borderRadius: 8, padding: '10px 12px' }}>
-                  <code style={{ flex: 1, fontSize: 15, fontFamily: 'monospace', color: 'var(--apple-text-primary)', fontWeight: 600, letterSpacing: '0.05em' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '10px 12px' }}>
+                  <code style={{ flex: 1, fontSize: 15, fontFamily: 'monospace', color: 'var(--text-primary, #e4e6ea)', fontWeight: 600, letterSpacing: '0.05em' }}>
                     {created.tempPassword}
                   </code>
                   <button
                     onClick={copyPassword}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied ? '#22c55e' : 'var(--apple-gray-5)', padding: 2, flexShrink: 0 }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied ? '#22c55e' : 'var(--text-muted, #6e7681)', padding: 2, flexShrink: 0 }}
                   >
                     {copied ? <CheckIcon style={{ width: 15, height: 15 }} /> : <ClipboardDocumentIcon style={{ width: 15, height: 15 }} />}
                   </button>
                 </div>
               </div>
 
-              <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 14px', display: 'flex', gap: 8 }}>
+              <div style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: 8, padding: '10px 14px', display: 'flex', gap: 8 }}>
                 <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
-                <div style={{ fontSize: 13, color: '#92400E', lineHeight: 1.4 }}>
+                <div style={{ fontSize: 13, color: '#eab308', lineHeight: 1.4 }}>
                   Share this password securely. The user must change it on first login.
                 </div>
               </div>
@@ -293,15 +293,16 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
                   </Field>
                   <div
                     style={{
-                      background: 'var(--apple-gray-1)',
+                      background: 'var(--bg-surface-raised, #1c2128)',
+                      border: '1px solid var(--border, rgba(255,255,255,0.07))',
                       borderRadius: 8,
                       padding: '12px 14px',
                       fontSize: 13,
-                      color: 'var(--apple-text-secondary)',
+                      color: 'var(--text-secondary, #8b949e)',
                       lineHeight: 1.5,
                     }}
                   >
-                    <strong style={{ color: 'var(--apple-text-primary)' }}>Role: {form.role}</strong>
+                    <strong style={{ color: 'var(--text-primary, #e4e6ea)' }}>Role: {form.role}</strong>
                     <br />
                     {form.role === 'IT Admin' && 'Full access to device management, policies, and user admin.'}
                     {form.role === 'Developer' && 'Access to dev environments, API keys, and code repositories.'}
@@ -315,7 +316,7 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
               {/* Step 3: Device */}
               {step === 3 && (
                 <div>
-                  <p style={{ fontSize: 13, color: 'var(--apple-text-secondary)', marginBottom: 16 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)', marginBottom: 16 }}>
                     Assign a device to this user, or skip for now.
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
@@ -331,17 +332,17 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
                           alignItems: 'center',
                           gap: 12,
                           padding: '12px 16px',
-                          border: form.deviceChoice === opt.value ? '1.5px solid #34C759' : '1px solid var(--apple-gray-2)',
+                          border: form.deviceChoice === opt.value ? '1.5px solid #34C759' : '1px solid var(--border, rgba(255,255,255,0.07))',
                           borderRadius: 10,
-                          background: form.deviceChoice === opt.value ? '#F0FFF4' : 'white',
+                          background: form.deviceChoice === opt.value ? 'rgba(52,199,89,0.1)' : 'var(--bg-surface-raised, #1c2128)',
                           cursor: 'pointer',
                           textAlign: 'left',
                         }}
                       >
                         <span style={{ fontSize: 24 }}>{opt.icon}</span>
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--apple-text-primary)' }}>{opt.label}</div>
-                          <div style={{ fontSize: 12, color: 'var(--apple-text-tertiary)' }}>{opt.desc}</div>
+                          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>{opt.label}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted, #6e7681)' }}>{opt.desc}</div>
                         </div>
                         {form.deviceChoice === opt.value && (
                           <CheckIcon style={{ width: 16, height: 16, color: '#34C759', marginLeft: 'auto', flexShrink: 0 }} />
@@ -364,10 +365,10 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
               {/* Step 4: Review */}
               {step === 4 && (
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--apple-text-primary)', marginBottom: 16 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 16 }}>
                     Review & Create Account
                   </div>
-                  <div style={{ background: 'var(--apple-gray-1)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+                  <div style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
                     {[
                       { label: 'Name', value: `${form.firstName} ${form.lastName}` },
                       { label: 'Email', value: form.email || '—' },
@@ -377,13 +378,13 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
                       { label: 'Manager', value: form.manager || '—' },
                       { label: 'Device', value: form.deviceChoice === 'later' ? 'Enroll later' : form.assignedDevice || '—' },
                     ].map(row => (
-                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--apple-gray-2)' }}>
-                        <span style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>{row.label}</span>
-                        <span style={{ fontSize: 13, color: 'var(--apple-text-primary)', fontWeight: 500 }}>{row.value}</span>
+                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                        <span style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>{row.label}</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-primary, #e4e6ea)', fontWeight: 500 }}>{row.value}</span>
                       </div>
                     ))}
                   </div>
-                  <p style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>
                     A temporary password will be generated. The user must change it on first login.
                   </p>
                 </div>
@@ -393,7 +394,7 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--apple-gray-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'white' }}>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border, rgba(255,255,255,0.07))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg-surface, #161b22)' }}>
           {created ? (
             <button onClick={onClose} style={{ marginLeft: 'auto', padding: '9px 20px', background: '#34C759', color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
               Done
@@ -402,7 +403,7 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
             <>
               <button
                 onClick={() => (step === 1 ? onClose() : setStep(prev => (prev - 1) as Step))}
-                style={{ padding: '8px 16px', border: 'none', background: 'none', fontSize: 14, color: 'var(--apple-text-secondary)', cursor: 'pointer' }}
+                style={{ padding: '8px 16px', border: 'none', background: 'none', fontSize: 14, color: 'var(--text-secondary, #8b949e)', cursor: 'pointer' }}
               >
                 {step === 1 ? 'Cancel' : '← Back'}
               </button>
@@ -412,7 +413,7 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
                   disabled={!canNext()}
                   style={{
                     padding: '9px 20px',
-                    background: canNext() ? '#34C759' : 'var(--apple-gray-3)',
+                    background: canNext() ? '#34C759' : 'rgba(255,255,255,0.1)',
                     color: 'white',
                     border: 'none',
                     borderRadius: 8,

@@ -64,7 +64,7 @@ function StepIndicator({ current }: { current: Step }) {
               style={{
                 flex: 1,
                 height: 2,
-                background: s.n <= current ? '#0071E3' : 'var(--apple-gray-3)',
+                background: s.n <= current ? '#006FFF' : 'rgba(255,255,255,0.1)',
               }}
             />
           )}
@@ -74,8 +74,8 @@ function StepIndicator({ current }: { current: Step }) {
                 width: 28,
                 height: 28,
                 borderRadius: '50%',
-                background: s.n < current ? '#0071E3' : s.n === current ? '#0071E3' : 'var(--apple-gray-3)',
-                color: s.n <= current ? 'white' : 'var(--apple-gray-5)',
+                background: s.n < current ? '#006FFF' : s.n === current ? '#006FFF' : 'rgba(255,255,255,0.1)',
+                color: s.n <= current ? 'white' : 'var(--text-muted, #6e7681)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -88,7 +88,7 @@ function StepIndicator({ current }: { current: Step }) {
             <span
               style={{
                 fontSize: 11,
-                color: s.n === current ? '#0071E3' : 'var(--apple-text-tertiary)',
+                color: s.n === current ? '#006FFF' : 'var(--text-muted, #6e7681)',
                 fontWeight: s.n === current ? 600 : 400,
                 whiteSpace: 'nowrap',
               }}
@@ -114,19 +114,19 @@ function CopyField({ label, value }: { label: string; value: string }) {
   };
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 11, color: 'var(--apple-text-secondary)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-secondary, #8b949e)', marginBottom: 4 }}>{label}</div>
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          background: 'var(--apple-gray-1)',
-          border: '1px solid var(--apple-gray-2)',
+          background: 'var(--bg-surface-raised, #1c2128)',
+          border: '1px solid var(--border, rgba(255,255,255,0.07))',
           borderRadius: 8,
           padding: '8px 12px',
         }}
       >
-        <code style={{ flex: 1, fontSize: 13, fontFamily: 'monospace', color: 'var(--apple-text-primary)', wordBreak: 'break-all' }}>
+        <code style={{ flex: 1, fontSize: 13, fontFamily: 'monospace', color: 'var(--text-primary, #e4e6ea)', wordBreak: 'break-all' }}>
           {value}
         </code>
         <button
@@ -135,7 +135,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
             background: 'none',
             border: 'none',
             cursor: 'pointer',
-            color: copied ? '#22c55e' : 'var(--apple-gray-5)',
+            color: copied ? '#22c55e' : 'var(--text-muted, #6e7681)',
             padding: 2,
             flexShrink: 0,
           }}
@@ -226,12 +226,23 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
     }
   };
 
+  const darkInputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '9px 12px',
+    border: '1px solid var(--border, rgba(255,255,255,0.07))',
+    borderRadius: 8,
+    fontSize: 14,
+    outline: 'none',
+    color: 'var(--text-primary, #e4e6ea)',
+    background: 'var(--bg-surface-raised, #1c2128)',
+  };
+
   return (
     <div
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.5)',
+        background: 'rgba(0,0,0,0.6)',
         backdropFilter: 'blur(4px)',
         zIndex: 60,
         display: 'flex',
@@ -243,9 +254,10 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
     >
       <div
         style={{
-          background: 'white',
+          background: 'var(--bg-surface, #161b22)',
+          border: '1px solid rgba(255,255,255,0.14)',
           borderRadius: 16,
-          boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
           width: '100%',
           maxWidth: 560,
           maxHeight: '90vh',
@@ -258,7 +270,7 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
         {/* Header */}
         <div
           style={{
-            background: 'linear-gradient(135deg, #0071E3 0%, #0055B3 100%)',
+            background: 'linear-gradient(135deg, #006FFF 0%, #0055CC 100%)',
             padding: '22px 24px 20px',
             color: 'white',
             flexShrink: 0,
@@ -286,10 +298,10 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
               <div style={{ fontSize: 48, marginBottom: 12 }}>
                 <CheckCircleIcon style={{ width: 56, height: 56, color: '#22c55e', margin: '0 auto' }} />
               </div>
-              <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--apple-text-primary)', marginBottom: 6 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)', marginBottom: 6 }}>
                 Device Enrolled!
               </h3>
-              <p style={{ fontSize: 13, color: 'var(--apple-text-secondary)', marginBottom: 20 }}>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)', marginBottom: 20 }}>
                 Complete setup on your {PLATFORMS.find(p => p.id === form.platform)?.label} device:
               </p>
 
@@ -301,7 +313,8 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
               {form.platform && (
                 <div
                   style={{
-                    background: 'var(--apple-gray-1)',
+                    background: 'var(--bg-surface-raised, #1c2128)',
+                    border: '1px solid var(--border, rgba(255,255,255,0.07))',
                     borderRadius: 10,
                     padding: '14px 16px',
                     textAlign: 'left',
@@ -309,7 +322,7 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                     marginBottom: 20,
                   }}
                 >
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--apple-text-secondary)', marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 10 }}>
                     Setup Instructions
                   </div>
                   <ol style={{ margin: 0, paddingLeft: 18 }}>
@@ -317,7 +330,7 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                       ? enrollResult.nextSteps
                       : getInstructions(form.platform, token ?? '')
                     ).map((s, i) => (
-                      <li key={i} style={{ fontSize: 13, color: 'var(--apple-text-primary)', marginBottom: 6, lineHeight: 1.4 }}>
+                      <li key={i} style={{ fontSize: 13, color: 'var(--text-primary, #e4e6ea)', marginBottom: 6, lineHeight: 1.4 }}>
                         {s}
                       </li>
                     ))}
@@ -328,7 +341,8 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
               {(form.platform === 'ios' || form.platform === 'android') && (
                 <div
                   style={{
-                    background: 'var(--apple-gray-1)',
+                    background: 'var(--bg-surface-raised, #1c2128)',
+                    border: '1px solid var(--border, rgba(255,255,255,0.07))',
                     borderRadius: 10,
                     padding: '16px',
                     display: 'flex',
@@ -341,12 +355,12 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                     style={{
                       width: 100,
                       height: 100,
-                      background: '#1D1D1F',
+                      background: '#0e1115',
                       borderRadius: 8,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: 'white',
+                      color: 'var(--text-secondary, #8b949e)',
                       fontSize: 11,
                     }}
                   >
@@ -362,7 +376,7 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
               {/* Step 1: Platform */}
               {step === 1 && (
                 <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--apple-text-primary)', marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 16 }}>
                     Choose a platform
                   </h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
@@ -376,16 +390,16 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                           alignItems: 'center',
                           gap: 8,
                           padding: '16px 8px',
-                          border: form.platform === p.id ? '2px solid #0071E3' : '1.5px solid var(--apple-gray-2)',
+                          border: form.platform === p.id ? '2px solid #006FFF' : '1.5px solid var(--border, rgba(255,255,255,0.07))',
                           borderRadius: 12,
-                          background: form.platform === p.id ? 'var(--apple-blue-light)' : 'white',
+                          background: form.platform === p.id ? 'rgba(0,111,255,0.12)' : 'var(--bg-surface-raised, #1c2128)',
                           cursor: 'pointer',
                           transition: 'all 0.15s',
                         }}
                       >
                         <span style={{ fontSize: 28 }}>{p.icon}</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--apple-text-primary)' }}>{p.label}</span>
-                        <span style={{ fontSize: 10, color: 'var(--apple-text-tertiary)', textAlign: 'center', lineHeight: 1.3 }}>{p.desc}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>{p.label}</span>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted, #6e7681)', textAlign: 'center', lineHeight: 1.3 }}>{p.desc}</span>
                       </button>
                     ))}
                   </div>
@@ -395,12 +409,12 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
               {/* Step 2: Device details */}
               {step === 2 && (
                 <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--apple-text-primary)', marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 16 }}>
                     Device Details
                   </h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--apple-text-primary)', marginBottom: 6 }}>
+                      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', marginBottom: 6 }}>
                         Device Name <span style={{ color: '#DC2626' }}>*</span>
                       </label>
                       <input
@@ -408,55 +422,31 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                         placeholder="e.g. MBA-johndoe"
                         value={form.deviceName}
                         onChange={e => set('deviceName', e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '9px 12px',
-                          border: '1px solid var(--apple-gray-2)',
-                          borderRadius: 8,
-                          fontSize: 14,
-                          outline: 'none',
-                          color: 'var(--apple-text-primary)',
-                        }}
+                        style={darkInputStyle}
                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--apple-text-primary)', marginBottom: 6 }}>
-                        Serial Number <span style={{ color: 'var(--apple-text-tertiary)', fontWeight: 400 }}>(optional)</span>
+                      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', marginBottom: 6 }}>
+                        Serial Number <span style={{ color: 'var(--text-muted, #6e7681)', fontWeight: 400 }}>(optional)</span>
                       </label>
                       <input
                         type="text"
                         placeholder="e.g. C02XG2JHJGH5"
                         value={form.serial}
                         onChange={e => set('serial', e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '9px 12px',
-                          border: '1px solid var(--apple-gray-2)',
-                          borderRadius: 8,
-                          fontSize: 14,
-                          outline: 'none',
-                          color: 'var(--apple-text-primary)',
-                        }}
+                        style={darkInputStyle}
                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--apple-text-primary)', marginBottom: 6 }}>
-                        Assign to User <span style={{ color: 'var(--apple-text-tertiary)', fontWeight: 400 }}>(optional)</span>
+                      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', marginBottom: 6 }}>
+                        Assign to User <span style={{ color: 'var(--text-muted, #6e7681)', fontWeight: 400 }}>(optional)</span>
                       </label>
                       <input
                         type="text"
                         placeholder="Type a username or email..."
                         value={form.assignedUser}
                         onChange={e => set('assignedUser', e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '9px 12px',
-                          border: '1px solid var(--apple-gray-2)',
-                          borderRadius: 8,
-                          fontSize: 14,
-                          outline: 'none',
-                          color: 'var(--apple-text-primary)',
-                        }}
+                        style={darkInputStyle}
                       />
                     </div>
                   </div>
@@ -466,10 +456,10 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
               {/* Step 3: OU placement */}
               {step === 3 && (
                 <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--apple-text-primary)', marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 16 }}>
                     Organisational Unit Placement
                   </h3>
-                  <p style={{ fontSize: 13, color: 'var(--apple-text-secondary)', marginBottom: 16 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)', marginBottom: 16 }}>
                     Select which OU this device should be placed in:
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -482,17 +472,17 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                           alignItems: 'center',
                           gap: 10,
                           padding: '10px 14px',
-                          border: form.ou === ou ? '1.5px solid #0071E3' : '1px solid var(--apple-gray-2)',
+                          border: form.ou === ou ? '1.5px solid #006FFF' : '1px solid var(--border, rgba(255,255,255,0.07))',
                           borderRadius: 8,
-                          background: form.ou === ou ? 'var(--apple-blue-light)' : 'white',
+                          background: form.ou === ou ? 'rgba(0,111,255,0.12)' : 'var(--bg-surface-raised, #1c2128)',
                           cursor: 'pointer',
                           textAlign: 'left',
                         }}
                       >
                         <span style={{ fontSize: 16 }}>📁</span>
-                        <span style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--apple-text-primary)' }}>{ou}</span>
+                        <span style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--text-primary, #e4e6ea)' }}>{ou}</span>
                         {form.ou === ou && (
-                          <CheckIcon style={{ width: 15, height: 15, color: '#0071E3', marginLeft: 'auto' }} />
+                          <CheckIcon style={{ width: 15, height: 15, color: '#006FFF', marginLeft: 'auto' }} />
                         )}
                       </button>
                     ))}
@@ -503,12 +493,13 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
               {/* Step 4: Confirm */}
               {step === 4 && (
                 <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--apple-text-primary)', marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 16 }}>
                     Confirm Enrollment
                   </h3>
                   <div
                     style={{
-                      background: 'var(--apple-gray-1)',
+                      background: 'var(--bg-surface-raised, #1c2128)',
+                      border: '1px solid var(--border, rgba(255,255,255,0.07))',
                       borderRadius: 10,
                       padding: '14px 16px',
                       marginBottom: 16,
@@ -521,15 +512,15 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                       { label: 'Assigned User', value: form.assignedUser || '—' },
                       { label: 'OU Placement', value: form.ou },
                     ].map(row => (
-                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--apple-gray-2)' }}>
-                        <span style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>{row.label}</span>
-                        <span style={{ fontSize: 13, color: 'var(--apple-text-primary)', fontWeight: 500, textAlign: 'right', maxWidth: '60%', wordBreak: 'break-all' }}>
+                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                        <span style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>{row.label}</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-primary, #e4e6ea)', fontWeight: 500, textAlign: 'right', maxWidth: '60%', wordBreak: 'break-all' }}>
                           {row.value}
                         </span>
                       </div>
                     ))}
                   </div>
-                  <p style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>
                     An enrollment token will be generated. Use it to complete device-side setup.
                   </p>
                 </div>
@@ -542,12 +533,12 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
         <div
           style={{
             padding: '16px 24px',
-            borderTop: '1px solid var(--apple-gray-2)',
+            borderTop: '1px solid var(--border, rgba(255,255,255,0.07))',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexShrink: 0,
-            background: 'white',
+            background: 'var(--bg-surface, #161b22)',
           }}
         >
           {token ? (
@@ -556,7 +547,7 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
               style={{
                 marginLeft: 'auto',
                 padding: '9px 20px',
-                background: '#0071E3',
+                background: '#006FFF',
                 color: 'white',
                 border: 'none',
                 borderRadius: 8,
@@ -576,7 +567,7 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                   border: 'none',
                   background: 'none',
                   fontSize: 14,
-                  color: 'var(--apple-text-secondary)',
+                  color: 'var(--text-secondary, #8b949e)',
                   cursor: 'pointer',
                 }}
               >
@@ -589,7 +580,7 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                   disabled={!canNext()}
                   style={{
                     padding: '9px 20px',
-                    background: canNext() ? '#0071E3' : 'var(--apple-gray-3)',
+                    background: canNext() ? '#006FFF' : 'rgba(255,255,255,0.1)',
                     color: 'white',
                     border: 'none',
                     borderRadius: 8,
@@ -606,7 +597,7 @@ export default function EnrollmentWizard({ onClose }: EnrollmentWizardProps) {
                   disabled={loading}
                   style={{
                     padding: '9px 20px',
-                    background: '#0071E3',
+                    background: '#006FFF',
                     color: 'white',
                     border: 'none',
                     borderRadius: 8,

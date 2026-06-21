@@ -23,15 +23,15 @@ function ActionBtn({ icon, label, onClick, danger }: { icon: string; label: stri
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
         padding: '8px 14px', minWidth: 100,
-        border: '1px solid var(--apple-gray-2)', borderRadius: 8,
-        background: '#FFFFFF', cursor: 'pointer',
+        border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8,
+        background: 'var(--bg-surface, #161b22)', cursor: 'pointer',
         transition: 'background 0.12s',
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#FFFFFF'; }}
+      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface, #161b22)'; }}
     >
       <span style={{ fontSize: 18 }}>{icon}</span>
-      <span style={{ fontSize: 11, color: danger ? '#DC2626' : 'var(--apple-text-secondary)', textAlign: 'center', lineHeight: 1.2 }}>
+      <span style={{ fontSize: 11, color: danger ? '#DC2626' : 'var(--text-secondary, #8b949e)', textAlign: 'center', lineHeight: 1.2 }}>
         {label}
       </span>
     </button>
@@ -45,7 +45,7 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
     <h3
       style={{
         fontSize: 11, fontWeight: 600,
-        color: '#86868b',
+        color: 'var(--text-muted, #6e7681)',
         textTransform: 'uppercase', letterSpacing: '0.07em',
         margin: '0 0 10px 0',
       }}
@@ -60,8 +60,8 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 function DetailItem({ label, value }: { label: string; value?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 11, color: '#86868b', fontWeight: 500 }}>{label}</span>
-      <span style={{ fontSize: 13, color: 'var(--apple-text-primary)' }}>{value ?? '—'}</span>
+      <span style={{ fontSize: 11, color: 'var(--text-muted, #6e7681)', fontWeight: 500 }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--text-primary, #e4e6ea)' }}>{value ?? '—'}</span>
     </div>
   );
 }
@@ -70,9 +70,9 @@ function DetailItem({ label, value }: { label: string; value?: string }) {
 
 function ComplianceBadge({ status }: { status: FleetDevice['compliance'] }) {
   const map = {
-    compliant:       { bg: '#D1FAE5', color: '#065F46', label: 'Compliant' },
-    warning:         { bg: '#FEF3C7', color: '#92400E', label: 'Warning' },
-    'non-compliant': { bg: '#FEE2E2', color: '#991B1B', label: 'Non-Compliant' },
+    compliant:       { bg: 'rgba(34,197,94,0.15)',   color: '#22c55e', label: 'Compliant' },
+    warning:         { bg: 'rgba(234,179,8,0.15)',   color: '#eab308', label: 'Warning' },
+    'non-compliant': { bg: 'rgba(239,68,68,0.15)',   color: '#ef4444', label: 'Non-Compliant' },
   };
   const s = map[status];
   return (
@@ -92,7 +92,7 @@ interface DeviceDetailPanelProps {
 export default function DeviceDetailPanel({ device }: DeviceDetailPanelProps) {
   if (!device) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, color: 'var(--apple-text-tertiary)' }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, color: 'var(--text-muted, #6e7681)', background: 'var(--bg-base, #0e1115)' }}>
         <span style={{ fontSize: 48 }}>💻</span>
         <p style={{ fontSize: 14, margin: 0 }}>Select a device to view details</p>
       </div>
@@ -100,7 +100,7 @@ export default function DeviceDetailPanel({ device }: DeviceDetailPanelProps) {
   }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', background: 'var(--bg-base, #0e1115)' }}>
       {/* Action buttons row */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28 }}>
         <ActionBtn icon="✏️" label="Edit MDM Server" onClick={() => toast.success('Edit MDM Server')} />
@@ -113,13 +113,14 @@ export default function DeviceDetailPanel({ device }: DeviceDetailPanelProps) {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
         <div style={{
           width: 128, height: 128, borderRadius: 24,
-          background: 'var(--apple-gray-1)',
+          background: 'var(--bg-surface, #161b22)',
+          border: '1px solid var(--border, rgba(255,255,255,0.07))',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           marginBottom: 14,
         }}>
           <span style={{ fontSize: 72 }}>{OS_ICON[device.os] ?? '💻'}</span>
         </div>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--apple-text-primary)', margin: '0 0 8px 0', textAlign: 'center' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)', margin: '0 0 8px 0', textAlign: 'center' }}>
           {device.name}
         </h1>
         <ComplianceBadge status={device.compliance} />
@@ -136,7 +137,7 @@ export default function DeviceDetailPanel({ device }: DeviceDetailPanelProps) {
       </section>
 
       {/* Divider */}
-      <div style={{ height: 1, background: 'var(--apple-gray-2)', marginBottom: 24 }} />
+      <div style={{ height: 1, background: 'var(--border, rgba(255,255,255,0.07))', marginBottom: 24 }} />
 
       {/* Details section */}
       <section style={{ marginBottom: 28 }}>
@@ -152,7 +153,7 @@ export default function DeviceDetailPanel({ device }: DeviceDetailPanelProps) {
       </section>
 
       {/* Divider */}
-      <div style={{ height: 1, background: 'var(--apple-gray-2)', marginBottom: 24 }} />
+      <div style={{ height: 1, background: 'var(--border, rgba(255,255,255,0.07))', marginBottom: 24 }} />
 
       {/* Activity section */}
       <section style={{ marginBottom: 28 }}>

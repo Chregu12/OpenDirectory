@@ -99,16 +99,16 @@ function DonutChart({ compliant, warning, nonCompliant }: { compliant: number; w
             transform={`rotate(-90 ${cx} ${cy})`}
           />
         ))}
-        <text x={cx} y={cy - 6} textAnchor="middle" fontSize={22} fontWeight={700} fill="#1D1D1F">{total}</text>
-        <text x={cx} y={cy + 12} textAnchor="middle" fontSize={11} fill="#6E6E73">devices</text>
+        <text x={cx} y={cy - 6} textAnchor="middle" fontSize={22} fontWeight={700} fill="#e4e6ea">{total}</text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fontSize={11} fill="#8b949e">devices</text>
       </svg>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {segments.map(seg => (
           <div key={seg.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ width: 10, height: 10, borderRadius: 3, background: seg.color, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>{seg.label}</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--apple-text-primary)', marginLeft: 4 }}>{seg.value}</span>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>{seg.label}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginLeft: 4 }}>{seg.value}</span>
           </div>
         ))}
       </div>
@@ -193,9 +193,9 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
 
   const sevColor = (s: string) => {
     switch (s) {
-      case 'high':    case 'critical': return { bg: '#FEE2E2', color: '#991B1B' };
-      case 'medium':  case 'warning':  return { bg: '#FEF3C7', color: '#92400E' };
-      default:                         return { bg: '#DBEAFE', color: '#1E40AF' };
+      case 'high':    case 'critical': return { bg: 'rgba(239,68,68,0.15)',   color: '#ef4444' };
+      case 'medium':  case 'warning':  return { bg: 'rgba(234,179,8,0.15)',   color: '#eab308' };
+      default:                         return { bg: 'rgba(59,130,246,0.15)',  color: '#60a5fa' };
     }
   };
 
@@ -205,19 +205,19 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
       onClick={onClose}
     >
       {/* Backdrop */}
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(2px)' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)' }} />
 
       {/* Panel */}
       <div
         style={{
           position: 'relative',
-          background: 'white',
+          background: 'var(--bg-surface, #161b22)',
           width: '100%',
           maxWidth: 420,
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '-8px 0 40px rgba(0,0,0,0.15)',
+          boxShadow: '-8px 0 40px rgba(0,0,0,0.5)',
         }}
         onClick={e => e.stopPropagation()}
       >
@@ -248,7 +248,7 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
         <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
           {/* Error banner */}
           {error && (
-            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#991B1B', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 8 }}>
               <ExclamationTriangleIcon style={{ width: 16, height: 16, flexShrink: 0 }} />
               {error} — showing cached data
             </div>
@@ -257,18 +257,19 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
           {/* Donut chart */}
           <div
             style={{
-              background: 'var(--apple-gray-1)',
+              background: 'var(--bg-surface-raised, #1c2128)',
+              border: '1px solid var(--border, rgba(255,255,255,0.07))',
               borderRadius: 12,
               padding: '16px 20px',
               marginBottom: 20,
             }}
           >
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--apple-text-primary)', marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 14 }}>
               Device Compliance Overview
             </div>
             {loading ? (
               <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ArrowPathIcon style={{ width: 28, height: 28, color: '#6B7280', animation: 'spin 1s linear infinite' }} />
+                <ArrowPathIcon style={{ width: 28, height: 28, color: 'var(--text-muted, #6e7681)', animation: 'spin 1s linear infinite' }} />
               </div>
             ) : (
               <DonutChart
@@ -282,7 +283,7 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
           {/* Top violations */}
           {data.topViolations.length > 0 && (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--apple-text-primary)', marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 10 }}>
                 Top Policy Violations
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -296,15 +297,15 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
                         alignItems: 'center',
                         gap: 10,
                         padding: '9px 12px',
-                        background: 'white',
-                        border: '1px solid var(--apple-gray-2)',
+                        background: 'var(--bg-surface-raised, #1c2128)',
+                        border: '1px solid var(--border, rgba(255,255,255,0.07))',
                         borderRadius: 8,
                       }}
                     >
                       <ExclamationTriangleIcon style={{ width: 15, height: 15, color: sc.color, flexShrink: 0 }} />
-                      <span style={{ flex: 1, fontSize: 13, color: 'var(--apple-text-primary)' }}>{v.name ?? v.policy}</span>
+                      <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary, #e4e6ea)' }}>{v.name ?? v.policy}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--apple-text-primary)' }}>{v.count}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>{v.count}</span>
                         <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: sc.bg, color: sc.color, fontWeight: 500 }}>
                           {v.severity}
                         </span>
@@ -319,7 +320,7 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
           {/* Devices needing attention */}
           {data.devicesNeedingAttention.length > 0 && (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--apple-text-primary)', marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 10 }}>
                 Devices Needing Attention
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -331,23 +332,23 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
                       alignItems: 'center',
                       gap: 10,
                       padding: '9px 12px',
-                      background: 'white',
-                      border: '1px solid var(--apple-gray-2)',
+                      background: 'var(--bg-surface-raised, #1c2128)',
+                      border: '1px solid var(--border, rgba(255,255,255,0.07))',
                       borderRadius: 8,
                     }}
                   >
                     {d.os && <span style={{ fontSize: 18, flexShrink: 0 }}>{d.os}</span>}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--apple-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {d.name}
                       </div>
-                      <div style={{ fontSize: 11, color: '#DC2626', marginTop: 1 }}>
+                      <div style={{ fontSize: 11, color: '#ef4444', marginTop: 1 }}>
                         {d.issue ?? d.issues?.join(', ')}
                       </div>
                     </div>
                     <button
                       onClick={() => { onViewChange?.('fleet'); onClose(); }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--apple-gray-5)', padding: 2, flexShrink: 0 }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #6e7681)', padding: 2, flexShrink: 0 }}
                       title="View device"
                     >
                       <ArrowTopRightOnSquareIcon style={{ width: 14, height: 14 }} />
@@ -360,7 +361,7 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
 
           {/* Empty state */}
           {!loading && !error && data.compliant === 0 && data.warning === 0 && data.nonCompliant === 0 && (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--apple-text-secondary)', fontSize: 13 }}>
+            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-secondary, #8b949e)', fontSize: 13 }}>
               No compliance data available. Run a scan to populate.
             </div>
           )}
@@ -370,10 +371,11 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
         <div
           style={{
             padding: '14px 20px',
-            borderTop: '1px solid var(--apple-gray-2)',
+            borderTop: '1px solid var(--border, rgba(255,255,255,0.07))',
             display: 'flex',
             gap: 10,
             flexShrink: 0,
+            background: 'var(--bg-surface, #161b22)',
           }}
         >
           <button
@@ -403,11 +405,11 @@ export default function ComplianceSnapshot({ onClose, onViewChange }: Compliance
             onClick={() => { onViewChange?.('compliance'); onClose(); }}
             style={{
               padding: '9px 16px',
-              border: '1px solid var(--apple-gray-2)',
+              border: '1px solid var(--border, rgba(255,255,255,0.07))',
               borderRadius: 8,
-              background: 'white',
+              background: 'var(--bg-surface-raised, #1c2128)',
               fontSize: 13,
-              color: 'var(--apple-text-primary)',
+              color: 'var(--text-primary, #e4e6ea)',
               cursor: 'pointer',
             }}
           >

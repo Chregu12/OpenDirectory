@@ -62,7 +62,7 @@ function CopyField({ label, value, secret }: { label: string; value: string; sec
 
   return (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--apple-text-secondary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
         {label}
       </div>
       <div
@@ -70,8 +70,8 @@ function CopyField({ label, value, secret }: { label: string; value: string; sec
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          background: 'var(--apple-gray-1)',
-          border: '1px solid var(--apple-gray-2)',
+          background: 'var(--bg-surface-raised, #1c2128)',
+          border: '1px solid var(--border, rgba(255,255,255,0.07))',
           borderRadius: 8,
           padding: '8px 12px',
         }}
@@ -81,7 +81,7 @@ function CopyField({ label, value, secret }: { label: string; value: string; sec
             flex: 1,
             fontSize: 13,
             fontFamily: 'monospace',
-            color: 'var(--apple-text-primary)',
+            color: 'var(--text-primary, #e4e6ea)',
             wordBreak: 'break-all',
             letterSpacing: secret && !visible ? '0.1em' : 'normal',
           }}
@@ -91,7 +91,7 @@ function CopyField({ label, value, secret }: { label: string; value: string; sec
         {secret && (
           <button
             onClick={() => setVisible(v => !v)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--apple-gray-5)', padding: 2, flexShrink: 0 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #6e7681)', padding: 2, flexShrink: 0 }}
           >
             {visible
               ? <EyeSlashIcon style={{ width: 15, height: 15 }} />
@@ -100,7 +100,7 @@ function CopyField({ label, value, secret }: { label: string; value: string; sec
         )}
         <button
           onClick={copy}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied ? '#22c55e' : 'var(--apple-gray-5)', padding: 2, flexShrink: 0 }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied ? '#22c55e' : 'var(--text-muted, #6e7681)', padding: 2, flexShrink: 0 }}
         >
           {copied
             ? <CheckIcon style={{ width: 15, height: 15 }} />
@@ -168,7 +168,7 @@ export default function ServicePrincipalWizard({ onClose }: ServicePrincipalWiza
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.5)',
+        background: 'rgba(0,0,0,0.6)',
         backdropFilter: 'blur(4px)',
         zIndex: 60,
         display: 'flex',
@@ -180,9 +180,10 @@ export default function ServicePrincipalWizard({ onClose }: ServicePrincipalWiza
     >
       <div
         style={{
-          background: 'white',
+          background: 'var(--bg-surface, #161b22)',
+          border: '1px solid rgba(255,255,255,0.14)',
           borderRadius: 16,
-          boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
           width: '100%',
           maxWidth: 520,
           maxHeight: '90vh',
@@ -225,8 +226,8 @@ export default function ServicePrincipalWizard({ onClose }: ServicePrincipalWiza
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
                 <CheckCircleIcon style={{ width: 28, height: 28, color: '#22c55e', flexShrink: 0 }} />
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--apple-text-primary)' }}>{created.name}</div>
-                  <div style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>Service Principal ready</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>{created.name}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>Service Principal ready</div>
                 </div>
               </div>
 
@@ -236,8 +237,8 @@ export default function ServicePrincipalWizard({ onClose }: ServicePrincipalWiza
 
               <div
                 style={{
-                  background: '#FEF3C7',
-                  border: '1px solid #FDE68A',
+                  background: 'rgba(234,179,8,0.1)',
+                  border: '1px solid rgba(234,179,8,0.3)',
                   borderRadius: 8,
                   padding: '10px 14px',
                   display: 'flex',
@@ -248,7 +249,7 @@ export default function ServicePrincipalWizard({ onClose }: ServicePrincipalWiza
                 }}
               >
                 <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
-                <div style={{ fontSize: 13, color: '#92400E', lineHeight: 1.4 }}>
+                <div style={{ fontSize: 13, color: '#eab308', lineHeight: 1.4 }}>
                   Save the Client Secret now — it won't be shown again.
                 </div>
               </div>
@@ -256,16 +257,17 @@ export default function ServicePrincipalWizard({ onClose }: ServicePrincipalWiza
               {/* .env snippet */}
               <div
                 style={{
-                  background: '#1D1D1F',
+                  background: 'var(--bg-surface-raised, #1c2128)',
+                  border: '1px solid var(--border, rgba(255,255,255,0.07))',
                   borderRadius: 10,
                   padding: '14px 16px',
                   marginBottom: 16,
                 }}
               >
-                <div style={{ fontSize: 11, color: '#AEAEB2', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted, #6e7681)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                   .env snippet
                 </div>
-                <pre style={{ margin: 0, fontSize: 12, color: '#E5E5EA', fontFamily: 'monospace', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                <pre style={{ margin: 0, fontSize: 12, color: 'var(--text-primary, #e4e6ea)', fontFamily: 'monospace', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
 {`CLIENT_ID=${created.clientId}
 CLIENT_SECRET=${created.clientSecret}
 AUTHORITY=https://opendirectory.local`}
@@ -277,7 +279,7 @@ AUTHORITY=https://opendirectory.local`}
             <div>
               {/* Name */}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--apple-text-primary)', marginBottom: 6 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', marginBottom: 6 }}>
                   Application Name <span style={{ color: '#DC2626' }}>*</span>
                 </label>
                 <input
@@ -288,11 +290,12 @@ AUTHORITY=https://opendirectory.local`}
                   style={{
                     width: '100%',
                     padding: '9px 12px',
-                    border: '1px solid var(--apple-gray-2)',
+                    border: '1px solid var(--border, rgba(255,255,255,0.07))',
                     borderRadius: 8,
                     fontSize: 14,
                     outline: 'none',
-                    color: 'var(--apple-text-primary)',
+                    color: 'var(--text-primary, #e4e6ea)',
+                    background: 'var(--bg-surface-raised, #1c2128)',
                     boxSizing: 'border-box',
                   }}
                 />
@@ -300,8 +303,8 @@ AUTHORITY=https://opendirectory.local`}
 
               {/* Description */}
               <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--apple-text-primary)', marginBottom: 6 }}>
-                  Description <span style={{ color: 'var(--apple-text-tertiary)', fontWeight: 400 }}>(optional)</span>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', marginBottom: 6 }}>
+                  Description <span style={{ color: 'var(--text-muted, #6e7681)', fontWeight: 400 }}>(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -311,11 +314,12 @@ AUTHORITY=https://opendirectory.local`}
                   style={{
                     width: '100%',
                     padding: '9px 12px',
-                    border: '1px solid var(--apple-gray-2)',
+                    border: '1px solid var(--border, rgba(255,255,255,0.07))',
                     borderRadius: 8,
                     fontSize: 14,
                     outline: 'none',
-                    color: 'var(--apple-text-primary)',
+                    color: 'var(--text-primary, #e4e6ea)',
+                    background: 'var(--bg-surface-raised, #1c2128)',
                     boxSizing: 'border-box',
                   }}
                 />
@@ -323,7 +327,7 @@ AUTHORITY=https://opendirectory.local`}
 
               {/* Permissions */}
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--apple-text-primary)', marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 10 }}>
                   Permissions
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -335,9 +339,9 @@ AUTHORITY=https://opendirectory.local`}
                         alignItems: 'flex-start',
                         gap: 10,
                         padding: '10px 12px',
-                        border: permissions[p.id] ? '1.5px solid #0071E3' : '1px solid var(--apple-gray-2)',
+                        border: permissions[p.id] ? '1.5px solid #006FFF' : '1px solid var(--border, rgba(255,255,255,0.07))',
                         borderRadius: 8,
-                        background: permissions[p.id] ? 'var(--apple-blue-light)' : 'white',
+                        background: permissions[p.id] ? 'rgba(0,111,255,0.12)' : 'var(--bg-surface-raised, #1c2128)',
                         cursor: 'pointer',
                         transition: 'all 0.15s',
                       }}
@@ -346,11 +350,11 @@ AUTHORITY=https://opendirectory.local`}
                         type="checkbox"
                         checked={permissions[p.id] ?? false}
                         onChange={() => togglePerm(p.id)}
-                        style={{ marginTop: 2, accentColor: '#0071E3', flexShrink: 0 }}
+                        style={{ marginTop: 2, accentColor: '#006FFF', flexShrink: 0 }}
                       />
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--apple-text-primary)' }}>{p.label}</div>
-                        <div style={{ fontSize: 11, color: 'var(--apple-text-tertiary)', marginTop: 1, lineHeight: 1.3 }}>{p.desc}</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>{p.label}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted, #6e7681)', marginTop: 1, lineHeight: 1.3 }}>{p.desc}</div>
                       </div>
                     </label>
                   ))}
@@ -364,12 +368,12 @@ AUTHORITY=https://opendirectory.local`}
         <div
           style={{
             padding: '16px 24px',
-            borderTop: '1px solid var(--apple-gray-2)',
+            borderTop: '1px solid var(--border, rgba(255,255,255,0.07))',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexShrink: 0,
-            background: 'white',
+            background: 'var(--bg-surface, #161b22)',
           }}
         >
           {created ? (
@@ -381,11 +385,11 @@ AUTHORITY=https://opendirectory.local`}
                   alignItems: 'center',
                   gap: 6,
                   padding: '8px 16px',
-                  border: '1px solid var(--apple-gray-2)',
+                  border: '1px solid var(--border, rgba(255,255,255,0.07))',
                   borderRadius: 8,
-                  background: 'white',
+                  background: 'var(--bg-surface-raised, #1c2128)',
                   fontSize: 13,
-                  color: 'var(--apple-text-primary)',
+                  color: 'var(--text-primary, #e4e6ea)',
                   cursor: 'pointer',
                 }}
               >
@@ -417,7 +421,7 @@ AUTHORITY=https://opendirectory.local`}
                   border: 'none',
                   background: 'none',
                   fontSize: 14,
-                  color: 'var(--apple-text-secondary)',
+                  color: 'var(--text-secondary, #8b949e)',
                   cursor: 'pointer',
                 }}
               >
@@ -431,7 +435,7 @@ AUTHORITY=https://opendirectory.local`}
                   alignItems: 'center',
                   gap: 6,
                   padding: '9px 20px',
-                  background: name.trim() ? '#AF52DE' : 'var(--apple-gray-3)',
+                  background: name.trim() ? '#AF52DE' : 'rgba(255,255,255,0.1)',
                   color: 'white',
                   border: 'none',
                   borderRadius: 8,

@@ -133,12 +133,12 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-surface, #161b22)', borderRight: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
       {/* Column header */}
-      <div style={{ padding: '16px 16px 10px 16px', borderBottom: '1px solid var(--apple-gray-2)', flexShrink: 0 }}>
+      <div style={{ padding: '16px 16px 10px 16px', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--apple-text-primary)', margin: 0 }}>Your Devices</h2>
-          <span style={{ fontSize: 12, color: 'var(--apple-text-secondary)' }}>{filtered.length}</span>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)', margin: 0 }}>Your Devices</h2>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary, #8b949e)' }}>{filtered.length}</span>
         </div>
 
         {/* Filter + Sort row */}
@@ -149,9 +149,10 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
               onClick={e => { e.stopPropagation(); setFilterOpen(o => !o); setSortOpen(false); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 4,
-                padding: '5px 10px', border: '1px solid var(--apple-gray-2)',
-                borderRadius: 6, background: osFilter !== 'all' ? 'var(--apple-blue-light)' : '#fff',
-                fontSize: 12, color: osFilter !== 'all' ? 'var(--apple-blue)' : 'var(--apple-text-secondary)',
+                padding: '5px 10px', border: '1px solid var(--border, rgba(255,255,255,0.07))',
+                borderRadius: 6,
+                background: osFilter !== 'all' ? 'rgba(0,111,255,0.15)' : 'var(--bg-surface-raised, #1c2128)',
+                fontSize: 12, color: osFilter !== 'all' ? '#006FFF' : 'var(--text-secondary, #8b949e)',
                 cursor: 'pointer', fontWeight: 500,
               }}
             >
@@ -161,8 +162,8 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
               <div
                 style={{
                   position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 20,
-                  background: 'white', border: '1px solid var(--apple-gray-2)',
-                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', overflow: 'hidden', minWidth: 140,
+                  background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))',
+                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.4)', overflow: 'hidden', minWidth: 140,
                 }}
                 onClick={e => e.stopPropagation()}
               >
@@ -172,11 +173,12 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
                     onClick={() => { setOsFilter(os); setFilterOpen(false); }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                      padding: '7px 12px', fontSize: 13, background: osFilter === os ? 'var(--apple-blue-light)' : 'none',
-                      color: osFilter === os ? 'var(--apple-blue)' : 'var(--apple-text-primary)',
+                      padding: '7px 12px', fontSize: 13,
+                      background: osFilter === os ? 'rgba(0,111,255,0.15)' : 'none',
+                      color: osFilter === os ? '#006FFF' : 'var(--text-primary, #e4e6ea)',
                       border: 'none', cursor: 'pointer', textAlign: 'left',
                     }}
-                    onMouseEnter={e => { if (osFilter !== os) (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
+                    onMouseEnter={e => { if (osFilter !== os) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
                     onMouseLeave={e => { if (osFilter !== os) (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
                   >
                     {os === 'all' ? '💻' : OS_META[os].icon}
@@ -193,9 +195,9 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
               onClick={e => { e.stopPropagation(); setSortOpen(o => !o); setFilterOpen(false); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 4,
-                padding: '5px 10px', border: '1px solid var(--apple-gray-2)',
-                borderRadius: 6, background: '#fff',
-                fontSize: 12, color: 'var(--apple-text-secondary)', cursor: 'pointer', fontWeight: 500,
+                padding: '5px 10px', border: '1px solid var(--border, rgba(255,255,255,0.07))',
+                borderRadius: 6, background: 'var(--bg-surface-raised, #1c2128)',
+                fontSize: 12, color: 'var(--text-secondary, #8b949e)', cursor: 'pointer', fontWeight: 500,
               }}
             >
               Sort ↕
@@ -204,8 +206,8 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
               <div
                 style={{
                   position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 20,
-                  background: 'white', border: '1px solid var(--apple-gray-2)',
-                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', overflow: 'hidden', minWidth: 140,
+                  background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))',
+                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.4)', overflow: 'hidden', minWidth: 140,
                 }}
                 onClick={e => e.stopPropagation()}
               >
@@ -215,11 +217,11 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
                     onClick={() => { setSortKey(key); setSortOpen(false); }}
                     style={{
                       display: 'block', width: '100%', padding: '7px 12px', fontSize: 13,
-                      background: sortKey === key ? 'var(--apple-blue-light)' : 'none',
-                      color: sortKey === key ? 'var(--apple-blue)' : 'var(--apple-text-primary)',
+                      background: sortKey === key ? 'rgba(0,111,255,0.15)' : 'none',
+                      color: sortKey === key ? '#006FFF' : 'var(--text-primary, #e4e6ea)',
                       border: 'none', cursor: 'pointer', textAlign: 'left',
                     }}
-                    onMouseEnter={e => { if (sortKey !== key) (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
+                    onMouseEnter={e => { if (sortKey !== key) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
                     onMouseLeave={e => { if (sortKey !== key) (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
                   >
                     {SORT_LABELS[key]}
@@ -246,17 +248,14 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
                 gap: 12,
                 width: '100%',
                 padding: '12px 16px',
-                borderBottom: '1px solid var(--apple-gray-2)',
-                background: isSelected ? 'var(--apple-blue)' : 'transparent',
+                background: isSelected ? '#006FFF' : 'transparent',
                 border: 'none',
-                borderBottomColor: isSelected ? 'var(--apple-blue)' : 'var(--apple-gray-2)',
-                borderBottomWidth: 1,
-                borderBottomStyle: 'solid',
+                borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))',
                 cursor: 'pointer',
                 textAlign: 'left',
                 transition: 'background 0.1s',
               }}
-              onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
+              onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
               onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
             >
               {/* OS icon */}
@@ -266,14 +265,14 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
                   fontSize: 13, fontWeight: 600,
-                  color: isSelected ? '#ffffff' : 'var(--apple-text-primary)',
+                  color: isSelected ? '#ffffff' : 'var(--text-primary, #e4e6ea)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {device.name}
                 </div>
                 <div style={{
                   fontSize: 11, marginTop: 2,
-                  color: isSelected ? 'rgba(255,255,255,0.75)' : 'var(--apple-text-secondary)',
+                  color: isSelected ? 'rgba(255,255,255,0.75)' : 'var(--text-secondary, #8b949e)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {device.mdmServer ?? meta?.label ?? ''}
@@ -288,7 +287,7 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
         })}
 
         {filtered.length === 0 && (
-          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--apple-text-tertiary)', fontSize: 13 }}>
+          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted, #6e7681)', fontSize: 13 }}>
             No devices match the filter.
           </div>
         )}

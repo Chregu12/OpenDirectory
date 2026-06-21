@@ -79,7 +79,7 @@ function StepIndicator({ current }: { current: Step }) {
       {STEPS.map((s, i) => (
         <React.Fragment key={s.n}>
           {i > 0 && (
-            <div style={{ flex: 1, height: 2, background: s.n <= current ? '#FF9500' : 'var(--apple-gray-3)' }} />
+            <div style={{ flex: 1, height: 2, background: s.n <= current ? '#FF9500' : 'rgba(255,255,255,0.1)' }} />
           )}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
             <div
@@ -87,8 +87,8 @@ function StepIndicator({ current }: { current: Step }) {
                 width: 28,
                 height: 28,
                 borderRadius: '50%',
-                background: s.n < current ? '#FF9500' : s.n === current ? '#FF9500' : 'var(--apple-gray-3)',
-                color: s.n <= current ? 'white' : 'var(--apple-gray-5)',
+                background: s.n < current ? '#FF9500' : s.n === current ? '#FF9500' : 'rgba(255,255,255,0.1)',
+                color: s.n <= current ? 'white' : 'var(--text-muted, #6e7681)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -98,7 +98,7 @@ function StepIndicator({ current }: { current: Step }) {
             >
               {s.n < current ? <CheckIcon style={{ width: 14, height: 14 }} /> : s.n}
             </div>
-            <span style={{ fontSize: 11, color: s.n === current ? '#FF9500' : 'var(--apple-text-tertiary)', fontWeight: s.n === current ? 600 : 400, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 11, color: s.n === current ? '#FF9500' : 'var(--text-muted, #6e7681)', fontWeight: s.n === current ? 600 : 400, whiteSpace: 'nowrap' }}>
               {s.label}
             </span>
           </div>
@@ -217,11 +217,11 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={onClose}
     >
       <div
-        style={{ background: 'white', borderRadius: 16, boxShadow: '0 24px 64px rgba(0,0,0,0.18)', width: '100%', maxWidth: 540, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 16, boxShadow: '0 24px 64px rgba(0,0,0,0.5)', width: '100%', maxWidth: 540, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -243,15 +243,15 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
             /* Success state */
             <div style={{ textAlign: 'center' }}>
               <CheckCircleIcon style={{ width: 52, height: 52, color: result.dryRun ? '#FF9500' : '#22c55e', margin: '0 auto 14px' }} />
-              <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary, #e4e6ea)' }}>
                 {result.dryRun ? 'Dry Run Complete' : 'Policy Deployed'}
               </h3>
-              <p style={{ fontSize: 13, color: 'var(--apple-text-secondary)', marginBottom: 20 }}>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)', marginBottom: 20 }}>
                 {result.dryRun
                   ? `Would have applied "${result.policy}" to ${estimatedScope()} devices. No changes were made.`
                   : `"${result.policy}" was applied to ${result.affectedTargets ?? result.applied ?? estimatedScope()} devices.`}
               </p>
-              <div style={{ background: 'var(--apple-gray-1)', borderRadius: 10, padding: '14px 16px', textAlign: 'left' }}>
+              <div style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 10, padding: '14px 16px', textAlign: 'left' }}>
                 {[
                   { label: 'Policy',           value: result.policy ?? selectedPolicy?.name ?? '—' },
                   { label: 'Target',           value: result.target ?? '—' },
@@ -259,28 +259,28 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
                   { label: 'Devices Affected', value: result.dryRun ? `${estimatedScope()} (simulated)` : `${result.affectedTargets ?? result.applied ?? estimatedScope()}` },
                   ...(result.deploymentId ? [{ label: 'Deployment ID', value: result.deploymentId }] : []),
                 ].map(row => (
-                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--apple-gray-2)' }}>
-                    <span style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>{row.label}</span>
-                    <span style={{ fontSize: 13, color: 'var(--apple-text-primary)', fontWeight: 500 }}>{row.value}</span>
+                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>{row.label}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-primary, #e4e6ea)', fontWeight: 500 }}>{row.value}</span>
                   </div>
                 ))}
               </div>
               {result.warnings && result.warnings.length > 0 && (
-                <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 14px', marginTop: 14, textAlign: 'left' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#92400E', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: 8, padding: '10px 14px', marginTop: 14, textAlign: 'left' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#eab308', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <ExclamationTriangleIcon style={{ width: 14, height: 14 }} />
                     Warnings
                   </div>
                   {result.warnings.map((w, i) => (
-                    <div key={i} style={{ fontSize: 12, color: '#92400E' }}>{w}</div>
+                    <div key={i} style={{ fontSize: 12, color: '#eab308' }}>{w}</div>
                   ))}
                 </div>
               )}
               {result.completedSteps && result.completedSteps.length > 0 && (
                 <div style={{ marginTop: 14, textAlign: 'left' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--apple-text-secondary)', marginBottom: 6 }}>Completed Steps</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Completed Steps</div>
                   {result.completedSteps.map((step, i) => (
-                    <div key={i} style={{ fontSize: 12, color: 'var(--apple-text-primary)', display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+                    <div key={i} style={{ fontSize: 12, color: 'var(--text-primary, #e4e6ea)', display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
                       <CheckIcon style={{ width: 12, height: 12, color: '#22c55e' }} />
                       {step}
                     </div>
@@ -296,13 +296,13 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
               {step === 1 && (
                 <div>
                   <div style={{ position: 'relative', marginBottom: 14 }}>
-                    <MagnifyingGlassIcon style={{ width: 15, height: 15, position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--apple-gray-5)', pointerEvents: 'none' }} />
+                    <MagnifyingGlassIcon style={{ width: 15, height: 15, position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted, #6e7681)', pointerEvents: 'none' }} />
                     <input
                       type="text"
                       placeholder="Search policies..."
                       value={search}
                       onChange={e => setSearch(e.target.value)}
-                      style={{ width: '100%', paddingLeft: 32, paddingRight: 12, paddingTop: 8, paddingBottom: 8, border: '1px solid var(--apple-gray-2)', borderRadius: 8, fontSize: 13, outline: 'none', background: 'var(--apple-gray-1)', boxSizing: 'border-box' }}
+                      style={{ width: '100%', paddingLeft: 32, paddingRight: 12, paddingTop: 8, paddingBottom: 8, border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, fontSize: 13, outline: 'none', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto' }}>
@@ -315,17 +315,17 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
                           alignItems: 'flex-start',
                           gap: 12,
                           padding: '10px 12px',
-                          border: selectedPolicy?.id === p.id ? '1.5px solid #FF9500' : '1px solid var(--apple-gray-2)',
+                          border: selectedPolicy?.id === p.id ? '1.5px solid #FF9500' : '1px solid var(--border, rgba(255,255,255,0.07))',
                           borderRadius: 8,
-                          background: selectedPolicy?.id === p.id ? '#FFF7E6' : 'white',
+                          background: selectedPolicy?.id === p.id ? 'rgba(255,149,0,0.12)' : 'var(--bg-surface-raised, #1c2128)',
                           cursor: 'pointer',
                           textAlign: 'left',
                         }}
                       >
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--apple-text-primary)' }}>{p.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--apple-text-tertiary)', marginTop: 2 }}>
-                            <span style={{ background: 'var(--apple-gray-2)', borderRadius: 4, padding: '1px 6px', marginRight: 6 }}>{p.category}</span>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>{p.name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted, #6e7681)', marginTop: 2 }}>
+                            <span style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 4, padding: '1px 6px', marginRight: 6, color: 'var(--text-secondary, #8b949e)' }}>{p.category}</span>
                             {p.description}
                           </div>
                         </div>
@@ -339,7 +339,7 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
               {/* Step 2: Choose target */}
               {step === 2 && (
                 <div>
-                  <p style={{ fontSize: 13, color: 'var(--apple-text-secondary)', marginBottom: 14 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)', marginBottom: 14 }}>
                     Choose which devices will receive this policy:
                   </p>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
@@ -352,17 +352,17 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
                           alignItems: 'flex-start',
                           gap: 10,
                           padding: '10px 12px',
-                          border: targetType === opt.value ? '1.5px solid #FF9500' : '1px solid var(--apple-gray-2)',
+                          border: targetType === opt.value ? '1.5px solid #FF9500' : '1px solid var(--border, rgba(255,255,255,0.07))',
                           borderRadius: 8,
-                          background: targetType === opt.value ? '#FFF7E6' : 'white',
+                          background: targetType === opt.value ? 'rgba(255,149,0,0.12)' : 'var(--bg-surface-raised, #1c2128)',
                           cursor: 'pointer',
                           textAlign: 'left',
                         }}
                       >
                         <span style={{ fontSize: 20 }}>{opt.icon}</span>
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--apple-text-primary)' }}>{opt.label}</div>
-                          <div style={{ fontSize: 11, color: 'var(--apple-text-tertiary)', lineHeight: 1.3 }}>{opt.desc}</div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>{opt.label}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted, #6e7681)', lineHeight: 1.3 }}>{opt.desc}</div>
                         </div>
                       </button>
                     ))}
@@ -373,7 +373,7 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
                       placeholder={`Specify ${TARGET_OPTIONS.find(o => o.value === targetType)?.label}...`}
                       value={targetValue}
                       onChange={e => setTargetValue(e.target.value)}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--apple-gray-2)', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, fontSize: 14, outline: 'none', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
                     />
                   )}
                 </div>
@@ -382,7 +382,7 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
               {/* Step 3: Options */}
               {step === 3 && (
                 <div>
-                  <p style={{ fontSize: 13, color: 'var(--apple-text-secondary)', marginBottom: 18 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)', marginBottom: 18 }}>
                     Configure deployment options:
                   </p>
                   {[
@@ -400,7 +400,7 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
                       desc: 'Simulate deployment — shows what WOULD happen without making any changes.',
                       value: dryRun,
                       toggle: () => setDryRun(d => !d),
-                      color: '#0071E3',
+                      color: '#006FFF',
                     },
                   ].map(opt => (
                     <div
@@ -411,15 +411,15 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
                         justifyContent: 'space-between',
                         gap: 16,
                         padding: '14px 16px',
-                        border: '1px solid var(--apple-gray-2)',
+                        border: '1px solid var(--border, rgba(255,255,255,0.07))',
                         borderRadius: 10,
                         marginBottom: 10,
-                        background: opt.value ? '#F9F9F9' : 'white',
+                        background: 'var(--bg-surface-raised, #1c2128)',
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--apple-text-primary)' }}>{opt.label}</div>
-                        <div style={{ fontSize: 12, color: 'var(--apple-text-secondary)', marginTop: 3, lineHeight: 1.4 }}>{opt.desc}</div>
+                        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>{opt.label}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary, #8b949e)', marginTop: 3, lineHeight: 1.4 }}>{opt.desc}</div>
                       </div>
                       <button
                         onClick={opt.toggle}
@@ -427,7 +427,7 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
                           width: 44,
                           height: 26,
                           borderRadius: 13,
-                          background: opt.value ? opt.color : 'var(--apple-gray-3)',
+                          background: opt.value ? opt.color : 'rgba(255,255,255,0.1)',
                           border: 'none',
                           cursor: 'pointer',
                           position: 'relative',
@@ -453,7 +453,7 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
                   ))}
 
                   {dryRun && (
-                    <div style={{ background: '#EAF4FF', border: '1px solid #A8D4FF', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#0055B3' }}>
+                    <div style={{ background: 'rgba(0,111,255,0.1)', border: '1px solid rgba(0,111,255,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#6ea8ff' }}>
                       Dry run is enabled. Deploying will simulate applying to ~{estimatedScope()} devices with no actual changes.
                     </div>
                   )}
@@ -464,26 +464,26 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
               {step === 4 && (
                 <div>
                   <div style={{ marginBottom: 20 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--apple-text-primary)', marginBottom: 14 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 14 }}>
                       Ready to {dryRun ? 'simulate' : 'deploy'}
                     </div>
-                    <div style={{ background: 'var(--apple-gray-1)', borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 10, padding: '14px 16px' }}>
                       {[
                         { label: 'Policy',           value: selectedPolicy?.name ?? '—' },
                         { label: 'Target',           value: targetType === 'all' ? 'All Devices' : targetValue || targetType },
                         { label: 'Mode',             value: dryRun ? 'Dry Run (no changes)' : enforced ? 'Enforced' : 'Audit Only' },
                         { label: 'Estimated Scope',  value: `~${estimatedScope()} devices` },
                       ].map(row => (
-                        <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--apple-gray-2)' }}>
-                          <span style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>{row.label}</span>
-                          <span style={{ fontSize: 13, color: 'var(--apple-text-primary)', fontWeight: 500 }}>{row.value}</span>
+                        <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                          <span style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>{row.label}</span>
+                          <span style={{ fontSize: 13, color: 'var(--text-primary, #e4e6ea)', fontWeight: 500 }}>{row.value}</span>
                         </div>
                       ))}
                     </div>
                   </div>
 
                   {deployError && (
-                    <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#991B1B', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 8 }}>
                       <ExclamationTriangleIcon style={{ width: 16, height: 16, flexShrink: 0 }} />
                       {deployError}
                     </div>
@@ -492,18 +492,18 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
                   {deploying && (
                     <div style={{ marginTop: 16 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ fontSize: 13, color: 'var(--apple-text-secondary)' }}>
+                        <span style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>
                           {dryRun ? 'Simulating...' : 'Deploying...'}
                         </span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--apple-text-primary)' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>
                           {Math.round(progress)}%
                         </span>
                       </div>
-                      <div style={{ height: 8, background: 'var(--apple-gray-2)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ height: 8, background: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' }}>
                         <div
                           style={{
                             height: '100%',
-                            background: dryRun ? '#0071E3' : '#FF9500',
+                            background: dryRun ? '#006FFF' : '#FF9500',
                             borderRadius: 4,
                             width: `${progress}%`,
                             transition: 'width 0.2s',
@@ -519,7 +519,7 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--apple-gray-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'white' }}>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border, rgba(255,255,255,0.07))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg-surface, #161b22)' }}>
           {result ? (
             <button onClick={onClose} style={{ marginLeft: 'auto', padding: '9px 20px', background: '#FF9500', color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
               Done
@@ -529,7 +529,7 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
               <button
                 onClick={() => (step === 1 ? onClose() : setStep(prev => (prev - 1) as Step))}
                 disabled={deploying}
-                style={{ padding: '8px 16px', border: 'none', background: 'none', fontSize: 14, color: 'var(--apple-text-secondary)', cursor: 'pointer' }}
+                style={{ padding: '8px 16px', border: 'none', background: 'none', fontSize: 14, color: 'var(--text-secondary, #8b949e)', cursor: 'pointer' }}
               >
                 {step === 1 ? 'Cancel' : 'Back'}
               </button>
@@ -540,7 +540,7 @@ export default function PolicyDeployWizard({ onClose }: PolicyDeployWizardProps)
                   disabled={step === 1 && !selectedPolicy}
                   style={{
                     padding: '9px 20px',
-                    background: (step === 1 && !selectedPolicy) ? 'var(--apple-gray-3)' : '#FF9500',
+                    background: (step === 1 && !selectedPolicy) ? 'rgba(255,255,255,0.1)' : '#FF9500',
                     color: 'white',
                     border: 'none',
                     borderRadius: 8,
