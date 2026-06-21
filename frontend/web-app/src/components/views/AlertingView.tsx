@@ -441,7 +441,7 @@ export default function AlertingView() {
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors`}
                     style={
                       severityFilter === f
-                        ? { background: '#0071E3', color: '#fff' }
+                        ? { background: '#006FFF', color: '#fff' }
                         : { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }
                     }
                   >
@@ -452,7 +452,7 @@ export default function AlertingView() {
               {selectedAlerts.size > 0 && (
                 <button
                   onClick={bulkAcknowledge}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0071E3]/90 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-[#006FFF] text-white rounded-xl text-sm font-medium hover:bg-[#006FFF]/90 transition-colors"
                 >
                   <CheckIcon className="w-4 h-4" />
                   {selectedAlerts.size} bestätigen
@@ -570,7 +570,7 @@ export default function AlertingView() {
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{rules.length} Regeln konfiguriert</p>
               <button
                 onClick={() => { setEditingRule({}); setShowRuleModal(true); }}
-                className="flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0071E3]/90 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-[#006FFF] text-white rounded-xl text-sm font-medium hover:bg-[#006FFF]/90 transition-colors"
               >
                 <PlusIcon className="w-4 h-4" />
                 Neue Regel
@@ -609,7 +609,7 @@ export default function AlertingView() {
                     <button
                       onClick={() => toggleRule(rule.id)}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
-                        rule.enabled ? 'bg-[#0071E3]' : 'bg-gray-600'
+                        rule.enabled ? 'bg-[#006FFF]' : 'bg-gray-600'
                       }`}
                     >
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${rule.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -637,7 +637,7 @@ export default function AlertingView() {
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{channels.length} Kanäle konfiguriert</p>
               <button
                 onClick={() => { setEditingChannel({ type: 'email' }); setShowChannelModal(true); }}
-                className="flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0071E3]/90 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-[#006FFF] text-white rounded-xl text-sm font-medium hover:bg-[#006FFF]/90 transition-colors"
               >
                 <PlusIcon className="w-4 h-4" />
                 Kanal hinzufügen
@@ -689,7 +689,7 @@ export default function AlertingView() {
                     </button>
                     <button
                       onClick={() => testChannel(ch.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium hover:bg-[#0071E3]/20 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium hover:bg-[#006FFF]/20 transition-colors"
                       style={{ background: 'rgba(0,111,255,0.15)', color: '#0071E3' }}
                     >
                       <PaperAirplaneIcon className="w-3.5 h-3.5" />
@@ -894,7 +894,7 @@ export default function AlertingView() {
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors"
                         style={
                           selected
-                            ? { background: '#0071E3', color: '#fff', borderColor: '#0071E3' }
+                            ? { background: '#006FFF', color: '#fff', borderColor: '#006FFF' }
                             : { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', borderColor: 'var(--border)' }
                         }
                       >
@@ -918,7 +918,7 @@ export default function AlertingView() {
               </button>
               <button
                 onClick={saveRule}
-                className="px-4 py-2 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0071E3]/90"
+                className="px-4 py-2 bg-[#006FFF] text-white rounded-xl text-sm font-medium hover:bg-[#006FFF]/90"
               >
                 {editingRule.id ? 'Speichern' : 'Erstellen'}
               </button>
@@ -1048,7 +1048,7 @@ export default function AlertingView() {
                   type="button"
                   onClick={() => setEditingChannel((p) => ({ ...p, enabled: !p.enabled }))}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    editingChannel.enabled !== false ? 'bg-[#0071E3]' : 'bg-gray-600'
+                    editingChannel.enabled !== false ? 'bg-[#006FFF]' : 'bg-gray-600'
                   }`}
                 >
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${editingChannel.enabled !== false ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -1067,7 +1067,7 @@ export default function AlertingView() {
               </button>
               <button
                 onClick={saveChannel}
-                className="px-4 py-2 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0071E3]/90"
+                className="px-4 py-2 bg-[#006FFF] text-white rounded-xl text-sm font-medium hover:bg-[#006FFF]/90"
               >
                 {editingChannel.id ? 'Speichern' : 'Hinzufügen'}
               </button>

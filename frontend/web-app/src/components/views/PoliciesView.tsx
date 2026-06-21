@@ -857,7 +857,7 @@ function ArtifactViewer({ compiled, policyId }: { compiled: CompiledResult; poli
                 <CopyButton text={artifact.apply_command} />
               </div>
             )}
-            <pre className="p-4 text-xs font-mono text-gray-700 overflow-x-auto bg-white max-h-48 overflow-y-auto whitespace-pre">{artifact.content}</pre>
+            <pre className="p-4 text-xs font-mono overflow-x-auto max-h-48 overflow-y-auto whitespace-pre" style={{ color: 'var(--text-primary, #e4e6ea)', background: 'var(--bg-surface-raised, #21262d)' }}>{artifact.content}</pre>
           </div>
         ))}
         {artifacts.length === 0 && (
@@ -897,7 +897,7 @@ function RollbackModal({ deploymentId, policyName, onClose, onRollback }: Rollba
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={result ? onClose : undefined}>
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+      <div className="rounded-xl max-w-md w-full" style={{ background: 'var(--bg-surface, #161b22)', boxShadow: 'var(--card-shadow)' }} onClick={e => e.stopPropagation()}>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1326,7 +1326,7 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
         {/* Wizard overlay when activeView is 'wizard' in simple mode */}
         {activeView === 'wizard' && (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6">
+            <div className="rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6" style={{ background: 'var(--bg-surface, #161b22)', boxShadow: 'var(--card-shadow)' }}>
               {/* Wizard Header */}
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900">Neue Policy erstellen</h2>
@@ -1602,8 +1602,8 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
         </div>
 
         {/* Architecture Banner */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-blue-900 mb-3">Architektur</h3>
+        <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--accent, #006FFF)' }}>Architektur</h3>
           <div className="flex items-start gap-3 flex-wrap">
             {[
               { icon: CodeBracketIcon, label: 'Intent YAML/JSON', sub: 'Policy definieren', color: 'blue' },
@@ -1612,11 +1612,11 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
               { icon: ServerIcon,      label: 'Linux → Configs',  sub: 'sshd · sysctl · PAM', color: 'orange' },
               { icon: DevicePhoneMobileIcon, label: 'macOS → Profiles', sub: '.mobileconfig · LaunchDaemon', color: 'gray' },
             ].map(({ icon: Icon, label, sub, color }) => (
-              <div key={label} className={`flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-${color}-100`}>
-                <Icon className={`h-5 w-5 text-${color}-500 flex-shrink-0`} />
+              <div key={label} className={`flex items-center gap-2 rounded-lg px-3 py-2 shadow-sm`} style={{ background: 'var(--bg-surface-raised, #21262d)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <Icon className={`h-5 w-5 text-${color}-400 flex-shrink-0`} />
                 <div>
-                  <p className="text-xs font-medium text-gray-800">{label}</p>
-                  <p className="text-xs text-gray-400">{sub}</p>
+                  <p className="text-xs font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{label}</p>
+                  <p className="text-xs" style={{ color: 'var(--text-muted, #8b949e)' }}>{sub}</p>
                 </div>
               </div>
             ))}
@@ -1625,7 +1625,7 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
 
         {/* Compliance Live-Status */}
         {complianceSummary && complianceSummary.overall.total_devices > 0 && (
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <ShieldCheckIcon className="h-4 w-4 text-green-500" />
@@ -1999,7 +1999,7 @@ export default function PoliciesView({ onOpenWizard }: PoliciesViewProps) {
             <div className="space-y-4">
               {/* Policy summary bar */}
               {policyCompliance ? (
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="rounded-lg p-4" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)' }}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-gray-700">Policy-Compliance</span>
                     <span className={`text-sm font-bold ${

@@ -87,7 +87,7 @@ function fmtCHF(amount: number, currency = 'CHF') {
 }
 
 function seatsColor(used: number, total: number) {
-  if (total === 0) return 'text-[#8E8E93]';
+  if (total === 0) return 'text-[var(--text-muted,#8b949e)] ';
   const pct = used / total;
   if (pct >= 1)   return 'text-red-500';
   if (pct >= 0.8) return 'text-[#FF9500]';
@@ -192,7 +192,7 @@ function RequestModal({ license, onClose, onSubmitted }: {
           <div className="flex justify-end gap-3 pt-2">
             <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg" style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface-raised)' }}>Abbrechen</button>
             <button onClick={submit} disabled={submitting}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED] disabled:opacity-60">
+              className="px-4 py-2 text-sm font-medium text-white bg-[#006FFF] rounded-lg hover:bg-[#006FFF]/90 disabled:opacity-60">
               {submitting ? 'Einreichen…' : 'Bestellen'}
             </button>
           </div>
@@ -245,67 +245,67 @@ function LicenseFormModal({ license, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.14)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-5 pb-0">
-          <h2 className="text-base font-semibold text-[#1D1D1F]">{license ? 'Lizenz bearbeiten' : 'Neue Lizenz'}</h2>
-          <button onClick={onClose}><XMarkIcon className="w-5 h-5 text-[#8E8E93]" /></button>
+          <h2 className="text-base font-semibold text-[var(--text-primary,#e4e6ea)] ">{license ? 'Lizenz bearbeiten' : 'Neue Lizenz'}</h2>
+          <button onClick={onClose}><XMarkIcon className="w-5 h-5 text-[var(--text-muted,#8b949e)] " /></button>
         </div>
         <div className="p-6 overflow-y-auto space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Produktname *</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#b1b5bd)]  mb-1">Produktname *</label>
               <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="z.B. Microsoft 365 Business" className="input-apple w-full" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Hersteller</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#b1b5bd)]  mb-1">Hersteller</label>
               <input value={form.vendor} onChange={e => setForm(p => ({ ...p, vendor: e.target.value }))} placeholder="Microsoft" className="input-apple w-full" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Kategorie</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#b1b5bd)]  mb-1">Kategorie</label>
               <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="input-apple w-full">
                 {['Productivity', 'Design', 'Developer', 'Security', 'Monitoring', 'Network', 'Software', 'Other'].map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Lizenztyp</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#b1b5bd)]  mb-1">Lizenztyp</label>
               <select value={form.license_type} onChange={e => setForm(p => ({ ...p, license_type: e.target.value as any }))} className="input-apple w-full">
                 {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Anzahl Seats</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#b1b5bd)]  mb-1">Anzahl Seats</label>
               <input type="number" min={0} value={form.total_seats} onChange={e => setForm(p => ({ ...p, total_seats: Number(e.target.value) }))} className="input-apple w-full" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Kosten / Seat</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#b1b5bd)]  mb-1">Kosten / Seat</label>
               <input type="number" min={0} step={0.01} value={form.cost_per_seat} onChange={e => setForm(p => ({ ...p, cost_per_seat: Number(e.target.value) }))} className="input-apple w-full" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Währung</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#b1b5bd)]  mb-1">Währung</label>
               <select value={form.currency} onChange={e => setForm(p => ({ ...p, currency: e.target.value }))} className="input-apple w-full">
                 {['CHF', 'EUR', 'USD', 'GBP'].map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Erneuerungsdatum</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#b1b5bd)]  mb-1">Erneuerungsdatum</label>
               <input type="date" value={form.renewal_date} onChange={e => setForm(p => ({ ...p, renewal_date: e.target.value }))} className="input-apple w-full" />
             </div>
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Beschreibung (Kiosk)</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#b1b5bd)]  mb-1">Beschreibung (Kiosk)</label>
               <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Wird im Kiosk angezeigt" className="input-apple w-full" />
             </div>
             <div className="col-span-2 flex items-center gap-3">
               <button type="button" onClick={() => setForm(p => ({ ...p, auto_approve: !p.auto_approve }))}
-                className={`relative w-11 h-6 rounded-full transition-colors ${form.auto_approve ? 'bg-[#0071E3]' : 'bg-[#D1D1D6]'}`}>
+                className={`relative w-11 h-6 rounded-full transition-colors ${form.auto_approve ? 'bg-[#006FFF]' : 'bg-gray-600'}`}>
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.auto_approve ? 'translate-x-5' : ''}`} />
               </button>
-              <span className="text-sm text-[#3C3C43]">Sofortzuweisung (ohne Genehmigung)</span>
+              <span className="text-sm text-[var(--text-secondary,#b1b5bd)] ">Sofortzuweisung (ohne Genehmigung)</span>
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-[#3C3C43] bg-[#F2F2F7] rounded-lg">Abbrechen</button>
+            <button onClick={onClose} className="px-4 py-2 text-sm text-[var(--text-secondary,#b1b5bd)]  bg-[rgba(255,255,255,0.06)]  rounded-lg">Abbrechen</button>
             <button onClick={save} disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED] disabled:opacity-60">
+              className="px-4 py-2 text-sm font-medium text-white bg-[#006FFF] rounded-lg hover:bg-[#006FFF]/90 disabled:opacity-60">
               {saving ? 'Speichern…' : 'Speichern'}
             </button>
           </div>
@@ -387,16 +387,16 @@ export default function LicenseKioskView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-[#1D1D1F] tracking-tight">Lizenzverwaltung</h1>
-          <p className="text-sm text-[#8E8E93] mt-0.5">Software-Lizenzen bestellen, zuweisen und verwalten</p>
+          <h1 className="text-2xl font-semibold text-[var(--text-primary,#e4e6ea)]  tracking-tight">Lizenzverwaltung</h1>
+          <p className="text-sm text-[var(--text-muted,#8b949e)]  mt-0.5">Software-Lizenzen bestellen, zuweisen und verwalten</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={load} className="p-2 rounded-lg hover:bg-[#F2F2F7]">
-            <ArrowPathIcon className={`w-5 h-5 text-[#8E8E93] ${loading ? 'animate-spin' : ''}`} />
+          <button onClick={load} className="p-2 rounded-lg hover:bg-[rgba(255,255,255,0.06)] ">
+            <ArrowPathIcon className={`w-5 h-5 text-[var(--text-muted,#8b949e)]  ${loading ? 'animate-spin' : ''}`} />
           </button>
           {tab === 'verwaltung' && (
             <button onClick={() => { setEditLicense(undefined); setShowLicForm(true); }}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED]">
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] rounded-lg hover:bg-[#006FFF]/90">
               <PlusIcon className="w-4 h-4" /> Lizenz hinzufügen
             </button>
           )}
@@ -411,20 +411,20 @@ export default function LicenseKioskView() {
           { label: 'Monatliche Kosten', value: `CHF ${totalCost.toFixed(0)}`,      sub: 'aktuelle Zuweisung' },
           { label: 'Offene Anfragen', value: pending.length,                       sub: 'warten auf Genehmigung' },
         ].map(({ label, value, sub }) => (
-          <div key={label} className="bg-white rounded-xl border border-[#E5E5EA] p-4">
-            <p className="text-xs text-[#8E8E93] mb-1">{label}</p>
-            <p className="text-xl font-semibold text-[#1D1D1F]">{value}</p>
-            <p className="text-xs text-[#8E8E93] mt-0.5">{sub}</p>
+          <div key={label} className="rounded-xl p-4" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <p className="text-xs text-[var(--text-muted,#8b949e)]  mb-1">{label}</p>
+            <p className="text-xl font-semibold text-[var(--text-primary,#e4e6ea)] ">{value}</p>
+            <p className="text-xs text-[var(--text-muted,#8b949e)]  mt-0.5">{sub}</p>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-[#E5E5EA]">
+      <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.key ? 'border-[#0071E3] text-[#0071E3]' : 'border-transparent text-[#8E8E93] hover:text-[#3C3C43]'
+              tab === t.key ? 'border-[#006FFF] text-[#006FFF]' : 'border-transparent text-[var(--text-muted,#8b949e)] hover:text-[var(--text-secondary,#b1b5bd)]'
             }`}>
             {t.label}
             {t.badge != null && t.badge > 0 && (
@@ -440,19 +440,19 @@ export default function LicenseKioskView() {
           {/* Search + category filter */}
           <div className="flex gap-3">
             <div className="relative flex-1">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8E93]" />
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted,#8b949e)] " />
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Software suchen…"
-                className="w-full pl-9 pr-3 py-2 text-sm border border-[#E5E5EA] rounded-lg focus:outline-none focus:border-[#0071E3]" />
+                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg focus:outline-none" style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'var(--bg-surface-raised, #21262d)', color: 'var(--text-primary)' }} />
             </div>
             <div className="flex gap-2 flex-wrap">
               <button onClick={() => setCatFilter('')}
-                className={`px-3 py-2 text-xs rounded-lg border transition-colors ${!catFilter ? 'border-[#0071E3] bg-[#EAF4FF] text-[#0071E3]' : 'border-[#E5E5EA] text-[#3C3C43] hover:bg-[#F2F2F7]'}`}>
+                className={`px-3 py-2 text-xs rounded-lg border transition-colors ${!catFilter ? 'border-[#006FFF] bg-[rgba(0,111,255,0.15)] text-[#006FFF]' : 'text-[var(--text-secondary,#b1b5bd)]'}`} style={{ borderColor: !catFilter ? '#006FFF' : 'rgba(255,255,255,0.07)' }}>
                 Alle
               </button>
               {categories.map(cat => (
                 <button key={cat} onClick={() => setCatFilter(catFilter === cat ? '' : cat)}
-                  className={`px-3 py-2 text-xs rounded-lg border transition-colors ${catFilter === cat ? 'border-[#0071E3] bg-[#EAF4FF] text-[#0071E3]' : 'border-[#E5E5EA] text-[#3C3C43] hover:bg-[#F2F2F7]'}`}>
+                  className={`px-3 py-2 text-xs rounded-lg border transition-colors ${catFilter === cat ? 'border-[#006FFF] bg-[rgba(0,111,255,0.15)] text-[#006FFF]' : 'text-[var(--text-secondary,#b1b5bd)]'}`} style={{ borderColor: catFilter === cat ? '#006FFF' : 'rgba(255,255,255,0.07)' }}>
                   {cat}
                 </button>
               ))}
@@ -466,8 +466,8 @@ export default function LicenseKioskView() {
             </div>
           ) : filteredLicenses.length === 0 ? (
             <div className="text-center py-20">
-              <ShoppingBagSolid className="w-12 h-12 mx-auto mb-3 text-[#8E8E93] opacity-30" />
-              <p className="text-sm text-[#8E8E93]">Keine Lizenzen gefunden</p>
+              <ShoppingBagSolid className="w-12 h-12 mx-auto mb-3 text-[var(--text-muted,#8b949e)]  opacity-30" />
+              <p className="text-sm text-[var(--text-muted,#8b949e)] ">Keine Lizenzen gefunden</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4">
@@ -475,7 +475,7 @@ export default function LicenseKioskView() {
                 const avail = lic.total_seats - lic.used_seats;
                 const pct = lic.total_seats > 0 ? lic.used_seats / lic.total_seats : 0;
                 return (
-                  <div key={lic.id} className="bg-white rounded-xl border border-[#E5E5EA] p-5 flex flex-col hover:border-[#0071E3] transition-colors group">
+                  <div key={lic.id} className="rounded-xl p-5 flex flex-col transition-colors group" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)' }}>
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -486,28 +486,28 @@ export default function LicenseKioskView() {
                             <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">⚡ Sofort</span>
                           )}
                         </div>
-                        <h3 className="text-sm font-semibold text-[#1D1D1F] truncate">{lic.name}</h3>
-                        <p className="text-xs text-[#8E8E93]">{lic.vendor}</p>
+                        <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]  truncate">{lic.name}</h3>
+                        <p className="text-xs text-[var(--text-muted,#8b949e)] ">{lic.vendor}</p>
                       </div>
                       <div className="text-right flex-shrink-0 ml-3">
-                        <p className="text-sm font-semibold text-[#1D1D1F]">{fmtCHF(lic.cost_per_seat, lic.currency)}</p>
-                        <p className="text-xs text-[#8E8E93]">pro {TYPE_LABELS[lic.license_type]?.split(' ')[1] ?? 'Seat'}</p>
+                        <p className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] ">{fmtCHF(lic.cost_per_seat, lic.currency)}</p>
+                        <p className="text-xs text-[var(--text-muted,#8b949e)] ">pro {TYPE_LABELS[lic.license_type]?.split(' ')[1] ?? 'Seat'}</p>
                       </div>
                     </div>
 
                     {lic.description && (
-                      <p className="text-xs text-[#3C3C43] mb-3 line-clamp-2">{lic.description}</p>
+                      <p className="text-xs text-[var(--text-secondary,#b1b5bd)]  mb-3 line-clamp-2">{lic.description}</p>
                     )}
 
                     {/* Seat bar */}
                     <div className="mb-3">
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-[#8E8E93]">Verfügbar</span>
+                        <span className="text-[var(--text-muted,#8b949e)] ">Verfügbar</span>
                         <span className={seatsColor(lic.used_seats, lic.total_seats)}>
                           {avail} / {lic.total_seats}
                         </span>
                       </div>
-                      <div className="h-1.5 bg-[#F2F2F7] rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-[rgba(255,255,255,0.06)]  rounded-full overflow-hidden">
                         <div className={`h-full rounded-full transition-all ${pct >= 1 ? 'bg-red-500' : pct >= 0.8 ? 'bg-[#FF9500]' : 'bg-[#34C759]'}`}
                           style={{ width: `${Math.min(pct * 100, 100)}%` }} />
                       </div>
@@ -515,7 +515,7 @@ export default function LicenseKioskView() {
 
                     <div className="mt-auto">
                       <button onClick={() => setOrderLicense(lic)}
-                        className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED] transition-colors">
+                        className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-white bg-[#006FFF] rounded-lg hover:bg-[#006FFF]/90 transition-colors">
                         <ShoppingBagIcon className="w-4 h-4" />
                         Bestellen
                       </button>
@@ -530,42 +530,42 @@ export default function LicenseKioskView() {
 
       {/* ── Verwaltung Tab ── */}
       {tab === 'verwaltung' && (
-        <div className="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden">
+        <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)' }}>
           {loading ? (
-            <div className="p-6 space-y-3">{[1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />)}</div>
+            <div className="p-6 space-y-3">{[1,2,3].map(i => <div key={i} className="h-16 rounded-lg animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />)}</div>
           ) : licenses.length === 0 ? (
             <div className="text-center py-16">
-              <TagIcon className="w-10 h-10 mx-auto mb-3 text-[#8E8E93] opacity-40" />
-              <p className="text-sm text-[#8E8E93]">Noch keine Lizenzen im Katalog</p>
+              <TagIcon className="w-10 h-10 mx-auto mb-3 text-[var(--text-muted,#8b949e)]  opacity-40" />
+              <p className="text-sm text-[var(--text-muted,#8b949e)] ">Noch keine Lizenzen im Katalog</p>
             </div>
           ) : (
             <table className="w-full">
-              <thead className="bg-[#F9F9F9] border-b border-[#F2F2F7]">
+              <thead className="bg-[rgba(255,255,255,0.04)]  border-b border-[rgba(255,255,255,0.07)] ">
                 <tr>{['Produkt', 'Typ', 'Seats', 'Kosten/Seat', 'Erneuerung', 'Aktionen'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#8E8E93] uppercase tracking-wider">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[var(--text-muted,#8b949e)]  uppercase tracking-wider">{h}</th>
                 ))}</tr>
               </thead>
-              <tbody className="divide-y divide-[#F2F2F7]">
+              <tbody className="divide-y divide-[rgba(255,255,255,0.07)] ">
                 {licenses.map(lic => (
-                  <tr key={lic.id} className="hover:bg-[#F9F9F9]">
+                  <tr key={lic.id} className="hover:bg-[rgba(255,255,255,0.04)] ">
                     <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-[#1D1D1F]">{lic.name}</p>
-                      <p className="text-xs text-[#8E8E93]">{lic.vendor} · {lic.category}</p>
+                      <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)] ">{lic.name}</p>
+                      <p className="text-xs text-[var(--text-muted,#8b949e)] ">{lic.vendor} · {lic.category}</p>
                     </td>
-                    <td className="px-4 py-3 text-sm text-[#3C3C43]">{TYPE_LABELS[lic.license_type]}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-secondary,#b1b5bd)] ">{TYPE_LABELS[lic.license_type]}</td>
                     <td className="px-4 py-3">
                       <span className={`text-sm font-medium ${seatsColor(lic.used_seats, lic.total_seats)}`}>
                         {lic.used_seats}
                       </span>
-                      <span className="text-sm text-[#8E8E93]"> / {lic.total_seats}</span>
+                      <span className="text-sm text-[var(--text-muted,#8b949e)] "> / {lic.total_seats}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-[#3C3C43]">{fmtCHF(lic.cost_per_seat, lic.currency)}</td>
-                    <td className="px-4 py-3 text-sm text-[#3C3C43]">{fmtDate(lic.renewal_date)}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-secondary,#b1b5bd)] ">{fmtCHF(lic.cost_per_seat, lic.currency)}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-secondary,#b1b5bd)] ">{fmtDate(lic.renewal_date)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => { setEditLicense(lic); setShowLicForm(true); }}
-                          className="p-1.5 rounded-lg hover:bg-[#F2F2F7]">
-                          <PencilIcon className="w-4 h-4 text-[#8E8E93]" />
+                          className="p-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.06)] ">
+                          <PencilIcon className="w-4 h-4 text-[var(--text-muted,#8b949e)] " />
                         </button>
                         <button onClick={() => deleteLicense(lic.id)}
                           className="p-1.5 rounded-lg hover:bg-red-50">
@@ -587,27 +587,27 @@ export default function LicenseKioskView() {
           {/* Pending */}
           {pending.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-[#8E8E93] uppercase tracking-wider mb-2">Ausstehend</p>
-              <div className="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden">
+              <p className="text-xs font-semibold text-[var(--text-muted,#8b949e)]  uppercase tracking-wider mb-2">Ausstehend</p>
+              <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)' }}>
                 <table className="w-full">
-                  <thead className="bg-[#F9F9F9] border-b border-[#F2F2F7]">
+                  <thead className="border-b" style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.07)' }}>
                     <tr>{['Benutzer', 'Lizenz', 'Für', 'Begründung', 'Angefragt', 'Aktionen'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#8E8E93] uppercase tracking-wider">{h}</th>
+                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[var(--text-muted,#8b949e)]  uppercase tracking-wider">{h}</th>
                     ))}</tr>
                   </thead>
-                  <tbody className="divide-y divide-[#F2F2F7]">
+                  <tbody className="divide-y divide-[rgba(255,255,255,0.07)] ">
                     {pending.map(r => (
-                      <tr key={r.id} className="hover:bg-[#F9F9F9]">
-                        <td className="px-4 py-3 text-sm font-medium text-[#1D1D1F]">{r.requester_name}</td>
-                        <td className="px-4 py-3 text-sm text-[#3C3C43]">{r.license_name}</td>
+                      <tr key={r.id} className="hover:bg-[rgba(255,255,255,0.04)] ">
+                        <td className="px-4 py-3 text-sm font-medium text-[var(--text-primary,#e4e6ea)] ">{r.requester_name}</td>
+                        <td className="px-4 py-3 text-sm text-[var(--text-secondary,#b1b5bd)] ">{r.license_name}</td>
                         <td className="px-4 py-3">
-                          <span className="text-xs bg-[#F2F2F7] text-[#3C3C43] px-2 py-0.5 rounded-full capitalize">{r.assignee_type}</span>
-                          {r.assignee_name && <span className="text-xs text-[#8E8E93] ml-1">{r.assignee_name}</span>}
+                          <span className="text-xs bg-[rgba(255,255,255,0.06)]  text-[var(--text-secondary,#b1b5bd)]  px-2 py-0.5 rounded-full capitalize">{r.assignee_type}</span>
+                          {r.assignee_name && <span className="text-xs text-[var(--text-muted,#8b949e)]  ml-1">{r.assignee_name}</span>}
                         </td>
                         <td className="px-4 py-3">
-                          <p className="text-xs text-[#3C3C43] max-w-xs truncate">{r.justification || '—'}</p>
+                          <p className="text-xs text-[var(--text-secondary,#b1b5bd)]  max-w-xs truncate">{r.justification || '—'}</p>
                         </td>
-                        <td className="px-4 py-3 text-xs text-[#8E8E93] whitespace-nowrap">{fmtDate(r.requested_at)}</td>
+                        <td className="px-4 py-3 text-xs text-[var(--text-muted,#8b949e)]  whitespace-nowrap">{fmtDate(r.requested_at)}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
                             <button onClick={() => approveLicReq(r.id)}
@@ -630,25 +630,25 @@ export default function LicenseKioskView() {
 
           {/* History */}
           <div>
-            <p className="text-xs font-semibold text-[#8E8E93] uppercase tracking-wider mb-2">Verlauf</p>
-            <div className="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden">
+            <p className="text-xs font-semibold text-[var(--text-muted,#8b949e)]  uppercase tracking-wider mb-2">Verlauf</p>
+            <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)' }}>
               {requests.filter(r => r.status !== 'pending').length === 0 ? (
                 <div className="text-center py-12">
-                  <ClockIcon className="w-8 h-8 mx-auto mb-2 text-[#8E8E93] opacity-40" />
-                  <p className="text-sm text-[#8E8E93]">Noch kein Verlauf</p>
+                  <ClockIcon className="w-8 h-8 mx-auto mb-2 text-[var(--text-muted,#8b949e)]  opacity-40" />
+                  <p className="text-sm text-[var(--text-muted,#8b949e)] ">Noch kein Verlauf</p>
                 </div>
               ) : (
                 <table className="w-full">
-                  <thead className="bg-[#F9F9F9] border-b border-[#F2F2F7]">
+                  <thead className="bg-[rgba(255,255,255,0.04)]  border-b border-[rgba(255,255,255,0.07)] ">
                     <tr>{['Benutzer', 'Lizenz', 'Status', 'Entschieden am', 'Durch'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#8E8E93] uppercase tracking-wider">{h}</th>
+                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[var(--text-muted,#8b949e)]  uppercase tracking-wider">{h}</th>
                     ))}</tr>
                   </thead>
-                  <tbody className="divide-y divide-[#F2F2F7]">
+                  <tbody className="divide-y divide-[rgba(255,255,255,0.07)] ">
                     {requests.filter(r => r.status !== 'pending').map(r => (
-                      <tr key={r.id} className="hover:bg-[#F9F9F9]">
-                        <td className="px-4 py-3 text-sm text-[#1D1D1F]">{r.requester_name}</td>
-                        <td className="px-4 py-3 text-sm text-[#3C3C43]">{r.license_name}</td>
+                      <tr key={r.id} className="hover:bg-[rgba(255,255,255,0.04)] ">
+                        <td className="px-4 py-3 text-sm text-[var(--text-primary,#e4e6ea)] ">{r.requester_name}</td>
+                        <td className="px-4 py-3 text-sm text-[var(--text-secondary,#b1b5bd)] ">{r.license_name}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
                             r.status === 'approved' ? 'bg-green-50 text-green-700 border-green-200'
@@ -656,8 +656,8 @@ export default function LicenseKioskView() {
                             {r.status === 'approved' ? 'Genehmigt' : 'Abgelehnt'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-[#8E8E93]">{fmtDate(r.decided_at)}</td>
-                        <td className="px-4 py-3 text-xs text-[#3C3C43]">{r.decided_by || '—'}</td>
+                        <td className="px-4 py-3 text-xs text-[var(--text-muted,#8b949e)] ">{fmtDate(r.decided_at)}</td>
+                        <td className="px-4 py-3 text-xs text-[var(--text-secondary,#b1b5bd)] ">{r.decided_by || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -680,15 +680,16 @@ export default function LicenseKioskView() {
         .input-apple {
           padding: 0.5rem 0.75rem;
           font-size: 0.875rem;
-          border: 1px solid #E5E5EA;
+          border: 1px solid rgba(255,255,255,0.07);
           border-radius: 0.5rem;
           outline: none;
           transition: border-color 0.15s, box-shadow 0.15s;
-          background: white;
+          background: var(--bg-surface-raised, #21262d);
+          color: var(--text-primary, #e4e6ea);
         }
         .input-apple:focus {
-          border-color: #0071E3;
-          box-shadow: 0 0 0 3px rgba(0,113,227,0.15);
+          border-color: #006FFF;
+          box-shadow: 0 0 0 3px rgba(0,111,255,0.15);
         }
       `}</style>
     </div>

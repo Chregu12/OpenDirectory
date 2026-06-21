@@ -176,7 +176,7 @@ function CreateApiKeyModal({ onClose, onCreated }: CreateApiKeyModalProps) {
           <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer' }}>Abbrechen</button>
           <button
             onClick={handleCreate} disabled={saving}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#2563EB', color: '#fff', fontSize: 14, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
           >
             {saving ? 'Erstellt...' : 'Erstellen'}
           </button>
@@ -222,7 +222,7 @@ function ShowKeyModal({ keyName, rawKey, onClose }: { keyName: string; rawKey: s
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#2563EB', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
             Fertig
           </button>
         </div>
@@ -305,7 +305,7 @@ function AddWebhookModal({ onClose, onSaved }: AddWebhookModalProps) {
           <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer' }}>Abbrechen</button>
           <button
             onClick={handleSave} disabled={saving}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#2563EB', color: '#fff', fontSize: 14, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
           >
             {saving ? 'Speichert...' : 'Speichern'}
           </button>
@@ -458,7 +458,7 @@ export default function IntegrationsView() {
         {activeTab === 'apikeys' && (
           <button
             onClick={() => setShowCreateKeyModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#2563EB', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
           >
             <PlusIcon style={{ width: 16, height: 16 }} />
             API-Schlüssel erstellen
@@ -467,7 +467,7 @@ export default function IntegrationsView() {
         {activeTab === 'webhooks' && (
           <button
             onClick={() => setShowAddWebhookModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#2563EB', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
           >
             <PlusIcon style={{ width: 16, height: 16 }} />
             Webhook hinzufügen
