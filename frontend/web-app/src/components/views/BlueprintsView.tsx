@@ -168,18 +168,18 @@ function PayloadForm({
       return (
         <div className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">SSID</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>SSID</label>
             <input
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
               value={(payload.ssid as string) || ''}
               onChange={e => set('ssid', e.target.value)}
               placeholder="Netzwerkname"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">Sicherheit</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Sicherheit</label>
             <select
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box', cursor: 'pointer' }}
               value={(payload.security as string) || 'WPA2'}
               onChange={e => set('security', e.target.value)}
             >
@@ -189,17 +189,17 @@ function PayloadForm({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">Passwort</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Passwort</label>
             <input
               type="password"
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
               value={(payload.password as string) || ''}
               onChange={e => set('password', e.target.value)}
               placeholder="WLAN-Passwort"
             />
           </div>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-[#1D1D1F] cursor-pointer">
+            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
               <input
                 type="checkbox"
                 checked={!!(payload.hidden)}
@@ -208,7 +208,7 @@ function PayloadForm({
               />
               Verstecktes Netzwerk
             </label>
-            <label className="flex items-center gap-2 text-sm text-[#1D1D1F] cursor-pointer">
+            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
               <input
                 type="checkbox"
                 checked={payload.autoJoin !== false}
@@ -225,18 +225,18 @@ function PayloadForm({
       return (
         <div className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">Server</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Server</label>
             <input
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
               value={(payload.server as string) || ''}
               onChange={e => set('server', e.target.value)}
               placeholder="vpn.example.com"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">Protokoll</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Protokoll</label>
             <select
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box', cursor: 'pointer' }}
               value={(payload.protocol as string) || 'IKEv2'}
               onChange={e => set('protocol', e.target.value)}
             >
@@ -246,9 +246,9 @@ function PayloadForm({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">Benutzername</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Benutzername</label>
             <input
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
               value={(payload.username as string) || ''}
               onChange={e => set('username', e.target.value)}
               placeholder="Benutzername"
@@ -260,7 +260,7 @@ function PayloadForm({
     case 'filevault':
       return (
         <div className="space-y-3">
-          <label className="flex items-center gap-2 text-sm text-[#1D1D1F] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
             <input
               type="checkbox"
               checked={payload.enabled !== false}
@@ -269,7 +269,7 @@ function PayloadForm({
             />
             FileVault aktivieren
           </label>
-          <label className="flex items-center gap-2 text-sm text-[#1D1D1F] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
             <input
               type="checkbox"
               checked={!!(payload.recoveryKeyEscrow)}
@@ -284,7 +284,7 @@ function PayloadForm({
     case 'gatekeeper':
       return (
         <div className="space-y-3">
-          <label className="flex items-center gap-2 text-sm text-[#1D1D1F] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
             <input
               type="checkbox"
               checked={payload.allowAppleAndDeveloper !== false}
@@ -299,7 +299,7 @@ function PayloadForm({
     case 'software_update':
       return (
         <div className="space-y-3">
-          <label className="flex items-center gap-2 text-sm text-[#1D1D1F] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
             <input
               type="checkbox"
               checked={payload.automatic !== false}
@@ -309,12 +309,12 @@ function PayloadForm({
             Automatische Updates
           </label>
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">Verzögerung (Tage)</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Verzögerung (Tage)</label>
             <input
               type="number"
               min={0}
               max={90}
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
               value={(payload.deferDays as number) ?? 0}
               onChange={e => set('deferDays', parseInt(e.target.value) || 0)}
             />
@@ -326,17 +326,17 @@ function PayloadForm({
       return (
         <div className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">Max. Inaktivität (Minuten)</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Max. Inaktivität (Minuten)</label>
             <input
               type="number"
               min={1}
               max={60}
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
               value={(payload.maxInactiveMinutes as number) ?? 5}
               onChange={e => set('maxInactiveMinutes', parseInt(e.target.value) || 5)}
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-[#1D1D1F] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
             <input
               type="checkbox"
               checked={payload.requirePassword !== false}
@@ -352,18 +352,18 @@ function PayloadForm({
       return (
         <div className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">Common Name</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Common Name</label>
             <input
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
               value={(payload.commonName as string) || ''}
               onChange={e => set('commonName', e.target.value)}
               placeholder="device.example.com"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">SANs (kommagetrennt)</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>SANs (kommagetrennt)</label>
             <input
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
               value={Array.isArray(payload.sans) ? (payload.sans as string[]).join(', ') : ''}
               onChange={e => set('sans', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
               placeholder="san1.example.com, san2.example.com"
@@ -376,24 +376,24 @@ function PayloadForm({
       return (
         <div className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">Gesperrte Domains (kommagetrennt)</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Gesperrte Domains (kommagetrennt)</label>
             <input
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
               value={Array.isArray(payload.blockedDomains) ? (payload.blockedDomains as string[]).join(', ') : ''}
               onChange={e => set('blockedDomains', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
               placeholder="example.com, bad.com"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#1D1D1F] mb-1">Erlaubte Domains (kommagetrennt)</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Erlaubte Domains (kommagetrennt)</label>
             <input
-              className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+              style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 12px', fontSize: 13, outline: 'none', background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
               value={Array.isArray(payload.allowedDomains) ? (payload.allowedDomains as string[]).join(', ') : ''}
               onChange={e => set('allowedDomains', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
               placeholder="trusted.com"
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-[#1D1D1F] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
             <input
               type="checkbox"
               checked={payload.safeSearch !== false}
@@ -408,7 +408,7 @@ function PayloadForm({
     case 'airdrop':
       return (
         <div className="space-y-3">
-          <label className="flex items-center gap-2 text-sm text-[#1D1D1F] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
             <input
               type="checkbox"
               checked={!!(payload.enabled)}
@@ -417,12 +417,12 @@ function PayloadForm({
             />
             AirDrop aktivieren
           </label>
-          <p className="text-xs text-[#6E6E73]">In Unternehmensumgebungen wird AirDrop empfohlen zu deaktivieren.</p>
+          <p className="text-xs" style={{ color: 'var(--text-secondary, #8b949e)' }}>In Unternehmensumgebungen wird AirDrop empfohlen zu deaktivieren.</p>
         </div>
       );
 
     default:
-      return <p className="text-sm text-[#6E6E73]">Keine Konfigurationsoptionen verfügbar.</p>;
+      return <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>Keine Konfigurationsoptionen verfügbar.</p>;
   }
 }
 
@@ -785,13 +785,13 @@ export default function BlueprintsView() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-full" style={{ background: '#F2F2F7', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif' }}>
+    <div className="min-h-full" style={{ background: 'var(--bg-base, #0e1115)', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif' }}>
 
       {/* Page header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1D1D1F', letterSpacing: '-0.3px' }}>Blueprints</h1>
-          <p style={{ fontSize: 13, color: '#6E6E73', marginTop: 2 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)', letterSpacing: '-0.3px' }}>Blueprints</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)', marginTop: 2 }}>
             Gerätekonfigurationsprofile erstellen und zuweisen — nach Vorbild von Apple Business Manager
           </p>
         </div>
@@ -800,7 +800,7 @@ export default function BlueprintsView() {
             onClick={() => setCreateOpen(true)}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
-              background: '#0071E3', color: 'white', border: 'none',
+              background: '#006FFF', color: 'white', border: 'none',
               borderRadius: 8, padding: '8px 16px', fontSize: 14, fontWeight: 500,
               cursor: 'pointer',
             }}
@@ -812,7 +812,7 @@ export default function BlueprintsView() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid #E5E5EA', paddingBottom: 0 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))', paddingBottom: 0 }}>
         {(['blueprints', 'dep'] as const).map(tab => (
           <button
             key={tab}
@@ -820,8 +820,8 @@ export default function BlueprintsView() {
             style={{
               padding: '8px 16px', fontSize: 14, fontWeight: 500,
               background: 'none', border: 'none', cursor: 'pointer',
-              color: activeTab === tab ? '#0071E3' : '#6E6E73',
-              borderBottom: activeTab === tab ? '2px solid #0071E3' : '2px solid transparent',
+              color: activeTab === tab ? '#006FFF' : 'var(--text-secondary, #8b949e)',
+              borderBottom: activeTab === tab ? '2px solid #006FFF' : '2px solid transparent',
               marginBottom: -1,
               display: 'flex', alignItems: 'center', gap: 6,
             }}
@@ -836,28 +836,28 @@ export default function BlueprintsView() {
 
       {/* ─── Blueprints tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'blueprints' && (
-        <div className="border border-[#E5E5EA] rounded-xl bg-white overflow-hidden">
+        <div style={{ border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, background: 'var(--bg-surface, #161b22)', overflow: 'hidden' }}>
           {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: '#6E6E73', fontSize: 14 }}>
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary, #8b949e)', fontSize: 14 }}>
               Wird geladen...
             </div>
           ) : blueprints.length === 0 ? (
             <div style={{ padding: 60, textAlign: 'center' }}>
-              <RectangleStackIcon className="w-12 h-12 mx-auto mb-3" style={{ color: '#C7C7CC' }} />
-              <p style={{ fontSize: 15, fontWeight: 600, color: '#1D1D1F', marginBottom: 4 }}>Keine Blueprints vorhanden</p>
-              <p style={{ fontSize: 13, color: '#6E6E73' }}>Erstelle ein Blueprint, um Gerätekonfigurationen zu verwalten</p>
+              <RectangleStackIcon className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--text-muted, #6e7681)' }} />
+              <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 4 }}>Keine Blueprints vorhanden</p>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>Erstelle ein Blueprint, um Gerätekonfigurationen zu verwalten</p>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #E5E5EA' }}>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Plattform</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Konfigurationen</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Zugewiesen</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Erstellt</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
+                <tr style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Name</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Plattform</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Konfigurationen</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Zugewiesen</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Status</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Erstellt</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -868,25 +868,25 @@ export default function BlueprintsView() {
                       key={bp.id}
                       onClick={() => openDetail(bp)}
                       style={{
-                        borderBottom: idx < blueprints.length - 1 ? '1px solid #F2F2F7' : 'none',
+                        borderBottom: idx < blueprints.length - 1 ? '1px solid var(--border, rgba(255,255,255,0.07))' : 'none',
                         cursor: 'pointer',
                         transition: 'background 0.1s',
                       }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = '#F9F9FB'; }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--bg-surface-raised, #1c2128)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
                     >
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{
                             width: 32, height: 32, borderRadius: 8,
-                            background: '#EAF4FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                            background: 'rgba(0,111,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                           }}>
-                            <RectangleStackIcon className="w-4 h-4" style={{ color: '#0071E3' }} />
+                            <RectangleStackIcon className="w-4 h-4" style={{ color: '#006FFF' }} />
                           </div>
                           <div>
-                            <p style={{ fontSize: 14, fontWeight: 500, color: '#1D1D1F' }}>{bp.name}</p>
+                            <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>{bp.name}</p>
                             {bp.description && (
-                              <p style={{ fontSize: 12, color: '#6E6E73', marginTop: 1 }}>{bp.description}</p>
+                              <p style={{ fontSize: 12, color: 'var(--text-secondary, #8b949e)', marginTop: 1 }}>{bp.description}</p>
                             )}
                           </div>
                         </div>
@@ -894,7 +894,7 @@ export default function BlueprintsView() {
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{
                           fontSize: 12, padding: '2px 8px', borderRadius: 4,
-                          background: '#F2F2F7', color: '#1D1D1F', fontWeight: 500,
+                          background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', fontWeight: 500,
                         }}>
                           {PLATFORM_LABELS[bp.platform] || bp.platform}
                         </span>
@@ -902,27 +902,27 @@ export default function BlueprintsView() {
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{
                           fontSize: 12, padding: '2px 8px', borderRadius: 10,
-                          background: '#EAF4FF', color: '#0071E3', fontWeight: 600,
+                          background: 'rgba(0,111,255,0.12)', color: '#006FFF', fontWeight: 600,
                         }}>
                           {bp.config_count}
                         </span>
                       </td>
                       <td style={{ padding: '12px 16px' }}>
-                        <span style={{ fontSize: 13, color: '#1D1D1F' }}>{bp.assignment_count}</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-primary, #e4e6ea)' }}>{bp.assignment_count}</span>
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         {!summary ? (
-                          <span style={{ fontSize: 12, color: '#AEAEB2', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted, #6e7681)', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <ClockIcon className="w-3.5 h-3.5" />
                             Noch nie angewendet
                           </span>
                         ) : summary.failed > 0 ? (
-                          <span style={{ fontSize: 12, color: '#FF3B30', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontSize: 12, color: '#f85149', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <ExclamationCircleIcon className="w-3.5 h-3.5" />
                             Fehler bei {summary.failed} Gerät(en)
                           </span>
                         ) : (
-                          <span style={{ fontSize: 12, color: '#34C759', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontSize: 12, color: '#3fb950', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <CheckCircleIcon className="w-3.5 h-3.5" />
                             {summary.latest.completedAt
                               ? `Angewendet am ${formatDate(summary.latest.completedAt)}`
@@ -932,7 +932,7 @@ export default function BlueprintsView() {
                         )}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
-                        <span style={{ fontSize: 13, color: '#6E6E73' }}>{formatDate(bp.created_at)}</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>{formatDate(bp.created_at)}</span>
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
@@ -940,11 +940,11 @@ export default function BlueprintsView() {
                             onClick={(e) => openApplyModal(bp, e)}
                             style={{
                               display: 'flex', alignItems: 'center', gap: 4,
-                              background: '#EAF4FF', border: 'none', cursor: 'pointer', padding: '5px 10px',
-                              borderRadius: 6, color: '#0071E3', fontSize: 12, fontWeight: 500,
+                              background: 'rgba(0,111,255,0.12)', border: 'none', cursor: 'pointer', padding: '5px 10px',
+                              borderRadius: 6, color: '#006FFF', fontSize: 12, fontWeight: 500,
                             }}
-                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#0071E3'; (e.currentTarget as HTMLButtonElement).style.color = 'white'; }}
-                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#EAF4FF'; (e.currentTarget as HTMLButtonElement).style.color = '#0071E3'; }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#006FFF'; (e.currentTarget as HTMLButtonElement).style.color = 'white'; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,111,255,0.12)'; (e.currentTarget as HTMLButtonElement).style.color = '#006FFF'; }}
                             title="Blueprint via MDM anwenden"
                           >
                             <PlayIcon className="w-3.5 h-3.5" />
@@ -954,15 +954,15 @@ export default function BlueprintsView() {
                             onClick={(e) => handleDelete(bp.id, e)}
                             style={{
                               background: 'none', border: 'none', cursor: 'pointer', padding: 6,
-                              borderRadius: 6, color: '#6E6E73',
+                              borderRadius: 6, color: 'var(--text-muted, #6e7681)',
                             }}
-                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#FF3B30'; (e.currentTarget as HTMLButtonElement).style.background = '#FFF2F1'; }}
-                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#6E6E73'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f85149'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(248,81,73,0.08)'; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted, #6e7681)'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
                             title="Blueprint löschen"
                           >
                             <TrashIcon className="w-4 h-4" />
                           </button>
-                          <ChevronRightIcon className="w-4 h-4" style={{ color: '#C7C7CC' }} />
+                          <ChevronRightIcon className="w-4 h-4" style={{ color: 'var(--text-muted, #6e7681)' }} />
                         </div>
                       </td>
                     </tr>
@@ -978,12 +978,12 @@ export default function BlueprintsView() {
       {activeTab === 'dep' && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <p style={{ fontSize: 13, color: '#6E6E73' }}>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>
               Geräte, die über Apple DEP / Zero-Touch-Enrollment automatisch konfiguriert werden können.
             </p>
             <button
               onClick={fetchDepDevices}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F2F2F7', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 13, color: '#1D1D1F', cursor: 'pointer' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '7px 14px', fontSize: 13, color: 'var(--text-primary, #e4e6ea)', cursor: 'pointer' }}
             >
               <ArrowPathIcon className={`w-4 h-4 ${depLoading ? 'animate-spin' : ''}`} />
               Aktualisieren
@@ -992,14 +992,14 @@ export default function BlueprintsView() {
 
           {/* DEP assign bar */}
           {selectedDepSerials.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#EAF4FF', border: '1px solid #BDD8F9', borderRadius: 10, padding: '10px 16px', marginBottom: 16 }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: '#0071E3', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(0,111,255,0.08)', border: '1px solid rgba(0,111,255,0.3)', borderRadius: 10, padding: '10px 16px', marginBottom: 16 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: '#006FFF', flex: 1 }}>
                 {selectedDepSerials.length} Gerät(e) ausgewählt
               </span>
               <select
                 value={depAssignBlueprintId}
                 onChange={e => setDepAssignBlueprintId(e.target.value)}
-                style={{ border: '1px solid #BDD8F9', borderRadius: 6, padding: '5px 10px', fontSize: 13, color: '#1D1D1F', background: 'white', minWidth: 180 }}
+                style={{ border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 6, padding: '5px 10px', fontSize: 13, color: 'var(--text-primary, #e4e6ea)', background: 'var(--bg-surface-raised, #1c2128)', minWidth: 180 }}
               >
                 <option value="">Blueprint wählen…</option>
                 {blueprints.map(bp => (
@@ -1010,7 +1010,7 @@ export default function BlueprintsView() {
                 onClick={handleDepAssign}
                 disabled={depAssigning}
                 style={{
-                  background: depAssigning ? '#A0C4F1' : '#0071E3', color: 'white', border: 'none',
+                  background: depAssigning ? 'rgba(0,111,255,0.5)' : '#006FFF', color: 'white', border: 'none',
                   borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: depAssigning ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -1019,31 +1019,31 @@ export default function BlueprintsView() {
             </div>
           )}
 
-          <div className="border border-[#E5E5EA] rounded-xl bg-white overflow-hidden">
+          <div style={{ border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, background: 'var(--bg-surface, #161b22)', overflow: 'hidden' }}>
             {depLoading ? (
-              <div style={{ padding: 40, textAlign: 'center', color: '#6E6E73', fontSize: 14 }}>Wird geladen...</div>
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary, #8b949e)', fontSize: 14 }}>Wird geladen...</div>
             ) : depDevices.length === 0 ? (
               <div style={{ padding: 60, textAlign: 'center' }}>
-                <DevicePhoneMobileIcon className="w-12 h-12 mx-auto mb-3" style={{ color: '#C7C7CC' }} />
-                <p style={{ fontSize: 15, fontWeight: 600, color: '#1D1D1F', marginBottom: 4 }}>Keine DEP-Geräte gefunden</p>
+                <DevicePhoneMobileIcon className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--text-muted, #6e7681)' }} />
+                <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 4 }}>Keine DEP-Geräte gefunden</p>
               </div>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #E5E5EA' }}>
-                    <th style={{ padding: '10px 16px', width: 40 }}></th>
-                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Seriennummer</th>
-                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Modell</th>
-                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Betriebssystem</th>
-                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
-                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Blueprint</th>
+                  <tr style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                    <th style={{ padding: '10px 16px', width: 40, background: 'var(--bg-surface-raised, #1c2128)' }}></th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Seriennummer</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Modell</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Betriebssystem</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Status</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-surface-raised, #1c2128)' }}>Blueprint</th>
                   </tr>
                 </thead>
                 <tbody>
                   {depDevices.map((dev, idx) => (
                     <tr
                       key={dev.serialNumber}
-                      style={{ borderBottom: idx < depDevices.length - 1 ? '1px solid #F2F2F7' : 'none' }}
+                      style={{ borderBottom: idx < depDevices.length - 1 ? '1px solid var(--border, rgba(255,255,255,0.07))' : 'none' }}
                     >
                       <td style={{ padding: '10px 16px' }}>
                         <input
@@ -1059,36 +1059,36 @@ export default function BlueprintsView() {
                         />
                       </td>
                       <td style={{ padding: '10px 16px' }}>
-                        <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#1D1D1F' }}>{dev.serialNumber}</span>
+                        <span style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--text-primary, #e4e6ea)' }}>{dev.serialNumber}</span>
                       </td>
                       <td style={{ padding: '10px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <DevicePhoneMobileIcon className="w-4 h-4" style={{ color: '#6E6E73', flexShrink: 0 }} />
+                          <DevicePhoneMobileIcon className="w-4 h-4" style={{ color: 'var(--text-secondary, #8b949e)', flexShrink: 0 }} />
                           <div>
-                            <p style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F' }}>{dev.model}</p>
-                            <p style={{ fontSize: 11, color: '#6E6E73' }}>{dev.color}</p>
+                            <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>{dev.model}</p>
+                            <p style={{ fontSize: 11, color: 'var(--text-secondary, #8b949e)' }}>{dev.color}</p>
                           </div>
                         </div>
                       </td>
                       <td style={{ padding: '10px 16px' }}>
-                        <span style={{ fontSize: 13, color: '#6E6E73' }}>{dev.os}</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>{dev.os}</span>
                       </td>
                       <td style={{ padding: '10px 16px' }}>
                         <span style={{
                           fontSize: 12, padding: '2px 8px', borderRadius: 10, fontWeight: 500,
-                          background: dev.status === 'assigned' ? '#E8FAE8' : '#F2F2F7',
-                          color: dev.status === 'assigned' ? '#34C759' : '#6E6E73',
+                          background: dev.status === 'assigned' ? 'rgba(63,185,80,0.12)' : 'var(--bg-surface-raised, #1c2128)',
+                          color: dev.status === 'assigned' ? '#3fb950' : 'var(--text-secondary, #8b949e)',
                         }}>
                           {dev.status === 'assigned' ? 'Zugewiesen' : 'Nicht zugewiesen'}
                         </span>
                       </td>
                       <td style={{ padding: '10px 16px' }}>
                         {dev.blueprintId ? (
-                          <span style={{ fontSize: 13, color: '#0071E3', fontWeight: 500 }}>
+                          <span style={{ fontSize: 13, color: '#006FFF', fontWeight: 500 }}>
                             {blueprints.find(b => b.id === dev.blueprintId)?.name || dev.blueprintId}
                           </span>
                         ) : (
-                          <span style={{ fontSize: 13, color: '#AEAEB2' }}>—</span>
+                          <span style={{ fontSize: 13, color: 'var(--text-muted, #6e7681)' }}>—</span>
                         )}
                       </td>
                     </tr>
@@ -1104,14 +1104,14 @@ export default function BlueprintsView() {
       {panelOpen && selectedBlueprint && (
         <div
           className="fixed inset-0 z-40 flex justify-end"
-          style={{ background: 'rgba(0,0,0,0.3)' }}
+          style={{ background: 'rgba(0,0,0,0.5)' }}
           onClick={closePanel}
         >
           <div
             className="h-full overflow-y-auto"
             style={{
-              width: '100%', maxWidth: 560, background: 'white',
-              boxShadow: '-8px 0 32px rgba(0,0,0,0.12)',
+              width: '100%', maxWidth: 560, background: 'var(--bg-surface, #161b22)',
+              boxShadow: '-8px 0 32px rgba(0,0,0,0.4)',
               animation: 'slideInRight 0.25s ease',
             }}
             onClick={e => e.stopPropagation()}
@@ -1119,24 +1119,24 @@ export default function BlueprintsView() {
             <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
 
             {/* Panel header */}
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid #E5E5EA', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
                 width: 40, height: 40, borderRadius: 10,
-                background: '#EAF4FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                background: 'rgba(0,111,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
               }}>
-                <RectangleStackIcon className="w-5 h-5" style={{ color: '#0071E3' }} />
+                <RectangleStackIcon className="w-5 h-5" style={{ color: '#006FFF' }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <h2 style={{ fontSize: 17, fontWeight: 600, color: '#1D1D1F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <h2 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {selectedBlueprint.name}
                 </h2>
                 {selectedBlueprint.description && (
-                  <p style={{ fontSize: 12, color: '#6E6E73', marginTop: 2 }}>{selectedBlueprint.description}</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary, #8b949e)', marginTop: 2 }}>{selectedBlueprint.description}</p>
                 )}
               </div>
               <button
                 onClick={closePanel}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: '#6E6E73', borderRadius: 6, flexShrink: 0 }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: 'var(--text-secondary, #8b949e)', borderRadius: 6, flexShrink: 0 }}
               >
                 <XMarkIcon className="w-5 h-5" />
               </button>
@@ -1145,15 +1145,15 @@ export default function BlueprintsView() {
             <div style={{ padding: 24 }}>
               {/* Platform selector */}
               <div style={{ marginBottom: 24 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 8 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 8 }}>
                   Plattform
                 </label>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {PLATFORMS.map(p => (
                     <span key={p} style={{
                       fontSize: 12, padding: '4px 10px', borderRadius: 6,
-                      background: selectedBlueprint.platform === p ? '#0071E3' : '#F2F2F7',
-                      color: selectedBlueprint.platform === p ? 'white' : '#1D1D1F',
+                      background: selectedBlueprint.platform === p ? '#006FFF' : 'var(--bg-surface-raised, #1c2128)',
+                      color: selectedBlueprint.platform === p ? 'white' : 'var(--text-primary, #e4e6ea)',
                       fontWeight: 500,
                     }}>
                       {PLATFORM_LABELS[p]}
@@ -1165,13 +1165,13 @@ export default function BlueprintsView() {
               {/* Configurations section */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1D1D1F' }}>Konfigurationen</h3>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>Konfigurationen</h3>
                   <button
                     onClick={() => setAddConfigOpen(true)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 4,
-                      background: '#F2F2F7', border: 'none', borderRadius: 6,
-                      padding: '5px 10px', fontSize: 13, color: '#0071E3', fontWeight: 500, cursor: 'pointer',
+                      background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 6,
+                      padding: '5px 10px', fontSize: 13, color: '#006FFF', fontWeight: 500, cursor: 'pointer',
                     }}
                   >
                     <PlusIcon className="w-3.5 h-3.5" />
@@ -1181,8 +1181,8 @@ export default function BlueprintsView() {
 
                 {selectedBlueprint.configurations.length === 0 ? (
                   <div style={{
-                    border: '1px dashed #E5E5EA', borderRadius: 10, padding: 20,
-                    textAlign: 'center', color: '#6E6E73', fontSize: 13,
+                    border: '1px dashed var(--border, rgba(255,255,255,0.07))', borderRadius: 10, padding: 20,
+                    textAlign: 'center', color: 'var(--text-secondary, #8b949e)', fontSize: 13,
                   }}>
                     Keine Konfigurationen. Klicke + um eine hinzuzufügen.
                   </div>
@@ -1191,25 +1191,25 @@ export default function BlueprintsView() {
                     {selectedBlueprint.configurations.map(cfg => (
                       <div key={cfg.id} style={{
                         display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '10px 14px', borderRadius: 10, border: '1px solid #E5E5EA', background: '#FAFAFA',
+                        padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)',
                       }}>
                         <div style={{
-                          width: 32, height: 32, borderRadius: 8, background: '#EAF4FF',
+                          width: 32, height: 32, borderRadius: 8, background: 'rgba(0,111,255,0.12)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                         }}>
                           <ConfigIcon type={cfg.config_type} className="w-4 h-4" />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F' }}>{cfg.config_name}</p>
-                          <p style={{ fontSize: 11, color: '#6E6E73', marginTop: 1 }}>
+                          <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>{cfg.config_name}</p>
+                          <p style={{ fontSize: 11, color: 'var(--text-secondary, #8b949e)', marginTop: 1 }}>
                             {CONFIG_TYPES.find(t => t.value === cfg.config_type)?.label || cfg.config_type}
                           </p>
                         </div>
                         <button
                           onClick={() => handleRemoveConfig(cfg.id)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#C7C7CC', borderRadius: 4, flexShrink: 0 }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#FF3B30'; }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#C7C7CC'; }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-muted, #6e7681)', borderRadius: 4, flexShrink: 0 }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f85149'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted, #6e7681)'; }}
                         >
                           <TrashIcon className="w-4 h-4" />
                         </button>
@@ -1222,13 +1222,13 @@ export default function BlueprintsView() {
               {/* Assignments section */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1D1D1F' }}>Zuweisungen</h3>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>Zuweisungen</h3>
                   <button
                     onClick={() => setAssignOpen(true)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 4,
-                      background: '#F2F2F7', border: 'none', borderRadius: 6,
-                      padding: '5px 10px', fontSize: 13, color: '#0071E3', fontWeight: 500, cursor: 'pointer',
+                      background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 6,
+                      padding: '5px 10px', fontSize: 13, color: '#006FFF', fontWeight: 500, cursor: 'pointer',
                     }}
                   >
                     <PlusIcon className="w-3.5 h-3.5" />
@@ -1238,8 +1238,8 @@ export default function BlueprintsView() {
 
                 {assignments.length === 0 ? (
                   <div style={{
-                    border: '1px dashed #E5E5EA', borderRadius: 10, padding: 20,
-                    textAlign: 'center', color: '#6E6E73', fontSize: 13,
+                    border: '1px dashed var(--border, rgba(255,255,255,0.07))', borderRadius: 10, padding: 20,
+                    textAlign: 'center', color: 'var(--text-secondary, #8b949e)', fontSize: 13,
                   }}>
                     Noch keinem Gerät oder Gruppe zugewiesen.
                   </div>
@@ -1248,22 +1248,22 @@ export default function BlueprintsView() {
                     {assignments.map(asgn => (
                       <div key={asgn.id} style={{
                         display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '10px 14px', borderRadius: 10, border: '1px solid #E5E5EA', background: '#FAFAFA',
+                        padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)',
                       }}>
                         <div style={{
-                          width: 28, height: 28, borderRadius: 6, background: '#F2F2F7',
+                          width: 28, height: 28, borderRadius: 6, background: 'rgba(255,255,255,0.06)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                         }}>
                           {asgn.target_type === 'device'
-                            ? <ComputerDesktopIcon className="w-4 h-4" style={{ color: '#6E6E73' }} />
-                            : <UserGroupIcon className="w-4 h-4" style={{ color: '#6E6E73' }} />
+                            ? <ComputerDesktopIcon className="w-4 h-4" style={{ color: 'var(--text-secondary, #8b949e)' }} />
+                            : <UserGroupIcon className="w-4 h-4" style={{ color: 'var(--text-secondary, #8b949e)' }} />
                           }
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {asgn.target_id}
                           </p>
-                          <p style={{ fontSize: 11, color: '#6E6E73', marginTop: 1 }}>
+                          <p style={{ fontSize: 11, color: 'var(--text-secondary, #8b949e)', marginTop: 1 }}>
                             {asgn.target_type === 'device' ? 'Gerät' : 'Gruppe'}
                             {asgn.assigned_at ? ` · ${formatDate(asgn.assigned_at)}` : ''}
                           </p>
@@ -1279,7 +1279,7 @@ export default function BlueprintsView() {
                 onClick={handleApply}
                 disabled={applying}
                 style={{
-                  width: '100%', background: applying ? '#A0C4F1' : '#0071E3',
+                  width: '100%', background: applying ? 'rgba(0,111,255,0.5)' : '#006FFF',
                   color: 'white', border: 'none', borderRadius: 10,
                   padding: '12px 0', fontSize: 15, fontWeight: 600,
                   cursor: applying ? 'not-allowed' : 'pointer',
@@ -1296,30 +1296,31 @@ export default function BlueprintsView() {
       {createOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.35)', padding: 16 }}
+          style={{ background: 'rgba(0,0,0,0.5)', padding: 16 }}
           onClick={() => setCreateOpen(false)}
         >
           <div
             style={{
-              background: 'white', borderRadius: 16, padding: 28,
+              background: 'var(--bg-surface, #161b22)', borderRadius: 16, padding: 28,
               width: '100%', maxWidth: 460,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              border: '1px solid var(--border, rgba(255,255,255,0.07))',
             }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1D1D1F' }}>Neues Blueprint</h2>
-              <button onClick={() => setCreateOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6E6E73' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>Neues Blueprint</h2>
+              <button onClick={() => setCreateOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary, #8b949e)' }}>
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 6 }}>Name *</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Name *</label>
                 <input
                   autoFocus
-                  className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+                  style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '8px 12px', fontSize: 14, outline: 'none', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   placeholder="z.B. Corporate macOS Standard"
@@ -1327,9 +1328,9 @@ export default function BlueprintsView() {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 6 }}>Beschreibung</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Beschreibung</label>
                 <textarea
-                  className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3] resize-none"
+                  style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '8px 12px', fontSize: 14, outline: 'none', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box', resize: 'none' }}
                   rows={2}
                   value={newDescription}
                   onChange={e => setNewDescription(e.target.value)}
@@ -1337,9 +1338,9 @@ export default function BlueprintsView() {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 6 }}>Plattform</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Plattform</label>
                 <select
-                  className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+                  style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '8px 12px', fontSize: 14, outline: 'none', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box', cursor: 'pointer' }}
                   value={newPlatform}
                   onChange={e => setNewPlatform(e.target.value)}
                 >
@@ -1354,8 +1355,8 @@ export default function BlueprintsView() {
               <button
                 onClick={() => setCreateOpen(false)}
                 style={{
-                  flex: 1, background: '#F2F2F7', border: 'none', borderRadius: 8,
-                  padding: '10px 0', fontSize: 14, fontWeight: 500, color: '#1D1D1F', cursor: 'pointer',
+                  flex: 1, background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8,
+                  padding: '10px 0', fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', cursor: 'pointer',
                 }}
               >
                 Abbrechen
@@ -1364,7 +1365,7 @@ export default function BlueprintsView() {
                 onClick={handleCreate}
                 disabled={creating || !newName.trim()}
                 style={{
-                  flex: 1, background: creating || !newName.trim() ? '#A0C4F1' : '#0071E3',
+                  flex: 1, background: creating || !newName.trim() ? 'rgba(0,111,255,0.5)' : '#006FFF',
                   border: 'none', borderRadius: 8, padding: '10px 0',
                   fontSize: 14, fontWeight: 600, color: 'white',
                   cursor: creating || !newName.trim() ? 'not-allowed' : 'pointer',
@@ -1381,51 +1382,52 @@ export default function BlueprintsView() {
       {applyModalBlueprintId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.35)', padding: 16 }}
+          style={{ background: 'rgba(0,0,0,0.5)', padding: 16 }}
           onClick={closeApplyModal}
         >
           <div
             style={{
-              background: 'white', borderRadius: 16, padding: 28,
+              background: 'var(--bg-surface, #161b22)', borderRadius: 16, padding: 28,
               width: '100%', maxWidth: 480,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              border: '1px solid var(--border, rgba(255,255,255,0.07))',
               maxHeight: '90vh', overflowY: 'auto',
             }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1D1D1F' }}>Blueprint anwenden</h2>
-              <button onClick={closeApplyModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6E6E73' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>Blueprint anwenden</h2>
+              <button onClick={closeApplyModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary, #8b949e)' }}>
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
 
-            <p style={{ fontSize: 14, color: '#6E6E73', marginBottom: 20 }}>
-              <strong style={{ color: '#1D1D1F' }}>{applyModalBlueprintName}</strong> per MDM-Push auf Geräte anwenden
+            <p style={{ fontSize: 14, color: 'var(--text-secondary, #8b949e)', marginBottom: 20 }}>
+              <strong style={{ color: 'var(--text-primary, #e4e6ea)' }}>{applyModalBlueprintName}</strong> per MDM-Push auf Geräte anwenden
             </p>
 
             {mdmApplyResult ? (
               <div>
-                <div style={{ background: '#E8FAE8', border: '1px solid #A8E6B8', borderRadius: 10, padding: '14px 16px', marginBottom: 20 }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1D7A35', marginBottom: 6 }}>
+                <div style={{ background: 'rgba(63,185,80,0.08)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: 10, padding: '14px 16px', marginBottom: 20 }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: '#3fb950', marginBottom: 6 }}>
                     Blueprint auf {mdmApplyResult.queued} Gerät(e) angewendet
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {mdmApplyResult.devices.map(d => (
                       <div key={d.deviceId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
                         {d.status === 'failed'
-                          ? <ExclamationCircleIcon className="w-4 h-4" style={{ color: '#FF3B30', flexShrink: 0 }} />
-                          : <CheckCircleIcon className="w-4 h-4" style={{ color: '#34C759', flexShrink: 0 }} />
+                          ? <ExclamationCircleIcon className="w-4 h-4" style={{ color: '#f85149', flexShrink: 0 }} />
+                          : <CheckCircleIcon className="w-4 h-4" style={{ color: '#3fb950', flexShrink: 0 }} />
                         }
-                        <span style={{ fontFamily: 'monospace', color: '#1D1D1F' }}>{d.deviceId}</span>
-                        <span style={{ color: d.status === 'failed' ? '#FF3B30' : '#34C759' }}>{d.status}</span>
+                        <span style={{ fontFamily: 'monospace', color: 'var(--text-primary, #e4e6ea)' }}>{d.deviceId}</span>
+                        <span style={{ color: d.status === 'failed' ? '#f85149' : '#3fb950' }}>{d.status}</span>
                       </div>
                     ))}
                   </div>
                 </div>
                 <button
                   onClick={closeApplyModal}
-                  style={{ width: '100%', background: '#F2F2F7', border: 'none', borderRadius: 8, padding: '10px 0', fontSize: 14, fontWeight: 500, color: '#1D1D1F', cursor: 'pointer' }}
+                  style={{ width: '100%', background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '10px 0', fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', cursor: 'pointer' }}
                 >
                   Schliessen
                 </button>
@@ -1434,9 +1436,9 @@ export default function BlueprintsView() {
               <div className="space-y-4">
                 {/* Target mode */}
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 8 }}>Zielgeräte</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 8 }}>Zielgeräte</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 8, border: `1.5px solid ${applyTargetMode === 'all' ? '#0071E3' : '#E5E5EA'}`, background: applyTargetMode === 'all' ? '#EAF4FF' : 'white' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 8, border: `1.5px solid ${applyTargetMode === 'all' ? '#006FFF' : 'var(--border, rgba(255,255,255,0.07))'}`, background: applyTargetMode === 'all' ? 'rgba(0,111,255,0.08)' : 'var(--bg-surface-raised, #1c2128)' }}>
                       <input
                         type="radio"
                         name="applyTarget"
@@ -1445,11 +1447,11 @@ export default function BlueprintsView() {
                         onChange={() => { setApplyTargetMode('all'); setSelectedDeviceIds([]); }}
                       />
                       <div>
-                        <p style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F' }}>Alle kompatiblen Geräte</p>
-                        <p style={{ fontSize: 11, color: '#6E6E73' }}>{mdmDevices.length} eingeschriebene Gerät(e)</p>
+                        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>Alle kompatiblen Geräte</p>
+                        <p style={{ fontSize: 11, color: 'var(--text-secondary, #8b949e)' }}>{mdmDevices.length} eingeschriebene Gerät(e)</p>
                       </div>
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 8, border: `1.5px solid ${applyTargetMode === 'specific' ? '#0071E3' : '#E5E5EA'}`, background: applyTargetMode === 'specific' ? '#EAF4FF' : 'white' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 8, border: `1.5px solid ${applyTargetMode === 'specific' ? '#006FFF' : 'var(--border, rgba(255,255,255,0.07))'}`, background: applyTargetMode === 'specific' ? 'rgba(0,111,255,0.08)' : 'var(--bg-surface-raised, #1c2128)' }}>
                       <input
                         type="radio"
                         name="applyTarget"
@@ -1458,8 +1460,8 @@ export default function BlueprintsView() {
                         onChange={() => setApplyTargetMode('specific')}
                       />
                       <div>
-                        <p style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F' }}>Bestimmte Geräte</p>
-                        <p style={{ fontSize: 11, color: '#6E6E73' }}>Geräte manuell auswählen</p>
+                        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>Bestimmte Geräte</p>
+                        <p style={{ fontSize: 11, color: 'var(--text-secondary, #8b949e)' }}>Geräte manuell auswählen</p>
                       </div>
                     </label>
                   </div>
@@ -1468,15 +1470,15 @@ export default function BlueprintsView() {
                 {/* Device checklist for specific mode */}
                 {applyTargetMode === 'specific' && (
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 8 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 8 }}>
                       Geräte auswählen {selectedDeviceIds.length > 0 && `(${selectedDeviceIds.length} ausgewählt)`}
                     </label>
                     {mdmDevices.length === 0 ? (
-                      <p style={{ fontSize: 13, color: '#AEAEB2', padding: '12px 0' }}>Keine eingeschriebenen Geräte gefunden</p>
+                      <p style={{ fontSize: 13, color: 'var(--text-muted, #6e7681)', padding: '12px 0' }}>Keine eingeschriebenen Geräte gefunden</p>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto', border: '1px solid #E5E5EA', borderRadius: 8, padding: 8 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: 8 }}>
                         {mdmDevices.map(dev => (
-                          <label key={dev.udid} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '7px 8px', borderRadius: 6, background: selectedDeviceIds.includes(dev.udid) ? '#EAF4FF' : 'transparent' }}>
+                          <label key={dev.udid} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '7px 8px', borderRadius: 6, background: selectedDeviceIds.includes(dev.udid) ? 'rgba(0,111,255,0.08)' : 'transparent' }}>
                             <input
                               type="checkbox"
                               checked={selectedDeviceIds.includes(dev.udid)}
@@ -1488,12 +1490,12 @@ export default function BlueprintsView() {
                                 }
                               }}
                             />
-                            <ComputerDesktopIcon className="w-4 h-4" style={{ color: '#6E6E73', flexShrink: 0 }} />
+                            <ComputerDesktopIcon className="w-4 h-4" style={{ color: 'var(--text-secondary, #8b949e)', flexShrink: 0 }} />
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <p style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {dev.device_name || dev.udid}
                               </p>
-                              {dev.model && <p style={{ fontSize: 11, color: '#6E6E73' }}>{dev.model}</p>}
+                              {dev.model && <p style={{ fontSize: 11, color: 'var(--text-secondary, #8b949e)' }}>{dev.model}</p>}
                             </div>
                           </label>
                         ))}
@@ -1503,7 +1505,7 @@ export default function BlueprintsView() {
                 )}
 
                 {/* Affected count */}
-                <div style={{ background: '#F9F9FB', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#6E6E73' }}>
+                <div style={{ background: 'var(--bg-surface-raised, #1c2128)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>
                   {applyTargetMode === 'all'
                     ? `${mdmDevices.length} Gerät(e) werden betroffen sein`
                     : `${selectedDeviceIds.length} Gerät(e) ausgewählt`
@@ -1513,7 +1515,7 @@ export default function BlueprintsView() {
                 <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                   <button
                     onClick={closeApplyModal}
-                    style={{ flex: 1, background: '#F2F2F7', border: 'none', borderRadius: 8, padding: '10px 0', fontSize: 14, fontWeight: 500, color: '#1D1D1F', cursor: 'pointer' }}
+                    style={{ flex: 1, background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '10px 0', fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', cursor: 'pointer' }}
                   >
                     Abbrechen
                   </button>
@@ -1522,7 +1524,7 @@ export default function BlueprintsView() {
                     disabled={mdmApplying || (applyTargetMode === 'specific' && selectedDeviceIds.length === 0)}
                     style={{
                       flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      background: mdmApplying || (applyTargetMode === 'specific' && selectedDeviceIds.length === 0) ? '#A0C4F1' : '#0071E3',
+                      background: mdmApplying || (applyTargetMode === 'specific' && selectedDeviceIds.length === 0) ? 'rgba(0,111,255,0.5)' : '#006FFF',
                       border: 'none', borderRadius: 8, padding: '10px 0',
                       fontSize: 14, fontWeight: 600, color: 'white',
                       cursor: mdmApplying || (applyTargetMode === 'specific' && selectedDeviceIds.length === 0) ? 'not-allowed' : 'pointer',
@@ -1542,28 +1544,29 @@ export default function BlueprintsView() {
       {addConfigOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.35)', padding: 16 }}
+          style={{ background: 'rgba(0,0,0,0.5)', padding: 16 }}
           onClick={() => setAddConfigOpen(false)}
         >
           <div
             style={{
-              background: 'white', borderRadius: 16, padding: 28,
+              background: 'var(--bg-surface, #161b22)', borderRadius: 16, padding: 28,
               width: '100%', maxWidth: 480,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              border: '1px solid var(--border, rgba(255,255,255,0.07))',
               maxHeight: '90vh', overflowY: 'auto',
             }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1D1D1F' }}>Konfiguration hinzufügen</h2>
-              <button onClick={() => setAddConfigOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6E6E73' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>Konfiguration hinzufügen</h2>
+              <button onClick={() => setAddConfigOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary, #8b949e)' }}>
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 6 }}>Typ</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Typ</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
                   {CONFIG_TYPES.map(ct => (
                     <button
@@ -1572,10 +1575,10 @@ export default function BlueprintsView() {
                       style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                         padding: '10px 6px', borderRadius: 8,
-                        border: `1.5px solid ${newConfigType === ct.value ? '#0071E3' : '#E5E5EA'}`,
-                        background: newConfigType === ct.value ? '#EAF4FF' : 'white',
+                        border: `1.5px solid ${newConfigType === ct.value ? '#006FFF' : 'var(--border, rgba(255,255,255,0.07))'}`,
+                        background: newConfigType === ct.value ? 'rgba(0,111,255,0.08)' : 'var(--bg-surface-raised, #1c2128)',
                         cursor: 'pointer', fontSize: 11, fontWeight: 500,
-                        color: newConfigType === ct.value ? '#0071E3' : '#1D1D1F',
+                        color: newConfigType === ct.value ? '#006FFF' : 'var(--text-primary, #e4e6ea)',
                       }}
                     >
                       <ConfigIcon type={ct.value} className="w-4 h-4" />
@@ -1586,9 +1589,9 @@ export default function BlueprintsView() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 6 }}>Konfigurationsname *</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Konfigurationsname *</label>
                 <input
-                  className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+                  style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '8px 12px', fontSize: 14, outline: 'none', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
                   value={newConfigName}
                   onChange={e => setNewConfigName(e.target.value)}
                   placeholder={`z.B. ${CONFIG_TYPES.find(t => t.value === newConfigType)?.label} Konfiguration`}
@@ -1596,8 +1599,8 @@ export default function BlueprintsView() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 8 }}>Einstellungen</label>
-                <div style={{ background: '#FAFAFA', borderRadius: 10, padding: '14px 14px', border: '1px solid #E5E5EA' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 8 }}>Einstellungen</label>
+                <div style={{ background: 'var(--bg-surface-raised, #1c2128)', borderRadius: 10, padding: '14px 14px', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
                   <PayloadForm
                     configType={newConfigType}
                     payload={newConfigPayload}
@@ -1611,8 +1614,8 @@ export default function BlueprintsView() {
               <button
                 onClick={() => setAddConfigOpen(false)}
                 style={{
-                  flex: 1, background: '#F2F2F7', border: 'none', borderRadius: 8,
-                  padding: '10px 0', fontSize: 14, fontWeight: 500, color: '#1D1D1F', cursor: 'pointer',
+                  flex: 1, background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8,
+                  padding: '10px 0', fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', cursor: 'pointer',
                 }}
               >
                 Abbrechen
@@ -1621,7 +1624,7 @@ export default function BlueprintsView() {
                 onClick={handleAddConfig}
                 disabled={addingConfig || !newConfigName.trim()}
                 style={{
-                  flex: 1, background: addingConfig || !newConfigName.trim() ? '#A0C4F1' : '#0071E3',
+                  flex: 1, background: addingConfig || !newConfigName.trim() ? 'rgba(0,111,255,0.5)' : '#006FFF',
                   border: 'none', borderRadius: 8, padding: '10px 0',
                   fontSize: 14, fontWeight: 600, color: 'white',
                   cursor: addingConfig || !newConfigName.trim() ? 'not-allowed' : 'pointer',
@@ -1638,27 +1641,28 @@ export default function BlueprintsView() {
       {assignOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.35)', padding: 16 }}
+          style={{ background: 'rgba(0,0,0,0.5)', padding: 16 }}
           onClick={() => setAssignOpen(false)}
         >
           <div
             style={{
-              background: 'white', borderRadius: 16, padding: 28,
+              background: 'var(--bg-surface, #161b22)', borderRadius: 16, padding: 28,
               width: '100%', maxWidth: 400,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              border: '1px solid var(--border, rgba(255,255,255,0.07))',
             }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1D1D1F' }}>Gerät zuweisen</h2>
-              <button onClick={() => setAssignOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6E6E73' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>Gerät zuweisen</h2>
+              <button onClick={() => setAssignOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary, #8b949e)' }}>
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 6 }}>Zieltyp</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Zieltyp</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(['device', 'group'] as const).map(t => (
                     <button
@@ -1667,10 +1671,10 @@ export default function BlueprintsView() {
                       style={{
                         flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                         padding: '8px 0', borderRadius: 8,
-                        border: `1.5px solid ${assignTargetType === t ? '#0071E3' : '#E5E5EA'}`,
-                        background: assignTargetType === t ? '#EAF4FF' : 'white',
+                        border: `1.5px solid ${assignTargetType === t ? '#006FFF' : 'var(--border, rgba(255,255,255,0.07))'}`,
+                        background: assignTargetType === t ? 'rgba(0,111,255,0.08)' : 'var(--bg-surface-raised, #1c2128)',
                         cursor: 'pointer', fontSize: 13, fontWeight: 500,
-                        color: assignTargetType === t ? '#0071E3' : '#1D1D1F',
+                        color: assignTargetType === t ? '#006FFF' : 'var(--text-primary, #e4e6ea)',
                       }}
                     >
                       {t === 'device'
@@ -1683,12 +1687,12 @@ export default function BlueprintsView() {
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1D1D1F', marginBottom: 6 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>
                   {assignTargetType === 'device' ? 'Geräte-ID' : 'Gruppen-ID'}
                 </label>
                 <input
                   autoFocus
-                  className="w-full border border-[#E5E5EA] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0071E3]"
+                  style={{ width: '100%', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, padding: '8px 12px', fontSize: 14, outline: 'none', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', boxSizing: 'border-box' }}
                   value={assignTargetId}
                   onChange={e => setAssignTargetId(e.target.value)}
                   placeholder={assignTargetType === 'device' ? 'device-uuid oder hostname' : 'group-uuid oder name'}
@@ -1701,8 +1705,8 @@ export default function BlueprintsView() {
               <button
                 onClick={() => setAssignOpen(false)}
                 style={{
-                  flex: 1, background: '#F2F2F7', border: 'none', borderRadius: 8,
-                  padding: '10px 0', fontSize: 14, fontWeight: 500, color: '#1D1D1F', cursor: 'pointer',
+                  flex: 1, background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8,
+                  padding: '10px 0', fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)', cursor: 'pointer',
                 }}
               >
                 Abbrechen
@@ -1711,7 +1715,7 @@ export default function BlueprintsView() {
                 onClick={handleAssign}
                 disabled={assigning || !assignTargetId.trim()}
                 style={{
-                  flex: 1, background: assigning || !assignTargetId.trim() ? '#A0C4F1' : '#0071E3',
+                  flex: 1, background: assigning || !assignTargetId.trim() ? 'rgba(0,111,255,0.5)' : '#006FFF',
                   border: 'none', borderRadius: 8, padding: '10px 0',
                   fontSize: 14, fontWeight: 600, color: 'white',
                   cursor: assigning || !assignTargetId.trim() ? 'not-allowed' : 'pointer',

@@ -163,14 +163,14 @@ const categoryIcons: Record<string, React.ComponentType<any>> = {
 };
 
 const categoryColors: Record<string, { bg: string; text: string }> = {
-  browser: { bg: 'bg-blue-100', text: 'text-blue-600' },
-  development: { bg: 'bg-purple-100', text: 'text-purple-600' },
-  productivity: { bg: 'bg-green-100', text: 'text-green-600' },
-  communication: { bg: 'bg-indigo-100', text: 'text-indigo-600' },
-  security: { bg: 'bg-red-100', text: 'text-red-600' },
-  utilities: { bg: 'bg-yellow-100', text: 'text-yellow-600' },
-  media: { bg: 'bg-pink-100', text: 'text-pink-600' },
-  system: { bg: 'bg-gray-100', text: 'text-gray-600' },
+  browser: { bg: 'bg-blue-900/40', text: 'text-blue-400' },
+  development: { bg: 'bg-purple-900/40', text: 'text-purple-400' },
+  productivity: { bg: 'bg-green-900/40', text: 'text-green-400' },
+  communication: { bg: 'bg-indigo-900/40', text: 'text-indigo-400' },
+  security: { bg: 'bg-red-900/40', text: 'text-red-400' },
+  utilities: { bg: 'bg-yellow-900/40', text: 'text-yellow-400' },
+  media: { bg: 'bg-pink-900/40', text: 'text-pink-400' },
+  system: { bg: 'bg-white/5', text: 'text-[#8b949e]' },
 };
 
 const platformLabels: Record<string, { label: string; icon: React.ComponentType<any> }> = {
@@ -496,9 +496,9 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   };
 
   const PLATFORM_INFO = {
-    windows: { label: 'Windows', color: 'bg-blue-100 text-blue-700', ext: '.exe / .msi / .msix' },
-    macos:   { label: 'macOS',   color: 'bg-gray-100 text-gray-700',  ext: '.dmg / .pkg' },
-    linux:   { label: 'Linux',   color: 'bg-orange-100 text-orange-700', ext: '.deb / .rpm / .AppImage' },
+    windows: { label: 'Windows', color: 'bg-blue-900/40 text-blue-400', ext: '.exe / .msi / .msix' },
+    macos:   { label: 'macOS',   color: 'bg-white/5 text-[#8b949e]',    ext: '.dmg / .pkg' },
+    linux:   { label: 'Linux',   color: 'bg-orange-900/40 text-orange-400', ext: '.deb / .rpm / .AppImage' },
   };
 
   // --- Filtered apps ---
@@ -521,14 +521,14 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
     return (
       <div className="p-6">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-64 mb-8"></div>
+          <div className="h-8 rounded w-64 mb-8" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {[...Array(8)].map((_, i) => (
-              <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <div className="h-12 w-12 bg-gray-200 rounded-xl mb-4"></div>
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/2 mb-4"></div>
-                <div className="h-20 bg-gray-200 rounded"></div>
+              <div key={i} className="od-card p-6">
+                <div className="h-12 w-12 rounded-xl mb-4" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}></div>
+                <div className="h-4 rounded w-3/4 mb-2" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}></div>
+                <div className="h-3 rounded w-1/2 mb-4" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}></div>
+                <div className="h-20 rounded" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}></div>
               </div>
             ))}
           </div>
@@ -564,7 +564,8 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
             placeholder="Search apps..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            className="block w-full pl-10 pr-3 py-2.5 rounded-xl text-sm focus:outline-none"
+            style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
           />
         </div>
 
@@ -578,17 +579,17 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
             const installStatus = getInstallStatus(app.id);
 
             return (
-              <div key={app.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-all">
+              <div key={app.id} className="od-card p-4 hover:shadow-lg transition-all cursor-pointer">
                 <div className="flex items-center space-x-3 mb-3">
                   <div className={`w-10 h-10 ${color.bg} rounded-xl flex items-center justify-center flex-shrink-0`}>
                     <Icon className={`w-5 h-5 ${color.text}`} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-semibold text-gray-900 truncate">{app.display_name}</h3>
-                    <p className="text-xs text-gray-500">v{app.version}</p>
+                    <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{app.display_name}</h3>
+                    <p className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>v{app.version}</p>
                   </div>
                 </div>
-                <p className="text-xs text-gray-600 mb-3 line-clamp-2">{app.description}</p>
+                <p className="text-xs mb-3 line-clamp-2" style={{ color: 'var(--text-secondary, #8b949e)' }}>{app.description}</p>
                 <button
                   onClick={() => {
                     if (installed) handleUninstall(app);
@@ -597,11 +598,12 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                   disabled={isInstalling2 || installStatus === 'installing' || installStatus === 'downloading'}
                   className={`w-full py-2 rounded-lg text-xs font-medium transition-colors ${
                     installed
-                      ? 'bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600'
+                      ? 'text-red-400 hover:text-red-300'
                       : isInstalling2 || installStatus === 'installing'
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                      ? 'cursor-not-allowed opacity-50'
+                      : 'fluent-btn-primary'
                   }`}
+                  style={installed || isInstalling2 ? { background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))' } : {}}
                 >
                   {installed ? 'Installed' : isInstalling2 ? 'Installing...' : 'Install'}
                 </button>
@@ -612,10 +614,10 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
 
         {filteredApps.length === 0 && (
           <div className="text-center py-12">
-            <MagnifyingGlassIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-sm text-gray-500">No apps found</p>
+            <MagnifyingGlassIcon className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-muted, #6e7681)' }} />
+            <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>No apps found</p>
             {apps.length === 0 && (
-              <button onClick={handleSeedApps} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+              <button onClick={handleSeedApps} className="fluent-btn-primary mt-4 px-4 py-2 text-sm font-medium">
                 Seed Default Apps
               </button>
             )}
@@ -631,15 +633,15 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">App Store</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>App Store</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>
             Browse, install, and manage enterprise applications
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           {onOpenWizard && (
-            <button onClick={onOpenWizard} className="px-3 py-1.5 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 text-sm font-medium transition-colors">
+            <button onClick={onOpenWizard} className="fluent-btn-ghost px-3 py-1.5 text-sm font-medium">
               Verteilungs-Assistent
             </button>
           )}
@@ -647,16 +649,16 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
         {/* Stats badges */}
         {stats && (
           <div className="flex items-center space-x-4 text-sm">
-            <div className="flex items-center space-x-1 text-gray-500">
+            <div className="flex items-center space-x-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>
               <ChartBarIcon className="w-4 h-4" />
               <span>{stats.apps.total} Apps</span>
             </div>
-            <div className="flex items-center space-x-1 text-green-600">
+            <div className="flex items-center space-x-1 text-green-400">
               <CheckCircleIcon className="w-4 h-4" />
               <span>{stats.installations.installed} Installed</span>
             </div>
             {stats.installations.pending > 0 && (
-              <div className="flex items-center space-x-1 text-yellow-600">
+              <div className="flex items-center space-x-1 text-yellow-400">
                 <ArrowPathIcon className="w-4 h-4" />
                 <span>{stats.installations.pending} Pending</span>
               </div>
@@ -666,7 +668,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
         <nav className="-mb-px flex space-x-8">
           {[
             { id: 'available' as const, label: 'Available Apps', icon: ArrowDownTrayIcon },
@@ -680,9 +682,10 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center space-x-2 py-3 px-1 border-b-2 text-sm font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-[#006FFF] text-[#006FFF]'
+                  : 'border-transparent hover:text-[#e4e6ea] hover:border-white/20'
               }`}
+              style={activeTab !== tab.id ? { color: 'var(--text-secondary, #8b949e)' } : {}}
             >
               <tab.icon className="w-4 h-4" />
               <span>{tab.label}</span>
@@ -702,7 +705,8 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
             placeholder="Search apps by name, description, or tags..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            className="block w-full pl-10 pr-3 py-2 rounded-lg text-sm focus:outline-none"
+            style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
           />
         </div>
 
@@ -712,9 +716,10 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
             onClick={() => setSelectedCategory('all')}
             className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
               selectedCategory === 'all'
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'bg-[#006FFF] text-white'
+                : 'hover:text-[#e4e6ea]'
             }`}
+            style={selectedCategory !== 'all' ? { background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-secondary, #8b949e)', border: '1px solid var(--border, rgba(255,255,255,0.07))' } : {}}
           >
             All
           </button>
@@ -726,9 +731,10 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                 onClick={() => setSelectedCategory(cat.name)}
                 className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
                   selectedCategory === cat.name
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-[#006FFF] text-white'
+                    : 'hover:text-[#e4e6ea]'
                 }`}
+                style={selectedCategory !== cat.name ? { background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-secondary, #8b949e)', border: '1px solid var(--border, rgba(255,255,255,0.07))' } : {}}
               >
                 <CatIcon className="w-3 h-3" />
                 <span>{cat.display_name}</span>
@@ -744,14 +750,14 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
           <div className="flex items-center space-x-3">
             <button
               onClick={handleSeedApps}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              className="fluent-btn-primary flex items-center space-x-2 px-4 py-2 text-sm font-medium"
             >
               <PlusIcon className="w-4 h-4" />
               <span>Seed Default Apps</span>
             </button>
             <button
               onClick={() => setShowShareAppModal(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+              className="fluent-btn-secondary flex items-center space-x-2 px-4 py-2 text-sm font-medium"
             >
               <ServerIcon className="w-4 h-4" />
               <span>App aus File Share</span>
@@ -760,23 +766,23 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
 
           {/* License overview */}
           {stats && stats.licenses.licensedApps > 0 && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center space-x-2">
-                <KeyIcon className="w-5 h-5 text-gray-400" />
+            <div className="od-card p-6">
+              <h3 className="text-lg font-medium mb-4 flex items-center space-x-2" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
+                <KeyIcon className="w-5 h-5" style={{ color: 'var(--text-muted, #6e7681)' }} />
                 <span>License Overview</span>
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Licensed Apps</p>
-                  <p className="text-2xl font-semibold text-gray-900">{stats.licenses.licensedApps}</p>
+                <div className="rounded-lg p-4" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>Licensed Apps</p>
+                  <p className="text-2xl font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{stats.licenses.licensedApps}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Used Licenses</p>
-                  <p className="text-2xl font-semibold text-gray-900">{stats.licenses.totalUsedLicenses}</p>
+                <div className="rounded-lg p-4" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>Used Licenses</p>
+                  <p className="text-2xl font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{stats.licenses.totalUsedLicenses}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Total Installations</p>
-                  <p className="text-2xl font-semibold text-gray-900">{stats.installations.total}</p>
+                <div className="rounded-lg p-4" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>Total Installations</p>
+                  <p className="text-2xl font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{stats.installations.total}</p>
                 </div>
               </div>
             </div>
@@ -784,8 +790,8 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
 
           {/* Stats by category */}
           {stats && stats.categories.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Apps by Category</h3>
+            <div className="od-card p-6">
+              <h3 className="text-lg font-medium mb-4" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Apps by Category</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {stats.categories.map((cat) => {
                   const color = getCategoryColor(cat.category);
@@ -795,7 +801,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                       <Icon className={`w-5 h-5 ${color.text}`} />
                       <div>
                         <p className={`text-sm font-medium ${color.text}`}>{cat.category}</p>
-                        <p className="text-xs text-gray-500">{cat.count} apps</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>{cat.count} apps</p>
                       </div>
                     </div>
                   );
@@ -811,50 +817,50 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
         <div className="space-y-4">
           {installedApps.length === 0 ? (
             <div className="text-center py-12">
-              <ArrowDownTrayIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No installed apps</h3>
-              <p className="text-sm text-gray-500">Browse the catalog and install apps to see them here</p>
+              <ArrowDownTrayIcon className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-muted, #6e7681)' }} />
+              <h3 className="text-lg font-medium mb-2" style={{ color: 'var(--text-primary, #e4e6ea)' }}>No installed apps</h3>
+              <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>Browse the catalog and install apps to see them here</p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">App</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Version</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Installed</th>
+            <div className="od-card overflow-hidden">
+              <table className="min-w-full">
+                <thead>
+                  <tr style={{ background: 'var(--bg-surface-raised, #1c2128)', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>App</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>Version</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>Progress</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>Installed</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody>
                   {installedApps.map((install) => (
-                    <tr key={install.id} className="hover:bg-gray-50">
+                    <tr key={install.id} style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center space-x-3">
                           <div className={`w-8 h-8 ${getCategoryColor(install.category || '').bg} rounded-lg flex items-center justify-center`}>
                             {React.createElement(getCategoryIcon(install.category || ''), { className: `w-4 h-4 ${getCategoryColor(install.category || '').text}` })}
                           </div>
-                          <span className="text-sm font-medium text-gray-900">{install.display_name || install.app_name || 'Unknown'}</span>
+                          <span className="text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{install.display_name || install.app_name || 'Unknown'}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{install.version}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>{install.version}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <StatusBadge status={install.status} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {install.status !== 'installed' && install.status !== 'failed' && (
-                          <div className="w-24 bg-gray-200 rounded-full h-2">
+                          <div className="w-24 rounded-full h-2" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                             <div
-                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                               style={{ width: `${install.progress}%` }}
                             />
                           </div>
                         )}
-                        {install.status === 'installed' && <span className="text-xs text-green-600">Complete</span>}
-                        {install.status === 'failed' && <span className="text-xs text-red-600">{install.error_message || 'Error'}</span>}
+                        {install.status === 'installed' && <span className="text-xs text-green-400">Complete</span>}
+                        {install.status === 'failed' && <span className="text-xs text-red-400">{install.error_message || 'Error'}</span>}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>
                         {install.installed_at ? new Date(install.installed_at).toLocaleDateString() : '-'}
                       </td>
                     </tr>
@@ -880,7 +886,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
               return (
                 <div
                   key={app.id}
-                  className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col"
+                  className="od-card p-5 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col"
                   onClick={() => {
                     setSelectedApp(app);
                     loadAppAssignments(app.id);
@@ -893,19 +899,19 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                         <Icon className={`w-6 h-6 ${color.text}`} />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-sm font-semibold text-gray-900 truncate">{app.display_name}</h3>
-                        <p className="text-xs text-gray-500">{app.publisher || app.category}</p>
+                        <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{app.display_name}</h3>
+                        <p className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>{app.publisher || app.category}</p>
                       </div>
                     </div>
                     {app.required && (
-                      <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full flex-shrink-0">
+                      <span className="px-2 py-0.5 text-xs font-medium bg-red-900/40 text-red-400 rounded-full flex-shrink-0">
                         Required
                       </span>
                     )}
                   </div>
 
                   {/* Description */}
-                  <p className="text-xs text-gray-600 mb-3 line-clamp-2 flex-1">{app.description}</p>
+                  <p className="text-xs mb-3 line-clamp-2 flex-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>{app.description}</p>
 
                   {/* Platform badges */}
                   <div className="flex items-center space-x-1 mb-3">
@@ -913,7 +919,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                       const plat = platformLabels[p];
                       if (!plat) return null;
                       return (
-                        <span key={p} className="inline-flex items-center space-x-1 px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+                        <span key={p} className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-xs" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-secondary, #8b949e)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
                           <plat.icon className="w-3 h-3" />
                           <span>{plat.label}</span>
                         </span>
@@ -922,17 +928,17 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                   </div>
 
                   {/* Footer: version + license + buttons */}
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
                     <div className="flex items-center space-x-2">
-                      <span className="text-xs text-gray-500">v{app.version}</span>
+                      <span className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>v{app.version}</span>
                       {app.license_type !== 'free' && (
-                        <span className="flex items-center space-x-0.5 text-xs text-yellow-600">
+                        <span className="flex items-center space-x-0.5 text-xs text-yellow-400">
                           <KeyIcon className="w-3 h-3" />
                           <span>{app.license_type}</span>
                         </span>
                       )}
                       {app.license_type !== 'free' && app.max_licenses && (
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>
                           {app.used_licenses}/{app.max_licenses}
                         </span>
                       )}
@@ -942,13 +948,14 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                       {/* Packages button */}
                       <button
                         onClick={(e) => { e.stopPropagation(); handleOpenPackageModal(app); }}
-                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-green-400 transition-colors"
+                        style={{ background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.2)' }}
                         title="Pakete verwalten"
                       >
                         <ArrowDownTrayIcon className="w-3.5 h-3.5" />
                         <span>Pakete</span>
                         {packageSummaries[app.id] && Object.values(packageSummaries[app.id]).some(Boolean) && (
-                          <span className="ml-0.5 bg-emerald-600 text-white rounded-full px-1 text-[10px]">
+                          <span className="ml-0.5 bg-green-600 text-white rounded-full px-1 text-[10px]">
                             {Object.values(packageSummaries[app.id]).filter(Boolean).length}
                           </span>
                         )}
@@ -961,7 +968,8 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                           setDeployTarget(app);
                           setShowDeployModal(true);
                         }}
-                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
+                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-purple-400 transition-colors"
+                        style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }}
                         title="App deployen"
                       >
                         <RocketLaunchIcon className="w-3.5 h-3.5" />
@@ -981,11 +989,12 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                         disabled={isInstalling || installStatus === 'installing' || installStatus === 'downloading'}
                         className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                           installed
-                            ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                            ? 'text-red-400'
                             : isInstalling || installStatus === 'installing' || installStatus === 'downloading'
-                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                              ? 'cursor-not-allowed opacity-50'
+                              : 'fluent-btn-primary'
                         }`}
+                        style={installed || isInstalling ? { background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))' } : {}}
                       >
                         {installed ? (
                           <>
@@ -1014,9 +1023,9 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
           {/* No results */}
           {filteredApps.length === 0 && (
             <div className="text-center py-12">
-              <MagnifyingGlassIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No apps found</h3>
-              <p className="text-sm text-gray-500">
+              <MagnifyingGlassIcon className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-muted, #6e7681)' }} />
+              <h3 className="text-lg font-medium mb-2" style={{ color: 'var(--text-primary, #e4e6ea)' }}>No apps found</h3>
+              <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>
                 {activeTab === 'required'
                   ? 'No required apps are configured'
                   : 'Try adjusting your search or filter criteria'}
@@ -1024,7 +1033,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
               {apps.length === 0 && (
                 <button
                   onClick={handleSeedApps}
-                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                  className="fluent-btn-primary mt-4 px-4 py-2 text-sm font-medium"
                 >
                   Seed Default Apps
                 </button>
@@ -1038,10 +1047,10 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
       {activeTab === 'deployments' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-gray-900">Aktive Deployments</h2>
+            <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Aktive Deployments</h2>
             <button
               onClick={loadDeployments}
-              className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="fluent-btn-secondary flex items-center space-x-1 px-3 py-1.5 text-xs font-medium"
             >
               <ArrowPathIcon className="w-3.5 h-3.5" />
               <span>Aktualisieren</span>
@@ -1050,61 +1059,61 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
 
           {deployments.length === 0 ? (
             <div className="text-center py-12">
-              <RocketLaunchIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Deployments</h3>
-              <p className="text-sm text-gray-500">Klicken Sie auf «Deployen» bei einer App um ein Deployment zu starten</p>
+              <RocketLaunchIcon className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-muted, #6e7681)' }} />
+              <h3 className="text-lg font-medium mb-2" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Keine Deployments</h3>
+              <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>Klicken Sie auf «Deployen» bei einer App um ein Deployment zu starten</p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">App</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziele</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fortschritt</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Erstellt</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aktion</th>
+            <div className="od-card overflow-hidden">
+              <table className="min-w-full">
+                <thead>
+                  <tr style={{ background: 'var(--bg-surface-raised, #1c2128)', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>App</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>Ziele</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>Fortschritt</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>Erstellt</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary, #8b949e)' }}>Aktion</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody>
                   {deployments.map((dep) => {
                     const progress = dep.progress || { total: dep.targets?.length || 0, installed: 0, failed: 0, pending: dep.targets?.length || 0 };
                     const pct = progress.total > 0 ? Math.round((progress.installed / progress.total) * 100) : 0;
                     return (
-                      <tr key={dep.id} className="hover:bg-gray-50">
+                      <tr key={dep.id} style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div>
-                            <p className="text-sm font-medium text-gray-900">{dep.app_name || dep.app_id}</p>
-                            <p className="text-xs text-gray-500">v{dep.version || '–'}</p>
+                            <p className="text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{dep.app_name || dep.app_id}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>v{dep.version || '–'}</p>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {dep.targets?.length || 0} {dep.mandatory && <span className="ml-1 px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded">Pflicht</span>}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>
+                          {dep.targets?.length || 0} {dep.mandatory && <span className="ml-1 px-1.5 py-0.5 text-xs bg-red-900/40 text-red-400 rounded">Pflicht</span>}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center space-x-2">
-                            <div className="w-24 bg-gray-200 rounded-full h-2">
+                            <div className="w-24 rounded-full h-2" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                               <div
                                 className={`h-2 rounded-full transition-all ${progress.failed > 0 ? 'bg-red-500' : 'bg-blue-500'}`}
                                 style={{ width: `${pct}%` }}
                               />
                             </div>
-                            <span className="text-xs text-gray-500 whitespace-nowrap">
+                            <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-secondary, #8b949e)' }}>
                               {progress.installed}/{progress.total} Geräte
                             </span>
                           </div>
                           {progress.failed > 0 && (
-                            <p className="text-xs text-red-600 mt-0.5">{progress.failed} Fehler</p>
+                            <p className="text-xs text-red-400 mt-0.5">{progress.failed} Fehler</p>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <DeploymentStatusBadge status={dep.status} />
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>
                           {new Date(dep.created_at).toLocaleDateString('de-CH')}
                           {dep.deadline && (
-                            <p className="text-xs text-orange-600 flex items-center space-x-0.5 mt-0.5">
+                            <p className="text-xs text-orange-400 flex items-center space-x-0.5 mt-0.5">
                               <ClockIcon className="w-3 h-3" />
                               <span>{new Date(dep.deadline).toLocaleDateString('de-CH')}</span>
                             </p>
@@ -1114,7 +1123,8 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                           {(dep.status === 'pending' || dep.status === 'running') && (
                             <button
                               onClick={() => handleCancelDeployment(dep.id)}
-                              className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                              className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-red-400 rounded-lg transition-colors"
+                              style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.2)' }}
                             >
                               <NoSymbolIcon className="w-3.5 h-3.5" />
                               <span>Abbrechen</span>
@@ -1134,60 +1144,62 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
       {/* Package Distribution Modal */}
       {showPackageModal && packageTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+            <div className="flex items-center justify-between p-6" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Pakete verwalten</h2>
-                <p className="text-sm text-gray-500 mt-0.5">{packageTarget.name}</p>
+                <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Pakete verwalten</h2>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>{packageTarget.name}</p>
               </div>
-              <button onClick={() => setShowPackageModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <XMarkIcon className="w-5 h-5 text-gray-500" />
+              <button onClick={() => setShowPackageModal(false)} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted, #6e7681)' }}>
+                <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-6 space-y-6">
               {/* Platform availability */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Verfügbare Plattform-Pakete</h3>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-secondary, #8b949e)' }}>Verfügbare Plattform-Pakete</h3>
                 <div className="grid grid-cols-3 gap-3">
                   {(['windows', 'macos', 'linux'] as const).map(platform => {
                     const info = PLATFORM_INFO[platform];
                     const pkg = packageSummaries[packageTarget.id]?.[platform];
                     return (
-                      <div key={platform} className={`rounded-xl border-2 p-3 ${pkg ? 'border-emerald-200 bg-emerald-50' : 'border-dashed border-gray-200 bg-gray-50'}`}>
+                      <div key={platform} className={`rounded-xl p-3`}
+                        style={pkg ? { border: '2px solid rgba(63,185,80,0.3)', background: 'rgba(63,185,80,0.05)' } : { border: '2px dashed var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)' }}>
                         <div className="flex items-center justify-between mb-1">
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${info.color}`}>{info.label}</span>
-                          {pkg && <span className="text-[10px] text-gray-400">v{pkg.version}</span>}
+                          {pkg && <span className="text-[10px]" style={{ color: 'var(--text-muted, #6e7681)' }}>v{pkg.version}</span>}
                         </div>
                         {pkg ? (
                           <div className="space-y-1.5 mt-2">
-                            <p className="text-xs text-gray-600 truncate" title={pkg.filename}>{pkg.filename}</p>
-                            <p className="text-xs text-gray-400">{fmtBytes(pkg.size_bytes)} · {pkg.download_count} Downloads</p>
+                            <p className="text-xs truncate" title={pkg.filename} style={{ color: 'var(--text-secondary, #8b949e)' }}>{pkg.filename}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>{fmtBytes(pkg.size_bytes)} · {pkg.download_count} Downloads</p>
                             <div className="flex gap-1.5 mt-2">
                               <button
                                 onClick={() => handlePackageDownload(pkg)}
-                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700"
+                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700"
                               >
                                 <ArrowDownTrayIcon className="w-3 h-3" />
                                 Download
                               </button>
                               <button
                                 onClick={() => handlePackageDelete(pkg.id, packageTarget.id)}
-                                className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                                className="p-1 rounded-lg transition-colors"
+                                style={{ color: 'var(--text-muted, #6e7681)' }}
                                 title="Paket löschen"
                               >
                                 <TrashIcon className="w-3.5 h-3.5" />
                               </button>
                             </div>
                             {pkg.sha256 && (
-                              <p className="text-[10px] text-gray-300 font-mono break-all">SHA256: {pkg.sha256.slice(0, 16)}…</p>
+                              <p className="text-[10px] font-mono break-all" style={{ color: 'var(--text-muted, #6e7681)' }}>SHA256: {pkg.sha256.slice(0, 16)}…</p>
                             )}
                           </div>
                         ) : (
                           <div className="mt-2 text-center">
-                            <p className="text-xs text-gray-400">Kein Paket</p>
-                            <p className="text-[10px] text-gray-300 mt-0.5">{info.ext}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>Kein Paket</p>
+                            <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted, #6e7681)' }}>{info.ext}</p>
                           </div>
                         )}
                       </div>
@@ -1198,11 +1210,12 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
 
               {/* Upload section */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Neues Paket hochladen</h3>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-secondary, #8b949e)' }}>Neues Paket hochladen</h3>
 
                 {/* Drop zone */}
                 <div
-                  className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${pkgDragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                  className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer`}
+                  style={pkgDragOver ? { borderColor: '#006FFF', background: 'rgba(0,111,255,0.05)' } : { borderColor: 'var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)' }}
                   onDragOver={e => { e.preventDefault(); setPkgDragOver(true); }}
                   onDragLeave={() => setPkgDragOver(false)}
                   onDrop={e => {
@@ -1223,16 +1236,16 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                       if (f) { setPkgFile(f); if (!pkgVersion) setPkgVersion('1.0.0'); }
                     }}
                   />
-                  <ArrowDownTrayIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <ArrowDownTrayIcon className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--text-muted, #6e7681)' }} />
                   {pkgFile ? (
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{pkgFile.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{fmtBytes(pkgFile.size)}</p>
+                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{pkgFile.name}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted, #6e7681)' }}>{fmtBytes(pkgFile.size)}</p>
                     </div>
                   ) : (
                     <div>
-                      <p className="text-sm text-gray-500">Datei hier ablegen oder klicken</p>
-                      <p className="text-xs text-gray-400 mt-1">.exe · .msi · .msix · .dmg · .pkg · .deb · .rpm · .AppImage · .tar.gz</p>
+                      <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>Datei hier ablegen oder klicken</p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted, #6e7681)' }}>.exe · .msi · .msix · .dmg · .pkg · .deb · .rpm · .AppImage · .tar.gz</p>
                     </div>
                   )}
                 </div>
@@ -1240,21 +1253,23 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                 {pkgFile && (
                   <div className="mt-3 grid grid-cols-3 gap-3">
                     <div className="col-span-2">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Version *</label>
+                      <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Version *</label>
                       <input
                         type="text"
                         value={pkgVersion}
                         onChange={e => setPkgVersion(e.target.value)}
                         placeholder="z.B. 2.5.1"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                        style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Architektur</label>
+                      <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Architektur</label>
                       <select
                         value={pkgArch}
                         onChange={e => setPkgArch(e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                        style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
                       >
                         <option value="x64">x64</option>
                         <option value="arm64">arm64</option>
@@ -1263,13 +1278,14 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                       </select>
                     </div>
                     <div className="col-span-3">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Release Notes (optional)</label>
+                      <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Release Notes (optional)</label>
                       <textarea
                         value={pkgReleaseNotes}
                         onChange={e => setPkgReleaseNotes(e.target.value)}
                         rows={2}
                         placeholder="Was hat sich geändert?"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none resize-none"
+                        style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
                       />
                     </div>
                   </div>
@@ -1316,14 +1332,16 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
       {/* App Detail Modal */}
       {selectedApp && (
         <div
-          className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50"
+          className="fixed inset-0 flex items-center justify-center p-4 z-50"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
           onClick={() => {
             setSelectedApp(null);
             setShowAssignModal(false);
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+            className="rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+            style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6">
@@ -1336,13 +1354,13 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                     })}
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-900">{selectedApp.display_name}</h2>
-                    <p className="text-sm text-gray-500">
+                    <h2 className="text-xl font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{selectedApp.display_name}</h2>
+                    <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>
                       {selectedApp.publisher} &middot; v{selectedApp.version} &middot; {selectedApp.category}
                     </p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedApp(null)} className="text-gray-400 hover:text-gray-600">
+                <button onClick={() => setSelectedApp(null)} style={{ color: 'var(--text-muted, #6e7681)' }}>
                   <XMarkIcon className="w-6 h-6" />
                 </button>
               </div>
@@ -1350,25 +1368,25 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
               <div className="space-y-6">
                 {/* Description */}
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Description</h3>
-                  <p className="text-sm text-gray-600">{selectedApp.description}</p>
+                  <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Description</h3>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>{selectedApp.description}</p>
                 </div>
 
                 {/* Platform support */}
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Platform Support</h3>
+                  <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Platform Support</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {(selectedApp.platforms || []).map((p) => {
                       const plat = platformLabels[p];
                       const pkg = selectedApp.packages[p];
                       if (!plat || !pkg) return null;
                       return (
-                        <div key={p} className="bg-gray-50 rounded-lg p-3">
+                        <div key={p} className="rounded-lg p-3" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                           <div className="flex items-center space-x-2 mb-1">
-                            <plat.icon className="w-4 h-4 text-gray-600" />
-                            <span className="text-sm font-medium text-gray-900">{plat.label}</span>
+                            <plat.icon className="w-4 h-4" style={{ color: 'var(--text-secondary, #8b949e)' }} />
+                            <span className="text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{plat.label}</span>
                           </div>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>
                             {pkg.type}: {pkg.id}
                             {pkg.cask ? ' (cask)' : ''}
                           </p>
@@ -1381,10 +1399,10 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                 {/* Tags */}
                 {selectedApp.tags && selectedApp.tags.length > 0 && (
                   <div>
-                    <h3 className="text-sm font-medium text-gray-900 mb-2">Tags</h3>
+                    <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Tags</h3>
                     <div className="flex flex-wrap gap-2">
                       {selectedApp.tags.map((tag) => (
-                        <span key={tag} className="inline-flex items-center space-x-1 px-2 py-1 bg-gray-100 rounded-full text-xs text-gray-600">
+                        <span key={tag} className="inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-secondary, #8b949e)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
                           <TagIcon className="w-3 h-3" />
                           <span>{tag}</span>
                         </span>
@@ -1395,20 +1413,20 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
 
                 {/* License info */}
                 {selectedApp.license_type !== 'free' && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="rounded-lg p-4" style={{ background: 'rgba(210,153,34,0.08)', border: '1px solid rgba(210,153,34,0.3)' }}>
                     <div className="flex items-center space-x-2 mb-2">
-                      <KeyIcon className="w-4 h-4 text-yellow-600" />
-                      <h3 className="text-sm font-medium text-yellow-800">License Information</h3>
+                      <KeyIcon className="w-4 h-4 text-yellow-400" />
+                      <h3 className="text-sm font-medium text-yellow-400">License Information</h3>
                     </div>
                     <div className="flex items-center space-x-6 text-sm">
-                      <span className="text-yellow-700">Type: {selectedApp.license_type}</span>
+                      <span className="text-yellow-400">Type: {selectedApp.license_type}</span>
                       {selectedApp.max_licenses && (
                         <>
-                          <span className="text-yellow-700">
+                          <span className="text-yellow-400">
                             Used: {selectedApp.used_licenses} / {selectedApp.max_licenses}
                           </span>
                           <div className="flex-1 max-w-[200px]">
-                            <div className="w-full bg-yellow-200 rounded-full h-2">
+                            <div className="w-full rounded-full h-2" style={{ background: 'rgba(210,153,34,0.2)' }}>
                               <div
                                 className="bg-yellow-500 h-2 rounded-full"
                                 style={{
@@ -1426,10 +1444,10 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                 {/* Assignments (Admin) */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-medium text-gray-900">Assignments</h3>
+                    <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Assignments</h3>
                     <button
                       onClick={() => setShowAssignModal(true)}
-                      className="flex items-center space-x-1 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-xs font-medium"
+                      className="fluent-btn-secondary flex items-center space-x-1 px-3 py-1.5 text-xs font-medium"
                     >
                       <PlusIcon className="w-3.5 h-3.5" />
                       <span>Assign</span>
@@ -1437,25 +1455,25 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                   </div>
 
                   {assignments.length === 0 ? (
-                    <p className="text-sm text-gray-500">No assignments. App is available to all users.</p>
+                    <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>No assignments. App is available to all users.</p>
                   ) : (
                     <div className="space-y-2">
                       {assignments.map((assign) => (
-                        <div key={assign.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                        <div key={assign.id} className="flex items-center justify-between rounded-lg p-3" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                           <div className="flex items-center space-x-3">
                             <TargetTypeIcon type={assign.target_type} />
                             <div>
-                              <p className="text-sm font-medium text-gray-900">
+                              <p className="text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
                                 {assign.target_name || assign.target_id}
                               </p>
-                              <p className="text-xs text-gray-500">
+                              <p className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>
                                 {assign.target_type} &middot; {assign.install_type}
                               </p>
                             </div>
                           </div>
                           <button
                             onClick={() => handleRemoveAssignment(selectedApp.id, assign.id)}
-                            className="text-gray-400 hover:text-red-500"
+                            style={{ color: 'var(--text-muted, #6e7681)' }}
                           >
                             <XMarkIcon className="w-4 h-4" />
                           </button>
@@ -1467,15 +1485,16 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
 
                 {/* Assign Modal Inline */}
                 {showAssignModal && (
-                  <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                    <h4 className="text-sm font-medium text-blue-900 mb-3">New Assignment</h4>
+                  <div className="rounded-lg p-4" style={{ background: 'rgba(0,111,255,0.05)', border: '1px solid rgba(0,111,255,0.2)' }}>
+                    <h4 className="text-sm font-medium text-[#006FFF] mb-3">New Assignment</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Target Type</label>
+                        <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Target Type</label>
                         <select
                           value={assignTarget.target_type}
                           onChange={(e) => setAssignTarget({ ...assignTarget, target_type: e.target.value })}
-                          className="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="block w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                          style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
                         >
                           <option value="domain">Domain</option>
                           <option value="ou">OU</option>
@@ -1485,21 +1504,23 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Target ID</label>
+                        <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Target ID</label>
                         <input
                           type="text"
                           value={assignTarget.target_id}
                           onChange={(e) => setAssignTarget({ ...assignTarget, target_id: e.target.value })}
                           placeholder="e.g., corp.local"
-                          className="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="block w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                          style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Install Type</label>
+                        <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Install Type</label>
                         <select
                           value={assignInstallType}
                           onChange={(e) => setAssignInstallType(e.target.value)}
-                          className="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="block w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                          style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
                         >
                           <option value="available">Available</option>
                           <option value="required">Required</option>
@@ -1510,14 +1531,14 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                     <div className="flex justify-end space-x-2">
                       <button
                         onClick={() => setShowAssignModal(false)}
-                        className="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                        className="fluent-btn-secondary px-3 py-1.5 text-sm"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={handleAssign}
                         disabled={!assignTarget.target_id}
-                        className="px-3 py-1.5 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="fluent-btn-primary px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Assign
                       </button>
@@ -1526,17 +1547,18 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                 )}
 
                 {/* Action buttons */}
-                <div className="flex justify-between pt-4 border-t border-gray-200">
+                <div className="flex justify-between pt-4" style={{ borderTop: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
                   <button
                     onClick={() => handleDeleteApp(selectedApp.id)}
-                    className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                    className="px-4 py-2 text-sm font-medium text-red-400 rounded-lg transition-colors"
+                    style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.2)' }}
                   >
                     Delete from Catalog
                   </button>
                   <div className="flex space-x-3">
                     <button
                       onClick={() => setSelectedApp(null)}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                      className="fluent-btn-secondary px-4 py-2 text-sm font-medium"
                     >
                       Close
                     </button>
@@ -1549,10 +1571,10 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
                         }
                         setSelectedApp(null);
                       }}
-                      className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
+                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                         isInstalled(selectedApp.id)
-                          ? 'bg-red-600 hover:bg-red-700'
-                          : 'bg-blue-600 hover:bg-blue-700'
+                          ? 'text-white bg-red-600 hover:bg-red-700'
+                          : 'fluent-btn-primary'
                       }`}
                     >
                       {isInstalled(selectedApp.id) ? 'Uninstall' : 'Install'}
@@ -1581,16 +1603,16 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
 
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    installed: { bg: 'bg-green-100', text: 'text-green-700', label: 'Installed' },
-    pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Pending' },
-    downloading: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Downloading' },
-    installing: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Installing' },
-    failed: { bg: 'bg-red-100', text: 'text-red-700', label: 'Failed' },
-    uninstalling: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Uninstalling' },
-    uninstalled: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Uninstalled' },
+    installed: { bg: 'bg-green-900/40', text: 'text-green-400', label: 'Installed' },
+    pending: { bg: 'bg-yellow-900/40', text: 'text-yellow-400', label: 'Pending' },
+    downloading: { bg: 'bg-blue-900/40', text: 'text-blue-400', label: 'Downloading' },
+    installing: { bg: 'bg-blue-900/40', text: 'text-blue-400', label: 'Installing' },
+    failed: { bg: 'bg-red-900/40', text: 'text-red-400', label: 'Failed' },
+    uninstalling: { bg: 'bg-orange-900/40', text: 'text-orange-400', label: 'Uninstalling' },
+    uninstalled: { bg: 'bg-white/5', text: 'text-[#8b949e]', label: 'Uninstalled' },
   };
 
-  const c = config[status] || { bg: 'bg-gray-100', text: 'text-gray-600', label: status };
+  const c = config[status] || { bg: 'bg-white/5', text: 'text-[#8b949e]', label: status };
   return (
     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${c.bg} ${c.text}`}>
       {c.label}
@@ -1607,19 +1629,19 @@ function TargetTypeIcon({ type }: { type: string }) {
     user: UserGroupIcon,
   };
   const Icon = icons[type] || ServerIcon;
-  return <Icon className="w-5 h-5 text-gray-400" />;
+  return <Icon className="w-5 h-5" style={{ color: 'var(--text-muted, #6e7681)' }} />;
 }
 
 // --- Deployment Status Badge ---
 function DeploymentStatusBadge({ status }: { status: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    pending:   { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Ausstehend' },
-    running:   { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'Läuft' },
-    completed: { bg: 'bg-green-100',  text: 'text-green-700',  label: 'Abgeschlossen' },
-    failed:    { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Fehlgeschlagen' },
-    cancelled: { bg: 'bg-gray-100',   text: 'text-gray-600',   label: 'Abgebrochen' },
+    pending:   { bg: 'bg-yellow-900/40', text: 'text-yellow-400', label: 'Ausstehend' },
+    running:   { bg: 'bg-blue-900/40',   text: 'text-blue-400',   label: 'Läuft' },
+    completed: { bg: 'bg-green-900/40',  text: 'text-green-400',  label: 'Abgeschlossen' },
+    failed:    { bg: 'bg-red-900/40',    text: 'text-red-400',    label: 'Fehlgeschlagen' },
+    cancelled: { bg: 'bg-white/5',       text: 'text-[#8b949e]',  label: 'Abgebrochen' },
   };
-  const c = config[status] || { bg: 'bg-gray-100', text: 'text-gray-600', label: status };
+  const c = config[status] || { bg: 'bg-white/5', text: 'text-[#8b949e]', label: status };
   return (
     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${c.bg} ${c.text}`}>
       {c.label}
@@ -1690,14 +1712,14 @@ function DeployModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+      <div className="rounded-xl shadow-2xl w-full max-w-md" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
           <div className="flex items-center gap-2">
-            <RocketLaunchIcon className="h-5 w-5 text-violet-600" />
-            <h2 className="text-base font-semibold text-gray-900">App deployen</h2>
+            <RocketLaunchIcon className="h-5 w-5 text-purple-400" />
+            <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>App deployen</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} style={{ color: 'var(--text-muted, #6e7681)' }}>
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
@@ -1705,17 +1727,17 @@ function DeployModal({
         {/* Body */}
         <div className="px-6 py-5 space-y-5">
           {/* App info */}
-          <div className="flex items-center gap-3 bg-violet-50 rounded-lg p-3">
-            <RocketLaunchIcon className="h-8 w-8 text-violet-500 flex-shrink-0" />
+          <div className="flex items-center gap-3 rounded-lg p-3" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
+            <RocketLaunchIcon className="h-8 w-8 text-purple-400 flex-shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-gray-900">{app.display_name || app.name}</p>
-              <p className="text-xs text-gray-500">v{app.version}</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{app.display_name || app.name}</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>v{app.version}</p>
             </div>
           </div>
 
           {/* Target selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Zielgruppe</label>
+            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary, #8b949e)' }}>Zielgruppe</label>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { value: 'all', label: 'Alle Geräte' },
@@ -1726,11 +1748,10 @@ function DeployModal({
                 <button
                   key={opt.value}
                   onClick={() => { setTargetType(opt.value as any); setTargetId(''); }}
-                  className={`py-2 px-3 rounded-lg border text-sm font-medium transition-colors text-left ${
-                    targetType === opt.value
-                      ? 'border-violet-500 bg-violet-50 text-violet-700'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                  }`}
+                  className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors text-left`}
+                  style={targetType === opt.value
+                    ? { border: '1px solid rgba(139,92,246,0.5)', background: 'rgba(139,92,246,0.1)', color: '#a78bfa' }
+                    : { border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-secondary, #8b949e)' }}
                 >
                   {opt.label}
                 </button>
@@ -1741,11 +1762,12 @@ function DeployModal({
           {/* Group/Device/User picker */}
           {targetType === 'group' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Gruppe auswählen</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Gruppe auswählen</label>
               <select
                 value={targetId}
                 onChange={(e) => setTargetId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
               >
                 <option value="">— Gruppe wählen —</option>
                 {DEMO_GROUPS.slice(1).map((g) => (
@@ -1756,7 +1778,7 @@ function DeployModal({
           )}
           {(targetType === 'device' || targetType === 'user') && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>
                 {targetType === 'device' ? 'Geräte-ID' : 'Benutzer-ID'} eingeben
               </label>
               <input
@@ -1764,7 +1786,8 @@ function DeployModal({
                 value={targetId}
                 onChange={(e) => setTargetId(e.target.value)}
                 placeholder={targetType === 'device' ? 'z.B. LAPTOP-001' : 'z.B. max.muster@corp.local'}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
               />
             </div>
           )}
@@ -1772,8 +1795,8 @@ function DeployModal({
           {/* Mandatory toggle */}
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-700">Pflichtinstallation</p>
-              <p className="text-xs text-gray-500">App wird automatisch auf Zielgeräten installiert</p>
+              <p className="text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Pflichtinstallation</p>
+              <p className="text-xs" style={{ color: 'var(--text-secondary, #8b949e)' }}>App wird automatisch auf Zielgeräten installiert</p>
             </div>
             <button
               onClick={() => setMandatory(!mandatory)}
@@ -1791,27 +1814,28 @@ function DeployModal({
 
           {/* Deadline */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Deadline <span className="text-gray-400 font-normal">(optional)</span>
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>
+              Deadline <span className="font-normal" style={{ color: 'var(--text-muted, #6e7681)' }}>(optional)</span>
             </label>
             <input
               type="datetime-local"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+              style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-          <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">
+        <div className="flex items-center justify-between px-6 py-4 rounded-b-xl" style={{ borderTop: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)' }}>
+          <button onClick={onClose} className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>
             Abbrechen
           </button>
           <button
             onClick={handleDeploy}
             disabled={!isValid || deploying}
-            className="flex items-center gap-1.5 bg-violet-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {deploying ? (
               <>
@@ -1928,15 +1952,15 @@ function ShareAppModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+      <div className="rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
           <div className="flex items-center gap-2">
-            <ServerIcon className="h-5 w-5 text-purple-600" />
-            <h2 className="text-base font-semibold text-gray-900">Apps aus File Share importieren</h2>
+            <ServerIcon className="h-5 w-5 text-purple-400" />
+            <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Apps aus File Share importieren</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="h-5 w-5" /></button>
+          <button onClick={onClose} style={{ color: 'var(--text-muted, #6e7681)' }}><XMarkIcon className="h-5 w-5" /></button>
         </div>
 
         {/* Body */}
@@ -1945,18 +1969,19 @@ function ShareAppModal({
           {/* Share picker + scan button */}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                File Share <span className="text-gray-400">(nur «Apps»-Shares)</span>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>
+                File Share <span style={{ color: 'var(--text-muted, #6e7681)' }}>(nur «Apps»-Shares)</span>
               </label>
               {shares.length === 0 ? (
-                <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <div className="text-xs rounded-lg px-3 py-2" style={{ color: '#d29922', background: 'rgba(210,153,34,0.1)', border: '1px solid rgba(210,153,34,0.3)' }}>
                   Kein Share mit Zweck «App-Verteilung» gefunden. Unter Infrastruktur → File Shares einen Share als «Apps» markieren.
                 </div>
               ) : (
                 <select
                   value={selectedShareId}
                   onChange={e => { setSelectedShareId(e.target.value); setFiles([]); setScanError(''); }}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  style={{ background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
                 >
                   <option value="">— Share auswählen —</option>
                   {shares.map(s => <option key={s.id} value={s.id}>{s.name} ({s.protocol} · {s.server})</option>)}
@@ -1974,13 +1999,13 @@ function ShareAppModal({
           </div>
 
           {selectedShare && (
-            <p className="text-xs text-gray-400 font-mono">
+            <p className="text-xs font-mono" style={{ color: 'var(--text-muted, #6e7681)' }}>
               {selectedShare.protocol === 'SMB' ? `\\\\${selectedShare.server}\\${selectedShare.path}` : `${selectedShare.server}:${selectedShare.path}`}
             </p>
           )}
 
           {scanError && (
-            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <div className="text-xs rounded-lg px-3 py-2" style={{ color: '#d29922', background: 'rgba(210,153,34,0.1)', border: '1px solid rgba(210,153,34,0.3)' }}>
               {scanError}
             </div>
           )}
@@ -1989,10 +2014,10 @@ function ShareAppModal({
           {files.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium text-gray-700">{files.length} Installer gefunden — auswählen zum Importieren</p>
+                <p className="text-xs font-medium" style={{ color: 'var(--text-secondary, #8b949e)' }}>{files.length} Installer gefunden — auswählen zum Importieren</p>
                 <div className="flex gap-2">
-                  <button onClick={() => setSelected(new Set(files.map(f => f.relativePath)))} className="text-xs text-purple-600 hover:underline">Alle</button>
-                  <button onClick={() => setSelected(new Set())} className="text-xs text-gray-400 hover:underline">Keine</button>
+                  <button onClick={() => setSelected(new Set(files.map(f => f.relativePath)))} className="text-xs text-purple-400 hover:underline">Alle</button>
+                  <button onClick={() => setSelected(new Set())} className="text-xs hover:underline" style={{ color: 'var(--text-muted, #6e7681)' }}>Keine</button>
                 </div>
               </div>
               <div className="space-y-2">
@@ -2000,19 +2025,21 @@ function ShareAppModal({
                   const sel = selected.has(f.relativePath);
                   const m = meta[f.relativePath] || { display_name: f.suggestedName, version: '1.0.0', category: categories[0]?.name || 'utilities' };
                   return (
-                    <div key={f.relativePath} className={`border rounded-lg p-3 transition-colors ${sel ? 'border-purple-300 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}>
+                    <div key={f.relativePath} className="rounded-lg p-3 transition-colors"
+                      style={sel ? { border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.05)' } : { border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)' }}>
                       <div className="flex items-start gap-2">
                         <button
                           onClick={() => toggleFile(f.relativePath)}
-                          className={`w-4 h-4 rounded mt-0.5 flex-shrink-0 flex items-center justify-center ${sel ? 'bg-purple-600' : 'border border-gray-300 bg-white'}`}
+                          className={`w-4 h-4 rounded mt-0.5 flex-shrink-0 flex items-center justify-center ${sel ? 'bg-purple-600' : ''}`}
+                          style={!sel ? { border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface, #161b22)' } : {}}
                         >
                           {sel && <CheckCircleIcon className="h-3 w-3 text-white" />}
                         </button>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-mono text-gray-600 truncate">{f.relativePath}</p>
+                          <p className="text-xs font-mono truncate" style={{ color: 'var(--text-secondary, #8b949e)' }}>{f.relativePath}</p>
                           <div className="flex gap-1 mt-1">
                             {f.platforms.map(p => (
-                              <span key={p} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${p === 'windows' ? 'bg-blue-100 text-blue-700' : p === 'macos' ? 'bg-gray-100 text-gray-700' : 'bg-orange-100 text-orange-700'}`}>{p}</span>
+                              <span key={p} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${p === 'windows' ? 'bg-blue-900/40 text-blue-400' : p === 'macos' ? 'bg-white/5 text-[#8b949e]' : 'bg-orange-900/40 text-orange-400'}`}>{p}</span>
                             ))}
                           </div>
                           {sel && (
@@ -2022,7 +2049,8 @@ function ShareAppModal({
                                   value={m.display_name}
                                   onChange={e => updateMeta(f.relativePath, 'display_name', e.target.value)}
                                   placeholder="App-Name"
-                                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400 bg-white"
+                                  className="w-full rounded px-2 py-1 text-xs focus:outline-none"
+                                  style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
                                 />
                               </div>
                               <div>
@@ -2030,14 +2058,16 @@ function ShareAppModal({
                                   value={m.version}
                                   onChange={e => updateMeta(f.relativePath, 'version', e.target.value)}
                                   placeholder="Version"
-                                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400 bg-white"
+                                  className="w-full rounded px-2 py-1 text-xs focus:outline-none"
+                                  style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
                                 />
                               </div>
                               <div>
                                 <select
                                   value={m.category}
                                   onChange={e => updateMeta(f.relativePath, 'category', e.target.value)}
-                                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400 bg-white"
+                                  className="w-full rounded px-2 py-1 text-xs focus:outline-none"
+                                  style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', color: 'var(--text-primary, #e4e6ea)' }}
                                 >
                                   {categories.map(c => <option key={c.id} value={c.name}>{c.display_name}</option>)}
                                 </select>
@@ -2054,13 +2084,13 @@ function ShareAppModal({
           )}
 
           {!scanning && files.length === 0 && selectedShareId && !scanError && (
-            <p className="text-xs text-gray-400 text-center py-4">Share scannen um Installer-Dateien zu finden</p>
+            <p className="text-xs text-center py-4" style={{ color: 'var(--text-muted, #6e7681)' }}>Share scannen um Installer-Dateien zu finden</p>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-          <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">Abbrechen</button>
+        <div className="flex items-center justify-between px-6 py-4 rounded-b-xl" style={{ borderTop: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)' }}>
+          <button onClick={onClose} className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>Abbrechen</button>
           <button
             onClick={handleImport}
             disabled={saving || selected.size === 0}

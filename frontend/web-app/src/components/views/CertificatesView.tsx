@@ -134,9 +134,9 @@ function copyToClipboard(text: string) {
 
 function StatusBadge({ status }: { status: CertStatus }) {
   const map: Record<CertStatus, string> = {
-    Aktiv: 'bg-green-100 text-green-800 border border-green-200',
-    Abgelaufen: 'bg-red-100 text-red-800 border border-red-200',
-    Widerrufen: 'bg-gray-100 text-gray-600 border border-gray-200',
+    Aktiv: 'bg-green-900/40 text-green-400 border border-green-700/50',
+    Abgelaufen: 'bg-red-900/40 text-red-400 border border-red-700/50',
+    Widerrufen: 'bg-white/5 text-[#8b949e] border border-white/10',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${map[status]}`}>
@@ -149,10 +149,10 @@ function StatusBadge({ status }: { status: CertStatus }) {
 
 function TypeBadge({ type }: { type: CertType }) {
   const map: Record<CertType, string> = {
-    Benutzer: 'bg-blue-50 text-blue-700',
-    Gerät: 'bg-purple-50 text-purple-700',
-    Server: 'bg-orange-50 text-orange-700',
-    CA: 'bg-indigo-50 text-indigo-700',
+    Benutzer: 'bg-blue-900/40 text-blue-400',
+    Gerät: 'bg-purple-900/40 text-purple-400',
+    Server: 'bg-orange-900/40 text-orange-400',
+    CA: 'bg-indigo-900/40 text-indigo-400',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${map[type]}`}>
@@ -170,15 +170,15 @@ interface StatCardProps {
   color?: string;
 }
 
-function StatCard({ label, value, icon, color = 'text-[#0071E3]' }: StatCardProps) {
+function StatCard({ label, value, icon, color = '#006FFF' }: StatCardProps) {
   return (
-    <div className="bg-white rounded-xl shadow-sm px-5 py-4 flex items-center gap-4">
-      <div className={`flex-shrink-0 w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center ${color}`}>
+    <div className="od-card rounded-xl px-5 py-4 flex items-center gap-4">
+      <div className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'var(--bg-surface-raised, #1c2128)', color }}>
         {icon}
       </div>
       <div>
-        <p className="text-xs text-gray-500 font-medium">{label}</p>
-        <p className="text-2xl font-bold text-gray-900 leading-tight">{value}</p>
+        <p className="text-xs font-medium" style={{ color: 'var(--text-secondary, #8b949e)' }}>{label}</p>
+        <p className="text-2xl font-bold leading-tight" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{value}</p>
       </div>
     </div>
   );
@@ -225,12 +225,15 @@ function IssueCertModal({ onClose, onIssued }: IssueCertModalProps) {
     }
   };
 
+  const inputCls = 'flex-1 rounded-lg px-3 py-2 text-sm focus:outline-none';
+  const inputStyle = { border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' };
+
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Zertifikat ausstellen</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+        <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+          <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Zertifikat ausstellen</h2>
+          <button onClick={onClose} style={{ color: 'var(--text-secondary, #8b949e)' }} className="hover:opacity-80 transition-opacity">
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
@@ -238,15 +241,18 @@ function IssueCertModal({ onClose, onIssued }: IssueCertModalProps) {
         <div className="px-6 py-5 space-y-5">
           {/* Type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Typ</label>
+            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary, #8b949e)' }}>Typ</label>
             <div className="grid grid-cols-4 gap-2">
               {(['Benutzer', 'Gerät', 'Server', 'Code-Signierung'] as CertIssueType[]).map(t => (
                 <button
                   key={t}
                   onClick={() => setType(t)}
-                  className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
-                    type === t ? 'bg-[#0071E3] text-white border-[#0071E3]' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-[#0071E3]'
-                  }`}
+                  className="px-3 py-2 rounded-lg text-xs font-medium border transition-all"
+                  style={{
+                    background: type === t ? '#006FFF' : 'var(--bg-surface-raised, #1c2128)',
+                    color: type === t ? 'white' : 'var(--text-primary, #e4e6ea)',
+                    borderColor: type === t ? '#006FFF' : 'var(--border, rgba(255,255,255,0.07))',
+                  }}
                 >
                   {t}
                 </button>
@@ -256,7 +262,7 @@ function IssueCertModal({ onClose, onIssued }: IssueCertModalProps) {
 
           {/* Subject */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary, #8b949e)' }}>Subject</label>
             <div className="space-y-2">
               {[
                 { label: 'CN (Common Name)*', value: cn, setter: setCn, placeholder: 'z.B. alice@firma.local' },
@@ -265,13 +271,14 @@ function IssueCertModal({ onClose, onIssued }: IssueCertModalProps) {
                 { label: 'C (Country)', value: c, setter: setC, placeholder: 'z.B. CH' },
               ].map(({ label, value, setter, placeholder }) => (
                 <div key={label} className="flex items-center gap-3">
-                  <label className="w-40 text-xs text-gray-500 shrink-0">{label}</label>
+                  <label className="w-40 text-xs shrink-0" style={{ color: 'var(--text-secondary, #8b949e)' }}>{label}</label>
                   <input
                     type="text"
                     value={value}
                     onChange={e => setter(e.target.value)}
                     placeholder={placeholder}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className={inputCls}
+                    style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }}
                   />
                 </div>
               ))}
@@ -281,11 +288,12 @@ function IssueCertModal({ onClose, onIssued }: IssueCertModalProps) {
           {/* Key & Validity */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Schlüssellänge</label>
+              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary, #8b949e)' }}>Schlüssellänge</label>
               <select
                 value={keyLength}
                 onChange={e => setKeyLength(e.target.value as KeyLength)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none cursor-pointer"
+                style={inputStyle}
               >
                 <option value="2048">RSA 2048</option>
                 <option value="4096">RSA 4096</option>
@@ -293,11 +301,12 @@ function IssueCertModal({ onClose, onIssued }: IssueCertModalProps) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Gültigkeit</label>
+              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary, #8b949e)' }}>Gültigkeit</label>
               <select
                 value={validity}
                 onChange={e => setValidity(e.target.value as Validity)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none cursor-pointer"
+                style={inputStyle}
               >
                 {Object.entries(VALIDITY_LABELS).map(([k, v]) => (
                   <option key={k} value={k}>{v}</option>
@@ -308,28 +317,29 @@ function IssueCertModal({ onClose, onIssued }: IssueCertModalProps) {
 
           {/* SANs */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Subject Alternative Names (SAN)</label>
+            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary, #8b949e)' }}>Subject Alternative Names (SAN)</label>
             <textarea
               value={sans}
               onChange={e => setSans(e.target.value)}
               rows={3}
               placeholder={'DNS:vpn.firma.local\nIP:192.168.1.10\nemail:alice@firma.local'}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3] resize-none font-mono"
+              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none resize-none font-mono"
+              style={inputStyle}
             />
-            <p className="text-xs text-gray-400 mt-1">Ein Eintrag pro Zeile (DNS:, IP:, email:)</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted, #6e7681)' }}>Ein Eintrag pro Zeile (DNS:, IP:, email:)</p>
           </div>
 
           {/* Usage */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Verwendungszweck</label>
+            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary, #8b949e)' }}>Verwendungszweck</label>
             <div className="flex flex-wrap gap-3">
               {USAGE_OPTIONS.map(u => (
-                <label key={u} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                <label key={u} className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
                   <input
                     type="checkbox"
                     checked={usages.includes(u)}
                     onChange={() => toggleUsage(u)}
-                    className="w-4 h-4 rounded border-gray-300 text-[#0071E3] focus:ring-[#0071E3]"
+                    className="w-4 h-4 rounded"
                   />
                   {u}
                 </label>
@@ -338,14 +348,15 @@ function IssueCertModal({ onClose, onIssued }: IssueCertModalProps) {
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+        <div className="px-6 py-4 flex justify-end gap-3" style={{ borderTop: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
             Abbrechen
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0060C7] transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
+            style={{ background: '#006FFF' }}
           >
             {saving ? 'Ausstellen…' : 'Zertifikat ausstellen'}
           </button>
@@ -387,19 +398,21 @@ function NewCAModal({ onClose, onCreated, existingCAs }: NewCAModalProps) {
     }
   };
 
+  const inputStyle = { border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' };
+
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Neue CA erstellen</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="rounded-2xl shadow-2xl w-full max-w-md" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+        <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+          <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Neue CA erstellen</h2>
+          <button onClick={onClose} style={{ color: 'var(--text-secondary, #8b949e)' }} className="hover:opacity-80 transition-opacity">
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
 
         <div className="px-6 py-5 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">CA-Typ</label>
+            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary, #8b949e)' }}>CA-Typ</label>
             <div className="grid grid-cols-2 gap-2">
               {([
                 { value: 'self-signed', label: 'Self-Signed Root' },
@@ -408,9 +421,12 @@ function NewCAModal({ onClose, onCreated, existingCAs }: NewCAModalProps) {
                 <button
                   key={t.value}
                   onClick={() => setCaType(t.value)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
-                    caType === t.value ? 'bg-[#0071E3] text-white border-[#0071E3]' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-[#0071E3]'
-                  }`}
+                  className="px-3 py-2 rounded-lg text-sm font-medium border transition-all"
+                  style={{
+                    background: caType === t.value ? '#006FFF' : 'var(--bg-surface-raised, #1c2128)',
+                    color: caType === t.value ? 'white' : 'var(--text-primary, #e4e6ea)',
+                    borderColor: caType === t.value ? '#006FFF' : 'var(--border, rgba(255,255,255,0.07))',
+                  }}
                 >
                   {t.label}
                 </button>
@@ -419,23 +435,25 @@ function NewCAModal({ onClose, onCreated, existingCAs }: NewCAModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>Name</label>
             <input
               type="text"
               value={name}
               onChange={e => setCaName(e.target.value)}
               placeholder="z.B. Firma Root CA"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+              style={inputStyle}
             />
           </div>
 
           {caType === 'intermediate' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Übergeordnete CA</label>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>Übergeordnete CA</label>
               <select
                 value={parentCA}
                 onChange={e => setParentCA(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none cursor-pointer"
+                style={inputStyle}
               >
                 <option value="">CA auswählen…</option>
                 {existingCAs.filter(ca => ca.isRoot).map(ca => (
@@ -447,11 +465,12 @@ function NewCAModal({ onClose, onCreated, existingCAs }: NewCAModalProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Schlüssellänge</label>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>Schlüssellänge</label>
               <select
                 value={keyType}
                 onChange={e => setKeyType(e.target.value as KeyLength)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none cursor-pointer"
+                style={inputStyle}
               >
                 <option value="2048">RSA 2048</option>
                 <option value="4096">RSA 4096</option>
@@ -459,11 +478,12 @@ function NewCAModal({ onClose, onCreated, existingCAs }: NewCAModalProps) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Gültigkeit</label>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>Gültigkeit</label>
               <select
                 value={validity}
                 onChange={e => setValidity(e.target.value as Validity)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none cursor-pointer"
+                style={inputStyle}
               >
                 <option value="1y">1 Jahr</option>
                 <option value="2y">2 Jahre</option>
@@ -473,14 +493,15 @@ function NewCAModal({ onClose, onCreated, existingCAs }: NewCAModalProps) {
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+        <div className="px-6 py-4 flex justify-end gap-3" style={{ borderTop: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
             Abbrechen
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0060C7] transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
+            style={{ background: '#006FFF' }}
           >
             {saving ? 'Erstellen…' : 'CA erstellen'}
           </button>
@@ -495,11 +516,11 @@ function NewCAModal({ onClose, onCreated, existingCAs }: NewCAModalProps) {
 function CertDetailsModal({ cert, onClose }: { cert: Certificate; onClose: () => void }) {
   const days = daysUntil(cert.validUntil);
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Zertifikat-Details</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="rounded-2xl shadow-2xl w-full max-w-md" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+        <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+          <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Zertifikat-Details</h2>
+          <button onClick={onClose} style={{ color: 'var(--text-secondary, #8b949e)' }} className="hover:opacity-80 transition-opacity">
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
@@ -514,23 +535,23 @@ function CertDetailsModal({ cert, onClose }: { cert: Certificate; onClose: () =>
             { label: 'Status', value: cert.status },
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between items-start gap-4">
-              <span className="text-sm text-gray-500 shrink-0">{label}</span>
-              <span className="text-sm font-medium text-gray-900 text-right">{value}</span>
+              <span className="text-sm shrink-0" style={{ color: 'var(--text-secondary, #8b949e)' }}>{label}</span>
+              <span className="text-sm font-medium text-right" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{value}</span>
             </div>
           ))}
           {cert.sans && cert.sans.length > 0 && (
             <div>
-              <span className="text-sm text-gray-500">SANs</span>
+              <span className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>SANs</span>
               <div className="mt-1 space-y-0.5">
                 {cert.sans.map(s => (
-                  <div key={s} className="text-sm font-mono text-gray-800 bg-gray-50 rounded px-2 py-0.5">{s}</div>
+                  <div key={s} className="text-sm font-mono rounded px-2 py-0.5" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>{s}</div>
                 ))}
               </div>
             </div>
           )}
         </div>
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+        <div className="px-6 py-4 flex justify-end" style={{ borderTop: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
             Schließen
           </button>
         </div>
@@ -559,46 +580,47 @@ function ZertifikateTab({
       {selectedCert && <CertDetailsModal cert={selectedCert} onClose={() => setSelectedCert(null)} />}
 
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">{certs.length} Zertifikate gefunden</p>
+        <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>{certs.length} Zertifikate gefunden</p>
         <button
           onClick={onIssue}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white text-sm font-medium rounded-lg hover:bg-[#0060C7] transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors"
+          style={{ background: '#006FFF' }}
         >
           <PlusIcon className="w-4 h-4" />
           Zertifikat ausstellen
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="od-card rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Subject CN</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Typ</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Aussteller</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Gültig bis</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Aktionen</th>
+            <tr style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)', background: 'var(--bg-surface-raised, #1c2128)' }}>Subject CN</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)', background: 'var(--bg-surface-raised, #1c2128)' }}>Typ</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)', background: 'var(--bg-surface-raised, #1c2128)' }}>Aussteller</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)', background: 'var(--bg-surface-raised, #1c2128)' }}>Gültig bis</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)', background: 'var(--bg-surface-raised, #1c2128)' }}>Status</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)', background: 'var(--bg-surface-raised, #1c2128)' }}>Aktionen</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody>
             {certs.map(cert => {
               const days = daysUntil(cert.validUntil);
               const soonExpiring = days > 0 && days <= 30;
               return (
-                <tr key={cert.id} className="hover:bg-gray-50/50 transition-colors">
+                <tr key={cert.id} className="transition-colors" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-gray-900 text-xs">{cert.cn}</span>
+                      <span className="font-mono text-xs" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{cert.cn}</span>
                       {soonExpiring && (
-                        <ExclamationTriangleIcon className="w-3.5 h-3.5 text-amber-500 shrink-0" title="Läuft bald ab" />
+                        <ExclamationTriangleIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" title="Läuft bald ab" />
                       )}
                     </div>
                   </td>
                   <td className="px-4 py-3"><TypeBadge type={cert.type} /></td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{cert.issuer}</td>
+                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-secondary, #8b949e)' }}>{cert.issuer}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs ${soonExpiring ? 'text-amber-600 font-medium' : 'text-gray-600'}`}>
+                    <span className={`text-xs ${soonExpiring ? 'text-amber-400 font-medium' : ''}`} style={!soonExpiring ? { color: 'var(--text-secondary, #8b949e)' } : {}}>
                       {fmtDate(cert.validUntil)}
                     </span>
                   </td>
@@ -608,14 +630,20 @@ function ZertifikateTab({
                       <button
                         onClick={() => onDownload(cert.id)}
                         title="Download (.pem)"
-                        className="p-1.5 text-gray-400 hover:text-[#0071E3] rounded-lg hover:bg-blue-50 transition-colors"
+                        className="p-1.5 rounded-lg transition-colors"
+                        style={{ color: 'var(--text-muted, #6e7681)' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = '#006FFF')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted, #6e7681)')}
                       >
                         <ArrowDownTrayIcon className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setSelectedCert(cert)}
                         title="Details"
-                        className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                        className="p-1.5 rounded-lg transition-colors"
+                        style={{ color: 'var(--text-muted, #6e7681)' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary, #e4e6ea)')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted, #6e7681)')}
                       >
                         <InformationCircleIcon className="w-4 h-4" />
                       </button>
@@ -623,7 +651,10 @@ function ZertifikateTab({
                         <button
                           onClick={() => onRevoke(cert.id)}
                           title="Widerrufen"
-                          className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                          className="p-1.5 rounded-lg transition-colors"
+                          style={{ color: 'var(--text-muted, #6e7681)' }}
+                          onMouseEnter={e => (e.currentTarget.style.color = '#f85149')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted, #6e7681)')}
                         >
                           <NoSymbolIcon className="w-4 h-4" />
                         </button>
@@ -636,7 +667,7 @@ function ZertifikateTab({
           </tbody>
         </table>
         {certs.length === 0 && (
-          <div className="text-center py-12 text-gray-400">
+          <div className="text-center py-12" style={{ color: 'var(--text-muted, #6e7681)' }}>
             <KeyIcon className="w-10 h-10 mx-auto mb-2 opacity-40" />
             <p className="text-sm">Keine Zertifikate vorhanden</p>
           </div>
@@ -660,10 +691,11 @@ function CATab({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">{cas.length} Zertifizierungsstellen</p>
+        <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>{cas.length} Zertifizierungsstellen</p>
         <button
           onClick={onNewCA}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white text-sm font-medium rounded-lg hover:bg-[#0060C7] transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors"
+          style={{ background: '#006FFF' }}
         >
           <PlusIcon className="w-4 h-4" />
           Neue CA erstellen
@@ -672,33 +704,34 @@ function CATab({
 
       <div className="space-y-3">
         {cas.map(ca => (
-          <div key={ca.id} className="bg-white rounded-xl shadow-sm p-5">
+          <div key={ca.id} className="od-card rounded-xl p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-4">
-                <div className={`mt-0.5 w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${ca.isRoot ? 'bg-indigo-50' : 'bg-blue-50'}`}>
-                  <BuildingLibraryIcon className={`w-5 h-5 ${ca.isRoot ? 'text-indigo-600' : 'text-blue-600'}`} />
+                <div className="mt-0.5 w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: ca.isRoot ? 'rgba(99,102,241,0.12)' : 'rgba(0,111,255,0.12)' }}>
+                  <BuildingLibraryIcon className="w-5 h-5" style={{ color: ca.isRoot ? '#818cf8' : '#006FFF' }} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-gray-900">{ca.name}</span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ca.isRoot ? 'bg-indigo-50 text-indigo-700' : 'bg-blue-50 text-blue-700'}`}>
+                    <span className="font-semibold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{ca.name}</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ background: ca.isRoot ? 'rgba(99,102,241,0.12)' : 'rgba(0,111,255,0.12)', color: ca.isRoot ? '#818cf8' : '#006FFF' }}>
                       {ca.isRoot ? 'Root CA' : 'Intermediate CA'}
                     </span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${ca.status === 'Aktiv' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}`}>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${ca.status === 'Aktiv' ? 'bg-green-900/40 text-green-400 border-green-700/50' : 'bg-red-900/40 text-red-400 border-red-700/50'}`}>
                       {ca.status}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 font-mono">{ca.subject}</p>
-                  <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                    <span>Schlüssel: <span className="text-gray-700 font-medium">{ca.keyType}</span></span>
-                    <span>Gültig bis: <span className="text-gray-700 font-medium">{fmtDate(ca.validUntil)}</span></span>
+                  <p className="text-xs font-mono" style={{ color: 'var(--text-secondary, #8b949e)' }}>{ca.subject}</p>
+                  <div className="flex items-center gap-4 mt-2 text-xs" style={{ color: 'var(--text-secondary, #8b949e)' }}>
+                    <span>Schlüssel: <span className="font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{ca.keyType}</span></span>
+                    <span>Gültig bis: <span className="font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{fmtDate(ca.validUntil)}</span></span>
                     <span>({daysUntil(ca.validUntil)} Tage)</span>
                   </div>
                 </div>
               </div>
               <button
                 onClick={() => onDownloadCA(ca.id)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shrink-0"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors shrink-0"
+                style={{ color: 'var(--text-primary, #e4e6ea)', border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)' }}
               >
                 <ArrowDownTrayIcon className="w-3.5 h-3.5" />
                 Download
@@ -707,7 +740,7 @@ function CATab({
           </div>
         ))}
         {cas.length === 0 && (
-          <div className="bg-white rounded-xl shadow-sm text-center py-12 text-gray-400">
+          <div className="od-card rounded-xl text-center py-12" style={{ color: 'var(--text-muted, #6e7681)' }}>
             <BuildingLibraryIcon className="w-10 h-10 mx-auto mb-2 opacity-40" />
             <p className="text-sm">Keine Zertifizierungsstellen konfiguriert</p>
           </div>
@@ -751,18 +784,21 @@ function ScepTab({ config, onChange }: { config: ScepConfig; onChange: (c: ScepC
     }
   };
 
+  const iconBtnStyle = { color: 'var(--text-muted, #6e7681)', border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)', borderRadius: 8, padding: 8, cursor: 'pointer' };
+
   return (
     <div className="max-w-2xl space-y-6">
       {/* Enable toggle */}
-      <div className="bg-white rounded-xl shadow-sm px-6 py-5">
+      <div className="od-card rounded-xl px-6 py-5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-medium text-gray-900">SCEP aktivieren</p>
-            <p className="text-sm text-gray-500 mt-0.5">Simple Certificate Enrollment Protocol für automatische Zertifikatsvergabe</p>
+            <p className="font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>SCEP aktivieren</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>Simple Certificate Enrollment Protocol für automatische Zertifikatsvergabe</p>
           </div>
           <button
             onClick={() => onChange({ ...config, enabled: !config.enabled })}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.enabled ? 'bg-[#0071E3]' : 'bg-gray-200'}`}
+            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+            style={{ background: config.enabled ? '#006FFF' : 'rgba(255,255,255,0.15)' }}
           >
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${config.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
@@ -772,20 +808,18 @@ function ScepTab({ config, onChange }: { config: ScepConfig; onChange: (c: ScepC
       {config.enabled && (
         <>
           {/* URL */}
-          <div className="bg-white rounded-xl shadow-sm px-6 py-5 space-y-4">
+          <div className="od-card rounded-xl px-6 py-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">SCEP URL</label>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>SCEP URL</label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   readOnly
                   value={config.url}
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 font-mono cursor-default"
+                  className="flex-1 rounded-lg px-3 py-2 text-sm font-mono cursor-default"
+                  style={{ border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                 />
-                <button
-                  onClick={() => copyToClipboard(config.url)}
-                  className="p-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                <button onClick={() => copyToClipboard(config.url)} style={iconBtnStyle}>
                   <ClipboardDocumentIcon className="w-4 h-4" />
                 </button>
               </div>
@@ -793,33 +827,28 @@ function ScepTab({ config, onChange }: { config: ScepConfig; onChange: (c: ScepC
 
             {/* Challenge Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Challenge Passwort</label>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>Challenge Passwort</label>
               <div className="flex items-center gap-2">
                 <div className="flex-1 relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     readOnly
                     value={config.challengePassword}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 font-mono cursor-default pr-10"
+                    className="w-full rounded-lg px-3 py-2 text-sm font-mono cursor-default pr-10"
+                    style={{ border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                   />
                   <button
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                    style={{ color: 'var(--text-muted, #6e7681)' }}
                   >
                     <EyeIcon className="w-4 h-4" />
                   </button>
                 </div>
-                <button
-                  onClick={() => copyToClipboard(config.challengePassword)}
-                  className="p-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                <button onClick={() => copyToClipboard(config.challengePassword)} style={iconBtnStyle}>
                   <ClipboardDocumentIcon className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={regeneratePassword}
-                  className="p-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                  title="Neu generieren"
-                >
+                <button onClick={regeneratePassword} style={iconBtnStyle} title="Neu generieren">
                   <ArrowPathIcon className="w-4 h-4" />
                 </button>
               </div>
@@ -827,16 +856,16 @@ function ScepTab({ config, onChange }: { config: ScepConfig; onChange: (c: ScepC
           </div>
 
           {/* Allowed devices */}
-          <div className="bg-white rounded-xl shadow-sm px-6 py-5">
-            <p className="font-medium text-gray-900 mb-3">Erlaubte Geräteplattformen</p>
+          <div className="od-card rounded-xl px-6 py-5">
+            <p className="font-medium mb-3" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Erlaubte Geräteplattformen</p>
             <div className="flex flex-wrap gap-3">
               {DEVICE_TYPES.map(d => (
-                <label key={d} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                <label key={d} className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
                   <input
                     type="checkbox"
                     checked={config.allowedDevices.includes(d)}
                     onChange={() => toggleDevice(d)}
-                    className="w-4 h-4 rounded border-gray-300 text-[#0071E3] focus:ring-[#0071E3]"
+                    className="w-4 h-4 rounded"
                   />
                   {d}
                 </label>
@@ -845,15 +874,16 @@ function ScepTab({ config, onChange }: { config: ScepConfig; onChange: (c: ScepC
           </div>
 
           {/* Auto-enrollment */}
-          <div className="bg-white rounded-xl shadow-sm px-6 py-5">
+          <div className="od-card rounded-xl px-6 py-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-gray-900">Auto-Enrollment für MDM-Geräte</p>
-                <p className="text-sm text-gray-500 mt-0.5">Zertifikat automatisch bei MDM-Einschreibung ausstellen</p>
+                <p className="font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Auto-Enrollment für MDM-Geräte</p>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>Zertifikat automatisch bei MDM-Einschreibung ausstellen</p>
               </div>
               <button
                 onClick={() => onChange({ ...config, autoEnrollment: !config.autoEnrollment })}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.autoEnrollment ? 'bg-[#0071E3]' : 'bg-gray-200'}`}
+                className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                style={{ background: config.autoEnrollment ? '#006FFF' : 'rgba(255,255,255,0.15)' }}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${config.autoEnrollment ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
@@ -864,7 +894,8 @@ function ScepTab({ config, onChange }: { config: ScepConfig; onChange: (c: ScepC
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-5 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0060C7] transition-colors disabled:opacity-50"
+              className="px-5 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
+              style={{ background: '#006FFF' }}
             >
               {saving ? 'Speichern…' : 'SCEP-Konfiguration speichern'}
             </button>
@@ -888,32 +919,35 @@ function CrlTab({ crl, onUpdate }: { crl: CrlInfo; onUpdate: () => void }) {
 
   return (
     <div className="max-w-3xl space-y-5">
-      <div className="bg-white rounded-xl shadow-sm px-6 py-5 space-y-4">
+      <div className="od-card rounded-xl px-6 py-5 space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">CRL URL</label>
+          <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>CRL URL</label>
           <div className="flex items-center gap-2">
             <input
               type="text"
               readOnly
               value={crl.url}
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 font-mono cursor-default"
+              className="flex-1 rounded-lg px-3 py-2 text-sm font-mono cursor-default"
+              style={{ border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
             />
             <button
               onClick={() => copyToClipboard(crl.url)}
-              className="p-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              className="p-2 rounded-lg transition-colors"
+              style={{ color: 'var(--text-muted, #6e7681)', border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)' }}
             >
               <ClipboardDocumentIcon className="w-4 h-4" />
             </button>
           </div>
         </div>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>
             <ClockIcon className="w-4 h-4" />
-            <span>Zuletzt aktualisiert: <span className="text-gray-800 font-medium">{fmtDateTime(crl.lastUpdated)}</span></span>
+            <span>Zuletzt aktualisiert: <span className="font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{fmtDateTime(crl.lastUpdated)}</span></span>
           </div>
           <button
             onClick={onUpdate}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0060C7] transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white rounded-lg transition-colors"
+            style={{ background: '#006FFF' }}
           >
             <ArrowPathIcon className="w-4 h-4" />
             CRL aktualisieren
@@ -921,32 +955,32 @@ function CrlTab({ crl, onUpdate }: { crl: CrlInfo; onUpdate: () => void }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="font-medium text-gray-900">Widerrufene Zertifikate ({crl.revokedCerts.length})</h3>
+      <div className="od-card rounded-xl overflow-hidden">
+        <div className="px-6 py-4" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+          <h3 className="font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Widerrufene Zertifikate ({crl.revokedCerts.length})</h3>
         </div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">CN</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Seriennummer</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Grund</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Datum</th>
+            <tr style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)' }}>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)' }}>CN</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)' }}>Seriennummer</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)' }}>Grund</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)' }}>Datum</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody>
             {crl.revokedCerts.map((r, i) => (
-              <tr key={i} className="hover:bg-gray-50/50">
-                <td className="px-4 py-3 font-mono text-xs text-gray-900">{r.cn}</td>
-                <td className="px-4 py-3 font-mono text-xs text-gray-600">{r.serial}</td>
-                <td className="px-4 py-3 text-xs text-gray-600">{REASON_LABELS[r.reason] ?? r.reason}</td>
-                <td className="px-4 py-3 text-xs text-gray-600">{fmtDate(r.date)}</td>
+              <tr key={i} style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{r.cn}</td>
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--text-secondary, #8b949e)' }}>{r.serial}</td>
+                <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-secondary, #8b949e)' }}>{REASON_LABELS[r.reason] ?? r.reason}</td>
+                <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-secondary, #8b949e)' }}>{fmtDate(r.date)}</td>
               </tr>
             ))}
           </tbody>
         </table>
         {crl.revokedCerts.length === 0 && (
-          <div className="text-center py-10 text-gray-400 text-sm">Keine widerrufenen Zertifikate</div>
+          <div className="text-center py-10 text-sm" style={{ color: 'var(--text-muted, #6e7681)' }}>Keine widerrufenen Zertifikate</div>
         )}
       </div>
     </div>
@@ -993,28 +1027,30 @@ function AblaufTab({ certs }: { certs: Certificate[] }) {
   return (
     <div className="max-w-3xl space-y-5">
       {/* Config */}
-      <div className="bg-white rounded-xl shadow-sm px-6 py-5 space-y-4">
-        <h3 className="font-medium text-gray-900">Warnungs-Konfiguration</h3>
+      <div className="od-card rounded-xl px-6 py-5 space-y-4">
+        <h3 className="font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Warnungs-Konfiguration</h3>
         <div className="flex items-center gap-3">
-          <label className="text-sm text-gray-700 shrink-0">Warnung bei</label>
+          <label className="text-sm shrink-0" style={{ color: 'var(--text-secondary, #8b949e)' }}>Warnung bei</label>
           <input
             type="number"
             min={1}
             max={365}
             value={warnDays}
             onChange={e => setWarnDays(Number(e.target.value))}
-            className="w-20 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+            className="w-20 rounded-lg px-3 py-1.5 text-sm text-center focus:outline-none"
+            style={{ border: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
           />
-          <label className="text-sm text-gray-700 shrink-0">Tagen vor Ablauf</label>
+          <label className="text-sm shrink-0" style={{ color: 'var(--text-secondary, #8b949e)' }}>Tagen vor Ablauf</label>
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-900">Email-Benachrichtigung</p>
-            <p className="text-xs text-gray-500 mt-0.5">Automatische Benachrichtigung bei ablaufenden Zertifikaten</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Email-Benachrichtigung</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary, #8b949e)' }}>Automatische Benachrichtigung bei ablaufenden Zertifikaten</p>
           </div>
           <button
             onClick={() => setEmailEnabled(!emailEnabled)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${emailEnabled ? 'bg-[#0071E3]' : 'bg-gray-200'}`}
+            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+            style={{ background: emailEnabled ? '#006FFF' : 'rgba(255,255,255,0.15)' }}
           >
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${emailEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
@@ -1023,7 +1059,8 @@ function AblaufTab({ certs }: { certs: Certificate[] }) {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0060C7] transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
+            style={{ background: '#006FFF' }}
           >
             {saving ? 'Speichern…' : 'Einstellungen speichern'}
           </button>
@@ -1031,12 +1068,12 @@ function AblaufTab({ certs }: { certs: Certificate[] }) {
       </div>
 
       {/* Expiring list */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-medium text-gray-900">
+      <div className="od-card rounded-xl overflow-hidden">
+        <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+          <h3 className="font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
             Bald ablaufend
             {expiring.length > 0 && (
-              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: 'rgba(210,153,34,0.15)', color: '#d29922' }}>
                 {expiring.length}
               </span>
             )}
@@ -1045,7 +1082,8 @@ function AblaufTab({ certs }: { certs: Certificate[] }) {
             <button
               onClick={handleRenewAll}
               disabled={renewing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-amber-500 rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
+              style={{ background: '#d29922' }}
             >
               <ArrowPathIcon className="w-4 h-4" />
               {renewing ? 'Erneuern…' : 'Alle erneuern'}
@@ -1054,23 +1092,23 @@ function AblaufTab({ certs }: { certs: Certificate[] }) {
         </div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">CN</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Typ</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Gültig bis</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Verbleibend</th>
+            <tr style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))', background: 'var(--bg-surface-raised, #1c2128)' }}>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)' }}>CN</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)' }}>Typ</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)' }}>Gültig bis</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary, #8b949e)' }}>Verbleibend</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody>
             {expiring.map(cert => {
               const days = daysUntil(cert.validUntil);
               return (
-                <tr key={cert.id} className="hover:bg-gray-50/50">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-900">{cert.cn}</td>
+                <tr key={cert.id} style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                  <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{cert.cn}</td>
                   <td className="px-4 py-3"><TypeBadge type={cert.type} /></td>
-                  <td className="px-4 py-3 text-xs text-gray-600">{fmtDate(cert.validUntil)}</td>
+                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-secondary, #8b949e)' }}>{fmtDate(cert.validUntil)}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-semibold ${days <= 7 ? 'text-red-600' : 'text-amber-600'}`}>
+                    <span className="text-xs font-semibold" style={{ color: days <= 7 ? '#f85149' : '#d29922' }}>
                       {days} Tage
                     </span>
                   </td>
@@ -1081,8 +1119,8 @@ function AblaufTab({ certs }: { certs: Certificate[] }) {
         </table>
         {expiring.length === 0 && (
           <div className="text-center py-10">
-            <CheckCircleIcon className="w-10 h-10 mx-auto mb-2 text-green-400" />
-            <p className="text-sm text-gray-400">Keine Zertifikate laufen in {warnDays} Tagen ab</p>
+            <CheckCircleIcon className="w-10 h-10 mx-auto mb-2" style={{ color: '#3fb950' }} />
+            <p className="text-sm" style={{ color: 'var(--text-muted, #6e7681)' }}>Keine Zertifikate laufen in {warnDays} Tagen ab</p>
           </div>
         )}
       </div>
@@ -1188,7 +1226,7 @@ export default function CertificatesView() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7]">
+    <div className="min-h-screen" style={{ background: 'var(--bg-base, #0e1115)' }}>
       {/* Modals */}
       {showIssueModal && (
         <IssueCertModal
@@ -1207,12 +1245,12 @@ export default function CertificatesView() {
       {/* Header */}
       <div className="px-8 py-6">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-[#0071E3]/10 flex items-center justify-center">
-            <ShieldCheckIcon className="w-5 h-5 text-[#0071E3]" />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,111,255,0.1)' }}>
+            <ShieldCheckIcon className="w-5 h-5" style={{ color: '#006FFF' }} />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Zertifikatsverwaltung</h1>
-            <p className="text-sm text-gray-500">Interne Zertifizierungsstelle und PKI-Verwaltung</p>
+            <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Zertifikatsverwaltung</h1>
+            <p className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>Interne Zertifizierungsstelle und PKI-Verwaltung</p>
           </div>
         </div>
 
@@ -1227,33 +1265,33 @@ export default function CertificatesView() {
             label="Aktiv"
             value={loading ? '…' : active}
             icon={<CheckCircleIcon className="w-5 h-5" />}
-            color="text-green-600"
+            color="#3fb950"
           />
           <StatCard
             label="Abgelaufen"
             value={loading ? '…' : expired}
             icon={<XCircleIcon className="w-5 h-5" />}
-            color="text-red-500"
+            color="#f85149"
           />
           <StatCard
             label="Läuft bald ab (< 30 Tage)"
             value={loading ? '…' : expiringSoon}
             icon={<BellAlertIcon className="w-5 h-5" />}
-            color="text-amber-500"
+            color="#d29922"
           />
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-white rounded-xl shadow-sm p-1 mb-6 w-fit">
+        <div className="flex gap-1 rounded-xl p-1 mb-6 w-fit" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
           {TABS.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                activeTab === tab.id
-                  ? 'bg-[#0071E3] text-white shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              style={activeTab === tab.id
+                ? { background: '#006FFF', color: '#ffffff' }
+                : { color: 'var(--text-secondary, #8b949e)' }
+              }
             >
               {tab.label}
             </button>

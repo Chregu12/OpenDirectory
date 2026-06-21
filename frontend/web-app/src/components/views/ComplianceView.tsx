@@ -170,9 +170,9 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 90) return 'text-green-600';
-    if (score >= 70) return 'text-yellow-600';
-    return 'text-red-600';
+    if (score >= 90) return 'text-green-400';
+    if (score >= 70) return 'text-yellow-400';
+    return 'text-red-400';
   };
 
   const getScoreBg = (score: number) => {
@@ -181,34 +181,40 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
     return 'bg-red-500';
   };
 
+  const getScoreStroke = (score: number) => {
+    if (score >= 90) return 'text-green-400';
+    if (score >= 70) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'critical': return 'bg-red-100 text-red-800';
-      case 'high': return 'bg-orange-100 text-orange-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'critical': return 'bg-red-900/40 text-red-400';
+      case 'high': return 'bg-orange-900/40 text-orange-400';
+      case 'medium': return 'bg-yellow-900/40 text-yellow-400';
+      case 'low': return 'bg-blue-900/40 text-blue-400';
+      default: return 'bg-white/5 text-[#8b949e]';
     }
   };
 
   const getTrendIcon = (trend: string) => {
     switch (trend) {
-      case 'up': return <ArrowTrendingUpIcon className="w-4 h-4 text-green-500" />;
-      case 'down': return <ArrowTrendingDownIcon className="w-4 h-4 text-red-500" />;
-      default: return <MinusIcon className="w-4 h-4 text-gray-400" />;
+      case 'up': return <ArrowTrendingUpIcon className="w-4 h-4 text-green-400" />;
+      case 'down': return <ArrowTrendingDownIcon className="w-4 h-4 text-red-400" />;
+      default: return <MinusIcon className="w-4 h-4" style={{ color: 'var(--text-muted, #6e7681)' }} />;
     }
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'compliant': return <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full"><CheckCircleIcon className="w-3 h-3" />Compliant</span>;
-      case 'non_compliant': return <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full"><XCircleIcon className="w-3 h-3" />Non-Compliant</span>;
-      default: return <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full"><ClockIcon className="w-3 h-3" />Pending</span>;
+      case 'compliant': return <span className="inline-flex items-center gap-1 text-xs font-medium text-green-400 bg-green-900/40 px-2 py-0.5 rounded-full"><CheckCircleIcon className="w-3 h-3" />Compliant</span>;
+      case 'non_compliant': return <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-900/40 px-2 py-0.5 rounded-full"><XCircleIcon className="w-3 h-3" />Non-Compliant</span>;
+      default: return <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full" style={{ color: 'var(--text-secondary, #8b949e)', background: 'rgba(255,255,255,0.05)' }}><ClockIcon className="w-3 h-3" />Pending</span>;
     }
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-96"><ArrowPathIcon className="w-8 h-8 animate-spin text-blue-500" /></div>;
+    return <div className="flex items-center justify-center h-96"><ArrowPathIcon className="w-8 h-8 animate-spin text-[#006FFF]" /></div>;
   }
 
   // ── Simple Mode ──
@@ -225,11 +231,11 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
           icon: (
             <div className="relative w-10 h-10">
               <svg className="w-10 h-10 transform -rotate-90" viewBox="0 0 36 36">
-                <path className="text-gray-200" stroke="currentColor" strokeWidth="3" fill="none" d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" />
-                <path className={scoreOk ? 'text-green-500' : 'text-red-500'} stroke="currentColor" strokeWidth="3" strokeDasharray={`${fleetScore}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path className="text-white/10" stroke="currentColor" strokeWidth="3" fill="none" d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path className={scoreOk ? 'text-green-400' : 'text-red-400'} stroke="currentColor" strokeWidth="3" strokeDasharray={`${fleetScore}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className={`text-xs font-bold ${scoreOk ? 'text-green-700' : 'text-red-700'}`}>{fleetScore.toFixed(0)}%</span>
+                <span className={`text-xs font-bold ${scoreOk ? 'text-green-400' : 'text-red-400'}`}>{fleetScore.toFixed(0)}%</span>
               </div>
             </div>
           ),
@@ -259,8 +265,8 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
       >
         {/* Trend */}
         {trendData.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">30-Day Trend</h3>
+          <div className="od-card p-5">
+            <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-secondary, #8b949e)' }}>30-Day Trend</h3>
             <div className="flex items-end gap-0.5 h-16">
               {trendData.map((point, i) => (
                 <div key={i} className="flex-1 group relative">
@@ -280,19 +286,19 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Compliance</h1>
-          <p className="text-sm text-gray-500 mt-1">Monitor device compliance across your fleet</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>Compliance</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-secondary, #8b949e)' }}>Monitor device compliance across your fleet</p>
         </div>
         <div className="flex items-center gap-3">
           {onOpenWizard && (
-            <button onClick={onOpenWizard} className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium transition-colors">
+            <button onClick={onOpenWizard} className="fluent-btn-ghost px-3 py-1.5 text-sm font-medium">
               Security-Assistent
             </button>
           )}
-          <button onClick={handleExportReport} className="flex items-center gap-2 px-3 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+          <button onClick={handleExportReport} className="fluent-btn-secondary flex items-center gap-2 px-3 py-2 text-sm">
             <DocumentArrowDownIcon className="w-4 h-4" /> Export
           </button>
-          <button onClick={loadData} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+          <button onClick={loadData} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted, #6e7681)' }}>
             <ArrowPathIcon className="w-5 h-5" />
           </button>
         </div>
@@ -300,12 +306,12 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
 
       {/* Fleet Score + Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="lg:col-span-1 bg-white rounded-xl border border-gray-200 p-6 flex flex-col items-center justify-center">
-          <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Fleet Score</p>
+        <div className="lg:col-span-1 od-card p-6 flex flex-col items-center justify-center">
+          <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-secondary, #8b949e)' }}>Fleet Score</p>
           <div className="relative w-32 h-32">
             <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 36 36">
-              <path className="text-gray-200" stroke="currentColor" strokeWidth="3" fill="none" d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" />
-              <path className={getScoreBg(fleetScore).replace('bg-', 'text-')} stroke="currentColor" strokeWidth="3" strokeDasharray={`${fleetScore}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path className="text-white/10" stroke="currentColor" strokeWidth="3" fill="none" d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path className={getScoreStroke(fleetScore)} stroke="currentColor" strokeWidth="3" strokeDasharray={`${fleetScore}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
               <span className={`text-3xl font-bold ${getScoreColor(fleetScore)}`}>{fleetScore.toFixed(0)}%</span>
@@ -313,44 +319,44 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
           </div>
         </div>
         <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="od-card p-4">
             <div className="flex items-center gap-2 mb-1">
-              <ComputerDesktopIcon className="w-5 h-5 text-blue-500" />
-              <span className="text-sm font-medium text-gray-600">Total Devices</span>
+              <ComputerDesktopIcon className="w-5 h-5 text-blue-400" />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-secondary, #8b949e)' }}>Total Devices</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{devices.length}</p>
-            <p className="text-xs text-green-600 mt-1">{devices.filter(d => d.status === 'compliant').length} compliant</p>
+            <p className="text-2xl font-bold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{devices.length}</p>
+            <p className="text-xs text-green-400 mt-1">{devices.filter(d => d.status === 'compliant').length} compliant</p>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="od-card p-4">
             <div className="flex items-center gap-2 mb-1">
-              <ExclamationTriangleIcon className="w-5 h-5 text-red-500" />
-              <span className="text-sm font-medium text-gray-600">Violations</span>
+              <ExclamationTriangleIcon className="w-5 h-5 text-red-400" />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-secondary, #8b949e)' }}>Violations</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{violations.reduce((s, v) => s + v.count, 0)}</p>
-            <p className="text-xs text-red-600 mt-1">{violations.find(v => v.severity === 'critical')?.count || 0} critical</p>
+            <p className="text-2xl font-bold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{violations.reduce((s, v) => s + v.count, 0)}</p>
+            <p className="text-xs text-red-400 mt-1">{violations.find(v => v.severity === 'critical')?.count || 0} critical</p>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="od-card p-4">
             <div className="flex items-center gap-2 mb-1">
-              <ShieldCheckIcon className="w-5 h-5 text-green-500" />
-              <span className="text-sm font-medium text-gray-600">Baselines</span>
+              <ShieldCheckIcon className="w-5 h-5 text-green-400" />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-secondary, #8b949e)' }}>Baselines</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{baselines.length}</p>
-            <p className="text-xs text-gray-500 mt-1">{waivers.filter(w => w.status === 'active').length} active waivers</p>
+            <p className="text-2xl font-bold" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{baselines.length}</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted, #6e7681)' }}>{waivers.filter(w => w.status === 'active').length} active waivers</p>
           </div>
         </div>
       </div>
 
       {/* Trend Chart (simple ASCII-style bar chart) */}
       {trendData.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Compliance Trend (30 days)</h3>
+        <div className="od-card p-6">
+          <h3 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-secondary, #8b949e)' }}>Compliance Trend (30 days)</h3>
           <div className="flex items-end gap-1 h-24">
             {trendData.map((point, i) => (
               <div key={i} className="flex-1 flex flex-col items-center group relative">
-                <div className="absolute -top-6 hidden group-hover:block bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
+                <div className="absolute -top-6 hidden group-hover:block text-xs px-2 py-1 rounded whitespace-nowrap z-10" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
                   {point.date}: {point.score.toFixed(1)}%
                 </div>
-                <div className={`w-full rounded-t ${getScoreBg(point.score)} opacity-80`} style={{ height: `${(point.score / 100) * 96}px` }} />
+                <div className={`w-full rounded-t ${getScoreBg(point.score)} opacity-70`} style={{ height: `${(point.score / 100) * 96}px` }} />
               </div>
             ))}
           </div>
@@ -358,14 +364,15 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-4 border-b border-gray-200">
+      <div className="flex gap-4" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
         {(['overview', 'devices', 'violations', 'waivers'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors capitalize ${
-              activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              activeTab === tab ? 'border-[#006FFF] text-[#006FFF]' : 'border-transparent hover:text-[#e4e6ea]'
             }`}
+            style={activeTab !== tab ? { color: 'var(--text-secondary, #8b949e)' } : {}}
           >
             {tab}
           </button>
@@ -374,24 +381,24 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Baseline</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Devices</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pass Rate</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trend</th>
+        <div className="od-card overflow-hidden">
+          <table className="min-w-full">
+            <thead>
+              <tr style={{ background: 'var(--bg-surface-raised, #1c2128)', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Baseline</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Devices</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Pass Rate</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Trend</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody>
               {baselines.map(b => (
-                <tr key={b.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{b.name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{b.devicesCovered}</td>
+                <tr key={b.id} style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                  <td className="px-6 py-4 text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{b.name}</td>
+                  <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>{b.devicesCovered}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
+                      <div className="w-24 rounded-full h-2" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                         <div className={`h-2 rounded-full ${getScoreBg(b.passRate)}`} style={{ width: `${b.passRate}%` }} />
                       </div>
                       <span className={`text-sm font-medium ${getScoreColor(b.passRate)}`}>{b.passRate}%</span>
@@ -406,30 +413,30 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
       )}
 
       {activeTab === 'devices' && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Device</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Scan</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+        <div className="od-card overflow-hidden">
+          <table className="min-w-full">
+            <thead>
+              <tr style={{ background: 'var(--bg-surface-raised, #1c2128)', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Device</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Platform</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Score</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Last Scan</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody>
               {devices.map(d => (
-                <tr key={d.deviceId} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{d.deviceName}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600 capitalize">{d.platform}</td>
+                <tr key={d.deviceId} style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                  <td className="px-6 py-4 text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{d.deviceName}</td>
+                  <td className="px-6 py-4 text-sm capitalize" style={{ color: 'var(--text-secondary, #8b949e)' }}>{d.platform}</td>
                   <td className="px-6 py-4">
                     <span className={`text-sm font-bold ${getScoreColor(d.score)}`}>{d.score}%</span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{new Date(d.lastScan).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>{new Date(d.lastScan).toLocaleString()}</td>
                   <td className="px-6 py-4">{getStatusBadge(d.status)}</td>
                   <td className="px-6 py-4">
-                    <button onClick={() => handleTriggerScan(d.deviceId)} className="text-blue-600 hover:text-blue-800 text-sm font-medium">Scan</button>
+                    <button onClick={() => handleTriggerScan(d.deviceId)} className="text-[#006FFF] hover:text-blue-300 text-sm font-medium">Scan</button>
                   </td>
                 </tr>
               ))}
@@ -441,18 +448,18 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
       {activeTab === 'violations' && (
         <div className="space-y-4">
           {violations.map(group => (
-            <div key={group.severity} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-6 py-3 bg-gray-50 flex items-center justify-between">
+            <div key={group.severity} className="od-card overflow-hidden">
+              <div className="px-6 py-3 flex items-center justify-between" style={{ background: 'var(--bg-surface-raised, #1c2128)', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getSeverityColor(group.severity)} capitalize`}>{group.severity}</span>
-                  <span className="text-sm text-gray-600">{group.count} violation{group.count !== 1 ? 's' : ''}</span>
+                  <span className="text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>{group.count} violation{group.count !== 1 ? 's' : ''}</span>
                 </div>
               </div>
-              <div className="divide-y divide-gray-100">
+              <div>
                 {group.items.map(item => (
-                  <div key={item.checkId} className="px-6 py-3 flex items-center justify-between">
-                    <span className="text-sm text-gray-900">{item.title}</span>
-                    <span className="text-xs text-gray-500">{item.affectedDevices} device{item.affectedDevices !== 1 ? 's' : ''}</span>
+                  <div key={item.checkId} className="px-6 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                    <span className="text-sm" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{item.title}</span>
+                    <span className="text-xs" style={{ color: 'var(--text-muted, #6e7681)' }}>{item.affectedDevices} device{item.affectedDevices !== 1 ? 's' : ''}</span>
                   </div>
                 ))}
               </div>
@@ -462,34 +469,34 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
       )}
 
       {activeTab === 'waivers' && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="od-card overflow-hidden">
           {waivers.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No active waivers</div>
+            <div className="p-8 text-center" style={{ color: 'var(--text-secondary, #8b949e)' }}>No active waivers</div>
           ) : (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Approved By</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expires</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            <table className="min-w-full">
+              <thead>
+                <tr style={{ background: 'var(--bg-surface-raised, #1c2128)', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Check</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Reason</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Approved By</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Expires</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase" style={{ color: 'var(--text-secondary, #8b949e)' }}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody>
                 {waivers.map(w => (
-                  <tr key={w.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{w.checkTitle}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{w.reason}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{w.approvedBy || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-500">{new Date(w.expiresAt).toLocaleDateString()}</td>
+                  <tr key={w.id} style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
+                    <td className="px-6 py-4 text-sm font-medium" style={{ color: 'var(--text-primary, #e4e6ea)' }}>{w.checkTitle}</td>
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>{w.reason}</td>
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary, #8b949e)' }}>{w.approvedBy || '-'}</td>
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-muted, #6e7681)' }}>{new Date(w.expiresAt).toLocaleDateString()}</td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${w.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{w.status}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${w.status === 'active' ? 'bg-green-900/40 text-green-400' : 'bg-white/5 text-[#8b949e]'}`}>{w.status}</span>
                     </td>
                     <td className="px-6 py-4">
                       {w.status === 'active' && (
-                        <button onClick={() => handleRevokeWaiver(w.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">Revoke</button>
+                        <button onClick={() => handleRevokeWaiver(w.id)} className="text-red-400 hover:text-red-300 text-sm font-medium">Revoke</button>
                       )}
                     </td>
                   </tr>
