@@ -91,7 +91,7 @@ function ProviderIcon({ provider, size = 24 }: { provider: string; size?: number
       </svg>
     );
   }
-  return <ServerStackIcon style={{ width: size, height: size, color: '#6B7280' }} />;
+  return <ServerStackIcon style={{ width: size, height: size, color: 'var(--text-muted, #6e7681)' }} />;
 }
 
 // ── Status Badge ───────────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ function ProviderIcon({ provider, size = 24 }: { provider: string; size?: number
 function StatusBadge({ status }: { status: string }) {
   if (status === 'active' || status === 'completed') {
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: '#DCFCE7', color: '#16A34A', fontSize: 12, fontWeight: 500 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: 'rgba(63,185,80,0.15)', color: '#3fb950', fontSize: 12, fontWeight: 500 }}>
         <CheckCircleIcon style={{ width: 12, height: 12 }} />
         {status === 'completed' ? 'Abgeschlossen' : 'Aktiv'}
       </span>
@@ -107,7 +107,7 @@ function StatusBadge({ status }: { status: string }) {
   }
   if (status === 'error') {
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: '#FEE2E2', color: '#DC2626', fontSize: 12, fontWeight: 500 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: 'rgba(248,81,73,0.15)', color: '#f85149', fontSize: 12, fontWeight: 500 }}>
         <ExclamationCircleIcon style={{ width: 12, height: 12 }} />
         Fehler
       </span>
@@ -115,14 +115,14 @@ function StatusBadge({ status }: { status: string }) {
   }
   if (status === 'syncing' || status === 'running') {
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: '#DBEAFE', color: '#2563EB', fontSize: 12, fontWeight: 500 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: 'rgba(0,111,255,0.15)', color: '#006FFF', fontSize: 12, fontWeight: 500 }}>
         <ArrowPathIcon style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
         Synchronisiert
       </span>
     );
   }
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: '#F3F4F6', color: '#6B7280', fontSize: 12, fontWeight: 500 }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: 'rgba(139,148,158,0.15)', color: '#8b949e', fontSize: 12, fontWeight: 500 }}>
       {status}
     </span>
   );
@@ -158,64 +158,64 @@ function AddConnectionModal({ onClose, onSaved }: AddConnectionModalProps) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: 480, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--bg-surface, #161b22)', borderRadius: 12, padding: 28, width: 480, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: '#111' }}>Verbindung hinzufügen</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>Verbindung hinzufügen</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #6e7681)' }}>
             <XMarkIcon style={{ width: 20, height: 20 }} />
           </button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Provider</label>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Provider</label>
             <div style={{ display: 'flex', gap: 8 }}>
               {(['google', 'entra', 'custom'] as const).map(p => (
                 <button
                   key={p}
                   onClick={() => setProvider(p)}
                   style={{
-                    flex: 1, padding: '10px 8px', borderRadius: 8, border: provider === p ? '2px solid #2563EB' : '1px solid #D1D5DB',
-                    background: provider === p ? '#EFF6FF' : '#fff', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                    flex: 1, padding: '10px 8px', borderRadius: 8, border: provider === p ? '2px solid #006FFF' : '1px solid rgba(255,255,255,0.07)',
+                    background: provider === p ? 'rgba(0,111,255,0.15)' : 'var(--bg-surface-raised, #1c2128)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
                   }}
                 >
                   <ProviderIcon provider={p} size={20} />
-                  <span style={{ fontSize: 11, color: provider === p ? '#2563EB' : '#374151', fontWeight: 500 }}>{PROVIDER_LABELS[p]}</span>
+                  <span style={{ fontSize: 11, color: provider === p ? '#006FFF' : 'var(--text-secondary, #8b949e)', fontWeight: 500 }}>{PROVIDER_LABELS[p]}</span>
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Name</label>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Name</label>
             <input
               value={name} onChange={e => setName(e.target.value)} placeholder={PROVIDER_LABELS[provider]}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)', fontSize: 14, boxSizing: 'border-box', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>SCIM Endpoint URL</label>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>SCIM Endpoint URL</label>
             <input
               value={endpoint} onChange={e => setEndpoint(e.target.value)} placeholder="https://..."
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)', fontSize: 14, boxSizing: 'border-box', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Bearer Token</label>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Bearer Token</label>
             <input
               type="password" value={bearerToken} onChange={e => setBearerToken(e.target.value)} placeholder="Bearer Token"
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)', fontSize: 14, boxSizing: 'border-box', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Synchronisierungsintervall</label>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary, #8b949e)', marginBottom: 6 }}>Synchronisierungsintervall</label>
             <select
               value={syncInterval} onChange={e => setSyncInterval(Number(e.target.value))}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, background: '#fff' }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)', fontSize: 14, background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
             >
               {SYNC_INTERVAL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -223,12 +223,12 @@ function AddConnectionModal({ onClose, onSaved }: AddConnectionModalProps) {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D1D5DB', background: '#fff', fontSize: 14, cursor: 'pointer' }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-secondary, #8b949e)', fontSize: 14, cursor: 'pointer' }}>
             Abbrechen
           </button>
           <button
             onClick={handleSave} disabled={saving}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#2563EB', color: '#fff', fontSize: 14, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
           >
             {saving ? 'Speichert...' : 'Speichern'}
           </button>
@@ -337,19 +337,19 @@ export default function SyncView() {
   ];
 
   return (
-    <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto', background: 'var(--bg-base, #0e1115)', minHeight: '100vh' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#111', margin: 0 }}>Verzeichnis-Synchronisierung</h1>
-          <p style={{ fontSize: 14, color: '#6B7280', marginTop: 4 }}>SCIM-Verbindungen zu Google Workspace, Microsoft Entra ID und anderen Identitätsanbietern</p>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)', margin: 0 }}>Verzeichnis-Synchronisierung</h1>
+          <p style={{ fontSize: 14, color: 'var(--text-muted, #6e7681)', marginTop: 4 }}>SCIM-Verbindungen zu Google Workspace, Microsoft Entra ID und anderen Identitätsanbietern</p>
         </div>
         {activeTab === 'connections' && (
           <button
             onClick={() => setShowAddModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#2563EB', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
           >
             <PlusIcon style={{ width: 16, height: 16 }} />
             Verbindung hinzufügen
@@ -358,15 +358,15 @@ export default function SyncView() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #E5E7EB', marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid rgba(255,255,255,0.07)', marginBottom: 24 }}>
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             style={{
               padding: '10px 16px', fontSize: 14, fontWeight: activeTab === tab.id ? 600 : 400,
-              color: activeTab === tab.id ? '#2563EB' : '#6B7280',
-              borderBottom: activeTab === tab.id ? '2px solid #2563EB' : '2px solid transparent',
+              color: activeTab === tab.id ? '#006FFF' : 'var(--text-muted, #6e7681)',
+              borderBottom: activeTab === tab.id ? '2px solid #006FFF' : '2px solid transparent',
               background: 'none', border: 'none', cursor: 'pointer', marginBottom: -1,
             }}
           >
@@ -376,42 +376,42 @@ export default function SyncView() {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 48, color: '#6B7280' }}>Laden...</div>
+        <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted, #6e7681)' }}>Laden...</div>
       ) : (
         <>
           {/* Connections Tab */}
           {activeTab === 'connections' && (
             <div>
               {connections.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 48, color: '#6B7280' }}>
-                  <ArrowPathIcon style={{ width: 40, height: 40, margin: '0 auto 12px', color: '#D1D5DB' }} />
+                <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted, #6e7681)' }}>
+                  <ArrowPathIcon style={{ width: 40, height: 40, margin: '0 auto 12px', color: 'var(--text-muted, #6e7681)' }} />
                   <p style={{ margin: 0, fontWeight: 500 }}>Keine Verbindungen konfiguriert</p>
                   <p style={{ margin: '4px 0 0', fontSize: 13 }}>Fügen Sie eine SCIM-Verbindung hinzu, um zu beginnen.</p>
                 </div>
               ) : (
-                <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
+                <div style={{ background: 'var(--bg-surface, #161b22)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ background: '#F9FAFB' }}>
+                      <tr style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                         {['Provider', 'Name', 'Status', 'Letzte Synchronisierung', 'Benutzer', 'Aktionen'].map(h => (
-                          <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                          <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {connections.map((conn, i) => (
-                        <tr key={conn.id} style={{ borderTop: i > 0 ? '1px solid #F3F4F6' : 'none' }}>
+                        <tr key={conn.id} style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.07)' : 'none' }}>
                           <td style={{ padding: '12px 16px' }}>
                             <ProviderIcon provider={conn.provider} size={22} />
                           </td>
                           <td style={{ padding: '12px 16px' }}>
-                            <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#111' }}>{conn.name}</p>
-                            {conn.endpoint && <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9CA3AF' }}>{conn.endpoint}</p>}
+                            <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #e4e6ea)' }}>{conn.name}</p>
+                            {conn.endpoint && <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted, #6e7681)' }}>{conn.endpoint}</p>}
                           </td>
                           <td style={{ padding: '12px 16px' }}>
                             <StatusBadge status={syncingIds.has(conn.id) ? 'syncing' : conn.status} />
                           </td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: '#6B7280' }}>
+                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted, #6e7681)' }}>
                             {conn.lastSync ? (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <ClockIcon style={{ width: 14, height: 14 }} />
@@ -419,14 +419,14 @@ export default function SyncView() {
                               </div>
                             ) : '—'}
                           </td>
-                          <td style={{ padding: '12px 16px', fontSize: 14, color: '#374151', fontWeight: 500 }}>{conn.usersSynced}</td>
+                          <td style={{ padding: '12px 16px', fontSize: 14, color: 'var(--text-secondary, #8b949e)', fontWeight: 500 }}>{conn.usersSynced}</td>
                           <td style={{ padding: '12px 16px' }}>
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button
                                 onClick={() => handleSync(conn.id)}
                                 disabled={syncingIds.has(conn.id)}
                                 title="Jetzt synchronisieren"
-                                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', fontSize: 12, cursor: syncingIds.has(conn.id) ? 'not-allowed' : 'pointer', opacity: syncingIds.has(conn.id) ? 0.6 : 1 }}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.07)', background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-secondary, #8b949e)', fontSize: 12, cursor: syncingIds.has(conn.id) ? 'not-allowed' : 'pointer', opacity: syncingIds.has(conn.id) ? 0.6 : 1 }}
                               >
                                 <ArrowPathIcon style={{ width: 14, height: 14, animation: syncingIds.has(conn.id) ? 'spin 1s linear infinite' : 'none' }} />
                                 Jetzt synchronisieren
@@ -434,7 +434,7 @@ export default function SyncView() {
                               <button
                                 onClick={() => handleDelete(conn.id)}
                                 title="Verbindung löschen"
-                                style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', borderRadius: 6, border: '1px solid #FEE2E2', background: '#FFF5F5', cursor: 'pointer', color: '#DC2626' }}
+                                style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', borderRadius: 6, border: '1px solid rgba(248,81,73,0.3)', background: 'rgba(248,81,73,0.1)', cursor: 'pointer', color: '#f85149' }}
                               >
                                 <TrashIcon style={{ width: 14, height: 14 }} />
                               </button>
@@ -457,7 +457,7 @@ export default function SyncView() {
                   <select
                     value={selectedConnectionId || connections[0].id}
                     onChange={e => { setSelectedConnectionId(e.target.value); loadSyncLog(e.target.value); }}
-                    style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, background: '#fff' }}
+                    style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)', fontSize: 14, background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                   >
                     {connections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -465,29 +465,29 @@ export default function SyncView() {
               )}
 
               {syncLog.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 48, color: '#6B7280' }}>
+                <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted, #6e7681)' }}>
                   <p style={{ margin: 0 }}>Keine Sync-Protokolleinträge</p>
                 </div>
               ) : (
-                <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
+                <div style={{ background: 'var(--bg-surface, #161b22)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ background: '#F9FAFB' }}>
+                      <tr style={{ background: 'var(--bg-surface-raised, #1c2128)' }}>
                         {['Zeitpunkt', 'Status', 'Erstellt', 'Aktualisiert', 'Gelöscht', 'Fehler', 'Meldung'].map(h => (
-                          <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                          <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {syncLog.map((entry, i) => (
-                        <tr key={entry.id} style={{ borderTop: i > 0 ? '1px solid #F3F4F6' : 'none' }}>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: '#374151' }}>{new Date(entry.startedAt).toLocaleString('de-CH')}</td>
+                        <tr key={entry.id} style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.07)' : 'none' }}>
+                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted, #6e7681)' }}>{new Date(entry.startedAt).toLocaleString('de-CH')}</td>
                           <td style={{ padding: '12px 16px' }}><StatusBadge status={entry.status} /></td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: '#16A34A', fontWeight: 500 }}>+{entry.usersCreated}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: '#2563EB', fontWeight: 500 }}>~{entry.usersUpdated}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: '#DC2626', fontWeight: 500 }}>-{entry.usersDeleted}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: entry.errors > 0 ? '#DC2626' : '#9CA3AF' }}>{entry.errors}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 12, color: '#6B7280' }}>{entry.message || '—'}</td>
+                          <td style={{ padding: '12px 16px', fontSize: 13, color: '#3fb950', fontWeight: 500 }}>+{entry.usersCreated}</td>
+                          <td style={{ padding: '12px 16px', fontSize: 13, color: '#006FFF', fontWeight: 500 }}>~{entry.usersUpdated}</td>
+                          <td style={{ padding: '12px 16px', fontSize: 13, color: '#f85149', fontWeight: 500 }}>-{entry.usersDeleted}</td>
+                          <td style={{ padding: '12px 16px', fontSize: 13, color: entry.errors > 0 ? '#f85149' : 'var(--text-muted, #6e7681)' }}>{entry.errors}</td>
+                          <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-muted, #6e7681)' }}>{entry.message || '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -501,9 +501,9 @@ export default function SyncView() {
           {activeTab === 'conflicts' && (
             <div>
               {conflicts.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 64, color: '#6B7280' }}>
-                  <CheckCircleIcon style={{ width: 48, height: 48, margin: '0 auto 16px', color: '#22C55E' }} />
-                  <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#111' }}>Keine Konflikte</p>
+                <div style={{ textAlign: 'center', padding: 64, color: 'var(--text-muted, #6e7681)' }}>
+                  <CheckCircleIcon style={{ width: 48, height: 48, margin: '0 auto 16px', color: '#3fb950' }} />
+                  <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>Keine Konflikte</p>
                   <p style={{ margin: '4px 0 0', fontSize: 14 }}>Alle Synchronisierungen verliefen konfliktfrei.</p>
                 </div>
               ) : (
@@ -519,11 +519,11 @@ export default function SyncView() {
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                         <div style={{ background: '#F9FAFB', borderRadius: 8, padding: 12 }}>
-                          <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#374151' }}>Lokale Daten</p>
+                          <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)' }}>Lokale Daten</p>
                           <pre style={{ margin: 0, fontSize: 11, color: '#6B7280', overflow: 'auto', maxHeight: 80 }}>{JSON.stringify(conflict.localData, null, 2)}</pre>
                         </div>
                         <div style={{ background: '#F9FAFB', borderRadius: 8, padding: 12 }}>
-                          <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#374151' }}>Remote-Daten</p>
+                          <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #8b949e)' }}>Remote-Daten</p>
                           <pre style={{ margin: 0, fontSize: 11, color: '#6B7280', overflow: 'auto', maxHeight: 80 }}>{JSON.stringify(conflict.remoteData, null, 2)}</pre>
                         </div>
                       </div>

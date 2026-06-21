@@ -86,7 +86,7 @@ function CopyButton({ value }: { value: string }) {
     setTimeout(() => setCopied(false), 2000);
   };
   return (
-    <button onClick={handleCopy} className="text-gray-400 hover:text-blue-600 transition-colors ml-2 shrink-0">
+    <button onClick={handleCopy} className="text-[var(--text-muted)] hover:text-[#006FFF] transition-colors ml-2 shrink-0">
       {copied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <ClipboardDocumentIcon className="w-4 h-4" />}
     </button>
   );
@@ -94,10 +94,10 @@ function CopyButton({ value }: { value: string }) {
 
 function EndpointRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
-      <span className="text-sm text-gray-500 w-44 shrink-0">{label}</span>
+    <div className="flex items-center justify-between py-2.5 border-b border-[rgba(255,255,255,0.07)] last:border-0">
+      <span className="text-sm text-[var(--text-muted,#6e7681)] w-44 shrink-0">{label}</span>
       <div className="flex items-center flex-1 min-w-0">
-        <code className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded truncate flex-1">{value}</code>
+        <code className="text-xs text-[#006FFF] bg-[rgba(0,111,255,0.15)] px-2 py-1 rounded truncate flex-1">{value}</code>
         <CopyButton value={value} />
       </div>
     </div>
@@ -106,9 +106,9 @@ function EndpointRow({ label, value }: { label: string; value: string }) {
 
 function StatusBadge({ status }: { status: SaasApp['status'] }) {
   const styles = {
-    active:   'bg-green-100 text-green-700',
-    inactive: 'bg-gray-100 text-gray-500',
-    pending:  'bg-yellow-100 text-yellow-700',
+    active:   'bg-[rgba(63,185,80,0.15)] text-[#3fb950]',
+    inactive: 'bg-[rgba(139,148,158,0.15)] text-[#8b949e]',
+    pending:  'bg-[rgba(210,153,34,0.15)] text-[#d29922]',
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status]}`}>
@@ -119,9 +119,9 @@ function StatusBadge({ status }: { status: SaasApp['status'] }) {
 
 function ProtocolBadge({ protocol }: { protocol: SaasApp['protocol'] }) {
   const styles: Record<string, string> = {
-    oidc:   'bg-blue-100 text-blue-700',
-    saml:   'bg-purple-100 text-purple-700',
-    oauth2: 'bg-orange-100 text-orange-700',
+    oidc:   'bg-[rgba(0,111,255,0.15)] text-[#006FFF]',
+    saml:   'bg-[rgba(163,113,247,0.15)] text-[#a371f7]',
+    oauth2: 'bg-[rgba(210,153,34,0.15)] text-[#d29922]',
   };
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${styles[protocol]}`}>
@@ -137,11 +137,11 @@ function OverviewTab({ domain }: { domain: string }) {
   return (
     <div className="space-y-6">
       {/* Status banner */}
-      <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
-        <CheckCircleIcon className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+      <div className="bg-[rgba(63,185,80,0.15)] border border-[rgba(63,185,80,0.3)] rounded-xl p-4 flex items-start gap-3">
+        <CheckCircleIcon className="w-5 h-5 text-[#3fb950] mt-0.5 shrink-0" />
         <div>
-          <p className="text-sm font-semibold text-green-800">Identity Provider aktiv</p>
-          <p className="text-xs text-green-700 mt-0.5">
+          <p className="text-sm font-semibold text-[#3fb950]">Identity Provider aktiv</p>
+          <p className="text-xs text-[#3fb950] mt-0.5">
             OpenDirectory läuft als vollständiger OAuth2/OIDC/SAML Identity Provider. Alle SaaS-Apps können sich gegen diesen Endpoint authentifizieren — kein Entra ID oder Okta nötig.
           </p>
         </div>
@@ -150,29 +150,29 @@ function OverviewTab({ domain }: { domain: string }) {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Verbundene Apps',   value: '6',   icon: GlobeAltIcon,    color: 'text-blue-600',   bg: 'bg-blue-50' },
-          { label: 'Aktive Clients',    value: '2',   icon: KeyIcon,         color: 'text-purple-600', bg: 'bg-purple-50' },
-          { label: 'Authentifizierungen heute', value: '143', icon: FingerPrintIcon, color: 'text-green-600',  bg: 'bg-green-50' },
-          { label: 'MFA-Nutzer',        value: '11',  icon: ShieldCheckIcon, color: 'text-orange-600', bg: 'bg-orange-50' },
+          { label: 'Verbundene Apps',   value: '6',   icon: GlobeAltIcon,    color: 'text-[#006FFF]',   bg: 'bg-[rgba(0,111,255,0.15)]' },
+          { label: 'Aktive Clients',    value: '2',   icon: KeyIcon,         color: 'text-[#a371f7]', bg: 'bg-[rgba(163,113,247,0.15)]' },
+          { label: 'Authentifizierungen heute', value: '143', icon: FingerPrintIcon, color: 'text-[#3fb950]',  bg: 'bg-[rgba(63,185,80,0.15)]' },
+          { label: 'MFA-Nutzer',        value: '11',  icon: ShieldCheckIcon, color: 'text-[#d29922]', bg: 'bg-[rgba(210,153,34,0.15)]' },
         ].map(s => (
-          <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
+          <div key={s.label} className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-4 flex items-center gap-3">
             <div className={`${s.bg} rounded-lg p-2.5`}>
               <s.icon className={`w-5 h-5 ${s.color}`} />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{s.value}</p>
-              <p className="text-xs text-gray-500 leading-tight">{s.label}</p>
+              <p className="text-2xl font-bold text-[var(--text-primary,#e4e6ea)]">{s.value}</p>
+              <p className="text-xs text-[var(--text-muted,#6e7681)] leading-tight">{s.label}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* OIDC Endpoints */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-5">
         <div className="flex items-center gap-2 mb-4">
-          <GlobeAltIcon className="w-5 h-5 text-blue-600" />
-          <h3 className="text-sm font-semibold text-gray-900">OIDC Discovery Endpoints</h3>
-          <span className="ml-auto text-xs text-gray-400">Issuer: <code className="font-mono">{issuer}</code></span>
+          <GlobeAltIcon className="w-5 h-5 text-[#006FFF]" />
+          <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">OIDC Discovery Endpoints</h3>
+          <span className="ml-auto text-xs text-[var(--text-muted,#6e7681)]">Issuer: <code className="font-mono">{issuer}</code></span>
         </div>
         <div>
           <EndpointRow label="Discovery Document"   value={`${issuer}/.well-known/openid-configuration`} />
@@ -188,35 +188,35 @@ function OverviewTab({ domain }: { domain: string }) {
       </div>
 
       {/* Supported Protocols */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Unterstützte Standards</h3>
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-5">
+        <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-4">Unterstützte Standards</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             {
               name: 'OAuth 2.0 / OIDC',
-              color: 'border-blue-200 bg-blue-50',
+              color: 'border-[rgba(0,111,255,0.3)] bg-[rgba(0,111,255,0.1)]',
               icon: '🔑',
               items: ['Authorization Code Flow', 'PKCE', 'Refresh Tokens', 'Client Credentials', 'Device Flow'],
             },
             {
               name: 'SAML 2.0',
-              color: 'border-purple-200 bg-purple-50',
+              color: 'border-[rgba(163,113,247,0.3)] bg-[rgba(163,113,247,0.1)]',
               icon: '🔐',
               items: ['SP-initiated SSO', 'IdP-initiated SSO', 'Signed Assertions', 'Encrypted Assertions', 'Single Logout'],
             },
             {
               name: 'Moderne Auth',
-              color: 'border-green-200 bg-green-50',
+              color: 'border-[rgba(63,185,80,0.3)] bg-[rgba(63,185,80,0.1)]',
               icon: '🛡️',
               items: ['TOTP/HOTP MFA', 'WebAuthn (FIDO2)', 'Passkeys', 'Conditional Access', 'Risk-Based Auth'],
             },
           ].map(p => (
             <div key={p.name} className={`rounded-lg border p-4 ${p.color}`}>
-              <p className="text-sm font-semibold text-gray-800 mb-2">{p.icon} {p.name}</p>
+              <p className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-2">{p.icon} {p.name}</p>
               <ul className="space-y-1">
                 {p.items.map(i => (
-                  <li key={i} className="text-xs text-gray-600 flex items-center gap-1.5">
-                    <CheckIcon className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                  <li key={i} className="text-xs text-[var(--text-secondary,#8b949e)] flex items-center gap-1.5">
+                    <CheckIcon className="w-3.5 h-3.5 text-[#3fb950] shrink-0" />
                     {i}
                   </li>
                 ))}
@@ -237,12 +237,12 @@ function AppsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900">Verbundene Anwendungen</h3>
-          <p className="text-xs text-gray-500 mt-0.5">SaaS-Apps und interne Dienste, die OpenDirectory als Identity Provider nutzen</p>
+          <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">Verbundene Anwendungen</h3>
+          <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">SaaS-Apps und interne Dienste, die OpenDirectory als Identity Provider nutzen</p>
         </div>
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 bg-blue-600 text-white text-sm px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-1.5 bg-[#006FFF] text-white text-sm px-3 py-2 rounded-lg hover:bg-[#0056cc] transition-colors"
         >
           <PlusIcon className="w-4 h-4" />
           App verbinden
@@ -250,10 +250,10 @@ function AppsTab() {
       </div>
 
       {showAdd && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+        <div className="bg-[rgba(0,111,255,0.1)] border border-[rgba(0,111,255,0.3)] rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-semibold text-gray-900">Neue App verbinden</h4>
-            <button onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-600">
+            <h4 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">Neue App verbinden</h4>
+            <button onClick={() => setShowAdd(false)} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]">
               <XMarkIcon className="w-5 h-5" />
             </button>
           </div>
@@ -271,43 +271,43 @@ function AppsTab() {
               <button
                 key={a.name}
                 onClick={() => { setShowAdd(false); toast.success(`${a.name} Wizard gestartet`); }}
-                className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-3 text-left hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                className="flex items-center gap-2 bg-[var(--bg-surface-raised,#1c2128)] border border-[rgba(255,255,255,0.07)] rounded-lg p-3 text-left hover:border-[#006FFF] hover:bg-[rgba(0,111,255,0.1)] transition-colors"
               >
                 <span className="text-xl">{a.logo}</span>
-                <span className="text-sm font-medium text-gray-700">{a.name}</span>
+                <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">{a.name}</span>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3">Anwendung</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3">Protokoll</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3">Status</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3">Nutzer</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3">Letzter Login</th>
+            <tr className="border-b border-[rgba(255,255,255,0.07)] bg-[var(--bg-surface-raised,#1c2128)]">
+              <th className="text-left text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wide px-4 py-3">Anwendung</th>
+              <th className="text-left text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wide px-4 py-3">Protokoll</th>
+              <th className="text-left text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wide px-4 py-3">Status</th>
+              <th className="text-left text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wide px-4 py-3">Nutzer</th>
+              <th className="text-left text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wide px-4 py-3">Letzter Login</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-[rgba(255,255,255,0.07)]">
             {SAAS_APPS.map(app => (
-              <tr key={app.id} className="hover:bg-gray-50 transition-colors">
+              <tr key={app.id} className="hover:bg-[rgba(255,255,255,0.04)] transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2.5">
                     <span className="text-xl">{app.logo}</span>
-                    <span className="text-sm font-medium text-gray-900">{app.name}</span>
+                    <span className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{app.name}</span>
                   </div>
                 </td>
                 <td className="px-4 py-3"><ProtocolBadge protocol={app.protocol} /></td>
                 <td className="px-4 py-3"><StatusBadge status={app.status} /></td>
-                <td className="px-4 py-3 text-sm text-gray-600">{app.users}</td>
-                <td className="px-4 py-3 text-sm text-gray-400">{app.lastLogin ?? '—'}</td>
+                <td className="px-4 py-3 text-sm text-[var(--text-secondary,#8b949e)]">{app.users}</td>
+                <td className="px-4 py-3 text-sm text-[var(--text-muted,#6e7681)]">{app.lastLogin ?? '—'}</td>
                 <td className="px-4 py-3">
-                  <button className="text-gray-400 hover:text-blue-600 transition-colors">
+                  <button className="text-[var(--text-muted)] hover:text-[#006FFF] transition-colors">
                     <Cog6ToothIcon className="w-4 h-4" />
                   </button>
                 </td>
@@ -327,8 +327,8 @@ function OAuthTab() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-gray-900">OAuth2 / OIDC Clients</h3>
-        <p className="text-xs text-gray-500 mt-0.5">Anwendungen, die Authorization Code, Client Credentials oder Device Flow nutzen</p>
+        <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">OAuth2 / OIDC Clients</h3>
+        <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Anwendungen, die Authorization Code, Client Credentials oder Device Flow nutzen</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -336,29 +336,29 @@ function OAuthTab() {
           <div
             key={client.id}
             onClick={() => setSelected(client)}
-            className={`bg-white rounded-xl border p-4 cursor-pointer hover:border-blue-400 transition-colors ${selected?.id === client.id ? 'border-blue-500 ring-1 ring-blue-200' : 'border-gray-200'}`}
+            className={`bg-[var(--bg-surface,#161b22)] rounded-xl border p-4 cursor-pointer hover:border-[#006FFF] transition-colors ${selected?.id === client.id ? 'border-[#006FFF] ring-1 ring-[rgba(0,111,255,0.3)]' : 'border-[rgba(255,255,255,0.07)]'}`}
           >
             <div className="flex items-start justify-between mb-3">
               <div>
-                <p className="text-sm font-semibold text-gray-900">{client.name}</p>
-                <p className="text-xs font-mono text-gray-500 mt-0.5">{client.clientId}</p>
+                <p className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">{client.name}</p>
+                <p className="text-xs font-mono text-[var(--text-muted,#6e7681)] mt-0.5">{client.clientId}</p>
               </div>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${client.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${client.status === 'active' ? 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]' : 'bg-[rgba(139,148,158,0.15)] text-[#8b949e]'}`}>
                 {client.status}
               </span>
             </div>
             <div className="flex flex-wrap gap-1 mb-2">
               {client.scopes.map(s => (
-                <span key={s} className="bg-blue-50 text-blue-700 text-xs px-1.5 py-0.5 rounded font-mono">{s}</span>
+                <span key={s} className="bg-[rgba(0,111,255,0.15)] text-[#006FFF] text-xs px-1.5 py-0.5 rounded font-mono">{s}</span>
               ))}
             </div>
-            <p className="text-xs text-gray-400">{client.grantTypes.join(' · ')}</p>
+            <p className="text-xs text-[var(--text-muted,#6e7681)]">{client.grantTypes.join(' · ')}</p>
           </div>
         ))}
 
         <button
           onClick={() => toast.success('Client-Wizard geöffnet')}
-          className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 flex items-center justify-center gap-2 text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          className="bg-[var(--bg-surface-raised,#1c2128)] border-2 border-dashed border-[rgba(255,255,255,0.15)] rounded-xl p-4 flex items-center justify-center gap-2 text-[var(--text-muted,#6e7681)] hover:border-[#006FFF] hover:text-[#006FFF] hover:bg-[rgba(0,111,255,0.1)] transition-colors"
         >
           <PlusIcon className="w-5 h-5" />
           <span className="text-sm font-medium">Neuer OAuth2 Client</span>
@@ -366,8 +366,8 @@ function OAuthTab() {
       </div>
 
       {selected && (
-        <div className="bg-white rounded-xl border border-blue-200 p-5">
-          <h4 className="text-sm font-semibold text-gray-900 mb-4">{selected.name} — Konfiguration</h4>
+        <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(0,111,255,0.3)] p-5">
+          <h4 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-4">{selected.name} — Konfiguration</h4>
           <div className="space-y-2">
             <EndpointRow label="Client ID"     value={selected.clientId} />
             <EndpointRow label="Client Secret" value="••••••••••••••••••••••••" />
@@ -376,9 +376,9 @@ function OAuthTab() {
             ))}
           </div>
 
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <p className="text-xs font-semibold text-gray-700 mb-2">Grafana-Beispielkonfiguration</p>
-            <pre className="text-xs font-mono text-gray-600 whitespace-pre-wrap">{`[auth.generic_oauth]
+          <div className="mt-4 p-4 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg">
+            <p className="text-xs font-semibold text-[var(--text-secondary,#8b949e)] mb-2">Grafana-Beispielkonfiguration</p>
+            <pre className="text-xs font-mono text-[var(--text-secondary,#8b949e)] whitespace-pre-wrap">{`[auth.generic_oauth]
 enabled = true
 name = OpenDirectory
 client_id = ${selected.clientId}
@@ -402,12 +402,12 @@ function SamlTab({ domain }: { domain: string }) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-gray-900">SAML 2.0 Service Provider Verbindungen</h3>
-        <p className="text-xs text-gray-500 mt-0.5">OpenDirectory fungiert als SAML Identity Provider (IdP) für alle verbundenen SPs</p>
+        <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">SAML 2.0 Service Provider Verbindungen</h3>
+        <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">OpenDirectory fungiert als SAML Identity Provider (IdP) für alle verbundenen SPs</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
-        <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">IdP Metadaten</h4>
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-5 space-y-3">
+        <h4 className="text-xs font-semibold text-[var(--text-secondary,#8b949e)] uppercase tracking-wide">IdP Metadaten</h4>
         <EndpointRow label="Entity ID / Issuer" value={issuer} />
         <EndpointRow label="SSO URL (POST)"     value={`${issuer}/saml/sso`} />
         <EndpointRow label="SSO URL (Redirect)" value={`${issuer}/saml/sso?binding=redirect`} />
@@ -416,7 +416,7 @@ function SamlTab({ domain }: { domain: string }) {
         <div className="pt-2">
           <button
             onClick={() => toast.success('Metadaten-XML wird heruntergeladen...')}
-            className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+            className="flex items-center gap-2 text-sm text-[#006FFF] hover:text-[#0056cc] font-medium"
           >
             <ArrowTopRightOnSquareIcon className="w-4 h-4" />
             IdP Metadaten herunterladen
@@ -428,23 +428,23 @@ function SamlTab({ domain }: { domain: string }) {
         {[
           { name: 'GitLab', logo: '🦊', entityId: 'https://gitlab.example.com', users: 5, nameid: 'email' },
         ].map(sp => (
-          <div key={sp.name} className="bg-white rounded-xl border border-gray-200 p-4">
+          <div key={sp.name} className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-4">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xl">{sp.logo}</span>
-              <span className="text-sm font-semibold text-gray-900">{sp.name}</span>
-              <span className="ml-auto bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">Aktiv</span>
+              <span className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">{sp.name}</span>
+              <span className="ml-auto bg-[rgba(63,185,80,0.15)] text-[#3fb950] text-xs px-2 py-0.5 rounded-full">Aktiv</span>
             </div>
-            <div className="text-xs text-gray-500 space-y-1">
-              <div><span className="text-gray-400">Entity ID:</span> <code className="font-mono">{sp.entityId}</code></div>
-              <div><span className="text-gray-400">NameID Format:</span> <code className="font-mono">{sp.nameid}</code></div>
-              <div><span className="text-gray-400">Aktive Nutzer:</span> {sp.users}</div>
+            <div className="text-xs text-[var(--text-muted,#6e7681)] space-y-1">
+              <div><span className="text-[var(--text-muted,#6e7681)]">Entity ID:</span> <code className="font-mono">{sp.entityId}</code></div>
+              <div><span className="text-[var(--text-muted,#6e7681)]">NameID Format:</span> <code className="font-mono">{sp.nameid}</code></div>
+              <div><span className="text-[var(--text-muted,#6e7681)]">Aktive Nutzer:</span> {sp.users}</div>
             </div>
           </div>
         ))}
 
         <button
           onClick={() => toast.success('SAML SP Wizard geöffnet')}
-          className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 flex items-center justify-center gap-2 text-gray-500 hover:border-purple-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+          className="bg-[var(--bg-surface-raised,#1c2128)] border-2 border-dashed border-[rgba(255,255,255,0.15)] rounded-xl p-4 flex items-center justify-center gap-2 text-[var(--text-muted,#6e7681)] hover:border-[#a371f7] hover:text-[#a371f7] hover:bg-[rgba(163,113,247,0.1)] transition-colors"
         >
           <PlusIcon className="w-5 h-5" />
           <span className="text-sm font-medium">Service Provider verbinden</span>
@@ -551,21 +551,21 @@ function MfaTab() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-gray-900">Multi-Faktor Authentifizierung</h3>
-        <p className="text-xs text-gray-500 mt-0.5">Konfiguriere MFA-Methoden und Zero-Trust Richtlinien</p>
+        <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">Multi-Faktor Authentifizierung</h3>
+        <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Konfiguriere MFA-Methoden und Zero-Trust Richtlinien</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] divide-y divide-[rgba(255,255,255,0.07)]">
         {/* FIDO2 row */}
         <div className="flex items-center justify-between p-4">
           <div className="flex items-start gap-3">
             <span className="text-2xl mt-0.5">🔑</span>
             <div>
               <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-gray-900">FIDO2 / Passkeys / WebAuthn</p>
-                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">Empfohlen</span>
+                <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">FIDO2 / Passkeys / WebAuthn</p>
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[rgba(63,185,80,0.15)] text-[#3fb950]">Empfohlen</span>
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">Hardware-Keys (YubiKey), Windows Hello, Touch ID, Face ID — Phishing-resistent</p>
+              <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Hardware-Keys (YubiKey), Windows Hello, Touch ID, Face ID — Phishing-resistent</p>
             </div>
           </div>
           <button
@@ -582,8 +582,8 @@ function MfaTab() {
             <div className="flex items-start gap-3">
               <span className="text-2xl mt-0.5">📱</span>
               <div>
-                <p className="text-sm font-medium text-gray-900">TOTP / HOTP (Authenticator-App)</p>
-                <p className="text-xs text-gray-500 mt-0.5">Google Authenticator, Aegis, Bitwarden Authenticator — zeitbasierte OTPs</p>
+                <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">TOTP / HOTP (Authenticator-App)</p>
+                <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Google Authenticator, Aegis, Bitwarden Authenticator — zeitbasierte OTPs</p>
               </div>
             </div>
             <button
@@ -593,10 +593,10 @@ function MfaTab() {
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${totp ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
-          <div className="flex items-center justify-between p-4 bg-gray-800/5 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between p-4 bg-[rgba(255,255,255,0.04)] rounded-lg border border-[rgba(255,255,255,0.07)]">
             <div>
               <p className="text-white font-medium text-sm" style={{ color: '#111827' }}>TOTP Authenticator</p>
-              <p className="text-gray-400 text-xs mt-0.5">Google Authenticator, Authy, etc.</p>
+              <p className="text-[var(--text-muted,#6e7681)] text-xs mt-0.5">Google Authenticator, Authy, etc.</p>
             </div>
             {mfaEnabled ? (
               <button
@@ -622,8 +622,8 @@ function MfaTab() {
           <div className="flex items-start gap-3">
             <span className="text-2xl mt-0.5">🛡️</span>
             <div>
-              <p className="text-sm font-medium text-gray-900">Conditional Access</p>
-              <p className="text-xs text-gray-500 mt-0.5">MFA-Anforderung basierend auf Gerät, Standort, Risikowert und Gruppe</p>
+              <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">Conditional Access</p>
+              <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">MFA-Anforderung basierend auf Gerät, Standort, Risikowert und Gruppe</p>
             </div>
           </div>
           <button
@@ -635,28 +635,28 @@ function MfaTab() {
         </div>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
-        <ExclamationTriangleIcon className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+      <div className="bg-[rgba(210,153,34,0.15)] border border-[rgba(210,153,34,0.3)] rounded-xl p-4 flex gap-3">
+        <ExclamationTriangleIcon className="w-5 h-5 text-[#d29922] shrink-0 mt-0.5" />
         <div className="text-sm">
-          <p className="font-semibold text-amber-800">Zero Trust Empfehlung</p>
-          <p className="text-amber-700 mt-0.5 text-xs">
+          <p className="font-semibold text-[#d29922]">Zero Trust Empfehlung</p>
+          <p className="text-[#d29922] mt-0.5 text-xs">
             Aktiviere FIDO2 für alle Admin-Accounts. TOTP als Fallback. Conditional Access blockiert unbekannte Geräte aus Hochrisiko-Standorten automatisch.
           </p>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h4 className="text-sm font-semibold text-gray-900 mb-3">Conditional Access Regeln</h4>
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-5">
+        <h4 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-3">Conditional Access Regeln</h4>
         <div className="space-y-2">
           {[
-            { name: 'Admin-Accounts', condition: 'FIDO2 oder TOTP immer', action: 'Erlaubt', color: 'text-green-600' },
-            { name: 'Unbekanntes Gerät + Risikoland', condition: 'IP-Geolocation in Sperrliste', action: 'Blockiert', color: 'text-red-600' },
-            { name: 'Firmenlaptop + CH/DE/AT', condition: 'Compliance-Score > 80%', action: 'Ohne MFA', color: 'text-blue-600' },
-            { name: 'BYOD-Geräte', condition: 'Alle Standorte', action: 'MFA erforderlich', color: 'text-orange-600' },
+            { name: 'Admin-Accounts', condition: 'FIDO2 oder TOTP immer', action: 'Erlaubt', color: 'text-[#3fb950]' },
+            { name: 'Unbekanntes Gerät + Risikoland', condition: 'IP-Geolocation in Sperrliste', action: 'Blockiert', color: 'text-red-400' },
+            { name: 'Firmenlaptop + CH/DE/AT', condition: 'Compliance-Score > 80%', action: 'Ohne MFA', color: 'text-[#006FFF]' },
+            { name: 'BYOD-Geräte', condition: 'Alle Standorte', action: 'MFA erforderlich', color: 'text-[#d29922]' },
           ].map(r => (
-            <div key={r.name} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-              <span className="text-sm font-medium text-gray-800">{r.name}</span>
-              <span className="text-xs text-gray-500 mx-4 flex-1">{r.condition}</span>
+            <div key={r.name} className="flex items-center justify-between py-2 border-b border-[rgba(255,255,255,0.07)] last:border-0">
+              <span className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{r.name}</span>
+              <span className="text-xs text-[var(--text-muted,#6e7681)] mx-4 flex-1">{r.condition}</span>
               <span className={`text-xs font-semibold ${r.color}`}>{r.action}</span>
             </div>
           ))}
@@ -945,34 +945,34 @@ export default function IdentityProviderView() {
   ];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ background: 'var(--bg-base, #0e1115)' }}>
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center">
+            <div className="w-9 h-9 bg-[#006FFF] rounded-xl flex items-center justify-center">
               <ShieldCheckIcon className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Identity Provider</h1>
-            <span className="bg-blue-100 text-blue-700 text-xs px-2.5 py-1 rounded-full font-medium">Entra ID Ersatz</span>
+            <h1 className="text-2xl font-bold text-[var(--text-primary,#e4e6ea)]">Identity Provider</h1>
+            <span className="bg-[rgba(0,111,255,0.15)] text-[#006FFF] text-xs px-2.5 py-1 rounded-full font-medium">Entra ID Ersatz</span>
           </div>
-          <p className="text-sm text-gray-500 ml-12">
+          <p className="text-sm text-[var(--text-muted,#6e7681)] ml-12">
             OpenDirectory als vollständiger Identity Provider — OAuth2, OIDC, SAML, MFA, Conditional Access
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-200">
+      <div className="flex items-center gap-1 border-b border-[rgba(255,255,255,0.07)]">
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === t.id
-                ? 'border-blue-600 text-blue-700'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+                ? 'border-[#006FFF] text-[#006FFF]'
+                : 'border-transparent text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)] hover:border-[rgba(255,255,255,0.07)]'
+            }`
           >
             <t.icon className="w-4 h-4" />
             {t.label}
@@ -989,7 +989,7 @@ export default function IdentityProviderView() {
       {activeTab === 'certificates' && <CertificatesTab />}
       {activeTab === 'kerberos'     && <KerberosTab domain={domain} />}
       {activeTab === 'settings'  && (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
+        <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-8 text-center text-[var(--text-muted,#6e7681)]">
           <Cog6ToothIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
           <p className="text-sm">IdP-Einstellungen (Token-Laufzeiten, Signing-Keys, Session-Policies)</p>
         </div>

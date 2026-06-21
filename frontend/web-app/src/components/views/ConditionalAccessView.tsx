@@ -195,10 +195,10 @@ const ACTION_LABELS: Record<PolicyAction, string> = {
 };
 
 const ACTION_STYLES: Record<PolicyAction, string> = {
-  allow: 'bg-green-50 text-green-700 border-green-200',
-  block: 'bg-red-50 text-red-700 border-red-200',
-  mfa: 'bg-blue-50 text-blue-700 border-blue-200',
-  compliant: 'bg-purple-50 text-purple-700 border-purple-200',
+  allow: 'bg-[rgba(63,185,80,0.15)] text-[#3fb950] border-[rgba(63,185,80,0.3)]',
+  block: 'bg-[rgba(248,81,73,0.15)] text-[#f85149] border-[rgba(248,81,73,0.3)]',
+  mfa: 'bg-[rgba(0,111,255,0.15)] text-[#006FFF] border-[rgba(0,111,255,0.3)]',
+  compliant: 'bg-[rgba(163,113,247,0.15)] text-[#a371f7] border-[rgba(163,113,247,0.3)]',
 };
 
 const RESULT_LABELS: Record<EventResult, string> = {
@@ -208,16 +208,16 @@ const RESULT_LABELS: Record<EventResult, string> = {
 };
 
 const RESULT_STYLES: Record<EventResult, string> = {
-  allowed: 'bg-green-50 text-green-700 border-green-200',
-  blocked: 'bg-red-50 text-red-700 border-red-200',
-  mfa_required: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+  allowed: 'bg-[rgba(63,185,80,0.15)] text-[#3fb950] border-[rgba(63,185,80,0.3)]',
+  blocked: 'bg-[rgba(248,81,73,0.15)] text-[#f85149] border-[rgba(248,81,73,0.3)]',
+  mfa_required: 'bg-[rgba(210,153,34,0.15)] text-[#d29922] border-[rgba(210,153,34,0.3)]',
 };
 
 function RiskBadge({ score }: { score: number }) {
   const style =
-    score >= 70 ? 'bg-red-100 text-red-800 border-red-200' :
-    score >= 35 ? 'bg-orange-100 text-orange-800 border-orange-200' :
-    'bg-green-100 text-green-800 border-green-200';
+    score >= 70 ? 'bg-[rgba(248,81,73,0.15)] text-[#f85149] border-[rgba(248,81,73,0.3)]' :
+    score >= 35 ? 'bg-[rgba(210,153,34,0.15)] text-[#d29922] border-[rgba(210,153,34,0.3)]' :
+    'bg-[rgba(63,185,80,0.15)] text-[#3fb950] border-[rgba(63,185,80,0.3)]';
   const label = score >= 70 ? 'Hoch' : score >= 35 ? 'Mittel' : 'Niedrig';
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${style}`}>
@@ -304,15 +304,15 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.07)]">
+          <h2 className="text-lg font-semibold text-[var(--text-primary,#e4e6ea)]">
             {policy ? 'Richtlinie bearbeiten' : 'Neue Richtlinie'}
           </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-            <XMarkIcon className="w-5 h-5 text-gray-500" />
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.06)] transition-colors">
+            <XMarkIcon className="w-5 h-5 text-[var(--text-muted,#6e7681)]" />
           </button>
         </div>
 
@@ -320,21 +320,23 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
           {/* Basic */}
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+              <label className="block text-sm font-medium text-[var(--text-secondary,#8b949e)] mb-1">Name *</label>
               <input
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
+                style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                 placeholder="z.B. MFA für externe Zugriffe"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Beschreibung</label>
+              <label className="block text-sm font-medium text-[var(--text-secondary,#8b949e)] mb-1">Beschreibung</label>
               <textarea
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 rows={2}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3] resize-none"
+                className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF] resize-none"
+                style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                 placeholder="Optionale Beschreibung"
               />
             </div>
@@ -342,8 +344,8 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
 
           {/* Zuweisungen */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <UserGroupIcon className="w-4 h-4 text-[#0071E3]" />
+            <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-2 flex items-center gap-2">
+              <UserGroupIcon className="w-4 h-4 text-[#006FFF]" />
               Zuweisungen
             </h3>
             <label className="flex items-center gap-2 cursor-pointer mb-2">
@@ -351,9 +353,9 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
                 type="checkbox"
                 checked={form.allUsers}
                 onChange={e => setForm(f => ({ ...f, allUsers: e.target.checked }))}
-                className="w-4 h-4 accent-[#0071E3]"
+                className="w-4 h-4 accent-[#006FFF]"
               />
-              <span className="text-sm text-gray-700">Alle Benutzer</span>
+              <span className="text-sm text-[var(--text-secondary,#8b949e)]">Alle Benutzer</span>
             </label>
             {!form.allUsers && (
               <div>
@@ -362,18 +364,19 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
                     value={userInput}
                     onChange={e => setUserInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addUser()}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className="flex-1 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
+                    style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                     placeholder="Benutzer oder Gruppe hinzufügen"
                   />
-                  <button onClick={addUser} className="px-3 py-1.5 bg-[#0071E3] text-white text-sm rounded-lg hover:bg-[#005BBE] transition-colors">
+                  <button onClick={addUser} className="px-3 py-1.5 bg-[#006FFF] text-white text-sm rounded-lg hover:bg-[#0056cc] transition-colors">
                     +
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {form.users.map((u, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs">
+                    <span key={i} className="inline-flex items-center gap-1 bg-[rgba(0,111,255,0.15)] text-[#006FFF] border border-[rgba(0,111,255,0.3)] rounded-full px-2.5 py-0.5 text-xs">
                       {u}
-                      <button onClick={() => setForm(f => ({ ...f, users: f.users.filter((_, idx) => idx !== i) }))} className="hover:text-blue-900">
+                      <button onClick={() => setForm(f => ({ ...f, users: f.users.filter((_, idx) => idx !== i) }))} className="hover:text-[#006FFF]">
                         <XMarkIcon className="w-3 h-3" />
                       </button>
                     </span>
@@ -385,14 +388,14 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
 
           {/* Bedingungen */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <FunnelIcon className="w-4 h-4 text-[#0071E3]" />
+            <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-2 flex items-center gap-2">
+              <FunnelIcon className="w-4 h-4 text-[#006FFF]" />
               Bedingungen
             </h3>
-            <div className="space-y-3 bg-gray-50 rounded-xl p-4">
+            <div className="space-y-3 bg-[var(--bg-surface-raised,#1c2128)] rounded-xl p-4">
               {/* Standort */}
               <div>
-                <p className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1.5">
+                <p className="text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5 flex items-center gap-1.5">
                   <MapPinIcon className="w-3.5 h-3.5" /> Standort (erlaubte IPs/Subnetze)
                 </p>
                 <div className="flex gap-2 mb-1.5">
@@ -400,14 +403,15 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
                     value={allowedIp}
                     onChange={e => setAllowedIp(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addToList('locations', allowedIp, setAllowedIp)}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3] bg-white"
+                    className="flex-1 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
+                    style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                     placeholder="192.168.1.0/24 oder CH"
                   />
                   <button onClick={() => addToList('locations', allowedIp, setAllowedIp)} className="px-2.5 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700">+</button>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {form.conditions.locations.map((loc, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5 text-xs">
+                    <span key={i} className="inline-flex items-center gap-1 bg-[rgba(63,185,80,0.15)] text-[#3fb950] border border-[rgba(63,185,80,0.3)] rounded-full px-2 py-0.5 text-xs">
                       {loc}
                       <button onClick={() => removeFromList('locations', i)}><XMarkIcon className="w-3 h-3" /></button>
                     </span>
@@ -417,7 +421,7 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
 
               {/* Blockierte Länder */}
               <div>
-                <p className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1.5">
+                <p className="text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5 flex items-center gap-1.5">
                   <XCircleIcon className="w-3.5 h-3.5 text-red-500" /> Blockierte Länder (ISO-Code)
                 </p>
                 <div className="flex gap-2 mb-1.5">
@@ -425,14 +429,15 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
                     value={blockedCountry}
                     onChange={e => setBlockedCountry(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addToList('blockedLocations', blockedCountry, setBlockedCountry)}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3] bg-white"
+                    className="flex-1 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
+                    style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                     placeholder="z.B. CN, RU, KP"
                   />
                   <button onClick={() => addToList('blockedLocations', blockedCountry, setBlockedCountry)} className="px-2.5 py-1.5 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600">+</button>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {form.conditions.blockedLocations.map((loc, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-200 rounded-full px-2 py-0.5 text-xs">
+                    <span key={i} className="inline-flex items-center gap-1 bg-[rgba(248,81,73,0.15)] text-[#f85149] border border-[rgba(248,81,73,0.3)] rounded-full px-2 py-0.5 text-xs">
                       {loc}
                       <button onClick={() => removeFromList('blockedLocations', i)}><XMarkIcon className="w-3 h-3" /></button>
                     </span>
@@ -442,17 +447,17 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
 
               {/* Gerätezustand */}
               <div>
-                <p className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1.5">
+                <p className="text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5 flex items-center gap-1.5">
                   <ComputerDesktopIcon className="w-3.5 h-3.5" /> Gerätezustand
                 </p>
                 <div className="space-y-1.5">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={form.conditions.deviceCompliant} onChange={e => setForm(f => ({ ...f, conditions: { ...f.conditions, deviceCompliant: e.target.checked } }))} className="w-3.5 h-3.5 accent-[#0071E3]" />
-                    <span className="text-xs text-gray-700">Konformes Gerät erforderlich</span>
+                    <input type="checkbox" checked={form.conditions.deviceCompliant} onChange={e => setForm(f => ({ ...f, conditions: { ...f.conditions, deviceCompliant: e.target.checked } }))} className="w-3.5 h-3.5 accent-[#006FFF]" />
+                    <span className="text-xs text-[var(--text-secondary,#8b949e)]">Konformes Gerät erforderlich</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={form.conditions.hybridJoined} onChange={e => setForm(f => ({ ...f, conditions: { ...f.conditions, hybridJoined: e.target.checked } }))} className="w-3.5 h-3.5 accent-[#0071E3]" />
-                    <span className="text-xs text-gray-700">Hybrid-joined erforderlich</span>
+                    <input type="checkbox" checked={form.conditions.hybridJoined} onChange={e => setForm(f => ({ ...f, conditions: { ...f.conditions, hybridJoined: e.target.checked } }))} className="w-3.5 h-3.5 accent-[#006FFF]" />
+                    <span className="text-xs text-[var(--text-secondary,#8b949e)]">Hybrid-joined erforderlich</span>
                   </label>
                 </div>
               </div>
@@ -460,13 +465,14 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
               {/* Risiko & App & Zeit */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
+                  <p className="text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1 flex items-center gap-1.5">
                     <SignalIcon className="w-3.5 h-3.5" /> Risiko-Level
                   </p>
                   <select
                     value={form.conditions.riskLevel}
                     onChange={e => setForm(f => ({ ...f, conditions: { ...f.conditions, riskLevel: e.target.value as RiskLevel } }))}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30"
+                    className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30"
+                    style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                   >
                     <option value="any">Beliebig</option>
                     <option value="low">Niedrig</option>
@@ -475,7 +481,7 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
                   </select>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
+                  <p className="text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1 flex items-center gap-1.5">
                     <ClockIcon className="w-3.5 h-3.5" /> Zeitfenster
                   </p>
                   <div className="flex items-center gap-1">
@@ -483,14 +489,16 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
                       type="time"
                       value={form.conditions.timeWindow?.start ?? ''}
                       onChange={e => setForm(f => ({ ...f, conditions: { ...f.conditions, timeWindow: { start: e.target.value, end: f.conditions.timeWindow?.end ?? '18:00' } } }))}
-                      className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                      className="flex-1 border border-[rgba(255,255,255,0.07)] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                      style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                     />
-                    <span className="text-xs text-gray-400">–</span>
+                    <span className="text-xs text-[var(--text-muted,#6e7681)]">–</span>
                     <input
                       type="time"
                       value={form.conditions.timeWindow?.end ?? ''}
                       onChange={e => setForm(f => ({ ...f, conditions: { ...f.conditions, timeWindow: { start: f.conditions.timeWindow?.start ?? '08:00', end: e.target.value } } }))}
-                      className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                      className="flex-1 border border-[rgba(255,255,255,0.07)] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                      style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                     />
                   </div>
                 </div>
@@ -498,20 +506,20 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
 
               {/* Apps */}
               <div>
-                <p className="text-xs font-medium text-gray-600 mb-1.5">Apps</p>
+                <p className="text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">Apps</p>
                 <label className="flex items-center gap-2 cursor-pointer mb-1.5">
-                  <input type="checkbox" checked={form.conditions.allApps} onChange={e => setForm(f => ({ ...f, conditions: { ...f.conditions, allApps: e.target.checked } }))} className="w-3.5 h-3.5 accent-[#0071E3]" />
-                  <span className="text-xs text-gray-700">Alle Apps</span>
+                  <input type="checkbox" checked={form.conditions.allApps} onChange={e => setForm(f => ({ ...f, conditions: { ...f.conditions, allApps: e.target.checked } }))} className="w-3.5 h-3.5 accent-[#006FFF]" />
+                  <span className="text-xs text-[var(--text-secondary,#8b949e)]">Alle Apps</span>
                 </label>
                 {!form.conditions.allApps && (
                   <div>
                     <div className="flex gap-2 mb-1.5">
-                      <input value={appInput} onChange={e => setAppInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addApp()} className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30" placeholder="App-Name" />
-                      <button onClick={addApp} className="px-2.5 py-1.5 bg-[#0071E3] text-white text-xs rounded-lg hover:bg-[#005BBE]">+</button>
+                      <input value={appInput} onChange={e => setAppInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addApp()} className="flex-1 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} placeholder="App-Name" />
+                      <button onClick={addApp} className="px-2.5 py-1.5 bg-[#006FFF] text-white text-xs rounded-lg hover:bg-[#0056cc]">+</button>
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {form.conditions.apps.map((a, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 text-xs">
+                        <span key={i} className="inline-flex items-center gap-1 bg-[rgba(0,111,255,0.15)] text-[#006FFF] border border-[rgba(0,111,255,0.3)] rounded-full px-2 py-0.5 text-xs">
                           {a}
                           <button onClick={() => setForm(f => ({ ...f, conditions: { ...f.conditions, apps: f.conditions.apps.filter((_, idx) => idx !== i) } }))}><XMarkIcon className="w-3 h-3" /></button>
                         </span>
@@ -525,27 +533,28 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
 
           {/* Zugriffssteuerung */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <LockClosedIcon className="w-4 h-4 text-[#0071E3]" />
+            <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-2 flex items-center gap-2">
+              <LockClosedIcon className="w-4 h-4 text-[#006FFF]" />
               Zugriffssteuerung
             </h3>
             <div className="grid grid-cols-2 gap-2">
               {(['allow', 'block', 'mfa', 'compliant'] as PolicyAction[]).map(a => (
-                <label key={a} className={`flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-all ${form.action === a ? 'border-[#0071E3] bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <input type="radio" name="action" value={a} checked={form.action === a} onChange={() => setForm(f => ({ ...f, action: a }))} className="w-4 h-4 accent-[#0071E3]" />
+                <label key={a} className={`flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-all ${form.action === a ? 'border-[#006FFF] bg-[rgba(0,111,255,0.15)]' : 'border-[rgba(255,255,255,0.07)] hover:border-[rgba(255,255,255,0.15)]'}`}>
+                  <input type="radio" name="action" value={a} checked={form.action === a} onChange={() => setForm(f => ({ ...f, action: a }))} className="w-4 h-4 accent-[#006FFF]" />
                   <div>
-                    <p className="text-sm font-medium text-gray-800">{ACTION_LABELS[a]}</p>
+                    <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{ACTION_LABELS[a]}</p>
                   </div>
                 </label>
               ))}
             </div>
             <div className="mt-3">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Session-Dauer Limit (Minuten, optional)</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Session-Dauer Limit (Minuten, optional)</label>
               <input
                 type="number"
                 value={form.sessionDuration ?? ''}
                 onChange={e => setForm(f => ({ ...f, sessionDuration: e.target.value ? Number(e.target.value) : undefined }))}
-                className="w-40 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                className="w-40 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
+                style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                 placeholder="z.B. 480"
                 min={1}
               />
@@ -553,9 +562,9 @@ function PolicyModal({ policy, onClose, onSaved }: PolicyModalProps) {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">Abbrechen</button>
-          <button onClick={save} disabled={saving} className="px-5 py-2 bg-[#0071E3] text-white text-sm font-medium rounded-lg hover:bg-[#005BBE] disabled:opacity-50 transition-colors">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[rgba(255,255,255,0.07)]">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[var(--text-muted,#6e7681)] hover:text-[var(--text-primary,#e4e6ea)] transition-colors">Abbrechen</button>
+          <button onClick={save} disabled={saving} className="px-5 py-2 bg-[#006FFF] text-white text-sm font-medium rounded-lg hover:bg-[#0056cc] disabled:opacity-50 transition-colors">
             {saving ? 'Speichern…' : 'Speichern'}
           </button>
         </div>
@@ -586,36 +595,36 @@ function LocationModal({ onClose, onSaved }: { onClose: () => void; onSaved: (lo
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-2xl shadow-2xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Standort hinzufügen</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><XMarkIcon className="w-5 h-5 text-gray-500" /></button>
+          <h2 className="text-lg font-semibold text-[var(--text-primary,#e4e6ea)]">Standort hinzufügen</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.06)]"><XMarkIcon className="w-5 h-5 text-[var(--text-muted,#6e7681)]" /></button>
         </div>
         <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input value={name} onChange={e => setName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]" placeholder="z.B. Büro Zürich" />
+            <label className="block text-sm font-medium text-[var(--text-secondary,#8b949e)] mb-1">Name *</label>
+            <input value={name} onChange={e => setName(e.target.value)} className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} placeholder="z.B. Büro Zürich" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Typ</label>
-            <select value={type} onChange={e => setType(e.target.value as 'ip' | 'country')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30">
+            <label className="block text-sm font-medium text-[var(--text-secondary,#8b949e)] mb-1">Typ</label>
+            <select value={type} onChange={e => setType(e.target.value as 'ip' | 'country')} className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
               <option value="ip">IP-Range / Subnetz</option>
               <option value="country">Länder (ISO-Code)</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Werte (kommagetrennt)</label>
-            <textarea value={values} onChange={e => setValues(e.target.value)} rows={3} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 resize-none" placeholder={type === 'ip' ? '192.168.1.0/24, 10.0.0.0/8' : 'CH, DE, AT'} />
+            <label className="block text-sm font-medium text-[var(--text-secondary,#8b949e)] mb-1">Werte (kommagetrennt)</label>
+            <textarea value={values} onChange={e => setValues(e.target.value)} rows={3} className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 resize-none" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} placeholder={type === 'ip' ? '192.168.1.0/24, 10.0.0.0/8' : 'CH, DE, AT'} />
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={trusted} onChange={e => setTrusted(e.target.checked)} className="w-4 h-4 accent-[#0071E3]" />
-            <span className="text-sm text-gray-700">Als vertrauenswürdig markieren</span>
+            <input type="checkbox" checked={trusted} onChange={e => setTrusted(e.target.checked)} className="w-4 h-4 accent-[#006FFF]" />
+            <span className="text-sm text-[var(--text-secondary,#8b949e)]">Als vertrauenswürdig markieren</span>
           </label>
         </div>
         <div className="flex items-center justify-end gap-3 mt-5">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Abbrechen</button>
-          <button onClick={save} className="px-5 py-2 bg-[#0071E3] text-white text-sm font-medium rounded-lg hover:bg-[#005BBE]">Speichern</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[var(--text-muted,#6e7681)] hover:text-[var(--text-primary,#e4e6ea)]">Abbrechen</button>
+          <button onClick={save} className="px-5 py-2 bg-[#006FFF] text-white text-sm font-medium rounded-lg hover:bg-[#0056cc]">Speichern</button>
         </div>
       </div>
     </div>
@@ -689,49 +698,49 @@ export default function ConditionalAccessView() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7] p-6">
+    <div className="min-h-screen p-6" style={{ background: 'var(--bg-base, #0e1115)' }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Conditional Access</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Zero Trust Zugriffsverwaltung</p>
+          <h1 className="text-2xl font-bold text-[var(--text-primary,#e4e6ea)]">Conditional Access</h1>
+          <p className="text-sm text-[var(--text-muted,#6e7681)] mt-0.5">Zero Trust Zugriffsverwaltung</p>
         </div>
-        <button onClick={loadData} className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm">
-          <ArrowPathIcon className={`w-5 h-5 text-gray-500 ${loading ? 'animate-spin' : ''}`} />
+        <button onClick={loadData} className="p-2 rounded-lg bg-[var(--bg-surface,#161b22)] border border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.04)] transition-colors shadow-sm">
+          <ArrowPathIcon className={`w-5 h-5 text-[var(--text-muted,#6e7681)] ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
       {/* Stats Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Richtlinien gesamt', value: totalPolicies, icon: ShieldCheckIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Aktiv', value: activePolicies, icon: CheckCircleIcon, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Blockierte Anmeldungen heute', value: blockedToday, icon: XCircleIcon, color: 'text-red-600', bg: 'bg-red-50' },
-          { label: 'MFA-Challenges heute', value: mfaToday, icon: KeyIcon, color: 'text-yellow-600', bg: 'bg-yellow-50' },
+          { label: 'Richtlinien gesamt', value: totalPolicies, icon: ShieldCheckIcon, color: 'text-[#006FFF]', bg: 'bg-[rgba(0,111,255,0.15)]' },
+          { label: 'Aktiv', value: activePolicies, icon: CheckCircleIcon, color: 'text-[#3fb950]', bg: 'bg-[rgba(63,185,80,0.15)]' },
+          { label: 'Blockierte Anmeldungen heute', value: blockedToday, icon: XCircleIcon, color: 'text-[#f85149]', bg: 'bg-[rgba(248,81,73,0.15)]' },
+          { label: 'MFA-Challenges heute', value: mfaToday, icon: KeyIcon, color: 'text-[#d29922]', bg: 'bg-[rgba(210,153,34,0.15)]' },
         ].map(stat => (
-          <div key={stat.label} className="bg-white rounded-xl shadow-sm p-4 flex items-center gap-3">
+          <div key={stat.label} className="bg-[var(--bg-surface,#161b22)] rounded-xl shadow-sm p-4 flex items-center gap-3">
             <div className={`${stat.bg} rounded-lg p-2.5`}>
               <stat.icon className={`w-5 h-5 ${stat.color}`} />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-              <p className="text-xs text-gray-500">{stat.label}</p>
+              <p className="text-2xl font-bold text-[var(--text-primary,#e4e6ea)]">{stat.value}</p>
+              <p className="text-xs text-[var(--text-muted,#6e7681)]">{stat.label}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="flex border-b border-gray-100">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl shadow-sm overflow-hidden">
+        <div className="flex border-b border-[rgba(255,255,255,0.07)]">
           {TABS.map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`px-5 py-3.5 text-sm font-medium transition-colors ${
                 tab === t.key
-                  ? 'text-[#0071E3] border-b-2 border-[#0071E3]'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'text-[#006FFF] border-b-2 border-[#006FFF]'
+                  : 'text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]'
               }`}
             >
               {t.label}
@@ -744,10 +753,10 @@ export default function ConditionalAccessView() {
           {tab === 'richtlinien' && (
             <div>
               <div className="flex items-center justify-between mb-4">
-                <p className="text-sm text-gray-500">{totalPolicies} Richtlinien konfiguriert</p>
+                <p className="text-sm text-[var(--text-muted,#6e7681)]">{totalPolicies} Richtlinien konfiguriert</p>
                 <button
                   onClick={() => { setEditPolicy(undefined); setShowPolicyModal(true); }}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white text-sm font-medium rounded-lg hover:bg-[#005BBE] transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-[#006FFF] text-white text-sm font-medium rounded-lg hover:bg-[#0056cc] transition-colors"
                 >
                   <PlusIcon className="w-4 h-4" />
                   Neue Richtlinie
@@ -755,54 +764,54 @@ export default function ConditionalAccessView() {
               </div>
 
               {loading ? (
-                <div className="text-center py-10 text-gray-400 text-sm">Lade Richtlinien…</div>
+                <div className="text-center py-10 text-[var(--text-muted,#6e7681)] text-sm">Lade Richtlinien…</div>
               ) : policies.length === 0 ? (
-                <div className="text-center py-10 text-gray-400 text-sm">Keine Richtlinien vorhanden</div>
+                <div className="text-center py-10 text-[var(--text-muted,#6e7681)] text-sm">Keine Richtlinien vorhanden</div>
               ) : (
                 <div className="space-y-3">
                   {policies.map(policy => (
-                    <div key={policy.id} className="border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-colors">
+                    <div key={policy.id} className="border border-[rgba(255,255,255,0.07)] rounded-xl p-4 hover:border-[rgba(255,255,255,0.15)] transition-colors">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-gray-900 text-sm">{policy.name}</span>
+                            <span className="font-medium text-[var(--text-primary,#e4e6ea)] text-sm">{policy.name}</span>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${ACTION_STYLES[policy.action]}`}>
                               {ACTION_LABELS[policy.action]}
                             </span>
                           </div>
                           {policy.description && (
-                            <p className="text-xs text-gray-500 mt-0.5">{policy.description}</p>
+                            <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">{policy.description}</p>
                           )}
                           <div className="flex flex-wrap gap-1.5 mt-2">
-                            <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-xs">
+                            <span className="inline-flex items-center gap-1 bg-[rgba(139,148,158,0.15)] text-[#8b949e] rounded-full px-2.5 py-0.5 text-xs">
                               <UserGroupIcon className="w-3 h-3" />
                               {policy.allUsers ? 'Alle Benutzer' : policy.users.join(', ')}
                             </span>
                             {policy.conditions.riskLevel !== 'any' && (
-                              <span className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 border border-orange-200 rounded-full px-2.5 py-0.5 text-xs">
+                              <span className="inline-flex items-center gap-1 bg-[rgba(210,153,34,0.15)] text-[#d29922] border border-[rgba(210,153,34,0.3)] rounded-full px-2.5 py-0.5 text-xs">
                                 <SignalIcon className="w-3 h-3" />
                                 Risiko: {policy.conditions.riskLevel === 'low' ? 'Niedrig' : policy.conditions.riskLevel === 'medium' ? 'Mittel' : 'Hoch'}
                               </span>
                             )}
                             {policy.conditions.deviceCompliant && (
-                              <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs">
+                              <span className="inline-flex items-center gap-1 bg-[rgba(163,113,247,0.15)] text-[#a371f7] border border-[rgba(163,113,247,0.3)] rounded-full px-2.5 py-0.5 text-xs">
                                 <ComputerDesktopIcon className="w-3 h-3" />
                                 Konformes Gerät
                               </span>
                             )}
                             {policy.conditions.blockedLocations.length > 0 && (
-                              <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-200 rounded-full px-2.5 py-0.5 text-xs">
+                              <span className="inline-flex items-center gap-1 bg-[rgba(248,81,73,0.15)] text-[#f85149] border border-[rgba(248,81,73,0.3)] rounded-full px-2.5 py-0.5 text-xs">
                                 <GlobeAltIcon className="w-3 h-3" />
                                 {policy.conditions.blockedLocations.length} blockierte Länder
                               </span>
                             )}
                             {!policy.conditions.allApps && policy.conditions.apps.length > 0 && (
-                              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs">
+                              <span className="inline-flex items-center gap-1 bg-[rgba(0,111,255,0.15)] text-[#006FFF] border border-[rgba(0,111,255,0.3)] rounded-full px-2.5 py-0.5 text-xs">
                                 {policy.conditions.apps.length} Apps
                               </span>
                             )}
                             {policy.conditions.timeWindow && (
-                              <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-xs">
+                              <span className="inline-flex items-center gap-1 bg-[rgba(139,148,158,0.15)] text-[#8b949e] rounded-full px-2.5 py-0.5 text-xs">
                                 <ClockIcon className="w-3 h-3" />
                                 {policy.conditions.timeWindow.start}–{policy.conditions.timeWindow.end}
                               </span>
@@ -813,21 +822,21 @@ export default function ConditionalAccessView() {
                           {/* Toggle */}
                           <button
                             onClick={() => togglePolicy(policy.id)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${policy.enabled ? 'bg-[#0071E3]' : 'bg-gray-300'}`}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${policy.enabled ? 'bg-[#3fb950]' : 'bg-[rgba(255,255,255,0.15)]'}`}
                           >
                             <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${policy.enabled ? 'translate-x-4' : 'translate-x-1'}`} />
                           </button>
                           <button
                             onClick={() => { setEditPolicy(policy); setShowPolicyModal(true); }}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.06)] transition-colors"
                           >
-                            <PencilIcon className="w-4 h-4 text-gray-500" />
+                            <PencilIcon className="w-4 h-4 text-[var(--text-muted,#6e7681)] hover:text-[#006FFF]" />
                           </button>
                           <button
                             onClick={() => deletePolicy(policy.id)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-[rgba(248,81,73,0.1)] transition-colors"
                           >
-                            <TrashIcon className="w-4 h-4 text-red-400" />
+                            <TrashIcon className="w-4 h-4 text-[var(--text-muted,#6e7681)] hover:text-[#f85149]" />
                           </button>
                         </div>
                       </div>
@@ -842,13 +851,14 @@ export default function ConditionalAccessView() {
           {tab === 'ereignisse' && (
             <div>
               <div className="flex items-center justify-between mb-4">
-                <p className="text-sm text-gray-500">{filteredEvents.length} Ereignisse</p>
+                <p className="text-sm text-[var(--text-muted,#6e7681)]">{filteredEvents.length} Ereignisse</p>
                 <div className="flex items-center gap-2">
-                  <FunnelIcon className="w-4 h-4 text-gray-400" />
+                  <FunnelIcon className="w-4 h-4 text-[var(--text-muted,#6e7681)]" />
                   <select
                     value={eventFilter}
                     onChange={e => setEventFilter(e.target.value as EventResult | 'all')}
-                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30"
+                    className="border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 text-[var(--text-secondary,#8b949e)]"
+                    style={{ background: 'var(--bg-surface-raised, #1c2128)' }}
                   >
                     <option value="all">Alle Ergebnisse</option>
                     <option value="allowed">Zugelassen</option>
@@ -860,7 +870,7 @@ export default function ConditionalAccessView() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-xs font-medium text-gray-500 border-b border-gray-100">
+                    <tr className="text-left text-xs font-medium text-[var(--text-muted,#6e7681)] border-b border-[rgba(255,255,255,0.07)]">
                       <th className="pb-2 pr-4">Benutzer</th>
                       <th className="pb-2 pr-4">App</th>
                       <th className="pb-2 pr-4">IP / Standort</th>
@@ -872,18 +882,18 @@ export default function ConditionalAccessView() {
                   </thead>
                   <tbody>
                     {filteredEvents.map(ev => (
-                      <tr key={ev.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      <tr key={ev.id} className="border-b border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.04)] transition-colors">
                         <td className="py-2.5 pr-4">
-                          <span className="font-medium text-gray-800">{ev.user}</span>
+                          <span className="font-medium text-[var(--text-primary,#e4e6ea)]">{ev.user}</span>
                         </td>
-                        <td className="py-2.5 pr-4 text-gray-600">{ev.app}</td>
+                        <td className="py-2.5 pr-4 text-[var(--text-secondary,#8b949e)]">{ev.app}</td>
                         <td className="py-2.5 pr-4">
                           <div className="text-xs">
-                            <p className="text-gray-700">{ev.ip}</p>
-                            <p className="text-gray-400">{ev.location}</p>
+                            <p className="text-[var(--text-secondary,#8b949e)]">{ev.ip}</p>
+                            <p className="text-[var(--text-muted,#6e7681)]">{ev.location}</p>
                           </div>
                         </td>
-                        <td className="py-2.5 pr-4 text-gray-600 text-xs">{ev.device}</td>
+                        <td className="py-2.5 pr-4 text-[var(--text-secondary,#8b949e)] text-xs">{ev.device}</td>
                         <td className="py-2.5 pr-4">
                           <RiskBadge score={ev.riskScore} />
                         </td>
@@ -892,7 +902,7 @@ export default function ConditionalAccessView() {
                             {RESULT_LABELS[ev.result]}
                           </span>
                         </td>
-                        <td className="py-2.5 text-xs text-gray-500">{fmtRelative(ev.timestamp)}</td>
+                        <td className="py-2.5 text-xs text-[var(--text-muted,#6e7681)]">{fmtRelative(ev.timestamp)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -905,10 +915,10 @@ export default function ConditionalAccessView() {
           {tab === 'locations' && (
             <div>
               <div className="flex items-center justify-between mb-4">
-                <p className="text-sm text-gray-500">{locations.length} Standorte konfiguriert</p>
+                <p className="text-sm text-[var(--text-muted,#6e7681)]">{locations.length} Standorte konfiguriert</p>
                 <button
                   onClick={() => setShowLocationModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white text-sm font-medium rounded-lg hover:bg-[#005BBE] transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-[#006FFF] text-white text-sm font-medium rounded-lg hover:bg-[#0056cc] transition-colors"
                 >
                   <PlusIcon className="w-4 h-4" />
                   Standort hinzufügen
@@ -916,35 +926,35 @@ export default function ConditionalAccessView() {
               </div>
               <div className="space-y-3">
                 {locations.map(loc => (
-                  <div key={loc.id} className="border border-gray-100 rounded-xl p-4 flex items-start justify-between gap-4">
+                  <div key={loc.id} className="border border-[rgba(255,255,255,0.07)] rounded-xl p-4 flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3">
-                      <div className={`rounded-lg p-2 mt-0.5 ${loc.trusted ? 'bg-green-50' : 'bg-red-50'}`}>
+                      <div className={`rounded-lg p-2 mt-0.5 ${loc.trusted ? 'bg-[rgba(63,185,80,0.15)]' : 'bg-[rgba(248,81,73,0.15)]'}`}>
                         {loc.type === 'ip' ? (
-                          <SignalIcon className={`w-5 h-5 ${loc.trusted ? 'text-green-600' : 'text-red-500'}`} />
+                          <SignalIcon className={`w-5 h-5 ${loc.trusted ? 'text-[#3fb950]' : 'text-[#f85149]'}`} />
                         ) : (
-                          <GlobeAltIcon className={`w-5 h-5 ${loc.trusted ? 'text-green-600' : 'text-red-500'}`} />
+                          <GlobeAltIcon className={`w-5 h-5 ${loc.trusted ? 'text-[#3fb950]' : 'text-[#f85149]'}`} />
                         )}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900 text-sm">{loc.name}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full border ${loc.trusted ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                          <span className="font-medium text-[var(--text-primary,#e4e6ea)] text-sm">{loc.name}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full border ${loc.trusted ? 'bg-[rgba(63,185,80,0.15)] text-[#3fb950] border-[rgba(63,185,80,0.3)]' : 'bg-[rgba(248,81,73,0.15)] text-[#f85149] border-[rgba(248,81,73,0.3)]'}`}>
                             {loc.trusted ? 'Vertrauenswürdig' : 'Blockiert'}
                           </span>
-                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                          <span className="text-xs text-[var(--text-muted,#6e7681)] bg-[rgba(139,148,158,0.15)] px-2 py-0.5 rounded-full">
                             {loc.type === 'ip' ? 'IP-Range' : 'Länder'}
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {loc.values.map((v, i) => (
-                            <span key={i} className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{v}</span>
+                            <span key={i} className="text-xs bg-[var(--bg-surface-raised,#1c2128)] text-[var(--text-secondary,#8b949e)] rounded-full px-2 py-0.5">{v}</span>
                           ))}
                         </div>
                       </div>
                     </div>
                     <button
                       onClick={() => { setLocations(ls => ls.filter(l => l.id !== loc.id)); toast.success('Standort entfernt'); }}
-                      className="p-1.5 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                      className="p-1.5 rounded-lg hover:bg-[rgba(248,81,73,0.1)] transition-colors shrink-0"
                     >
                       <TrashIcon className="w-4 h-4 text-red-400" />
                     </button>
@@ -957,13 +967,13 @@ export default function ConditionalAccessView() {
           {/* Tab 4: Risiko-Konfiguration */}
           {tab === 'risiko' && (
             <div className="max-w-2xl space-y-6">
-              <p className="text-sm text-gray-500">Konfigurieren Sie die Gewichtung der Risikofaktoren für die Berechnung des Risiko-Scores.</p>
+              <p className="text-sm text-[var(--text-muted,#6e7681)]">Konfigurieren Sie die Gewichtung der Risikofaktoren für die Berechnung des Risiko-Scores.</p>
 
               {/* Login Frequency */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium text-gray-700">Anmeldehäufigkeit (Gewichtung)</label>
-                  <span className="text-sm font-semibold text-[#0071E3]">{riskConfig.loginFrequencyWeight}%</span>
+                  <label className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Anmeldehäufigkeit (Gewichtung)</label>
+                  <span className="text-sm font-semibold text-[#006FFF]">{riskConfig.loginFrequencyWeight}%</span>
                 </div>
                 <input
                   type="range"
@@ -971,36 +981,36 @@ export default function ConditionalAccessView() {
                   max={100}
                   value={riskConfig.loginFrequencyWeight}
                   onChange={e => setRiskConfig(c => ({ ...c, loginFrequencyWeight: Number(e.target.value) }))}
-                  className="w-full accent-[#0071E3]"
+                  className="w-full accent-[#006FFF]"
                 />
-                <div className="flex justify-between text-xs text-gray-400 mt-0.5">
+                <div className="flex justify-between text-xs text-[var(--text-muted,#6e7681)] mt-0.5">
                   <span>0%</span><span>100%</span>
                 </div>
               </div>
 
               {/* Impossible Travel */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+              <div className="flex items-center justify-between p-4 bg-[var(--bg-surface-raised,#1c2128)] rounded-xl">
                 <div>
-                  <p className="text-sm font-medium text-gray-800">Impossible Travel-Erkennung</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Erkennt physikalisch unmögliche Standortwechsel</p>
+                  <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">Impossible Travel-Erkennung</p>
+                  <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Erkennt physikalisch unmögliche Standortwechsel</p>
                 </div>
                 <button
                   onClick={() => setRiskConfig(c => ({ ...c, impossibleTravelEnabled: !c.impossibleTravelEnabled }))}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${riskConfig.impossibleTravelEnabled ? 'bg-[#0071E3]' : 'bg-gray-300'}`}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${riskConfig.impossibleTravelEnabled ? 'bg-[#3fb950]' : 'bg-[rgba(255,255,255,0.15)]'}`}
                 >
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${riskConfig.impossibleTravelEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
               </div>
 
               {/* Leaked Credentials */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+              <div className="flex items-center justify-between p-4 bg-[var(--bg-surface-raised,#1c2128)] rounded-xl">
                 <div>
-                  <p className="text-sm font-medium text-gray-800">Kompromittierte Zugangsdaten prüfen</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Abgleich mit bekannten Datenleck-Datenbanken</p>
+                  <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">Kompromittierte Zugangsdaten prüfen</p>
+                  <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Abgleich mit bekannten Datenleck-Datenbanken</p>
                 </div>
                 <button
                   onClick={() => setRiskConfig(c => ({ ...c, leakedCredentialsCheck: !c.leakedCredentialsCheck }))}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${riskConfig.leakedCredentialsCheck ? 'bg-[#0071E3]' : 'bg-gray-300'}`}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${riskConfig.leakedCredentialsCheck ? 'bg-[#3fb950]' : 'bg-[rgba(255,255,255,0.15)]'}`}
                 >
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${riskConfig.leakedCredentialsCheck ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
@@ -1009,8 +1019,8 @@ export default function ConditionalAccessView() {
               {/* Device Compliance Weight */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium text-gray-700">Gerätecompliance (Gewichtung)</label>
-                  <span className="text-sm font-semibold text-[#0071E3]">{riskConfig.deviceComplianceWeight}%</span>
+                  <label className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Gerätecompliance (Gewichtung)</label>
+                  <span className="text-sm font-semibold text-[#006FFF]">{riskConfig.deviceComplianceWeight}%</span>
                 </div>
                 <input
                   type="range"
@@ -1018,9 +1028,9 @@ export default function ConditionalAccessView() {
                   max={100}
                   value={riskConfig.deviceComplianceWeight}
                   onChange={e => setRiskConfig(c => ({ ...c, deviceComplianceWeight: Number(e.target.value) }))}
-                  className="w-full accent-[#0071E3]"
+                  className="w-full accent-[#006FFF]"
                 />
-                <div className="flex justify-between text-xs text-gray-400 mt-0.5">
+                <div className="flex justify-between text-xs text-[var(--text-muted,#6e7681)] mt-0.5">
                   <span>0%</span><span>100%</span>
                 </div>
               </div>
@@ -1028,8 +1038,8 @@ export default function ConditionalAccessView() {
               {/* Anomaly Threshold */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium text-gray-700">Anomalie-Schwellenwert</label>
-                  <span className="text-sm font-semibold text-[#0071E3]">{riskConfig.anomalyThreshold}</span>
+                  <label className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Anomalie-Schwellenwert</label>
+                  <span className="text-sm font-semibold text-[#006FFF]">{riskConfig.anomalyThreshold}</span>
                 </div>
                 <input
                   type="range"
@@ -1037,9 +1047,9 @@ export default function ConditionalAccessView() {
                   max={100}
                   value={riskConfig.anomalyThreshold}
                   onChange={e => setRiskConfig(c => ({ ...c, anomalyThreshold: Number(e.target.value) }))}
-                  className="w-full accent-[#0071E3]"
+                  className="w-full accent-[#006FFF]"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-[var(--text-muted,#6e7681)] mt-1">
                   Ab Score {riskConfig.anomalyThreshold} wird eine Risiko-Warnung ausgelöst
                 </p>
               </div>
@@ -1049,7 +1059,7 @@ export default function ConditionalAccessView() {
                   await api.put('/api/conditional-access/risk-config', riskConfig).catch(() => {});
                   toast.success('Risiko-Konfiguration gespeichert');
                 }}
-                className="px-5 py-2 bg-[#0071E3] text-white text-sm font-medium rounded-lg hover:bg-[#005BBE] transition-colors"
+                className="px-5 py-2 bg-[#006FFF] text-white text-sm font-medium rounded-lg hover:bg-[#0056cc] transition-colors"
               >
                 Konfiguration speichern
               </button>

@@ -120,11 +120,11 @@ function StatusDot({ status }: { status: PrinterStatus }) {
 
 function JobStatusBadge({ status }: { status: JobStatus }) {
   const styles: Record<JobStatus, string> = {
-    pending:   'bg-yellow-100 text-yellow-700',
-    printing:  'bg-blue-100 text-blue-700',
-    completed: 'bg-green-100 text-green-700',
-    failed:    'bg-red-100 text-red-700',
-    cancelled: 'bg-gray-100 text-gray-600',
+    pending:   'bg-[rgba(210,153,34,0.15)] text-[#d29922]',
+    printing:  'bg-[rgba(0,111,255,0.15)] text-[#006FFF]',
+    completed: 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]',
+    failed:    'bg-[rgba(248,81,73,0.15)] text-[#f85149]',
+    cancelled: 'bg-[rgba(139,148,158,0.15)] text-[#8b949e]',
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${styles[status]}`}>
@@ -135,9 +135,9 @@ function JobStatusBadge({ status }: { status: JobStatus }) {
 
 function ProtocolBadge({ protocol }: { protocol: PrinterProtocol }) {
   const styles: Record<PrinterProtocol, string> = {
-    IPP: 'bg-blue-100 text-blue-700',
-    LPD: 'bg-purple-100 text-purple-700',
-    SMB: 'bg-orange-100 text-orange-700',
+    IPP: 'bg-[rgba(0,111,255,0.15)] text-[#006FFF]',
+    LPD: 'bg-[rgba(163,113,247,0.15)] text-[#a371f7]',
+    SMB: 'bg-[rgba(210,153,34,0.15)] text-[#d29922]',
   };
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[protocol]}`}>
@@ -354,19 +354,19 @@ function AddPrinterWizard({ onClose, onAdded }: {
   const STEPS = ['Find Device', 'Select Driver', 'Confirm'];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col">
 
         {/* Title bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Add Network Printer</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.07)]">
+          <h2 className="text-base font-semibold text-[var(--text-primary,#e4e6ea)]">Add Network Printer</h2>
+          <button onClick={onClose} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]">
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
 
         {/* Step indicator */}
-        <div className="flex items-center gap-0 px-6 py-3 border-b border-gray-100 bg-gray-50">
+        <div className="flex items-center gap-0 px-6 py-3 border-b border-[rgba(255,255,255,0.07)] bg-[var(--bg-surface-raised,#1c2128)]">
           {STEPS.map((label, i) => {
             const n = i + 1;
             const done    = step > n;
@@ -375,18 +375,18 @@ function AddPrinterWizard({ onClose, onAdded }: {
               <React.Fragment key={n}>
                 <div className="flex items-center gap-1.5">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
-                    done   ? 'bg-blue-600 text-white' :
-                    active ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' :
-                             'bg-gray-200 text-gray-500'
+                    done   ? 'bg-[#006FFF] text-white' :
+                    active ? 'bg-[rgba(0,111,255,0.15)] text-[#006FFF] ring-2 ring-[#006FFF]' :
+                             'bg-[rgba(255,255,255,0.08)] text-[var(--text-muted,#6e7681)]'
                   }`}>
                     {done ? <CheckCircleIcon className="w-4 h-4" /> : n}
                   </div>
-                  <span className={`text-xs font-medium ${active ? 'text-blue-700' : done ? 'text-blue-600' : 'text-gray-400'}`}>
+                  <span className={`text-xs font-medium ${active ? 'text-[#006FFF]' : done ? 'text-[#006FFF]' : 'text-[var(--text-muted,#6e7681)]'}`}>
                     {label}
                   </span>
                 </div>
                 {i < STEPS.length - 1 && (
-                  <ChevronRightIcon className="w-3.5 h-3.5 text-gray-300 mx-2 flex-shrink-0" />
+                  <ChevronRightIcon className="w-3.5 h-3.5 text-[var(--text-muted,#6e7681)] mx-2 flex-shrink-0" />
                 )}
               </React.Fragment>
             );
@@ -399,11 +399,11 @@ function AddPrinterWizard({ onClose, onAdded }: {
           {/* ── Step 1: Find Device ── */}
           {step === 1 && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-[var(--text-secondary,#8b949e)]">
                 Enter the IP address or hostname of the printer. The service will probe the device to detect its make, model, and supported protocols.
               </p>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">
                   IP Address / Hostname
                 </label>
                 <div className="flex gap-2">
@@ -411,14 +411,15 @@ function AddPrinterWizard({ onClose, onAdded }: {
                     value={ip}
                     onChange={e => { setIp(e.target.value); setProbeError(null); setManualMode(false); }}
                     onKeyDown={e => e.key === 'Enter' && handleProbe()}
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="flex-1 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                    style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                     placeholder="192.168.1.50"
                     autoFocus
                   />
                   <button
                     onClick={handleProbe}
                     disabled={probing || !ip.trim()}
-                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50"
                   >
                     {probing
                       ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Probing…</>
@@ -429,7 +430,7 @@ function AddPrinterWizard({ onClose, onAdded }: {
               </div>
 
               {probeError && (
-                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                <div className="flex items-start gap-2 p-3 bg-[rgba(210,153,34,0.15)] border border-[rgba(210,153,34,0.3)] rounded-lg text-sm text-[#d29922]">
                   <ExclamationCircleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   {probeError}
                 </div>
@@ -437,37 +438,40 @@ function AddPrinterWizard({ onClose, onAdded }: {
 
               {/* Manual entry — shown after a failed probe */}
               {manualMode && (
-                <div className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
-                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Enter device details manually</p>
+                <div className="border border-[rgba(255,255,255,0.07)] rounded-lg p-4 space-y-3 bg-[var(--bg-surface-raised,#1c2128)]">
+                  <p className="text-xs font-semibold text-[var(--text-secondary,#8b949e)] uppercase tracking-wide">Enter device details manually</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Manufacturer</label>
+                      <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Manufacturer</label>
                       <select
                         value={manualVendor}
                         onChange={e => setManualVendor(e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                        style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                       >
                         {VENDOR_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Model (optional)</label>
+                      <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Model (optional)</label>
                       <input
                         value={manualModel}
                         onChange={e => setManualModel(e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                        style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                         placeholder="e.g. LaserJet Pro M404n"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Protocol</label>
+                    <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Protocol</label>
                     <div className="flex gap-2">
                       {(['IPP', 'LPD', 'SMB'] as PrinterProtocol[]).map(p => (
                         <button key={p} onClick={() => setSelectedProtocol(p)}
                           className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                            selectedProtocol === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                          }`}>
+                            selectedProtocol === p ? 'bg-[#006FFF] text-white border-[#006FFF]' : 'text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.04)]'
+                          }`}
+                          style={selectedProtocol !== p ? { background: 'var(--bg-surface-raised,#1c2128)' } : undefined}>
                           {p}
                         </button>
                       ))}
@@ -482,34 +486,34 @@ function AddPrinterWizard({ onClose, onAdded }: {
           {step === 2 && probeResult && (
             <div className="space-y-4">
               {/* Device info card */}
-              <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 space-y-2">
+              <div className="bg-[rgba(0,111,255,0.1)] border border-[rgba(0,111,255,0.2)] rounded-lg p-4 space-y-2">
                 <div className="flex items-center gap-2 mb-1">
-                  <CheckCircleIcon className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-800">Device found</span>
+                  <CheckCircleIcon className="w-4 h-4 text-[#006FFF]" />
+                  <span className="text-sm font-medium text-[#006FFF]">Device found</span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                  <span className="text-gray-500">Address</span>
-                  <span className="font-mono text-gray-800">{probeResult.ip}</span>
+                  <span className="text-[var(--text-muted,#6e7681)]">Address</span>
+                  <span className="font-mono text-[var(--text-primary,#e4e6ea)]">{probeResult.ip}</span>
                   {probeResult.hostname && <>
-                    <span className="text-gray-500">Hostname</span>
-                    <span className="text-gray-800">{probeResult.hostname}</span>
+                    <span className="text-[var(--text-muted,#6e7681)]">Hostname</span>
+                    <span className="text-[var(--text-primary,#e4e6ea)]">{probeResult.hostname}</span>
                   </>}
                   {probeResult.vendor && <>
-                    <span className="text-gray-500">Vendor</span>
-                    <span className="text-gray-800">{probeResult.vendor}</span>
+                    <span className="text-[var(--text-muted,#6e7681)]">Vendor</span>
+                    <span className="text-[var(--text-primary,#e4e6ea)]">{probeResult.vendor}</span>
                   </>}
                   {probeResult.model && <>
-                    <span className="text-gray-500">Model</span>
-                    <span className="text-gray-800 font-medium">{probeResult.model}</span>
+                    <span className="text-[var(--text-muted,#6e7681)]">Model</span>
+                    <span className="text-[var(--text-primary,#e4e6ea)] font-medium">{probeResult.model}</span>
                   </>}
-                  <span className="text-gray-500">Protocols</span>
-                  <span className="text-gray-800">{(probeResult.protocols ?? ['IPP']).join(', ')}</span>
+                  <span className="text-[var(--text-muted,#6e7681)]">Protocols</span>
+                  <span className="text-[var(--text-primary,#e4e6ea)]">{(probeResult.protocols ?? ['IPP']).join(', ')}</span>
                 </div>
               </div>
 
               {/* Protocol selector */}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">Connection Protocol</label>
+                <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">Connection Protocol</label>
                 <div className="flex gap-2">
                   {(['IPP', 'LPD', 'SMB'] as PrinterProtocol[]).map(p => {
                     const detected = probeResult.protocols?.includes(p);
@@ -519,13 +523,14 @@ function AddPrinterWizard({ onClose, onAdded }: {
                         onClick={() => setSelectedProtocol(p)}
                         className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
                           selectedProtocol === p
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                            ? 'bg-[#006FFF] text-white border-[#006FFF]'
+                            : 'text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.04)]'
                         }`}
+                        style={selectedProtocol !== p ? { background: 'var(--bg-surface-raised,#1c2128)' } : undefined}
                       >
                         {p}
                         {detected && (
-                          <span className={`ml-1 text-xs ${selectedProtocol === p ? 'text-blue-200' : 'text-green-600'}`}>
+                          <span className={`ml-1 text-xs ${selectedProtocol === p ? 'text-blue-200' : 'text-[#3fb950]'}`}>
                             ✓
                           </span>
                         )}
@@ -533,20 +538,20 @@ function AddPrinterWizard({ onClose, onAdded }: {
                     );
                   })}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">✓ = detected on this device</p>
+                <p className="text-xs text-[var(--text-muted,#6e7681)] mt-1">✓ = detected on this device</p>
               </div>
 
               {/* Driver list */}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">
                   Driver
-                  {loadingDrivers && <ArrowPathIcon className="w-3 h-3 inline ml-1 animate-spin text-gray-400" />}
+                  {loadingDrivers && <ArrowPathIcon className="w-3 h-3 inline ml-1 animate-spin text-[var(--text-muted,#6e7681)]" />}
                 </label>
-                <div className="space-y-1 max-h-44 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                <div className="space-y-1 max-h-44 overflow-y-auto border border-[rgba(255,255,255,0.07)] rounded-lg divide-y divide-[rgba(255,255,255,0.07)]">
                   {drivers.map(d => (
                     <label key={d.id}
                       className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
-                        selectedDriver?.id === d.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+                        selectedDriver?.id === d.id ? 'bg-[rgba(0,111,255,0.15)]' : 'hover:bg-[rgba(255,255,255,0.04)]'
                       }`}
                     >
                       <input
@@ -554,14 +559,14 @@ function AddPrinterWizard({ onClose, onAdded }: {
                         name="driver"
                         checked={selectedDriver?.id === d.id}
                         onChange={() => setSelectedDriver(d)}
-                        className="text-blue-600"
+                        className="text-[#006FFF]"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{d.name}</p>
-                        {d.version && <p className="text-xs text-gray-400">v{d.version}</p>}
+                        <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)] truncate">{d.name}</p>
+                        {d.version && <p className="text-xs text-[var(--text-muted,#6e7681)]">v{d.version}</p>}
                       </div>
                       {d.recommended && (
-                        <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium flex-shrink-0">
+                        <span className="text-xs px-1.5 py-0.5 bg-[rgba(0,111,255,0.15)] text-[#006FFF] rounded font-medium flex-shrink-0">
                           Recommended
                         </span>
                       )}
@@ -576,42 +581,44 @@ function AddPrinterWizard({ onClose, onAdded }: {
           {step === 3 && probeResult && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">Printer Name *</label>
+                <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">Printer Name *</label>
                 <input
                   value={printerName}
                   onChange={e => setPrinterName(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                  style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                   placeholder="e.g. Office-HP-LaserJet"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">Location (optional)</label>
+                <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">Location (optional)</label>
                 <input
                   value={location}
                   onChange={e => setLocation(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                  style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                   placeholder="e.g. Open Office, 2nd Floor"
                 />
               </div>
 
               {/* Multifunction toggle */}
-              <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+              <div className="border border-[rgba(255,255,255,0.07)] rounded-lg p-3 space-y-2 bg-[rgba(0,111,255,0.1)]">
                 <label className="flex items-center gap-2.5 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={isMultifunction}
                     onChange={e => setIsMultifunction(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                    className="w-4 h-4 rounded text-[#006FFF] focus:ring-[#006FFF]"
                   />
-                  <span className="text-sm font-medium text-gray-700">This device also has a scanner</span>
+                  <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">This device also has a scanner</span>
                   {autoDetectedMF && (
-                    <span className="text-xs text-green-700 bg-green-100 px-1.5 py-0.5 rounded font-medium">Auto-detected</span>
+                    <span className="text-xs text-[#3fb950] bg-[rgba(63,185,80,0.15)] px-1.5 py-0.5 rounded font-medium">Auto-detected</span>
                   )}
                 </label>
                 {isMultifunction && (
                   <div className="pl-6 space-y-1.5">
-                    <p className="text-xs text-gray-500">Supported scan formats:</p>
+                    <p className="text-xs text-[var(--text-muted,#6e7681)]">Supported scan formats:</p>
                     <div className="flex gap-4">
                       {(['PDF', 'JPEG', 'TIFF', 'PNG'] as const).map(fmt => (
                         <label key={fmt} className="flex items-center gap-1.5 cursor-pointer">
@@ -621,9 +628,9 @@ function AddPrinterWizard({ onClose, onAdded }: {
                             onChange={e => setScanFormats(prev =>
                               e.target.checked ? [...prev, fmt] : prev.filter(f => f !== fmt)
                             )}
-                            className="w-3.5 h-3.5 rounded text-blue-600"
+                            className="w-3.5 h-3.5 rounded text-[#006FFF]"
                           />
-                          <span className="text-xs text-gray-700">{fmt}</span>
+                          <span className="text-xs text-[var(--text-secondary,#8b949e)]">{fmt}</span>
                         </label>
                       ))}
                     </div>
@@ -632,8 +639,8 @@ function AddPrinterWizard({ onClose, onAdded }: {
               </div>
 
               {/* Summary */}
-              <div className="bg-gray-50 rounded-lg p-4 space-y-1.5 text-xs">
-                <p className="font-medium text-gray-700 mb-2">Summary</p>
+              <div className="bg-[var(--bg-surface-raised,#1c2128)] rounded-lg p-4 space-y-1.5 text-xs">
+                <p className="font-medium text-[var(--text-secondary,#8b949e)] mb-2">Summary</p>
                 {[
                   ['Address',  probeResult.ip],
                   ['Model',    probeResult.model ?? '—'],
@@ -641,8 +648,8 @@ function AddPrinterWizard({ onClose, onAdded }: {
                   ['Driver',   selectedDriver?.name ?? '—'],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between">
-                    <span className="text-gray-500">{k}</span>
-                    <span className="text-gray-800 font-medium truncate max-w-[220px]">{v}</span>
+                    <span className="text-[var(--text-muted,#6e7681)]">{k}</span>
+                    <span className="text-[var(--text-primary,#e4e6ea)] font-medium truncate max-w-[220px]">{v}</span>
                   </div>
                 ))}
               </div>
@@ -651,10 +658,10 @@ function AddPrinterWizard({ onClose, onAdded }: {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[rgba(255,255,255,0.07)]">
           <button
             onClick={step === 1 ? onClose : () => setStep(s => (s - 1) as WizardStep)}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-[var(--text-secondary,#8b949e)] hover:text-[var(--text-primary,#e4e6ea)]"
           >
             {step === 1 ? 'Cancel' : <><ChevronLeftIcon className="w-4 h-4" /> Back</>}
           </button>
@@ -663,7 +670,7 @@ function AddPrinterWizard({ onClose, onAdded }: {
             <button
               onClick={handleProbe}
               disabled={probing || !ip.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50"
             >
               {probing ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Probing…</> : <>Next <ChevronRightIcon className="w-4 h-4" /></>}
             </button>
@@ -672,7 +679,7 @@ function AddPrinterWizard({ onClose, onAdded }: {
             <button
               onClick={handleManualNext}
               disabled={!ip.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50"
             >
               Next <ChevronRightIcon className="w-4 h-4" />
             </button>
@@ -682,7 +689,7 @@ function AddPrinterWizard({ onClose, onAdded }: {
             <button
               onClick={() => setStep(3)}
               disabled={!selectedDriver}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50"
             >
               Next <ChevronRightIcon className="w-4 h-4" />
             </button>
@@ -692,7 +699,7 @@ function AddPrinterWizard({ onClose, onAdded }: {
             <button
               onClick={handleAddPrinter}
               disabled={saving || !printerName.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50"
             >
               {saving ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Adding…</> : 'Add Printer'}
             </button>
@@ -750,14 +757,14 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
   const profiles = scanner.profiles ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl shadow-xl w-full max-w-md mx-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.07)]">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Scannen — {scanner.name}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{scanner.ip} · {scanner.model}</p>
+            <h2 className="text-base font-semibold text-[var(--text-primary,#e4e6ea)]">Scannen — {scanner.name}</h2>
+            <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">{scanner.ip} · {scanner.model}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]">
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
@@ -765,7 +772,7 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
         {/* Quick profile selector */}
         {profiles.length > 0 && (
           <div className="px-6 pt-4 pb-0">
-            <p className="text-xs font-medium text-gray-500 mb-2">Schnellauswahl</p>
+            <p className="text-xs font-medium text-[var(--text-muted,#6e7681)] mb-2">Schnellauswahl</p>
             <div className="flex gap-2 flex-wrap">
               {profiles.map(p => (
                 <button
@@ -773,9 +780,10 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
                   onClick={() => applyProfile(p)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                     activeProfileId === p.id
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:text-blue-600'
+                      ? 'bg-[#006FFF] text-white border-[#006FFF]'
+                      : 'text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)] hover:border-[#006FFF] hover:text-[#006FFF]'
                   }`}
+                  style={activeProfileId !== p.id ? { background: 'var(--bg-surface-raised,#1c2128)' } : undefined}
                 >
                   {p.isDefault && <StarIconSolid className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
                   <FolderIcon className="w-3 h-3 flex-shrink-0" />
@@ -789,44 +797,48 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
         <form onSubmit={handleScan} className="p-6 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Auflösung</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Auflösung</label>
               <select value={form.resolution}
                 onChange={e => { setForm(f => ({ ...f, resolution: e.target.value })); setActiveProfileId(null); }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}>
                 {['75', '150', '300', '600'].map(r => <option key={r} value={r}>{r} DPI</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Farbe</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Farbe</label>
               <select value={form.color}
                 onChange={e => { setForm(f => ({ ...f, color: e.target.value })); setActiveProfileId(null); }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}>
                 <option value="color">Farbe</option>
                 <option value="grayscale">Schwarz/Weiss</option>
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Format</label>
+            <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Format</label>
             <div className="flex gap-2">
               {scanner.formats.map(fmt => (
                 <button key={fmt} type="button"
                   onClick={() => { setForm(f => ({ ...f, format: fmt })); setActiveProfileId(null); }}
                   className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                    form.format === fmt ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}>
+                    form.format === fmt ? 'bg-[#006FFF] text-white border-[#006FFF]' : 'text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.04)]'
+                  }`}
+                  style={form.format !== fmt ? { background: 'var(--bg-surface-raised,#1c2128)' } : undefined}>
                   {fmt}
                 </button>
               ))}
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Zielordner oder E-Mail *</label>
+            <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Zielordner oder E-Mail *</label>
             {scanShares.length > 0 ? (
               <select
                 value={form.destination}
                 onChange={e => { setForm(f => ({ ...f, destination: e.target.value })); setActiveProfileId(null); }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
               >
                 <option value="">— Share auswählen oder Pfad eingeben —</option>
                 {scanShares.map(s => {
@@ -840,7 +852,8 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
               <input
                 value={form.destination === '__custom__' ? '' : form.destination}
                 onChange={e => { setForm(f => ({ ...f, destination: e.target.value })); setActiveProfileId(null); }}
-                className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${scanShares.length > 0 ? 'mt-2' : ''}`}
+                className={`w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF] ${scanShares.length > 0 ? 'mt-2' : ''}`}
+                style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                 placeholder="/scans/dokumente  oder  user@example.com"
                 autoFocus={form.destination === '__custom__'}
               />
@@ -848,11 +861,11 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
           </div>
           <div className="flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
+              className="px-4 py-2 text-sm font-medium text-[var(--text-secondary,#8b949e)] bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.12)] rounded-lg">
               Abbrechen
             </button>
             <button type="submit" disabled={scanning}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
+              className="px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50">
               {scanning ? 'Starte…' : 'Scan starten'}
             </button>
           </div>
@@ -918,31 +931,31 @@ function ScannerSettingsModal({ scanner, onClose, onSaved }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.07)] flex-shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Scanner-Einstellungen</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{scanner.name} · {scanner.ip}</p>
+            <h2 className="text-base font-semibold text-[var(--text-primary,#e4e6ea)]">Scanner-Einstellungen</h2>
+            <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">{scanner.name} · {scanner.ip}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]"><XMarkIcon className="w-5 h-5" /></button>
         </div>
 
         <div className="overflow-y-auto flex-1 p-6 space-y-4">
           {/* Profile list */}
           <div className="flex items-center justify-between mb-1">
-            <p className="text-sm font-medium text-gray-700">Scan-Profile ({profiles.length})</p>
+            <p className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Scan-Profile ({profiles.length})</p>
             <button
               onClick={() => setEditing({ ...BLANK_PROFILE(), id: '', _new: true })}
-              className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+              className="flex items-center gap-1.5 text-xs font-medium text-[#006FFF] hover:text-[#0056cc]"
             >
               <PlusIcon className="w-4 h-4" /> Profil hinzufügen
             </button>
           </div>
 
           {profiles.length === 0 && !editing && (
-            <div className="text-center py-8 text-gray-400">
+            <div className="text-center py-8 text-[var(--text-muted,#6e7681)]">
               <FolderIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
               <p className="text-sm">Noch keine Profile — erstelle das erste Profil</p>
             </div>
@@ -950,26 +963,26 @@ function ScannerSettingsModal({ scanner, onClose, onSaved }: {
 
           <div className="space-y-2">
             {profiles.map(p => (
-              <div key={p.id} className="border border-gray-200 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-50">
+              <div key={p.id} className="border border-[rgba(255,255,255,0.07)] rounded-lg p-3 flex items-center gap-3 hover:bg-[rgba(255,255,255,0.04)]">
                 <button onClick={() => handleSetDefault(p.id)} title="Als Standard setzen"
-                  className={`flex-shrink-0 ${p.isDefault ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}>
+                  className={`flex-shrink-0 ${p.isDefault ? 'text-yellow-500' : 'text-[var(--text-muted,#6e7681)] hover:text-yellow-400'}`}>
                   {p.isDefault ? <StarIconSolid className="w-4 h-4" /> : <StarIcon className="w-4 h-4" />}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
+                  <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)] truncate">
                     {p.name}
-                    {p.isDefault && <span className="ml-2 text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded">Standard</span>}
+                    {p.isDefault && <span className="ml-2 text-xs text-yellow-500 bg-[rgba(210,153,34,0.15)] px-1.5 py-0.5 rounded">Standard</span>}
                   </p>
-                  <p className="text-xs text-gray-400 truncate">
+                  <p className="text-xs text-[var(--text-muted,#6e7681)] truncate">
                     {p.resolution} DPI · {p.color === 'color' ? 'Farbe' : 'S/W'} · {p.format} → {p.destination || '—'}
                   </p>
                 </div>
                 <button onClick={() => setEditing(p)}
-                  className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors">
+                  className="text-[var(--text-muted,#6e7681)] hover:text-[#006FFF] p-1 rounded transition-colors">
                   <PencilIcon className="w-4 h-4" />
                 </button>
                 <button onClick={() => handleDelete(p.id)}
-                  className="text-gray-400 hover:text-red-600 p-1 rounded transition-colors">
+                  className="text-[var(--text-muted,#6e7681)] hover:text-[#f85149] p-1 rounded transition-colors">
                   <TrashIcon className="w-4 h-4" />
                 </button>
               </div>
@@ -987,9 +1000,9 @@ function ScannerSettingsModal({ scanner, onClose, onSaved }: {
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end flex-shrink-0">
+        <div className="px-6 py-4 border-t border-[rgba(255,255,255,0.07)] flex justify-end flex-shrink-0">
           <button onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
+            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary,#8b949e)] bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.12)] rounded-lg">
             Schliessen
           </button>
         </div>
@@ -1014,21 +1027,23 @@ function ProfileEditForm({ value, formats, onSave, onCancel }: {
 }) {
   const [form, setForm] = useState(value);
   return (
-    <div className="border-2 border-blue-200 rounded-xl p-4 space-y-3 bg-blue-50/30">
-      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+    <div className="border-2 border-[rgba(0,111,255,0.3)] rounded-xl p-4 space-y-3 bg-[rgba(0,111,255,0.08)]">
+      <p className="text-xs font-semibold text-[#006FFF] uppercase tracking-wide">
         {value._new ? 'Neues Profil' : 'Profil bearbeiten'}
       </p>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Profilname *</label>
+        <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Profilname *</label>
         <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+          style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
           placeholder="z.B. Dokumente, Archiv, Schnellscan" autoFocus />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Auflösung</label>
+          <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Auflösung</label>
           <select value={form.resolution} onChange={e => setForm(f => ({ ...f, resolution: e.target.value }))}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+            className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+            style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}>
             <option value="75">75 DPI (Web)</option>
             <option value="150">150 DPI (Normal)</option>
             <option value="300">300 DPI (Druck)</option>
@@ -1036,45 +1051,48 @@ function ProfileEditForm({ value, formats, onSave, onCancel }: {
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Farbe</label>
+          <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Farbe</label>
           <select value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+            className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+            style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}>
             <option value="color">Farbe</option>
             <option value="grayscale">Schwarz/Weiss</option>
           </select>
         </div>
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Format</label>
+        <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Format</label>
         <div className="flex gap-2">
           {(formats.length > 0 ? formats : ['PDF','JPEG','TIFF']).map(fmt => (
             <button key={fmt} type="button"
               onClick={() => setForm(f => ({ ...f, format: fmt }))}
               className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                form.format === fmt ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-              }`}>
+                form.format === fmt ? 'bg-[#006FFF] text-white border-[#006FFF]' : 'text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.04)]'
+              }`}
+              style={form.format !== fmt ? { background: 'var(--bg-surface-raised,#1c2128)' } : undefined}>
               {fmt}
             </button>
           ))}
         </div>
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Standardziel (Ordner oder E-Mail)</label>
+        <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Standardziel (Ordner oder E-Mail)</label>
         <input value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+          style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
           placeholder="/scans/dokumente  oder  archiv@example.com" />
       </div>
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={!!form.isDefault}
           onChange={e => setForm(f => ({ ...f, isDefault: e.target.checked }))}
-          className="rounded text-blue-600" />
-        <span className="text-sm text-gray-700">Als Standard-Profil setzen</span>
+          className="rounded text-[#006FFF]" />
+        <span className="text-sm text-[var(--text-secondary,#8b949e)]">Als Standard-Profil setzen</span>
       </label>
       <div className="flex justify-end gap-2 pt-1">
         <button type="button" onClick={onCancel}
-          className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg">Abbrechen</button>
+          className="px-3 py-1.5 text-sm text-[var(--text-secondary,#8b949e)] bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.12)] rounded-lg">Abbrechen</button>
         <button type="button" onClick={() => onSave(form)}
-          className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Speichern</button>
+          className="px-4 py-1.5 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg">Speichern</button>
       </div>
     </div>
   );
