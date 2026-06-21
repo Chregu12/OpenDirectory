@@ -58,32 +58,39 @@ function ForceSyncModal({ dcNames, onClose, onSynced }: {
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+      <div className="rounded-xl shadow-xl w-full max-w-md" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} onClick={e => e.stopPropagation()}>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-gray-900">Force Replication Sync</h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
+            <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Force Replication Sync</h3>
+            <button onClick={onClose} style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+              <XMarkIcon className="w-5 h-5" />
+            </button>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Source DC</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Source DC</label>
             {dcNames.length > 0 ? (
               <select value={form.sourceDC} onChange={e => setForm(p => ({ ...p, sourceDC: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', border: '1px solid var(--border-strong)' }}>
                 {dcNames.map(dc => <option key={dc} value={dc}>{dc}</option>)}
               </select>
             ) : (
               <input type="text" placeholder="DC01" value={form.sourceDC}
                 onChange={e => setForm(p => ({ ...p, sourceDC: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', border: '1px solid var(--border-strong)' }} />
             )}
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Naming Context</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Naming Context</label>
             <select value={form.namingContext} onChange={e => setForm(p => ({ ...p, namingContext: e.target.value as NamingContext }))}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', border: '1px solid var(--border-strong)' }}>
               {(['Domain', 'Configuration', 'Schema'] as NamingContext[]).map(nc => (
                 <option key={nc} value={nc}>{nc}</option>
               ))}
@@ -92,7 +99,10 @@ function ForceSyncModal({ dcNames, onClose, onSynced }: {
 
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={onClose} disabled={syncing}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50">Cancel</button>
+              className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50"
+              style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', border: '1px solid var(--border-strong)' }}>
+              Cancel
+            </button>
             <button onClick={handleSync} disabled={syncing}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-60">
               {syncing ? <><ArrowPathIcon className="w-4 h-4 animate-spin" />Syncing…</> : 'Force Sync'}
@@ -125,27 +135,30 @@ function DCStatusRow({ dc }: { dc: DCReplicationStatus }) {
   const failed  = dc.consecutiveFailures >= 3;
 
   return (
-    <tr className="hover:bg-gray-50">
-      <td className="px-4 py-3 font-mono text-sm font-medium text-gray-900">{dc.dcName}</td>
-      <td className="px-4 py-3 text-sm text-gray-600">{formatRelative(dc.lastSuccess)}</td>
+    <tr className="hover:bg-[#1c2128]">
+      <td className="px-4 py-3 font-mono text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{dc.dcName}</td>
+      <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-secondary)' }}>{formatRelative(dc.lastSuccess)}</td>
       <td className="px-4 py-3 text-sm">
         {dc.usnGap === 0 ? (
-          <span className="text-gray-500">0</span>
+          <span style={{ color: 'var(--text-muted)' }}>0</span>
         ) : (
-          <span className="font-medium text-yellow-700">{dc.usnGap.toLocaleString()}</span>
+          <span className="font-medium" style={{ color: 'var(--warning)' }}>{dc.usnGap.toLocaleString()}</span>
         )}
       </td>
       <td className="px-4 py-3">
         {failed ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-100">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+            style={{ background: 'var(--danger-light)', color: 'var(--danger)', border: '1px solid rgba(248,81,73,0.3)' }}>
             <XCircleIcon className="w-3.5 h-3.5" /> Failed
           </span>
         ) : delayed ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-100">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+            style={{ background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid rgba(210,153,34,0.3)' }}>
             <ExclamationTriangleIcon className="w-3.5 h-3.5" /> Delayed
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+            style={{ background: 'var(--success-light)', color: 'var(--success)', border: '1px solid rgba(63,185,80,0.3)' }}>
             <CheckCircleIcon className="w-3.5 h-3.5" /> Healthy
           </span>
         )}
@@ -158,26 +171,30 @@ function DCStatusRow({ dc }: { dc: DCReplicationStatus }) {
 
 function HealthBadge({ overall }: { overall?: 'healthy' | 'degraded' | 'failed' }) {
   if (overall === 'healthy') return (
-    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-50 border border-green-100">
-      <CheckCircleIcon className="w-5 h-5 text-green-600" />
-      <span className="text-sm font-semibold text-green-800">Healthy</span>
+    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg"
+      style={{ background: 'var(--success-light)', border: '1px solid rgba(63,185,80,0.3)' }}>
+      <CheckCircleIcon className="w-5 h-5" style={{ color: 'var(--success)' }} />
+      <span className="text-sm font-semibold" style={{ color: 'var(--success)' }}>Healthy</span>
     </div>
   );
   if (overall === 'degraded') return (
-    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-50 border border-yellow-200">
-      <ExclamationTriangleIcon className="w-5 h-5 text-yellow-600" />
-      <span className="text-sm font-semibold text-yellow-800">Degraded</span>
+    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg"
+      style={{ background: 'var(--warning-light)', border: '1px solid rgba(210,153,34,0.3)' }}>
+      <ExclamationTriangleIcon className="w-5 h-5" style={{ color: 'var(--warning)' }} />
+      <span className="text-sm font-semibold" style={{ color: 'var(--warning)' }}>Degraded</span>
     </div>
   );
   if (overall === 'failed') return (
-    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-50 border border-red-200">
-      <XCircleIcon className="w-5 h-5 text-red-600" />
-      <span className="text-sm font-semibold text-red-800">Failed</span>
+    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg"
+      style={{ background: 'var(--danger-light)', border: '1px solid rgba(248,81,73,0.3)' }}>
+      <XCircleIcon className="w-5 h-5" style={{ color: 'var(--danger)' }} />
+      <span className="text-sm font-semibold" style={{ color: 'var(--danger)' }}>Failed</span>
     </div>
   );
   return (
-    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100">
-      <span className="text-sm font-medium text-gray-500">Unknown</span>
+    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg"
+      style={{ background: 'var(--bg-surface-raised)' }}>
+      <span className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Unknown</span>
     </div>
   );
 }
@@ -246,46 +263,50 @@ export default function ReplicationView() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ background: 'var(--bg-base)', minHeight: '100vh' }}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Active Directory Replication</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Monitor and manage DC replication health</p>
+          <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Active Directory Replication</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Monitor and manage DC replication health</p>
         </div>
         <button onClick={load}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+          className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg"
+          style={{ color: 'var(--text-primary)', background: 'var(--bg-surface)', border: '1px solid var(--border-strong)' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-surface)')}>
           <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
         </button>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+        <div className="rounded-lg px-4 py-3 text-sm flex items-center gap-2"
+          style={{ background: 'var(--danger-light)', border: '1px solid rgba(248,81,73,0.3)', color: 'var(--danger)' }}>
           <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" /> {error}
         </div>
       )}
 
       {/* Overall health + USN */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.05em' }} className="mb-2">
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }} className="mb-2">
             Overall Health
           </p>
           {loading ? (
-            <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+            <div className="h-10 rounded-lg animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />
           ) : (
             <HealthBadge overall={health?.overall} />
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.05em' }} className="mb-2">
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }} className="mb-2">
             Current USN
           </p>
           {loading ? (
-            <div className="h-8 w-24 bg-gray-100 rounded-lg animate-pulse" />
+            <div className="h-8 w-24 rounded-lg animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />
           ) : (
-            <p className="text-2xl font-semibold text-gray-900 font-mono">
+            <p className="text-2xl font-semibold font-mono" style={{ color: 'var(--text-primary)' }}>
               {usn !== null ? usn.toLocaleString() : '—'}
             </p>
           )}
@@ -294,21 +315,22 @@ export default function ReplicationView() {
 
       {/* Naming contexts */}
       {health?.namingContexts && health.namingContexts.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100">
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+          <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Naming Contexts
             </span>
           </div>
-          <div className="divide-y divide-gray-50">
-            {health.namingContexts.map(nc => (
-              <div key={nc.name} className="flex items-center justify-between px-5 py-3">
-                <span className="text-sm font-mono text-gray-700">{nc.name}</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+          <div>
+            {health.namingContexts.map((nc, idx) => (
+              <div key={nc.name} className="flex items-center justify-between px-5 py-3"
+                style={{ borderBottom: idx < (health.namingContexts?.length ?? 0) - 1 ? '1px solid var(--border)' : 'none' }}>
+                <span className="text-sm font-mono" style={{ color: 'var(--text-secondary)' }}>{nc.name}</span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={
                   nc.status === 'healthy'
-                    ? 'bg-green-50 text-green-700 border border-green-100'
-                    : 'bg-yellow-50 text-yellow-700 border border-yellow-100'
-                }`}>{nc.status}</span>
+                    ? { background: 'var(--success-light)', color: 'var(--success)', border: '1px solid rgba(63,185,80,0.3)' }
+                    : { background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid rgba(210,153,34,0.3)' }
+                }>{nc.status}</span>
               </div>
             ))}
           </div>
@@ -316,33 +338,43 @@ export default function ReplicationView() {
       )}
 
       {/* DC table */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100">
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+        <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Domain Controllers
           </span>
         </div>
 
         {loading ? (
           <div className="p-6 space-y-3 animate-pulse">
-            {[...Array(3)].map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded-lg" />)}
+            {[...Array(3)].map((_, i) => <div key={i} className="h-12 rounded-lg" style={{ background: 'var(--bg-surface-raised)' }} />)}
           </div>
         ) : dcList.length === 0 ? (
-          <div className="p-10 text-center text-gray-400">
-            <p className="text-sm">No domain controller data available</p>
+          <div className="p-10 text-center">
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No domain controller data available</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead style={{ background: 'var(--bg-surface-raised)', borderBottom: '1px solid var(--border)' }}>
                 <tr>
                   {['DC Name', 'Last Success', 'USN Gap', 'Status'].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
+                    <th key={h} className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider"
+                      style={{ color: 'var(--text-muted)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
-                {dcList.map(dc => <DCStatusRow key={dc.dcName} dc={dc} />)}
+              <tbody>
+                {dcList.map((dc, idx) => (
+                  <React.Fragment key={dc.dcName}>
+                    {idx > 0 && (
+                      <tr style={{ height: 0 }}>
+                        <td colSpan={4} style={{ padding: 0, borderTop: '1px solid var(--border)' }} />
+                      </tr>
+                    )}
+                    <DCStatusRow dc={dc} />
+                  </React.Fragment>
+                ))}
               </tbody>
             </table>
           </div>
@@ -358,11 +390,12 @@ export default function ReplicationView() {
 
         {dcList.length > 0 && (
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Check lingering objects on:</span>
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Check lingering objects on:</span>
             <select
               onChange={e => e.target.value && handleCheckLingeringObjects(e.target.value)}
               value=""
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', border: '1px solid var(--border-strong)' }}
               disabled={!!checkingLO}>
               <option value="">Select DC…</option>
               {dcList.map(dc => <option key={dc.dcName} value={dc.dcName}>{dc.dcName}</option>)}
@@ -376,22 +409,26 @@ export default function ReplicationView() {
 
       {/* Lingering objects result */}
       {loResult && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+        <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="flex items-center justify-between mb-3">
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Lingering Objects — {loResult.dc}
             </p>
-            <button onClick={() => setLoResult(null)} className="text-gray-400 hover:text-gray-600">
+            <button onClick={() => setLoResult(null)}
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
               <XMarkIcon className="w-4 h-4" />
             </button>
           </div>
           {loResult.data?.count === 0 || (Array.isArray(loResult.data) && loResult.data.length === 0) ? (
-            <div className="flex items-center gap-2 text-green-700">
+            <div className="flex items-center gap-2" style={{ color: 'var(--success)' }}>
               <CheckCircleIcon className="w-5 h-5" />
               <span className="text-sm font-medium">No lingering objects found.</span>
             </div>
           ) : (
-            <pre className="text-xs font-mono text-gray-700 bg-gray-50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+            <pre className="text-xs font-mono rounded-lg p-3 overflow-x-auto whitespace-pre-wrap"
+              style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }}>
               {JSON.stringify(loResult.data, null, 2)}
             </pre>
           )}

@@ -112,11 +112,11 @@ const MOCK_HISTORY: NotificationHistoryEntry[] = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function severityBadge(severity: AlertSeverity) {
+function severityBadgeStyle(severity: AlertSeverity): React.CSSProperties {
   switch (severity) {
-    case 'critical': return 'bg-red-100 text-red-700 border border-red-200';
-    case 'warning':  return 'bg-orange-100 text-orange-700 border border-orange-200';
-    case 'info':     return 'bg-blue-100 text-blue-700 border border-blue-200';
+    case 'critical': return { background: 'var(--danger-light)', color: 'var(--danger)', border: '1px solid rgba(248,81,73,0.3)' };
+    case 'warning':  return { background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid rgba(210,153,34,0.3)' };
+    case 'info':     return { background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid rgba(0,111,255,0.3)' };
   }
 }
 
@@ -128,11 +128,11 @@ function severityLabel(severity: AlertSeverity) {
   }
 }
 
-function statusBadge(status: AlertStatus) {
+function statusBadgeStyle(status: AlertStatus): React.CSSProperties {
   switch (status) {
-    case 'active':       return 'bg-red-50 text-red-600';
-    case 'acknowledged': return 'bg-yellow-50 text-yellow-700';
-    case 'resolved':     return 'bg-green-50 text-green-700';
+    case 'active':       return { background: 'var(--danger-light)', color: 'var(--danger)' };
+    case 'acknowledged': return { background: 'var(--warning-light)', color: 'var(--warning)' };
+    case 'resolved':     return { background: 'var(--success-light)', color: 'var(--success)' };
   }
 }
 
@@ -357,22 +357,30 @@ export default function AlertingView() {
     { key: 'history',  label: 'Verlauf' },
   ];
 
+  const statBgMap: Record<string, React.CSSProperties> = {
+    'bg-blue-50':   { background: 'rgba(0,111,255,0.15)' },
+    'bg-red-50':    { background: 'rgba(248,81,73,0.15)' },
+    'bg-orange-50': { background: 'rgba(210,153,34,0.15)' },
+    'bg-sky-50':    { background: 'rgba(0,111,255,0.10)' },
+  };
+
   return (
-    <div className="min-h-screen bg-[#F2F2F7] p-6">
+    <div className="min-h-screen p-6" style={{ background: 'var(--bg-base)' }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-white rounded-xl shadow-sm">
+          <div className="p-2.5 rounded-xl" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }}>
             <BellAlertIcon className="w-6 h-6 text-[#0071E3]" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Benachrichtigungen &amp; Alerts</h1>
-            <p className="text-sm text-gray-500">Verwalte Alarme, Regeln und Benachrichtigungskanäle</p>
+            <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Benachrichtigungen &amp; Alerts</h1>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Verwalte Alarme, Regeln und Benachrichtigungskanäle</p>
           </div>
         </div>
         <button
           onClick={() => { fetchAlerts(); fetchChannels(); toast.success('Aktualisiert'); }}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)', boxShadow: 'var(--card-shadow)' }}
         >
           <ArrowPathIcon className="w-4 h-4" />
           Aktualisieren
@@ -382,35 +390,36 @@ export default function AlertingView() {
       {/* Stats bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Aktive Alerts', value: activeAlerts.length, icon: BellIcon, color: 'text-[#0071E3]', bg: 'bg-blue-50' },
-          { label: 'Kritisch',      value: criticalCount,       icon: XCircleIcon,              color: 'text-red-600',   bg: 'bg-red-50'  },
-          { label: 'Warnung',       value: warningCount,        icon: ExclamationTriangleIcon,  color: 'text-orange-600', bg: 'bg-orange-50' },
-          { label: 'Info',          value: infoCount,           icon: InformationCircleIcon,    color: 'text-blue-500',  bg: 'bg-sky-50'  },
-        ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${bg}`}>
+          { label: 'Aktive Alerts', value: activeAlerts.length, icon: BellIcon, color: 'text-[#0071E3]', bgStyle: { background: 'rgba(0,111,255,0.15)' } },
+          { label: 'Kritisch',      value: criticalCount,       icon: XCircleIcon,              color: 'text-red-400',   bgStyle: { background: 'rgba(248,81,73,0.15)' } },
+          { label: 'Warnung',       value: warningCount,        icon: ExclamationTriangleIcon,  color: 'text-orange-400', bgStyle: { background: 'rgba(210,153,34,0.15)' } },
+          { label: 'Info',          value: infoCount,           icon: InformationCircleIcon,    color: 'text-blue-400',  bgStyle: { background: 'rgba(0,111,255,0.10)' } },
+        ].map(({ label, value, icon: Icon, color, bgStyle }) => (
+          <div key={label} className="rounded-2xl p-4 flex items-center gap-3" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }}>
+            <div className="p-2.5 rounded-xl" style={bgStyle}>
               <Icon className={`w-5 h-5 ${color}`} />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{value}</p>
-              <p className="text-xs text-gray-500">{label}</p>
+              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{value}</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* Tab bar */}
-      <div className="bg-white rounded-2xl shadow-sm mb-6 overflow-hidden">
-        <div className="flex border-b border-gray-100">
+      <div className="rounded-2xl mb-6 overflow-hidden" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }}>
+        <div className="flex" style={{ borderBottom: '1px solid var(--border)' }}>
           {tabs.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
-              className={`flex-1 px-4 py-3.5 text-sm font-medium transition-colors ${
+              className={`flex-1 px-4 py-3.5 text-sm font-medium transition-colors`}
+              style={
                 activeTab === key
-                  ? 'text-[#0071E3] border-b-2 border-[#0071E3] bg-blue-50/40'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
+                  ? { color: 'var(--accent)', borderBottom: '2px solid var(--accent)', background: 'var(--accent-light)' }
+                  : { color: 'var(--text-muted)' }
+              }
             >
               {label}
             </button>
@@ -423,17 +432,18 @@ export default function AlertingView() {
             {/* Filter bar */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
               <div className="flex items-center gap-2">
-                <FunnelIcon className="w-4 h-4 text-gray-400" />
-                <span className="text-sm text-gray-500">Filter:</span>
+                <FunnelIcon className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Filter:</span>
                 {(['alle', 'critical', 'warning', 'info'] as const).map((f) => (
                   <button
                     key={f}
                     onClick={() => setSeverityFilter(f)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors`}
+                    style={
                       severityFilter === f
-                        ? 'bg-[#0071E3] text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                        ? { background: '#0071E3', color: '#fff' }
+                        : { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }
+                    }
                   >
                     {f === 'alle' ? 'Alle' : severityLabel(f)}
                   </button>
@@ -451,7 +461,7 @@ export default function AlertingView() {
             </div>
 
             {filteredAlerts.length === 0 ? (
-              <div className="text-center py-16 text-gray-400">
+              <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
                 <CheckCircleIcon className="w-12 h-12 mx-auto mb-3 opacity-40" />
                 <p className="font-medium">Keine aktiven Alerts</p>
                 <p className="text-sm mt-1">Alle Systeme laufen normal</p>
@@ -460,7 +470,7 @@ export default function AlertingView() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
+                    <tr className="text-left text-xs" style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
                       <th className="pb-3 pr-4 font-medium w-8">
                         <input
                           type="checkbox"
@@ -481,9 +491,12 @@ export default function AlertingView() {
                       <th className="pb-3 font-medium">Aktionen</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody style={{ borderColor: 'var(--border)' }}>
                     {filteredAlerts.map((alert) => (
-                      <tr key={alert.id} className="hover:bg-gray-50/60 transition-colors">
+                      <tr key={alert.id} className="transition-colors" style={{ borderBottom: '1px solid var(--border)' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
                         <td className="py-3 pr-4">
                           <input
                             type="checkbox"
@@ -492,26 +505,26 @@ export default function AlertingView() {
                             className="rounded"
                           />
                         </td>
-                        <td className="py-3 pr-4 font-medium text-gray-900">{alert.name}</td>
+                        <td className="py-3 pr-4 font-medium" style={{ color: 'var(--text-primary)' }}>{alert.name}</td>
                         <td className="py-3 pr-4">
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-xs font-mono">
+                          <span className="px-2 py-0.5 rounded-md text-xs font-mono" style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }}>
                             {alert.service}
                           </span>
                         </td>
                         <td className="py-3 pr-4">
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${severityBadge(alert.severity)}`}>
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium" style={severityBadgeStyle(alert.severity)}>
                             {severityLabel(alert.severity)}
                           </span>
                         </td>
-                        <td className="py-3 pr-4 text-gray-500 max-w-xs truncate">{alert.message}</td>
-                        <td className="py-3 pr-4 text-gray-400 whitespace-nowrap">
+                        <td className="py-3 pr-4 max-w-xs truncate" style={{ color: 'var(--text-muted)' }}>{alert.message}</td>
+                        <td className="py-3 pr-4 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
                           <span className="flex items-center gap-1">
                             <ClockIcon className="w-3.5 h-3.5" />
                             {relativeTime(alert.createdAt)}
                           </span>
                         </td>
                         <td className="py-3 pr-4">
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadge(alert.status)}`}>
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium" style={statusBadgeStyle(alert.status)}>
                             {statusLabel(alert.status)}
                           </span>
                         </td>
@@ -521,7 +534,10 @@ export default function AlertingView() {
                               <button
                                 onClick={() => acknowledgeAlert(alert.id)}
                                 title="Bestätigen"
-                                className="p-1.5 text-gray-400 hover:text-[#0071E3] hover:bg-blue-50 rounded-lg transition-colors"
+                                className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors"
+                                style={{ color: 'var(--text-muted)' }}
+                                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#0071E3'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,111,255,0.1)'; }}
+                                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
                               >
                                 <CheckIcon className="w-4 h-4" />
                               </button>
@@ -529,7 +545,10 @@ export default function AlertingView() {
                             <button
                               onClick={() => closeAlert(alert.id)}
                               title="Schliessen"
-                              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              className="p-1.5 rounded-lg transition-colors"
+                              style={{ color: 'var(--text-muted)' }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--danger-light)'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
                             >
                               <XMarkIcon className="w-4 h-4" />
                             </button>
@@ -548,7 +567,7 @@ export default function AlertingView() {
         {activeTab === 'rules' && (
           <div className="p-6">
             <div className="flex items-center justify-between mb-5">
-              <p className="text-sm text-gray-500">{rules.length} Regeln konfiguriert</p>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{rules.length} Regeln konfiguriert</p>
               <button
                 onClick={() => { setEditingRule({}); setShowRuleModal(true); }}
                 className="flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0071E3]/90 transition-colors"
@@ -560,14 +579,20 @@ export default function AlertingView() {
 
             <div className="space-y-3">
               {rules.map((rule) => (
-                <div key={rule.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100/70 transition-colors">
+                <div
+                  key={rule.id}
+                  className="flex items-center justify-between p-4 rounded-xl transition-colors"
+                  style={{ background: 'var(--bg-surface-raised)' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-overlay)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <AdjustmentsHorizontalIcon className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                    <AdjustmentsHorizontalIcon className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
                     <div className="min-w-0">
-                      <p className="font-medium text-gray-900 truncate">{rule.name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <p className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>{rule.name}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
                         {rule.service} · {rule.metric} {rule.operator} {rule.threshold} ·{' '}
-                        <span className={`font-medium ${rule.severity === 'critical' ? 'text-red-600' : rule.severity === 'warning' ? 'text-orange-500' : 'text-blue-500'}`}>
+                        <span className={`font-medium ${rule.severity === 'critical' ? 'text-red-400' : rule.severity === 'warning' ? 'text-orange-400' : 'text-blue-400'}`}>
                           {severityLabel(rule.severity)}
                         </span>
                       </p>
@@ -576,7 +601,7 @@ export default function AlertingView() {
                   <div className="flex items-center gap-3 ml-4">
                     <div className="flex gap-1.5 flex-wrap justify-end">
                       {rule.notificationChannels.map((ch) => (
-                        <span key={ch} className="px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-500">
+                        <span key={ch} className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                           {ch}
                         </span>
                       ))}
@@ -584,14 +609,17 @@ export default function AlertingView() {
                     <button
                       onClick={() => toggleRule(rule.id)}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
-                        rule.enabled ? 'bg-[#0071E3]' : 'bg-gray-200'
+                        rule.enabled ? 'bg-[#0071E3]' : 'bg-gray-600'
                       }`}
                     >
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${rule.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
                     <button
                       onClick={() => { setEditingRule({ ...rule }); setShowRuleModal(true); }}
-                      className="p-1.5 text-gray-400 hover:text-[#0071E3] hover:bg-blue-50 rounded-lg transition-colors"
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{ color: 'var(--text-muted)' }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#0071E3'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,111,255,0.1)'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
                     >
                       <CogIcon className="w-4 h-4" />
                     </button>
@@ -606,7 +634,7 @@ export default function AlertingView() {
         {activeTab === 'channels' && (
           <div className="p-6">
             <div className="flex items-center justify-between mb-5">
-              <p className="text-sm text-gray-500">{channels.length} Kanäle konfiguriert</p>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{channels.length} Kanäle konfiguriert</p>
               <button
                 onClick={() => { setEditingChannel({ type: 'email' }); setShowChannelModal(true); }}
                 className="flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0071E3]/90 transition-colors"
@@ -618,43 +646,51 @@ export default function AlertingView() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {channels.map((ch) => (
-                <div key={ch.id} className="bg-gray-50 rounded-2xl p-5 flex flex-col gap-4">
+                <div key={ch.id} className="rounded-2xl p-5 flex flex-col gap-4" style={{ background: 'var(--bg-surface-raised)' }}>
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className={`p-2.5 rounded-xl ${ch.enabled ? 'bg-[#0071E3]/10 text-[#0071E3]' : 'bg-gray-200 text-gray-400'}`}>
+                      <div className="p-2.5 rounded-xl" style={ch.enabled ? { background: 'rgba(0,111,255,0.15)', color: '#0071E3' } : { background: 'var(--bg-overlay)', color: 'var(--text-muted)' }}>
                         {channelIcon(ch.type)}
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900">{ch.name}</p>
-                        <p className="text-xs text-gray-500">{channelTypeName(ch.type)}</p>
+                        <p className="font-semibold" style={{ color: 'var(--text-primary)' }}>{ch.name}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{channelTypeName(ch.type)}</p>
                       </div>
                     </div>
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${ch.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    <span
+                      className="px-2.5 py-0.5 rounded-full text-xs font-medium"
+                      style={ch.enabled
+                        ? { background: 'var(--success-light)', color: 'var(--success)' }
+                        : { background: 'var(--bg-surface-raised)', color: 'var(--text-muted)' }
+                      }
+                    >
                       {ch.enabled ? 'Aktiv' : 'Inaktiv'}
                     </span>
                   </div>
 
                   {ch.type === 'email' && ch.config.to && (
-                    <p className="text-xs text-gray-500 font-mono truncate">{ch.config.to}</p>
+                    <p className="text-xs font-mono truncate" style={{ color: 'var(--text-muted)' }}>{ch.config.to}</p>
                   )}
                   {ch.type === 'slack' && ch.config.webhookUrl && (
-                    <p className="text-xs text-gray-500 font-mono truncate">{ch.config.webhookUrl.substring(0, 40)}…</p>
+                    <p className="text-xs font-mono truncate" style={{ color: 'var(--text-muted)' }}>{ch.config.webhookUrl.substring(0, 40)}…</p>
                   )}
                   {ch.type === 'webhook' && ch.config.url && (
-                    <p className="text-xs text-gray-500 font-mono truncate">{ch.config.url}</p>
+                    <p className="text-xs font-mono truncate" style={{ color: 'var(--text-muted)' }}>{ch.config.url}</p>
                   )}
 
                   <div className="flex gap-2 mt-auto">
                     <button
                       onClick={() => { setEditingChannel({ ...ch }); setShowChannelModal(true); }}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors"
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
                     >
                       <CogIcon className="w-3.5 h-3.5" />
                       Konfigurieren
                     </button>
                     <button
                       onClick={() => testChannel(ch.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#0071E3]/10 text-[#0071E3] rounded-xl text-xs font-medium hover:bg-[#0071E3]/20 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium hover:bg-[#0071E3]/20 transition-colors"
+                      style={{ background: 'rgba(0,111,255,0.15)', color: '#0071E3' }}
                     >
                       <PaperAirplaneIcon className="w-3.5 h-3.5" />
                       Test senden
@@ -669,11 +705,11 @@ export default function AlertingView() {
         {/* ── Tab 4: Verlauf ───────────────────────────────────────────────────── */}
         {activeTab === 'history' && (
           <div className="p-6">
-            <p className="text-sm text-gray-500 mb-5">{history.length} gesendete Benachrichtigungen</p>
+            <p className="text-sm mb-5" style={{ color: 'var(--text-muted)' }}>{history.length} gesendete Benachrichtigungen</p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
+                  <tr className="text-left text-xs" style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
                     <th className="pb-3 pr-4 font-medium">Zeit</th>
                     <th className="pb-3 pr-4 font-medium">Kanal</th>
                     <th className="pb-3 pr-4 font-medium">Alert</th>
@@ -681,37 +717,46 @@ export default function AlertingView() {
                     <th className="pb-3 font-medium">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody>
                   {history.map((entry, i) => (
-                    <tr key={i} className="hover:bg-gray-50/60 transition-colors">
-                      <td className="py-3 pr-4 text-gray-400 whitespace-nowrap">
+                    <tr
+                      key={i}
+                      className="transition-colors"
+                      style={{ borderBottom: '1px solid var(--border)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <td className="py-3 pr-4 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
                         <span className="flex items-center gap-1">
                           <ClockIcon className="w-3.5 h-3.5" />
                           {relativeTime(entry.sentAt)}
                         </span>
                       </td>
                       <td className="py-3 pr-4">
-                        <span className="flex items-center gap-1.5 text-gray-600">
+                        <span className="flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
                           {channelIcon(entry.channelType)}
                           {entry.channelName}
                         </span>
                       </td>
-                      <td className="py-3 pr-4 font-medium text-gray-900">{entry.alertName}</td>
-                      <td className="py-3 pr-4 text-gray-500 max-w-xs truncate">{entry.subject}</td>
+                      <td className="py-3 pr-4 font-medium" style={{ color: 'var(--text-primary)' }}>{entry.alertName}</td>
+                      <td className="py-3 pr-4 max-w-xs truncate" style={{ color: 'var(--text-muted)' }}>{entry.subject}</td>
                       <td className="py-3">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          entry.status === 'delivered'
-                            ? 'bg-green-100 text-green-700'
-                            : entry.status === 'failed'
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-gray-100 text-gray-500'
-                        }`}>
+                        <span
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium"
+                          style={
+                            entry.status === 'delivered'
+                              ? { background: 'var(--success-light)', color: 'var(--success)' }
+                              : entry.status === 'failed'
+                              ? { background: 'var(--danger-light)', color: 'var(--danger)' }
+                              : { background: 'var(--bg-surface-raised)', color: 'var(--text-muted)' }
+                          }
+                        >
                           {entry.status === 'delivered' && <CheckCircleIcon className="w-3 h-3" />}
                           {entry.status === 'failed'    && <XCircleIcon      className="w-3 h-3" />}
                           {entry.status === 'delivered' ? 'Zugestellt' : entry.status === 'failed' ? 'Fehlgeschlagen' : 'Übersprungen'}
                         </span>
                         {entry.error && (
-                          <p className="text-xs text-red-500 mt-0.5">{entry.error}</p>
+                          <p className="text-xs text-red-400 mt-0.5">{entry.error}</p>
                         )}
                       </td>
                     </tr>
@@ -726,34 +771,42 @@ export default function AlertingView() {
       {/* ── Modal: Alert-Regel ─────────────────────────────────────────────────── */}
       {showRuleModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900">
+          <div className="rounded-2xl w-full max-w-lg" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }}>
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {editingRule.id ? 'Regel bearbeiten' : 'Neue Alert-Regel'}
               </h2>
-              <button onClick={() => { setShowRuleModal(false); setEditingRule({}); }} className="p-2 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-100">
+              <button
+                onClick={() => { setShowRuleModal(false); setEditingRule({}); }}
+                className="p-2 rounded-xl transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+              >
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Name *</label>
                 <input
                   type="text"
                   value={editingRule.name || ''}
                   onChange={(e) => setEditingRule((p) => ({ ...p, name: e.target.value }))}
                   placeholder="z.B. Hohe CPU-Auslastung"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                  className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                  style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Service</label>
                   <select
                     value={editingRule.service || 'all'}
                     onChange={(e) => setEditingRule((p) => ({ ...p, service: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                   >
                     <option value="all">Alle</option>
                     <option value="api-gateway">API Gateway</option>
@@ -764,11 +817,12 @@ export default function AlertingView() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Metrik *</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Metrik *</label>
                   <select
                     value={editingRule.metric || ''}
                     onChange={(e) => setEditingRule((p) => ({ ...p, metric: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                   >
                     <option value="">Auswählen…</option>
                     <option value="CPU">CPU (%)</option>
@@ -782,11 +836,12 @@ export default function AlertingView() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Operator</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Operator</label>
                   <select
                     value={editingRule.operator || '>'}
                     onChange={(e) => setEditingRule((p) => ({ ...p, operator: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                   >
                     <option value=">">{'>'}</option>
                     <option value="<">{'<'}</option>
@@ -796,20 +851,22 @@ export default function AlertingView() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Schwellenwert</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Schwellenwert</label>
                   <input
                     type="number"
                     value={editingRule.threshold ?? ''}
                     onChange={(e) => setEditingRule((p) => ({ ...p, threshold: Number(e.target.value) }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Schwere</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Schwere</label>
                   <select
                     value={editingRule.severity || 'warning'}
                     onChange={(e) => setEditingRule((p) => ({ ...p, severity: e.target.value as AlertSeverity }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                   >
                     <option value="critical">Kritisch</option>
                     <option value="warning">Warnung</option>
@@ -819,7 +876,7 @@ export default function AlertingView() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Benachrichtigungskanäle</label>
+                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>Benachrichtigungskanäle</label>
                 <div className="flex flex-wrap gap-2">
                   {(['email', 'slack', 'webhook', 'pagerduty'] as const).map((ch) => {
                     const selected = (editingRule.notificationChannels || []).includes(ch);
@@ -834,9 +891,12 @@ export default function AlertingView() {
                             notificationChannels: selected ? current.filter((c) => c !== ch) : [...current, ch],
                           }));
                         }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-                          selected ? 'bg-[#0071E3] text-white border-[#0071E3]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#0071E3]'
-                        }`}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors"
+                        style={
+                          selected
+                            ? { background: '#0071E3', color: '#fff', borderColor: '#0071E3' }
+                            : { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', borderColor: 'var(--border)' }
+                        }
                       >
                         {channelIcon(ch)}
                         {channelTypeName(ch)}
@@ -846,10 +906,13 @@ export default function AlertingView() {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+            <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
               <button
                 onClick={() => { setShowRuleModal(false); setEditingRule({}); }}
-                className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50"
+                className="px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+                style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)')}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
               >
                 Abbrechen
               </button>
@@ -867,33 +930,41 @@ export default function AlertingView() {
       {/* ── Modal: Benachrichtigungskanal ──────────────────────────────────────── */}
       {showChannelModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900">
+          <div className="rounded-2xl w-full max-w-lg" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }}>
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {editingChannel.id ? 'Kanal konfigurieren' : 'Kanal hinzufügen'}
               </h2>
-              <button onClick={() => { setShowChannelModal(false); setEditingChannel({}); }} className="p-2 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-100">
+              <button
+                onClick={() => { setShowChannelModal(false); setEditingChannel({}); }}
+                className="p-2 rounded-xl transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+              >
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Name *</label>
                   <input
                     type="text"
                     value={editingChannel.name || ''}
                     onChange={(e) => setEditingChannel((p) => ({ ...p, name: e.target.value }))}
                     placeholder="z.B. Ops Slack"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Typ *</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Typ *</label>
                   <select
                     value={editingChannel.type || 'email'}
                     onChange={(e) => setEditingChannel((p) => ({ ...p, type: e.target.value as ChannelType, config: {} }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                   >
                     <option value="email">E-Mail</option>
                     <option value="slack">Slack</option>
@@ -906,46 +977,50 @@ export default function AlertingView() {
               {/* Type-specific config */}
               {editingChannel.type === 'email' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Empfänger-E-Mail</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Empfänger-E-Mail</label>
                   <input
                     type="email"
                     value={editingChannel.config?.to || ''}
                     onChange={(e) => setEditingChannel((p) => ({ ...p, config: { ...p.config, to: e.target.value } }))}
                     placeholder="admin@example.com"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
               )}
               {editingChannel.type === 'slack' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Slack Webhook URL</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Slack Webhook URL</label>
                   <input
                     type="url"
                     value={editingChannel.config?.webhookUrl || ''}
                     onChange={(e) => setEditingChannel((p) => ({ ...p, config: { ...p.config, webhookUrl: e.target.value } }))}
                     placeholder="https://hooks.slack.com/services/..."
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                    style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
               )}
               {editingChannel.type === 'webhook' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
+                    <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>URL</label>
                     <input
                       type="url"
                       value={editingChannel.config?.url || ''}
                       onChange={(e) => setEditingChannel((p) => ({ ...p, config: { ...p.config, url: e.target.value } }))}
                       placeholder="https://your-service.example.com/webhook"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                      className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                      style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Methode</label>
+                    <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Methode</label>
                     <select
                       value={editingChannel.config?.method || 'POST'}
                       onChange={(e) => setEditingChannel((p) => ({ ...p, config: { ...p.config, method: e.target.value } }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                      className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                      style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                     >
                       <option value="POST">POST</option>
                       <option value="PUT">PUT</option>
@@ -955,34 +1030,38 @@ export default function AlertingView() {
               )}
               {editingChannel.type === 'pagerduty' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Routing Key</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Routing Key</label>
                   <input
                     type="text"
                     value={editingChannel.config?.routingKey || ''}
                     onChange={(e) => setEditingChannel((p) => ({ ...p, config: { ...p.config, routingKey: e.target.value } }))}
                     placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3] font-mono"
+                    className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3] font-mono"
+                    style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
               )}
 
               <div className="flex items-center justify-between pt-2">
-                <span className="text-sm font-medium text-gray-700">Aktiv</span>
+                <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Aktiv</span>
                 <button
                   type="button"
                   onClick={() => setEditingChannel((p) => ({ ...p, enabled: !p.enabled }))}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    editingChannel.enabled !== false ? 'bg-[#0071E3]' : 'bg-gray-200'
+                    editingChannel.enabled !== false ? 'bg-[#0071E3]' : 'bg-gray-600'
                   }`}
                 >
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${editingChannel.enabled !== false ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
               </div>
             </div>
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+            <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
               <button
                 onClick={() => { setShowChannelModal(false); setEditingChannel({}); }}
-                className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50"
+                className="px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+                style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)')}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
               >
                 Abbrechen
               </button>

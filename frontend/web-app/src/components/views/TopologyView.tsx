@@ -124,16 +124,16 @@ export default function TopologyView() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ background: 'var(--bg-base)', minHeight: '100vh' }}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Network Topology</h1>
-          <p className="text-sm text-gray-500 mt-1">Service architecture overview</p>
+          <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Network Topology</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Service architecture overview</p>
         </div>
         <div className="flex items-center gap-4">
           {/* Legend */}
-          <div className="flex items-center gap-4 text-xs text-gray-600">
+          <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
             {(['healthy', 'unknown', 'unhealthy'] as Status[]).map(s => (
               <span key={s} className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: STATUS_COLOR[s] }} />
@@ -143,7 +143,8 @@ export default function TopologyView() {
           </div>
           <button
             onClick={refresh}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg hover:opacity-80"
+            style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
           >
             <ArrowPathIcon className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
@@ -152,7 +153,7 @@ export default function TopologyView() {
       </div>
 
       {/* Canvas */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="w-full"
@@ -161,7 +162,7 @@ export default function TopologyView() {
           {/* Grid background */}
           <defs>
             <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#f3f4f6" strokeWidth="1"/>
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1"/>
             </pattern>
           </defs>
           <rect width={W} height={H} fill="url(#grid)" />
@@ -177,7 +178,7 @@ export default function TopologyView() {
                   key={`${node.id}→${targetId}`}
                   x1={node.x} y1={node.y}
                   x2={target.x} y2={target.y}
-                  stroke={isExt ? '#d1d5db' : '#93c5fd'}
+                  stroke={isExt ? 'rgba(255,255,255,0.2)' : 'rgba(100,160,255,0.5)'}
                   strokeWidth={isExt ? 1.5 : 2}
                   strokeDasharray={isExt ? '6 4' : undefined}
                   opacity={0.7}
@@ -213,7 +214,7 @@ export default function TopologyView() {
                   cy={-(r * 0.7)}
                   r={5}
                   fill={STATUS_COLOR[node.status]}
-                  stroke="white"
+                  stroke="#161b22"
                   strokeWidth="1.5"
                 />
                 {/* Label */}
@@ -222,12 +223,12 @@ export default function TopologyView() {
                   textAnchor="middle"
                   fontSize={10}
                   fontWeight={node.type === 'gateway' ? 700 : 500}
-                  fill="#374151"
+                  fill="#e4e6ea"
                 >
                   {node.name}
                 </text>
                 {node.port && (
-                  <text y={r + 25} textAnchor="middle" fontSize={9} fill="#9ca3af">
+                  <text y={r + 25} textAnchor="middle" fontSize={9} fill="#6e7681">
                     :{node.port}
                   </text>
                 )}
@@ -239,43 +240,48 @@ export default function TopologyView() {
 
       {/* Detail panel */}
       {selected && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="rounded-xl p-6" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: selected.color + '20' }}>
                 <selected.icon className="w-6 h-6" style={{ color: selected.color }} />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">{selected.name}</h3>
-                <p className="text-sm text-gray-500 capitalize">{selected.type} service</p>
+                <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{selected.name}</h3>
+                <p className="text-sm capitalize" style={{ color: 'var(--text-muted)' }}>{selected.type} service</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {getStatusIcon(selected.status)}
-              <span className="text-sm font-medium capitalize text-gray-700">{selected.status}</span>
+              <span className="text-sm font-medium capitalize" style={{ color: 'var(--text-secondary)' }}>{selected.status}</span>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-6 text-sm">
             <div>
-              <p className="text-gray-500 mb-1">Type</p>
-              <p className="font-medium text-gray-900 capitalize">{selected.type}</p>
+              <p className="mb-1" style={{ color: 'var(--text-muted)' }}>Type</p>
+              <p className="font-medium capitalize" style={{ color: 'var(--text-primary)' }}>{selected.type}</p>
             </div>
             <div>
-              <p className="text-gray-500 mb-1">Connections</p>
-              <p className="font-medium text-gray-900">{selected.connections.length} upstream</p>
+              <p className="mb-1" style={{ color: 'var(--text-muted)' }}>Connections</p>
+              <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{selected.connections.length} upstream</p>
             </div>
             <div>
-              <p className="text-gray-500 mb-1">Status</p>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                selected.status === 'healthy'   ? 'bg-green-100 text-green-800' :
-                selected.status === 'unhealthy' ? 'bg-red-100 text-red-800'   :
-                                                  'bg-yellow-100 text-yellow-800'
-              }`}>
+              <p className="mb-1" style={{ color: 'var(--text-muted)' }}>Status</p>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style={
+                selected.status === 'healthy'   ? { background: 'var(--success-light)', color: 'var(--success)' } :
+                selected.status === 'unhealthy' ? { background: 'var(--danger-light)',  color: 'var(--danger)'  } :
+                                                  { background: 'var(--warning-light)', color: 'var(--warning)' }
+              }>
                 {selected.status}
               </span>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Loading skeleton */}
+      {loading && !selected && (
+        <div className="rounded-xl h-32 animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />
       )}
     </div>
   );

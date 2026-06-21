@@ -137,15 +137,15 @@ interface StatCardProps {
   color?: string;
 }
 
-function StatCard({ label, value, icon, color = 'text-[#0071E3]' }: StatCardProps) {
+function StatCard({ label, value, icon, color = 'text-[#006FFF]' }: StatCardProps) {
   return (
-    <div className="bg-white rounded-xl shadow-sm px-5 py-4 flex items-center gap-4">
-      <div className={`flex-shrink-0 w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center ${color}`}>
+    <div style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} className="rounded-xl px-5 py-4 flex items-center gap-4">
+      <div style={{ background: 'var(--bg-surface-raised)' }} className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${color}`}>
         {icon}
       </div>
       <div>
-        <p className="text-xs text-gray-500 font-medium">{label}</p>
-        <p className="text-2xl font-bold text-gray-900 leading-tight">{value}</p>
+        <p style={{ color: 'var(--text-muted)' }} className="text-xs font-medium">{label}</p>
+        <p style={{ color: 'var(--text-primary)' }} className="text-2xl font-bold leading-tight">{value}</p>
       </div>
     </div>
   );
@@ -154,13 +154,13 @@ function StatCard({ label, value, icon, color = 'text-[#0071E3]' }: StatCardProp
 // ── Result Badge ───────────────────────────────────────────────────────────────
 
 function ResultBadge({ result }: { result: AuthResult }) {
-  const map: Record<AuthResult, string> = {
-    Accept: 'bg-green-100 text-green-800 border border-green-200',
-    Reject: 'bg-red-100 text-red-800 border border-red-200',
-    Challenge: 'bg-amber-100 text-amber-800 border border-amber-200',
+  const styleMap: Record<AuthResult, React.CSSProperties> = {
+    Accept:    { background: 'var(--success-light)', color: 'var(--success)', border: '1px solid var(--success)' },
+    Reject:    { background: 'var(--danger-light)',  color: 'var(--danger)',  border: '1px solid var(--danger)' },
+    Challenge: { background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid var(--warning)' },
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${map[result]}`}>
+    <span style={styleMap[result]} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium">
       {result}
     </span>
   );
@@ -169,14 +169,14 @@ function ResultBadge({ result }: { result: AuthResult }) {
 // ── NAS Type Badge ─────────────────────────────────────────────────────────────
 
 function NasTypeBadge({ type }: { type: NasType }) {
-  const map: Record<NasType, string> = {
-    Switch: 'bg-blue-50 text-blue-700',
-    'WiFi AP': 'bg-purple-50 text-purple-700',
-    VPN: 'bg-indigo-50 text-indigo-700',
-    Other: 'bg-gray-100 text-gray-600',
+  const styleMap: Record<NasType, React.CSSProperties> = {
+    Switch:    { background: 'var(--accent-light)',           color: 'var(--accent)' },
+    'WiFi AP': { background: 'rgba(139,92,246,0.15)',         color: '#a78bfa' },
+    VPN:       { background: 'rgba(99,102,241,0.15)',         color: '#818cf8' },
+    Other:     { background: 'var(--bg-surface-raised)',      color: 'var(--text-secondary)' },
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${map[type]}`}>
+    <span style={styleMap[type]} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium">
       {type}
     </span>
   );
@@ -188,7 +188,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   return (
     <button
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? 'bg-[#0071E3]' : 'bg-gray-200'}`}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? 'bg-[#006FFF]' : 'bg-gray-200'}`}
     >
       <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
     </button>
@@ -234,51 +234,55 @@ function NewClientModal({ onClose, onCreated }: NewClientModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Neuer RADIUS-Client</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+      <div style={{ background: 'var(--bg-surface)' }} className="rounded-2xl shadow-2xl w-full max-w-md">
+        <div style={{ borderBottom: '1px solid var(--border)' }} className="flex items-center justify-between px-6 py-5">
+          <h2 style={{ color: 'var(--text-primary)' }} className="text-base font-semibold">Neuer RADIUS-Client</h2>
+          <button onClick={onClose} style={{ color: 'var(--text-muted)' }} className="hover:text-[var(--text-secondary)] transition-colors">
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
 
         <div className="px-6 py-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
+            <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-1.5">Name</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="z.B. Core-Switch-01"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+              style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">IP-Adresse / CIDR</label>
+            <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-1.5">IP-Adresse / CIDR</label>
             <input
               type="text"
               value={ipSubnet}
               onChange={e => setIpSubnet(e.target.value)}
               placeholder="z.B. 192.168.1.10/32"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+              style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Shared Secret</label>
+            <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-1.5">Shared Secret</label>
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <input
                   type={showSecret ? 'text' : 'password'}
                   value={secret}
                   onChange={e => setSecret(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3] pr-10 font-mono"
+                  style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF] pr-10 font-mono"
                 />
                 <button
                   type="button"
                   onClick={() => setShowSecret(!showSecret)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  style={{ color: 'var(--text-muted)' }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 hover:text-[var(--text-secondary)]"
                 >
                   {showSecret ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
                 </button>
@@ -287,7 +291,8 @@ function NewClientModal({ onClose, onCreated }: NewClientModalProps) {
                 type="button"
                 onClick={() => setSecret(generateSecret())}
                 title="Neu generieren"
-                className="p-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                style={{ color: 'var(--text-muted)', borderColor: 'var(--border-strong)', background: 'var(--bg-surface-raised)' }}
+                className="p-2 border rounded-lg hover:text-[var(--text-secondary)] transition-colors"
               >
                 <ArrowPathIcon className="w-4 h-4" />
               </button>
@@ -295,11 +300,12 @@ function NewClientModal({ onClose, onCreated }: NewClientModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">NAS-Typ</label>
+            <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-1.5">NAS-Typ</label>
             <select
               value={nasType}
               onChange={e => setNasType(e.target.value as NasType)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+              style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
             >
               {(['Switch', 'WiFi AP', 'VPN', 'Other'] as NasType[]).map(t => (
                 <option key={t} value={t}>{t}</option>
@@ -308,14 +314,14 @@ function NewClientModal({ onClose, onCreated }: NewClientModalProps) {
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+        <div style={{ borderTop: '1px solid var(--border)' }} className="px-6 py-4 flex justify-end gap-3">
+          <button onClick={onClose} style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }} className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-[#252c37] transition-colors">
             Abbrechen
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0060C7] transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-white bg-[#006FFF] rounded-lg hover:bg-[#0060E0] transition-colors disabled:opacity-50"
           >
             {saving ? 'Erstellen…' : 'Client erstellen'}
           </button>
@@ -362,62 +368,66 @@ function NewPolicyModal({ onClose, onCreated }: NewPolicyModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Neue Richtlinie</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+      <div style={{ background: 'var(--bg-surface)' }} className="rounded-2xl shadow-2xl w-full max-w-md">
+        <div style={{ borderBottom: '1px solid var(--border)' }} className="flex items-center justify-between px-6 py-5">
+          <h2 style={{ color: 'var(--text-primary)' }} className="text-base font-semibold">Neue Richtlinie</h2>
+          <button onClick={onClose} style={{ color: 'var(--text-muted)' }} className="hover:text-[var(--text-secondary)] transition-colors">
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
 
         <div className="px-6 py-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
+            <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-1.5">Name</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="z.B. IT-Mitarbeiter VLAN 10"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+              style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Benutzergruppe</label>
+            <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-1.5">Benutzergruppe</label>
             <input
               type="text"
               value={userGroup}
               onChange={e => setUserGroup(e.target.value)}
               placeholder="z.B. IT, Engineering (leer = alle)"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+              style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Gerätetyp</label>
+              <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-1.5">Gerätetyp</label>
               <input
                 type="text"
                 value={deviceType}
                 onChange={e => setDeviceType(e.target.value)}
                 placeholder="Alle"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Tageszeit</label>
+              <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-1.5">Tageszeit</label>
               <input
                 type="text"
                 value={timeOfDay}
                 onChange={e => setTimeOfDay(e.target.value)}
                 placeholder="Immer"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+                style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Aktion</label>
+            <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-2">Aktion</label>
             <div className="grid grid-cols-3 gap-2">
               {(['Accept', 'Reject', 'Challenge'] as PolicyAction[]).map(a => (
                 <button
@@ -428,8 +438,9 @@ function NewPolicyModal({ onClose, onCreated }: NewPolicyModalProps) {
                       ? a === 'Accept' ? 'bg-green-600 text-white border-green-600'
                         : a === 'Reject' ? 'bg-red-600 text-white border-red-600'
                         : 'bg-amber-500 text-white border-amber-500'
-                      : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-300'
+                      : ''
                   }`}
+                  style={action !== a ? { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', borderColor: 'var(--border-strong)' } : {}}
                 >
                   {a}
                 </button>
@@ -438,25 +449,26 @@ function NewPolicyModal({ onClose, onCreated }: NewPolicyModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">VLAN (optional)</label>
+            <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-1.5">VLAN (optional)</label>
             <input
               type="text"
               value={vlan}
               onChange={e => setVlan(e.target.value)}
               placeholder="z.B. 10"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+              style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
             />
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+        <div style={{ borderTop: '1px solid var(--border)' }} className="px-6 py-4 flex justify-end gap-3">
+          <button onClick={onClose} style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }} className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-[#252c37] transition-colors">
             Abbrechen
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0060C7] transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-white bg-[#006FFF] rounded-lg hover:bg-[#0060E0] transition-colors disabled:opacity-50"
           >
             {saving ? 'Erstellen…' : 'Richtlinie erstellen'}
           </button>
@@ -490,41 +502,42 @@ function ClientsTab({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">{clients.length} Clients konfiguriert</p>
+        <p style={{ color: 'var(--text-muted)' }} className="text-sm">{clients.length} Clients konfiguriert</p>
         <button
           onClick={onNewClient}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white text-sm font-medium rounded-lg hover:bg-[#0060C7] transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#006FFF] text-white text-sm font-medium rounded-lg hover:bg-[#0060E0] transition-colors"
         >
           <PlusIcon className="w-4 h-4" />
           Neuer Client
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} className="rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Client Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">IP / Subnetz</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Shared Secret</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">NAS-Typ</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Aktionen</th>
+            <tr style={{ background: 'var(--bg-surface-raised)', borderBottom: '1px solid var(--border)' }}>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Client Name</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">IP / Subnetz</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Shared Secret</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">NAS-Typ</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Status</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide">Aktionen</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-[rgba(255,255,255,0.07)]">
             {clients.map(client => (
-              <tr key={client.id} className="hover:bg-gray-50/50 transition-colors">
-                <td className="px-4 py-3 font-medium text-gray-900">{client.name}</td>
-                <td className="px-4 py-3 font-mono text-xs text-gray-700">{client.ipSubnet}</td>
+              <tr key={client.id} className="hover:bg-[#1c2128] transition-colors">
+                <td style={{ color: 'var(--text-primary)' }} className="px-4 py-3 font-medium">{client.name}</td>
+                <td style={{ color: 'var(--text-secondary)' }} className="px-4 py-3 font-mono text-xs">{client.ipSubnet}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-xs text-gray-700">
+                    <span style={{ color: 'var(--text-secondary)' }} className="font-mono text-xs">
                       {visibleSecrets.has(client.id) ? client.secret : '••••••••••••'}
                     </span>
                     <button
                       onClick={() => toggleSecret(client.id)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      style={{ color: 'var(--text-muted)' }}
+                      className="hover:text-[var(--text-secondary)] transition-colors"
                     >
                       {visibleSecrets.has(client.id)
                         ? <EyeSlashIcon className="w-3.5 h-3.5" />
@@ -535,7 +548,10 @@ function ClientsTab({
                 </td>
                 <td className="px-4 py-3"><NasTypeBadge type={client.nasType} /></td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex items-center gap-1 text-xs font-medium ${client.status === 'Aktiv' ? 'text-green-700' : 'text-gray-500'}`}>
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs font-medium ${client.status === 'Aktiv' ? 'text-green-400' : ''}`}
+                    style={client.status !== 'Aktiv' ? { color: 'var(--text-muted)' } : {}}
+                  >
                     <span className={`w-1.5 h-1.5 rounded-full ${client.status === 'Aktiv' ? 'bg-green-500' : 'bg-gray-400'}`} />
                     {client.status}
                   </span>
@@ -544,13 +560,15 @@ function ClientsTab({
                   <div className="flex items-center justify-end gap-1">
                     <button
                       onClick={() => toast('Bearbeiten noch nicht implementiert', { icon: 'ℹ️' })}
-                      className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                      style={{ color: 'var(--text-muted)' }}
+                      className="p-1.5 hover:text-[var(--text-primary)] rounded-lg hover:bg-[#252c37] transition-colors"
                     >
                       <PencilIcon className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => onDelete(client.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                      style={{ color: 'var(--text-muted)' }}
+                      className="p-1.5 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors"
                     >
                       <TrashIcon className="w-4 h-4" />
                     </button>
@@ -561,7 +579,7 @@ function ClientsTab({
           </tbody>
         </table>
         {clients.length === 0 && (
-          <div className="text-center py-12 text-gray-400">
+          <div style={{ color: 'var(--text-muted)' }} className="text-center py-12">
             <ServerIcon className="w-10 h-10 mx-auto mb-2 opacity-40" />
             <p className="text-sm">Keine RADIUS-Clients konfiguriert</p>
           </div>
@@ -584,19 +602,19 @@ function PoliciesTab({
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const ACTION_COLORS: Record<PolicyAction, string> = {
-    Accept: 'bg-green-100 text-green-800 border-green-200',
-    Reject: 'bg-red-100 text-red-800 border-red-200',
-    Challenge: 'bg-amber-100 text-amber-800 border-amber-200',
+  const ACTION_STYLES: Record<PolicyAction, React.CSSProperties> = {
+    Accept:    { background: 'var(--success-light)', color: 'var(--success)', border: '1px solid var(--success)' },
+    Reject:    { background: 'var(--danger-light)',  color: 'var(--danger)',  border: '1px solid var(--danger)' },
+    Challenge: { background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid var(--warning)' },
   };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">{policies.length} Richtlinien definiert</p>
+        <p style={{ color: 'var(--text-muted)' }} className="text-sm">{policies.length} Richtlinien definiert</p>
         <button
           onClick={onNewPolicy}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0071E3] text-white text-sm font-medium rounded-lg hover:bg-[#0060C7] transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#006FFF] text-white text-sm font-medium rounded-lg hover:bg-[#0060E0] transition-colors"
         >
           <PlusIcon className="w-4 h-4" />
           Neue Richtlinie
@@ -605,36 +623,37 @@ function PoliciesTab({
 
       <div className="space-y-3">
         {policies.map(policy => (
-          <div key={policy.id} className={`bg-white rounded-xl shadow-sm px-5 py-4 ${!policy.enabled ? 'opacity-60' : ''}`}>
+          <div key={policy.id} style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} className={`rounded-xl px-5 py-4 ${!policy.enabled ? 'opacity-60' : ''}`}>
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="font-semibold text-gray-900">{policy.name}</span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${ACTION_COLORS[policy.action]}`}>
+                  <span style={{ color: 'var(--text-primary)' }} className="font-semibold">{policy.name}</span>
+                  <span style={ACTION_STYLES[policy.action]} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium">
                     {policy.action}
                   </span>
                   {policy.vlan && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                    <span style={{ background: 'var(--accent-light)', color: 'var(--accent)' }} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium">
                       VLAN {policy.vlan}
                     </span>
                   )}
                   {!policy.enabled && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">
+                    <span style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-muted)' }} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium">
                       Deaktiviert
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-5 text-xs text-gray-500">
-                  <span>Gruppe: <span className="text-gray-700 font-medium">{policy.userGroup || 'Alle'}</span></span>
-                  <span>Gerät: <span className="text-gray-700 font-medium">{policy.deviceType}</span></span>
-                  <span>Zeit: <span className="text-gray-700 font-medium">{policy.timeOfDay}</span></span>
+                <div style={{ color: 'var(--text-muted)' }} className="flex items-center gap-5 text-xs">
+                  <span>Gruppe: <span style={{ color: 'var(--text-secondary)' }} className="font-medium">{policy.userGroup || 'Alle'}</span></span>
+                  <span>Gerät: <span style={{ color: 'var(--text-secondary)' }} className="font-medium">{policy.deviceType}</span></span>
+                  <span>Zeit: <span style={{ color: 'var(--text-secondary)' }} className="font-medium">{policy.timeOfDay}</span></span>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <Toggle checked={policy.enabled} onChange={() => onToggle(policy.id)} />
                 <button
                   onClick={() => onDelete(policy.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                  style={{ color: 'var(--text-muted)' }}
+                  className="p-1.5 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors"
                 >
                   <TrashIcon className="w-4 h-4" />
                 </button>
@@ -643,7 +662,7 @@ function PoliciesTab({
           </div>
         ))}
         {policies.length === 0 && (
-          <div className="bg-white rounded-xl shadow-sm text-center py-12 text-gray-400">
+          <div style={{ background: 'var(--bg-surface)', color: 'var(--text-muted)', boxShadow: 'var(--card-shadow)' }} className="rounded-xl text-center py-12">
             <ShieldCheckIcon className="w-10 h-10 mx-auto mb-2 opacity-40" />
             <p className="text-sm">Keine Richtlinien definiert</p>
           </div>
@@ -667,12 +686,12 @@ function AuthLogTab({ entries }: { entries: AuthLogEntry[] }) {
     return true;
   });
 
-  const METHOD_COLORS: Record<AuthMethod, string> = {
-    'EAP-TLS': 'bg-blue-50 text-blue-700',
-    PEAP: 'bg-purple-50 text-purple-700',
-    PAP: 'bg-gray-100 text-gray-600',
-    CHAP: 'bg-gray-100 text-gray-600',
-    'EAP-TTLS': 'bg-indigo-50 text-indigo-700',
+  const METHOD_STYLES: Record<AuthMethod, React.CSSProperties> = {
+    'EAP-TLS':  { background: 'var(--accent-light)',        color: 'var(--accent)' },
+    PEAP:       { background: 'rgba(139,92,246,0.15)',       color: '#a78bfa' },
+    PAP:        { background: 'var(--bg-surface-raised)',    color: 'var(--text-secondary)' },
+    CHAP:       { background: 'var(--bg-surface-raised)',    color: 'var(--text-secondary)' },
+    'EAP-TTLS': { background: 'rgba(99,102,241,0.15)',       color: '#818cf8' },
   };
 
   const handleExport = () => {
@@ -695,13 +714,14 @@ function AuthLogTab({ entries }: { entries: AuthLogEntry[] }) {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="flex items-center gap-2">
-          <FunnelIcon className="w-4 h-4 text-gray-400" />
-          <span className="text-sm text-gray-500">Filter:</span>
+          <FunnelIcon style={{ color: 'var(--text-muted)' }} className="w-4 h-4" />
+          <span style={{ color: 'var(--text-muted)' }} className="text-sm">Filter:</span>
         </div>
         <select
           value={filterResult}
           onChange={e => setFilterResult(e.target.value as AuthResult | 'Alle')}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+          style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+          className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
         >
           <option value="Alle">Alle Ergebnisse</option>
           <option value="Accept">Accept</option>
@@ -713,19 +733,22 @@ function AuthLogTab({ entries }: { entries: AuthLogEntry[] }) {
           value={filterUser}
           onChange={e => setFilterUser(e.target.value)}
           placeholder="Benutzer filtern…"
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3] w-44"
+          style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+          className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF] w-44"
         />
         <input
           type="text"
           value={filterClient}
           onChange={e => setFilterClient(e.target.value)}
           placeholder="Client-IP filtern…"
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3] w-40"
+          style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+          className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF] w-40"
         />
         <div className="ml-auto">
           <button
             onClick={handleExport}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-strong)' }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border rounded-lg hover:bg-[#1c2128] transition-colors"
           >
             <DocumentArrowDownIcon className="w-4 h-4" />
             CSV exportieren
@@ -733,49 +756,49 @@ function AuthLogTab({ entries }: { entries: AuthLogEntry[] }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} className="rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Zeitstempel</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Benutzer</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Client IP</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">NAS IP</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Methode</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Ergebnis</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">VLAN</th>
+            <tr style={{ background: 'var(--bg-surface-raised)', borderBottom: '1px solid var(--border)' }}>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Zeitstempel</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Benutzer</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Client IP</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">NAS IP</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Methode</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Ergebnis</th>
+              <th style={{ color: 'var(--text-muted)' }} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">VLAN</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-[rgba(255,255,255,0.07)]">
             {filtered.map(entry => (
-              <tr key={entry.id} className="hover:bg-gray-50/50 transition-colors">
-                <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtDateTime(entry.timestamp)}</td>
+              <tr key={entry.id} className="hover:bg-[#1c2128] transition-colors">
+                <td style={{ color: 'var(--text-secondary)' }} className="px-4 py-3 text-xs whitespace-nowrap">{fmtDateTime(entry.timestamp)}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5">
-                    <UserIcon className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="text-xs font-medium text-gray-900">{entry.user}</span>
+                    <UserIcon style={{ color: 'var(--text-muted)' }} className="w-3.5 h-3.5" />
+                    <span style={{ color: 'var(--text-primary)' }} className="text-xs font-medium">{entry.user}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 font-mono text-xs text-gray-700">{entry.clientIp}</td>
-                <td className="px-4 py-3 font-mono text-xs text-gray-700">{entry.nasIp}</td>
+                <td style={{ color: 'var(--text-secondary)' }} className="px-4 py-3 font-mono text-xs">{entry.clientIp}</td>
+                <td style={{ color: 'var(--text-secondary)' }} className="px-4 py-3 font-mono text-xs">{entry.nasIp}</td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${METHOD_COLORS[entry.method] ?? 'bg-gray-100 text-gray-600'}`}>
+                  <span style={METHOD_STYLES[entry.method] ?? { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium">
                     {entry.method}
                   </span>
                 </td>
                 <td className="px-4 py-3"><ResultBadge result={entry.result} /></td>
-                <td className="px-4 py-3 text-xs text-gray-600">{entry.vlan ?? '—'}</td>
+                <td style={{ color: 'var(--text-secondary)' }} className="px-4 py-3 text-xs">{entry.vlan ?? '—'}</td>
               </tr>
             ))}
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <div className="text-center py-10 text-gray-400 text-sm">
+          <div style={{ color: 'var(--text-muted)' }} className="text-center py-10 text-sm">
             Keine Log-Einträge gefunden
           </div>
         )}
       </div>
-      <p className="text-xs text-gray-400 mt-2">{filtered.length} von {entries.length} Einträgen</p>
+      <p style={{ color: 'var(--text-muted)' }} className="text-xs mt-2">{filtered.length} von {entries.length} Einträgen</p>
     </div>
   );
 }
@@ -799,7 +822,7 @@ function KonfigTab({ config, onChange }: { config: RadiusConfig; onChange: (c: R
 
   const numberInput = (label: string, value: number, setter: (v: number) => void, min?: number, max?: number, suffix?: string) => (
     <div className="flex items-center justify-between">
-      <label className="text-sm text-gray-700">{label}</label>
+      <label style={{ color: 'var(--text-secondary)' }} className="text-sm">{label}</label>
       <div className="flex items-center gap-2">
         <input
           type="number"
@@ -807,9 +830,10 @@ function KonfigTab({ config, onChange }: { config: RadiusConfig; onChange: (c: R
           max={max}
           value={value}
           onChange={e => setter(Number(e.target.value))}
-          className="w-24 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+          style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+          className="w-24 border rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
         />
-        {suffix && <span className="text-sm text-gray-500">{suffix}</span>}
+        {suffix && <span style={{ color: 'var(--text-muted)' }} className="text-sm">{suffix}</span>}
       </div>
     </div>
   );
@@ -817,8 +841,8 @@ function KonfigTab({ config, onChange }: { config: RadiusConfig; onChange: (c: R
   const toggleRow = (label: string, description: string, value: boolean, setter: (v: boolean) => void) => (
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-sm font-medium text-gray-900">{label}</p>
-        {description && <p className="text-xs text-gray-500 mt-0.5">{description}</p>}
+        <p style={{ color: 'var(--text-primary)' }} className="text-sm font-medium">{label}</p>
+        {description && <p style={{ color: 'var(--text-muted)' }} className="text-xs mt-0.5">{description}</p>}
       </div>
       <Toggle checked={value} onChange={setter} />
     </div>
@@ -827,8 +851,8 @@ function KonfigTab({ config, onChange }: { config: RadiusConfig; onChange: (c: R
   return (
     <div className="max-w-2xl space-y-5">
       {/* Server settings */}
-      <div className="bg-white rounded-xl shadow-sm px-6 py-5 space-y-4">
-        <h3 className="font-semibold text-gray-900">Server-Einstellungen</h3>
+      <div style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} className="rounded-xl px-6 py-5 space-y-4">
+        <h3 style={{ color: 'var(--text-primary)' }} className="font-semibold">Server-Einstellungen</h3>
         <div className="space-y-3">
           {numberInput('Authentication Port', config.authPort, v => onChange({ ...config, authPort: v }), 1, 65535)}
           {numberInput('Accounting Port', config.accountingPort, v => onChange({ ...config, accountingPort: v }), 1, 65535)}
@@ -838,8 +862,8 @@ function KonfigTab({ config, onChange }: { config: RadiusConfig; onChange: (c: R
       </div>
 
       {/* EAP settings */}
-      <div className="bg-white rounded-xl shadow-sm px-6 py-5 space-y-4">
-        <h3 className="font-semibold text-gray-900">EAP-Einstellungen</h3>
+      <div style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} className="rounded-xl px-6 py-5 space-y-4">
+        <h3 style={{ color: 'var(--text-primary)' }} className="font-semibold">EAP-Einstellungen</h3>
         <div className="space-y-4">
           {toggleRow(
             'EAP-TLS aktivieren',
@@ -861,23 +885,24 @@ function KonfigTab({ config, onChange }: { config: RadiusConfig; onChange: (c: R
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">CA-Zertifikat</label>
+          <label style={{ color: 'var(--text-secondary)' }} className="block text-sm font-medium mb-1.5">CA-Zertifikat</label>
           <select
             value={config.caCertId}
             onChange={e => onChange({ ...config, caCertId: e.target.value })}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+            style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]/30 focus:border-[#006FFF]"
           >
             <option value="">CA-Zertifikat auswählen…</option>
             <option value="ca1">Firma Root CA</option>
             <option value="ca2">Firma Intermediate CA</option>
           </select>
-          <p className="text-xs text-gray-400 mt-1">CA aus der Zertifikatsverwaltung auswählen</p>
+          <p style={{ color: 'var(--text-muted)' }} className="text-xs mt-1">CA aus der Zertifikatsverwaltung auswählen</p>
         </div>
       </div>
 
       {/* Accounting */}
-      <div className="bg-white rounded-xl shadow-sm px-6 py-5 space-y-4">
-        <h3 className="font-semibold text-gray-900">Accounting</h3>
+      <div style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} className="rounded-xl px-6 py-5 space-y-4">
+        <h3 style={{ color: 'var(--text-primary)' }} className="font-semibold">Accounting</h3>
         <div className="space-y-4">
           {toggleRow(
             'RADIUS Accounting aktivieren',
@@ -887,7 +912,7 @@ function KonfigTab({ config, onChange }: { config: RadiusConfig; onChange: (c: R
           )}
           {config.accountingEnabled && (
             <div className="flex items-center justify-between">
-              <label className="text-sm text-gray-700">Accounting-Ziel</label>
+              <label style={{ color: 'var(--text-secondary)' }} className="text-sm">Accounting-Ziel</label>
               <div className="flex gap-2">
                 {(['syslog', 'database'] as const).map(d => (
                   <button
@@ -895,9 +920,10 @@ function KonfigTab({ config, onChange }: { config: RadiusConfig; onChange: (c: R
                     onClick={() => onChange({ ...config, accountingDest: d })}
                     className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-all ${
                       config.accountingDest === d
-                        ? 'bg-[#0071E3] text-white border-[#0071E3]'
-                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-300'
+                        ? 'bg-[#006FFF] text-white border-[#006FFF]'
+                        : ''
                     }`}
+                    style={config.accountingDest !== d ? { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', borderColor: 'var(--border-strong)' } : {}}
                   >
                     {d === 'syslog' ? 'Syslog' : 'Datenbank'}
                   </button>
@@ -912,7 +938,7 @@ function KonfigTab({ config, onChange }: { config: RadiusConfig; onChange: (c: R
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-5 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0060C7] transition-colors disabled:opacity-50"
+          className="px-5 py-2 text-sm font-medium text-white bg-[#006FFF] rounded-lg hover:bg-[#0060E0] transition-colors disabled:opacity-50"
         >
           {saving ? 'Speichern…' : 'Konfiguration speichern'}
         </button>
@@ -1002,7 +1028,7 @@ export default function RadiusView() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7]">
+    <div style={{ minHeight: '100vh', background: 'var(--bg-base)' }}>
       {/* Modals */}
       {showNewClientModal && (
         <NewClientModal
@@ -1020,12 +1046,12 @@ export default function RadiusView() {
       {/* Header */}
       <div className="px-8 py-6">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-[#0071E3]/10 flex items-center justify-center">
-            <WifiIcon className="w-5 h-5 text-[#0071E3]" />
+          <div className="w-10 h-10 rounded-xl bg-[#006FFF]/10 flex items-center justify-center">
+            <WifiIcon className="w-5 h-5 text-[#006FFF]" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">RADIUS / 802.1X</h1>
-            <p className="text-sm text-gray-500">Netzwerk-Authentifizierung und Zugriffskontrolle</p>
+            <h1 style={{ color: 'var(--text-primary)' }} className="text-xl font-bold">RADIUS / 802.1X</h1>
+            <p style={{ color: 'var(--text-muted)' }} className="text-sm">Netzwerk-Authentifizierung und Zugriffskontrolle</p>
           </div>
         </div>
 
@@ -1040,33 +1066,34 @@ export default function RadiusView() {
             label="Aktive Sitzungen"
             value={loading ? '…' : activeSessions}
             icon={<CheckCircleIcon className="w-5 h-5" />}
-            color="text-green-600"
+            color="text-green-400"
           />
           <StatCard
             label="Fehlgeschlagene Auth heute"
             value={loading ? '…' : failedToday}
             icon={<XCircleIcon className="w-5 h-5" />}
-            color="text-red-500"
+            color="text-red-400"
           />
           <StatCard
             label="Erfolgreiche Auth heute"
             value={loading ? '…' : successToday}
             icon={<ShieldCheckIcon className="w-5 h-5" />}
-            color="text-[#0071E3]"
+            color="text-[#006FFF]"
           />
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-white rounded-xl shadow-sm p-1 mb-6 w-fit">
+        <div style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)' }} className="flex gap-1 rounded-xl p-1 mb-6 w-fit">
           {TABS.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === tab.id
-                  ? 'bg-[#0071E3] text-white shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  ? 'bg-[#006FFF] text-white shadow-sm'
+                  : 'hover:bg-[#1c2128]'
               }`}
+              style={activeTab !== tab.id ? { color: 'var(--text-secondary)' } : {}}
             >
               {tab.label}
             </button>

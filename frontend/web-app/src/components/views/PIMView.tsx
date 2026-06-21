@@ -98,12 +98,13 @@ interface BreakGlassEvent {
 
 type Tab = 'rollen' | 'anfragen' | 'aktiv' | 'anfordern' | 'sessions' | 'breakglass';
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  active:  'bg-green-50  text-green-700  border-green-200',
-  denied:  'bg-red-50    text-red-700    border-red-200',
-  expired: 'bg-gray-50   text-gray-600   border-gray-200',
-  revoked: 'bg-gray-50   text-gray-500   border-gray-200',
+// Dark-theme status color map using CSS vars inline
+const STATUS_BADGE: Record<string, React.CSSProperties> = {
+  pending: { color: 'var(--warning)',  background: 'var(--warning-light)',  border: '1px solid var(--warning)' },
+  active:  { color: 'var(--success)',  background: 'var(--success-light)',  border: '1px solid var(--success)' },
+  denied:  { color: 'var(--danger)',   background: 'var(--danger-light)',   border: '1px solid var(--danger)' },
+  expired: { color: 'var(--text-muted)', background: 'var(--bg-surface-raised)', border: '1px solid var(--border)' },
+  revoked: { color: 'var(--text-muted)', background: 'var(--bg-surface-raised)', border: '1px solid var(--border)' },
 };
 
 function timeLeft(expires_at?: string): string {
@@ -120,10 +121,10 @@ function fmtDate(s?: string) {
   return new Date(s).toLocaleString('de-CH', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-function riskColor(score: number): string {
-  if (score >= 0.7) return 'text-red-600 bg-red-50';
-  if (score >= 0.4) return 'text-orange-600 bg-orange-50';
-  return 'text-green-600 bg-green-50';
+function riskBadgeStyle(score: number): React.CSSProperties {
+  if (score >= 0.7) return { color: 'var(--danger)',  background: 'var(--danger-light)' };
+  if (score >= 0.4) return { color: 'var(--warning)', background: 'var(--warning-light)' };
+  return { color: 'var(--success)', background: 'var(--success-light)' };
 }
 
 // ─── Role Form Modal ──────────────────────────────────────────────────────────
@@ -143,6 +144,17 @@ function RoleFormModal({ role, onClose, onSaved }: {
     approver_group_id:  role?.approver_group_id ?? '',
   });
   const [saving, setSaving] = useState(false);
+
+  const inputStyle: React.CSSProperties = {
+    padding: '0.5rem 0.75rem',
+    fontSize: '0.875rem',
+    border: '1px solid var(--border-strong)',
+    borderRadius: '0.5rem',
+    outline: 'none',
+    background: 'var(--bg-surface-raised)',
+    color: 'var(--text-primary)',
+    width: '100%',
+  };
 
   const save = async () => {
     if (!form.name || !form.target_group_id) {
@@ -167,60 +179,62 @@ function RoleFormModal({ role, onClose, onSaved }: {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
+      <div className="rounded-2xl shadow-2xl w-full max-w-lg" style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-strong)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-5 pb-0">
-          <h2 className="text-base font-semibold text-[#1D1D1F]">{role ? 'Rolle bearbeiten' : 'Neue PIM-Rolle'}</h2>
-          <button onClick={onClose}><XMarkIcon className="w-5 h-5 text-[#8E8E93]" /></button>
+          <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{role ? 'Rolle bearbeiten' : 'Neue PIM-Rolle'}</h2>
+          <button onClick={onClose}><XMarkIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} /></button>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Rollenname *</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Rollenname *</label>
               <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                placeholder="z.B. Server-Administrator" className="input-apple w-full" />
+                placeholder="z.B. Server-Administrator" style={inputStyle} />
             </div>
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Beschreibung</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Beschreibung</label>
               <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-                placeholder="Wofür ist diese Rolle?" className="input-apple w-full" />
+                placeholder="Wofür ist diese Rolle?" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Ziel-Gruppe ID *</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Ziel-Gruppe ID *</label>
               <input value={form.target_group_id} onChange={e => setForm(p => ({ ...p, target_group_id: e.target.value }))}
-                placeholder="grp-servers" className="input-apple w-full font-mono" />
+                placeholder="grp-servers" style={{ ...inputStyle, fontFamily: 'monospace' }} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Ziel-Gruppe Name</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Ziel-Gruppe Name</label>
               <input value={form.target_group_name} onChange={e => setForm(p => ({ ...p, target_group_name: e.target.value }))}
-                placeholder="Server-Admins" className="input-apple w-full" />
+                placeholder="Server-Admins" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">Max. Dauer (Stunden)</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Max. Dauer (Stunden)</label>
               <input type="number" min={1} max={72} value={form.max_duration_hours}
                 onChange={e => setForm(p => ({ ...p, max_duration_hours: Number(e.target.value) }))}
-                className="input-apple w-full" />
+                style={inputStyle} />
             </div>
             <div className="flex items-center gap-3 mt-5">
               <button type="button"
                 onClick={() => setForm(p => ({ ...p, requires_approval: !p.requires_approval }))}
-                className={`relative w-11 h-6 rounded-full transition-colors ${form.requires_approval ? 'bg-[#0071E3]' : 'bg-[#D1D1D6]'}`}>
+                className={`relative w-11 h-6 rounded-full transition-colors`}
+                style={{ background: form.requires_approval ? 'var(--accent)' : 'var(--bg-surface-raised)' }}>
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.requires_approval ? 'translate-x-5' : ''}`} />
               </button>
-              <span className="text-sm text-[#3C3C43]">Genehmigung erforderlich</span>
+              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Genehmigung erforderlich</span>
             </div>
             {form.requires_approval && (
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-[#3C3C43] mb-1">Genehmiger-Gruppe ID</label>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Genehmiger-Gruppe ID</label>
                 <input value={form.approver_group_id} onChange={e => setForm(p => ({ ...p, approver_group_id: e.target.value }))}
-                  placeholder="grp-approvers (leer = alle Admins)" className="input-apple w-full font-mono" />
+                  placeholder="grp-approvers (leer = alle Admins)" style={{ ...inputStyle, fontFamily: 'monospace' }} />
               </div>
             )}
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-[#3C3C43] bg-[#F2F2F7] rounded-lg hover:bg-[#E5E5EA]">Abbrechen</button>
+            <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg" style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface-raised)', border: '1px solid var(--border)' }}>Abbrechen</button>
             <button onClick={save} disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED] disabled:opacity-60">
+              className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-60"
+              style={{ background: 'var(--accent)' }}>
               {saving ? 'Speichern...' : 'Speichern'}
             </button>
           </div>
@@ -243,6 +257,17 @@ function RequestModal({ roles, onClose, onSubmitted }: {
   const [submitting, setSubmitting] = useState(false);
 
   const selectedRole = roles.find(r => r.id === roleId);
+
+  const inputStyle: React.CSSProperties = {
+    padding: '0.5rem 0.75rem',
+    fontSize: '0.875rem',
+    border: '1px solid var(--border-strong)',
+    borderRadius: '0.5rem',
+    outline: 'none',
+    background: 'var(--bg-surface-raised)',
+    color: 'var(--text-primary)',
+    width: '100%',
+  };
 
   const submit = async () => {
     if (!roleId || !justification.trim()) {
@@ -269,43 +294,44 @@ function RequestModal({ roles, onClose, onSubmitted }: {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
+      <div className="rounded-2xl shadow-2xl w-full max-w-md" style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-strong)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-5 pb-0">
-          <h2 className="text-base font-semibold text-[#1D1D1F]">Erweiterten Zugriff anfordern</h2>
-          <button onClick={onClose}><XMarkIcon className="w-5 h-5 text-[#8E8E93]" /></button>
+          <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Erweiterten Zugriff anfordern</h2>
+          <button onClick={onClose}><XMarkIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} /></button>
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#3C3C43] mb-1">Rolle</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Rolle</label>
             <select value={roleId} onChange={e => { setRoleId(e.target.value); const r = roles.find(x => x.id === e.target.value); setHours(Math.min(hours, r?.max_duration_hours ?? 8)); }}
-              className="input-apple w-full">
+              style={inputStyle}>
               {roles.map(r => <option key={r.id} value={r.id}>{r.name} ({r.target_group_name})</option>)}
             </select>
           </div>
           {selectedRole && (
-            <div className="bg-[#F2F2F7] rounded-xl p-4 space-y-1 text-sm">
-              <p className="text-[#3C3C43]">{selectedRole.description}</p>
-              <p className="text-xs text-[#8E8E93]">
+            <div className="rounded-xl p-4 space-y-1 text-sm" style={{ background: 'var(--bg-surface-raised)' }}>
+              <p style={{ color: 'var(--text-secondary)' }}>{selectedRole.description}</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                 {selectedRole.requires_approval ? 'Genehmigung erforderlich' : 'Sofortiger Zugriff'}
                 {' · '}Max. {selectedRole.max_duration_hours}h
               </p>
             </div>
           )}
           <div>
-            <label className="block text-xs font-medium text-[#3C3C43] mb-1">Dauer (Stunden)</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Dauer (Stunden)</label>
             <input type="number" min={1} max={selectedRole?.max_duration_hours ?? 8} value={hours}
-              onChange={e => setHours(Number(e.target.value))} className="input-apple w-full" />
+              onChange={e => setHours(Number(e.target.value))} style={inputStyle} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#3C3C43] mb-1">Begründung *</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Begründung *</label>
             <textarea value={justification} onChange={e => setJustification(e.target.value)} rows={3}
-              placeholder="Warum benötigst du diesen Zugriff?" className="input-apple w-full resize-none" />
+              placeholder="Warum benötigst du diesen Zugriff?" style={{ ...inputStyle, resize: 'none' }} />
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-[#3C3C43] bg-[#F2F2F7] rounded-lg hover:bg-[#E5E5EA]">Abbrechen</button>
+            <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg" style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface-raised)', border: '1px solid var(--border)' }}>Abbrechen</button>
             <button onClick={submit} disabled={submitting}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED] disabled:opacity-60">
+              className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-60"
+              style={{ background: 'var(--accent)' }}>
               {submitting ? 'Einreichen...' : 'Zugriff anfordern'}
             </button>
           </div>
@@ -333,25 +359,27 @@ function SessionReplayModal({ session, onClose }: { session: PIMSession; onClose
       .finally(() => setLoading(false));
   }, [session.id]);
 
-  const activityRiskColor = (score: number) => {
-    if (score >= 0.7) return { bg: '#FEF2F2', text: '#DC2626', label: 'HIGH' };
-    if (score >= 0.4) return { bg: '#FFF7ED', text: '#D97706', label: 'MED' };
-    return { bg: '#F0FDF4', text: '#16A34A', label: 'LOW' };
+  const activityRiskStyle = (score: number): React.CSSProperties => {
+    if (score >= 0.7) return { background: 'var(--danger-light)',  color: 'var(--danger)' };
+    if (score >= 0.4) return { background: 'var(--warning-light)', color: 'var(--warning)' };
+    return { background: 'var(--success-light)', color: 'var(--success)' };
   };
 
+  const activityRiskLabel = (score: number) => score >= 0.7 ? 'HIGH' : score >= 0.4 ? 'MED' : 'LOW';
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-gray-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
+      <div className="rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-strong)' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Session Replay</h2>
-            <p className="text-sm text-gray-500">
+            <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Session Replay</h2>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
               {session.userName ?? session.user_name ?? session.userId ?? session.user_id}
               {' — '}
               {session.roleName ?? session.role_name}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} style={{ color: 'var(--text-muted)' }}>
             <XMarkIcon className="w-6 h-6" />
           </button>
         </div>
@@ -359,17 +387,17 @@ function SessionReplayModal({ session, onClose }: { session: PIMSession; onClose
         <div className="flex-1 overflow-y-auto p-5">
           {loading && (
             <div className="flex items-center justify-center py-16">
-              <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-500" />
+              <ArrowPathIcon className="w-8 h-8 animate-spin" style={{ color: 'var(--accent)' }} />
             </div>
           )}
           {error && (
-            <div className="text-center py-16 text-red-600">
+            <div className="text-center py-16" style={{ color: 'var(--danger)' }}>
               <ExclamationTriangleIcon className="w-10 h-10 mx-auto mb-3" />
               <p>{error}</p>
             </div>
           )}
           {!loading && !error && activities.length === 0 && (
-            <div className="text-center py-16 text-gray-400">
+            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
               <PlayIcon className="w-10 h-10 mx-auto mb-3 opacity-40" />
               <p>No activity recorded for this session</p>
             </div>
@@ -378,21 +406,22 @@ function SessionReplayModal({ session, onClose }: { session: PIMSession; onClose
             <div className="space-y-2">
               {activities.map((act, i) => {
                 const risk = act.riskScore ?? act.risk_score ?? 0;
-                const rc = activityRiskColor(risk);
+                const rs = activityRiskStyle(risk);
+                const label = activityRiskLabel(risk);
                 const type = act.activityType ?? act.activity_type ?? 'UNKNOWN';
                 return (
-                  <div key={i} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50">
-                    <span className="text-xs text-gray-400 w-16 flex-shrink-0 pt-0.5 font-mono">
+                  <div key={i} className="flex items-start gap-3 p-3 rounded-lg" style={{ border: '1px solid var(--border)', background: 'var(--bg-surface-raised)' }}>
+                    <span className="text-xs w-16 flex-shrink-0 pt-0.5 font-mono" style={{ color: 'var(--text-muted)' }}>
                       {new Date(act.timestamp).toLocaleTimeString()}
                     </span>
                     <span
                       className="text-xs font-mono font-semibold px-1.5 py-0.5 rounded flex-shrink-0"
-                      style={{ background: '#F3F4F6', color: '#374151' }}
+                      style={{ background: 'var(--bg-overlay)', color: 'var(--text-secondary)' }}
                     >
                       {type}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-700 font-mono truncate">
+                      <p className="text-sm font-mono truncate" style={{ color: 'var(--text-secondary)' }}>
                         {typeof act.details === 'string'
                           ? act.details
                           : (act.details?.command ?? act.details?.path ?? act.details?.target ?? JSON.stringify(act.details))}
@@ -400,9 +429,9 @@ function SessionReplayModal({ session, onClose }: { session: PIMSession; onClose
                     </div>
                     <span
                       className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                      style={{ background: rc.bg, color: rc.text }}
+                      style={rs}
                     >
-                      {risk.toFixed(1)} {rc.label}
+                      {risk.toFixed(1)} {label}
                     </span>
                   </div>
                 );
@@ -423,6 +452,17 @@ function BreakGlassRequestModal({ onClose, onSubmitted }: { onClose: () => void;
   const [estimatedDuration, setEstimatedDuration] = useState(60);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ id: string } | null>(null);
+
+  const inputStyle: React.CSSProperties = {
+    padding: '0.5rem 0.75rem',
+    fontSize: '0.875rem',
+    border: '1px solid var(--border-strong)',
+    borderRadius: '0.5rem',
+    outline: 'none',
+    background: 'var(--bg-surface-raised)',
+    color: 'var(--text-primary)',
+    width: '100%',
+  };
 
   const submit = async () => {
     if (!reason.trim()) {
@@ -448,8 +488,8 @@ function BreakGlassRequestModal({ onClose, onSubmitted }: { onClose: () => void;
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
+      <div className="rounded-2xl shadow-2xl w-full max-w-md" style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-strong)' }} onClick={e => e.stopPropagation()}>
         <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-t-2xl p-5 text-white">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
@@ -466,55 +506,55 @@ function BreakGlassRequestModal({ onClose, onSubmitted }: { onClose: () => void;
         <div className="p-6 space-y-4">
           {result ? (
             <div className="text-center py-4">
-              <CheckCircleIcon className="w-12 h-12 text-green-500 mx-auto mb-3" />
-              <h3 className="text-base font-semibold text-gray-900 mb-2">Request Submitted</h3>
-              <p className="text-sm text-gray-500 mb-3">
-                Break-glass ID: <span className="font-mono font-semibold text-gray-700">{result.id}</span>
+              <CheckCircleIcon className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--success)' }} />
+              <h3 className="text-base font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Request Submitted</h3>
+              <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
+                Break-glass ID: <span className="font-mono font-semibold" style={{ color: 'var(--text-secondary)' }}>{result.id}</span>
               </p>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+              <div className="rounded-lg p-3 text-sm" style={{ background: 'var(--warning-light)', border: '1px solid var(--warning)', color: 'var(--warning)' }}>
                 Awaiting second manager approval. You will be notified when access is granted.
               </div>
-              <button onClick={onClose} className="mt-4 px-6 py-2 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-700">
+              <button onClick={onClose} className="mt-4 px-6 py-2 text-white rounded-lg text-sm font-medium" style={{ background: 'var(--bg-surface-raised)' }}>
                 Close
               </button>
             </div>
           ) : (
             <>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Reason *</label>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Reason *</label>
                 <textarea
                   value={reason}
                   onChange={e => setReason(e.target.value)}
                   rows={3}
                   placeholder="Why is emergency access needed?"
-                  className="input-apple w-full resize-none"
+                  style={{ ...inputStyle, resize: 'none' }}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Systems Affected</label>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Systems Affected</label>
                 <input
                   value={systemsAffected}
                   onChange={e => setSystemsAffected(e.target.value)}
                   placeholder="e.g. DC01, FILESERVER-01, Production DB"
-                  className="input-apple w-full"
+                  style={inputStyle}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Estimated Duration (minutes)</label>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Estimated Duration (minutes)</label>
                 <input
                   type="number"
                   min={5}
                   max={480}
                   value={estimatedDuration}
                   onChange={e => setEstimatedDuration(Number(e.target.value))}
-                  className="input-apple w-full"
+                  style={inputStyle}
                 />
               </div>
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+              <div className="rounded-lg p-3 text-xs" style={{ background: 'var(--danger-light)', border: '1px solid var(--danger)', color: 'var(--danger)' }}>
                 Emergency access bypasses normal approval workflows. All activity will be recorded and audited.
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg" style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface-raised)', border: '1px solid var(--border)' }}>
                   Cancel
                 </button>
                 <button
@@ -590,7 +630,6 @@ export default function PIMView() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Lazy-load sessions/break-glass when tab is activated
   useEffect(() => {
     if (tab === 'sessions') loadSessions();
     if (tab === 'breakglass') loadBreakGlass();
@@ -639,20 +678,46 @@ export default function PIMView() {
     { key: 'breakglass', label: 'Break-Glass' },
   ];
 
+  const tableStyle: React.CSSProperties = {
+    background: 'var(--bg-surface)',
+    border: '1px solid var(--border)',
+    borderRadius: '0.75rem',
+    overflow: 'hidden',
+  };
+
+  const theadStyle: React.CSSProperties = {
+    background: 'var(--bg-surface-raised)',
+    borderBottom: '1px solid var(--border)',
+  };
+
+  const thStyle: React.CSSProperties = {
+    padding: '12px 16px',
+    textAlign: 'left',
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  };
+
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-5">
+    <div className="p-6 max-w-5xl mx-auto space-y-5" style={{ background: 'var(--bg-base)', minHeight: '100vh' }}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-[#1D1D1F] tracking-tight">Privileged Identity Management</h1>
-          <p className="text-sm text-[#8E8E93] mt-0.5">Zeitbasierter Gruppenzugriff — kein permanenter Admin</p>
+          <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>Privileged Identity Management</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Zeitbasierter Gruppenzugriff — kein permanenter Admin</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={load} className="p-2 rounded-lg hover:bg-[#F2F2F7] transition-colors">
-            <ArrowPathIcon className={`w-5 h-5 text-[#8E8E93] ${loading ? 'animate-spin' : ''}`} />
+          <button onClick={load} className="p-2 rounded-lg transition-colors" style={{ background: 'transparent' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} style={{ color: 'var(--text-muted)' }} />
           </button>
           <button onClick={() => setShowRequest(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED]">
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg"
+            style={{ background: 'var(--accent)' }}>
             <BoltIcon className="w-4 h-4" />
             Zugriff anfordern
           </button>
@@ -662,31 +727,33 @@ export default function PIMView() {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Aktive Sessions', value: active.length, color: 'text-[#34C759]', icon: ShieldCheckIcon },
-          { label: 'Ausstehend',      value: pending.length, color: 'text-[#FF9500]', icon: ClockIcon },
-          { label: 'PIM-Rollen',      value: roles.length,   color: 'text-[#0071E3]', icon: KeyIcon },
-          { label: 'Heute genehmigt', value: requests.filter(r => r.decided_at && new Date(r.decided_at).toDateString() === new Date().toDateString() && r.status === 'active').length, color: 'text-[#34C759]', icon: CheckCircleIcon },
+          { label: 'Aktive Sessions', value: active.length, color: 'var(--success)', icon: ShieldCheckIcon },
+          { label: 'Ausstehend',      value: pending.length, color: 'var(--warning)', icon: ClockIcon },
+          { label: 'PIM-Rollen',      value: roles.length,   color: 'var(--accent)', icon: KeyIcon },
+          { label: 'Heute genehmigt', value: requests.filter(r => r.decided_at && new Date(r.decided_at).toDateString() === new Date().toDateString() && r.status === 'active').length, color: 'var(--success)', icon: CheckCircleIcon },
         ].map(({ label, value, color, icon: Icon }) => (
-          <div key={label} className="bg-white rounded-xl border border-[#E5E5EA] p-4">
+          <div key={label} className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
             <div className="flex items-center gap-2 mb-1">
-              <Icon className={`w-4 h-4 ${color}`} />
-              <span className="text-xs text-[#8E8E93]">{label}</span>
+              <Icon className="w-4 h-4" style={{ color }} />
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}</span>
             </div>
-            <p className={`text-2xl font-semibold ${color}`}>{value}</p>
+            <p className="text-2xl font-semibold" style={{ color }}>{value}</p>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-[#E5E5EA] overflow-x-auto">
+      <div className="flex overflow-x-auto" style={{ borderBottom: '1px solid var(--border)' }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              tab === t.key ? 'border-[#0071E3] text-[#0071E3]' : 'border-transparent text-[#8E8E93] hover:text-[#3C3C43]'
-            }`}>
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+            style={tab === t.key
+              ? { borderColor: 'var(--accent)', color: 'var(--accent)' }
+              : { borderColor: 'transparent', color: 'var(--text-muted)' }
+            }>
             {t.label}
             {t.badge != null && t.badge > 0 && (
-              <span className="bg-[#FF9500] text-white text-xs font-semibold px-1.5 py-0.5 rounded-full">{t.badge}</span>
+              <span className="text-white text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--warning)' }}>{t.badge}</span>
             )}
           </button>
         ))}
@@ -694,38 +761,43 @@ export default function PIMView() {
 
       {/* ── Anfragen Tab ── */}
       {tab === 'anfragen' && (
-        <div className="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden">
+        <div style={tableStyle}>
           {pending.length === 0 ? (
             <div className="text-center py-16">
-              <CheckSolid className="w-10 h-10 mx-auto mb-3 text-[#34C759]" />
-              <p className="text-sm font-medium text-[#1D1D1F]">Keine ausstehenden Anfragen</p>
+              <CheckSolid className="w-10 h-10 mx-auto mb-3" style={{ color: 'var(--success)' }} />
+              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Keine ausstehenden Anfragen</p>
             </div>
           ) : (
             <table className="w-full">
-              <thead className="bg-[#F9F9F9] border-b border-[#F2F2F7]">
+              <thead style={theadStyle}>
                 <tr>{['Benutzer', 'Rolle', 'Dauer', 'Begründung', 'Angefragt', 'Aktionen'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#8E8E93] uppercase tracking-wider">{h}</th>
+                  <th key={h} style={thStyle as any}>{h}</th>
                 ))}</tr>
               </thead>
-              <tbody className="divide-y divide-[#F2F2F7]">
+              <tbody>
                 {pending.map(r => (
-                  <tr key={r.id} className="hover:bg-[#F9F9F9]">
+                  <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
                     <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-[#1D1D1F]">{r.user_name}</p>
-                      <p className="text-xs text-[#8E8E93]">{r.user_email || r.user_id}</p>
+                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{r.user_name}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{r.user_email || r.user_id}</p>
                     </td>
-                    <td className="px-4 py-3"><p className="text-sm text-[#1D1D1F]">{r.role_name}</p></td>
-                    <td className="px-4 py-3 text-sm text-[#3C3C43]">{r.requested_duration_hours}h</td>
-                    <td className="px-4 py-3"><p className="text-sm text-[#3C3C43] max-w-xs truncate">{r.justification || '—'}</p></td>
-                    <td className="px-4 py-3 text-xs text-[#8E8E93] whitespace-nowrap">{fmtDate(r.requested_at)}</td>
+                    <td className="px-4 py-3"><p className="text-sm" style={{ color: 'var(--text-primary)' }}>{r.role_name}</p></td>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-secondary)' }}>{r.requested_duration_hours}h</td>
+                    <td className="px-4 py-3"><p className="text-sm max-w-xs truncate" style={{ color: 'var(--text-secondary)' }}>{r.justification || '—'}</p></td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{fmtDate(r.requested_at)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <button onClick={() => approve(r.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-[#34C759] rounded-lg hover:bg-green-600">
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white rounded-lg"
+                          style={{ background: 'var(--success)' }}>
                           <CheckCircleIcon className="w-3.5 h-3.5" /> Genehmigen
                         </button>
                         <button onClick={() => deny(r.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg"
+                          style={{ color: 'var(--danger)', background: 'var(--danger-light)', border: '1px solid var(--danger)' }}>
                           <XCircleIcon className="w-3.5 h-3.5" /> Ablehnen
                         </button>
                       </div>
@@ -740,33 +812,37 @@ export default function PIMView() {
 
       {/* ── Aktiv Tab ── */}
       {tab === 'aktiv' && (
-        <div className="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden">
+        <div style={tableStyle}>
           {active.length === 0 ? (
             <div className="text-center py-16">
-              <ShieldCheckIcon className="w-10 h-10 mx-auto mb-3 text-[#8E8E93] opacity-40" />
-              <p className="text-sm text-[#8E8E93]">Keine aktiven PIM-Sessions</p>
+              <ShieldCheckIcon className="w-10 h-10 mx-auto mb-3 opacity-40" style={{ color: 'var(--text-muted)' }} />
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Keine aktiven PIM-Sessions</p>
             </div>
           ) : (
             <table className="w-full">
-              <thead className="bg-[#F9F9F9] border-b border-[#F2F2F7]">
+              <thead style={theadStyle}>
                 <tr>{['Benutzer', 'Rolle / Gruppe', 'Läuft ab in', 'Aktiviert', 'Aktion'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#8E8E93] uppercase tracking-wider">{h}</th>
+                  <th key={h} style={thStyle as any}>{h}</th>
                 ))}</tr>
               </thead>
-              <tbody className="divide-y divide-[#F2F2F7]">
+              <tbody>
                 {active.map(r => (
-                  <tr key={r.id} className="hover:bg-[#F9F9F9]">
-                    <td className="px-4 py-3"><p className="text-sm font-medium text-[#1D1D1F]">{r.user_name}</p></td>
-                    <td className="px-4 py-3"><p className="text-sm text-[#1D1D1F]">{r.role_name}</p></td>
+                  <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td className="px-4 py-3"><p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{r.user_name}</p></td>
+                    <td className="px-4 py-3"><p className="text-sm" style={{ color: 'var(--text-primary)' }}>{r.role_name}</p></td>
                     <td className="px-4 py-3">
-                      <span className={`text-sm font-medium ${timeLeft(r.expires_at) === 'Abgelaufen' ? 'text-red-500' : 'text-[#FF9500]'}`}>
+                      <span className="text-sm font-medium" style={{ color: timeLeft(r.expires_at) === 'Abgelaufen' ? 'var(--danger)' : 'var(--warning)' }}>
                         {timeLeft(r.expires_at)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-[#8E8E93]">{fmtDate(r.activated_at)}</td>
+                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(r.activated_at)}</td>
                     <td className="px-4 py-3">
                       <button onClick={() => revoke(r.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg"
+                        style={{ color: 'var(--danger)', background: 'var(--danger-light)', border: '1px solid var(--danger)' }}>
                         <XMarkIcon className="w-3.5 h-3.5" /> Widerrufen
                       </button>
                     </td>
@@ -783,50 +859,57 @@ export default function PIMView() {
         <div className="space-y-4">
           <div className="flex justify-end">
             <button onClick={() => { setEditRole(undefined); setShowRoleForm(true); }}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0071E3] rounded-lg hover:bg-[#0077ED]">
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg"
+              style={{ background: 'var(--accent)' }}>
               <PlusIcon className="w-4 h-4" /> Neue Rolle
             </button>
           </div>
           {loading ? (
-            <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+            <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 rounded-xl animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />)}</div>
           ) : roles.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-xl border border-[#E5E5EA]">
-              <KeyIcon className="w-10 h-10 mx-auto mb-3 text-[#8E8E93] opacity-40" />
-              <p className="text-sm text-[#8E8E93]">Noch keine PIM-Rollen definiert</p>
+            <div className="text-center py-16 rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+              <KeyIcon className="w-10 h-10 mx-auto mb-3 opacity-40" style={{ color: 'var(--text-muted)' }} />
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Noch keine PIM-Rollen definiert</p>
             </div>
           ) : (
             <div className="space-y-3">
               {roles.map(role => (
-                <div key={role.id} className="bg-white rounded-xl border border-[#E5E5EA] px-5 py-4 flex items-start justify-between gap-4">
+                <div key={role.id} className="rounded-xl px-5 py-4 flex items-start justify-between gap-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <KeyIcon className="w-4 h-4 text-[#0071E3]" />
-                      <span className="text-sm font-medium text-[#1D1D1F]">{role.name}</span>
+                      <KeyIcon className="w-4 h-4" style={{ color: 'var(--accent)' }} />
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{role.name}</span>
                       {!role.requires_approval && (
-                        <span className="text-xs bg-[#F2F2F7] text-[#8E8E93] px-2 py-0.5 rounded-full">Sofortzugriff</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-muted)' }}>Sofortzugriff</span>
                       )}
                     </div>
-                    <p className="text-xs text-[#8E8E93]">{role.description}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{role.description}</p>
                     <div className="flex items-center gap-4 mt-2">
-                      <span className="text-xs text-[#3C3C43]">
-                        <span className="text-[#8E8E93]">Gruppe:</span> {role.target_group_name || role.target_group_id}
+                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Gruppe:</span> {role.target_group_name || role.target_group_id}
                       </span>
-                      <span className="text-xs text-[#3C3C43]">
-                        <span className="text-[#8E8E93]">Max:</span> {role.max_duration_hours}h
+                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Max:</span> {role.max_duration_hours}h
                       </span>
-                      <span className="text-xs text-[#3C3C43]">
-                        <span className="text-[#8E8E93]">Genehmigung:</span> {role.requires_approval ? 'Ja' : 'Nein'}
+                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Genehmigung:</span> {role.requires_approval ? 'Ja' : 'Nein'}
                       </span>
                     </div>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
                     <button onClick={() => { setEditRole(role); setShowRoleForm(true); }}
-                      className="p-2 rounded-lg hover:bg-[#F2F2F7]">
-                      <PencilIcon className="w-4 h-4 text-[#8E8E93]" />
+                      className="p-2 rounded-lg transition-colors"
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <PencilIcon className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
                     </button>
                     <button onClick={() => deleteRole(role.id)}
-                      className="p-2 rounded-lg hover:bg-red-50">
-                      <TrashIcon className="w-4 h-4 text-red-400" />
+                      className="p-2 rounded-lg transition-colors"
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--danger-light)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <TrashIcon className="w-4 h-4" style={{ color: 'var(--danger)' }} />
                     </button>
                   </div>
                 </div>
@@ -839,29 +922,33 @@ export default function PIMView() {
       {/* ── Anfordern Tab ── */}
       {tab === 'anfordern' && (
         <div className="space-y-3">
-          <p className="text-sm text-[#8E8E93]">Wähle eine Rolle und begründe deine Anfrage. Der Zugriff läuft automatisch ab.</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Wähle eine Rolle und begründe deine Anfrage. Der Zugriff läuft automatisch ab.</p>
           {roles.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-xl border border-[#E5E5EA]">
-              <ExclamationTriangleIcon className="w-10 h-10 mx-auto mb-3 text-[#8E8E93] opacity-40" />
-              <p className="text-sm text-[#8E8E93]">Keine PIM-Rollen verfügbar</p>
+            <div className="text-center py-16 rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+              <ExclamationTriangleIcon className="w-10 h-10 mx-auto mb-3 opacity-40" style={{ color: 'var(--text-muted)' }} />
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Keine PIM-Rollen verfügbar</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
               {roles.map(role => (
-                <div key={role.id} className="bg-white rounded-xl border border-[#E5E5EA] p-5 flex items-center justify-between gap-4 hover:border-[#0071E3] transition-colors group">
+                <div key={role.id} className="rounded-xl p-5 flex items-center justify-between gap-4 transition-colors" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <UserGroupIcon className="w-5 h-5 text-[#0071E3]" />
-                      <span className="text-sm font-medium text-[#1D1D1F]">{role.name}</span>
+                      <UserGroupIcon className="w-5 h-5" style={{ color: 'var(--accent)' }} />
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{role.name}</span>
                       {!role.requires_approval
-                        ? <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full">Sofort</span>
-                        : <span className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2 py-0.5 rounded-full">Genehmigung</span>}
+                        ? <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--success-light)', color: 'var(--success)', border: '1px solid var(--success)' }}>Sofort</span>
+                        : <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid var(--warning)' }}>Genehmigung</span>}
                     </div>
-                    <p className="text-xs text-[#8E8E93]">{role.description}</p>
-                    <p className="text-xs text-[#8E8E93] mt-1">Gruppe: <span className="text-[#3C3C43]">{role.target_group_name}</span> · Max. <span className="text-[#3C3C43]">{role.max_duration_hours}h</span></p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{role.description}</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Gruppe: <span style={{ color: 'var(--text-secondary)' }}>{role.target_group_name}</span> · Max. <span style={{ color: 'var(--text-secondary)' }}>{role.max_duration_hours}h</span></p>
                   </div>
                   <button onClick={() => setShowRequest(true)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#0071E3] border border-[#0071E3] rounded-lg hover:bg-[#EAF4FF] transition-colors flex-shrink-0">
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg flex-shrink-0 transition-colors"
+                    style={{ color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-light)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
                     <BoltIcon className="w-4 h-4" />
                     Anfordern
                   </button>
@@ -876,32 +963,35 @@ export default function PIMView() {
       {tab === 'sessions' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <p className="text-sm text-[#8E8E93]">Session recordings from the conditional-access service.</p>
-            <button onClick={loadSessions} className="p-2 rounded-lg hover:bg-[#F2F2F7]">
-              <ArrowPathIcon className={`w-4 h-4 text-[#8E8E93] ${sessionsLoading ? 'animate-spin' : ''}`} />
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Session recordings from the conditional-access service.</p>
+            <button onClick={loadSessions} className="p-2 rounded-lg transition-colors"
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <ArrowPathIcon className={`w-4 h-4 ${sessionsLoading ? 'animate-spin' : ''}`} style={{ color: 'var(--text-muted)' }} />
             </button>
           </div>
-          <div className="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden">
+          <div style={tableStyle}>
             {sessionsLoading ? (
               <div className="flex items-center justify-center py-16">
-                <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-500" />
+                <ArrowPathIcon className="w-8 h-8 animate-spin" style={{ color: 'var(--accent)' }} />
               </div>
             ) : sessions.length === 0 ? (
               <div className="text-center py-16">
-                <PlayIcon className="w-10 h-10 mx-auto mb-3 text-[#8E8E93] opacity-40" />
-                <p className="text-sm text-[#8E8E93]">No session recordings found</p>
+                <PlayIcon className="w-10 h-10 mx-auto mb-3 opacity-40" style={{ color: 'var(--text-muted)' }} />
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No session recordings found</p>
               </div>
             ) : (
               <table className="w-full">
-                <thead className="bg-[#F9F9F9] border-b border-[#F2F2F7]">
+                <thead style={theadStyle}>
                   <tr>{['User', 'Role', 'Duration', 'Risk Score', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#8E8E93] uppercase tracking-wider">{h}</th>
+                    <th key={h} style={thStyle as any}>{h}</th>
                   ))}</tr>
                 </thead>
-                <tbody className="divide-y divide-[#F2F2F7]">
+                <tbody>
                   {sessions.map(s => {
                     const risk = s.riskScore ?? s.risk_score ?? 0;
-                    const rc = riskColor(risk);
+                    const rs = riskBadgeStyle(risk);
                     const startTime = s.startedAt ?? s.started_at;
                     const endTime   = s.endedAt   ?? s.ended_at;
                     let durationStr = '—';
@@ -910,25 +1000,30 @@ export default function PIMView() {
                       const m = Math.round(ms / 60000);
                       durationStr = m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
                     }
+                    const statusStyle = STATUS_BADGE[s.status ?? 'expired'] ?? STATUS_BADGE.expired;
                     return (
-                      <tr key={s.id} className="hover:bg-[#F9F9F9]">
-                        <td className="px-4 py-3 text-sm text-[#1D1D1F]">{s.userName ?? s.user_name ?? s.userId ?? s.user_id ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-[#1D1D1F]">{s.roleName ?? s.role_name ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-[#3C3C43]">{durationStr}</td>
+                      <tr key={s.id} style={{ borderTop: '1px solid var(--border)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-primary)' }}>{s.userName ?? s.user_name ?? s.userId ?? s.user_id ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-primary)' }}>{s.roleName ?? s.role_name ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-secondary)' }}>{durationStr}</td>
                         <td className="px-4 py-3">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${rc}`}>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={rs}>
                             {risk.toFixed(2)}
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_COLORS[s.status ?? 'expired'] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                          <span className="text-xs px-2 py-0.5 rounded-full" style={statusStyle}>
                             {s.status ?? 'ended'}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           <button
                             onClick={() => setSelectedSession(s)}
-                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#0071E3] bg-blue-50 rounded-lg hover:bg-blue-100"
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg"
+                            style={{ color: 'var(--accent)', background: 'var(--accent-light)' }}
                           >
                             <PlayIcon className="w-3.5 h-3.5" /> Replay
                           </button>
@@ -948,12 +1043,15 @@ export default function PIMView() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm font-medium text-gray-800">Emergency Access (Break-Glass)</p>
-              <p className="text-xs text-[#8E8E93]">Use only in critical situations. All access is audited.</p>
+              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Emergency Access (Break-Glass)</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Use only in critical situations. All access is audited.</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={loadBreakGlass} className="p-2 rounded-lg hover:bg-[#F2F2F7]">
-                <ArrowPathIcon className={`w-4 h-4 text-[#8E8E93] ${bgLoading ? 'animate-spin' : ''}`} />
+              <button onClick={loadBreakGlass} className="p-2 rounded-lg transition-colors"
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <ArrowPathIcon className={`w-4 h-4 ${bgLoading ? 'animate-spin' : ''}`} style={{ color: 'var(--text-muted)' }} />
               </button>
               <button
                 onClick={() => setShowBGRequest(true)}
@@ -965,41 +1063,47 @@ export default function PIMView() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden">
+          <div style={tableStyle}>
             {bgLoading ? (
               <div className="flex items-center justify-center py-16">
                 <ArrowPathIcon className="w-8 h-8 animate-spin text-red-500" />
               </div>
             ) : breakGlassEvents.length === 0 ? (
               <div className="text-center py-16">
-                <ShieldCheckIcon className="w-10 h-10 mx-auto mb-3 text-green-400 opacity-60" />
-                <p className="text-sm text-[#8E8E93]">No break-glass events recorded</p>
+                <ShieldCheckIcon className="w-10 h-10 mx-auto mb-3 opacity-60" style={{ color: 'var(--success)' }} />
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No break-glass events recorded</p>
               </div>
             ) : (
               <table className="w-full">
-                <thead className="bg-[#F9F9F9] border-b border-[#F2F2F7]">
+                <thead style={theadStyle}>
                   <tr>{['Requested By', 'Reason', 'Systems', 'Status', 'Requested At'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#8E8E93] uppercase tracking-wider">{h}</th>
+                    <th key={h} style={thStyle as any}>{h}</th>
                   ))}</tr>
                 </thead>
-                <tbody className="divide-y divide-[#F2F2F7]">
-                  {breakGlassEvents.map(ev => (
-                    <tr key={ev.id} className="hover:bg-[#F9F9F9]">
-                      <td className="px-4 py-3 text-sm text-[#1D1D1F]">{ev.requestedBy ?? ev.requested_by ?? '—'}</td>
-                      <td className="px-4 py-3">
-                        <p className="text-sm text-[#3C3C43] max-w-xs truncate">{ev.reason}</p>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-[#8E8E93]">{ev.systemsAffected ?? ev.systems_affected ?? '—'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_COLORS[ev.status ?? 'expired'] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                          {ev.status ?? 'unknown'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-[#8E8E93] whitespace-nowrap">
-                        {fmtDate(ev.requestedAt ?? ev.requested_at)}
-                      </td>
-                    </tr>
-                  ))}
+                <tbody>
+                  {breakGlassEvents.map(ev => {
+                    const statusStyle = STATUS_BADGE[ev.status ?? 'expired'] ?? STATUS_BADGE.expired;
+                    return (
+                      <tr key={ev.id} style={{ borderTop: '1px solid var(--border)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-primary)' }}>{ev.requestedBy ?? ev.requested_by ?? '—'}</td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm max-w-xs truncate" style={{ color: 'var(--text-secondary)' }}>{ev.reason}</p>
+                        </td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{ev.systemsAffected ?? ev.systems_affected ?? '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs px-2 py-0.5 rounded-full" style={statusStyle}>
+                            {ev.status ?? 'unknown'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+                          {fmtDate(ev.requestedAt ?? ev.requested_at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -1028,15 +1132,16 @@ export default function PIMView() {
         .input-apple {
           padding: 0.5rem 0.75rem;
           font-size: 0.875rem;
-          border: 1px solid #E5E5EA;
+          border: 1px solid var(--border-strong);
           border-radius: 0.5rem;
           outline: none;
           transition: border-color 0.15s, box-shadow 0.15s;
-          background: white;
+          background: var(--bg-surface-raised);
+          color: var(--text-primary);
         }
         .input-apple:focus {
-          border-color: #0071E3;
-          box-shadow: 0 0 0 3px rgba(0,113,227,0.15);
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px var(--accent-light);
         }
       `}</style>
     </div>

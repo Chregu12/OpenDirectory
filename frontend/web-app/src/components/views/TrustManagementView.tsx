@@ -70,31 +70,60 @@ function NewTrustModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 flex items-center justify-center p-4 z-50"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={onClose}
+    >
+      <div
+        className="rounded-xl shadow-xl w-full max-w-md"
+        style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-gray-900">New Domain Trust</h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
+            <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>New Domain Trust</h3>
+            <button
+              onClick={onClose}
+              style={{ color: 'var(--text-muted)' }}
+              className="hover:opacity-80"
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
           </div>
 
           {/* Trusted Domain */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Trusted Domain</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Trusted Domain</label>
             <input
               type="text"
               placeholder="partner.corp"
               value={form.trustedDomain}
               onChange={set('trustedDomain')}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{
+                background: 'var(--bg-overlay)',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--text-primary)',
+              }}
             />
           </div>
 
           {/* Trust Type */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Trust Type</label>
-            <select value={form.trustType} onChange={set('trustType')}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Trust Type</label>
+            <select
+              value={form.trustType}
+              onChange={set('trustType')}
+              className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{
+                background: 'var(--bg-overlay)',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--text-primary)',
+              }}
+            >
               {(['External', 'Forest', 'Shortcut', 'Kerberos Realm'] as TrustType[]).map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
@@ -103,9 +132,17 @@ function NewTrustModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
           {/* Direction */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Direction</label>
-            <select value={form.trustDirection} onChange={set('trustDirection')}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Direction</label>
+            <select
+              value={form.trustDirection}
+              onChange={set('trustDirection')}
+              className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{
+                background: 'var(--bg-overlay)',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--text-primary)',
+              }}
+            >
               {(['Inbound', 'Outbound', 'Bidirectional'] as TrustDirection[]).map(d => (
                 <option key={d} value={d}>{d}</option>
               ))}
@@ -114,9 +151,17 @@ function NewTrustModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
           {/* Transitivity */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Transitivity</label>
-            <select value={form.transitivity} onChange={set('transitivity')}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Transitivity</label>
+            <select
+              value={form.transitivity}
+              onChange={set('transitivity')}
+              className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{
+                background: 'var(--bg-overlay)',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--text-primary)',
+              }}
+            >
               {(['Transitive', 'Non-Transitive'] as TrustTransitivity[]).map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
@@ -125,18 +170,27 @@ function NewTrustModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
           {/* Trust Password */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Trust Password</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Trust Password</label>
             <input
               type="password"
               value={form.trustPassword}
               onChange={set('trustPassword')}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{
+                background: 'var(--bg-overlay)',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--text-primary)',
+              }}
             />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={onClose} disabled={submitting}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50">
+            <button
+              onClick={onClose}
+              disabled={submitting}
+              className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 hover:opacity-80"
+              style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface-raised)' }}
+            >
               Cancel
             </button>
             <button onClick={handleCreate} disabled={submitting}
@@ -154,17 +208,26 @@ function NewTrustModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
 function StatusBadge({ status }: { status?: Trust['status'] }) {
   if (status === 'healthy') return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100">
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{ background: 'var(--success-light)', color: 'var(--success)', border: '1px solid rgba(63,185,80,0.3)' }}
+    >
       <CheckCircleIcon className="w-3.5 h-3.5" /> Healthy
     </span>
   );
   if (status === 'degraded') return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-100">
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{ background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid rgba(210,153,34,0.3)' }}
+    >
       <ExclamationTriangleIcon className="w-3.5 h-3.5" /> Degraded
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-muted)' }}
+    >
       Unknown
     </span>
   );
@@ -257,16 +320,19 @@ export default function TrustManagementView() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ background: 'var(--bg-base)', minHeight: '100vh' }}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Forest &amp; Trust Management</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Manage domain trusts and forest relationships</p>
+          <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Forest &amp; Trust Management</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Manage domain trusts and forest relationships</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={loadTrusts}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+          <button
+            onClick={loadTrusts}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg hover:opacity-80"
+            style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+          >
             <ArrowPathIcon className="w-4 h-4" /> Refresh
           </button>
           <button onClick={() => setShowNew(true)}
@@ -277,7 +343,10 @@ export default function TrustManagementView() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+        <div
+          className="rounded-lg px-4 py-3 text-sm flex items-center gap-2"
+          style={{ background: 'var(--danger-light)', border: '1px solid rgba(248,81,73,0.3)', color: 'var(--danger)' }}
+        >
           <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" />
           {error}
         </div>
@@ -285,35 +354,59 @@ export default function TrustManagementView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Trust list */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Domain Trusts</span>
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}
+        >
+          <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Domain Trusts</span>
           </div>
 
           {loading ? (
             <div className="p-6 space-y-3 animate-pulse">
-              {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg" />)}
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-14 rounded-lg" style={{ background: 'var(--bg-surface-raised)' }} />
+              ))}
             </div>
           ) : trusts.length === 0 ? (
-            <div className="p-10 text-center text-gray-400">
+            <div className="p-10 text-center" style={{ color: 'var(--text-muted)' }}>
               <div className="text-4xl mb-2">🌐</div>
               <p className="text-sm">No domain trusts configured</p>
-              <button onClick={() => setShowNew(true)} className="mt-3 text-sm text-blue-600 hover:text-blue-700 font-medium">
+              <button
+                onClick={() => setShowNew(true)}
+                className="mt-3 text-sm font-medium hover:opacity-80"
+                style={{ color: 'var(--accent)' }}
+              >
                 + Create your first trust
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-[rgba(255,255,255,0.07)]">
               {trusts.map(trust => (
-                <button key={trust.domain}
+                <button
+                  key={trust.domain}
                   onClick={() => setSelected(trust)}
-                  className={`w-full flex items-center gap-4 px-5 py-3.5 text-left transition-colors ${
-                    selected?.domain === trust.domain ? 'bg-blue-50' : 'hover:bg-gray-50'
-                  }`}>
+                  className="w-full flex items-center gap-4 px-5 py-3.5 text-left transition-colors"
+                  style={
+                    selected?.domain === trust.domain
+                      ? { background: 'var(--accent-light)' }
+                      : undefined
+                  }
+                  onMouseEnter={e => {
+                    if (selected?.domain !== trust.domain) {
+                      (e.currentTarget as HTMLElement).style.background = 'var(--bg-surface-raised)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (selected?.domain !== trust.domain) {
+                      (e.currentTarget as HTMLElement).style.background = '';
+                    }
+                  }}
+                >
                   <span className="text-xl flex-shrink-0">🌐</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{trust.domain}</p>
-                    <p className="text-xs text-gray-400">{trust.trustDirection} · {trust.trustType}</p>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{trust.domain}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{trust.trustDirection} · {trust.trustType}</p>
                   </div>
                   <StatusBadge status={trust.status} />
                 </button>
@@ -324,10 +417,18 @@ export default function TrustManagementView() {
 
         {/* Trust detail */}
         {selected ? (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Trust Details</span>
-              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600">
+          <div
+            className="rounded-xl overflow-hidden"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}
+          >
+            <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Trust Details</span>
+              <button
+                onClick={() => setSelected(null)}
+                style={{ color: 'var(--text-muted)' }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+              >
                 <XMarkIcon className="w-4 h-4" />
               </button>
             </div>
@@ -335,8 +436,8 @@ export default function TrustManagementView() {
             <div className="p-5 space-y-4">
               {/* Domain */}
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Domain</p>
-                <p className="text-sm font-medium text-gray-900 font-mono">{selected.domain}</p>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Domain</p>
+                <p className="text-sm font-medium font-mono" style={{ color: 'var(--text-primary)' }}>{selected.domain}</p>
               </div>
 
               {/* Properties grid */}
@@ -348,38 +449,49 @@ export default function TrustManagementView() {
                   { label: 'Last Verified', value: formatRelative(selected.lastVerified) },
                   ...(selected.latencyMs !== undefined ? [{ label: 'Latency', value: `${selected.latencyMs} ms` }] : []),
                 ].map(({ label, value }) => (
-                  <div key={label} className="bg-gray-50 rounded-lg px-3 py-2.5">
-                    <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-                    <p className="text-sm font-medium text-gray-900">{value}</p>
+                  <div key={label} className="rounded-lg px-3 py-2.5" style={{ background: 'var(--bg-surface-raised)' }}>
+                    <p className="text-xs mb-0.5" style={{ color: 'var(--text-muted)' }}>{label}</p>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{value}</p>
                   </div>
                 ))}
               </div>
 
               {/* Status */}
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-gray-500">Status:</span>
+                <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Status:</span>
                 <StatusBadge status={selected.status} />
               </div>
 
               {/* Errors */}
               {selected.errors && selected.errors.length > 0 && (
-                <div className="bg-red-50 border border-red-100 rounded-lg p-3 space-y-1">
+                <div
+                  className="rounded-lg p-3 space-y-1"
+                  style={{ background: 'var(--danger-light)', border: '1px solid rgba(248,81,73,0.3)' }}
+                >
                   {selected.errors.map((e, i) => (
-                    <p key={i} className="text-xs text-red-700">{e}</p>
+                    <p key={i} className="text-xs" style={{ color: 'var(--danger)' }}>{e}</p>
                   ))}
                 </div>
               )}
 
               {/* Actions */}
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-                <button onClick={() => handleVerify(selected.domain)} disabled={verifying === selected.domain}
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg disabled:opacity-60">
+              <div className="flex flex-wrap gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => handleVerify(selected.domain)}
+                  disabled={verifying === selected.domain}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg disabled:opacity-60 hover:opacity-80"
+                  style={{ color: 'var(--accent)', background: 'var(--accent-light)' }}
+                >
                   <ArrowPathIcon className={`w-4 h-4 ${verifying === selected.domain ? 'animate-spin' : ''}`} />
                   {verifying === selected.domain ? 'Verifying…' : 'Verify Now'}
                 </button>
 
-                <button onClick={() => handleRotate(selected.domain)} disabled={rotating === selected.domain}
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-60">
+                <button
+                  onClick={() => handleRotate(selected.domain)}
+                  disabled={rotating === selected.domain}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg disabled:opacity-60 hover:opacity-80"
+                  style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface-raised)' }}
+                >
                   <ArrowPathIcon className={`w-4 h-4 ${rotating === selected.domain ? 'animate-spin' : ''}`} />
                   {rotating === selected.domain ? 'Rotating…' : 'Rotate Credential'}
                 </button>
@@ -390,14 +502,20 @@ export default function TrustManagementView() {
                       className="px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg">
                       Confirm Remove
                     </button>
-                    <button onClick={() => setDeleting(null)}
-                      className="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg">
+                    <button
+                      onClick={() => setDeleting(null)}
+                      className="px-3 py-2 text-sm font-medium rounded-lg hover:opacity-80"
+                      style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface-raised)' }}
+                    >
                       Cancel
                     </button>
                   </div>
                 ) : (
-                  <button onClick={() => handleDelete(selected.domain)}
-                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg ml-auto">
+                  <button
+                    onClick={() => handleDelete(selected.domain)}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg ml-auto hover:opacity-80"
+                    style={{ color: 'var(--danger)', background: 'var(--danger-light)' }}
+                  >
                     <TrashIcon className="w-4 h-4" /> Remove Trust
                   </button>
                 )}
@@ -405,8 +523,11 @@ export default function TrustManagementView() {
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex items-center justify-center p-10 text-gray-400">
-            <p className="text-sm">Select a trust to view details</p>
+          <div
+            className="rounded-xl flex items-center justify-center p-10"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}
+          >
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Select a trust to view details</p>
           </div>
         )}
       </div>

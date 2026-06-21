@@ -58,11 +58,11 @@ const RESOURCE_KEYS = ['devices', 'users', 'policies', 'apps', 'secrets', 'print
 
 const LEVEL_LABEL: Record<PermLevel, string> = { none: 'Kein', read: 'Lesen', write: 'Schreiben', admin: 'Admin' };
 
-const LEVEL_BADGE: Record<PermLevel, string> = {
-  none:  'bg-gray-100 text-gray-600 hover:bg-gray-200',
-  read:  'bg-blue-100 text-blue-700 hover:bg-blue-200',
-  write: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200',
-  admin: 'bg-green-100 text-green-700 hover:bg-green-200',
+const LEVEL_BADGE: Record<PermLevel, React.CSSProperties> = {
+  none:  { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' },
+  read:  { background: 'var(--accent-light)', color: 'var(--accent)' },
+  write: { background: 'var(--warning-light)', color: 'var(--warning)' },
+  admin: { background: 'var(--success-light)', color: 'var(--success)' },
 };
 
 // Demo data for matrix (used when API unavailable)
@@ -96,7 +96,8 @@ function LevelBadge({ level, onClick }: { level: PermLevel; onClick?: () => void
   return (
     <button
       onClick={onClick}
-      className={`px-2 py-0.5 text-xs font-medium rounded-full transition-colors ${LEVEL_BADGE[level]}`}
+      className="px-2 py-0.5 text-xs font-medium rounded-full transition-colors"
+      style={LEVEL_BADGE[level]}
     >
       {LEVEL_LABEL[level]}
     </button>
@@ -104,14 +105,13 @@ function LevelBadge({ level, onClick }: { level: PermLevel; onClick?: () => void
 }
 
 function RiskBar({ score }: { score: number }) {
-  const color = score >= 70 ? 'bg-red-500' : score >= 30 ? 'bg-yellow-400' : 'bg-green-500';
-  const text  = score >= 70 ? 'text-red-700' : score >= 30 ? 'text-yellow-700' : 'text-green-700';
+  const color = score >= 70 ? '#f85149' : score >= 30 ? '#d29922' : '#3fb950';
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-        <div className={`h-2 rounded-full transition-all ${color}`} style={{ width: `${score}%` }} />
+      <div className="flex-1 rounded-full h-2 overflow-hidden" style={{ background: 'var(--bg-surface-raised)' }}>
+        <div className="h-2 rounded-full transition-all" style={{ width: `${score}%`, background: color }} />
       </div>
-      <span className={`text-xs font-semibold w-8 text-right ${text}`}>{score}</span>
+      <span className="text-xs font-semibold w-8 text-right" style={{ color }}>{score}</span>
     </div>
   );
 }
@@ -126,9 +126,9 @@ function MatrixTab({ onDemoData }: { onDemoData: () => void }) {
   useEffect(() => {
     fetch('/api/permissions/matrix')
       .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setMatrix(data); else { setMatrix([]); onDemoData(); } })
+      .then(data => { if (Array.isArray(data)) setMatrix(data); else { setMatrix(DEMO_MATRIX); onDemoData(); } })
       .catch(() => {
-        setMatrix([]);
+        setMatrix(DEMO_MATRIX);
         onDemoData();
       })
       .finally(() => setMatrixLoading(false));
@@ -155,28 +155,31 @@ function MatrixTab({ onDemoData }: { onDemoData: () => void }) {
     <div className="overflow-x-auto">
       {matrixLoading ? (
         <div className="space-y-2 p-4">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-gray-700 rounded animate-pulse" />)}
+          {[...Array(4)].map((_, i) => <div key={i} className="h-10 rounded animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />)}
         </div>
       ) : matrix.length === 0 ? (
-        <div className="text-center py-8 text-gray-400 text-sm">Keine Berechtigungen konfiguriert</div>
+        <div className="text-center py-8 text-sm" style={{ color: 'var(--text-muted)' }}>Keine Berechtigungen konfiguriert</div>
       ) : (
         <>
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left px-4 py-3 font-medium text-gray-500 w-44">Benutzer</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Rolle</th>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left px-4 py-3 font-medium w-44" style={{ color: 'var(--text-muted)' }}>Benutzer</th>
+                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--text-muted)' }}>Rolle</th>
                 {RESOURCES.map((r) => (
-                  <th key={r} className="text-center px-3 py-3 font-medium text-gray-500 whitespace-nowrap">{r}</th>
+                  <th key={r} className="text-center px-3 py-3 font-medium whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{r}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {matrix.map(row => (
-                <tr key={row.userId} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{row.name}</td>
+                <tr key={row.userId} className="transition-colors" style={{ borderBottom: '1px solid var(--border)' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <td className="px-4 py-3 font-medium whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>{row.name}</td>
                   <td className="px-4 py-3">
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">{row.role}</span>
+                    <span className="px-2 py-0.5 text-xs rounded-full" style={{ background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }}>{row.role}</span>
                   </td>
                   {RESOURCE_KEYS.map((key) => {
                     const level = (row.permissions[key] ?? 'none') as PermLevel;
@@ -189,7 +192,8 @@ function MatrixTab({ onDemoData }: { onDemoData: () => void }) {
                             defaultValue={level}
                             onBlur={() => setEditCell(null)}
                             onChange={e => handleLevelChange(row.userId, key, e.target.value as PermLevel)}
-                            className="text-xs border border-gray-300 rounded px-1 py-0.5"
+                            className="text-xs rounded px-1 py-0.5"
+                            style={{ border: '1px solid var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}
                           >
                             {(['none', 'read', 'write', 'admin'] as PermLevel[]).map(l => (
                               <option key={l} value={l}>{LEVEL_LABEL[l]}</option>
@@ -205,7 +209,7 @@ function MatrixTab({ onDemoData }: { onDemoData: () => void }) {
               ))}
             </tbody>
           </table>
-          <p className="text-xs text-gray-400 mt-3 px-4">Klick auf eine Berechtigung zum Bearbeiten</p>
+          <p className="text-xs mt-3 px-4" style={{ color: 'var(--text-muted)' }}>Klick auf eine Berechtigung zum Bearbeiten</p>
         </>
       )}
     </div>
@@ -222,8 +226,8 @@ function UnusedTab({ onCountChange, onDemoData }: { onCountChange: (n: number) =
   useEffect(() => {
     fetch('/api/permissions/unused')
       .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setUnused(data); else { setUnused([]); onDemoData(); } })
-      .catch(() => { setUnused([]); onDemoData(); });
+      .then(data => { if (Array.isArray(data)) setUnused(data); else { setUnused(DEMO_UNUSED); onDemoData(); } })
+      .catch(() => { setUnused(DEMO_UNUSED); onDemoData(); });
   }, [onDemoData]);
 
   const revokeOne = async (userId: string, resource: string) => {
@@ -241,27 +245,44 @@ function UnusedTab({ onCountChange, onDemoData }: { onCountChange: (n: number) =
   };
 
   if (unused.length === 0) {
-    return <div className="text-center py-12 text-gray-500"><p className="font-medium">Keine ungenutzten Berechtigungen gefunden</p><p className="text-sm mt-1">Alle Berechtigungen wurden kürzlich genutzt.</p></div>;
+    return (
+      <div className="text-center py-12" style={{ color: 'var(--text-secondary)' }}>
+        <p className="font-medium">Keine ungenutzten Berechtigungen gefunden</p>
+        <p className="text-sm mt-1">Alle Berechtigungen wurden kürzlich genutzt.</p>
+      </div>
+    );
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-600">{unused.length} ungenutzte Berechtigungen (&gt;90 Tage)</p>
-        <button onClick={revokeAll} className="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg">Alle entziehen</button>
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{unused.length} ungenutzte Berechtigungen (&gt;90 Tage)</p>
+        <button
+          onClick={revokeAll}
+          className="px-3 py-1.5 text-sm font-medium rounded-lg"
+          style={{ color: 'var(--danger)', background: 'var(--danger-light)', border: '1px solid var(--danger)' }}
+        >
+          Alle entziehen
+        </button>
       </div>
       <div className="space-y-2">
         {unused.map(u => (
-          <div key={`${u.userId}-${u.resource}`} className="flex items-center gap-4 p-3 bg-orange-50 border border-orange-100 rounded-lg">
+          <div key={`${u.userId}-${u.resource}`} className="flex items-center gap-4 p-3 rounded-lg" style={{ background: 'var(--warning-light)', border: '1px solid var(--border)' }}>
             <div className="flex-1 min-w-0">
-              <span className="font-medium text-gray-900">{u.userName}</span>
-              <span className="text-gray-400 mx-2">·</span>
-              <span className="text-gray-700">{u.resource}</span>
-              <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded-full">{u.level}</span>
+              <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{u.userName}</span>
+              <span className="mx-2" style={{ color: 'var(--text-muted)' }}>·</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{u.resource}</span>
+              <span className="ml-2 px-2 py-0.5 text-xs rounded-full" style={{ background: 'var(--warning-light)', color: 'var(--warning)' }}>{u.level}</span>
             </div>
-            <span className="text-xs text-gray-500 whitespace-nowrap">Zuletzt genutzt: {new Date(u.lastUsed).toLocaleDateString('de-DE')}</span>
-            <span className="text-xs font-medium text-orange-700 whitespace-nowrap">{u.daysIdle} Tage</span>
-            <button onClick={() => revokeOne(u.userId, u.resource)} className="px-3 py-1 text-xs font-medium text-red-700 bg-white hover:bg-red-50 border border-red-200 rounded">Entziehen</button>
+            <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>Zuletzt genutzt: {new Date(u.lastUsed).toLocaleDateString('de-DE')}</span>
+            <span className="text-xs font-medium whitespace-nowrap" style={{ color: 'var(--warning)' }}>{u.daysIdle} Tage</span>
+            <button
+              onClick={() => revokeOne(u.userId, u.resource)}
+              className="px-3 py-1 text-xs font-medium rounded"
+              style={{ color: 'var(--danger)', background: 'var(--bg-surface)', border: '1px solid var(--danger)' }}
+            >
+              Entziehen
+            </button>
           </div>
         ))}
       </div>
@@ -274,7 +295,7 @@ function UnusedTab({ onCountChange, onDemoData }: { onCountChange: (n: number) =
 function PimTab() {
   const [requests, setRequests] = useState<PimRequest[]>([]);
   const [active, setActive] = useState<ActiveElevation[]>([]);
-  const [riskScores, setRiskScores] = useState<RiskScore[]>([]);
+  const [riskScores, setRiskScores] = useState<RiskScore[]>(DEMO_RISK);
   const [form, setForm] = useState({ userId: '', resource: 'secrets', duration_hours: 2, reason: '' });
   const [submitting, setSubmitting] = useState(false);
 
@@ -320,14 +341,14 @@ function PimTab() {
       {/* Active Elevations */}
       {active.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Aktive Privilegien</h3>
+          <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>Aktive Privilegien</h3>
           <div className="space-y-2">
             {active.map(e => (
-              <div key={e.id} className="flex items-center gap-4 p-3 bg-purple-50 border border-purple-100 rounded-lg text-sm">
-                <span className="font-medium text-gray-900">{e.userName}</span>
-                <span className="text-gray-500">→</span>
-                <span className="text-purple-700 font-medium">{e.resource}</span>
-                <span className="ml-auto text-xs text-gray-500">Läuft ab in <span className="font-semibold text-purple-700">{e.timeRemainingMinutes} Min.</span></span>
+              <div key={e.id} className="flex items-center gap-4 p-3 rounded-lg text-sm" style={{ background: 'var(--accent-light)', border: '1px solid var(--border)' }}>
+                <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{e.userName}</span>
+                <span style={{ color: 'var(--text-muted)' }}>→</span>
+                <span className="font-medium" style={{ color: 'var(--accent)' }}>{e.resource}</span>
+                <span className="ml-auto text-xs" style={{ color: 'var(--text-muted)' }}>Läuft ab in <span className="font-semibold" style={{ color: 'var(--accent)' }}>{e.timeRemainingMinutes} Min.</span></span>
               </div>
             ))}
           </div>
@@ -335,33 +356,33 @@ function PimTab() {
       )}
 
       {/* Request Form */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Privilege-Anfrage stellen</h3>
+      <div className="rounded-lg p-4" style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-secondary)' }}>Privilege-Anfrage stellen</h3>
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Benutzer</label>
-            <select value={form.userId} onChange={e => setForm(f => ({ ...f, userId: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+            <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>Benutzer</label>
+            <select value={form.userId} onChange={e => setForm(f => ({ ...f, userId: e.target.value }))} className="w-full rounded px-2 py-1.5 text-sm" style={{ border: '1px solid var(--border-strong)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
               {riskScores.map(u => <option key={u.userId} value={u.userId}>{u.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Ressource</label>
-            <select value={form.resource} onChange={e => setForm(f => ({ ...f, resource: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+            <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>Ressource</label>
+            <select value={form.resource} onChange={e => setForm(f => ({ ...f, resource: e.target.value }))} className="w-full rounded px-2 py-1.5 text-sm" style={{ border: '1px solid var(--border-strong)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
               {RESOURCE_KEYS.map((k, i) => <option key={k} value={k}>{RESOURCES[i]}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Dauer</label>
-            <select value={form.duration_hours} onChange={e => setForm(f => ({ ...f, duration_hours: Number(e.target.value) }))} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+            <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>Dauer</label>
+            <select value={form.duration_hours} onChange={e => setForm(f => ({ ...f, duration_hours: Number(e.target.value) }))} className="w-full rounded px-2 py-1.5 text-sm" style={{ border: '1px solid var(--border-strong)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
               {[1, 2, 4, 8].map(h => <option key={h} value={h}>{h} Stunde{h > 1 ? 'n' : ''}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Begründung</label>
-            <input value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Begründung angeben..." className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+            <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>Begründung</label>
+            <input value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Begründung angeben..." className="w-full rounded px-2 py-1.5 text-sm" style={{ border: '1px solid var(--border-strong)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
           </div>
         </div>
-        <button onClick={submitRequest} disabled={submitting} className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50">
+        <button onClick={submitRequest} disabled={submitting} className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50" style={{ background: '#7c3aed' }}>
           {submitting ? 'Sende…' : 'Anfragen'}
         </button>
       </div>
@@ -369,18 +390,18 @@ function PimTab() {
       {/* Pending Requests */}
       {requests.filter(r => r.status === 'pending').length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Ausstehende Anfragen</h3>
+          <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>Ausstehende Anfragen</h3>
           <div className="space-y-2">
             {requests.filter(r => r.status === 'pending').map(r => (
-              <div key={r.id} className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg text-sm">
+              <div key={r.id} className="flex items-center gap-3 p-3 rounded-lg text-sm" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
                 <div className="flex-1 min-w-0">
-                  <span className="font-medium text-gray-900">{r.userName}</span>
-                  <span className="text-gray-400 mx-2">·</span>
-                  <span className="text-gray-700">{r.resource}</span>
-                  <span className="ml-2 text-xs text-gray-500">{r.duration_hours}h · {r.reason}</span>
+                  <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{r.userName}</span>
+                  <span className="mx-2" style={{ color: 'var(--text-muted)' }}>·</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{r.resource}</span>
+                  <span className="ml-2 text-xs" style={{ color: 'var(--text-muted)' }}>{r.duration_hours}h · {r.reason}</span>
                 </div>
-                <button onClick={() => processRequest(r.id, 'approve')} className="px-3 py-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded">Genehmigen</button>
-                <button onClick={() => processRequest(r.id, 'deny')} className="px-3 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded">Ablehnen</button>
+                <button onClick={() => processRequest(r.id, 'approve')} className="px-3 py-1 text-xs font-medium rounded" style={{ color: 'var(--success)', background: 'var(--success-light)', border: '1px solid var(--success)' }}>Genehmigen</button>
+                <button onClick={() => processRequest(r.id, 'deny')} className="px-3 py-1 text-xs font-medium rounded" style={{ color: 'var(--danger)', background: 'var(--danger-light)', border: '1px solid var(--danger)' }}>Ablehnen</button>
               </div>
             ))}
           </div>
@@ -389,17 +410,17 @@ function PimTab() {
 
       {/* Risk Scores */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Risikobewertung Benutzer</h3>
+        <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>Risikobewertung Benutzer</h3>
         <div className="space-y-2">
           {riskScores.map(u => (
             <div key={u.userId} className="flex items-center gap-3 p-2">
-              <span className="text-sm text-gray-700 w-36 truncate">{u.name}</span>
-              <span className="text-xs text-gray-400 w-20">{u.role}</span>
+              <span className="text-sm w-36 truncate" style={{ color: 'var(--text-secondary)' }}>{u.name}</span>
+              <span className="text-xs w-20" style={{ color: 'var(--text-muted)' }}>{u.role}</span>
               <div className="flex-1"><RiskBar score={u.riskScore} /></div>
             </div>
           ))}
         </div>
-        <p className="text-xs text-gray-400 mt-2">Risikoscore: Grün &lt;30, Gelb &lt;70, Rot ≥70</p>
+        <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Risikoscore: Grün &lt;30, Gelb &lt;70, Rot ≥70</p>
       </div>
     </div>
   );
@@ -419,34 +440,34 @@ export default function PermissionsView() {
   ];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ background: 'var(--bg-base)', minHeight: '100vh' }}>
       {usingDemoData && (
-        <div className="mx-6 mt-4 p-3 bg-yellow-900/50 border border-yellow-600 rounded-lg flex items-center gap-2 text-yellow-300 text-sm">
-          <span className="text-yellow-400">⚠</span>
+        <div className="p-3 rounded-lg flex items-center gap-2 text-sm" style={{ background: 'var(--warning-light)', border: '1px solid var(--warning)', color: 'var(--warning)' }}>
+          <span>⚠</span>
           <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
         </div>
       )}
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Berechtigungen</h1>
-        <p className="text-sm text-gray-500 mt-1">Verwalte Zugriffsrechte, ungenutzte Berechtigungen und privilegierten Zugang</p>
+        <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Berechtigungen</h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Verwalte Zugriffsrechte, ungenutzte Berechtigungen und privilegierten Zugang</p>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div style={{ borderBottom: '1px solid var(--border)' }}>
         <nav className="flex gap-6">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className="flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors"
+              style={activeTab === tab.id
+                ? { borderColor: 'var(--accent)', color: 'var(--accent)' }
+                : { borderColor: 'transparent', color: 'var(--text-muted)' }
+              }
             >
               {tab.label}
               {tab.badge !== undefined && tab.badge > 0 && (
-                <span className="px-1.5 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 rounded-full">{tab.badge}</span>
+                <span className="px-1.5 py-0.5 text-xs font-semibold rounded-full" style={{ background: 'var(--warning-light)', color: 'var(--warning)' }}>{tab.badge}</span>
               )}
             </button>
           ))}
@@ -454,7 +475,7 @@ export default function PermissionsView() {
       </div>
 
       {/* Tab Content */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+      <div className="rounded-xl p-6" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
         {activeTab === 'matrix' && <MatrixTab onDemoData={() => setUsingDemoData(true)} />}
         {activeTab === 'unused' && <UnusedTab onCountChange={setUnusedCount} onDemoData={() => setUsingDemoData(true)} />}
         {activeTab === 'pim' && <PimTab />}
