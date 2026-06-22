@@ -83,7 +83,27 @@ class APIGateway {
     this.wsServer = null;
     this.services = new Map();
     this.config = configManager.getConfig();
-    
+
+    // Pre-create rate limiters at init time (express-rate-limit v7 requirement)
+    this.apiClientLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 5000,
+      message: 'API rate limit exceeded',
+      standardHeaders: true,
+    });
+    this.frontendLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 1000,
+      message: 'Rate limit exceeded',
+      standardHeaders: true,
+    });
+    this.defaultLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      message: 'Rate limit exceeded. Consider using API authentication for higher limits.',
+      standardHeaders: true,
+    });
+
     this.initializeMiddleware();
     this.initializeWebSocket();
     this.initializeRoutes();
@@ -711,34 +731,12 @@ class APIGateway {
   }
 
   getRateLimiter(req) {
-    const hasApiKey = req.headers['x-api-key'];
-    const isFromFrontend = req.clientType === 'frontend';
-    
-    if (hasApiKey) {
-      // API clients get higher rate limits
-      return rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 5000, // 5000 requests per 15 minutes
-        message: 'API rate limit exceeded',
-        standardHeaders: true,
-      });
-    } else if (isFromFrontend) {
-      // Frontend gets normal rate limits
-      return rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 1000, // 1000 requests per 15 minutes
-        message: 'Rate limit exceeded',
-        standardHeaders: true,
-      });
-    } else {
-      // Direct clients (Postman, etc.) get lower rate limits without auth
-      return rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 100, // 100 requests per 15 minutes
-        message: 'Rate limit exceeded. Consider using API authentication for higher limits.',
-        standardHeaders: true,
-      });
+    if (req.headers['x-api-key']) return this.apiClientLimiter;
+    const origin = req.headers.origin || '';
+    if (origin.includes('localhost:3000') || origin.includes('app.opendirectory')) {
+      return this.frontendLimiter;
     }
+    return this.defaultLimiter;
   }
 
   getApiDocs(req, res) {
