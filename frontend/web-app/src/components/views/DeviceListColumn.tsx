@@ -64,7 +64,8 @@ interface DeviceListColumnProps {
 }
 
 export default function DeviceListColumn({ selectedId, onSelect }: DeviceListColumnProps) {
-  const [devices,    setDevices]    = useState<FleetDevice[]>(MOCK_DEVICES);
+  const [devices,    setDevices]    = useState<FleetDevice[]>([]);
+  const [loading,    setLoading]    = useState(true);
   const [osFilter,   setOsFilter]   = useState<OSType>('all');
   const [sortKey,    setSortKey]    = useState<SortKey>('name');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -72,6 +73,7 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
   const [refreshKey, setRefreshKey] = useState(0);
 
   const loadDevices = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await api.get('/api/devices');
       const raw = Array.isArray(res.data) ? res.data : res.data?.devices ?? [];
@@ -93,7 +95,9 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
         }));
         setDevices(mapped);
       }
-    } catch {}
+    } catch {} finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { loadDevices(); }, [loadDevices, refreshKey]);
@@ -233,7 +237,17 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
         </div>
       </div>
 
+      {/* Loading skeleton */}
+      {loading && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px' }}>
+          {[...Array(5)].map((_, i) => (
+            <div key={i} style={{ height: 52, borderRadius: 8, background: 'rgba(255,255,255,0.05)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          ))}
+        </div>
+      )}
+
       {/* Device list */}
+      {!loading && (
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {filtered.map(device => {
           const meta = OS_META[device.os];
@@ -287,11 +301,21 @@ export default function DeviceListColumn({ selectedId, onSelect }: DeviceListCol
         })}
 
         {filtered.length === 0 && (
-          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted, #6e7681)', fontSize: 13 }}>
-            No devices match the filter.
-          </div>
+          osFilter !== 'all'
+            ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted, #6e7681)', fontSize: 13 }}>
+                No devices match the filter.
+              </div>
+            )
+            : (
+              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted, #6e7681)', fontSize: 13 }}>
+                <p style={{ marginBottom: 8 }}>No devices enrolled yet.</p>
+                <p style={{ fontSize: 11 }}>Use <strong>Enroll Device</strong> or the Enrollment Hub to add devices.</p>
+              </div>
+            )
         )}
       </div>
+      )}
     </div>
   );
 }
