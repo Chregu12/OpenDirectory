@@ -249,7 +249,7 @@ function DnsTab() {
   );
 }
 
-const SAMBA_URL = process.env.NEXT_PUBLIC_SAMBA_URL || 'http://samba-ad-dc:3010';
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
 
 interface DomainStatus {
   provisioned: boolean;
@@ -278,7 +278,7 @@ export default function NetworkInfrastructureIntegration() {
   const loadDomainStatus = async () => {
     setDomainLoading(true);
     try {
-      const res  = await fetch(`${SAMBA_URL}/api/samba/domain/status`);
+      const res  = await fetch(`${API_BASE}/api/samba/domain/status`);
       const data = await res.json();
       setDomainStatus(data);
     } catch {

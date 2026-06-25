@@ -14,7 +14,9 @@ import {
 import WizardLayout from '@/components/shared/WizardLayout';
 import toast from 'react-hot-toast';
 
-const SAMBA_URL = process.env.NEXT_PUBLIC_SAMBA_URL || 'http://samba-ad-dc:3010';
+// Calls go through the API gateway (same origin) so no direct service URL needed.
+// NEXT_PUBLIC_API_URL falls back to '' (same origin) in production.
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -430,7 +432,7 @@ export default function DomainSetupWizard({ onClose, onProvisioned }: DomainSetu
     setStep(4);
 
     const steps = [
-      `Verbindung zu Samba AD DC (${SAMBA_URL})…`,
+      `Verbindung zu Samba AD DC via API-Gateway…`,
       `Realm: ${form.realm} / NetBIOS: ${form.domain}`,
       `DNS-Backend: ${form.dnsBackend}`,
       'Initialisiere SAM-Datenbank…',
@@ -446,7 +448,7 @@ export default function DomainSetupWizard({ onClose, onProvisioned }: DomainSetu
     }, 600);
 
     try {
-      const res = await fetch(`${SAMBA_URL}/api/samba/domain/provision`, {
+      const res = await fetch(`${API_BASE}/api/samba/domain/provision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -472,7 +474,7 @@ export default function DomainSetupWizard({ onClose, onProvisioned }: DomainSetu
       toast.success(`Domain ${form.realm} eingerichtet!`);
     } catch (err: any) {
       clearInterval(ticker);
-      setError(err.message || 'Netzwerkfehler — ist der Samba-Service erreichbar?');
+      setError(err.message || 'Netzwerkfehler — ist der samba-ad-dc Container gestartet?');
       setSaving(false);
     }
   };

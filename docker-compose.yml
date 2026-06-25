@@ -471,9 +471,54 @@ services:
       start_period: 20s
 
   # ===================
+  # Samba AD Domain Controller
+  # ===================
+
+  samba-ad-dc:
+    build:
+      context: ./services/core/samba-ad-dc
+      dockerfile: Dockerfile
+    container_name: od-samba-ad-dc
+    restart: unless-stopped
+    privileged: true          # Required for Kerberos, LDAP socket and Samba kernel modules
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3010
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/samba
+      - AD_DOMAIN=${AD_DOMAIN:-opendirectory.local}
+      - AD_REALM=${AD_REALM:-OPENDIRECTORY.LOCAL}
+      - SAMBA_CONFIG_PATH=/etc/samba
+    ports:
+      - "3010:3010"   # REST API
+      - "389:389"     # LDAP
+      - "636:636"     # LDAPS
+      - "88:88"       # Kerberos
+      - "88:88/udp"   # Kerberos UDP
+      - "464:464"     # kpasswd
+      - "445:445"     # SMB / CIFS
+      - "135:135"     # DCE/RPC endpoint mapper
+      - "3268:3268"   # Global Catalog
+      - "3269:3269"   # Global Catalog SSL
+    volumes:
+      - samba-data:/var/lib/samba        # SAM database, SYSVOL, NETLOGON (persistent)
+      - samba-config:/etc/samba          # smb.conf, Kerberos config (persistent)
+      - samba-logs:/var/log/samba
+    networks:
+      - opendirectory
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s   # Samba provisioning can take up to 60 s
+
+  # ===================
   # Frontend
   # ===================
-  
+
   web-app:
     build:
       context: ./frontend/web-app
@@ -483,8 +528,9 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8080
       - NEXT_PUBLIC_WS_URL=ws://localhost:8080
-      - NEXT_PUBLIC_AD_DOMAIN=${AD_DOMAIN}
+      - NEXT_PUBLIC_AD_DOMAIN=${AD_DOMAIN:-opendirectory.local}
       - NEXT_PUBLIC_APP_URL=${APP_URL:-https://opendirectory.heusser.local}
+      - NEXT_PUBLIC_SAMBA_URL=http://samba-ad-dc:3010
       - INTEGRATION_SERVICE_URL=http://integration-service:4000
       - PRINTER_SERVICE_URL=http://printer-service:3006
       - APP_STORE_URL=http://app-store:3906
@@ -901,3 +947,6 @@ volumes:
   network-shares:
   network-logs:
   kerberos_data:
+  samba-data:      # /var/lib/samba — SAM DB, SYSVOL, NETLOGON, Kerberos keytab
+  samba-config:    # /etc/samba — smb.conf, krb5.conf
+  samba-logs:      # /var/log/samba

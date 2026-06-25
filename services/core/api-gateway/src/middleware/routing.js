@@ -274,6 +274,23 @@ class RoutingMiddleware {
         description: 'App Deployment'
       },
       
+      // Samba AD Domain Controller
+      '/api/samba': {
+        service: 'samba-ad-dc',
+        port: 3010,
+        description: 'Samba Active Directory Domain Controller'
+      },
+      '/api/domain': {
+        service: 'samba-ad-dc',
+        port: 3010,
+        description: 'AD Domain Management'
+      },
+      '/api/computers': {
+        service: 'samba-ad-dc',
+        port: 3010,
+        description: 'Computer Account Management'
+      },
+
       // Identity Management
       '/api/identity': {
         service: 'identity-service',
