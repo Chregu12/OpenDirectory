@@ -2070,7 +2070,14 @@ export function ScanDestinationsTab() {
                   <td className="px-4 py-3 font-mono text-gray-600 text-xs">
                     {dest.smbServer ? `//${dest.smbServer}/${dest.smbShare}` : dest.localPath ?? '—'}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{dest.smbPath || '—'}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {dest.smbPath
+                      ? /(@\{username\}|@\{email\}|%U)/i.test(dest.smbPath)
+                        ? <span className="font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{dest.smbPath}</span>
+                        : <span className="font-mono text-gray-500">{dest.smbPath}</span>
+                      : <span className="text-gray-400">—</span>
+                    }
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{dest.label || '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -2188,11 +2195,17 @@ export function ScanDestinationsTab() {
                     <label className="text-xs font-medium text-gray-600">Sub-path (optional)</label>
                     <input
                       type="text"
-                      placeholder="Marketing/Incoming"
+                      placeholder="scanner/@{username}  oder  Marketing/Incoming"
                       value={form.smbPath}
                       onChange={e => setForm(f => ({ ...f, smbPath: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                    <p className="text-xs text-blue-600">
+                      Variablen: <code className="bg-blue-50 px-1 rounded">@&#123;username&#125;</code> → Login-Name,{' '}
+                      <code className="bg-blue-50 px-1 rounded">@&#123;email&#125;</code> → E-Mail,{' '}
+                      <code className="bg-blue-50 px-1 rounded">%U</code> → Samba-Alias für Username.
+                      Nützlich für Gruppen-Regeln: z.B. <code className="bg-blue-50 px-1 rounded">scanner/@&#123;username&#125;</code> → <em>scanner/jdoe</em>.
+                    </p>
                   </div>
 
                   {/* SMB Username */}
@@ -2238,11 +2251,16 @@ export function ScanDestinationsTab() {
                   <label className="text-xs font-medium text-gray-600">Local Path</label>
                   <input
                     type="text"
-                    placeholder="/mnt/storage/scans"
+                    placeholder="/mnt/storage/scans/@{username}"
                     value={form.localPath}
                     onChange={e => setForm(f => ({ ...f, localPath: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  <p className="text-xs text-blue-600">
+                    Variablen: <code className="bg-blue-50 px-1 rounded">@&#123;username&#125;</code>,{' '}
+                    <code className="bg-blue-50 px-1 rounded">@&#123;email&#125;</code>,{' '}
+                    <code className="bg-blue-50 px-1 rounded">%U</code> werden beim Scan ersetzt.
+                  </p>
                 </div>
               )}
             </div>

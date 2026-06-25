@@ -139,15 +139,37 @@ class ScanDestinationManager {
     return this._rowToDestination(result.rows[0] || null);
   }
 
+  // Replace @{username}, @{email}, and %U / %u placeholders with the actual user values.
+  // userId may be a full email (jdoe@corp.com) or a plain login name (jdoe).
+  _resolveVariables(dest, userId) {
+    if (!dest || !userId) return dest;
+    const email    = userId.includes('@') ? userId : `${userId}@opendirectory.local`;
+    const username = userId.includes('@') ? userId.split('@')[0] : userId;
+
+    const replace = str =>
+      str ? str
+        .replace(/@\{username\}/g, username)
+        .replace(/@\{email\}/g,    email)
+        .replace(/%U/g,            username)
+        .replace(/%u/g,            username)
+      : str;
+
+    return {
+      ...dest,
+      smbPath:   replace(dest.smbPath),
+      localPath: replace(dest.localPath),
+    };
+  }
+
   async resolveDestination(userId, userGroups = []) {
     // 1. User-specific destination
     const userDest = await this.getUserDestination(userId);
-    if (userDest) return userDest;
+    if (userDest) return this._resolveVariables(userDest, userId);
 
-    // 2. First matching group destination
+    // 2. First matching group destination — variables resolved against requesting user
     for (const groupId of userGroups) {
       const groupDest = await this.getGroupDestination(groupId);
-      if (groupDest) return groupDest;
+      if (groupDest) return this._resolveVariables(groupDest, userId);
     }
 
     // 3. No destination found — caller uses default /var/scans/{userId}
