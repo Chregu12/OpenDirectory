@@ -30,6 +30,7 @@ import {
 type NewDevice = { ip: string; hostname: string; mac: string; vendor: string; type: string };
 import toast from 'react-hot-toast';
 import NetworkConfigWizard from '@/components/setup/NetworkConfigWizard';
+import DomainSetupWizard from '@/components/setup/DomainSetupWizard';
 import { api } from '@/lib/api';
 
 interface NetworkDevice {
@@ -81,7 +82,7 @@ interface FileShare {
 interface LdapGroup { id: string; displayName: string; members: string[] }
 interface LdapUser  { id: string; displayName: string; email: string; groups: string[] }
 
-type TabId = 'dns' | 'dhcp' | 'shares' | 'discovery' | 'statistics' | 'dns-records';
+type TabId = 'dns' | 'dhcp' | 'shares' | 'discovery' | 'statistics' | 'dns-records' | 'domain';
 type WizardStep = 1 | 2 | 3;
 type Protocol = 'SMB' | 'NFS' | 'S3';
 
@@ -248,10 +249,59 @@ function DnsTab() {
   );
 }
 
+const SAMBA_URL = process.env.NEXT_PUBLIC_SAMBA_URL || 'http://samba-ad-dc:3010';
+
+interface DomainStatus {
+  provisioned: boolean;
+  realm?: string;
+  domain?: string;
+  provisionedAt?: string;
+  dcHealth?: string;
+  fsmoRoles?: Record<string, string>;
+  forestLevel?: string;
+}
+
 export default function NetworkInfrastructureIntegration() {
-  const [activeTab, setActiveTab] = useState<TabId>('dns');
+  const initialTab: TabId =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab') === 'domain'
+      ? 'domain'
+      : 'dns';
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [loading, setLoading]     = useState(false);
-  const [showNetworkWizard, setShowNetworkWizard] = useState(false);
+  const [showNetworkWizard, setShowNetworkWizard]   = useState(false);
+  const [showDomainWizard,  setShowDomainWizard]    = useState(false);
+  const [domainStatus,      setDomainStatus]        = useState<DomainStatus | null>(null);
+  const [domainLoading,     setDomainLoading]       = useState(false);
+  const [joinPlatform,      setJoinPlatform]        = useState<'Linux' | 'macOS' | 'Windows'>('Linux');
+  const [copiedJoin,        setCopiedJoin]          = useState(false);
+
+  const loadDomainStatus = async () => {
+    setDomainLoading(true);
+    try {
+      const res  = await fetch(`${SAMBA_URL}/api/samba/domain/status`);
+      const data = await res.json();
+      setDomainStatus(data);
+    } catch {
+      setDomainStatus({ provisioned: false });
+    } finally {
+      setDomainLoading(false);
+    }
+  };
+
+  const joinScript = (platform: 'Linux' | 'macOS' | 'Windows', realm: string) => {
+    switch (platform) {
+      case 'Windows': return `Add-Computer -DomainName "${realm}" -Credential (Get-Credential) -Restart`;
+      case 'macOS':   return `dsconfigad -add ${realm.toLowerCase()} -username Administrator -password ""`;
+      case 'Linux':   return `sudo apt install -y realmd sssd adcli\nsudo realm join -U Administrator ${realm.toLowerCase()}`;
+    }
+  };
+
+  const copyJoin = () => {
+    if (!domainStatus?.realm) return;
+    navigator.clipboard.writeText(joinScript(joinPlatform, domainStatus.realm)).then(() => {
+      setCopiedJoin(true); setTimeout(() => setCopiedJoin(false), 2000);
+    });
+  };
 
   const [dnsRecords, setDnsRecords]   = useState<DNSRecord[]>([]);
   const [newDNSRecord, setNewDNSRecord] = useState<Partial<DNSRecord>>({ type: 'A', ttl: 300 });
@@ -305,6 +355,7 @@ export default function NetworkInfrastructureIntegration() {
   const [newDevice, setNewDevice]           = useState<NewDevice>({ ip: '', hostname: '', mac: '', vendor: '', type: '' });
 
   useEffect(() => { loadNetworkData(); }, []);
+  useEffect(() => { if (activeTab === 'domain' && !domainStatus) loadDomainStatus(); }, [activeTab]);
 
   const loadNetworkData = async () => {
     setLoading(true);
@@ -477,6 +528,7 @@ export default function NetworkInfrastructureIntegration() {
   };
 
   const tabs: { key: TabId; label: string; icon: React.ElementType }[] = [
+    { key: 'domain',      label: 'Domain',       icon: ServerIcon },
     { key: 'dns',         label: 'DNS',          icon: GlobeAltIcon },
     { key: 'dns-records', label: 'DNS Records',  icon: GlobeAltIcon },
     { key: 'dhcp',        label: 'DHCP',         icon: ServerIcon },
@@ -544,6 +596,131 @@ export default function NetworkInfrastructureIntegration() {
 
       {/* Tab Content */}
       <div className="p-6">
+
+        {/* Domain Tab */}
+        {activeTab === 'domain' && (
+          <div className="space-y-6" onClick={() => { if (!domainStatus) loadDomainStatus(); }}>
+            {domainLoading ? (
+              <div className="flex items-center justify-center h-40">
+                <svg className="animate-spin w-6 h-6 text-blue-500" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              </div>
+            ) : !domainStatus ? (
+              /* Auto-load on first view */
+              <div className="flex items-center justify-center h-40">
+                <button onClick={loadDomainStatus} className="text-sm text-blue-600 hover:underline">Status laden</button>
+              </div>
+            ) : !domainStatus.provisioned ? (
+              /* Not provisioned */
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
+                  <ServerIcon className="w-8 h-8 text-blue-500" />
+                </div>
+                <h3 className="text-base font-semibold text-gray-900 mb-2">Noch keine Domain eingerichtet</h3>
+                <p className="text-sm text-gray-500 max-w-sm mb-6">
+                  Erstelle einen Samba Active Directory Domain Controller und füge anschliessend Windows, macOS und Linux Clients hinzu.
+                </p>
+                <button
+                  onClick={() => setShowDomainWizard(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
+                >
+                  <ServerIcon className="w-4 h-4" />
+                  Domain einrichten
+                </button>
+              </div>
+            ) : (
+              /* Provisioned — status + join commands */
+              <div className="space-y-6">
+                {/* Status card */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="border border-gray-200 rounded-xl p-5 space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <h3 className="text-sm font-semibold text-gray-900">Domain aktiv</h3>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between text-gray-600">
+                        <span>Realm (FQDN)</span>
+                        <code className="font-mono text-gray-900">{domainStatus.realm}</code>
+                      </div>
+                      <div className="flex justify-between text-gray-600">
+                        <span>NetBIOS-Name</span>
+                        <code className="font-mono text-gray-900">{domainStatus.domain}</code>
+                      </div>
+                      {domainStatus.forestLevel && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>Forest-Level</span>
+                          <span className="text-gray-900">{domainStatus.forestLevel}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border border-gray-200 rounded-xl p-5 space-y-3">
+                    <h3 className="text-sm font-semibold text-gray-900">DC-Status</h3>
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className={`w-2 h-2 rounded-full ${domainStatus.dcHealth === 'ok' ? 'bg-green-500' : 'bg-amber-400'}`} />
+                      <span className="text-gray-700">{domainStatus.dcHealth === 'ok' ? 'Erreichbar' : 'Nicht geprüft'}</span>
+                    </div>
+                    <button
+                      onClick={loadDomainStatus}
+                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                    >
+                      ↻ Status aktualisieren
+                    </button>
+                  </div>
+                </div>
+
+                {/* Join commands */}
+                <div className="border border-gray-200 rounded-xl p-5 space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                    <ComputerDesktopIcon className="w-4 h-4 text-blue-600" />
+                    Clients der Domain hinzufügen
+                  </h3>
+                  <div className="flex gap-2">
+                    {(['Linux', 'macOS', 'Windows'] as const).map(p => (
+                      <button
+                        key={p}
+                        onClick={() => setJoinPlatform(p)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${joinPlatform === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative">
+                    <pre className="bg-gray-900 text-green-400 rounded-xl p-4 text-xs font-mono whitespace-pre-wrap overflow-x-auto">
+                      {joinScript(joinPlatform, domainStatus.realm!)}
+                    </pre>
+                    <button
+                      onClick={copyJoin}
+                      className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 text-xs text-blue-400 bg-gray-800 hover:bg-gray-700 rounded-md transition-colors"
+                    >
+                      {copiedJoin ? <><CheckIcon className="w-3 h-3" />Kopiert</> : <><ClipboardDocumentIcon className="w-3 h-3" />Kopieren</>}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Domain-Admin: <code className="font-mono">Administrator@{domainStatus.realm?.toLowerCase()}</code>
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Always show "Setup" button when domain is loaded */}
+            {domainStatus && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowDomainWizard(true)}
+                  className="text-xs text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  {domainStatus.provisioned ? 'Domain neu einrichten' : 'Domain einrichten'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* DNS Records Tab (live API) */}
         {activeTab === 'dns-records' && <DnsTab />}
@@ -1217,6 +1394,15 @@ export default function NetworkInfrastructureIntegration() {
         </div>
       )}
       {showNetworkWizard && <NetworkConfigWizard onClose={() => setShowNetworkWizard(false)} />}
+      {showDomainWizard && (
+        <DomainSetupWizard
+          onClose={() => setShowDomainWizard(false)}
+          onProvisioned={info => {
+            setDomainStatus({ provisioned: true, realm: info.realm, domain: info.domain });
+            setShowDomainWizard(false);
+          }}
+        />
+      )}
     </div>
   );
 }

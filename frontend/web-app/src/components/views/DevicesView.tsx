@@ -1770,12 +1770,12 @@ function EnrollModal({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
                   <a
-                    href="/infrastructure"
+                    href="/infrastructure?tab=domain"
                     onClick={onClose}
-                    className="flex items-center justify-center gap-2 w-full rounded-md bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 px-4 transition-colors"
+                    className="flex items-center justify-center gap-2 w-full rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 transition-colors"
                   >
                     <ServerIcon className="w-4 h-4" />
-                    Domain jetzt einrichten →
+                    Domain einrichten →
                   </a>
                 </div>
               ) : (
