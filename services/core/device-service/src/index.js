@@ -26,6 +26,7 @@ const PostgresDeviceRepository = require('./infrastructure/repositories/Postgres
 
 // Import enhanced services
 const DeviceManager = require('./services/deviceManager');
+const driverRoutes = require('./routes/driverRoutes');
 const PolicyEngine = require('./services/policyEngine');
 const ComplianceScanner = require('./services/complianceScanner');
 const EnrollmentService = require('./services/enrollmentService');
@@ -689,6 +690,11 @@ class EnterpriseDeviceManagementService {
     this.app.post('/api/devices/:deviceId/install-app', this.installApp.bind(this));
     this.app.get('/api/devices/:deviceId/install-jobs', this.getInstallJobs.bind(this));
     this.app.post('/api/devices/:deviceId/install-jobs/:jobId/result', this.reportInstallResult.bind(this));
+
+    // Driver Management Routes
+    // Gateway rewrites /api/devices/* → /api/* at this service,
+    // so /api/devices/drivers in the gateway maps to /api/drivers here.
+    this.app.use('/api/drivers', driverRoutes);
 
     // Error handling
     this.app.use(this.errorHandler.bind(this));
