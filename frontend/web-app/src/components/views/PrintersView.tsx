@@ -18,7 +18,9 @@ import {
   FolderIcon,
   InformationCircleIcon,
   ClipboardDocumentIcon,
+  CircleStackIcon,
 } from '@heroicons/react/24/outline';
+import PrinterDriversTab from '@/components/views/tabs/PrinterDriversTab';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { printerApi } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -29,7 +31,7 @@ import PrinterSetupWizard from '@/components/setup/PrinterSetupWizard';
 type PrinterProtocol = 'IPP' | 'LPD' | 'SMB';
 type PrinterStatus   = 'online' | 'offline' | 'error';
 type JobStatus       = 'pending' | 'printing' | 'completed' | 'failed' | 'cancelled';
-type PrinterTab      = 'printers' | 'scanners' | 'jobs' | 'quotas';
+type PrinterTab      = 'printers' | 'scanners' | 'jobs' | 'quotas' | 'drivers';
 
 interface Printer {
   id: string;
@@ -1364,6 +1366,7 @@ export default function PrintersView() {
     { id: 'scanners', label: 'Scanners',   count: scanners.length },
     { id: 'jobs',     label: 'Print Jobs', count: jobs.length },
     { id: 'quotas',   label: 'Quotas',     count: quotas.length },
+    { id: 'drivers',  label: 'Treiber' },
   ];
 
   if (loading) {
@@ -1789,6 +1792,9 @@ export default function PrintersView() {
             </div>
           )
       )}
+
+      {/* ── DRIVERS TAB ────────────────────────────────────────────────────── */}
+      {activeTab === 'drivers' && <PrinterDriversTab />}
 
       {/* Modals */}
       {showAddPrinter && (
