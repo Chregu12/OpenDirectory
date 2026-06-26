@@ -16,6 +16,7 @@ let PrinterDeployment; try { PrinterDeployment = require('./services/deployment'
 const PrinterAgentService = require('./services/PrinterAgentService');
 const QuotaManager = require('./services/quota');
 const PrintAnalytics = require('./services/analytics');
+const driverRoutes = require('./routes/driverRoutes');
 
 const app = express();
 const server = createServer(app);
@@ -942,6 +943,10 @@ app.get('/api/agent/deployment-status', (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ── Printer Driver Management ────────────────────────────────────────────────
+// GET/POST/DELETE /api/printer/drivers/...  and  /api/printer/printers/:id/drivers
+app.use('/api/printer', driverRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
