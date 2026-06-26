@@ -41,6 +41,9 @@ const ThreatDetector = require('./services/threatDetector');
 const AnalyticsEngine = require('./services/analyticsEngine');
 const PolicyAgentService = require('./services/PolicyAgentService');
 
+// Route modules
+const deviceDetectionRoutes = require('./routes/deviceDetectionRoutes');
+
 // HTTP clients — replace cross-service file imports with proper API calls
 const updateClient = require('./clients/updateClient');
 const networkProfileClient = require('./clients/networkProfileClient');
@@ -695,6 +698,10 @@ class EnterpriseDeviceManagementService {
     // Gateway rewrites /api/devices/* → /api/* at this service,
     // so /api/devices/drivers in the gateway maps to /api/drivers here.
     this.app.use('/api/drivers', driverRoutes);
+
+    // Hardware Detection & Driver Matching Routes
+    // Must be mounted before wildcard /:deviceId routes to avoid conflicts.
+    this.app.use('/api/devices', deviceDetectionRoutes);
 
     // Error handling
     this.app.use(this.errorHandler.bind(this));
