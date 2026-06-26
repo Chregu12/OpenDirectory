@@ -40,6 +40,7 @@ interface DriverRecommendation {
   format?: string;
   os?: string[];
   downloadUrl?: string;
+  aptPackage?: string;
   matchScore?: number;
   matchedVia?: string;
   description?: string;
@@ -252,28 +253,41 @@ export default function DeviceDriversTab() {
                             )}
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleImportRecommended(rec)}
-                          disabled={importing || imported || !rec.downloadUrl}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                            imported
-                              ? 'text-green-700 bg-green-50 cursor-default'
-                              : importing
-                              ? 'text-blue-500 bg-blue-50 cursor-wait'
-                              : !rec.downloadUrl
-                              ? 'text-gray-300 bg-gray-50 cursor-not-allowed'
-                              : 'text-blue-700 bg-blue-50 hover:bg-blue-100'
-                          }`}
-                          title={!rec.downloadUrl ? 'Kein Download-Link' : undefined}
-                        >
-                          {imported ? (
-                            <><CheckCircleIcon className="w-3.5 h-3.5" /> Importiert</>
-                          ) : importing ? (
-                            <><ArrowPathIcon className="w-3.5 h-3.5 animate-spin" /> …</>
-                          ) : (
-                            <><CloudArrowDownIcon className="w-3.5 h-3.5" /> Importieren</>
-                          )}
-                        </button>
+                        {rec.aptPackage ? (
+                          <code
+                            className="px-2 py-1 text-xs bg-gray-900 text-green-400 rounded font-mono cursor-pointer hover:bg-gray-800 transition-colors"
+                            title="Klicken zum Kopieren"
+                            onClick={() => {
+                              navigator.clipboard?.writeText(`apt install ${rec.aptPackage}`);
+                              toast.success(`"apt install ${rec.aptPackage}" kopiert`);
+                            }}
+                          >
+                            apt install {rec.aptPackage}
+                          </code>
+                        ) : (
+                          <button
+                            onClick={() => handleImportRecommended(rec)}
+                            disabled={importing || imported || !rec.downloadUrl}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                              imported
+                                ? 'text-green-700 bg-green-50 cursor-default'
+                                : importing
+                                ? 'text-blue-500 bg-blue-50 cursor-wait'
+                                : !rec.downloadUrl
+                                ? 'text-gray-300 bg-gray-50 cursor-not-allowed'
+                                : 'text-blue-700 bg-blue-50 hover:bg-blue-100'
+                            }`}
+                            title={!rec.downloadUrl ? 'Kein Download-Link' : undefined}
+                          >
+                            {imported ? (
+                              <><CheckCircleIcon className="w-3.5 h-3.5" /> Importiert</>
+                            ) : importing ? (
+                              <><ArrowPathIcon className="w-3.5 h-3.5 animate-spin" /> …</>
+                            ) : (
+                              <><CloudArrowDownIcon className="w-3.5 h-3.5" /> Importieren</>
+                            )}
+                          </button>
+                        )}
                       </div>
                     );
                   })}
