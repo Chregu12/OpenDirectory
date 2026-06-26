@@ -17,6 +17,8 @@ const PrinterAgentService = require('./services/PrinterAgentService');
 const QuotaManager = require('./services/quota');
 const PrintAnalytics = require('./services/analytics');
 
+const catalogRoutes = require('./routes/catalogRoutes');
+
 const app = express();
 const server = createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -942,6 +944,9 @@ app.get('/api/agent/deployment-status', (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Driver Catalog
+app.use('/api/printer/catalog', catalogRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
