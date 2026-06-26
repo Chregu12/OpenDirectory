@@ -23,9 +23,11 @@ import {
   PlusCircleIcon,
   MinusCircleIcon,
   ExclamationTriangleIcon,
+  CpuChipIcon,
 } from '@heroicons/react/24/outline';
 import { deviceApi, api } from '@/lib/api';
 import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
+import DeviceDriversTab from '@/components/views/tabs/DeviceDriversTab';
 import toast from 'react-hot-toast';
 
 function resizeImage(file: File, maxPx: number): Promise<string> {
@@ -51,6 +53,7 @@ function resizeImage(file: File, maxPx: number): Promise<string> {
 type StatusFilter   = 'all' | 'online' | 'offline';
 type PlatformFilter = 'all' | 'linux' | 'macos' | 'windows';
 type DeviceTab      = 'details' | 'apps' | 'hardware' | 'network' | 'history' | 'stammdaten';
+type MainTab        = 'devices' | 'drivers';
 
 interface Stammdaten {
   custom_name?: string;
@@ -1515,6 +1518,7 @@ function EnrollModal({ onClose }: { onClose: () => void }) {
 // ─── Main View ─────────────────────────────────────────────────────────────────
 
 export default function DevicesView() {
+  const [mainTab,       setMainTab]       = useState<MainTab>('devices');
   const [devices,       setDevices]       = useState<Device[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [searchTerm,    setSearchTerm]    = useState('');
@@ -1633,30 +1637,64 @@ export default function DevicesView() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-gray-900">Devices</h1>
-          {!loading && (
+          {!loading && mainTab === 'devices' && (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
               {devices.length}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={handleRefreshAll}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-            <ArrowPathIcon className="w-4 h-4" />
-            Refresh
-          </button>
-          <button onClick={() => setShowEnrollWizard(true)}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors">
-            <SparklesIcon className="w-4 h-4" />
-            Enrollment Wizard
-          </button>
-          <button onClick={() => setShowEnroll(true)}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
-            <PlusIcon className="w-4 h-4" />
-            Enroll Device
-          </button>
-        </div>
+        {mainTab === 'devices' && (
+          <div className="flex items-center gap-3">
+            <button onClick={handleRefreshAll}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <ArrowPathIcon className="w-4 h-4" />
+              Refresh
+            </button>
+            <button onClick={() => setShowEnrollWizard(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors">
+              <SparklesIcon className="w-4 h-4" />
+              Enrollment Wizard
+            </button>
+            <button onClick={() => setShowEnroll(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+              <PlusIcon className="w-4 h-4" />
+              Enroll Device
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Top-level tab navigation */}
+      <div className="flex border-b border-gray-200">
+        <button
+          onClick={() => setMainTab('devices')}
+          className={`flex items-center gap-2 py-2.5 px-4 text-sm font-medium border-b-2 transition-colors ${
+            mainTab === 'devices'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          <ComputerDesktopIcon className="w-4 h-4" />
+          Geräte
+        </button>
+        <button
+          onClick={() => setMainTab('drivers')}
+          className={`flex items-center gap-2 py-2.5 px-4 text-sm font-medium border-b-2 transition-colors ${
+            mainTab === 'drivers'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          <CpuChipIcon className="w-4 h-4" />
+          Treiber
+        </button>
+      </div>
+
+      {/* Drivers tab */}
+      {mainTab === 'drivers' && <DeviceDriversTab />}
+
+      {/* Devices tab content (hidden when drivers tab active) */}
+      {mainTab === 'devices' && (<>
 
       {/* Filter bar */}
       <div className="flex items-center gap-4 flex-wrap">
@@ -1865,6 +1903,7 @@ export default function DevicesView() {
       {showEnrollWizard && (
         <DeviceEnrollmentWizard onClose={() => setShowEnrollWizard(false)} />
       )}
+      </>)}
     </div>
   );
 }
