@@ -972,7 +972,7 @@ export default function IdentityProviderView() {
               activeTab === t.id
                 ? 'border-[#006FFF] text-[#006FFF]'
                 : 'border-transparent text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)] hover:border-[rgba(255,255,255,0.07)]'
-            }`
+            }`}
           >
             <t.icon className="w-4 h-4" />
             {t.label}

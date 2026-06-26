@@ -9,6 +9,8 @@ const { execFile } = require('child_process');
 const crypto = require('crypto');
 const winston = require('winston');
 
+const dellCatalog = require('./dellCatalogService');
+
 // ─── Logger ──────────────────────────────────────────────────────────────────
 
 const logger = winston.createLogger({
@@ -30,138 +32,10 @@ const DEVICE_DRIVER_DIR  = '/var/lib/opendirectory/device-drivers';
 
 // ─── Manufacturer Catalog ─────────────────────────────────────────────────────
 
-const MANUFACTURER_CATALOG = {
+// Dell entries come from the live DellCatalogService (dellCatalogService.js).
+// Static entries below cover HP, Lenovo, Brother, Canon, Epson, and Generic only.
 
-  dell: [
-    {
-      id: 'dell-network-e1000',
-      name: 'Dell Intel PRO/1000 Network Driver',
-      version: '12.19.2.0',
-      vendor: 'Dell',
-      os: ['windows'],
-      deviceType: 'network',
-      format: 'exe',
-      architecture: 'x86_64',
-      description: 'Intel PRO/1000 Gigabit Ethernet adapter driver for Dell systems',
-      downloadUrl: 'https://dl.dell.com/FOLDER08838516M/1/Network_Driver_38FCR_WN64_12.19.2.0_A00.EXE',
-      models: ['OptiPlex 7090', 'Latitude 5520', 'Precision 5560'],
-      fileSize: 8543232,
-      tags: ['network', 'ethernet', 'intel'],
-      licenseType: 'freeware',
-    },
-    {
-      id: 'dell-wifi-ax201',
-      name: 'Dell Intel Wi-Fi 6 AX201 Driver',
-      version: '22.230.0.6',
-      vendor: 'Dell',
-      os: ['windows'],
-      deviceType: 'network',
-      format: 'exe',
-      architecture: 'x86_64',
-      description: 'Intel Wi-Fi 6 AX201 wireless adapter driver for Dell laptops',
-      downloadUrl: 'https://dl.dell.com/FOLDER09012345M/1/Network_Driver_WIFI_WN64_22.230.0.6_A00.EXE',
-      models: ['Latitude 5520', 'Latitude 7420', 'XPS 15 9510'],
-      fileSize: 15728640,
-      tags: ['wifi', 'wireless', 'intel', 'ax201'],
-      licenseType: 'freeware',
-    },
-    {
-      id: 'dell-display-uhdgfx',
-      name: 'Dell UHD Graphics Driver (Intel)',
-      version: '30.0.101.1960',
-      vendor: 'Dell',
-      os: ['windows'],
-      deviceType: 'display',
-      format: 'exe',
-      architecture: 'x86_64',
-      description: 'Intel UHD Graphics driver optimised for Dell systems',
-      downloadUrl: 'https://dl.dell.com/FOLDER09234567M/1/Video_Driver_7BKXF_WN64_30.0.101.1960_A00.EXE',
-      models: ['OptiPlex 7090', 'OptiPlex 5090', 'Latitude 5520'],
-      fileSize: 167772160,
-      tags: ['display', 'graphics', 'intel', 'uhd'],
-      licenseType: 'freeware',
-    },
-    {
-      id: 'dell-bios-optiplex7090',
-      name: 'Dell OptiPlex 7090 BIOS Update',
-      version: '1.18.0',
-      vendor: 'Dell',
-      os: ['windows'],
-      deviceType: 'firmware',
-      format: 'exe',
-      architecture: 'x86_64',
-      description: 'BIOS update for Dell OptiPlex 7090 desktop',
-      downloadUrl: 'https://dl.dell.com/FOLDER09345678M/1/OptiPlex_7090_1.18.0.exe',
-      models: ['OptiPlex 7090'],
-      fileSize: 20971520,
-      tags: ['bios', 'firmware', 'optiplex'],
-      licenseType: 'freeware',
-    },
-    {
-      id: 'dell-audio-realtek',
-      name: 'Dell Realtek Audio Driver',
-      version: '6.0.9374.1',
-      vendor: 'Dell',
-      os: ['windows'],
-      deviceType: 'audio',
-      format: 'exe',
-      architecture: 'x86_64',
-      description: 'Realtek High Definition Audio driver for Dell systems',
-      downloadUrl: 'https://dl.dell.com/FOLDER09456789M/1/Audio_Driver_XK48D_WN64_6.0.9374.1_A00.EXE',
-      models: ['OptiPlex 7090', 'Latitude 5520', 'Precision 5560', 'XPS 15 9510'],
-      fileSize: 262144000,
-      tags: ['audio', 'sound', 'realtek', 'hda'],
-      licenseType: 'freeware',
-    },
-    {
-      id: 'dell-chipset-intel500',
-      name: 'Dell Intel 500 Series Chipset Driver',
-      version: '10.1.19444.8378',
-      vendor: 'Dell',
-      os: ['windows'],
-      deviceType: 'chipset',
-      format: 'exe',
-      architecture: 'x86_64',
-      description: 'Intel 500 Series (Tiger Lake/Rocket Lake) chipset driver for Dell',
-      downloadUrl: 'https://dl.dell.com/FOLDER09567890M/1/Chipset_Driver_CR8M2_WN64_10.1.19444.8378_A00.EXE',
-      models: ['OptiPlex 7090', 'Latitude 5520', 'Precision 5560'],
-      fileSize: 5242880,
-      tags: ['chipset', 'intel', 'system'],
-      licenseType: 'freeware',
-    },
-    {
-      id: 'dell-thunderbolt-driver',
-      name: 'Dell Thunderbolt Controller Driver',
-      version: '1.41.1.0',
-      vendor: 'Dell',
-      os: ['windows'],
-      deviceType: 'usb',
-      format: 'exe',
-      architecture: 'x86_64',
-      description: 'Thunderbolt 4 controller driver and firmware for Dell systems',
-      downloadUrl: 'https://dl.dell.com/FOLDER09678901M/1/Thunderbolt_Driver_NVPF5_WN64_1.41.1.0_A00.EXE',
-      models: ['XPS 15 9510', 'Latitude 7420', 'Precision 5560'],
-      fileSize: 10485760,
-      tags: ['thunderbolt', 'usb4', 'dock'],
-      licenseType: 'freeware',
-    },
-    {
-      id: 'dell-printer-s2830dn',
-      name: 'Dell S2830dn Printer Driver',
-      version: '2.4.0',
-      vendor: 'Dell',
-      os: ['windows', 'macos'],
-      deviceType: 'printer',
-      format: 'exe',
-      architecture: 'x86_64',
-      description: 'PCL6/PS driver package for Dell S2830dn mono laser printer',
-      downloadUrl: 'https://dl.dell.com/FOLDER07654321M/1/Dell-S2830dn-Driver-2.4.0.exe',
-      models: ['S2830dn'],
-      fileSize: 52428800,
-      tags: ['printer', 'laser', 'pcl6', 'postscript'],
-      licenseType: 'freeware',
-    },
-  ],
+const MANUFACTURER_CATALOG = {
 
   hp: [
     {
@@ -984,8 +858,8 @@ class DriverCatalogManager {
   constructor() {
     this.catalog = MANUFACTURER_CATALOG;
 
-    // Build a flat list with source tags
-    this._allEntries = Object.entries(this.catalog).flatMap(([vendor, entries]) =>
+    // Build a flat list from static vendors (Dell comes from live catalog)
+    this._staticEntries = Object.entries(this.catalog).flatMap(([vendor, entries]) =>
       entries.map((e) => ({ ...e, source: vendor }))
     );
   }
@@ -994,31 +868,54 @@ class DriverCatalogManager {
 
   async searchCatalog(query, filters = {}) {
     const q = (query || '').toLowerCase().trim();
+    const vendorFilter = (filters.vendor || '').toLowerCase();
 
-    let results = this._allEntries.filter((entry) => {
-      // Text match
-      if (q) {
-        const haystack = [
-          entry.name, entry.description, entry.vendor,
-          ...(entry.models || []), ...(entry.tags || []),
-        ].join(' ').toLowerCase();
-        if (!haystack.includes(q)) return false;
+    // Decide which sources to query
+    const wantDell    = !vendorFilter || vendorFilter === 'dell';
+    const wantStatic  = !vendorFilter || vendorFilter !== 'dell';
+    const wantOpenPrinting = filters.source === 'openprinting' || filters.includeOpenPrinting;
+
+    let results = [];
+
+    // Static catalog entries (non-Dell)
+    if (wantStatic) {
+      const staticMatches = this._staticEntries.filter((entry) => {
+        if (q) {
+          const haystack = [
+            entry.name, entry.description, entry.vendor,
+            ...(entry.models || []), ...(entry.tags || []),
+          ].join(' ').toLowerCase();
+          if (!haystack.includes(q)) return false;
+        }
+        if (vendorFilter && entry.vendor.toLowerCase() !== vendorFilter) return false;
+        if (filters.os) {
+          const oses = Array.isArray(filters.os) ? filters.os : [filters.os];
+          if (!oses.some((o) => entry.os.includes(o.toLowerCase()))) return false;
+        }
+        if (filters.deviceType && entry.deviceType !== filters.deviceType) return false;
+        if (filters.source && filters.source !== 'dell' && entry.source !== filters.source) return false;
+        return true;
+      });
+      results = [...results, ...staticMatches];
+    }
+
+    // Live Dell catalog
+    if (wantDell && filters.source !== 'openprinting') {
+      try {
+        const dellFilters = {};
+        if (filters.os)         dellFilters.os         = Array.isArray(filters.os) ? filters.os[0] : filters.os;
+        if (filters.deviceType) dellFilters.deviceType = filters.deviceType;
+        if (filters.systemModel) dellFilters.systemModel = filters.systemModel;
+
+        const dellResults = await dellCatalog.search(q, dellFilters);
+        results = [...results, ...dellResults];
+      } catch (err) {
+        logger.warn('Dell catalog search failed, skipping:', { message: err.message });
       }
+    }
 
-      // Filters
-      if (filters.vendor && entry.vendor.toLowerCase() !== filters.vendor.toLowerCase()) return false;
-      if (filters.os) {
-        const oses = Array.isArray(filters.os) ? filters.os : [filters.os];
-        if (!oses.some((o) => entry.os.includes(o.toLowerCase()))) return false;
-      }
-      if (filters.deviceType && entry.deviceType !== filters.deviceType) return false;
-      if (filters.source && entry.source !== filters.source) return false;
-
-      return true;
-    });
-
-    // If query looks printer-related and OpenPrinting search is requested, merge
-    if (filters.source === 'openprinting' || filters.includeOpenPrinting) {
+    // OpenPrinting
+    if (wantOpenPrinting) {
       try {
         const opResults = await this.searchOpenPrinting(query);
         results = [...results, ...opResults];
@@ -1152,10 +1049,17 @@ class DriverCatalogManager {
 
   // ── Vendor list ─────────────────────────────────────────────────────────────
 
-  getVendors() {
+  async getVendors() {
     const counts = {};
     for (const [vendor, entries] of Object.entries(this.catalog)) {
       counts[vendor] = entries.length;
+    }
+    // Add Dell from live catalog
+    try {
+      const stats = await dellCatalog.getStats();
+      counts['dell'] = stats.count || 0;
+    } catch (_) {
+      counts['dell'] = 0;
     }
     return counts;
   }

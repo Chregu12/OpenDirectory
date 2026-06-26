@@ -9,6 +9,8 @@ RUN apk add --no-cache \
     imagemagick \
     avahi \
     openssl \
+    cabextract \
+    p7zip \
     && rm -rf /var/cache/apk/*
 
 # Create app directory

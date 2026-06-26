@@ -2,6 +2,7 @@
 
 const express = require('express');
 const DriverCatalogManager = require('../services/driverCatalogManager');
+const dellCatalog = require('../services/dellCatalogService');
 
 const router = express.Router();
 const catalog = new DriverCatalogManager();
@@ -30,9 +31,9 @@ router.get('/search', async (req, res) => {
 
 // ─── GET /catalog/vendors ─────────────────────────────────────────────────────
 // Returns all known vendors with entry counts
-router.get('/vendors', (req, res) => {
+router.get('/vendors', async (req, res) => {
   try {
-    const vendors = catalog.getVendors();
+    const vendors = await catalog.getVendors();
     const list = Object.entries(vendors).map(([id, count]) => ({
       id,
       name: id.charAt(0).toUpperCase() + id.slice(1),
@@ -84,6 +85,44 @@ router.post('/import-url', async (req, res) => {
 
     const record = await catalog.importFromUrl(url, metadata);
     res.json({ success: true, driver: record });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─── GET /catalog/dell ───────────────────────────────────────────────────────
+// Live Dell catalog search.  Query params: q, systemModel, os, deviceType
+router.get('/dell', async (req, res) => {
+  try {
+    const { q = '', systemModel, os, deviceType } = req.query;
+    const filters = {};
+    if (systemModel) filters.systemModel = systemModel;
+    if (os)          filters.os          = os;
+    if (deviceType)  filters.deviceType  = deviceType;
+
+    const results = await dellCatalog.search(q, filters);
+    res.json({ success: true, source: 'dell', count: results.length, results });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─── GET /catalog/dell/stats ─────────────────────────────────────────────────
+router.get('/dell/stats', async (req, res) => {
+  try {
+    const stats = await dellCatalog.getStats();
+    res.json({ success: true, ...stats });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─── POST /catalog/dell/refresh ──────────────────────────────────────────────
+// Force re-download and re-parse of the Dell CatalogPC.cab
+router.post('/dell/refresh', async (req, res) => {
+  try {
+    const result = await dellCatalog.refresh();
+    res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
