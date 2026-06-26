@@ -27,7 +27,8 @@
     "compression": "^1.7.4",
     "uuid": "^9.0.0",
     "pdf-lib": "^1.17.1",
-    "amqplib": "^0.10.3"
+    "amqplib": "^0.10.3",
+    "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1",

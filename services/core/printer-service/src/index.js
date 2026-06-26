@@ -18,6 +18,7 @@ const QuotaManager = require('./services/quota');
 const PrintAnalytics = require('./services/analytics');
 const ScanDestinationManager = require('./services/scanDestinationManager');
 const PrintPoolManager = require('./services/printPool');
+const driverRoutes = require('./routes/driverRoutes');
 
 const app = express();
 const server = createServer(app);
@@ -1176,6 +1177,10 @@ app.get('/api/agent/deployment-status', (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ── Printer Driver Management ────────────────────────────────────────────────
+// GET/POST/DELETE /api/printer/drivers/...  and  /api/printer/printers/:id/drivers
+app.use('/api/printer', driverRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
