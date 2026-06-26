@@ -6,6 +6,8 @@ const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const winston = require('winston');
+const http = require('http');
+const https = require('https');
 
 // ---------------------------------------------------------------------------
 // Logger
@@ -15,6 +17,31 @@ const logger = winston.createLogger({
   format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
   transports: [new winston.transports.Console()]
 });
+
+// ---------------------------------------------------------------------------
+// Notify device-service of domain join (fire-and-forget)
+// ---------------------------------------------------------------------------
+const DEVICE_SERVICE_URL = (process.env.DEVICE_SERVICE_URL || 'http://device-service:3003').replace(/\/$/, '');
+
+function notifyDeviceService(payload) {
+  const body = JSON.stringify(payload);
+  const url = new URL(`${DEVICE_SERVICE_URL}/api/devices/report-hardware`);
+  const proto = url.protocol === 'https:' ? https : http;
+  const req = proto.request({
+    hostname: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    path: url.pathname,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+  }, res => {
+    res.resume(); // drain
+    logger.info('Device-service notified of domain join', { status: res.statusCode, hostname: payload.hostname });
+  });
+  req.on('error', err => logger.warn('Could not notify device-service', { message: err.message }));
+  req.setTimeout(5000, () => req.destroy());
+  req.write(body);
+  req.end();
+}
 
 // ---------------------------------------------------------------------------
 // PostgreSQL pool (optional — service degrades gracefully without it)
@@ -200,7 +227,8 @@ app.delete('/api/trusts/:domain', async (req, res) => {
  */
 app.post('/api/computers/join', async (req, res) => {
   try {
-    const { computerName, ouDn, requestingUser, operatingSystem, osVersion, ipAddress } = req.body;
+    const { computerName, ouDn, requestingUser, operatingSystem, osVersion, ipAddress,
+            manufacturer, model } = req.body;
 
     if (!computerName) {
       return res.status(400).json({ error: 'computerName is required' });
@@ -209,6 +237,16 @@ app.post('/api/computers/join', async (req, res) => {
     const result = await computerManager.joinDomain({
       computerName, ouDn, requestingUser, operatingSystem, osVersion, ipAddress
     });
+
+    // Fire-and-forget: notify device-service so driver matching can start
+    notifyDeviceService({
+      hostname: computerName,
+      manufacturer: manufacturer || null,
+      model: model || null,
+      os: operatingSystem || null,
+      osVersion: osVersion || null,
+    });
+
     res.status(201).json(result);
   } catch (err) {
     const status = err.message.includes('required') || err.message.includes('NetBIOS') ? 400 : 500;
