@@ -20,6 +20,8 @@ const ScanDestinationManager = require('./services/scanDestinationManager');
 const PrintPoolManager = require('./services/printPool');
 const driverRoutes = require('./routes/driverRoutes');
 
+const catalogRoutes = require('./routes/catalogRoutes');
+
 const app = express();
 const server = createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -1178,9 +1180,11 @@ app.get('/api/agent/deployment-status', (req, res) => {
   }
 });
 
-// ── Printer Driver Management ────────────────────────────────────────────────
-// GET/POST/DELETE /api/printer/drivers/...  and  /api/printer/printers/:id/drivers
+// ── Printer Driver Management ─────────────────────────────────────────────────
 app.use('/api/printer', driverRoutes);
+
+// ── Driver Catalog (OpenPrinting + manufacturer catalog) ──────────────────────
+app.use('/api/printer/catalog', catalogRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
