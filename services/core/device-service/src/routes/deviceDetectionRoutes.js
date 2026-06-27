@@ -3,7 +3,7 @@
 const express = require('express');
 const fsp = require('fs').promises;
 const path = require('path');
-const driverMatcher = require('../services/driverMatchingService');
+const { matchDrivers } = require('../services/driverMatchingService');
 
 const router = express.Router();
 
@@ -45,7 +45,7 @@ router.post('/report-hardware', async (req, res) => {
     await persistReport(key, report);
 
     // Run driver matching
-    const recommendations = await driverMatcher.matchDrivers({ manufacturer, model, os, hardwareIds });
+    const recommendations = await matchDrivers({ manufacturer, model, os, hardwareIds });
     driverRecommendations.set(key, { recommendations, matchedAt: new Date().toISOString() });
 
     res.json({
@@ -73,7 +73,7 @@ router.get('/:id/driver-recommendations', async (req, res) => {
       if (!report) {
         return res.status(404).json({ success: false, error: 'No hardware report found for this device. Run report-hardware first.' });
       }
-      const recommendations = await driverMatcher.matchDrivers(report);
+      const recommendations = await matchDrivers(report);
       cached = { recommendations, matchedAt: new Date().toISOString() };
       driverRecommendations.set(key, cached);
     }
@@ -99,7 +99,7 @@ router.post('/:id/detect-drivers', async (req, res) => {
       hwInfo = { ...stored, ...hwInfo };
     }
 
-    const recommendations = await driverMatcher.matchDrivers(hwInfo);
+    const recommendations = await matchDrivers(hwInfo);
     driverRecommendations.set(key, { recommendations, matchedAt: new Date().toISOString() });
 
     res.json({ success: true, count: recommendations.length, recommendations: recommendations.slice(0, 20) });
