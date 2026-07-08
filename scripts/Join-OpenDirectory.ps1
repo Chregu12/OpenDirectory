@@ -133,6 +133,10 @@ Write-Host "  PnP devices  : $($pnpDevices.Count) found"
 # ─── Step 2: Prompt for password if not provided ───────────────────────────────
 
 if (-not $AdminPassword) {
+    if (-not [Environment]::UserInteractive) {
+        Write-Error "No admin password provided. Pass -AdminPassword in non-interactive contexts."
+        exit 1
+    }
     $AdminPassword = Read-Host "Domain admin password for $AdminUser" -AsSecureString
 }
 
@@ -252,7 +256,11 @@ if ($recommendations.Count -gt 0) {
 Write-Host "`nDone! A restart is required to complete domain membership." -ForegroundColor Green
 Write-Host "After restart, log in with: $netbiosDomain\$AdminUser"
 
-$restart = Read-Host "`nRestart now? [y/N]"
-if ($restart -eq 'y' -or $restart -eq 'Y') {
-    Restart-Computer -Force
+if ([Environment]::UserInteractive) {
+    $restart = Read-Host "`nRestart now? [y/N]"
+    if ($restart -eq 'y' -or $restart -eq 'Y') {
+        Restart-Computer -Force
+    }
+} else {
+    Write-Host "Restart required."
 }
