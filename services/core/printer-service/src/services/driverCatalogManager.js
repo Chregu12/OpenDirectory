@@ -27,8 +27,8 @@ const logger = winston.createLogger({
 
 // ─── Storage paths ────────────────────────────────────────────────────────────
 
-const PRINTER_DRIVER_DIR = '/var/lib/opendirectory/printer-drivers';
-const DEVICE_DRIVER_DIR  = '/var/lib/opendirectory/device-drivers';
+const PRINTER_DRIVER_DIR = process.env.PRINTER_DRIVERS_DIR || '/var/lib/opendirectory/printer-drivers';
+const DEVICE_DRIVER_DIR  = process.env.DEVICE_DRIVERS_DIR || '/var/lib/opendirectory/device-drivers';
 
 // ─── Manufacturer Catalog ─────────────────────────────────────────────────────
 

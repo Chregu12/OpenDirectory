@@ -4,7 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const winston = require('winston');
 
-const STORAGE_BASE = '/var/lib/opendirectory/printer-drivers';
+const STORAGE_BASE = process.env.PRINTER_DRIVERS_DIR || '/var/lib/opendirectory/printer-drivers';
 const DRIVERS_JSON  = path.join(STORAGE_BASE, 'drivers.json');
 const FILES_DIR     = path.join(STORAGE_BASE, 'files');
 

@@ -18,7 +18,7 @@ const logger = winston.createLogger({
 });
 
 const CATALOG_URL  = 'https://downloads.dell.com/catalog/CatalogPC.cab';
-const CACHE_DIR    = '/var/lib/opendirectory/driver-catalogs/dell';
+const CACHE_DIR    = process.env.DELL_CATALOG_CACHE_DIR || '/var/lib/opendirectory/driver-catalogs/dell';
 const CAB_PATH     = path.join(CACHE_DIR, 'CatalogPC.cab');
 const XML_PATH     = path.join(CACHE_DIR, 'CatalogPC.xml');
 const INDEX_PATH   = path.join(CACHE_DIR, 'index.json');

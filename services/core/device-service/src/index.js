@@ -207,20 +207,25 @@ class EnterpriseDeviceManagementService {
       next();
     });
 
-    // Response time middleware
+    // Response time middleware. The header must be set before the response
+    // headers are flushed — a 'finish' listener runs after the response is
+    // sent, where setHeader throws "Cannot set headers after they are sent".
     this.app.use((req, res, next) => {
       const start = Date.now();
+      const origWriteHead = res.writeHead;
+      res.writeHead = function (...args) {
+        res.setHeader('X-Response-Time', `${Date.now() - start}ms`);
+        return origWriteHead.apply(this, args);
+      };
       res.on('finish', () => {
-        const duration = Date.now() - start;
-        res.setHeader('X-Response-Time', `\${duration}ms`);
-        this.metrics.recordResponseTime(req.route?.path || req.path, duration);
+        this.metrics.recordResponseTime(req.route?.path || req.path, Date.now() - start);
       });
       next();
     });
 
     // Logging middleware
     this.app.use((req, res, next) => {
-      logger.info(`\${req.method} \${req.path}`, {
+      logger.info(`${req.method} ${req.path}`, {
         requestId: req.id,
         userAgent: req.headers['user-agent'],
         ip: req.ip,
@@ -796,7 +801,7 @@ class EnterpriseDeviceManagementService {
         break;
 
       case 'command_result':
-        logger.info(`Command result from \${ws.deviceId}: \${data.commandId} - \${data.status}`);
+        logger.info(`Command result from ${ws.deviceId}: ${data.commandId} - ${data.status}`);
         // Forward results to the correct service based on command prefix
         if (data.commandId && data.commandId.startsWith('pol-')) {
           this.policyAgentService.handleCommandResult(ws.deviceId, data);
@@ -822,14 +827,14 @@ class EnterpriseDeviceManagementService {
       case 'inventory_report':
         if (ws.deviceId && data.inventory) {
           await this.inventoryService.updateInventory(ws.deviceId, data.inventory);
-          logger.info(`Inventory updated: \${ws.deviceId}`);
+          logger.info(`Inventory updated: ${ws.deviceId}`);
         }
         break;
 
       default:
         ws.send(JSON.stringify({
           type: 'error',
-          message: `Unknown message type: \${type}`,
+          message: `Unknown message type: ${type}`,
           requestId
         }));
     }
@@ -1248,14 +1253,14 @@ class EnterpriseDeviceManagementService {
       };
 
       const delivered = this.sendToDevice(deviceId, notifMessage);
-      logger.info(`Notification \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${notification.category}`);
+      logger.info(`Notification ${delivered ? 'pushed' : 'queued'} for device ${deviceId}: ${notification.category}`);
 
       // If device offline, queue in cache for delivery on reconnect
       if (!delivered && this.cache) {
-        const existing = await this.cache.get(`pending:\${deviceId}`);
+        const existing = await this.cache.get(`pending:${deviceId}`);
         const pending = existing ? JSON.parse(existing) : [];
         pending.push(notifMessage);
-        await this.cache.set(`pending:\${deviceId}`, JSON.stringify(pending), 'EX', 86400);
+        await this.cache.set(`pending:${deviceId}`, JSON.stringify(pending), 'EX', 86400);
       }
 
       res.json({
@@ -1288,7 +1293,7 @@ class EnterpriseDeviceManagementService {
         results = { sent, offline: 0 };
       }
 
-      logger.info(`Broadcast: \${results.sent} delivered, \${results.offline} offline`);
+      logger.info(`Broadcast: ${results.sent} delivered, ${results.offline} offline`);
 
       res.json({
         status: 'broadcast_sent',
@@ -1426,7 +1431,7 @@ class EnterpriseDeviceManagementService {
       };
 
       const delivered = this.sendToDevice(deviceId, cmdMessage);
-      logger.info(`Command \${delivered ? 'pushed' : 'queued'} for device \${deviceId}: \${command.type}`);
+      logger.info(`Command ${delivered ? 'pushed' : 'queued'} for device ${deviceId}: ${command.type}`);
 
       // If device offline, queue via RabbitMQ (preferred) or Redis (fallback)
       if (!delivered) {
@@ -1438,10 +1443,10 @@ class EnterpriseDeviceManagementService {
           });
         }
         if (!mqQueued && this.cache) {
-          const existing = await this.cache.get(`pending:\${deviceId}`);
+          const existing = await this.cache.get(`pending:${deviceId}`);
           const pending = existing ? JSON.parse(existing) : [];
           pending.push(cmdMessage);
-          await this.cache.set(`pending:\${deviceId}`, JSON.stringify(pending), 'EX', 86400);
+          await this.cache.set(`pending:${deviceId}`, JSON.stringify(pending), 'EX', 86400);
         }
       }
 
@@ -1489,16 +1494,16 @@ class EnterpriseDeviceManagementService {
 
       const agent = agentFiles[platform];
       if (!agent) {
-        return res.status(400).json({ error: `Unknown platform: \${platform}. Use: windows, macos, linux` });
+        return res.status(400).json({ error: `Unknown platform: ${platform}. Use: windows, macos, linux` });
       }
 
       const agentPath = path.join(__dirname, '../../../../clients', agent.dir, agent.file);
       if (fs.existsSync(agentPath)) {
         res.setHeader('Content-Type', 'application/octet-stream');
-        res.setHeader('Content-Disposition', `attachment; filename="\${agent.file}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${agent.file}"`);
         fs.createReadStream(agentPath).pipe(res);
       } else {
-        res.status(404).json({ error: `Agent for \${platform} not found` });
+        res.status(404).json({ error: `Agent for ${platform} not found` });
       }
     } catch (error) {
       logger.error('Agent download error:', error);
@@ -2255,9 +2260,9 @@ class EnterpriseDeviceManagementService {
     });
 
     this.server.listen(port, () => {
-      logger.info(`🖥️  Enterprise Device Management Service started on port \${port}`);
-      logger.info(`📊 Health check: http://localhost:\${port}/health`);
-      logger.info(`🔌 WebSocket: ws://localhost:\${port}/ws/devices`);
+      logger.info(`🖥️  Enterprise Device Management Service started on port ${port}`);
+      logger.info(`📊 Health check: http://localhost:${port}/health`);
+      logger.info(`🔌 WebSocket: ws://localhost:${port}/ws/devices`);
       logger.info(`📱 Features: Enrollment, Compliance, Remote Actions, Analytics`);
       logger.info(`🛡️  Security: Threat Detection, Geofencing, Certificate Management`);
     });
@@ -2311,14 +2316,14 @@ process.on('SIGTERM', () => {
 if (cluster.isMaster && process.env.NODE_ENV === 'production') {
   const numWorkers = process.env.WORKERS || os.cpus().length;
   
-  logger.info(`Starting \${numWorkers} workers...`);
+  logger.info(`Starting ${numWorkers} workers...`);
   
   for (let i = 0; i < numWorkers; i++) {
     cluster.fork();
   }
   
   cluster.on('exit', (worker, code, signal) => {
-    logger.error(`Worker \${worker.process.pid} died`);
+    logger.error(`Worker ${worker.process.pid} died`);
     cluster.fork();
   });
 } else {

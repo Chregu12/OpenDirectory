@@ -151,6 +151,14 @@ jest.mock('../utils/logger', () => ({
   debug: jest.fn(),
 }), { virtual: true });
 
+// OIDC auth — pass through; this suite tests the routes, not authentication
+jest.mock('../middleware/oidcAuth', () => ({
+  oidcAuth: () => (req, _res, next) => {
+    req.user = { sub: 'test-user', roles: ['admin'] };
+    next();
+  },
+}));
+
 // Config
 jest.mock('../config', () => ({
   environment: 'test',
@@ -192,6 +200,7 @@ jest.mock('../services/policyEngine', () => jest.fn().mockImplementation(() => (
 
 // ComplianceScanner
 jest.mock('../services/complianceScanner', () => jest.fn().mockImplementation(() => ({
+  scanDevice: jest.fn().mockResolvedValue({ deviceId: 'device-123', compliant: true, violations: [] }),
   getViolationCount: jest.fn().mockResolvedValue(0),
   performScheduledScan: jest.fn().mockResolvedValue(undefined),
   getViolations: jest.fn().mockResolvedValue([]),
@@ -222,6 +231,8 @@ jest.mock('../services/inventoryService', () => jest.fn().mockImplementation(() 
 
 // RemoteActionService
 jest.mock('../services/remoteActionService', () => jest.fn().mockImplementation(() => ({
+  setDb: jest.fn(),
+  setDeviceRepository: jest.fn(),
   isolateDevice: jest.fn().mockResolvedValue(undefined),
   executeAction: jest.fn().mockResolvedValue({ actionId: 'action-123' }),
   getActionStatus: jest.fn().mockResolvedValue({ status: 'completed' }),
@@ -540,7 +551,8 @@ describe('Device Service - E2E API Tests', () => {
   // ─── DELETE /api/devices/:deviceId ──────────────────────────────────────────
   describe('DELETE /api/devices/:deviceId', () => {
     it('returns 200 on successful deletion', async () => {
-      mockDeviceManager.deleteDevice.mockResolvedValueOnce(undefined);
+      // deviceManager.deleteDevice resolves true on success, false when missing
+      mockDeviceManager.deleteDevice.mockResolvedValueOnce(true);
 
       const res = await request(app).delete('/api/devices/device-123');
       expect(res.status).toBe(200);
@@ -589,11 +601,14 @@ describe('Device Service - E2E API Tests', () => {
   // ─── GET /api/compliance/violations ── additional cases ─────────────────────
   describe('GET /api/compliance/violations — additional cases', () => {
     it('returns 200 with empty array when no violations exist', async () => {
-      service.complianceScanner.getViolations.mockResolvedValueOnce([]);
+      // getViolations returns { violations, pagination }; the handler spreads it
+      service.complianceScanner.getViolations.mockResolvedValueOnce({
+        violations: [], pagination: { page: 1, limit: 50, total: 0 },
+      });
       const res = await request(app).get('/api/compliance/violations');
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('success', true);
-      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(Array.isArray(res.body.violations)).toBe(true);
     });
   });
 

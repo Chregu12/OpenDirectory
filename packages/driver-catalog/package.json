@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Shared driver catalog and hardware-matching for OpenDirectory — platform-agnostic core with per-platform matchers (Windows PnP, Linux PCI/USB) and per-vendor providers (HP, Lenovo, Dell-static).",
   "main": "src/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
   "license": "MIT",
   "keywords": ["opendirectory", "drivers", "catalog", "hardware"],
   "exports": {

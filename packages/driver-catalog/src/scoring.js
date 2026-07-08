@@ -28,11 +28,13 @@ function normalizeVendor(raw) {
 
 // ─── OS normalisation ─────────────────────────────────────────────────────────
 
+const LINUX_HINTS = ['linux', 'ubuntu', 'debian', 'fedora', 'centos', 'rhel', 'red hat', 'suse', 'arch', 'mint', 'alpine'];
+
 function normalizeOs(raw) {
   if (!raw) return null;
   const s = raw.toLowerCase();
   if (s.includes('windows')) return 'windows';
-  if (s.includes('linux'))   return 'linux';
+  if (LINUX_HINTS.some(h => s.includes(h))) return 'linux';
   if (s.includes('mac') || s.includes('darwin') || s.includes('macos')) return 'macos';
   return null;
 }

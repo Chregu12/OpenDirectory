@@ -23,7 +23,7 @@ function cacheSet(map, key, value) {
   map.set(key, value);
 }
 
-const REPORT_DIR = '/var/lib/opendirectory/device-hardware';
+const REPORT_DIR = process.env.DEVICE_HARDWARE_DIR || '/var/lib/opendirectory/device-hardware';
 
 async function persistReport(key, data) {
   try {

@@ -11,7 +11,7 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()]
 });
 
-const DRIVERS_DIR = '/var/lib/opendirectory/device-drivers';
+const DRIVERS_DIR = process.env.DEVICE_DRIVERS_DIR || '/var/lib/opendirectory/device-drivers';
 const CATALOG_FILE = path.join(DRIVERS_DIR, 'drivers.json');
 const FILES_DIR = path.join(DRIVERS_DIR, 'files');
 
