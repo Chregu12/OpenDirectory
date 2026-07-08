@@ -59,6 +59,10 @@ function tokenize(s) {
 function modelTokensMatch(aTokens, bTokens) {
   const [shorter, longer] = aTokens.length <= bTokens.length ? [aTokens, bTokens] : [bTokens, aTokens];
   if (shorter.length === 0) return false;
+  // A single-character token (e.g. "1" or "X") is too generic to count as a
+  // meaningful model match on its own — require at least one token with
+  // some specificity (length >= 2, e.g. "G9", "T14") in the shorter list.
+  if (!shorter.some(t => t.length >= 2)) return false;
   return shorter.every(t => longer.includes(t));
 }
 

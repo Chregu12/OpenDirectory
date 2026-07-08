@@ -45,6 +45,10 @@ interface VendorCount {
 interface DriverCatalogBrowserProps {
   onClose: () => void;
   onImported?: (driverName: string) => void;
+  // Which service catalog imports should be sent to. Printer drivers use
+  // the printer-service catalog import; device drivers must land in
+  // device-service instead, or they never show up in the device driver list.
+  importTarget?: 'printer' | 'device';
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -271,7 +275,13 @@ function DriverCard({
 
 // ─── URL Import Panel ─────────────────────────────────────────────────────────
 
-function UrlImportPanel({ onImported }: { onImported?: (name: string) => void }) {
+function UrlImportPanel({
+  onImported,
+  importTarget = 'printer',
+}: {
+  onImported?: (name: string) => void;
+  importTarget?: 'printer' | 'device';
+}) {
   const [url, setUrl]           = useState('');
   const [name, setName]         = useState('');
   const [version, setVersion]   = useState('');
@@ -289,13 +299,19 @@ function UrlImportPanel({ onImported }: { onImported?: (name: string) => void })
     setError(null);
     setSuccess(false);
     try {
-      await api.post('/api/printer/catalog/import-url', {
+      // The catalog stores/expects lowercase English deviceType values
+      // ('printer', 'network', …), but the select above shows German labels.
+      const apiDeviceType = deviceType ? (DEVICE_TYPE_API_VALUE[deviceType] ?? deviceType.toLowerCase()) : undefined;
+      const endpoint = importTarget === 'device'
+        ? '/api/devices/drivers/import-url'
+        : '/api/printer/catalog/import-url';
+      await api.post(endpoint, {
         url: url.trim(),
         name: name.trim() || undefined,
         version: version.trim() || undefined,
         vendor: vendor.trim() || undefined,
         os: os || undefined,
-        deviceType: deviceType || undefined,
+        deviceType: apiDeviceType,
         format: format || undefined,
       });
       setSuccess(true);
@@ -426,7 +442,7 @@ function UrlImportPanel({ onImported }: { onImported?: (name: string) => void })
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function DriverCatalogBrowser({ onClose, onImported }: DriverCatalogBrowserProps) {
+export default function DriverCatalogBrowser({ onClose, onImported, importTarget = 'printer' }: DriverCatalogBrowserProps) {
   const [query, setQuery]               = useState('');
   const [results, setResults]           = useState<CatalogEntry[]>([]);
   const [loading, setLoading]           = useState(false);
@@ -531,7 +547,20 @@ export default function DriverCatalogBrowser({ onClose, onImported }: DriverCata
       { entryId: entry.id, status: 'importing' },
     ]);
     try {
-      await api.post('/api/printer/catalog/import', { entry });
+      if (importTarget === 'device') {
+        await api.post('/api/devices/drivers/import-url', {
+          url: entry.downloadUrl,
+          name: entry.name,
+          version: entry.version,
+          vendor: entry.vendor,
+          os: entry.os,
+          deviceType: entry.deviceType,
+          format: entry.format,
+          description: entry.description,
+        });
+      } else {
+        await api.post('/api/printer/catalog/import', { entry });
+      }
       setImportStates(prev => [
         ...prev.filter(s => s.entryId !== entry.id),
         { entryId: entry.id, status: 'success' },
@@ -680,7 +709,7 @@ export default function DriverCatalogBrowser({ onClose, onImported }: DriverCata
             {/* URL Import */}
             <div className="border-t border-gray-100 p-3 flex-shrink-0">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">URL-Import</p>
-              <UrlImportPanel onImported={onImported} />
+              <UrlImportPanel onImported={onImported} importTarget={importTarget} />
             </div>
           </div>
 

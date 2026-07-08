@@ -170,9 +170,23 @@ JOIN_RESPONSE="$(curl -sf -X POST \
     exit 1
   }
 
-DC_IP="$(echo "$JOIN_RESPONSE" | grep -o '"dcIpAddress":"[^"]*"' | cut -d'"' -f4)"
-NETBIOS="$(echo "$JOIN_RESPONSE" | grep -o '"netbiosDomain":"[^"]*"' | cut -d'"' -f4)"
-COMPUTER_DN="$(echo "$JOIN_RESPONSE" | grep -o '"computerDn":"[^"]*"' | cut -d'"' -f4)"
+# Parsed via python3 (already a hard dependency, see JOIN_BODY above) rather
+# than grep/cut: the latter breaks on escaped quotes, nested JSON, or a
+# different field order in the response. Missing/non-string fields print as
+# an empty line, same as a grep/cut miss did before.
+JOIN_PARSED="$(printf '%s' "$JOIN_RESPONSE" | python3 -c "
+import sys, json
+try:
+    data = json.loads(sys.stdin.read())
+    if not isinstance(data, dict):
+        data = {}
+except Exception:
+    data = {}
+for k in ('dcIpAddress', 'netbiosDomain', 'computerDn'):
+    v = data.get(k)
+    print(v if isinstance(v, str) else '')
+" 2>/dev/null || true)"
+IFS=$'\n' read -r DC_IP NETBIOS COMPUTER_DN <<< "$JOIN_PARSED" || true
 
 echo "  Computer DN  : ${COMPUTER_DN:-?}"
 echo "  DC IP        : ${DC_IP:-?}"
@@ -228,7 +242,18 @@ HW_RESPONSE="$(curl -sf -X POST \
   }
 
 if [[ -n "$HW_RESPONSE" ]]; then
-  REC_COUNT="$(echo "$HW_RESPONSE" | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2 || echo 0)"
+  # Same python3-based JSON parsing as JOIN_RESPONSE above, instead of grep/cut.
+  REC_COUNT="$(printf '%s' "$HW_RESPONSE" | python3 -c "
+import sys, json
+try:
+    data = json.loads(sys.stdin.read())
+    if not isinstance(data, dict):
+        data = {}
+except Exception:
+    data = {}
+count = data.get('count', 0)
+print(count if isinstance(count, int) else 0)
+" 2>/dev/null || echo 0)"
   echo "  Driver recommendations: ${REC_COUNT} found"
 fi
 

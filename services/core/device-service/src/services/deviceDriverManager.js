@@ -91,7 +91,7 @@ async function getDriver(id) {
 async function addDriver(metadata) {
   await ensureStorage();
 
-  const id = Date.now().toString(36);
+  const id = `${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
   const { fileBuffer, filename, name, version, vendor, os, deviceType,
           format, architecture, description, tags } = metadata;
 

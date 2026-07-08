@@ -17,6 +17,7 @@ const nextConfig = {
     const quickActionsUrl      = process.env.QUICK_ACTIONS_URL              || 'http://quick-actions:3950';
     const authServiceUrl       = process.env.AUTH_SERVICE_URL               || 'http://auth-service:3001';
     const deviceServiceUrl     = process.env.DEVICE_SERVICE_URL             || 'http://device-service:3003';
+    const sambaUrl             = process.env.SAMBA_SERVICE_URL              || 'http://samba-ad-dc:3010';
     return [
       // OIDC endpoints → auth-service (same-origin, avoids CORS)
       { source: '/oidc/:path*', destination: `${authServiceUrl}/:path*` },
@@ -52,6 +53,12 @@ const nextConfig = {
       { source: '/api/v1/pim/:path*',       destination: `${conditionalAccessUrl}/api/v1/pim/:path*` },
       // Quick actions (compliance snapshot, policy deploy) -> quick-actions service (port 3950)
       { source: '/api/quick/:path*',        destination: `${quickActionsUrl}/api/quick/:path*` },
+      // Samba AD DC service routes -> samba-ad-dc (must come before the
+      // /api/:path* catch-all; api-backend has none of these routes).
+      // /api/computers/join et al. are mounted without the /samba prefix
+      // on the backend, so that specific rule must come first.
+      { source: '/api/samba/computers/:path*', destination: `${sambaUrl}/api/computers/:path*` },
+      { source: '/api/samba/:path*',           destination: `${sambaUrl}/api/samba/:path*` },
       // Everything else -> api-backend
       { source: '/api/:path*',              destination: `${apiBackendUrl}/api/:path*` },
     ];
