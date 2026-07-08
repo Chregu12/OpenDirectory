@@ -86,6 +86,7 @@ router.get('/drivers/:id', async (req, res) => {
 // file field: driver
 router.post('/drivers/upload', upload.single('driver'), async (req, res) => {
   const tmpPath = req.file?.path;
+  let driver;
 
   try {
     if (!req.file) return fail(res, 400, 'No driver file uploaded (field name: driver)');
@@ -99,7 +100,7 @@ router.post('/drivers/upload', upload.single('driver'), async (req, res) => {
       : [];
 
     // Register the driver — metadata defaults are derived from the filename
-    const driver = await driverManager.addDriver({
+    driver = await driverManager.addDriver({
       name: name || path.basename(originalname, path.extname(originalname)),
       version: version || '0.0.0',
       vendor: vendor || 'Unbekannt',
@@ -119,6 +120,10 @@ router.post('/drivers/upload', upload.single('driver'), async (req, res) => {
     logger.error('Upload driver error:', err);
     // Clean up tmp file on error
     if (tmpPath) fs.unlink(tmpPath).catch(() => {});
+    // If the catalog record was already persisted (addDriver succeeded)
+    // but the rename below it failed, don't leave a driver entry pointing
+    // at a file that was never actually written.
+    if (driver) driverManager.deleteDriver(driver.id).catch(() => {});
     fail(res, 500, err.message);
   }
 });
