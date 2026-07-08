@@ -411,6 +411,7 @@ export default function DeviceDriversTab() {
         <DriverCatalogBrowser
           onClose={() => setShowCatalog(false)}
           onImported={handleCatalogImported}
+          importTarget="device"
         />
       )}
     </div>

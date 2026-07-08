@@ -1,11 +1,70 @@
 'use strict';
 
+const fs = require('fs').promises;
+const path = require('path');
 const express = require('express');
 const DriverCatalogManager = require('../services/driverCatalogManager');
 const dellCatalog = require('../services/dellCatalogService');
+const printerDriverManager = require('../services/printerDriverManager');
 
 const router = express.Router();
 const catalog = new DriverCatalogManager();
+
+// Coerce a query param that may be a single value, an array (e.g. ?q=a&q=b,
+// which Express turns into req.query.q === ['a', 'b']), or undefined into a
+// plain string so downstream .toLowerCase()/comparisons never crash.
+function qs(value, fallback = '') {
+  return String([].concat(value ?? fallback)[0] ?? fallback);
+}
+
+// printerDriverManager only stores a single OS value (linux|windows|macos|
+// universal) and listDrivers()/getDriver() filter on it with strict
+// equality. Catalog/import records may carry an array of supported OSes
+// (e.g. ['linux', 'macos']); collapse that to a single value that still
+// makes sense for that filtering.
+function normalizeOs(os) {
+  if (Array.isArray(os)) {
+    return os.length === 1 ? os[0] : 'universal';
+  }
+  return os || 'universal';
+}
+
+// Register a downloaded catalog/URL import record with printerDriverManager
+// (drivers.json) and move the already-downloaded file into place. Without
+// this, importFromCatalog()/importFromUrl() only return an in-memory object
+// and the driver never shows up in GET /api/printer/drivers.
+async function persistImportedDriver(record) {
+  let driver;
+  try {
+    driver = await printerDriverManager.addDriver({
+      name: record.name,
+      version: record.version || '0.0.0',
+      vendor: record.vendor || 'Unbekannt',
+      os: normalizeOs(record.os),
+      format: record.format || 'bin',
+      models: record.models || [],
+      filename: path.basename(record.localPath),
+      fileSize: record.fileSize,
+    });
+
+    try {
+      await fs.rename(record.localPath, driver.filePath);
+    } catch (err) {
+      if (err.code === 'EXDEV') {
+        await fs.copyFile(record.localPath, driver.filePath);
+        await fs.unlink(record.localPath);
+      } else {
+        throw err;
+      }
+    }
+
+    return driver;
+  } catch (err) {
+    if (record.localPath) await fs.unlink(record.localPath).catch(() => {});
+    if (driver) await printerDriverManager.deleteDriver(driver.id).catch(() => {});
+    throw err;
+  }
+}
 
 // ─── GET /catalog/search ──────────────────────────────────────────────────────
 // Query params: q, vendor, os, deviceType, source, includeOpenPrinting

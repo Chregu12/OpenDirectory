@@ -186,7 +186,10 @@ for k in ('dcIpAddress', 'netbiosDomain', 'computerDn'):
     v = data.get(k)
     print(v if isinstance(v, str) else '')
 " 2>/dev/null || true)"
-IFS=$'\n' read -r DC_IP NETBIOS COMPUTER_DN <<< "$JOIN_PARSED" || true
+mapfile -t JOIN_FIELDS <<< "$JOIN_PARSED"
+DC_IP="${JOIN_FIELDS[0]:-}"
+NETBIOS="${JOIN_FIELDS[1]:-}"
+COMPUTER_DN="${JOIN_FIELDS[2]:-}"
 
 echo "  Computer DN  : ${COMPUTER_DN:-?}"
 echo "  DC IP        : ${DC_IP:-?}"
@@ -317,8 +320,12 @@ if [[ "$JOIN_METHOD" == "samba" ]]; then
     echo "ERROR: samba-tool not found." >&2
     exit 1
   fi
-  samba-tool domain join "$REALM_UPPER" MEMBER \
-    -U "${ADMIN_USER}%${ADMIN_PASS}" \
+  # samba-tool has no equivalent of net's -A auth-file option, so pass the
+  # password via stdin (samba-tool's documented credentials prompt reads
+  # stdin when there's no TTY) instead of -U user%pass, which would leak the
+  # plaintext password to any local user via `ps aux`.
+  echo "$ADMIN_PASS" | samba-tool domain join "$REALM_UPPER" MEMBER \
+    -U "$ADMIN_USER" \
     ${DC_IP:+--server="$DC_IP"} && JOINED=true
 fi
 
