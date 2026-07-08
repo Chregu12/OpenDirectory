@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   XMarkIcon,
   MagnifyingGlassIcon,
@@ -81,6 +81,18 @@ const LICENSE_LABEL: Record<string, string> = {
 
 const OS_OPTIONS = ['Alle', 'Linux', 'Windows', 'macOS', 'Universal'];
 const DEVICE_TYPE_OPTIONS = ['Alle', 'Drucker', 'Netzwerk', 'Anzeige', 'Speicher', 'USB', 'Audio'];
+
+// The catalog API stores deviceType as lowercase English values ('printer',
+// 'network', …) — map the German UI labels to those before sending the
+// request, otherwise the filter silently returns zero results.
+const DEVICE_TYPE_API_VALUE: Record<string, string> = {
+  Drucker: 'printer',
+  Netzwerk: 'network',
+  Anzeige: 'display',
+  Speicher: 'storage',
+  USB: 'usb',
+  Audio: 'audio',
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -432,7 +444,12 @@ export default function DriverCatalogBrowser({ onClose, onImported }: DriverCata
     api.get('/api/printer/catalog/vendors')
       .then(res => {
         const data = res.data?.vendors ?? res.data ?? [];
-        setVendors(data);
+        // Backend returns { id, name, count } — normalize to { vendor, count }
+        // so vendorKey()/getVendorColor() below don't choke on `undefined`.
+        const list: VendorCount[] = Array.isArray(data)
+          ? data.map((v: any) => ({ vendor: v.vendor ?? v.name ?? v.id ?? '', count: v.count ?? 0 }))
+          : [];
+        setVendors(list);
       })
       .catch(() => {
         // Fallback vendor list
@@ -451,26 +468,34 @@ export default function DriverCatalogBrowser({ onClose, onImported }: DriverCata
 
   // ── Search ──────────────────────────────────────────────────────────────────
 
+  // Guards against out-of-order responses: if the user changes a filter
+  // while an older request is still in flight, only the latest request's
+  // response is allowed to update the UI.
+  const searchSeqRef = useRef(0);
+
   const doSearch = useCallback(async (q: string, vendor: string, os: string, type: string) => {
+    const seq = ++searchSeqRef.current;
     setLoading(true);
     setHasSearched(true);
     try {
       const params: Record<string, string> = { q };
       if (vendor !== 'alle') params.vendor = vendor;
       if (os !== 'Alle')     params.os     = os;
-      if (type !== 'Alle')   params.deviceType = type;
+      if (type !== 'Alle')   params.deviceType = DEVICE_TYPE_API_VALUE[type] ?? type.toLowerCase();
 
       const res = await api.get('/api/printer/catalog/search', { params });
+      if (seq !== searchSeqRef.current) return; // a newer search has since started
       const data = res.data;
       const items: CatalogEntry[] = data?.entries ?? data?.results ?? data ?? [];
       setResults(items);
       setTotal(data?.total ?? items.length);
     } catch {
+      if (seq !== searchSeqRef.current) return;
       // Show empty state on error
       setResults([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (seq === searchSeqRef.current) setLoading(false);
     }
   }, []);
 

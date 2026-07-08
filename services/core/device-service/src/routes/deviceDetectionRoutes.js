@@ -12,6 +12,17 @@ const router = express.Router();
 const hardwareReports = new Map();
 const driverRecommendations = new Map();
 
+// Cap in-memory caches so a stream of distinct hostnames/deviceIds can't
+// grow these maps without bound; evict the oldest entry (FIFO) once full.
+const MAX_CACHE_ENTRIES = 500;
+function cacheSet(map, key, value) {
+  if (!map.has(key) && map.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = map.keys().next().value;
+    map.delete(oldestKey);
+  }
+  map.set(key, value);
+}
+
 const REPORT_DIR = '/var/lib/opendirectory/device-hardware';
 
 async function persistReport(key, data) {
@@ -33,20 +44,23 @@ async function loadReport(key) {
 // Body: { hostname, deviceId?, manufacturer, model, os, osVersion, hardwareIds? }
 router.post('/report-hardware', async (req, res) => {
   try {
-    const { hostname, deviceId, manufacturer, model, os, osVersion, hardwareIds = [] } = req.body;
+    const { hostname, deviceId, manufacturer, model, os, osVersion, hardwareIds = [] } = req.body || {};
     if (!hostname && !deviceId) {
       return res.status(400).json({ success: false, error: 'hostname or deviceId required' });
     }
 
-    const key = (deviceId || hostname).toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const key = String(deviceId || hostname).toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    if (!key) {
+      return res.status(400).json({ success: false, error: 'hostname or deviceId required' });
+    }
     const report = { hostname, deviceId, manufacturer, model, os, osVersion, hardwareIds, reportedAt: new Date().toISOString() };
 
-    hardwareReports.set(key, report);
+    cacheSet(hardwareReports, key, report);
     await persistReport(key, report);
 
     // Run driver matching
     const recommendations = await matchDrivers({ manufacturer, model, os, hardwareIds });
-    driverRecommendations.set(key, { recommendations, matchedAt: new Date().toISOString() });
+    cacheSet(driverRecommendations, key, { recommendations, matchedAt: new Date().toISOString() });
 
     res.json({
       success: true,
@@ -75,7 +89,7 @@ router.get('/:id/driver-recommendations', async (req, res) => {
       }
       const recommendations = await matchDrivers(report);
       cached = { recommendations, matchedAt: new Date().toISOString() };
-      driverRecommendations.set(key, cached);
+      cacheSet(driverRecommendations, key, cached);
     }
 
     res.json({ success: true, ...cached, count: cached.recommendations.length });
@@ -100,7 +114,7 @@ router.post('/:id/detect-drivers', async (req, res) => {
     }
 
     const recommendations = await matchDrivers(hwInfo);
-    driverRecommendations.set(key, { recommendations, matchedAt: new Date().toISOString() });
+    cacheSet(driverRecommendations, key, { recommendations, matchedAt: new Date().toISOString() });
 
     res.json({ success: true, count: recommendations.length, recommendations: recommendations.slice(0, 20) });
   } catch (error) {

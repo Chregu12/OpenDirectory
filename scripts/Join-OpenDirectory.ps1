@@ -78,6 +78,22 @@ function Invoke-OdApi {
     }
 }
 
+# Safe property getter: Set-StrictMode -Version Latest throws on access to a
+# property that is absent from a PSCustomObject (e.g. an optional field the
+# API omitted from its JSON response), so every access to a dynamically
+# parsed API response must be guarded.
+function Get-OdProp {
+    param(
+        $InputObject,
+        [string]$Name,
+        $Default = $null
+    )
+    if ($InputObject -and ($InputObject.PSObject.Properties.Name -contains $Name)) {
+        return $InputObject.$Name
+    }
+    return $Default
+}
+
 # ─── Step 1: Collect hardware inventory ───────────────────────────────────────
 
 Write-Host "`n[1/5] Collecting hardware inventory..." -ForegroundColor Cyan
@@ -119,9 +135,6 @@ Write-Host "  PnP devices  : $($pnpDevices.Count) found"
 if (-not $AdminPassword) {
     $AdminPassword = Read-Host "Domain admin password for $AdminUser" -AsSecureString
 }
-$plainPass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($AdminPassword)
-)
 
 # ─── Step 3: Register computer with OpenDirectory / Samba AD DC ───────────────
 
@@ -144,11 +157,12 @@ try {
     exit 1
 }
 
-$machinePassword = $joinResult.machinePassword
-$dcIp            = $joinResult.dcIpAddress
-$netbiosDomain   = $joinResult.netbiosDomain
+$machinePassword = Get-OdProp $joinResult 'machinePassword'
+$dcIp            = Get-OdProp $joinResult 'dcIpAddress'
+$netbiosDomain   = Get-OdProp $joinResult 'netbiosDomain'
+$computerDn      = Get-OdProp $joinResult 'computerDn'
 
-Write-Host "  Computer DN  : $($joinResult.computerDn)"
+Write-Host "  Computer DN  : $computerDn"
 Write-Host "  DC IP        : $dcIp"
 Write-Host "  NetBIOS      : $netbiosDomain"
 
@@ -167,7 +181,7 @@ $hwBody = @{
 
 try {
     $hwResult = Invoke-OdApi -Method POST -Path '/api/devices/report-hardware' -Body $hwBody
-    Write-Host "  Driver recommendations: $($hwResult.count) found"
+    Write-Host "  Driver recommendations: $(Get-OdProp $hwResult 'count' 0) found"
 } catch {
     Write-Warning "Hardware report failed (non-fatal): $_"
     $hwResult = $null
@@ -209,13 +223,21 @@ if ($hwResult -and ($hwResult.PSObject.Properties.Name -contains 'recommendation
 
 if ($recommendations.Count -gt 0) {
     $recommendations | Select-Object -First 10 | ForEach-Object {
-        $rec   = $_
-        $score = if ($rec.matchScore) { " [score: $($rec.matchScore)]" } else { '' }
-        $dtype = if ($rec.deviceType) { $rec.deviceType.ToString().ToUpper().PadRight(10) } else { 'OTHER     ' }
-        Write-Host "  [$dtype] $($rec.name) v$($rec.version)$score"
-        Write-Host "             OS: $($rec.os -join ', ')  |  Format: $($rec.format)"
-        if ($rec.downloadUrl) {
-            Write-Host "             URL: $($rec.downloadUrl)"
+        $rec         = $_
+        $matchScore  = Get-OdProp $rec 'matchScore'
+        $deviceType  = Get-OdProp $rec 'deviceType'
+        $recName     = Get-OdProp $rec 'name'
+        $recVersion  = Get-OdProp $rec 'version'
+        $recOs       = Get-OdProp $rec 'os' @()
+        $recFormat   = Get-OdProp $rec 'format'
+        $downloadUrl = Get-OdProp $rec 'downloadUrl'
+
+        $score = if ($matchScore) { " [score: $matchScore]" } else { '' }
+        $dtype = if ($deviceType) { $deviceType.ToString().ToUpper().PadRight(10) } else { 'OTHER     ' }
+        Write-Host "  [$dtype] $recName v$recVersion$score"
+        Write-Host "             OS: $($recOs -join ', ')  |  Format: $recFormat"
+        if ($downloadUrl) {
+            Write-Host "             URL: $downloadUrl"
         }
         Write-Host ""
     }

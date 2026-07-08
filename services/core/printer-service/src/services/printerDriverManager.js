@@ -42,10 +42,25 @@ async function readCatalog() {
   }
 }
 
-// Persist the drivers catalog to disk
+// Persist the drivers catalog to disk (write-then-rename so a crash
+// mid-write can never leave a truncated/corrupt drivers.json behind)
 async function writeCatalog(drivers) {
   await ensureStorage();
-  await fs.writeFile(DRIVERS_JSON, JSON.stringify(drivers, null, 2), 'utf-8');
+  const tmpPath = `${DRIVERS_JSON}.tmp`;
+  await fs.writeFile(tmpPath, JSON.stringify(drivers, null, 2), 'utf-8');
+  await fs.rename(tmpPath, DRIVERS_JSON);
+}
+
+// Serializes read-modify-write access to drivers.json. Every mutation below
+// reads the whole catalog, changes it in memory, then writes it back — if
+// two requests (e.g. two uploads, or an upload racing a delete) did this
+// concurrently, the second write would silently clobber the first's
+// change. Queuing them ensures each mutation sees the previous one's result.
+let _writeQueue = Promise.resolve();
+function _serialize(fn) {
+  const run = _writeQueue.then(fn, fn);
+  _writeQueue = run.then(() => {}, () => {});
+  return run;
 }
 
 /**
@@ -93,33 +108,35 @@ async function addDriver({ name, version, vendor, os, format, models = [], filen
   if (!VALID_OS.has(os))     throw new Error(`Invalid os value: ${os}`);
   if (!VALID_FORMAT.has(format)) throw new Error(`Invalid format value: ${format}`);
 
-  await ensureStorage();
-  const drivers = await readCatalog();
+  return _serialize(async () => {
+    await ensureStorage();
+    const drivers = await readCatalog();
 
-  const id = Date.now().toString(36);
-  const safeFilename = `${id}-${path.basename(filename)}`;
-  const filePath = path.join(FILES_DIR, safeFilename);
+    const id = Date.now().toString(36);
+    const safeFilename = `${id}-${path.basename(filename)}`;
+    const filePath = path.join(FILES_DIR, safeFilename);
 
-  const driver = {
-    id,
-    name,
-    version,
-    vendor,
-    os,
-    format,
-    models: Array.isArray(models) ? models : [],
-    filename: safeFilename,
-    fileSize: fileSize || 0,
-    filePath,
-    assignedPrinters: [],
-    uploadedAt: new Date().toISOString(),
-  };
+    const driver = {
+      id,
+      name,
+      version,
+      vendor,
+      os,
+      format,
+      models: Array.isArray(models) ? models : [],
+      filename: safeFilename,
+      fileSize: fileSize || 0,
+      filePath,
+      assignedPrinters: [],
+      uploadedAt: new Date().toISOString(),
+    };
 
-  drivers.push(driver);
-  await writeCatalog(drivers);
+    drivers.push(driver);
+    await writeCatalog(drivers);
 
-  logger.info(`Driver added: ${name} v${version} (id=${id})`);
-  return driver;
+    logger.info(`Driver added: ${name} v${version} (id=${id})`);
+    return driver;
+  });
 }
 
 /**
@@ -128,13 +145,18 @@ async function addDriver({ name, version, vendor, os, format, models = [], filen
  * @returns {Promise<boolean>} true if deleted, false if not found
  */
 async function deleteDriver(id) {
-  await ensureStorage();
-  const drivers = await readCatalog();
-  const idx = drivers.findIndex(d => d.id === id);
-  if (idx === -1) return false;
+  const removed = await _serialize(async () => {
+    await ensureStorage();
+    const drivers = await readCatalog();
+    const idx = drivers.findIndex(d => d.id === id);
+    if (idx === -1) return null;
 
-  const [removed] = drivers.splice(idx, 1);
-  await writeCatalog(drivers);
+    const [removedEntry] = drivers.splice(idx, 1);
+    await writeCatalog(drivers);
+    return removedEntry;
+  });
+
+  if (!removed) return false;
 
   // Best-effort file removal
   try {
@@ -154,18 +176,20 @@ async function deleteDriver(id) {
  * @returns {Promise<object>} updated driver
  */
 async function assignDriverToPrinter(driverId, printerId) {
-  await ensureStorage();
-  const drivers = await readCatalog();
-  const driver = drivers.find(d => d.id === driverId);
-  if (!driver) throw new Error(`Driver not found: ${driverId}`);
+  return _serialize(async () => {
+    await ensureStorage();
+    const drivers = await readCatalog();
+    const driver = drivers.find(d => d.id === driverId);
+    if (!driver) throw new Error(`Driver not found: ${driverId}`);
 
-  if (!driver.assignedPrinters.includes(printerId)) {
-    driver.assignedPrinters.push(printerId);
-    await writeCatalog(drivers);
-    logger.info(`Driver ${driverId} assigned to printer ${printerId}`);
-  }
+    if (!driver.assignedPrinters.includes(printerId)) {
+      driver.assignedPrinters.push(printerId);
+      await writeCatalog(drivers);
+      logger.info(`Driver ${driverId} assigned to printer ${printerId}`);
+    }
 
-  return driver;
+    return driver;
+  });
 }
 
 /**
@@ -175,16 +199,18 @@ async function assignDriverToPrinter(driverId, printerId) {
  * @returns {Promise<object>} updated driver
  */
 async function unassignDriverFromPrinter(driverId, printerId) {
-  await ensureStorage();
-  const drivers = await readCatalog();
-  const driver = drivers.find(d => d.id === driverId);
-  if (!driver) throw new Error(`Driver not found: ${driverId}`);
+  return _serialize(async () => {
+    await ensureStorage();
+    const drivers = await readCatalog();
+    const driver = drivers.find(d => d.id === driverId);
+    if (!driver) throw new Error(`Driver not found: ${driverId}`);
 
-  driver.assignedPrinters = driver.assignedPrinters.filter(pid => pid !== printerId);
-  await writeCatalog(drivers);
-  logger.info(`Driver ${driverId} unassigned from printer ${printerId}`);
+    driver.assignedPrinters = driver.assignedPrinters.filter(pid => pid !== printerId);
+    await writeCatalog(drivers);
+    logger.info(`Driver ${driverId} unassigned from printer ${printerId}`);
 
-  return driver;
+    return driver;
+  });
 }
 
 /**

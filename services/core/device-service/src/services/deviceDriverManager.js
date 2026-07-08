@@ -31,7 +31,21 @@ async function readCatalog() {
 }
 
 async function writeCatalog(catalog) {
-  await fs.promises.writeFile(CATALOG_FILE, JSON.stringify(catalog, null, 2), 'utf8');
+  // Write to a temp file and rename to avoid leaving a truncated/corrupt
+  // drivers.json behind if the process crashes mid-write.
+  const tmpFile = `${CATALOG_FILE}.${process.pid}.${Date.now()}.tmp`;
+  await fs.promises.writeFile(tmpFile, JSON.stringify(catalog, null, 2), 'utf8');
+  await fs.promises.rename(tmpFile, CATALOG_FILE);
+}
+
+// Serialize all read-modify-write operations on the catalog file so
+// concurrent addDriver/deleteDriver/deployDriver/updateDeploymentStatus
+// calls can't clobber each other's changes (lost update).
+let catalogQueue = Promise.resolve();
+function withCatalogLock(task) {
+  const run = catalogQueue.then(task, task);
+  catalogQueue = run.then(() => {}, () => {});
+  return run;
 }
 
 /**
@@ -108,9 +122,11 @@ async function addDriver(metadata) {
     uploadedAt: new Date().toISOString(),
   };
 
-  const catalog = await readCatalog();
-  catalog.drivers.push(driver);
-  await writeCatalog(catalog);
+  await withCatalogLock(async () => {
+    const catalog = await readCatalog();
+    catalog.drivers.push(driver);
+    await writeCatalog(catalog);
+  });
 
   logger.info('Driver added', { id, name, version, vendor, os, format });
   return driver;
@@ -122,25 +138,27 @@ async function addDriver(metadata) {
  */
 async function deleteDriver(id) {
   await ensureStorage();
-  const catalog = await readCatalog();
-  const idx = catalog.drivers.findIndex(d => d.id === id);
-  if (idx === -1) return false;
+  return withCatalogLock(async () => {
+    const catalog = await readCatalog();
+    const idx = catalog.drivers.findIndex(d => d.id === id);
+    if (idx === -1) return false;
 
-  const driver = catalog.drivers[idx];
+    const driver = catalog.drivers[idx];
 
-  // Remove file
-  try {
-    await fs.promises.unlink(driver.filePath);
-  } catch (err) {
-    // Warn but continue — file may already be gone
-    logger.warn('Driver file not found during delete', { id, filePath: driver.filePath });
-  }
+    // Remove file
+    try {
+      await fs.promises.unlink(driver.filePath);
+    } catch (err) {
+      // Warn but continue — file may already be gone
+      logger.warn('Driver file not found during delete', { id, filePath: driver.filePath });
+    }
 
-  catalog.drivers.splice(idx, 1);
-  await writeCatalog(catalog);
+    catalog.drivers.splice(idx, 1);
+    await writeCatalog(catalog);
 
-  logger.info('Driver deleted', { id });
-  return true;
+    logger.info('Driver deleted', { id });
+    return true;
+  });
 }
 
 /**
@@ -149,26 +167,28 @@ async function deleteDriver(id) {
  */
 async function deployDriver(driverId, deviceIds) {
   await ensureStorage();
-  const catalog = await readCatalog();
-  const driver = catalog.drivers.find(d => d.id === driverId);
-  if (!driver) throw new Error(`Driver ${driverId} not found`);
+  return withCatalogLock(async () => {
+    const catalog = await readCatalog();
+    const driver = catalog.drivers.find(d => d.id === driverId);
+    if (!driver) throw new Error(`Driver ${driverId} not found`);
 
-  const now = new Date().toISOString();
-  const deployments = deviceIds.map(deviceId => ({
-    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-    driverId,
-    deviceId,
-    status: 'pending',
-    deployedAt: now,
-    updatedAt: now,
-    error: null,
-  }));
+    const now = new Date().toISOString();
+    const deployments = deviceIds.map(deviceId => ({
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      driverId,
+      deviceId,
+      status: 'pending',
+      deployedAt: now,
+      updatedAt: now,
+      error: null,
+    }));
 
-  driver.deployments.push(...deployments);
-  await writeCatalog(catalog);
+    driver.deployments.push(...deployments);
+    await writeCatalog(catalog);
 
-  logger.info('Driver deployed', { driverId, deviceCount: deviceIds.length });
-  return deployments;
+    logger.info('Driver deployed', { driverId, deviceCount: deviceIds.length });
+    return deployments;
+  });
 }
 
 /**
@@ -186,21 +206,23 @@ async function getDeployments(driverId) {
  */
 async function updateDeploymentStatus(deploymentId, status, error = null) {
   await ensureStorage();
-  const catalog = await readCatalog();
+  return withCatalogLock(async () => {
+    const catalog = await readCatalog();
 
-  for (const driver of catalog.drivers) {
-    const deployment = driver.deployments.find(dep => dep.id === deploymentId);
-    if (deployment) {
-      deployment.status = status;
-      deployment.error = error !== undefined ? error : deployment.error;
-      deployment.updatedAt = new Date().toISOString();
-      await writeCatalog(catalog);
-      logger.info('Deployment status updated', { deploymentId, status });
-      return deployment;
+    for (const driver of catalog.drivers) {
+      const deployment = driver.deployments.find(dep => dep.id === deploymentId);
+      if (deployment) {
+        deployment.status = status;
+        deployment.error = error !== undefined ? error : deployment.error;
+        deployment.updatedAt = new Date().toISOString();
+        await writeCatalog(catalog);
+        logger.info('Deployment status updated', { deploymentId, status });
+        return deployment;
+      }
     }
-  }
 
-  return null;
+    return null;
+  });
 }
 
 module.exports = {

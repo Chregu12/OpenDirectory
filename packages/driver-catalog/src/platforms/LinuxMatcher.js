@@ -210,7 +210,12 @@ function matchFromHardware({ pciDevices, usbVendors }, device = {}) {
   for (const pci of pciDevices) {
     for (const rule of PCI_RULES) {
       if (rule.pciVendor !== pci.vendorId) continue;
-      if (rule.pciClass && pci.classId && !pci.classId.startsWith(rule.pciClass)) continue;
+      // When a rule is class-scoped, an unknown classId must NOT be treated
+      // as "anything goes": several vendors (e.g. Intel 8086, Realtek 10ec)
+      // have rules spanning network/display/audio/thunderbolt for the same
+      // vendorId, so skipping the class check on missing data would fan a
+      // single unclassified device out to unrelated driver categories.
+      if (rule.pciClass && (!pci.classId || !pci.classId.startsWith(rule.pciClass))) continue;
       push(rule, 'pci-id', 15);
     }
   }

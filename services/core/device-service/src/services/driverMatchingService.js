@@ -27,7 +27,12 @@ function fetchJson(url, timeoutMs = 12000) {
     const proto = url.startsWith('https') ? https : http;
     const req = proto.get(url, { headers: { 'User-Agent': 'OpenDirectory/1.0' } }, res => {
       if (res.statusCode === 301 || res.statusCode === 302) {
-        return fetchJson(res.headers.location, timeoutMs).then(resolve).catch(reject);
+        res.resume();
+        if (!res.headers.location) return reject(new Error('Redirect ohne Location-Header'));
+        let nextUrl;
+        try { nextUrl = new URL(res.headers.location, url).toString(); }
+        catch (_) { return reject(new Error('Ungültige Redirect-URL')); }
+        return fetchJson(nextUrl, timeoutMs).then(resolve).catch(reject);
       }
       let data = '';
       res.on('data', c => { data += c; });

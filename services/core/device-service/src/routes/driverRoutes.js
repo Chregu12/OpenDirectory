@@ -20,7 +20,11 @@ function downloadToBuffer(url, timeoutMs = 300000, redirectsLeft = 5) {
       if ([301, 302, 307, 308].includes(res.statusCode)) {
         res.resume();
         if (redirectsLeft <= 0) return reject(new Error('Zu viele Redirects'));
-        return downloadToBuffer(res.headers.location, timeoutMs, redirectsLeft - 1)
+        if (!res.headers.location) return reject(new Error('Redirect ohne Location-Header'));
+        let nextUrl;
+        try { nextUrl = new URL(res.headers.location, url).toString(); }
+        catch (_) { return reject(new Error('Ungültige Redirect-URL')); }
+        return downloadToBuffer(nextUrl, timeoutMs, redirectsLeft - 1)
           .then(resolve).catch(reject);
       }
       if (res.statusCode !== 200) {
@@ -60,8 +64,10 @@ const logger = winston.createLogger({
 
 const router = express.Router();
 
-// Store uploads in memory so we can compute sha256 before writing to disk
-const upload = multer({ storage: multer.memoryStorage() });
+// Store uploads in memory so we can compute sha256 before writing to disk.
+// Cap file size to match the import-url download limit so a huge upload
+// can't exhaust process memory.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_DOWNLOAD_BYTES } });
 
 // GET /drivers — list with optional filters
 router.get('/', async (req, res) => {

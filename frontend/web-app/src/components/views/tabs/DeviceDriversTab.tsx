@@ -25,7 +25,7 @@ interface DeviceDriver {
   vendor?: string;
   deviceType?: string;
   format?: string;
-  os?: string[];
+  os?: string[] | string;
   architecture?: string;
   uploadedAt?: string;
   source?: string;
@@ -38,7 +38,7 @@ interface DriverRecommendation {
   vendor?: string;
   deviceType?: string;
   format?: string;
-  os?: string[];
+  os?: string[] | string;
   downloadUrl?: string;
   aptPackage?: string;
   matchScore?: number;
@@ -47,6 +47,12 @@ interface DriverRecommendation {
 }
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
+
+// Older driver records may store `os` as a plain string instead of an array.
+function toOsList(os?: string[] | string): string[] {
+  if (!os) return [];
+  return Array.isArray(os) ? os : [os];
+}
 
 const DEVICE_TYPE_COLOR: Record<string, string> = {
   network:  'bg-blue-100 text-blue-700',
@@ -250,7 +256,7 @@ export default function DeviceDriversTab() {
                                 {rec.deviceType}
                               </span>
                             )}
-                            {rec.os?.map(o => (
+                            {toOsList(rec.os).map(o => (
                               <span key={o} className="px-1.5 py-0.5 text-xs rounded bg-slate-100 text-slate-600 font-medium">{o}</span>
                             ))}
                             {rec.matchScore != null && rec.matchScore > 0 && (
@@ -375,7 +381,7 @@ export default function DeviceDriversTab() {
                         {driver.format}
                       </span>
                     )}
-                    {driver.os?.map(os => (
+                    {toOsList(driver.os).map(os => (
                       <span key={os} className="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-700 font-medium">{os}</span>
                     ))}
                     {driver.architecture && <span className="text-xs text-gray-400">{driver.architecture}</span>}

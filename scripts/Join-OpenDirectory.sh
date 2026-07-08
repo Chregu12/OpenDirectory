@@ -122,8 +122,15 @@ echo "  USB devices  : $USB_COUNT found"
 # ─── Step 2: Prompt for password if not provided ─────────────────────────────
 
 if [[ -z "$ADMIN_PASS" ]]; then
-  read -rsp "Domain admin password for $ADMIN_USER@$REALM_UPPER: " ADMIN_PASS
+  # `read` fails (non-zero exit) if stdin is closed/non-interactive (e.g. run
+  # via automation with no TTY), which under `set -e` would otherwise abort
+  # the script here with no useful message. Handle that explicitly instead.
+  read -rsp "Domain admin password for $ADMIN_USER@$REALM_UPPER: " ADMIN_PASS || true
   echo ""
+  if [[ -z "$ADMIN_PASS" ]]; then
+    echo "ERROR: No admin password provided. Pass --admin-pass in non-interactive contexts." >&2
+    exit 1
+  fi
 fi
 
 # ─── Step 3: Register computer with OpenDirectory ────────────────────────────
@@ -131,18 +138,28 @@ fi
 echo ""
 echo "[2/5] Registering computer with OpenDirectory…"
 
-JOIN_BODY="$(cat <<JSON
-{
-  "computerName": "$HOSTNAME",
-  "requestingUser": "$ADMIN_USER",
-  "operatingSystem": "${DISTRO:-Linux}",
-  "osVersion": "$OS_VERSION",
-  "manufacturer": "${MANUFACTURER}",
-  "model": "${MODEL}"
-$(if [[ -n "$OU_DN" ]]; then echo ",\"ouDn\": \"$OU_DN\""; fi)
+# Built via python3 (already a dependency of this script, see the hardware
+# merge step below) rather than string interpolation into a heredoc: any of
+# these values (hostname, admin user, manufacturer/model from dmidecode, OU
+# DN) could contain a double quote or backslash and corrupt/inject into the
+# hand-rolled JSON otherwise.
+JOIN_BODY="$(OD_HOSTNAME="$HOSTNAME" OD_ADMIN_USER="$ADMIN_USER" OD_OS_LABEL="${DISTRO:-Linux}" \
+  OD_OS_VERSION="$OS_VERSION" OD_MANUFACTURER="$MANUFACTURER" OD_MODEL="$MODEL" OD_OU_DN="$OU_DN" \
+  python3 -c "
+import os, json
+body = {
+    'computerName': os.environ.get('OD_HOSTNAME', ''),
+    'requestingUser': os.environ.get('OD_ADMIN_USER', ''),
+    'operatingSystem': os.environ.get('OD_OS_LABEL', ''),
+    'osVersion': os.environ.get('OD_OS_VERSION', ''),
+    'manufacturer': os.environ.get('OD_MANUFACTURER', ''),
+    'model': os.environ.get('OD_MODEL', ''),
 }
-JSON
-)"
+ou = os.environ.get('OD_OU_DN', '')
+if ou:
+    body['ouDn'] = ou
+print(json.dumps(body))
+")"
 
 JOIN_RESPONSE="$(curl -sf -X POST \
   -H "Content-Type: application/json" \
@@ -180,17 +197,27 @@ def load(name):
 print(json.dumps((load('PCI_LIST') + load('USB_LIST'))[:80]))
 " 2>/dev/null || echo "[]")"
 
-HW_BODY="$(cat <<JSON
-{
-  "hostname": "$HOSTNAME",
-  "manufacturer": "${MANUFACTURER}",
-  "model": "${MODEL}",
-  "os": "linux",
-  "osVersion": "${DISTRO:-Linux} $OS_VERSION",
-  "hardwareIds": ${HW_COMBINED}
+# Same JSON-injection concern as JOIN_BODY above: build via python3 instead
+# of interpolating hostname/manufacturer/model into a heredoc.
+HW_BODY="$(OD_HOSTNAME="$HOSTNAME" OD_MANUFACTURER="$MANUFACTURER" OD_MODEL="$MODEL" \
+  OD_OS_VERSION="${DISTRO:-Linux} $OS_VERSION" HW_IDS="$HW_COMBINED" python3 -c "
+import os, json
+try:
+    hw_ids = json.loads(os.environ.get('HW_IDS', '[]'))
+    if not isinstance(hw_ids, list):
+        hw_ids = []
+except Exception:
+    hw_ids = []
+body = {
+    'hostname': os.environ.get('OD_HOSTNAME', ''),
+    'manufacturer': os.environ.get('OD_MANUFACTURER', ''),
+    'model': os.environ.get('OD_MODEL', ''),
+    'os': 'linux',
+    'osVersion': os.environ.get('OD_OS_VERSION', ''),
+    'hardwareIds': hw_ids,
 }
-JSON
-)"
+print(json.dumps(body))
+")"
 
 HW_RESPONSE="$(curl -sf -X POST \
   -H "Content-Type: application/json" \
@@ -244,12 +271,20 @@ if [[ "$JOIN_METHOD" == "winbind" && "$JOINED" == "false" ]]; then
   SERVER_ARG=""
   [[ -n "$DC_IP" ]] && SERVER_ARG="-S $DC_IP"
 
-  if echo "$ADMIN_PASS" | net ads join -U "${ADMIN_USER}%${ADMIN_PASS}" ${SERVER_ARG} 2>&1; then
+  # Use an authentication file (net's -A option) instead of -U user%pass:
+  # the latter puts the plaintext password in the process arguments, which
+  # is visible to any local user via `ps aux` for the life of the process.
+  NET_AUTH_FILE="$(mktemp)"
+  chmod 600 "$NET_AUTH_FILE"
+  printf 'username = %s\npassword = %s\n' "$ADMIN_USER" "$ADMIN_PASS" > "$NET_AUTH_FILE"
+
+  if net ads join -A "$NET_AUTH_FILE" ${SERVER_ARG} 2>&1; then
     JOINED=true
     echo "  Joined domain via winbind (net ads join)."
   else
     echo "  WARNING: winbind join also failed. Check credentials and DNS."
   fi
+  rm -f "$NET_AUTH_FILE"
 fi
 
 if [[ "$JOIN_METHOD" == "samba" ]]; then

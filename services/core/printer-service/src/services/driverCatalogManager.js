@@ -815,22 +815,26 @@ async function downloadFile(url, destPath) {
     if (!url) return reject(new Error('No download URL provided'));
     const proto = url.startsWith('https') ? https : http;
     const file = fs.createWriteStream(destPath);
+    // On any failure, close and remove the (possibly partially written)
+    // file so a failed import never leaves a half-written driver on disk.
+    const fail = (err) => { file.close(() => fs.unlink(destPath, () => reject(err))); };
     proto.get(url, { headers: { 'User-Agent': 'OpenDirectory/1.0' } }, (response) => {
       if (response.statusCode === 301 || response.statusCode === 302) {
-        file.close();
-        return downloadFile(response.headers.location, destPath).then(resolve).catch(reject);
+        response.resume();
+        if (!response.headers.location) return fail(new Error('Redirect with no Location header'));
+        const nextUrl = new URL(response.headers.location, url).toString();
+        file.close(() => fs.unlink(destPath, () => downloadFile(nextUrl, destPath).then(resolve).catch(reject)));
+        return;
       }
       if (response.statusCode !== 200) {
-        file.close();
-        return reject(new Error(`HTTP ${response.statusCode} from ${url}`));
+        response.resume();
+        return fail(new Error(`HTTP ${response.statusCode} from ${url}`));
       }
+      response.on('error', fail);
+      file.on('error', fail);
       response.pipe(file);
       file.on('finish', () => file.close(resolve));
-      file.on('error', reject);
-    }).on('error', (err) => {
-      file.close();
-      reject(err);
-    });
+    }).on('error', fail);
   });
 }
 
@@ -841,11 +845,15 @@ function httpsGet(url, timeoutMs = 10000) {
     const proto = url.startsWith('https') ? https : http;
     const req = proto.get(url, { headers: { 'User-Agent': 'OpenDirectory/1.0' } }, (res) => {
       if (res.statusCode === 301 || res.statusCode === 302) {
-        return httpsGet(res.headers.location, timeoutMs).then(resolve).catch(reject);
+        res.resume();
+        if (!res.headers.location) return reject(new Error('Redirect with no Location header'));
+        const nextUrl = new URL(res.headers.location, url).toString();
+        return httpsGet(nextUrl, timeoutMs).then(resolve).catch(reject);
       }
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => resolve(data));
+      res.on('error', reject);
     });
     req.setTimeout(timeoutMs, () => { req.destroy(); reject(new Error('Request timed out')); });
     req.on('error', reject);
@@ -1077,7 +1085,8 @@ class DriverCatalogManager {
 
     const ext = this._guessExtension(entry.downloadUrl, entry.format);
     const safeId = entry.id.replace(/[^a-z0-9_-]/gi, '_');
-    const fileName = `${safeId}-${entry.version || 'unknown'}${ext}`;
+    const safeVersion = String(entry.version || 'unknown').replace(/[^a-z0-9_.-]/gi, '_');
+    const fileName = `${safeId}-${safeVersion}${ext}`;
     const destPath = path.join(storageDir, fileName);
 
     logger.info(`Downloading catalog entry "${entry.name}" → ${destPath}`);
@@ -1161,7 +1170,12 @@ class DriverCatalogManager {
   // ── Private helpers ─────────────────────────────────────────────────────────
 
   _guessExtension(url, formatHint) {
-    if (formatHint) return `.${formatHint.replace(/^\./, '')}`;
+    if (formatHint) {
+      // Strip anything but alphanumerics so a crafted format value (e.g.
+      // containing "/" or "..") can't be used to escape the storage dir.
+      const clean = String(formatHint).replace(/^\./, '').replace(/[^a-z0-9]/gi, '');
+      if (clean) return `.${clean}`;
+    }
     const match = (url || '').match(/\.([a-z0-9]{1,8})(?:[?#]|$)/i);
     return match ? `.${match[1].toLowerCase()}` : '.bin';
   }

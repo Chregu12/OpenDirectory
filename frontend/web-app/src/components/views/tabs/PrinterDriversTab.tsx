@@ -21,9 +21,16 @@ interface PrinterDriver {
   version?: string;
   vendor?: string;
   format?: string;
-  os?: string[];
+  os?: string[] | string;
   uploadedAt?: string;
   source?: string;
+}
+
+// The printer-service upload route stores `os` as a plain string (single
+// value), while catalog imports store it as an array — normalize both.
+function toOsList(os?: string[] | string): string[] {
+  if (!os) return [];
+  return Array.isArray(os) ? os : [os];
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -178,7 +185,7 @@ export default function PrinterDriversTab() {
                       {driver.format}
                     </span>
                   )}
-                  {driver.os?.map(os => (
+                  {toOsList(driver.os).map(os => (
                     <span key={os} className="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-700 font-medium">
                       {os}
                     </span>

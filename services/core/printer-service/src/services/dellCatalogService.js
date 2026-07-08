@@ -77,6 +77,12 @@ class DellCatalogService {
 
   // Force a fresh refresh (ignores TTL)
   async refresh() {
+    // If a load is already in flight, wait for it to settle before starting
+    // a new one — otherwise two _load() calls would run concurrently and
+    // race on the same CAB/XML/index cache files.
+    if (this._loading) {
+      try { await this._loading; } catch (_) {}
+    }
     this.loaded   = false;
     this._loading = null;
     this.drivers  = [];
@@ -120,30 +126,43 @@ class DellCatalogService {
     this.loaded  = true;
     logger.info('Dell catalog parsed', { count: this.drivers.length });
 
-    await fsp.writeFile(INDEX_PATH, JSON.stringify({
+    // Write to a temp file and rename into place so a crash mid-write can
+    // never leave a truncated/corrupt index.json behind.
+    const tmpIndexPath = `${INDEX_PATH}.tmp`;
+    await fsp.writeFile(tmpIndexPath, JSON.stringify({
       drivers:  this.drivers,
       cachedAt: new Date().toISOString(),
       count:    this.drivers.length,
     }));
+    await fsp.rename(tmpIndexPath, INDEX_PATH);
   }
 
   _download(url, dest) {
     return new Promise((resolve, reject) => {
       const proto = url.startsWith('https') ? https : http;
       const file  = fs.createWriteStream(dest);
+      // Any failure path closes the (possibly partially written) file and
+      // removes it, so a failed download never leaves a truncated CAB
+      // behind for the next _extract()/_parse() to trip over.
+      const fail  = err => { file.close(() => fs.unlink(dest, () => reject(err))); };
       const req   = proto.get(url, { headers: { 'User-Agent': 'OpenDirectory/1.0' } }, res => {
         if (res.statusCode === 301 || res.statusCode === 302) {
-          file.close(() => this._download(res.headers.location, dest).then(resolve).catch(reject));
+          res.resume();
+          if (!res.headers.location) return fail(new Error(`Redirect from ${url} had no Location header`));
+          const nextUrl = new URL(res.headers.location, url).toString();
+          file.close(() => fs.unlink(dest, () => this._download(nextUrl, dest).then(resolve).catch(reject)));
           return;
         }
         if (res.statusCode !== 200) {
-          file.close();
-          return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+          res.resume();
+          return fail(new Error(`HTTP ${res.statusCode} for ${url}`));
         }
+        res.on('error', fail);
+        file.on('error', fail);
         res.pipe(file);
         file.on('finish', () => file.close(resolve));
       });
-      req.on('error', err => { file.close(); reject(err); });
+      req.on('error', fail);
     });
   }
 

@@ -24,23 +24,33 @@ const logger = winston.createLogger({
 const DEVICE_SERVICE_URL = (process.env.DEVICE_SERVICE_URL || 'http://device-service:3003').replace(/\/$/, '');
 
 function notifyDeviceService(payload) {
-  const body = JSON.stringify(payload);
-  const url = new URL(`${DEVICE_SERVICE_URL}/api/devices/report-hardware`);
-  const proto = url.protocol === 'https:' ? https : http;
-  const req = proto.request({
-    hostname: url.hostname,
-    port: url.port || (url.protocol === 'https:' ? 443 : 80),
-    path: url.pathname,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-  }, res => {
-    res.resume(); // drain
-    logger.info('Device-service notified of domain join', { status: res.statusCode, hostname: payload.hostname });
-  });
-  req.on('error', err => logger.warn('Could not notify device-service', { message: err.message }));
-  req.setTimeout(5000, () => req.destroy());
-  req.write(body);
-  req.end();
+  // This is meant to be fire-and-forget: a domain join must not fail (or
+  // report an error to the caller) just because the notification could not
+  // be sent. new URL() throws synchronously on a malformed
+  // DEVICE_SERVICE_URL, which — uncaught — would bubble up into the
+  // /api/computers/join route's try/catch and turn an already-successful
+  // join into a reported failure. Guard the whole thing.
+  try {
+    const body = JSON.stringify(payload);
+    const url = new URL(`${DEVICE_SERVICE_URL}/api/devices/report-hardware`);
+    const proto = url.protocol === 'https:' ? https : http;
+    const req = proto.request({
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    }, res => {
+      res.resume(); // drain
+      logger.info('Device-service notified of domain join', { status: res.statusCode, hostname: payload.hostname });
+    });
+    req.on('error', err => logger.warn('Could not notify device-service', { message: err.message }));
+    req.setTimeout(5000, () => req.destroy());
+    req.write(body);
+    req.end();
+  } catch (err) {
+    logger.warn('Could not notify device-service', { message: err.message });
+  }
 }
 
 // ---------------------------------------------------------------------------

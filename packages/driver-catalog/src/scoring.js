@@ -47,14 +47,29 @@ function normalizeOs(raw) {
  * @param {{ model?: string, os?: string }}      device
  * @returns {number}
  */
+function tokenize(s) {
+  return s.split(/\s+/).filter(Boolean);
+}
+
+// True if every token of the shorter token list appears as a whole token
+// (not merely a substring) in the longer token list. Plain substring
+// matching would let a short/partial model string like "T1" match an
+// unrelated model such as "ThinkPad T16 Gen 1" (T16 is a different model,
+// not a more specific T1) — comparing whole tokens avoids that.
+function modelTokensMatch(aTokens, bTokens) {
+  const [shorter, longer] = aTokens.length <= bTokens.length ? [aTokens, bTokens] : [bTokens, aTokens];
+  if (shorter.length === 0) return false;
+  return shorter.every(t => longer.includes(t));
+}
+
 function scoreMatch(driver, { model, os }) {
   let score = 0;
 
   if (model && Array.isArray(driver.models)) {
-    const m = model.toLowerCase();
+    const mTokens = tokenize(model.toLowerCase());
     for (const dm of driver.models) {
-      const dml = dm.toLowerCase();
-      if (dml.includes(m) || m.includes(dml)) {
+      const dmTokens = tokenize(dm.toLowerCase());
+      if (modelTokensMatch(mTokens, dmTokens)) {
         score += 20;
         break;
       }
