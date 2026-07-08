@@ -6,6 +6,7 @@ const express = require('express');
 const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs').promises;
+const crypto  = require('crypto');
 const winston = require('winston');
 
 const driverManager = require('../services/printerDriverManager');
@@ -38,13 +39,43 @@ const upload = multer({
       }
     },
     filename: (_req, file, cb) => {
-      // Temporary name; printerDriverManager.addDriver() will compute the real one
-      const tmp = `upload-${Date.now().toString(36)}-${path.basename(file.originalname)}`;
+      // Temporary name; printerDriverManager.addDriver() will compute the real one.
+      // Random component avoids two concurrent uploads of the same filename
+      // colliding when Date.now() lands in the same millisecond.
+      const rand = crypto.randomBytes(4).toString('hex');
+      const tmp = `upload-${Date.now().toString(36)}-${rand}-${path.basename(file.originalname)}`;
       cb(null, tmp);
     },
   }),
   limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB cap
 });
+
+// ── One-time startup cleanup: sweep orphaned temp uploads ─────────────────────
+// If the process crashes between multer writing "upload-*-..." and addDriver()
+// renaming it to its final path, the temp file is left behind forever. Sweep
+// once at module load for anything older than 24h; best-effort/fire-and-forget.
+(async () => {
+  try {
+    await driverManager.ensureStorage();
+    const entries = await fs.readdir(driverManager.FILES_DIR);
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    await Promise.all(
+      entries
+        .filter((name) => name.startsWith('upload-'))
+        .map(async (name) => {
+          const filePath = path.join(driverManager.FILES_DIR, name);
+          try {
+            const stat = await fs.stat(filePath);
+            if (stat.mtimeMs < cutoff) await fs.unlink(filePath);
+          } catch (_) {
+            // Ignore — file may have been renamed/removed concurrently.
+          }
+        })
+    );
+  } catch (_) {
+    // Storage not ready/readable yet — nothing to clean up.
+  }
+})();
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 

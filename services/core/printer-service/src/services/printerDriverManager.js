@@ -9,7 +9,11 @@ const DRIVERS_JSON  = path.join(STORAGE_BASE, 'drivers.json');
 const FILES_DIR     = path.join(STORAGE_BASE, 'files');
 
 const VALID_OS      = new Set(['linux', 'windows', 'macos', 'universal']);
-const VALID_FORMAT  = new Set(['ppd', 'inf', 'cab', 'pkg', 'zip']);
+// ppd/inf/cab/pkg/zip cover the manual-upload form; exe/msi/deb/run/dmg are
+// added so catalog/URL imports (driverCatalogManager.js static entries and
+// the live Dell catalog, which both hand out these installer formats) can
+// actually be persisted instead of failing addDriver() validation.
+const VALID_FORMAT  = new Set(['ppd', 'inf', 'cab', 'pkg', 'zip', 'exe', 'msi', 'deb', 'run', 'dmg']);
 
 const logger = winston.createLogger({
   level: 'info',

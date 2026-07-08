@@ -70,7 +70,11 @@ async function persistImportedDriver(record) {
 // Query params: q, vendor, os, deviceType, source, includeOpenPrinting
 router.get('/search', async (req, res) => {
   try {
-    const { q = '', vendor, os, deviceType, source, includeOpenPrinting } = req.query;
+    const q = qs(req.query.q);
+    const vendor = qs(req.query.vendor);
+    const os = qs(req.query.os);
+    const deviceType = qs(req.query.deviceType);
+    const { source, includeOpenPrinting } = req.query;
 
     const filters = {};
     if (vendor)   filters.vendor   = vendor;
@@ -108,7 +112,7 @@ router.get('/vendors', async (req, res) => {
 // Query params: q (required)
 router.get('/openprinting', async (req, res) => {
   try {
-    const { q } = req.query;
+    const q = qs(req.query.q);
     if (!q) return res.status(400).json({ success: false, error: 'q (query) parameter is required' });
 
     const results = await catalog.searchOpenPrinting(q);
@@ -129,7 +133,8 @@ router.post('/import', async (req, res) => {
     }
 
     const record = await catalog.importFromCatalog(entry);
-    res.json({ success: true, driver: record });
+    const driver = await persistImportedDriver(record);
+    res.json({ success: true, driver });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -143,7 +148,8 @@ router.post('/import-url', async (req, res) => {
     if (!url) return res.status(400).json({ success: false, error: 'url is required' });
 
     const record = await catalog.importFromUrl(url, metadata);
-    res.json({ success: true, driver: record });
+    const driver = await persistImportedDriver(record);
+    res.json({ success: true, driver });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -155,8 +161,11 @@ router.post('/import-url', async (req, res) => {
 // entries, so unbounded responses are never returned.
 router.get('/dell', async (req, res) => {
   try {
-    const { q = '', systemModel, os, deviceType } = req.query;
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 1000);
+    const q = qs(req.query.q);
+    const systemModel = qs(req.query.systemModel);
+    const os = qs(req.query.os);
+    const deviceType = qs(req.query.deviceType);
+    const limit = Math.min(Math.max(parseInt(qs(req.query.limit), 10) || 100, 1), 1000);
     const filters = {};
     if (systemModel) filters.systemModel = systemModel;
     if (os)          filters.os          = os;
