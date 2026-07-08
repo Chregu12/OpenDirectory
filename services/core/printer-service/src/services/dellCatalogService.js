@@ -258,16 +258,32 @@ class DellCatalogService {
       )).filter(Boolean))];
       if (!osLabels.length) osLabels.push('windows');
 
-      // Models — all CDATA display names inside <Model> tags
+      // Models — Dell's catalog nests <Model> tags inside a <Brand> element
+      // whose own CDATA display (e.g. "Optiplex", "Latitude") is *not*
+      // repeated on the model itself (e.g. just "7090"). Parsing <Model>
+      // alone therefore loses the brand name and breaks any systemModel
+      // search for "OptiPlex 7090" — combine brand + model here instead.
       const models = [];
       const sysBlock = chunk.match(/<SupportedSystems>([\s\S]*?)<\/SupportedSystems>/i);
       if (sysBlock) {
-        const mRe2 = /<Model[^>]*>[\s\S]*?<!\[CDATA\[([^\]]+)\]\]>/g;
-        let mm;
-        while ((mm = mRe2.exec(sysBlock[1])) !== null) {
-          const modelName = mm[1].trim();
-          if (modelName && !models.includes(modelName)) models.push(modelName);
-          if (models.length >= 15) break;
+        const brandRe = /<Brand[^>]*>([\s\S]*?)<\/Brand>/g;
+        let bm;
+        outer:
+        while ((bm = brandRe.exec(sysBlock[1])) !== null) {
+          const brandBlock = bm[1];
+          const cdataRe = /<!\[CDATA\[([^\]]+)\]\]>/g;
+          const firstCdata = cdataRe.exec(brandBlock);
+          const brandName = firstCdata ? firstCdata[1].trim() : '';
+          const brandWords = brandName.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+          let mm;
+          while ((mm = cdataRe.exec(brandBlock)) !== null) {
+            const modelName = mm[1].trim();
+            if (!modelName) continue;
+            const alreadyHasBrand = brandWords.some(w => modelName.toLowerCase().includes(w));
+            const combined = (!brandName || alreadyHasBrand) ? modelName : `${brandName} ${modelName}`;
+            if (!models.includes(combined)) models.push(combined);
+            if (models.length >= 15) break outer;
+          }
         }
       }
 

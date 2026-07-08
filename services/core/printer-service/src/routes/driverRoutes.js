@@ -146,7 +146,7 @@ router.post('/drivers/upload', upload.single('driver'), async (req, res) => {
     await fs.rename(tmpPath, driver.filePath);
 
     logger.info(`Driver uploaded: ${name} v${version} (id=${driver.id})`);
-    ok(res, driver);
+    res.status(201).json({ success: true, data: driver });
   } catch (err) {
     logger.error('Upload driver error:', err);
     // Clean up tmp file on error
