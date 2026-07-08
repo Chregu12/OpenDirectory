@@ -149,6 +149,7 @@ class DellCatalogService {
 
   async _extract() {
     // Try cabextract, fallback to 7z
+    const errors = [];
     for (const [cmd, args] of [
       ['cabextract', [CAB_PATH, '-d', CACHE_DIR]],
       ['7z',         ['e', CAB_PATH, `-o${CACHE_DIR}`, '-y']],
@@ -156,9 +157,11 @@ class DellCatalogService {
       try {
         await execFileAsync(cmd, args, { timeout: 60000 });
         return;
-      } catch (_) {}
+      } catch (err) {
+        errors.push(`${cmd}: ${err.message}`);
+      }
     }
-    throw new Error('cabextract and 7z both unavailable — cannot extract Dell catalog');
+    throw new Error(`Could not extract Dell catalog — ${errors.join('; ')}`);
   }
 
   async _parse() {
@@ -236,12 +239,10 @@ class DellCatalogService {
       )).filter(Boolean))];
       if (!osLabels.length) osLabels.push('windows');
 
-      // Models
+      // Models — all CDATA display names inside <Model> tags
       const models = [];
       const sysBlock = chunk.match(/<SupportedSystems>([\s\S]*?)<\/SupportedSystems>/i);
       if (sysBlock) {
-        const modRe = /<!-\[CDATA\[([^\]]+)\]\]>|<Display[^>]*><!-\[CDATA\[([^\]]+)\]\]>/g;
-        // simpler: match all CDATA inside Model tags
         const mRe2 = /<Model[^>]*>[\s\S]*?<!\[CDATA\[([^\]]+)\]\]>/g;
         let mm;
         while ((mm = mRe2.exec(sysBlock[1])) !== null) {

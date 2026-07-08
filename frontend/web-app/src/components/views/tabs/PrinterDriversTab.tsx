@@ -62,7 +62,7 @@ export default function PrinterDriversTab() {
     setUploading(true);
     try {
       const form = new FormData();
-      form.append('file', file);
+      form.append('driver', file);
       await api.post('/api/printer/drivers/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });

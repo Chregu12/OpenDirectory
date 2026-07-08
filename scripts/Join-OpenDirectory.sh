@@ -95,23 +95,23 @@ echo "  Model        : ${MODEL:-unknown}"
 echo "  Hostname     : $HOSTNAME"
 echo "  OS           : ${DISTRO:-Linux} (kernel $OS_VERSION, $ARCH)"
 
-# Collect PCI devices (lspci -n: vendorId:deviceId classId)
+# Collect PCI devices (lspci -n: "00:02.0 0300: 8086:9a49 (rev 01)")
+# → {"deviceId":"8086:9a49","class":"0300"}  (class without trailing colon)
 PCI_JSON="[]"
 if command -v lspci &>/dev/null; then
   PCI_JSON="$(lspci -n 2>/dev/null | awk '{
-    split($3, a, ":");
-    split($1, b, ":");
-    printf "{\"deviceId\":\"%s\",\"class\":\"%s\",\"description\":\"%s\"},\n", $3, $2, $4
-  }' | sed '$ s/,$//' | { echo "["; cat; echo "]"; } 2>/dev/null || echo "[]")"
+    cls = substr($2, 1, 4);
+    printf "{\"deviceId\":\"%s\",\"class\":\"%s\"},\n", $3, cls
+  }' | sed '$ s/,$//' | { echo "["; cat; echo "]"; })" || PCI_JSON="[]"
 fi
 
-# Collect USB devices (lsusb: vendorId:productId description)
+# Collect USB devices (lsusb: "Bus 002 Device 003: ID 0bda:8153 ...")
+# → {"deviceId":"0bda:8153","class":"usb"}
 USB_JSON="[]"
 if command -v lsusb &>/dev/null; then
   USB_JSON="$(lsusb 2>/dev/null | awk '{
-    split($6, a, ":");
-    printf "{\"deviceId\":\"%s\",\"class\":\"usb\",\"description\":\"%s %s %s %s %s\"},\n", $6, $7, $8, $9, $10, $11
-  }' | sed '$ s/,$//' | { echo "["; cat; echo "]"; } 2>/dev/null || echo "[]")"
+    printf "{\"deviceId\":\"%s\",\"class\":\"usb\"},\n", $6
+  }' | sed '$ s/,$//' | { echo "["; cat; echo "]"; })" || USB_JSON="[]"
 fi
 
 PCI_COUNT="$(echo "$PCI_JSON" | grep -c '"deviceId"' || true)"
@@ -166,15 +166,18 @@ echo "  NetBIOS      : ${NETBIOS:-?}"
 echo ""
 echo "[3/5] Submitting hardware report for driver matching…"
 
-# Combine PCI + USB into one hardwareIds array
-HW_COMBINED="$(echo "$PCI_JSON $USB_JSON" | python3 -c "
-import sys, json
-data = sys.stdin.read().replace('] [', ',')
-try:
-    arr = json.loads(data)
-    print(json.dumps(arr[:80]))
-except:
-    print('[]')
+# Combine PCI + USB into one hardwareIds array.
+# Each list is parsed independently so a malformed or empty one
+# never destroys the other.
+HW_COMBINED="$(PCI_LIST="$PCI_JSON" USB_LIST="$USB_JSON" python3 -c "
+import os, json
+def load(name):
+    try:
+        v = json.loads(os.environ.get(name, '[]'))
+        return v if isinstance(v, list) else []
+    except Exception:
+        return []
+print(json.dumps((load('PCI_LIST') + load('USB_LIST'))[:80]))
 " 2>/dev/null || echo "[]")"
 
 HW_BODY="$(cat <<JSON

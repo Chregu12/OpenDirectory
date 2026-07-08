@@ -43,14 +43,16 @@ async function listDrivers(filters = {}) {
   let drivers = catalog.drivers;
 
   if (filters.os) {
-    drivers = drivers.filter(d => d.os === filters.os);
+    drivers = drivers.filter(d =>
+      Array.isArray(d.os) ? d.os.includes(filters.os) : d.os === filters.os
+    );
   }
   if (filters.deviceType) {
     drivers = drivers.filter(d => d.deviceType === filters.deviceType);
   }
   if (filters.vendor) {
     drivers = drivers.filter(d =>
-      d.vendor.toLowerCase().includes(filters.vendor.toLowerCase())
+      (d.vendor || '').toLowerCase().includes(filters.vendor.toLowerCase())
     );
   }
 

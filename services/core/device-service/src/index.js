@@ -695,12 +695,14 @@ class EnterpriseDeviceManagementService {
     this.app.post('/api/devices/:deviceId/install-jobs/:jobId/result', this.reportInstallResult.bind(this));
 
     // Driver Management Routes
-    // Gateway rewrites /api/devices/* → /api/* at this service,
-    // so /api/devices/drivers in the gateway maps to /api/drivers here.
+    // The frontend's Next.js rewrite maps /api/devices/drivers/* → /api/drivers/*
+    // at this service (see frontend/web-app/next.config.js).
     this.app.use('/api/drivers', driverRoutes);
 
     // Hardware Detection & Driver Matching Routes
-    // Must be mounted before wildcard /:deviceId routes to avoid conflicts.
+    // Reached directly (samba-ad-dc, join scripts) and via the Next.js
+    // rewrites for /api/devices/report-hardware and
+    // /api/devices/:id/driver-recommendations|detect-drivers.
     this.app.use('/api/devices', deviceDetectionRoutes);
 
     // Error handling

@@ -67,19 +67,25 @@ class DriverCatalog {
     const results = [];
 
     const push = (driver, extra = {}) => {
-      const key = driver.id || driver.aptPackage || driver.name;
+      // Dedupe by apt package first so a vendor-branded entry and a
+      // hardware-derived entry for the same package collapse into one.
+      const key = driver.aptPackage || driver.id || driver.name;
       if (seen.has(key)) return;
       seen.add(key);
       results.push({ ...driver, ...extra });
     };
 
     // ── 1. Async providers (e.g. Dell live catalog) ──
-    const wantDell   = !vendor || vendor === 'dell';
+    // Only hit the (large) Dell catalog when the device is a Dell, or the
+    // vendor is unknown but we at least have a model to search for.
+    // An empty query would return the entire catalog (tens of thousands
+    // of entries) — never useful as a "recommendation".
+    const wantDell   = vendor === 'dell' || (!vendor && !!model);
     const wantStatic = !vendor || vendor !== 'dell';
 
-    if (wantDell && this._asyncProviders.dell) {
+    if (wantDell && model && this._asyncProviders.dell) {
       try {
-        const dellResults = await this._asyncProviders.dell(model || '', { os: osLabel, systemModel: model });
+        const dellResults = await this._asyncProviders.dell(model, { os: osLabel, systemModel: model });
         for (const d of dellResults) {
           push(d, { matchScore: scoreMatch(d, { model, os: osLabel }), matchedVia: 'dell-catalog' });
         }

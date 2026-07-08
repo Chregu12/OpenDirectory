@@ -899,8 +899,10 @@ class DriverCatalogManager {
       results = [...results, ...staticMatches];
     }
 
-    // Live Dell catalog
-    if (wantDell && filters.source !== 'openprinting') {
+    // Live Dell catalog — only with a search term; an empty query would
+    // merge the entire catalog (tens of thousands of entries) into the
+    // response. Results are capped to keep payloads bounded.
+    if (wantDell && q && filters.source !== 'openprinting') {
       try {
         const dellFilters = {};
         if (filters.os)         dellFilters.os         = Array.isArray(filters.os) ? filters.os[0] : filters.os;
@@ -908,7 +910,7 @@ class DriverCatalogManager {
         if (filters.systemModel) dellFilters.systemModel = filters.systemModel;
 
         const dellResults = await dellCatalog.search(q, dellFilters);
-        results = [...results, ...dellResults];
+        results = [...results, ...dellResults.slice(0, 500)];
       } catch (err) {
         logger.warn('Dell catalog search failed, skipping:', { message: err.message });
       }

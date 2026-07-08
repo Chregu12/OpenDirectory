@@ -126,19 +126,15 @@ function parseHardwareIds(hardwareIds = []) {
   const usbVendors = new Set();
 
   for (const entry of hardwareIds) {
-    const rawId = (typeof entry === 'string' ? entry : (entry.deviceId || entry.id || '')).toString();
+    const isObject = typeof entry === 'object' && entry !== null;
+    const rawId = (isObject ? (entry.deviceId || entry.id || '') : entry).toString();
     const id = rawId.toLowerCase().trim();
 
-    // Linux lspci -n format: "8086:9a49" or "8086:9a49 (0300)"
-    const linuxPci = id.match(/^([0-9a-f]{4}):([0-9a-f]{4})(?:.*?\(?([0-9a-f]{4})\)?)?/);
-    if (linuxPci && !id.startsWith('pci\\')) {
-      pciDevices.push({
-        vendorId: linuxPci[1],
-        deviceId: linuxPci[2],
-        classId:  linuxPci[3] ? linuxPci[3].substring(0, 4) : null,
-      });
-      continue;
-    }
+    // Bus/class hint from the agent's report ("usb" for lsusb entries,
+    // a 4-hex-digit PCI class like "0300" for lspci entries).
+    const entryClass = isObject ? String(entry.class || '').toLowerCase().replace(/:$/, '') : '';
+    const isUsbEntry = entryClass === 'usb';
+    const pciClassHint = /^[0-9a-f]{4}$/.test(entryClass) ? entryClass : null;
 
     // Windows PnP PCI format: PCI\VEN_8086&DEV_9A49&CC_030000
     if (id.startsWith('pci\\')) {
@@ -148,17 +144,26 @@ function parseHardwareIds(hardwareIds = []) {
       continue;
     }
 
-    // Linux lsusb format: "0bda:8153" or "ID 0bda:8153"
-    const linuxUsb = id.match(/(?:id\s+)?([0-9a-f]{4}):([0-9a-f]{4})/);
-    if (linuxUsb && !id.startsWith('usb\\')) {
-      usbVendors.add(linuxUsb[1]);
-      continue;
-    }
-
     // Windows PnP USB format: USB\VID_0BDA&PID_8153
     if (id.startsWith('usb\\')) {
       const vid = id.match(/vid_([0-9a-f]{4})/)?.[1];
       if (vid) usbVendors.add(vid);
+      continue;
+    }
+
+    // Bare "vendor:device" pairs from lspci -n / lsusb — the shape is
+    // identical for PCI and USB, so the entry's class field decides.
+    const pair = id.match(/(?:^|id\s+)([0-9a-f]{4}):([0-9a-f]{4})(?:\s+\(?([0-9a-f]{4})\)?)?/);
+    if (!pair) continue;
+
+    if (isUsbEntry) {
+      usbVendors.add(pair[1]);
+    } else {
+      pciDevices.push({
+        vendorId: pair[1],
+        deviceId: pair[2],
+        classId:  pciClassHint || (pair[3] ? pair[3].substring(0, 4) : null),
+      });
     }
   }
 

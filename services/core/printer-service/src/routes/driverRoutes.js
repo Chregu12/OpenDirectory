@@ -90,26 +90,23 @@ router.post('/drivers/upload', upload.single('driver'), async (req, res) => {
   try {
     if (!req.file) return fail(res, 400, 'No driver file uploaded (field name: driver)');
 
+    const originalname = req.file.originalname || 'driver.bin';
+    const ext = path.extname(originalname).replace('.', '').toLowerCase();
     const { name, version, vendor, os, format, models } = req.body;
-    if (!name)    return fail(res, 400, 'name is required');
-    if (!version) return fail(res, 400, 'version is required');
-    if (!vendor)  return fail(res, 400, 'vendor is required');
-    if (!os)      return fail(res, 400, 'os is required');
-    if (!format)  return fail(res, 400, 'format is required');
 
     const modelList = models
       ? models.split(',').map(m => m.trim()).filter(Boolean)
       : [];
 
-    // Register the driver — returns the canonical filename/filePath
+    // Register the driver — metadata defaults are derived from the filename
     const driver = await driverManager.addDriver({
-      name,
-      version,
-      vendor,
-      os,
-      format,
+      name: name || path.basename(originalname, path.extname(originalname)),
+      version: version || '0.0.0',
+      vendor: vendor || 'Unbekannt',
+      os: os || 'universal',
+      format: format || ext || 'bin',
       models: modelList,
-      filename: req.file.originalname,
+      filename: originalname,
       fileSize: req.file.size,
     });
 

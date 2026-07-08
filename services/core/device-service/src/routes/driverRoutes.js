@@ -3,9 +3,54 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const http = require('http');
+const https = require('https');
 const winston = require('winston');
 
 const manager = require('../services/deviceDriverManager');
+
+const MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024; // 512 MB
+
+// Download a URL into a Buffer, following redirects.
+function downloadToBuffer(url, timeoutMs = 300000, redirectsLeft = 5) {
+  return new Promise((resolve, reject) => {
+    if (!/^https?:\/\//i.test(url)) return reject(new Error('Nur http(s)-URLs erlaubt'));
+    const proto = url.startsWith('https') ? https : http;
+    const req = proto.get(url, { headers: { 'User-Agent': 'OpenDirectory/1.0' } }, res => {
+      if ([301, 302, 307, 308].includes(res.statusCode)) {
+        res.resume();
+        if (redirectsLeft <= 0) return reject(new Error('Zu viele Redirects'));
+        return downloadToBuffer(res.headers.location, timeoutMs, redirectsLeft - 1)
+          .then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode} von ${url}`));
+      }
+      const chunks = [];
+      let size = 0;
+      res.on('data', c => {
+        size += c.length;
+        if (size > MAX_DOWNLOAD_BYTES) {
+          req.destroy();
+          return reject(new Error('Datei überschreitet 512 MB Limit'));
+        }
+        chunks.push(c);
+      });
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    });
+    req.setTimeout(timeoutMs, () => { req.destroy(); reject(new Error('Download-Timeout')); });
+    req.on('error', reject);
+  });
+}
+
+function filenameFromUrl(url, fallback = 'driver.bin') {
+  try {
+    const base = path.basename(new URL(url).pathname);
+    return base || fallback;
+  } catch (_) { return fallback; }
+}
 
 const logger = winston.createLogger({
   level: 'info',
@@ -42,33 +87,34 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /drivers/upload — multipart upload
+// POST /drivers/upload — multipart upload (file field: "driver" or "file").
+// Metadata fields are optional; sensible defaults are derived from the filename.
 // Note: this route must be declared before /:id to avoid being shadowed
-router.post('/upload', upload.single('driver'), async (req, res) => {
+router.post('/upload', upload.fields([{ name: 'driver', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Keine Treiberdatei hochgeladen (Feld: driver)' });
+    const file = req.files?.driver?.[0] || req.files?.file?.[0];
+    if (!file) {
+      return res.status(400).json({ error: 'Keine Treiberdatei hochgeladen (Feld: driver oder file)' });
     }
 
+    const originalname = file.originalname || 'driver.bin';
+    const ext = path.extname(originalname).replace('.', '').toLowerCase();
     const { name, version, vendor, os, deviceType, format, architecture, description, tags } = req.body;
 
-    // Basic required-field validation
-    const missing = ['name', 'version', 'vendor', 'os', 'deviceType', 'format', 'architecture']
-      .filter(f => !req.body[f]);
-    if (missing.length) {
-      return res.status(400).json({ error: `Pflichtfelder fehlen: ${missing.join(', ')}` });
-    }
+    const osList = os
+      ? (Array.isArray(os) ? os : String(os).split(',').map(s => s.trim()).filter(Boolean))
+      : ['universal'];
 
     const driver = await manager.addDriver({
-      fileBuffer: req.file.buffer,
-      filename: req.file.originalname || `driver.${format}`,
-      name,
-      version,
-      vendor,
-      os,
-      deviceType,
-      format,
-      architecture,
+      fileBuffer: file.buffer,
+      filename: originalname,
+      name: name || path.basename(originalname, path.extname(originalname)),
+      version: version || '0.0.0',
+      vendor: vendor || 'Unbekannt',
+      os: osList,
+      deviceType: deviceType || 'other',
+      format: format || ext || 'bin',
+      architecture: architecture || 'universal',
       description,
       tags,
     });
@@ -76,6 +122,43 @@ router.post('/upload', upload.single('driver'), async (req, res) => {
     res.status(201).json({ success: true, data: driver });
   } catch (err) {
     logger.error('uploadDriver error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /drivers/import-url — download a driver from a URL and register it.
+// Body: { url, name?, version?, vendor?, os?, deviceType?, format?, architecture?, description?, tags? }
+// Used by the frontend to import recommended drivers (Dell catalog, vendor catalogs).
+router.post('/import-url', async (req, res) => {
+  try {
+    const { url, name, version, vendor, os, deviceType, format, architecture, description, tags } = req.body;
+    if (!url) return res.status(400).json({ error: 'url ist erforderlich' });
+
+    const fileBuffer = await downloadToBuffer(url);
+    const filename = filenameFromUrl(url);
+    const ext = path.extname(filename).replace('.', '').toLowerCase();
+
+    const osList = os
+      ? (Array.isArray(os) ? os : String(os).split(',').map(s => s.trim()).filter(Boolean))
+      : ['universal'];
+
+    const driver = await manager.addDriver({
+      fileBuffer,
+      filename,
+      name: name || filename,
+      version: version || '0.0.0',
+      vendor: vendor || 'Unbekannt',
+      os: osList,
+      deviceType: deviceType || 'other',
+      format: format || ext || 'bin',
+      architecture: architecture || 'universal',
+      description: description || `Importiert von ${url}`,
+      tags,
+    });
+
+    res.status(201).json({ success: true, data: driver });
+  } catch (err) {
+    logger.error('importDriverFromUrl error:', err);
     res.status(500).json({ error: err.message });
   }
 });

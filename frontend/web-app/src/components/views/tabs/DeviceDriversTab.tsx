@@ -100,7 +100,7 @@ export default function DeviceDriversTab() {
     setUploading(true);
     try {
       const form = new FormData();
-      form.append('file', file);
+      form.append('driver', file);
       await api.post('/api/devices/drivers/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
@@ -166,16 +166,21 @@ export default function DeviceDriversTab() {
     if (!rec.downloadUrl) { toast.error('Kein Download-Link vorhanden'); return; }
     setImportingId(rec.id);
     try {
-      await fetch(`${API_BASE}/api/printer/catalog/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entry: rec }),
+      await api.post('/api/devices/drivers/import-url', {
+        url: rec.downloadUrl,
+        name: rec.name,
+        version: rec.version,
+        vendor: rec.vendor,
+        os: rec.os,
+        deviceType: rec.deviceType,
+        format: rec.format,
+        description: rec.description,
       });
       setImportedIds(prev => new Set(prev).add(rec.id));
       toast.success(`"${rec.name}" importiert`);
       await loadDrivers();
     } catch (err: any) {
-      toast.error(err.message ?? 'Import fehlgeschlagen');
+      toast.error(err?.response?.data?.error ?? err.message ?? 'Import fehlgeschlagen');
     } finally {
       setImportingId(null);
     }

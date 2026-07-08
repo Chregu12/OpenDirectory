@@ -44,7 +44,7 @@ async function fetchDellDrivers(query, filters = {}) {
   const q   = query ? encodeURIComponent(query) : '';
   const sm  = filters.systemModel ? `&systemModel=${encodeURIComponent(filters.systemModel)}` : '';
   const osp = filters.os ? `&os=${filters.os}` : '';
-  const url = `${PRINTER_SERVICE_URL}/api/printer/catalog/dell?q=${q}${sm}${osp}`;
+  const url = `${PRINTER_SERVICE_URL}/api/printer/catalog/dell?q=${q}${sm}${osp}&limit=300`;
 
   try {
     const data = await fetchJson(url, 15000);

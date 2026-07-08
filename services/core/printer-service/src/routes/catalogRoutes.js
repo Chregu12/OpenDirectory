@@ -91,17 +91,25 @@ router.post('/import-url', async (req, res) => {
 });
 
 // ─── GET /catalog/dell ───────────────────────────────────────────────────────
-// Live Dell catalog search.  Query params: q, systemModel, os, deviceType
+// Live Dell catalog search.  Query params: q, systemModel, os, deviceType,
+// limit (default 100, max 1000) — the full catalog has tens of thousands of
+// entries, so unbounded responses are never returned.
 router.get('/dell', async (req, res) => {
   try {
     const { q = '', systemModel, os, deviceType } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 1000);
     const filters = {};
     if (systemModel) filters.systemModel = systemModel;
     if (os)          filters.os          = os;
     if (deviceType)  filters.deviceType  = deviceType;
 
     const results = await dellCatalog.search(q, filters);
-    res.json({ success: true, source: 'dell', count: results.length, results });
+    res.json({
+      success: true,
+      source: 'dell',
+      count: results.length,
+      results: results.slice(0, limit),
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

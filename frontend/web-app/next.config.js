@@ -16,6 +16,7 @@ const nextConfig = {
     const conditionalAccessUrl = process.env.CONDITIONAL_ACCESS_URL         || 'http://conditional-access:3007';
     const quickActionsUrl      = process.env.QUICK_ACTIONS_URL              || 'http://quick-actions:3950';
     const authServiceUrl       = process.env.AUTH_SERVICE_URL               || 'http://auth-service:3001';
+    const deviceServiceUrl     = process.env.DEVICE_SERVICE_URL             || 'http://device-service:3003';
     return [
       // OIDC endpoints → auth-service (same-origin, avoids CORS)
       { source: '/oidc/:path*', destination: `${authServiceUrl}/:path*` },
@@ -34,6 +35,14 @@ const nextConfig = {
       { source: '/api/services',            destination: `${integrationUrl}/api/services` },
       // Printer service routes -> printer-service
       { source: '/api/printer/:path*',      destination: `${printerUrl}/api/printer/:path*` },
+      // Device drivers & hardware detection -> device-service (must come
+      // before the /api/:path* catch-all; api-backend has none of these routes)
+      { source: '/api/devices/drivers',                        destination: `${deviceServiceUrl}/api/drivers` },
+      { source: '/api/devices/drivers/:path*',                 destination: `${deviceServiceUrl}/api/drivers/:path*` },
+      { source: '/api/devices/report-hardware',                destination: `${deviceServiceUrl}/api/devices/report-hardware` },
+      { source: '/api/devices/report-hardware/:id',            destination: `${deviceServiceUrl}/api/devices/report-hardware/:id` },
+      { source: '/api/devices/:id/driver-recommendations',     destination: `${deviceServiceUrl}/api/devices/:id/driver-recommendations` },
+      { source: '/api/devices/:id/detect-drivers',             destination: `${deviceServiceUrl}/api/devices/:id/detect-drivers` },
       // App Store routes -> app-store service
       { source: '/api/store/:path*',        destination: `${appStoreUrl}/api/store/:path*` },
       { source: '/api/appstore/:path*',     destination: `${appStoreUrl}/api/appstore/:path*` },

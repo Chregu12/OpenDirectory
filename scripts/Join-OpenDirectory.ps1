@@ -69,9 +69,12 @@ function Invoke-OdApi {
         $resp = Invoke-WebRequest @params
         return ($resp.Content | ConvertFrom-Json)
     } catch {
-        $statusCode = $_.Exception.Response?.StatusCode.value__ ?? 0
-        $detail     = $_.Exception.Message
-        throw "API $Method $Path failed ($statusCode): $detail"
+        # Windows PowerShell 5.1 compatible (no ?. / ?? operators)
+        $statusCode = 0
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            $statusCode = [int]$_.Exception.Response.StatusCode
+        }
+        throw "API $Method $Path failed ($statusCode): $($_.Exception.Message)"
     }
 }
 
@@ -94,18 +97,20 @@ Write-Host "  Hostname     : $hostname"
 Write-Host "  OS           : $osCaption (Build $osBuild)"
 
 # Collect PnP hardware IDs for finer driver matching
-$pnpDevices = Get-CimInstance -ClassName Win32_PnPEntity |
-    Where-Object { $_.Status -eq 'OK' -and $_.DeviceID -ne $null } |
-    Select-Object -First 50 @{
-        Name       = 'class'
-        Expression = { $_.PNPClass }
-    }, @{
-        Name       = 'deviceId'
-        Expression = { $_.DeviceID }
-    }, @{
-        Name       = 'description'
-        Expression = { $_.Description }
-    }
+$pnpDevices = @(
+    Get-CimInstance -ClassName Win32_PnPEntity |
+        Where-Object { $_.Status -eq 'OK' -and $_.DeviceID -ne $null } |
+        Select-Object -First 50 @{
+            Name       = 'class'
+            Expression = { $_.PNPClass }
+        }, @{
+            Name       = 'deviceId'
+            Expression = { $_.DeviceID }
+        }, @{
+            Name       = 'description'
+            Expression = { $_.Description }
+        }
+)
 
 Write-Host "  PnP devices  : $($pnpDevices.Count) found"
 
@@ -197,13 +202,20 @@ try {
 
 Write-Host "`n[5/5] Driver recommendations for this device:" -ForegroundColor Cyan
 
-if ($hwResult -and $hwResult.recommendations -and $hwResult.recommendations.Count -gt 0) {
-    $hwResult.recommendations | Select-Object -First 10 | ForEach-Object {
-        $score = if ($_.matchScore) { " [score: $($_.matchScore)]" } else { '' }
-        Write-Host "  [$($_.deviceType.ToUpper().PadRight(10))] $($_.name) v$($_.version)$score"
-        Write-Host "             OS: $($_.os -join ', ')  |  Format: $($_.format)"
-        if ($_.downloadUrl) {
-            Write-Host "             URL: $($_.downloadUrl)"
+$recommendations = @()
+if ($hwResult -and ($hwResult.PSObject.Properties.Name -contains 'recommendations')) {
+    $recommendations = @($hwResult.recommendations)
+}
+
+if ($recommendations.Count -gt 0) {
+    $recommendations | Select-Object -First 10 | ForEach-Object {
+        $rec   = $_
+        $score = if ($rec.matchScore) { " [score: $($rec.matchScore)]" } else { '' }
+        $dtype = if ($rec.deviceType) { $rec.deviceType.ToString().ToUpper().PadRight(10) } else { 'OTHER     ' }
+        Write-Host "  [$dtype] $($rec.name) v$($rec.version)$score"
+        Write-Host "             OS: $($rec.os -join ', ')  |  Format: $($rec.format)"
+        if ($rec.downloadUrl) {
+            Write-Host "             URL: $($rec.downloadUrl)"
         }
         Write-Host ""
     }
