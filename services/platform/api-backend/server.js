@@ -6,6 +6,7 @@ const http = require('http');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const jwt    = require('jsonwebtoken');
+const { callDeviceService } = require('./utils/serviceClient');
 
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
@@ -83,6 +84,58 @@ const CT2001_HOST = process.env.CT2001_HOST || '192.168.1.51';
 
 // In-memory device store — populated via enrollment
 const deviceStore = {};
+
+// ── device-service delegation ─────────────────────────────────────────────────
+// GET /api/devices and GET /api/devices/:id delegate to device-service (the
+// domain owner) via a Client Credentials service token. If device-service is
+// unreachable, rejects the token, or errors out, we fall back to the legacy
+// in-memory deviceStore so the API keeps working during rollout / outages.
+
+// Throttle the fallback warning to at most once per minute so a persistent
+// outage doesn't spam the logs on every request.
+const DELEGATION_WARN_THROTTLE_MS = 60 * 1000;
+let _lastDelegationWarnAt = 0;
+function warnDelegationFallback(routeLabel, err) {
+  const now = Date.now();
+  if (now - _lastDelegationWarnAt < DELEGATION_WARN_THROTTLE_MS) return;
+  _lastDelegationWarnAt = now;
+  console.warn(`[device-delegation] ${routeLabel} — falling back to local deviceStore: ${err.message}`);
+}
+
+// Fields that are new/nullable on newer device-service builds. If a field is
+// missing from the response (older device-service), it is omitted from the
+// adapted device rather than forced to null, so the shape matches what the
+// frontend already gets from the legacy in-memory store today.
+const DEVICE_NULLABLE_FIELDS = ['complianceScore', 'os', 'osVersion', 'ipAddress', 'kernel', 'packageManager'];
+
+/**
+ * Adapts a device-service device (toJSON shape) to the shape api-backend has
+ * historically returned: `hostname` -> `name`, core fields passed through,
+ * and the newer compliance/inventory fields passed through only when present.
+ */
+function adaptDevice(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+
+  const device = {
+    id: raw.id,
+    name: raw.hostname,
+    platform: raw.platform,
+    status: raw.status,
+    enrolledAt: raw.enrolledAt,
+    lastSeen: raw.lastSeen,
+  };
+
+  if (raw.isCompliant !== undefined) device.isCompliant = raw.isCompliant;
+  if (raw.complianceViolations !== undefined) device.complianceViolations = raw.complianceViolations;
+
+  for (const field of DEVICE_NULLABLE_FIELDS) {
+    if (raw[field] !== undefined && raw[field] !== null) {
+      device[field] = raw[field];
+    }
+  }
+
+  return device;
+}
 
 const userStore = [
   {
@@ -335,21 +388,44 @@ app.delete('/api/users/:id', authMiddleware, (req, res) => {
 });
 
 // Device Management APIs
-app.get('/api/devices', authMiddleware, (req, res) => {
-  res.json({
-    success: true,
-    data: Object.values(deviceStore)
-  });
-});
-
-app.get('/api/devices/:id', authMiddleware, (req, res) => {
-  const device = deviceStore[req.params.id];
-  if (!device) {
-    return res.status(404).json({ success: false, error: 'Device not found' });
+// Delegates to device-service (domain owner) with a bounded timeout;
+// falls back to the legacy in-memory deviceStore on any failure
+// (timeout, ECONNREFUSED, 401/403 token rejection, 5xx, ...).
+app.get('/api/devices', authMiddleware, async (req, res) => {
+  try {
+    const remote = await callDeviceService('GET', '/api/devices');
+    const list = Array.isArray(remote) ? remote : (Array.isArray(remote?.data) ? remote.data : null);
+    if (!list) throw new Error('device-service returned an unexpected response shape');
+    return res.json({ success: true, data: list.map(adaptDevice) });
+  } catch (err) {
+    warnDelegationFallback('GET /api/devices', err);
+    return res.json({
+      success: true,
+      data: Object.values(deviceStore)
+    });
   }
-  res.json({ success: true, data: device });
 });
 
+app.get('/api/devices/:id', authMiddleware, async (req, res) => {
+  try {
+    const remote = await callDeviceService('GET', `/api/devices/${encodeURIComponent(req.params.id)}`);
+    const raw = remote?.data !== undefined ? remote.data : remote;
+    if (!raw || !raw.id) throw new Error('device-service returned an unexpected response shape');
+    return res.json({ success: true, data: adaptDevice(raw) });
+  } catch (err) {
+    warnDelegationFallback(`GET /api/devices/${req.params.id}`, err);
+    const device = deviceStore[req.params.id];
+    if (!device) {
+      return res.status(404).json({ success: false, error: 'Device not found' });
+    }
+    return res.json({ success: true, data: device });
+  }
+});
+
+// TODO(device-service delegation): this write path still operates on the
+// legacy in-memory deviceStore only. Once device-service exposes an
+// equivalent write endpoint, delegate here too (mirroring the GET routes
+// above) so refreshed state is persisted in the device-service domain.
 app.post('/api/devices/:id/refresh', authMiddleware, async (req, res) => {
   const deviceId = req.params.id;
   const device = deviceStore[deviceId];
@@ -394,6 +470,8 @@ app.post('/api/devices/:id/refresh', authMiddleware, async (req, res) => {
 // Whitelist of allowed app IDs to prevent command injection
 const ALLOWED_APP_IDS = new Set(['docker', 'vscode', 'firefox', 'chrome']);
 
+// TODO(device-service delegation): app install/uninstall still operate on
+// the legacy in-memory deviceStore only — not yet delegated to device-service.
 app.post('/api/devices/:id/apps/install', authMiddleware, async (req, res) => {
   const { appId, appName, version } = req.body;
   const deviceId = req.params.id;
@@ -470,6 +548,7 @@ app.post('/api/devices/:id/apps/install', authMiddleware, async (req, res) => {
   }
 });
 
+// TODO(device-service delegation): not yet delegated — see install route above.
 app.delete('/api/devices/:id/apps/:appId', authMiddleware, async (req, res) => {
   const { appId } = req.params;
   const deviceId = req.params.id;
@@ -687,6 +766,10 @@ app.post('/api/devices/enroll/token', authMiddleware, writeRateLimit, (req, res)
 });
 
 // Device enrollment uses token (no user auth, but token is required)
+// TODO(device-service delegation): enrollment still writes to the legacy
+// in-memory deviceStore only, so devices enrolled here won't be visible via
+// device-service until this is delegated too (see GET routes above for the
+// read-side delegation + fallback pattern to follow).
 app.post('/api/devices/enroll', writeRateLimit, (req, res) => {
   const { token, hostname, platform, os: deviceOs, osVersion } = req.body;
 

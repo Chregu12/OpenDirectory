@@ -226,6 +226,11 @@ services:
       - DB_NAME=devices
       - DB_USER=opendirectory
       - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      # OIDC token verification for service-to-service calls (oidcAuth middleware).
+      # Must match oauth-provider's issuer claim (OAUTH_ISSUER below) — NOT its
+      # host:port, since that's just where the JWKS happens to be served from.
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
     ports:
       - "3003:3003"
     networks:
@@ -333,6 +338,16 @@ services:
       - CT2001_PORT=${CT2001_PORT:-22}
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/api
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      # device-service delegation (GET /api/devices, GET /api/devices/:id):
+      # api-backend authenticates to device-service with a Client Credentials
+      # token from oauth-provider. If API_BACKEND_CLIENT_SECRET is unset, or
+      # oauth-provider/device-service is unreachable, api-backend falls back
+      # to its legacy in-memory device store — set the secret to activate
+      # delegation, and register a matching client on oauth-provider.
+      - DEVICE_SERVICE_URL=http://device-service:3003
+      - OAUTH_TOKEN_URL=http://oauth-provider:3010/oauth/token
+      - API_BACKEND_CLIENT_ID=${API_BACKEND_CLIENT_ID:-api-backend}
+      - API_BACKEND_CLIENT_SECRET=${API_BACKEND_CLIENT_SECRET:-}
     ports:
       - "8080:8080"
     networks:

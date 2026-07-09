@@ -255,6 +255,12 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/identity
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      # device-service delegation: this lite topology has no oauth-provider
+      # container, so no OAUTH_TOKEN_URL / client credentials are configured
+      # here. api-backend still knows where device-service is (for future
+      # use / parity with docker-compose.yml), but without a token endpoint
+      # it will always fall back to its legacy in-memory device store.
+      - DEVICE_SERVICE_URL=http://device-service:3003
     ports:
       - "8080:8080"
     networks:

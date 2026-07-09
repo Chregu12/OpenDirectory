@@ -91,37 +91,39 @@ Die File-Repositories sind bewusst hinter Interfaces: ein Wechsel auf
 Postgres (analog `PostgresDeviceRepository`) ändert nur die
 Infrastruktur-Schicht.
 
-### 4. Geräteliste — bekannte Duplizierung (bewusst zurückgestellt)
+### 4. Geräteliste (Single Source of Truth: device-service)
 
-`api-backend` hält eine eigene In-Memory-Geräteliste (`deviceStore`,
-befüllt via `POST /api/devices/enroll`), parallel zur DDD-Domäne des
-device-service. Eine Delegation der lesenden Routen an den device-service
-wurde analysiert und **bewusst zurückgestellt**, weil zwei harte Blocker
-bestehen:
+`api-backend` hielt historisch eine eigene In-Memory-Geräteliste
+(`deviceStore`). Die lesenden Routen (`GET /api/devices`,
+`GET /api/devices/:id`) **delegieren jetzt** an den device-service:
 
-1. **Fehlende Domänendaten**: Das `DeviceAggregate` des device-service
-   kennt nur `id, hostname, platform, status, isCompliant,
-   complianceViolations, lastSeen, enrolledAt`. Das Frontend
-   (`DevicesView.tsx`) konsumiert und verarbeitet aber aktiv `os`,
-   `osVersion`, `ip_address`, `kernel`, `package_manager` und einen
-   numerischen `complianceScore` — Felder ohne Datenquelle im
-   device-service. Ein Adapter würde sie still leeren.
-2. **Service-zu-Service-Auth fehlt**: api-backend signiert
-   HS256-Tokens mit symmetrischem Secret; device-service verlangt
-   JWKS-verifizierte Bearer-Tokens (`oidcAuth`). Zusätzlich setzt
-   `docker-compose.yml` für device-service kein
-   `OIDC_ISSUER`/`JWKS_URI` — der Default zeigt auf einen im Container
-   unbelegten Port.
+- **Domänendaten**: Das `DeviceAggregate` wurde um `os`, `osVersion`,
+  `ipAddress`, `kernel`, `packageManager` erweitert (additive Migration
+  `002_device_system_info.sql`) und leitet einen numerischen
+  `complianceScore` ab (compliant → 100, sonst −25 pro Violation).
+- **Service-zu-Service-Auth**: api-backend holt sich per
+  Client-Credentials-Flow ein Token vom oauth-provider
+  (`utils/serviceClient.js`, Token-Caching mit 30-s-Refresh-Puffer,
+  Cache-Drop bei 401/403). `docker-compose.yml` setzt für device-service
+  jetzt `OIDC_ISSUER` (Default `https://opendirectory.local`, der
+  Issuer-Claim des oauth-provider) und
+  `JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json`.
+- **Shape-Adapter**: `hostname`→`name`; neue Felder werden nur
+  durchgereicht, wenn vorhanden (ältere device-service-Versionen
+  degradieren sauber).
+- **Fallback**: Bei Timeout/401/5xx/Nichterreichbarkeit antwortet
+  api-backend aus dem lokalen `deviceStore` (Warn-Log, gedrosselt auf
+  1×/Minute) — die Delegation kann nie einen Ausfall verursachen.
 
-**Migrationspfad** (Voraussetzungen, bevor die Delegation umgesetzt
-werden kann):
-- device-service-Domäne um `os`, `osVersion`, `ipAddress`, `kernel`,
-  `packageManager` erweitern (Migration + Aggregate + Repository) und
-  einen numerischen Compliance-Score ableiten,
-- Client-Credentials-Flow gegen den `oauth-provider` in api-backend
-  (Vorbild: `services/platform/quick-actions/src/utils/serviceClient.js`),
-- `OIDC_ISSUER`/`JWKS_URI` für device-service in `docker-compose.yml`
-  korrekt auf den oauth-provider setzen.
+**Offene Betriebsaufgabe**: Der oauth-provider seedet keinen
+`api-backend`-Client (nur `grafana-od-client`/`devportal-od-client`).
+Bis ein Client `api-backend` mit Secret `API_BACKEND_CLIENT_SECRET`
+registriert ist (z. B. via `POST /api/clients`), greift dauerhaft der
+Fallback. In `docker-compose.lite.yml` existiert kein oauth-provider —
+dort bleibt der Fallback bewusst der Normalpfad.
+
+Schreibende Routen (`enroll`, `refresh`, `apps/install`) sind noch
+lokal und als `TODO(device-service delegation)` markiert.
 
 ## Testabdeckung als Architektur-Vertrag
 
