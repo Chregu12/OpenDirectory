@@ -149,6 +149,14 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
       - LDAP_URL=ldap://lldap:3890
+      # This lite topology has no oauth-provider container; auth-service's
+      # built-in OIDC provider (node-oidc-provider) doubles as the token
+      # issuer/JWKS source for service-to-service calls instead. It already
+      # registers a "device-service" client_credentials client (see
+      # services/core/authentication-service/src/oidc/provider.js). Pin the
+      # issuer to the container DNS name so device-service's OIDC_ISSUER
+      # below matches exactly.
+      - ISSUER_URL=${AUTH_ISSUER_URL:-http://auth-service:3002}
     ports:
       - "3002:3002"
     networks:
@@ -175,6 +183,17 @@ services:
       - PORT=3003
       - MONGODB_URL=mongodb://opendirectory:${MONGO_PASSWORD}@mongodb:27017/devices
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      # No oauth-provider in this lite topology — auth-service's built-in
+      # OIDC provider is used instead (see ISSUER_URL on auth-service above).
+      # This makes OIDC-protected device-service routes (oidcAuth middleware)
+      # work in lite too. If auth-service is disabled/misconfigured, those
+      # routes will 401/403 — only the enrollment path (DEVICE_ENROLLMENT_TOKEN
+      # below) and calls that don't go through oidcAuth still work.
+      - OIDC_ISSUER=${AUTH_ISSUER_URL:-http://auth-service:3002}
+      - JWKS_URI=http://auth-service:3002/jwks
+      # Shared enrollment secret (X-Enrollment-Token). No samba-ad-dc in the
+      # lite topology, but keep this settable for enrollment-hub callers.
+      - DEVICE_ENROLLMENT_TOKEN=${DEVICE_ENROLLMENT_TOKEN:-}
     ports:
       - "3003:3003"
     networks:
@@ -182,6 +201,12 @@ services:
     depends_on:
       - mongodb
       - redis
+    volumes:
+      # FileDriverRepository / FileHardwareReportRepository default paths —
+      # named volumes so uploaded drivers/hardware reports survive
+      # container recreation (previously unmounted -> data loss).
+      - device-drivers:/var/lib/opendirectory/device-drivers
+      - device-hardware:/var/lib/opendirectory/device-hardware
     deploy:
       resources:
         limits:
@@ -394,6 +419,11 @@ services:
     volumes:
       - printer-spool:/var/spool/cups
       - printer-config:/etc/cups
+      # FilePrinterDriverRepository / dellCatalogService default paths —
+      # named volumes so imported printer drivers and driver-catalog caches
+      # survive container recreation (previously unmounted -> data loss).
+      - printer-drivers:/var/lib/opendirectory/printer-drivers
+      - driver-catalogs:/var/lib/opendirectory/driver-catalogs
     privileged: true
     deploy:
       resources:
@@ -636,3 +666,7 @@ volumes:
   network-shares:
   grafana-data:
   prometheus-data:
+  device-drivers:    # /var/lib/opendirectory/device-drivers (device-service)
+  device-hardware:   # /var/lib/opendirectory/device-hardware (device-service)
+  printer-drivers:   # /var/lib/opendirectory/printer-drivers (printer-service)
+  driver-catalogs:   # /var/lib/opendirectory/driver-catalogs (printer-service)

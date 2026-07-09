@@ -10,7 +10,12 @@ COPY package*.json ./
 RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
 
 # Copy application code
+# NOTE: server.js requires ./utils/serviceClient (device-service delegation
+# client) — it must be copied too, or the container crashes on boot with
+# "Cannot find module './utils/serviceClient'". __tests__ is intentionally
+# NOT copied — dev/test-only, not needed at runtime.
 COPY server.js ./
+COPY utils ./utils/
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \

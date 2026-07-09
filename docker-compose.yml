@@ -231,6 +231,9 @@ services:
       # host:port, since that's just where the JWKS happens to be served from.
       - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
       - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
+      # Shared enrollment secret (X-Enrollment-Token) — samba-ad-dc attaches
+      # this header when calling device-service's enrollment endpoints.
+      - DEVICE_ENROLLMENT_TOKEN=${DEVICE_ENROLLMENT_TOKEN:-}
     ports:
       - "3003:3003"
     networks:
@@ -249,6 +252,11 @@ services:
     volumes:
       - ./services/core/device-service:/app
       - /app/node_modules
+      # FileDriverRepository / FileHardwareReportRepository default paths —
+      # named volumes so uploaded drivers/hardware reports survive
+      # container recreation (previously unmounted -> data loss).
+      - device-drivers:/var/lib/opendirectory/device-drivers
+      - device-hardware:/var/lib/opendirectory/device-hardware
 
   policy-service:
     build:
@@ -305,7 +313,13 @@ services:
       - LOG_LEVEL=info
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001}
     ports:
-      - "3010:8080"
+      # Host port moved from 3010 -> 3016: 3010 collided with samba-ad-dc's
+      # REST API (also mapped to host 3010 below). Nothing depends on
+      # api-gateway's *host* port — next.config.js rewrites and other
+      # services reach it (if at all) via the container-internal DNS name
+      # "api-gateway", never via localhost:3010. Container port 8080 is
+      # unchanged.
+      - "3016:8080"
     networks:
       - opendirectory
     depends_on:
@@ -442,6 +456,11 @@ services:
       - printer-cache:/var/cache/cups
       - printer-config:/etc/cups
       - scanned-documents:/var/scans
+      # FilePrinterDriverRepository / dellCatalogService default paths —
+      # named volumes so imported printer drivers and driver-catalog caches
+      # survive container recreation (previously unmounted -> data loss).
+      - printer-drivers:/var/lib/opendirectory/printer-drivers
+      - driver-catalogs:/var/lib/opendirectory/driver-catalogs
     privileged: true  # Required for CUPS and device access
     devices:
       - /dev/bus/usb:/dev/bus/usb  # USB printers/scanners
@@ -503,6 +522,10 @@ services:
       - AD_DOMAIN=${AD_DOMAIN:-opendirectory.local}
       - AD_REALM=${AD_REALM:-OPENDIRECTORY.LOCAL}
       - SAMBA_CONFIG_PATH=/etc/samba
+      # Shared enrollment secret (X-Enrollment-Token) — see device-service's
+      # DEVICE_ENROLLMENT_TOKEN above; must match for the enrollment
+      # contract between samba-ad-dc and device-service to work.
+      - DEVICE_ENROLLMENT_TOKEN=${DEVICE_ENROLLMENT_TOKEN:-}
     ports:
       - "3010:3010"   # REST API
       - "389:389"     # LDAP
@@ -965,3 +988,7 @@ volumes:
   samba-data:      # /var/lib/samba — SAM DB, SYSVOL, NETLOGON, Kerberos keytab
   samba-config:    # /etc/samba — smb.conf, krb5.conf
   samba-logs:      # /var/log/samba
+  device-drivers:    # /var/lib/opendirectory/device-drivers (device-service)
+  device-hardware:   # /var/lib/opendirectory/device-hardware (device-service)
+  printer-drivers:   # /var/lib/opendirectory/printer-drivers (printer-service)
+  driver-catalogs:   # /var/lib/opendirectory/driver-catalogs (printer-service)
