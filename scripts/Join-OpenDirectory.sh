@@ -8,7 +8,8 @@
 #       --realm CORP.EXAMPLE.COM \
 #       --admin-user Administrator \
 #       [--ou "OU=Linux,DC=corp,DC=example,DC=com"] \
-#       [--join-method realm|winbind|samba]
+#       [--join-method realm|winbind|samba] \
+#       [--enrollment-token TOKEN]
 #
 # Requirements:
 #   realm method  : realmd, sssd, adcli, krb5-user  (recommended — most modern distros)
@@ -17,6 +18,15 @@
 #
 # After joining, the script posts a hardware report including PCI/USB IDs
 # to device-service and prints driver recommendations.
+#
+# Enrollment token:
+#   This script runs before the device has any user/OIDC identity, so the
+#   /api/samba/computers/join and /api/devices/report-hardware calls are
+#   authenticated via a shared enrollment token instead of a Bearer JWT.
+#   Provide it via --enrollment-token or the DEVICE_ENROLLMENT_TOKEN
+#   environment variable; it is sent as the `X-Enrollment-Token` header.
+#   If neither is set, the header is omitted (calls will fail against a
+#   server that requires it).
 
 set -euo pipefail
 
@@ -28,22 +38,24 @@ ADMIN_USER="Administrator"
 ADMIN_PASS=""
 OU_DN=""
 JOIN_METHOD="realm"   # realm | winbind | samba
+ENROLLMENT_TOKEN="${DEVICE_ENROLLMENT_TOKEN:-}"
 
 # ─── Parse arguments ──────────────────────────────────────────────────────────
 
 usage() {
-  echo "Usage: $0 --api-base URL --realm DOMAIN --admin-user USER [--ou DN] [--join-method realm|winbind|samba]"
+  echo "Usage: $0 --api-base URL --realm DOMAIN --admin-user USER [--ou DN] [--join-method realm|winbind|samba] [--enrollment-token TOKEN]"
   exit 1
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --api-base)    API_BASE="$2";     shift 2 ;;
-    --realm)       REALM="$2";        shift 2 ;;
-    --admin-user)  ADMIN_USER="$2";   shift 2 ;;
-    --admin-pass)  ADMIN_PASS="$2";   shift 2 ;;
-    --ou)          OU_DN="$2";        shift 2 ;;
-    --join-method) JOIN_METHOD="$2";  shift 2 ;;
+    --api-base)          API_BASE="$2";          shift 2 ;;
+    --realm)              REALM="$2";             shift 2 ;;
+    --admin-user)        ADMIN_USER="$2";         shift 2 ;;
+    --admin-pass)        ADMIN_PASS="$2";         shift 2 ;;
+    --ou)                 OU_DN="$2";              shift 2 ;;
+    --join-method)       JOIN_METHOD="$2";        shift 2 ;;
+    --enrollment-token)  ENROLLMENT_TOKEN="$2";   shift 2 ;;
     *) usage ;;
   esac
 done
@@ -53,6 +65,13 @@ done
 API_BASE="${API_BASE%/}"
 REALM_UPPER="${REALM^^}"
 HOSTNAME="$(hostname -s)"
+
+# curl args for the enrollment-token header, added to the join and
+# report-hardware calls below. Kept as an array (rather than string
+# interpolation) so an empty token cleanly omits the header instead of
+# passing an empty -H value.
+ENROLLMENT_CURL_ARGS=()
+[[ -n "$ENROLLMENT_TOKEN" ]] && ENROLLMENT_CURL_ARGS=(-H "X-Enrollment-Token: $ENROLLMENT_TOKEN")
 
 # ─── Root check ───────────────────────────────────────────────────────────────
 
@@ -163,6 +182,7 @@ print(json.dumps(body))
 
 JOIN_RESPONSE="$(curl -sf -X POST \
   -H "Content-Type: application/json" \
+  "${ENROLLMENT_CURL_ARGS[@]+"${ENROLLMENT_CURL_ARGS[@]}"}" \
   -d "$JOIN_BODY" \
   "${API_BASE}/api/samba/computers/join" 2>&1)" || {
     echo "ERROR: OpenDirectory registration failed." >&2
@@ -238,6 +258,7 @@ print(json.dumps(body))
 
 HW_RESPONSE="$(curl -sf -X POST \
   -H "Content-Type: application/json" \
+  "${ENROLLMENT_CURL_ARGS[@]+"${ENROLLMENT_CURL_ARGS[@]}"}" \
   -d "$HW_BODY" \
   "${API_BASE}/api/devices/report-hardware" 2>&1)" || {
     echo "  WARNING: Hardware report failed (non-fatal)."

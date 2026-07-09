@@ -46,8 +46,6 @@ interface DriverRecommendation {
   description?: string;
 }
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
-
 // Older driver records may store `os` as a plain string instead of an array.
 function toOsList(os?: string[] | string): string[] {
   if (!os) return [];
@@ -151,15 +149,12 @@ export default function DeviceDriversTab() {
     setRecsLoading(true);
     setRecs(null);
     try {
-      const res = await fetch(
-        `${API_BASE}/api/devices/${encodeURIComponent(hostname)}/driver-recommendations`,
-        { headers: { Accept: 'application/json' } }
+      const res = await api.get(
+        `/api/devices/${encodeURIComponent(hostname)}/driver-recommendations`
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Fehler beim Laden');
-      setRecs(data.recommendations ?? []);
+      setRecs(res.data?.recommendations ?? []);
     } catch (err: any) {
-      toast.error(err.message ?? 'Empfehlungen konnten nicht geladen werden');
+      toast.error(err?.response?.data?.error ?? err.message ?? 'Empfehlungen konnten nicht geladen werden');
       setRecs([]);
     } finally {
       setRecsLoading(false);

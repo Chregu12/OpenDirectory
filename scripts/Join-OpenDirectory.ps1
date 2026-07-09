@@ -26,8 +26,16 @@
     Optional OU distinguished name where the computer account will be placed.
     Example: OU=Workstations,DC=corp,DC=example,DC=com
 
+.PARAMETER EnrollmentToken
+    Optional shared enrollment token. This script runs before the device has
+    any user/OIDC identity, so the /api/samba/computers/join and
+    /api/devices/report-hardware calls are authenticated via this token
+    (sent as the `X-Enrollment-Token` header) instead of a Bearer JWT. If
+    omitted, the header is not sent (calls will fail against a server that
+    requires it).
+
 .EXAMPLE
-    .\Join-OpenDirectory.ps1 -ApiBase https://od.corp.local -Realm CORP.LOCAL -AdminUser Administrator
+    .\Join-OpenDirectory.ps1 -ApiBase https://od.corp.local -Realm CORP.LOCAL -AdminUser Administrator -EnrollmentToken (Get-Content .\enrollment-token.txt)
 #>
 
 [CmdletBinding()]
@@ -43,7 +51,9 @@ param(
 
     [SecureString]$AdminPassword,
 
-    [string]$OuDn
+    [string]$OuDn,
+
+    [string]$EnrollmentToken
 )
 
 Set-StrictMode -Version Latest
@@ -55,7 +65,8 @@ function Invoke-OdApi {
     param(
         [string]$Method,
         [string]$Path,
-        [hashtable]$Body
+        [hashtable]$Body,
+        [switch]$UseEnrollmentToken
     )
     $uri = ($ApiBase.TrimEnd('/')) + $Path
     $params = @{
@@ -65,6 +76,9 @@ function Invoke-OdApi {
         UseBasicParsing = $true
     }
     if ($Body) { $params['Body'] = ($Body | ConvertTo-Json -Depth 10) }
+    if ($UseEnrollmentToken -and $EnrollmentToken) {
+        $params['Headers'] = @{ 'X-Enrollment-Token' = $EnrollmentToken }
+    }
     try {
         $resp = Invoke-WebRequest @params
         return ($resp.Content | ConvertFrom-Json)
@@ -155,7 +169,7 @@ $joinBody = @{
 if ($OuDn) { $joinBody['ouDn'] = $OuDn }
 
 try {
-    $joinResult = Invoke-OdApi -Method POST -Path '/api/samba/computers/join' -Body $joinBody
+    $joinResult = Invoke-OdApi -Method POST -Path '/api/samba/computers/join' -Body $joinBody -UseEnrollmentToken
 } catch {
     Write-Error "Domain join registration failed: $_"
     exit 1
@@ -184,7 +198,7 @@ $hwBody = @{
 }
 
 try {
-    $hwResult = Invoke-OdApi -Method POST -Path '/api/devices/report-hardware' -Body $hwBody
+    $hwResult = Invoke-OdApi -Method POST -Path '/api/devices/report-hardware' -Body $hwBody -UseEnrollmentToken
     Write-Host "  Driver recommendations: $(Get-OdProp $hwResult 'count' 0) found"
 } catch {
     Write-Warning "Hardware report failed (non-fatal): $_"

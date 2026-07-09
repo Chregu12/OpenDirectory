@@ -99,7 +99,9 @@ Infrastruktur-Schicht.
 
 - **Domänendaten**: Das `DeviceAggregate` wurde um `os`, `osVersion`,
   `ipAddress`, `kernel`, `packageManager` erweitert (additive Migration
-  `002_device_system_info.sql`) und leitet einen numerischen
+  `services/core/device-service/migrations/002_device_system_info.sql`,
+  die vom Migrations-Runner in `src/db.js` gelesen wird) und leitet einen
+  numerischen
   `complianceScore` ab (compliant → 100, sonst −25 pro Violation).
 - **Service-zu-Service-Auth**: api-backend holt sich per
   Client-Credentials-Flow ein Token vom oauth-provider
@@ -137,3 +139,28 @@ lokal und als `TODO(device-service delegation)` markiert.
 
 Die E2E-Suiten definieren die API-Verträge: Refactorings der inneren
 Schichten müssen sie unverändert grün halten.
+
+**Zwei api-gateways.** Es existieren zwei unabhängige Gateway-Implementierungen:
+`services/core/api-gateway` (Full-Stack-Proxy für alle Core-Services,
+inklusive `/api/devices/*`-Treiber-Routen — für diese Treiber-Routen
+existiert dort aktuell keine dedizierte E2E-Abdeckung) und
+`services/platform/api-gateway` (schlanker, service-discovery-basiert,
+abgesichert durch `src/__tests__/gatewayE2E.test.js`). Bei Änderungen an
+den Treiber-Routen muss ggf. beides geprüft werden.
+
+**Enrollment-Contract.** `POST /api/samba/computers/join`
+(intern `/api/computers/join` im samba-ad-dc, dort via `oidcAuth`-Middleware
+mit `enrollmentPaths`) akzeptiert entweder einen OIDC-Bearer-JWT oder den
+Header `X-Enrollment-Token` (Wert aus `DEVICE_ENROLLMENT_TOKEN`) — nötig,
+weil die Join-Skripte (`scripts/Join-OpenDirectory.sh` /
+`.ps1`, Parameter `--enrollment-token` / `-EnrollmentToken`) vor jeder
+Domain-Mitgliedschaft laufen und noch keine Nutzer-/OIDC-Identität besitzen.
+`POST /api/devices/report-hardware` (device-service) verlangt aktuell
+ausschließlich einen Bearer-JWT — dessen `oidcAuth`-Middleware kennt (Stand
+dieses Dokuments) noch keine `enrollmentPaths`-Ausnahme; die Join-Skripte
+senden den Header dorthin bereits vorsorglich mit, er wird server-seitig
+aber noch nicht ausgewertet. Das Frontend (`DeviceDriversTab.tsx` u. a.)
+nutzt für alle `/api/devices/*`-Aufrufe stattdessen den User-JWT, den der
+`api`-Request-Interceptor in `frontend/web-app/src/lib/api.ts` automatisch
+aus dem in `lib/auth.ts` (PKCE, `localStorage`) gehaltenen Access-Token
+anhängt.

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAccessToken } from './auth';
 
 // Empty string = relative URLs → requests go through Next.js rewrites (cluster-internal proxy)
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -11,6 +12,23 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+// Request interceptor: attach the PKCE access token (localStorage, see
+// lib/auth.ts) as a Bearer header. Several backend services (e.g.
+// device-service) now require OIDC-authenticated requests, and the httpOnly
+// cookie sent via withCredentials is not sufficient for those. Mirrors the
+// manual buildHeaders() approach in lib/quickActionsApi.ts. Never throws if
+// there is no token or we're running outside the browser (SSR) — the header
+// is simply omitted and the request proceeds unauthenticated.
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = getAccessToken();
+    if (token) {
+      config.headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
+  return config;
 });
 
 // Response interceptor for error handling
