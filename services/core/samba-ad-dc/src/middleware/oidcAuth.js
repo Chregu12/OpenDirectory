@@ -1,3 +1,5 @@
+'use strict';
+
 const crypto = require('crypto');
 const { createRemoteJWKSet, jwtVerify } = require('jose');
 
@@ -11,28 +13,8 @@ function getJWKS() {
   return JWKS;
 }
 
-// Plain prefix matcher — same semantics as the previous skipPaths check
-// (exact match or the request path starts with the listed path).
-function matchesPrefix(list, path) {
+function matchesPath(list, path) {
   return list.some(p => path === p || path.startsWith(p));
-}
-
-/**
- * Matches enrollmentPaths entries against a request path.
- *
- * Two entry forms are supported:
- *   - '/foo/bar'  → prefix match (path === '/foo/bar' or starts with it).
- *     Used for fixed routes such as '/api/devices/report-hardware'.
- *   - '*suffix'   → suffix match (path ends with 'suffix').
- *     Used for routes with a variable id segment, e.g. '*\/driver-recommendations'
- *     matches '/api/devices/:id/driver-recommendations' without also matching
- *     the generic '/api/devices' or '/api/devices/:id' CRUD routes.
- */
-function matchesEnrollmentPath(list, path) {
-  return list.some(p => {
-    if (p.startsWith('*')) return path.endsWith(p.slice(1));
-    return path === p || path.startsWith(p);
-  });
 }
 
 /**
@@ -58,31 +40,29 @@ function isValidEnrollmentToken(headerValue) {
 }
 
 /**
- * OIDC bearer-token auth middleware for the device-service.
+ * OIDC bearer-token auth middleware for the samba-ad-dc service.
  *
  * options.skipPaths       - paths that bypass auth entirely (health probes).
  * options.enrollmentPaths - paths that, in addition to a normal OIDC JWT,
  *                           accept the shared DEVICE_ENROLLMENT_TOKEN via the
- *                           `x-enrollment-token` header (see
- *                           services/core/samba-ad-dc/src/middleware/oidcAuth.js
- *                           for the same ENROLLMENT-CONTRACT). This exists for
- *                           device agents / join scripts that report hardware
- *                           and request driver recommendations before they
- *                           have any user/OIDC identity. Only routes
+ *                           `x-enrollment-token` header. This exists for the
+ *                           domain-join scripts, which run on a machine
+ *                           before it has any user/OIDC identity and so
+ *                           cannot present a Bearer token. Only routes
  *                           explicitly listed here get this bypass — every
- *                           other route (including the generic device and
- *                           driver CRUD APIs) is strictly JWT-only.
+ *                           other route (including the LAPS password and
+ *                           BitLocker key endpoints) is strictly JWT-only.
  */
 function oidcAuth({ skipPaths = [], enrollmentPaths = [] } = {}) {
   return async (req, res, next) => {
-    if (matchesPrefix(skipPaths, req.path)) return next();
+    if (matchesPath(skipPaths, req.path)) return next();
 
     const auth = req.headers.authorization;
 
     // Enrollment bypass: only for explicitly whitelisted paths, and only
     // when the caller did not present a Bearer token (a Bearer token, if
     // present, is always verified as a normal OIDC JWT below).
-    if (matchesEnrollmentPath(enrollmentPaths, req.path) && !auth?.startsWith('Bearer ')) {
+    if (matchesPath(enrollmentPaths, req.path) && !auth?.startsWith('Bearer ')) {
       if (isValidEnrollmentToken(req.headers['x-enrollment-token'])) {
         req.enrolledViaToken = true;
         return next();
@@ -93,6 +73,7 @@ function oidcAuth({ skipPaths = [], enrollmentPaths = [] } = {}) {
     if (!auth?.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'unauthorized' });
     }
+
     try {
       const { payload } = await jwtVerify(auth.slice(7), getJWKS(), { issuer: ISSUER });
       req.user = payload;
@@ -104,4 +85,4 @@ function oidcAuth({ skipPaths = [], enrollmentPaths = [] } = {}) {
   };
 }
 
-module.exports = { oidcAuth, isValidEnrollmentToken, matchesEnrollmentPath };
+module.exports = { oidcAuth };

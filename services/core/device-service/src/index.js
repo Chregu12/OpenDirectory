@@ -17,8 +17,47 @@ const EventBusClient = (() => {
 // RabbitMQ MessageBus — kept only for device-command-queue operations
 // (consumeDeviceCommands / queueDeviceCommand) which are not part of
 // the generic EventBusClient contract.
-const MessageBus = require('../../../../packages/service-contracts/src/messageBus');
-const { Events }  = require('../../../../packages/service-contracts/src/events');
+//
+// packages/ lives outside this service's Docker build context, so in a
+// container the relative require below throws MODULE_NOT_FOUND and used to
+// crash the process at boot. Fall back through the published package name,
+// then to a functionally-inert in-process stub (same shape the RabbitMQ
+// client already degrades to via its own internal amqplib-missing check —
+// see packages/service-contracts/src/messageBus.js) so the service still
+// boots and simply runs without the RabbitMQ command queue (the Redis-backed
+// pending-command fallback paths in this file take over instead).
+const MessageBus = (() => {
+  try { return require('../../../../packages/service-contracts/src/messageBus'); }
+  catch (_) {
+    try { return require('@opendirectory/service-contracts/messageBus'); }
+    catch (_) {
+      return class NoopMessageBus {
+        async connect() {}
+        async publish() { return false; }
+        async subscribe() {}
+        isConnected() { return false; }
+        async queueDeviceCommand() { return false; }
+        async consumeDeviceCommands() {}
+        async close() {}
+      };
+    }
+  }
+})();
+
+const Events = (() => {
+  try { return require('../../../../packages/service-contracts/src/events').Events; }
+  catch (_) {
+    try { return require('@opendirectory/service-contracts/events').Events; }
+    catch (_) {
+      return {
+        DEVICE_ENROLLED: 'device.enrolled',
+        DEVICE_NON_COMPLIANT: 'device.non_compliant',
+        APP_INSTALL_COMPLETED: 'app.install.completed',
+        APP_INSTALL_FAILED: 'app.install.failed',
+      };
+    }
+  }
+})();
 
 // PostgreSQL persistence layer
 const db = require('./db');
@@ -185,6 +224,27 @@ class EnterpriseDeviceManagementService {
 
     this.app.use('/api/devices', deviceLimiter);
 
+    // Driver management/upload/import-url endpoints — same limits as device
+    // operations. Previously unmounted, so /api/drivers had no rate limiting
+    // at all (upload, import-url and deploy could be hammered unbounded).
+    const driverLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: async (req) => {
+        const deviceType = req.headers['x-device-type'];
+        const userRole = req.user?.roles || [];
+
+        if (userRole.includes('admin')) return 10000;
+        if (deviceType === 'server') return 5000;
+        if (deviceType === 'workstation') return 1000;
+        return 500;
+      },
+      message: 'Rate limit exceeded for driver operations',
+      standardHeaders: true,
+      skip: (req) => config.environment === 'development'
+    });
+
+    this.app.use('/api/drivers', driverLimiter);
+
     // Body parsing with size limits
     this.app.use(express.json({ 
       limit: '10mb',
@@ -197,8 +257,26 @@ class EnterpriseDeviceManagementService {
       limit: '10mb' 
     }));
 
-    // OIDC token verification (RS256 via JWKS)
-    this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
+    // OIDC token verification (RS256 via JWKS).
+    //
+    // enrollmentPaths lets device agents / the samba-ad-dc join flow
+    // authenticate with the shared DEVICE_ENROLLMENT_TOKEN (x-enrollment-token
+    // header) instead of a user JWT, before the device has any OIDC identity.
+    // Only these three endpoint families get the bypass — see
+    // middleware/oidcAuth.js for the matching rules:
+    //   - '/api/devices/report-hardware' (+ its GET .../:id retrieval)
+    //   - any path ending in '/driver-recommendations' (GET .../:id/driver-recommendations)
+    //   - any path ending in '/detect-drivers' (POST .../:id/detect-drivers)
+    // The generic CRUD routes ('/api/devices', '/api/devices/:id', '/api/drivers/*')
+    // deliberately stay JWT-only.
+    this.app.use(oidcAuth({
+      skipPaths: ['/health', '/metrics'],
+      enrollmentPaths: [
+        '/api/devices/report-hardware',
+        '*/driver-recommendations',
+        '*/detect-drivers',
+      ],
+    }));
 
     // Request ID middleware
     this.app.use((req, res, next) => {

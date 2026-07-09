@@ -65,7 +65,10 @@ class FileDriverRepository extends IDriverRepository {
 
   async saveFile(driverId, filename, fileBuffer) {
     await this._ensureStorage();
-    const destFilename = `${driverId}-${filename}`;
+    // filename comes from an untrusted multipart originalname (or a URL-derived
+    // basename) — strip any directory components to prevent path traversal
+    // (e.g. "../../etc/passwd") from escaping this._filesDir.
+    const destFilename = `${driverId}-${path.basename(filename)}`;
     const filePath = path.join(this._filesDir, destFilename);
     await fs.promises.writeFile(filePath, fileBuffer);
     return { filePath, destFilename };

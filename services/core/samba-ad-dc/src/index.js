@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const winston = require('winston');
 const http = require('http');
 const https = require('https');
+const { oidcAuth } = require('./middleware/oidcAuth');
 
 // ---------------------------------------------------------------------------
 // Logger
@@ -34,12 +35,20 @@ function notifyDeviceService(payload) {
     const body = JSON.stringify(payload);
     const url = new URL(`${DEVICE_SERVICE_URL}/api/devices/report-hardware`);
     const proto = url.protocol === 'https:' ? https : http;
+    const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+    // device-service's report-hardware endpoint requires either an OIDC JWT
+    // or the shared enrollment token (see its oidcAuth enrollmentPaths
+    // contract) — this call runs machine-to-machine with no user token, so
+    // it must present the enrollment token to get through.
+    if (process.env.DEVICE_ENROLLMENT_TOKEN) {
+      headers['X-Enrollment-Token'] = process.env.DEVICE_ENROLLMENT_TOKEN;
+    }
     const req = proto.request({
       hostname: url.hostname,
       port: url.port || (url.protocol === 'https:' ? 443 : 80),
       path: url.pathname,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      headers,
     }, res => {
       res.resume(); // drain
       logger.info('Device-service notified of domain join', { status: res.statusCode, hostname: payload.hostname });
@@ -94,6 +103,24 @@ app.use(express.json({ limit: '1mb' }));
 
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 200 });
 app.use(limiter);
+
+// ---------------------------------------------------------------------------
+// Authentication
+//
+// Every route below (including everything under /api/samba/* and
+// /api/computers/*, which the frontend reaches via the /api/samba/computers/*
+// rewrite) requires a valid OIDC bearer token. The sole exception is
+// /api/computers/join: domain-join scripts run on a machine before it has
+// any user/OIDC identity, so that single path additionally accepts the
+// shared DEVICE_ENROLLMENT_TOKEN via the x-enrollment-token header. The
+// highly sensitive computer endpoints (LAPS passwords, BitLocker recovery
+// keys, machine-password reset) are deliberately NOT in enrollmentPaths —
+// they stay strictly JWT-only.
+// ---------------------------------------------------------------------------
+app.use(oidcAuth({
+  skipPaths: ['/health'],
+  enrollmentPaths: ['/api/computers/join'],
+}));
 
 // ---------------------------------------------------------------------------
 // Existing routes (domain, DNS, Kerberos, sync, users, groups, OUs, computers)
@@ -234,6 +261,11 @@ app.delete('/api/trusts/:domain', async (req, res) => {
  * POST /api/computers/join
  * Domain join: create a computer account.
  * Body: { computerName, ouDn, requestingUser, operatingSystem, osVersion, ipAddress }
+ *
+ * Enrollment contract: this is the one route where oidcAuth (see mount
+ * above) also accepts the shared DEVICE_ENROLLMENT_TOKEN header
+ * (x-enrollment-token) in place of an OIDC JWT, since join scripts run on a
+ * machine before it has any user identity.
  */
 app.post('/api/computers/join', async (req, res) => {
   try {
@@ -337,6 +369,8 @@ app.delete('/api/computers/:name/join', async (req, res) => {
 /**
  * POST /api/computers/:name/reset-machine-password
  * Reset the machine account password.
+ *
+ * Strictly JWT-only (no enrollment-token bypass — see oidcAuth mount above).
  */
 app.post('/api/computers/:name/reset-machine-password', async (req, res) => {
   try {
@@ -351,16 +385,21 @@ app.post('/api/computers/:name/reset-machine-password', async (req, res) => {
 /**
  * GET /api/computers/:name/laps-password
  * Retrieve the LAPS local administrator password.
- * Query: requestingUserId (required)
+ *
+ * Strictly JWT-only (no enrollment-token bypass — see oidcAuth mount above).
+ * requestingUserId is derived from the verified token subject, never from
+ * the (client-controlled, unverified) query parameter, so the audit trail
+ * in computerManager.getLAPSPassword can't be spoofed by whoever is calling.
+ * TODO(authz): oidcAuth only proves *who* is asking, not that they're
+ * *allowed* to read this computer's LAPS password — computerManager
+ * currently just logs requestingUserId. Add real role/scope-based
+ * authorization (e.g. "LAPS readers" group / per-OU delegation) here before
+ * this is safe to expose broadly.
  */
 app.get('/api/computers/:name/laps-password', async (req, res) => {
   try {
     const { name } = req.params;
-    const { requestingUserId } = req.query;
-
-    if (!requestingUserId) {
-      return res.status(400).json({ error: 'requestingUserId query parameter is required' });
-    }
+    const requestingUserId = req.user.sub;
 
     const result = await computerManager.getLAPSPassword(name, requestingUserId);
     res.json(result);
@@ -421,16 +460,21 @@ app.get('/api/computers/:name/bitlocker-keys', async (req, res) => {
 /**
  * GET /api/computers/:name/bitlocker-keys/:keyId
  * Retrieve a BitLocker recovery key (sensitive — logs access).
- * Query: requestingUserId (required)
+ *
+ * Strictly JWT-only (no enrollment-token bypass — see oidcAuth mount above).
+ * requestingUserId is derived from the verified token subject, never from
+ * the (client-controlled, unverified) query parameter, so the audit trail
+ * in computerManager.getBitLockerKey can't be spoofed by whoever is calling.
+ * TODO(authz): oidcAuth only proves *who* is asking, not that they're
+ * *allowed* to read this computer's BitLocker key — computerManager
+ * currently just logs requestingUserId. Add real role/scope-based
+ * authorization (e.g. "BitLocker readers" group / per-OU delegation) here
+ * before this is safe to expose broadly.
  */
 app.get('/api/computers/:name/bitlocker-keys/:keyId', async (req, res) => {
   try {
     const { name, keyId } = req.params;
-    const { requestingUserId } = req.query;
-
-    if (!requestingUserId) {
-      return res.status(400).json({ error: 'requestingUserId query parameter is required' });
-    }
+    const requestingUserId = req.user.sub;
 
     const result = await computerManager.getBitLockerKey(name, keyId, requestingUserId);
     res.json(result);

@@ -23,6 +23,7 @@ const driverRoutes = require('./routes/driverRoutes');
 const catalogRoutes = require('./routes/catalogRoutes');
 const PrinterApplicationService = require('./application/PrinterApplicationService');
 const createPrinterRoutes = require('./routes/printerRoutes');
+const { oidcAuth } = require('./middleware/oidcAuth');
 
 const app = express();
 const server = createServer(app);
@@ -53,6 +54,14 @@ app.use(helmet());
 app.use(cors());
 app.use(compression());
 app.use(express.json({ limit: '50mb' }));
+
+// OIDC token verification (RS256 via JWKS). /health is unauthenticated so
+// orchestrators/load balancers can probe liveness; /metrics is skipped for
+// future-proofing (no /metrics route currently exists on this service).
+// Everything else — including the driver-catalog search endpoints used by
+// the frontend's DriverCatalogBrowser (/api/printer/catalog/search,
+// /vendors, /openprinting, /dell) — requires a valid bearer token.
+app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
 
 const discovery = new PrinterDiscoveryService();
 const cups = new CUPSIntegration();
