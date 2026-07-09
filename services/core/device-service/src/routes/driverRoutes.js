@@ -2,65 +2,31 @@
 
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const http = require('http');
-const https = require('https');
 const winston = require('winston');
 
-const manager = require('../services/deviceDriverManager');
+const DriverApplicationService = require('../application/DriverApplicationService');
+const FileDriverRepository = require('../infrastructure/repositories/FileDriverRepository');
+const FileHardwareReportRepository = require('../infrastructure/repositories/FileHardwareReportRepository');
+const { matchDrivers } = require('../services/driverMatchingService');
 
-const MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024; // 512 MB
-
-// Download a URL into a Buffer, following redirects.
-function downloadToBuffer(url, timeoutMs = 300000, redirectsLeft = 5) {
-  return new Promise((resolve, reject) => {
-    if (!/^https?:\/\//i.test(url)) return reject(new Error('Nur http(s)-URLs erlaubt'));
-    const proto = url.startsWith('https') ? https : http;
-    const req = proto.get(url, { headers: { 'User-Agent': 'OpenDirectory/1.0' } }, res => {
-      if ([301, 302, 307, 308].includes(res.statusCode)) {
-        res.resume();
-        if (redirectsLeft <= 0) return reject(new Error('Zu viele Redirects'));
-        if (!res.headers.location) return reject(new Error('Redirect ohne Location-Header'));
-        let nextUrl;
-        try { nextUrl = new URL(res.headers.location, url).toString(); }
-        catch (_) { return reject(new Error('Ungültige Redirect-URL')); }
-        return downloadToBuffer(nextUrl, timeoutMs, redirectsLeft - 1)
-          .then(resolve).catch(reject);
-      }
-      if (res.statusCode !== 200) {
-        res.resume();
-        return reject(new Error(`HTTP ${res.statusCode} von ${url}`));
-      }
-      const chunks = [];
-      let size = 0;
-      res.on('data', c => {
-        size += c.length;
-        if (size > MAX_DOWNLOAD_BYTES) {
-          req.destroy();
-          return reject(new Error('Datei überschreitet 512 MB Limit'));
-        }
-        chunks.push(c);
-      });
-      res.on('end', () => resolve(Buffer.concat(chunks)));
-      res.on('error', reject);
-    });
-    req.setTimeout(timeoutMs, () => { req.destroy(); reject(new Error('Download-Timeout')); });
-    req.on('error', reject);
-  });
-}
-
-function filenameFromUrl(url, fallback = 'driver.bin') {
-  try {
-    const base = path.basename(new URL(url).pathname);
-    return base || fallback;
-  } catch (_) { return fallback; }
-}
+const MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024; // 512 MB — mirrors the import-url download limit
 
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
   transports: [new winston.transports.Console()]
 });
+
+// Module singleton — file-backed repositories + the (already clean) driver
+// matching wrapper. deviceDetectionRoutes.js builds its own instance backed
+// by the same repository classes so both routers share behaviour, not state
+// (each repository re-reads process.env.DEVICE_DRIVERS_DIR / DEVICE_HARDWARE_DIR
+// at construction time, same as the transaction-script version did).
+const driverAppService = new DriverApplicationService(
+  new FileDriverRepository(),
+  new FileHardwareReportRepository(),
+  { matchDrivers }
+);
 
 const router = express.Router();
 
@@ -73,8 +39,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX
 router.get('/', async (req, res) => {
   try {
     const { os, deviceType, vendor } = req.query;
-    const drivers = await manager.listDrivers({ os, deviceType, vendor });
-    res.json({ success: true, data: drivers });
+    const drivers = await driverAppService.listDrivers({ os, deviceType, vendor });
+    res.json({ success: true, data: drivers.map(d => d.toJSON()) });
   } catch (err) {
     logger.error('listDrivers error:', err);
     res.status(500).json({ error: err.message });
@@ -82,11 +48,12 @@ router.get('/', async (req, res) => {
 });
 
 // GET /drivers/:id — single driver with deployments
+// Note: this route must be declared after /upload and /import-url to avoid shadowing them.
 router.get('/:id', async (req, res) => {
   try {
-    const driver = await manager.getDriver(req.params.id);
+    const driver = await driverAppService.getDriver(req.params.id);
     if (!driver) return res.status(404).json({ error: 'Treiber nicht gefunden' });
-    res.json({ success: true, data: driver });
+    res.json({ success: true, data: driver.toJSON() });
   } catch (err) {
     logger.error('getDriver error:', err);
     res.status(500).json({ error: err.message });
@@ -103,29 +70,12 @@ router.post('/upload', upload.fields([{ name: 'driver', maxCount: 1 }, { name: '
       return res.status(400).json({ error: 'Keine Treiberdatei hochgeladen (Feld: driver oder file)' });
     }
 
-    const originalname = file.originalname || 'driver.bin';
-    const ext = path.extname(originalname).replace('.', '').toLowerCase();
     const { name, version, vendor, os, deviceType, format, architecture, description, tags } = req.body;
-
-    const osList = os
-      ? (Array.isArray(os) ? os : String(os).split(',').map(s => s.trim()).filter(Boolean))
-      : ['universal'];
-
-    const driver = await manager.addDriver({
-      fileBuffer: file.buffer,
-      filename: originalname,
-      name: name || path.basename(originalname, path.extname(originalname)),
-      version: version || '0.0.0',
-      vendor: vendor || 'Unbekannt',
-      os: osList,
-      deviceType: deviceType || 'other',
-      format: format || ext || 'bin',
-      architecture: architecture || 'universal',
-      description,
-      tags,
+    const driver = await driverAppService.uploadDriver(file.buffer, file.originalname, {
+      name, version, vendor, os, deviceType, format, architecture, description, tags,
     });
 
-    res.status(201).json({ success: true, data: driver });
+    res.status(201).json({ success: true, data: driver.toJSON() });
   } catch (err) {
     logger.error('uploadDriver error:', err);
     res.status(500).json({ error: err.message });
@@ -140,39 +90,22 @@ router.post('/import-url', async (req, res) => {
     const { url, name, version, vendor, os, deviceType, format, architecture, description, tags } = req.body;
     if (!url) return res.status(400).json({ error: 'url ist erforderlich' });
 
-    const fileBuffer = await downloadToBuffer(url);
-    const filename = filenameFromUrl(url);
-    const ext = path.extname(filename).replace('.', '').toLowerCase();
-
-    const osList = os
-      ? (Array.isArray(os) ? os : String(os).split(',').map(s => s.trim()).filter(Boolean))
-      : ['universal'];
-
-    const driver = await manager.addDriver({
-      fileBuffer,
-      filename,
-      name: name || filename,
-      version: version || '0.0.0',
-      vendor: vendor || 'Unbekannt',
-      os: osList,
-      deviceType: deviceType || 'other',
-      format: format || ext || 'bin',
-      architecture: architecture || 'universal',
-      description: description || `Importiert von ${url}`,
-      tags,
+    const driver = await driverAppService.importFromUrl(url, {
+      name, version, vendor, os, deviceType, format, architecture, description, tags,
     });
 
-    res.status(201).json({ success: true, data: driver });
+    res.status(201).json({ success: true, data: driver.toJSON() });
   } catch (err) {
     logger.error('importDriverFromUrl error:', err);
-    res.status(500).json({ error: err.message });
+    const status = err.message === 'url ist erforderlich' ? 400 : 500;
+    res.status(status).json({ error: err.message });
   }
 });
 
 // DELETE /drivers/:id
 router.delete('/:id', async (req, res) => {
   try {
-    const deleted = await manager.deleteDriver(req.params.id);
+    const deleted = await driverAppService.deleteDriver(req.params.id);
     if (!deleted) return res.status(404).json({ error: 'Treiber nicht gefunden' });
     res.json({ success: true });
   } catch (err) {
@@ -188,7 +121,7 @@ router.post('/:id/deploy', async (req, res) => {
     if (!Array.isArray(deviceIds) || deviceIds.length === 0) {
       return res.status(400).json({ error: 'deviceIds muss ein nicht-leeres Array sein' });
     }
-    const deployments = await manager.deployDriver(req.params.id, deviceIds);
+    const deployments = await driverAppService.deployDriver(req.params.id, deviceIds);
     res.status(201).json({ success: true, data: deployments });
   } catch (err) {
     logger.error('deployDriver error:', err);
@@ -200,7 +133,7 @@ router.post('/:id/deploy', async (req, res) => {
 // GET /drivers/:id/deployments
 router.get('/:id/deployments', async (req, res) => {
   try {
-    const deployments = await manager.getDeployments(req.params.id);
+    const deployments = await driverAppService.getDeployments(req.params.id);
     res.json({ success: true, data: deployments });
   } catch (err) {
     logger.error('getDeployments error:', err);
@@ -215,7 +148,7 @@ router.patch('/:id/deployments/:deploymentId', async (req, res) => {
     const { status, error } = req.body;
     if (!status) return res.status(400).json({ error: 'status ist erforderlich' });
 
-    const deployment = await manager.updateDeploymentStatus(req.params.deploymentId, status, error);
+    const deployment = await driverAppService.updateDeploymentStatus(req.params.deploymentId, status, error);
     if (!deployment) return res.status(404).json({ error: 'Deployment nicht gefunden' });
     res.json({ success: true, data: deployment });
   } catch (err) {

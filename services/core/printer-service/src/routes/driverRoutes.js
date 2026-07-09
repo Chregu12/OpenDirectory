@@ -9,7 +9,7 @@ const fs      = require('fs').promises;
 const crypto  = require('crypto');
 const winston = require('winston');
 
-const driverManager = require('../services/printerDriverManager');
+const appService = require('../application/DriverCatalogApplicationService');
 
 const router = express.Router();
 
@@ -26,20 +26,20 @@ const logger = winston.createLogger({
 });
 
 // ── Multer storage: write directly to the driver files directory ──────────────
-// We use a temporary name during upload and rename after addDriver() returns
-// the final filename.
+// We use a temporary name during upload and rename after appService.uploadDriver()
+// resolves the final filename.
 const upload = multer({
   storage: multer.diskStorage({
     destination: async (_req, _file, cb) => {
       try {
-        await driverManager.ensureStorage();
-        cb(null, driverManager.FILES_DIR);
+        await appService.ensureStorage();
+        cb(null, appService.FILES_DIR);
       } catch (err) {
         cb(err);
       }
     },
     filename: (_req, file, cb) => {
-      // Temporary name; printerDriverManager.addDriver() will compute the real one.
+      // Temporary name; appService.uploadDriver() will compute the real one.
       // Random component avoids two concurrent uploads of the same filename
       // colliding when Date.now() lands in the same millisecond.
       const rand = crypto.randomBytes(4).toString('hex');
@@ -51,19 +51,20 @@ const upload = multer({
 });
 
 // ── One-time startup cleanup: sweep orphaned temp uploads ─────────────────────
-// If the process crashes between multer writing "upload-*-..." and addDriver()
-// renaming it to its final path, the temp file is left behind forever. Sweep
-// once at module load for anything older than 24h; best-effort/fire-and-forget.
+// If the process crashes between multer writing "upload-*-..." and
+// appService.uploadDriver() renaming it to its final path, the temp file is
+// left behind forever. Sweep once at module load for anything older than
+// 24h; best-effort/fire-and-forget.
 (async () => {
   try {
-    await driverManager.ensureStorage();
-    const entries = await fs.readdir(driverManager.FILES_DIR);
+    await appService.ensureStorage();
+    const entries = await fs.readdir(appService.FILES_DIR);
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     await Promise.all(
       entries
         .filter((name) => name.startsWith('upload-'))
         .map(async (name) => {
-          const filePath = path.join(driverManager.FILES_DIR, name);
+          const filePath = path.join(appService.FILES_DIR, name);
           try {
             const stat = await fs.stat(filePath);
             if (stat.mtimeMs < cutoff) await fs.unlink(filePath);
@@ -92,7 +93,7 @@ function fail(res, status, message) {
 router.get('/drivers', async (req, res) => {
   try {
     const { os, format } = req.query;
-    const drivers = await driverManager.listDrivers({ os, format });
+    const drivers = await appService.listDrivers({ os, format });
     ok(res, drivers);
   } catch (err) {
     logger.error('List drivers error:', err);
@@ -103,7 +104,7 @@ router.get('/drivers', async (req, res) => {
 // ── GET /drivers/:id ──────────────────────────────────────────────────────────
 router.get('/drivers/:id', async (req, res) => {
   try {
-    const driver = await driverManager.getDriver(req.params.id);
+    const driver = await appService.getDriver(req.params.id);
     if (!driver) return fail(res, 404, 'Driver not found');
     ok(res, driver);
   } catch (err) {
@@ -116,45 +117,19 @@ router.get('/drivers/:id', async (req, res) => {
 // multipart/form-data fields: name, version, vendor, os, format, models (comma-sep)
 // file field: driver
 router.post('/drivers/upload', upload.single('driver'), async (req, res) => {
-  const tmpPath = req.file?.path;
-  let driver;
-
   try {
     if (!req.file) return fail(res, 400, 'No driver file uploaded (field name: driver)');
 
-    const originalname = req.file.originalname || 'driver.bin';
-    const ext = path.extname(originalname).replace('.', '').toLowerCase();
-    const { name, version, vendor, os, format, models } = req.body;
+    const driver = await appService.uploadDriver(
+      req.file.path,
+      { originalname: req.file.originalname, size: req.file.size },
+      req.body
+    );
 
-    const modelList = models
-      ? models.split(',').map(m => m.trim()).filter(Boolean)
-      : [];
-
-    // Register the driver — metadata defaults are derived from the filename
-    driver = await driverManager.addDriver({
-      name: name || path.basename(originalname, path.extname(originalname)),
-      version: version || '0.0.0',
-      vendor: vendor || 'Unbekannt',
-      os: os || 'universal',
-      format: format || ext || 'bin',
-      models: modelList,
-      filename: originalname,
-      fileSize: req.file.size,
-    });
-
-    // Rename temp upload to the canonical path computed by addDriver
-    await fs.rename(tmpPath, driver.filePath);
-
-    logger.info(`Driver uploaded: ${name} v${version} (id=${driver.id})`);
+    logger.info(`Driver uploaded: ${req.body.name} v${req.body.version} (id=${driver.id})`);
     res.status(201).json({ success: true, data: driver });
   } catch (err) {
     logger.error('Upload driver error:', err);
-    // Clean up tmp file on error
-    if (tmpPath) fs.unlink(tmpPath).catch(() => {});
-    // If the catalog record was already persisted (addDriver succeeded)
-    // but the rename below it failed, don't leave a driver entry pointing
-    // at a file that was never actually written.
-    if (driver) driverManager.deleteDriver(driver.id).catch(() => {});
     fail(res, 500, err.message);
   }
 });
@@ -162,7 +137,7 @@ router.post('/drivers/upload', upload.single('driver'), async (req, res) => {
 // ── DELETE /drivers/:id ───────────────────────────────────────────────────────
 router.delete('/drivers/:id', async (req, res) => {
   try {
-    const deleted = await driverManager.deleteDriver(req.params.id);
+    const deleted = await appService.deleteDriver(req.params.id);
     if (!deleted) return fail(res, 404, 'Driver not found');
     ok(res, { id: req.params.id });
   } catch (err) {
@@ -178,7 +153,7 @@ router.post('/drivers/:id/assign', async (req, res) => {
     const { printerId } = req.body;
     if (!printerId) return fail(res, 400, 'printerId is required');
 
-    const driver = await driverManager.assignDriverToPrinter(req.params.id, printerId);
+    const driver = await appService.assignDriverToPrinter(req.params.id, printerId);
     ok(res, driver);
   } catch (err) {
     logger.error('Assign driver error:', err);
@@ -190,7 +165,7 @@ router.post('/drivers/:id/assign', async (req, res) => {
 // ── DELETE /drivers/:id/assign/:printerId ─────────────────────────────────────
 router.delete('/drivers/:id/assign/:printerId', async (req, res) => {
   try {
-    const driver = await driverManager.unassignDriverFromPrinter(
+    const driver = await appService.unassignDriverFromPrinter(
       req.params.id,
       req.params.printerId
     );
@@ -205,7 +180,7 @@ router.delete('/drivers/:id/assign/:printerId', async (req, res) => {
 // ── GET /printers/:printerId/drivers ─────────────────────────────────────────
 router.get('/printers/:printerId/drivers', async (req, res) => {
   try {
-    const drivers = await driverManager.getDriversForPrinter(req.params.printerId);
+    const drivers = await appService.getDriversForPrinter(req.params.printerId);
     ok(res, drivers);
   } catch (err) {
     logger.error('Get printer drivers error:', err);

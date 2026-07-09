@@ -1,15 +1,10 @@
 'use strict';
 
-const fs = require('fs');
-const fsp = require('fs').promises;
-const path = require('path');
-const https = require('https');
-const http = require('http');
 const { execFile } = require('child_process');
-const crypto = require('crypto');
 const winston = require('winston');
 
 const dellCatalog = require('./dellCatalogService');
+const { httpsGet } = require('../infrastructure/httpDownload');
 
 // ─── Logger ──────────────────────────────────────────────────────────────────
 
@@ -24,11 +19,6 @@ const logger = winston.createLogger({
     new winston.transports.File({ filename: 'printer-service.log' }),
   ],
 });
-
-// ─── Storage paths ────────────────────────────────────────────────────────────
-
-const PRINTER_DRIVER_DIR = process.env.PRINTER_DRIVERS_DIR || '/var/lib/opendirectory/printer-drivers';
-const DEVICE_DRIVER_DIR  = process.env.DEVICE_DRIVERS_DIR || '/var/lib/opendirectory/device-drivers';
 
 // ─── Manufacturer Catalog ─────────────────────────────────────────────────────
 
@@ -808,59 +798,14 @@ const MANUFACTURER_CATALOG = {
   ],
 };
 
-// ─── Helper: download a file ──────────────────────────────────────────────────
-
-async function downloadFile(url, destPath) {
-  return new Promise((resolve, reject) => {
-    if (!url) return reject(new Error('No download URL provided'));
-    const proto = url.startsWith('https') ? https : http;
-    const file = fs.createWriteStream(destPath);
-    // On any failure, close and remove the (possibly partially written)
-    // file so a failed import never leaves a half-written driver on disk.
-    const fail = (err) => { file.close(() => fs.unlink(destPath, () => reject(err))); };
-    proto.get(url, { headers: { 'User-Agent': 'OpenDirectory/1.0' } }, (response) => {
-      if (response.statusCode === 301 || response.statusCode === 302) {
-        response.resume();
-        if (!response.headers.location) return fail(new Error('Redirect with no Location header'));
-        const nextUrl = new URL(response.headers.location, url).toString();
-        file.close(() => fs.unlink(destPath, () => downloadFile(nextUrl, destPath).then(resolve).catch(reject)));
-        return;
-      }
-      if (response.statusCode !== 200) {
-        response.resume();
-        return fail(new Error(`HTTP ${response.statusCode} from ${url}`));
-      }
-      response.on('error', fail);
-      file.on('error', fail);
-      response.pipe(file);
-      file.on('finish', () => file.close(resolve));
-    }).on('error', fail);
-  });
-}
-
-// ─── Helper: simple HTTPS GET returning text ──────────────────────────────────
-
-function httpsGet(url, timeoutMs = 10000) {
-  return new Promise((resolve, reject) => {
-    const proto = url.startsWith('https') ? https : http;
-    const req = proto.get(url, { headers: { 'User-Agent': 'OpenDirectory/1.0' } }, (res) => {
-      if (res.statusCode === 301 || res.statusCode === 302) {
-        res.resume();
-        if (!res.headers.location) return reject(new Error('Redirect with no Location header'));
-        const nextUrl = new URL(res.headers.location, url).toString();
-        return httpsGet(nextUrl, timeoutMs).then(resolve).catch(reject);
-      }
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => resolve(data));
-      res.on('error', reject);
-    });
-    req.setTimeout(timeoutMs, () => { req.destroy(); reject(new Error('Request timed out')); });
-    req.on('error', reject);
-  });
-}
-
 // ─── DriverCatalogManager class ───────────────────────────────────────────────
+//
+// This class is the vendor/catalog *data* provider only (static manufacturer
+// catalog + OpenPrinting search + Dell live-catalog merge). Downloading and
+// persisting an actual driver file (importFromCatalog/importFromUrl in the
+// old version of this file) is an application-level use case and now lives
+// in application/DriverCatalogApplicationService.js, backed by the shared
+// infrastructure/httpDownload.js helper.
 
 class DriverCatalogManager {
   constructor() {
@@ -1072,112 +1017,6 @@ class DriverCatalogManager {
       counts['dell'] = 0;
     }
     return counts;
-  }
-
-  // ── Import from catalog entry ───────────────────────────────────────────────
-
-  async importFromCatalog(entry) {
-    if (!entry || !entry.id) throw new Error('Invalid catalog entry');
-    if (!entry.downloadUrl) throw new Error('This entry has no download URL');
-
-    const storageDir = entry.deviceType === 'printer' ? PRINTER_DRIVER_DIR : DEVICE_DRIVER_DIR;
-    await fsp.mkdir(storageDir, { recursive: true });
-
-    const ext = this._guessExtension(entry.downloadUrl, entry.format);
-    const safeId = entry.id.replace(/[^a-z0-9_-]/gi, '_');
-    const safeVersion = String(entry.version || 'unknown').replace(/[^a-z0-9_.-]/gi, '_');
-    const fileName = `${safeId}-${safeVersion}${ext}`;
-    const destPath = path.join(storageDir, fileName);
-
-    logger.info(`Downloading catalog entry "${entry.name}" → ${destPath}`);
-
-    try {
-      await downloadFile(entry.downloadUrl, destPath);
-    } catch (err) {
-      throw new Error(`Failed to download driver: ${err.message}`);
-    }
-
-    const stat = await fsp.stat(destPath);
-    const record = {
-      id: entry.id,
-      name: entry.name,
-      version: entry.version || '',
-      vendor: entry.vendor,
-      os: entry.os,
-      deviceType: entry.deviceType,
-      format: entry.format,
-      architecture: entry.architecture || 'universal',
-      description: entry.description || '',
-      downloadUrl: entry.downloadUrl,
-      models: entry.models || [],
-      tags: entry.tags || [],
-      licenseType: entry.licenseType || 'freeware',
-      localPath: destPath,
-      fileSize: stat.size,
-      importedAt: new Date().toISOString(),
-    };
-
-    logger.info(`Driver imported: ${entry.name} (${stat.size} bytes)`);
-    return record;
-  }
-
-  // ── Import from arbitrary URL ───────────────────────────────────────────────
-
-  async importFromUrl(url, metadata = {}) {
-    if (!url) throw new Error('url is required');
-
-    const storageDir = (metadata.deviceType === 'printer') ? PRINTER_DRIVER_DIR : DEVICE_DRIVER_DIR;
-    await fsp.mkdir(storageDir, { recursive: true });
-
-    const ext = this._guessExtension(url, metadata.format);
-    const hash = crypto.createHash('md5').update(url).digest('hex').slice(0, 8);
-    const safeName = (metadata.name || 'driver').replace(/[^a-z0-9_-]/gi, '_');
-    const fileName = `${safeName}-${hash}${ext}`;
-    const destPath = path.join(storageDir, fileName);
-
-    logger.info(`Downloading from URL "${url}" → ${destPath}`);
-
-    try {
-      await downloadFile(url, destPath);
-    } catch (err) {
-      throw new Error(`Failed to download from URL: ${err.message}`);
-    }
-
-    const stat = await fsp.stat(destPath);
-    const record = {
-      id: `url-${hash}`,
-      name: metadata.name || fileName,
-      version: metadata.version || '',
-      vendor: metadata.vendor || 'Unknown',
-      os: metadata.os ? (Array.isArray(metadata.os) ? metadata.os : [metadata.os]) : [],
-      deviceType: metadata.deviceType || 'generic',
-      format: metadata.format || ext.replace('.', ''),
-      architecture: metadata.architecture || 'universal',
-      description: metadata.description || `Imported from ${url}`,
-      downloadUrl: url,
-      models: metadata.models || [],
-      tags: metadata.tags || [],
-      licenseType: metadata.licenseType || 'freeware',
-      localPath: destPath,
-      fileSize: stat.size,
-      importedAt: new Date().toISOString(),
-    };
-
-    logger.info(`Driver imported from URL: ${url} (${stat.size} bytes)`);
-    return record;
-  }
-
-  // ── Private helpers ─────────────────────────────────────────────────────────
-
-  _guessExtension(url, formatHint) {
-    if (formatHint) {
-      // Strip anything but alphanumerics so a crafted format value (e.g.
-      // containing "/" or "..") can't be used to escape the storage dir.
-      const clean = String(formatHint).replace(/^\./, '').replace(/[^a-z0-9]/gi, '');
-      if (clean) return `.${clean}`;
-    }
-    const match = (url || '').match(/\.([a-z0-9]{1,8})(?:[?#]|$)/i);
-    return match ? `.${match[1].toLowerCase()}` : '.bin';
   }
 }
 

@@ -13,6 +13,9 @@ const DeviceEvents = {
   INSTALL_JOB_CREATED:   'device.install.created',
   INSTALL_JOB_COMPLETED: 'device.install.completed',
   INSTALL_JOB_FAILED:    'device.install.failed',
+  DRIVER_IMPORTED:       'driver.imported',
+  DRIVER_DEPLOYED:       'driver.deployed',
+  HARDWARE_REPORTED:     'device.hardware_reported',
 };
 
 module.exports = { DeviceEvents };
