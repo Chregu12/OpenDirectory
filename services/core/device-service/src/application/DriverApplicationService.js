@@ -52,9 +52,22 @@ function isPrivateAddress(ip) {
   if (!ip || typeof ip !== 'string') return true;
 
   let addr = ip;
-  // Normalize IPv4-mapped IPv6 (::ffff:127.0.0.1) to the embedded IPv4 form.
-  const v4Mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.exec(addr);
-  if (v4Mapped) addr = v4Mapped[1];
+  // Normalize IPv4-mapped IPv6 to the embedded IPv4 form. Two spellings must
+  // both be handled: the dotted form (::ffff:127.0.0.1) and the hex form
+  // (::ffff:7f00:0001) that `new URL(...).hostname` normalizes it to — the
+  // latter is how an attacker's http://[::ffff:169.254.169.254]/ arrives, and
+  // missing it left cloud-metadata reachable over IPv4-mapped IPv6.
+  const v4MappedDotted = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.exec(addr);
+  if (v4MappedDotted) {
+    addr = v4MappedDotted[1];
+  } else {
+    const v4MappedHex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(addr);
+    if (v4MappedHex) {
+      const hi = parseInt(v4MappedHex[1], 16);
+      const lo = parseInt(v4MappedHex[2], 16);
+      addr = `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`;
+    }
+  }
 
   const version = net.isIP(addr);
   if (version === 4) return isPrivateIPv4(addr);
@@ -111,7 +124,11 @@ function downloadToBuffer(url, timeoutMs = 300000, redirectsLeft = 5) {
     // http://127.0.0.1/ or http://169.254.169.254/), that case must be
     // rejected here, before any connection is attempted.
     if (!SSRF_GUARD_DISABLED) {
-      const hostname = parsedUrl.hostname;
+      // URL.hostname keeps the brackets around an IPv6 literal ("[::1]"),
+      // which net.isIP() does not recognise — strip them so IPv6 literals
+      // (incl. IPv4-mapped forms like [::ffff:169.254.169.254]) are checked
+      // instead of silently bypassing the guard.
+      const hostname = parsedUrl.hostname.replace(/^\[|\]$/g, '');
       if (hostname.toLowerCase() === 'localhost') {
         return reject(new Error('Blocked internal/private address'));
       }

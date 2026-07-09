@@ -30,9 +30,25 @@ const server = createServer(app);
 const wss = new WebSocket.Server({ server });
 
 // ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+// packages/grpc-event-bus lives outside this service's Docker build context,
+// so the relative require throws MODULE_NOT_FOUND in a container. Fall back
+// through the published package name, then to an inert no-op client so the
+// service still boots and simply runs without cross-service event publishing.
 const EventBusClient = (() => {
   try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
-  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+  catch (_) {
+    try { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+    catch (_) {
+      return class NoopEventBusClient {
+        constructor() {}
+        async connect() {}
+        async publish() { return false; }
+        async subscribe() {}
+        async close() {}
+        isConnected() { return false; }
+      };
+    }
+  }
 })();
 const _bus = new EventBusClient({ source: 'printer-service' });
 async function connectBus() { await _bus.connect(); }

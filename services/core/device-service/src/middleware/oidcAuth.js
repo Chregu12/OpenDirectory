@@ -31,7 +31,11 @@ function matchesPrefix(list, path) {
 function matchesEnrollmentPath(list, path) {
   return list.some(p => {
     if (p.startsWith('*')) return path.endsWith(p.slice(1));
-    return path === p || path.startsWith(p);
+    // startsWith(p + '/') — never a bare startsWith(p) — so an entry like
+    // '/api/devices/report-hardware' cannot also match the generic CRUD
+    // route '/api/devices/report-hardwareXYZ' and hand it the enrollment
+    // bypass. The trailing slash enforces a path-segment boundary.
+    return path === p || path.startsWith(p + '/');
   });
 }
 

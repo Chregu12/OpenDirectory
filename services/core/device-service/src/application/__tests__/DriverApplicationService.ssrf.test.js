@@ -67,6 +67,22 @@ describe('isPrivateAddress', () => {
     ])('%s (%s) is allowed', (ip) => {
       expect(isPrivateAddress(ip)).toBe(false);
     });
+
+    // Regression: new URL('http://[::ffff:169.254.169.254]/').hostname
+    // normalizes IPv4-mapped IPv6 to the hex spelling ::ffff:a9fe:a9fe, which
+    // the dotted-form check missed — leaving cloud metadata reachable over
+    // IPv4-mapped IPv6. Both spellings must resolve to the embedded IPv4.
+    test.each([
+      ['::ffff:a9fe:a9fe', 'hex IPv4-mapped 169.254.169.254 (cloud metadata)'],
+      ['::ffff:7f00:0001', 'hex IPv4-mapped 127.0.0.1 (loopback)'],
+      ['::ffff:0a00:0005', 'hex IPv4-mapped 10.0.0.5 (private)'],
+    ])('%s (%s) is blocked', (ip) => {
+      expect(isPrivateAddress(ip)).toBe(true);
+    });
+
+    test('hex IPv4-mapped public address stays allowed (::ffff:0808:0808 = 8.8.8.8)', () => {
+      expect(isPrivateAddress('::ffff:0808:0808')).toBe(false);
+    });
   });
 
   describe('invalid / missing input fails closed (blocked)', () => {

@@ -14,7 +14,12 @@ function getJWKS() {
 }
 
 function matchesPath(list, path) {
-  return list.some(p => path === p || path.startsWith(p));
+  // startsWith(p + '/') — never a bare startsWith(p): a bare prefix match
+  // would treat '/api/computers/joinPWNED/reset-machine-password' as matching
+  // '/api/computers/join', letting the low-trust enrollment token reach
+  // strictly-JWT-only endpoints. The trailing slash enforces a path-segment
+  // boundary.
+  return list.some(p => path === p || path.startsWith(p + '/'));
 }
 
 /**
