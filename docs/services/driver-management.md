@@ -91,13 +91,37 @@ Die File-Repositories sind bewusst hinter Interfaces: ein Wechsel auf
 Postgres (analog `PostgresDeviceRepository`) ändert nur die
 Infrastruktur-Schicht.
 
-### 4. Geräteliste (Single Source of Truth: device-service)
+### 4. Geräteliste — bekannte Duplizierung (bewusst zurückgestellt)
 
-`api-backend` hielt historisch eine eigene Geräteliste. Die lesenden
-Routen delegieren jetzt an den device-service (mit Shape-Adapter und
-lokalem Fallback bei Nichterreichbarkeit), sodass es genau eine fachliche
-Quelle gibt. Schreibende Spezialrouten (`enroll`, `apps/install`) sind
-als Migrations-TODO markiert.
+`api-backend` hält eine eigene In-Memory-Geräteliste (`deviceStore`,
+befüllt via `POST /api/devices/enroll`), parallel zur DDD-Domäne des
+device-service. Eine Delegation der lesenden Routen an den device-service
+wurde analysiert und **bewusst zurückgestellt**, weil zwei harte Blocker
+bestehen:
+
+1. **Fehlende Domänendaten**: Das `DeviceAggregate` des device-service
+   kennt nur `id, hostname, platform, status, isCompliant,
+   complianceViolations, lastSeen, enrolledAt`. Das Frontend
+   (`DevicesView.tsx`) konsumiert und verarbeitet aber aktiv `os`,
+   `osVersion`, `ip_address`, `kernel`, `package_manager` und einen
+   numerischen `complianceScore` — Felder ohne Datenquelle im
+   device-service. Ein Adapter würde sie still leeren.
+2. **Service-zu-Service-Auth fehlt**: api-backend signiert
+   HS256-Tokens mit symmetrischem Secret; device-service verlangt
+   JWKS-verifizierte Bearer-Tokens (`oidcAuth`). Zusätzlich setzt
+   `docker-compose.yml` für device-service kein
+   `OIDC_ISSUER`/`JWKS_URI` — der Default zeigt auf einen im Container
+   unbelegten Port.
+
+**Migrationspfad** (Voraussetzungen, bevor die Delegation umgesetzt
+werden kann):
+- device-service-Domäne um `os`, `osVersion`, `ipAddress`, `kernel`,
+  `packageManager` erweitern (Migration + Aggregate + Repository) und
+  einen numerischen Compliance-Score ableiten,
+- Client-Credentials-Flow gegen den `oauth-provider` in api-backend
+  (Vorbild: `services/platform/quick-actions/src/utils/serviceClient.js`),
+- `OIDC_ISSUER`/`JWKS_URI` für device-service in `docker-compose.yml`
+  korrekt auf den oauth-provider setzen.
 
 ## Testabdeckung als Architektur-Vertrag
 
