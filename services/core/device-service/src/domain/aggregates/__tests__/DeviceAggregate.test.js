@@ -171,4 +171,119 @@ describe('DeviceAggregate', () => {
       expect(secondCall).toHaveLength(0);
     });
   });
+
+  // ── system info fields (os, osVersion, ipAddress, kernel, packageManager) ──
+
+  describe('system info fields', () => {
+    it('default to null when not provided', () => {
+      const device = new DeviceAggregate(validProps);
+      expect(device.os).toBeNull();
+      expect(device.osVersion).toBeNull();
+      expect(device.ipAddress).toBeNull();
+      expect(device.kernel).toBeNull();
+      expect(device.packageManager).toBeNull();
+    });
+
+    it('are settable via constructor props', () => {
+      const device = new DeviceAggregate({
+        ...validProps,
+        os: 'linux',
+        osVersion: '22.04',
+        ipAddress: '10.0.0.5',
+        kernel: '5.15.0',
+        packageManager: 'apt',
+      });
+      expect(device.os).toBe('linux');
+      expect(device.osVersion).toBe('22.04');
+      expect(device.ipAddress).toBe('10.0.0.5');
+      expect(device.kernel).toBe('5.15.0');
+      expect(device.packageManager).toBe('apt');
+    });
+
+    it('round-trip through toJSON()', () => {
+      const device = new DeviceAggregate({
+        ...validProps,
+        os: 'macos',
+        osVersion: '14.4',
+        ipAddress: '192.168.1.10',
+        kernel: 'Darwin 23.4.0',
+        packageManager: 'brew',
+      });
+      const json = device.toJSON();
+      expect(json.os).toBe('macos');
+      expect(json.osVersion).toBe('14.4');
+      expect(json.ipAddress).toBe('192.168.1.10');
+      expect(json.kernel).toBe('Darwin 23.4.0');
+      expect(json.packageManager).toBe('brew');
+    });
+
+    it('round-trip through toJSON()/fromJSON()', () => {
+      const device = new DeviceAggregate({
+        ...validProps,
+        os: 'windows',
+        osVersion: '11',
+        ipAddress: '172.16.0.1',
+        kernel: '10.0.22631',
+        packageManager: 'winget',
+      });
+      const restored = DeviceAggregate.fromJSON(device.toJSON());
+      expect(restored.os).toBe('windows');
+      expect(restored.osVersion).toBe('11');
+      expect(restored.ipAddress).toBe('172.16.0.1');
+      expect(restored.kernel).toBe('10.0.22631');
+      expect(restored.packageManager).toBe('winget');
+    });
+
+    it('updateSystemInfo() updates only the provided fields', () => {
+      const device = new DeviceAggregate({ ...validProps, os: 'linux', osVersion: '20.04' });
+      device.updateSystemInfo({ osVersion: '22.04', ipAddress: '10.0.0.1' });
+      expect(device.os).toBe('linux');
+      expect(device.osVersion).toBe('22.04');
+      expect(device.ipAddress).toBe('10.0.0.1');
+    });
+
+    it('updateSystemInfo() returns device for chaining', () => {
+      const device = new DeviceAggregate(validProps);
+      expect(device.updateSystemInfo({ os: 'linux' })).toBe(device);
+    });
+  });
+
+  // ── complianceScore ──────────────────────────────────────────────────────
+
+  describe('complianceScore', () => {
+    it('is 100 when the device is compliant', () => {
+      const device = new DeviceAggregate({ ...validProps, isCompliant: true, complianceViolations: [] });
+      expect(device.complianceScore).toBe(100);
+    });
+
+    it('is 75 when non-compliant with 1 violation', () => {
+      const device = new DeviceAggregate({ ...validProps, isCompliant: false, complianceViolations: ['v1'] });
+      expect(device.complianceScore).toBe(75);
+    });
+
+    it('is 0 when non-compliant with 5 (or more) violations', () => {
+      const device = new DeviceAggregate({
+        ...validProps,
+        isCompliant: false,
+        complianceViolations: ['v1', 'v2', 'v3', 'v4', 'v5'],
+      });
+      expect(device.complianceScore).toBe(0);
+    });
+
+    it('is included in toJSON()', () => {
+      const device = new DeviceAggregate({ ...validProps, isCompliant: false, complianceViolations: ['v1', 'v2'] });
+      expect(device.toJSON().complianceScore).toBe(50);
+    });
+
+    it('updates dynamically after markNonCompliant()/markCompliant()', () => {
+      const device = DeviceAggregate.create(validProps);
+      expect(device.complianceScore).toBe(100);
+
+      device.markNonCompliant(['v1', 'v2', 'v3']);
+      expect(device.complianceScore).toBe(25);
+
+      device.markCompliant();
+      expect(device.complianceScore).toBe(100);
+    });
+  });
 });

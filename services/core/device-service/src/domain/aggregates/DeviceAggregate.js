@@ -12,6 +12,11 @@ class DeviceAggregate {
     this._complianceViolations = props.complianceViolations || [];
     this._lastSeen = props.lastSeen || null;
     this._enrolledAt = props.enrolledAt || new Date();
+    this._os = props.os !== undefined ? props.os : null;
+    this._osVersion = props.osVersion !== undefined ? props.osVersion : null;
+    this._ipAddress = props.ipAddress !== undefined ? props.ipAddress : null;
+    this._kernel = props.kernel !== undefined ? props.kernel : null;
+    this._packageManager = props.packageManager !== undefined ? props.packageManager : null;
     this._domainEvents = [];
   }
 
@@ -39,6 +44,15 @@ class DeviceAggregate {
 
   updateLastSeen() {
     this._lastSeen = new Date();
+    return this;
+  }
+
+  updateSystemInfo({ os, osVersion, ipAddress, kernel, packageManager } = {}) {
+    if (os !== undefined) this._os = os;
+    if (osVersion !== undefined) this._osVersion = osVersion;
+    if (ipAddress !== undefined) this._ipAddress = ipAddress;
+    if (kernel !== undefined) this._kernel = kernel;
+    if (packageManager !== undefined) this._packageManager = packageManager;
     return this;
   }
 
@@ -80,6 +94,21 @@ class DeviceAggregate {
   get complianceViolations() { return [...this._complianceViolations]; }
   get lastSeen() { return this._lastSeen; }
   get enrolledAt() { return this._enrolledAt; }
+  get os() { return this._os; }
+  get osVersion() { return this._osVersion; }
+  get ipAddress() { return this._ipAddress; }
+  get kernel() { return this._kernel; }
+  get packageManager() { return this._packageManager; }
+
+  /**
+   * Derived compliance score (0-100).
+   * Fully compliant devices score 100; each recorded violation deducts 25,
+   * floored at 0.
+   */
+  get complianceScore() {
+    if (this._isCompliant === true) return 100;
+    return Math.max(0, 100 - 25 * this._complianceViolations.length);
+  }
 
   getAndClearDomainEvents() {
     const events = [...this._domainEvents];
@@ -93,7 +122,14 @@ class DeviceAggregate {
       status: this._status, isCompliant: this._isCompliant,
       complianceViolations: this._complianceViolations,
       lastSeen: this._lastSeen, enrolledAt: this._enrolledAt,
+      os: this._os, osVersion: this._osVersion, ipAddress: this._ipAddress,
+      kernel: this._kernel, packageManager: this._packageManager,
+      complianceScore: this.complianceScore,
     };
+  }
+
+  static fromJSON(json) {
+    return new DeviceAggregate(json);
   }
 }
 

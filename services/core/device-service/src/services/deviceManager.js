@@ -135,6 +135,11 @@ class DeviceManager {
       if (updates.lastSeen !== undefined) aggregate._lastSeen = updates.lastSeen;
       if (updates.isCompliant !== undefined) aggregate._isCompliant = updates.isCompliant;
       if (updates.complianceViolations !== undefined) aggregate._complianceViolations = updates.complianceViolations;
+      if (updates.os !== undefined) aggregate._os = updates.os;
+      if (updates.osVersion !== undefined) aggregate._osVersion = updates.osVersion;
+      if (updates.ipAddress !== undefined) aggregate._ipAddress = updates.ipAddress;
+      if (updates.kernel !== undefined) aggregate._kernel = updates.kernel;
+      if (updates.packageManager !== undefined) aggregate._packageManager = updates.packageManager;
 
       await this.deviceRepository.save(aggregate);
       const device = aggregate.toJSON();

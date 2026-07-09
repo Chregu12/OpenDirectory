@@ -45,13 +45,15 @@ class PostgresDeviceRepository extends IDeviceRepository {
   async save(device) {
     const d = device.toJSON();
     await this._db.query(
-      `INSERT INTO devices (id, hostname, platform, status, is_compliant, compliance_violations, last_seen, enrolled_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO devices (id, hostname, platform, status, is_compliant, compliance_violations, last_seen, enrolled_at, os, os_version, ip_address, kernel, package_manager)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        ON CONFLICT (id) DO UPDATE SET
          hostname=$2, platform=$3, status=$4, is_compliant=$5,
-         compliance_violations=$6, last_seen=$7`,
+         compliance_violations=$6, last_seen=$7,
+         os=$9, os_version=$10, ip_address=$11, kernel=$12, package_manager=$13`,
       [d.id, d.hostname, d.platform, d.status, d.isCompliant,
-       JSON.stringify(d.complianceViolations), d.lastSeen, d.enrolledAt]
+       JSON.stringify(d.complianceViolations), d.lastSeen, d.enrolledAt,
+       d.os, d.osVersion, d.ipAddress, d.kernel, d.packageManager]
     );
     return device;
   }
@@ -71,6 +73,8 @@ class PostgresDeviceRepository extends IDeviceRepository {
       status: row.status, isCompliant: row.is_compliant,
       complianceViolations: row.compliance_violations || [],
       lastSeen: row.last_seen, enrolledAt: row.enrolled_at,
+      os: row.os, osVersion: row.os_version, ipAddress: row.ip_address,
+      kernel: row.kernel, packageManager: row.package_manager,
     });
   }
 
