@@ -127,10 +127,20 @@ class AutoExtendingApiGateway extends EventEmitter {
       logger.error('❌ Redis connection error:', error);
     });
     
-    // Subscribe to service registration events
+    // Subscribe to service registration events. The subscriber needs its own
+    // error handler and the subscribe() promise must be caught — otherwise an
+    // unreachable Redis turns into an uncaught exception that kills the
+    // gateway process instead of degrading gracefully like the main client.
     const subscriber = this.redis.duplicate();
-    subscriber.subscribe('service:register', 'service:unregister', 'service:health');
-    
+    subscriber.on('error', (error) => {
+      logger.error('❌ Redis subscriber error:', error);
+    });
+    Promise.resolve(
+      subscriber.subscribe('service:register', 'service:unregister', 'service:health')
+    ).catch((error) => {
+      logger.error('❌ Redis subscribe failed — service events disabled:', error);
+    });
+
     subscriber.on('message', (channel, message) => {
       try {
         const data = JSON.parse(message);
