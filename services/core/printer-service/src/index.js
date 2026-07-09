@@ -21,6 +21,8 @@ const PrintPoolManager = require('./services/printPool');
 const driverRoutes = require('./routes/driverRoutes');
 
 const catalogRoutes = require('./routes/catalogRoutes');
+const PrinterApplicationService = require('./application/PrinterApplicationService');
+const createPrinterRoutes = require('./routes/printerRoutes');
 
 const app = express();
 const server = createServer(app);
@@ -34,13 +36,6 @@ const EventBusClient = (() => {
 const _bus = new EventBusClient({ source: 'printer-service' });
 async function connectBus() { await _bus.connect(); }
 function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
-
-// Lightweight in-memory job log (survives restarts via DB if needed later)
-const jobLog = [];
-function addJobLog(entry) {
-  jobLog.unshift({ id: require('uuid').v4(), submitted: new Date().toISOString(), ...entry });
-  if (jobLog.length > 200) jobLog.length = 200; // cap at 200 entries
-}
 
 const logger = winston.createLogger({
   level: 'info',
@@ -68,6 +63,14 @@ const permissions = new PermissionManager();
 const deployment = new PrinterDeployment();
 const quota = new QuotaManager();
 const analytics = new PrintAnalytics();
+
+// PrinterApplicationService — printer CRUD, deployment and print-job-queue
+// (read/cancel) use cases, layered behind routes/printerRoutes.js. Built
+// from the manager instances above rather than its own, since printerManager
+// and printQueue are also used directly by routes that stay inline below
+// (permissions, quota, scanner, print-pool, agent, and POST /api/print,
+// which is cross-cut with permissions/quota).
+const printerAppService = new PrinterApplicationService({ printerManager, discovery, deployment, printQueue });
 
 // ─── PostgreSQL Pool ─────────────────────────────────────────────────────────
 const { Pool } = require('pg');
@@ -150,309 +153,10 @@ function broadcastJobStatus(jobId, status) {
 
 // API Routes
 
-// Printer discovery and management
-app.post('/api/printers/discover', async (req, res) => {
-  try {
-    const { method = 'all', subnet, timeout = 30000 } = req.body;
-    const printers = await discovery.discoverPrinters(method, subnet, timeout);
-    res.json({ success: true, printers });
-  } catch (error) {
-    logger.error('Discovery error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/printers/add', async (req, res) => {
-  try {
-    const { 
-      name, 
-      address, 
-      driver, 
-      protocol = 'ipp',
-      port,
-      description,
-      location,
-      autoDetect = true
-    } = req.body;
-    
-    const printer = await printerManager.addPrinter({
-      name,
-      address,
-      driver,
-      protocol,
-      port,
-      description,
-      location,
-      autoDetect
-    });
-    
-    res.json({ success: true, printer });
-  } catch (error) {
-    logger.error('Add printer error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/printers', async (req, res) => {
-  try {
-    const printers = await printerManager.listPrinters();
-    res.json({ success: true, printers });
-  } catch (error) {
-    logger.error('List printers error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ── Probe a specific IP for printer info ─────────────────────────────────────
-
-const net = require('net');
-const ipp = (() => { try { return require('ipp'); } catch (_) { return null; } })();
-
-function tcpProbe(host, port, timeoutMs = 3000) {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    socket.setTimeout(timeoutMs);
-    socket.on('connect', () => { socket.destroy(); resolve(true); });
-    socket.on('timeout', () => { socket.destroy(); resolve(false); });
-    socket.on('error', () => { socket.destroy(); resolve(false); });
-    socket.connect(port, host);
-  });
-}
-
-async function ippGetAttributes(host, port) {
-  if (!ipp) return null;
-  return new Promise((resolve) => {
-    try {
-      const printer = new ipp.Printer(`http://${host}:${port}/ipp/print`);
-      printer.execute('Get-Printer-Attributes', {
-        'operation-attributes-tag': { 'requested-attributes': ['printer-make-and-model', 'printer-info', 'document-format-supported'] },
-      }, (err, res) => {
-        if (err || !res) return resolve(null);
-        const attrs = res?.['printer-attributes-tag'] ?? {};
-        resolve({
-          model: attrs['printer-make-and-model'] ?? attrs['printer-info'] ?? null,
-          formats: attrs['document-format-supported'] ?? [],
-        });
-      });
-      setTimeout(() => resolve(null), 4000);
-    } catch (_) { resolve(null); }
-  });
-}
-
-app.post('/api/printer/probe', async (req, res) => {
-  const { ip } = req.body;
-  if (!ip) return res.status(400).json({ error: 'ip is required' });
-
-  // Try common printer ports in parallel
-  const [ipp631, ipp443, raw9100, http80] = await Promise.all([
-    tcpProbe(ip, 631),
-    tcpProbe(ip, 443),
-    tcpProbe(ip, 9100),
-    tcpProbe(ip, 80),
-  ]);
-
-  if (!ipp631 && !ipp443 && !raw9100 && !http80) {
-    return res.status(404).json({ error: 'No printer found at that address' });
-  }
-
-  // Detect protocols available
-  const protocols = [];
-  if (ipp631 || ipp443) protocols.push('IPP');
-  if (raw9100)          protocols.push('RAW');
-  if (http80)           protocols.push('HTTP');
-
-  // Try to get make/model via IPP if port 631 is open
-  let model = null;
-  let vendor = null;
-  if (ipp631) {
-    const attrs = await ippGetAttributes(ip, 631);
-    if (attrs?.model) {
-      model = attrs.model;
-      // Extract vendor from first word of model
-      vendor = model.split(/\s+/)[0];
-    }
-  }
-
-  res.json({
-    ip,
-    vendor: vendor ?? 'Unknown',
-    model:  model  ?? null,
-    protocols,
-    openPorts: { ipp: ipp631, ippSecure: ipp443, raw: raw9100, http: http80 },
-  });
-});
-
-// Alias: /api/printer/discover → run a quick IPP scan (returns [] on macOS; use /probe for targeted checks)
-app.post('/api/printer/discover', async (req, res) => {
-  try {
-    const printers = await discovery.discoverPrinters('ipp', req.body?.subnet, 8000);
-    res.json({ success: true, printers });
-  } catch (error) {
-    res.json({ success: true, printers: [] });
-  }
-});
-
-// ── Frontend-compatible routes (called via /api/printer/* gateway prefix) ────
-
-// Map frontend field names (ip, model, isMultifunction, scanFormats) to service fields
-function mapFrontendPayload(body) {
-  const { ip, ipAddress, name, model, protocol, driver, location, isMultifunction, scanFormats, description } = body;
-  const address = ip || ipAddress || body.address;
-  const proto = (protocol || 'IPP').toLowerCase();
-  return {
-    name:            name,
-    displayName:     name,
-    address,
-    protocol:        proto,
-    port:            proto === 'ipp' ? 631 : proto === 'lpd' ? 515 : 9100,
-    driver:          driver || 'everywhere',
-    model:           model || '',
-    description:     description || model || '',
-    location:        location || '',
-    isMultifunction: !!isMultifunction,
-    scanFormats:     scanFormats || [],
-  };
-}
-
-function mapToFrontend(p) {
-  return {
-    id:              p.id,
-    name:            p.display_name || p.name,
-    ip:              p.address,
-    model:           p.model || '',
-    protocol:        (p.protocol || 'IPP').toUpperCase(),
-    status:          p.status === 'idle' || p.status === 'online' ? 'online' : p.status === 'offline' ? 'offline' : 'online',
-    queueDepth:      p.queue_depth || 0,
-    location:        p.location || '',
-    isMultifunction: p.is_multifunction || false,
-    scanFormats:     p.scan_formats || [],
-  };
-}
-
-app.get('/api/printer/printers', async (req, res) => {
-  try {
-    const printers = await printerManager.listPrinters();
-    res.json(printers.map(mapToFrontend));
-  } catch (error) {
-    logger.error('List printers (frontend) error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/printer/printers', async (req, res) => {
-  try {
-    const config = mapFrontendPayload(req.body);
-    if (!config.name)    return res.status(400).json({ error: 'Printer name is required' });
-    if (!config.address) return res.status(400).json({ error: 'IP address is required' });
-    const printer = await printerManager.addPrinter(config);
-    res.json(mapToFrontend(printer));
-  } catch (error) {
-    logger.error('Add printer (frontend) error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/printer/printers/:id', async (req, res) => {
-  try {
-    await printerManager.removePrinter(req.params.id);
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('Delete printer (frontend) error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Submit a print job / test page via IPP directly to the printer
-app.post('/api/printer/jobs', async (req, res) => {
-  try {
-    const { printer_name, document_name = 'Test Page', user_name = 'admin' } = req.body;
-    if (!printer_name) return res.status(400).json({ error: 'printer_name is required' });
-
-    // Look up printer by name from printerManager
-    const allPrinters = await printerManager.listPrinters();
-    const printer = allPrinters.find(p =>
-      p.name === printer_name || p.address === printer_name || p.id === printer_name
-    );
-    if (!printer) {
-      return res.status(404).json({ error: `Printer "${printer_name}" not found` });
-    }
-    const ip = printer.address || printer.ip_address;
-    if (!ip) return res.status(400).json({ error: 'Printer has no IP address stored' });
-
-    // Build a PCL5 test page (supported by all HP printers)
-    const ESC = '\x1B';
-    const now = new Date().toLocaleString('de-CH');
-    const lines = [
-      '================================================',
-      '   OpenDirectory  -  Test Page',
-      '================================================',
-      '',
-      `  Printer  : ${printer.name}`,
-      `  Address  : ${ip}`,
-      `  Document : ${document_name}`,
-      `  Sent by  : ${user_name}`,
-      `  Time     : ${now}`,
-      '',
-      '------------------------------------------------',
-      '  If you can read this, the printer',
-      '  connection is working correctly.',
-      '------------------------------------------------',
-    ];
-    let pcl = ESC + 'E';            // Reset printer
-    pcl += ESC + '&l0O';            // Portrait
-    pcl += ESC + '(0U';             // US ASCII symbol set
-    pcl += ESC + '(s0p10h12v0s0b3T'; // Courier 12pt fixed
-    pcl += ESC + '&a5R' + ESC + '&a5C'; // Start at row 5, col 5
-    lines.forEach(line => { pcl += line + '\r\n'; });
-    pcl += ESC + 'E';               // Reset + eject page
-    const jobData = Buffer.from(pcl, 'latin1');
-
-    // Send via IPP Print-Job request
-    const ipp = require('ipp');
-    const printerUrl = `http://${ip}:631/ipp/print`;
-    const ippPrinter = ipp.Printer(printerUrl);
-
-    const ippMsg = {
-      'operation-attributes-tag': {
-        'requesting-user-name': user_name,
-        'job-name': document_name,
-        'document-format': 'application/vnd.hp-PCL',
-      },
-      data: jobData,
-    };
-
-    await new Promise((resolve, reject) => {
-      ippPrinter.execute('Print-Job', ippMsg, (err, response) => {
-        if (err) return reject(err);
-        const status = response?.statusCode || response?.['status-code'];
-        if (status && !String(status).startsWith('successful')) {
-          return reject(new Error(`IPP error: ${status}`));
-        }
-        resolve(response);
-      });
-    });
-
-    addJobLog({
-      printer: printer.name,
-      documentName: document_name,
-      user: user_name,
-      pages: req.body.pages || 1,
-      status: 'completed',
-    });
-    logger.info(`Test page sent to ${printer.name} (${ip}) by ${user_name}`);
-    res.json({ success: true, message: `Test page sent to ${printer.name}` });
-  } catch (error) {
-    addJobLog({
-      printer: req.body.printer_name,
-      documentName: req.body.document_name || 'Test Page',
-      user: req.body.user_name || 'admin',
-      pages: req.body.pages || 1,
-      status: 'failed',
-    });
-    logger.error('Print job error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+// Printer CRUD, deployment, probe, frontend-compatible printer routes and
+// print-job-queue (read/cancel) — layered behind PrinterApplicationService.
+// See routes/printerRoutes.js for the extracted route definitions.
+app.use(createPrinterRoutes(printerAppService));
 
 // POST /api/printer/test-scan — verify scanner reachability via eSCL
 app.post('/api/printer/test-scan', async (req, res) => {
@@ -548,45 +252,6 @@ app.get('/api/printer/scanners', async (req, res) => {
   }
 });
 
-// GET /api/printer/jobs — return job log for the frontend
-app.get('/api/printer/jobs', (req, res) => {
-  const { printer } = req.query;
-  const filtered = printer
-    ? jobLog.filter(j => j.printer === printer)
-    : jobLog;
-  res.json({ data: filtered });
-});
-
-app.get('/api/printers/:id', async (req, res) => {
-  try {
-    const printer = await printerManager.getPrinter(req.params.id);
-    res.json({ success: true, printer });
-  } catch (error) {
-    logger.error('Get printer error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.put('/api/printers/:id', async (req, res) => {
-  try {
-    const printer = await printerManager.updatePrinter(req.params.id, req.body);
-    res.json({ success: true, printer });
-  } catch (error) {
-    logger.error('Update printer error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/printers/:id', async (req, res) => {
-  try {
-    await printerManager.removePrinter(req.params.id);
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('Remove printer error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Printer permissions and access control
 app.post('/api/printers/:id/permissions', async (req, res) => {
   try {
@@ -672,37 +337,6 @@ app.post('/api/print', async (req, res) => {
     res.json({ success: true, jobId: job.id });
   } catch (error) {
     logger.error('Print error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/jobs', async (req, res) => {
-  try {
-    const { userId, printerId, status } = req.query;
-    const jobs = await printQueue.listJobs({ userId, printerId, status });
-    res.json({ success: true, jobs });
-  } catch (error) {
-    logger.error('List jobs error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/jobs/:id', async (req, res) => {
-  try {
-    const job = await printQueue.getJob(req.params.id);
-    res.json({ success: true, job });
-  } catch (error) {
-    logger.error('Get job error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/jobs/:id', async (req, res) => {
-  try {
-    await printQueue.cancelJob(req.params.id);
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('Cancel job error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -945,29 +579,6 @@ app.post('/api/print-pools/:poolId/test-route', async (req, res) => {
     res.json({ success: true, selectedMember: member });
   } catch (error) {
     logger.error('Test route error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Deployment endpoints
-app.post('/api/deployment/generate', async (req, res) => {
-  try {
-    const { platform, printers, settings } = req.body;
-    const config = await deployment.generateConfig(platform, printers, settings);
-    res.json({ success: true, config });
-  } catch (error) {
-    logger.error('Generate config error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/deployment/deploy', async (req, res) => {
-  try {
-    const { targetDevices, printers, platform } = req.body;
-    const result = await deployment.deployPrinters(targetDevices, printers, platform);
-    res.json({ success: true, result });
-  } catch (error) {
-    logger.error('Deploy error:', error);
     res.status(500).json({ error: error.message });
   }
 });
