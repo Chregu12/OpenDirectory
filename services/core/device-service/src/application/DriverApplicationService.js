@@ -100,6 +100,26 @@ function checkedLookup(hostname, options, callback) {
 function downloadToBuffer(url, timeoutMs = 300000, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
     if (!/^https?:\/\//i.test(url)) return reject(new Error('Nur http(s)-URLs erlaubt'));
+
+    let parsedUrl;
+    try { parsedUrl = new URL(url); } catch (_) { return reject(new Error('Ungültige URL')); }
+
+    // Node's custom `lookup` option (used below via checkedLookup, for
+    // hostnames and DNS-rebinding protection) is *not* invoked when the URL
+    // host is already an IP literal — Node connects to it directly. Since
+    // SSRF payloads very commonly target a literal IP (e.g.
+    // http://127.0.0.1/ or http://169.254.169.254/), that case must be
+    // rejected here, before any connection is attempted.
+    if (!SSRF_GUARD_DISABLED) {
+      const hostname = parsedUrl.hostname;
+      if (hostname.toLowerCase() === 'localhost') {
+        return reject(new Error('Blocked internal/private address'));
+      }
+      if (net.isIP(hostname) && isPrivateAddress(hostname)) {
+        return reject(new Error('Blocked internal/private address'));
+      }
+    }
+
     const proto = url.startsWith('https') ? https : http;
     const req = proto.get(url, { headers: { 'User-Agent': 'OpenDirectory/1.0' }, lookup: checkedLookup }, res => {
       if ([301, 302, 307, 308].includes(res.statusCode)) {
