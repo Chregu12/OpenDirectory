@@ -196,7 +196,7 @@ function newDriverId() {
  * validation, defaulting and persistence orchestration lives here.
  */
 class DriverApplicationService {
-  constructor(driverRepo, reportRepo, { matchDrivers, eventBus } = {}) {
+  constructor({ driverRepo, reportRepo, matchDrivers, eventBus } = {}) {
     this._driverRepo = driverRepo;
     this._reportRepo = reportRepo;
     this._matchDrivers = matchDrivers;

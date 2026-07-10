@@ -12,7 +12,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { oidcAuth } = require('../oidcAuth');
+const { oidcAuth, requireDeviceAdmin, hasDeviceAdminAccess } = require('../oidcAuth');
 
 const ENROLL = 'test-enrollment-secret';
 
@@ -88,4 +88,76 @@ test('enrollment bypass fails closed when DEVICE_ENROLLMENT_TOKEN is unset', asy
   } finally {
     if (prev !== undefined) process.env.DEVICE_ENROLLMENT_TOKEN = prev;
   }
+});
+
+// ---------------------------------------------------------------------------
+// requireDeviceAdmin / hasDeviceAdminAccess
+//
+// Regression coverage for the LAPS/BitLocker/reset/unjoin authorization gap:
+// oidcAuth alone only proves a caller presented a valid JWT, not that they
+// hold a role/scope entitled to device secrets. Any authenticated user could
+// previously read LAPS cleartext passwords and BitLocker recovery keys.
+// ---------------------------------------------------------------------------
+
+function runRoleMiddleware(user) {
+  return new Promise(resolve => {
+    const req = { user };
+    const res = {
+      status(code) {
+        return { json: () => resolve({ outcome: 'rejected', code }) };
+      },
+    };
+    requireDeviceAdmin(req, res, () => resolve({ outcome: 'next' }));
+  });
+}
+
+test('requireDeviceAdmin: valid token WITHOUT admin/helpdesk role -> 403', async () => {
+  const r = await runRoleMiddleware({ sub: 'user-1', roles: ['user'] });
+  assert.equal(r.outcome, 'rejected');
+  assert.equal(r.code, 403);
+});
+
+test('requireDeviceAdmin: valid token WITH admin role -> next()', async () => {
+  const r = await runRoleMiddleware({ sub: 'admin-1', roles: ['admin'] });
+  assert.equal(r.outcome, 'next');
+});
+
+test('requireDeviceAdmin: valid token WITH helpdesk role -> next()', async () => {
+  const r = await runRoleMiddleware({ sub: 'helpdesk-1', roles: ['helpdesk', 'user'] });
+  assert.equal(r.outcome, 'next');
+});
+
+test('requireDeviceAdmin: valid token WITH device.admin scope (space-delimited string) -> next()', async () => {
+  const r = await runRoleMiddleware({ sub: 'svc-1', scope: 'openid profile device.admin' });
+  assert.equal(r.outcome, 'next');
+});
+
+test('requireDeviceAdmin: valid token WITH device.admin in scopes array -> next()', async () => {
+  const r = await runRoleMiddleware({ sub: 'svc-2', scopes: ['device.admin'] });
+  assert.equal(r.outcome, 'next');
+});
+
+test('requireDeviceAdmin: realm_access.roles (Keycloak-style) admin role -> next()', async () => {
+  const r = await runRoleMiddleware({ sub: 'kc-1', realm_access: { roles: ['admin'] } });
+  assert.equal(r.outcome, 'next');
+});
+
+test('requireDeviceAdmin: token with no roles/scopes at all -> 403 (fail closed)', async () => {
+  const r = await runRoleMiddleware({ sub: 'user-2' });
+  assert.equal(r.outcome, 'rejected');
+  assert.equal(r.code, 403);
+});
+
+test('requireDeviceAdmin: missing req.user entirely -> 403 (fail closed)', async () => {
+  const r = await runRoleMiddleware(undefined);
+  assert.equal(r.outcome, 'rejected');
+  assert.equal(r.code, 403);
+});
+
+test('hasDeviceAdminAccess: irrelevant scope string does not grant access', () => {
+  assert.equal(hasDeviceAdminAccess({ sub: 'x', scope: 'openid profile email' }), false);
+});
+
+test('hasDeviceAdminAccess: non-array roles claim (malformed token) does not throw / does not grant access', () => {
+  assert.equal(hasDeviceAdminAccess({ sub: 'x', roles: 'admin' }), false);
 });

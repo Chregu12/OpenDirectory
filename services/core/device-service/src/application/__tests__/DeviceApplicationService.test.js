@@ -182,4 +182,62 @@ describe('DeviceApplicationService', () => {
       );
     });
   });
+
+  // ── markDeviceSeen ──────────────────────────────────────────────────────────
+
+  describe('markDeviceSeen()', () => {
+    it('throws when device is not found', async () => {
+      mockDeviceRepo.findById.mockResolvedValue(null);
+
+      await expect(svc.markDeviceSeen('missing')).rejects.toThrow('Device not found');
+    });
+
+    it('updates lastSeen and saves', async () => {
+      const device = makeDevice();
+      mockDeviceRepo.findById.mockResolvedValue(device);
+      mockDeviceRepo.save.mockResolvedValue(undefined);
+
+      const result = await svc.markDeviceSeen('dev-1');
+
+      expect(device.updateLastSeen).toHaveBeenCalled();
+      expect(mockDeviceRepo.save).toHaveBeenCalledWith(device);
+      expect(result).toBe(device);
+    });
+  });
+
+  // ── retireDevice ─────────────────────────────────────────────────────────────
+
+  describe('retireDevice()', () => {
+    it('throws when device is not found', async () => {
+      mockDeviceRepo.findById.mockResolvedValue(null);
+
+      await expect(svc.retireDevice('missing')).rejects.toThrow('Device not found');
+    });
+
+    it('retires the device and saves', async () => {
+      const device = makeDevice();
+      mockDeviceRepo.findById.mockResolvedValue(device);
+      mockDeviceRepo.save.mockResolvedValue(undefined);
+
+      const result = await svc.retireDevice('dev-1');
+
+      expect(device.retire).toHaveBeenCalled();
+      expect(mockDeviceRepo.save).toHaveBeenCalledWith(device);
+      expect(result).toBe(device);
+    });
+  });
+
+  // ── listDevices ──────────────────────────────────────────────────────────────
+
+  describe('listDevices()', () => {
+    it('delegates to repository findAll with filters', async () => {
+      const device = makeDevice();
+      mockDeviceRepo.findAll.mockResolvedValue([device]);
+
+      const result = await svc.listDevices({ platform: 'macos' });
+
+      expect(mockDeviceRepo.findAll).toHaveBeenCalledWith({ platform: 'macos' });
+      expect(result).toHaveLength(1);
+    });
+  });
 });

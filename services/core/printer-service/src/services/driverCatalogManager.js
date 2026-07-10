@@ -24,6 +24,31 @@ const logger = winston.createLogger({
 
 // Dell entries come from the live DellCatalogService (dellCatalogService.js).
 // Static entries below cover HP, Lenovo, Brother, Canon, Epson, and Generic only.
+//
+// Relationship to @opendirectory/driver-catalog (packages/driver-catalog):
+// that shared package is the I/O-free hardware-matching kernel consumed by
+// device-service (src/vendors/HpProvider.js, LenovoProvider.js — network,
+// audio, display, firmware, biometric, etc. drivers matched by PnP/PCI/USB
+// ID). This catalog here is printer-service's own, domain-specific driver
+// catalog (UPD, PPD, CUPS/HPLIP, LaserJet/OfficeJet full-feature installers)
+// and is intentionally NOT sourced from the shared package — see
+// docs/services/driver-management.md, "Bounded Contexts".
+//
+// The two catalogs overlap for real (not just similarly-named IDs) in a
+// couple of spots that predate this comment and are left as-is rather than
+// restructured:
+//   - 'hp-hplip-linux' exists (same downloadUrl) in both catalogs, because
+//     HPLIP is legitimately both a printer driver (this catalog) and a
+//     generic Linux imaging/scanning package (shared package). Its `format`
+//     must be kept identical in both places — currently 'run' (the
+//     downloadUrl is a self-extracting .run installer, not a .deb).
+//   - 'hp-network-broadcom' below and the entire `lenovo` block are
+//     non-printer device drivers (network/audio/wifi/display/firmware/...)
+//     duplicated verbatim (same downloadUrl, different id) from
+//     HpProvider.js / LenovoProvider.js in the shared package. They are not
+//     printer drivers and arguably don't belong in a printer catalog, but
+//     removing/relocating them is a larger restructuring outside the scope
+//     of this fix — flagged here for a future cleanup pass.
 
 const MANUFACTURER_CATALOG = {
 

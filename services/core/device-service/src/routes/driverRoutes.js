@@ -22,11 +22,11 @@ const logger = winston.createLogger({
 // by the same repository classes so both routers share behaviour, not state
 // (each repository re-reads process.env.DEVICE_DRIVERS_DIR / DEVICE_HARDWARE_DIR
 // at construction time, same as the transaction-script version did).
-const driverAppService = new DriverApplicationService(
-  new FileDriverRepository(),
-  new FileHardwareReportRepository(),
-  { matchDrivers }
-);
+const driverAppService = new DriverApplicationService({
+  driverRepo: new FileDriverRepository(),
+  reportRepo: new FileHardwareReportRepository(),
+  matchDrivers,
+});
 
 const router = express.Router();
 

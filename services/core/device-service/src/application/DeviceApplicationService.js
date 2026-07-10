@@ -3,6 +3,12 @@ const DeviceAggregate = require('../domain/aggregates/DeviceAggregate');
 const { Platform } = require('../domain/value-objects/Platform');
 const ComplianceStatus = require('../domain/value-objects/ComplianceStatus');
 
+// NOTE: This DDD application service is NOT yet the active device CRUD path.
+// index.js still wires up the transaction-script services/deviceManager.js
+// for device enroll/list/compliance/retire routes. Swapping index.js over to
+// this class (and its repository/message-bus dependencies) is an intentionally
+// deferred, larger refactor — not done here. Keep this class and its tests
+// green, but do not treat its absence from index.js as a bug.
 class DeviceApplicationService {
   constructor({ deviceRepository, messageBus, logger }) {
     this._repo = deviceRepository;

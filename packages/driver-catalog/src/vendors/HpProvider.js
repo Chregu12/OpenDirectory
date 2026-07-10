@@ -92,7 +92,10 @@ const DRIVERS = [
     vendor: 'HP',
     os: ['linux'],
     deviceType: 'printer',
-    format: 'deb',
+    // downloadUrl is a self-extracting .run installer, not a .deb package —
+    // keep this in sync with the same id in printer-service's
+    // driverCatalogManager.js MANUFACTURER_CATALOG.hp (see comment there).
+    format: 'run',
     architecture: 'x86_64',
     description: 'Supports 3000+ HP printers and scanners on Linux via CUPS',
     downloadUrl: 'https://ftp.hp.com/pub/softlib/software13/printers/hpijs/hplip-3.23.3.run',

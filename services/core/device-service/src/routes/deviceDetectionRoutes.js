@@ -12,11 +12,11 @@ const router = express.Router();
 
 // Module singleton — see driverRoutes.js for why each router builds its own
 // application-service instance backed by the file repositories.
-const driverAppService = new DriverApplicationService(
-  new FileDriverRepository(),
-  new FileHardwareReportRepository(),
-  { matchDrivers }
-);
+const driverAppService = new DriverApplicationService({
+  driverRepo: new FileDriverRepository(),
+  reportRepo: new FileHardwareReportRepository(),
+  matchDrivers,
+});
 
 // POST /api/devices/report-hardware
 // Called by Windows agent / Join script after domain join

@@ -8,7 +8,7 @@ const rateLimit = require('express-rate-limit');
 const winston = require('winston');
 const http = require('http');
 const https = require('https');
-const { oidcAuth } = require('./middleware/oidcAuth');
+const { oidcAuth, requireDeviceAdmin } = require('./middleware/oidcAuth');
 
 // ---------------------------------------------------------------------------
 // Logger
@@ -114,8 +114,11 @@ app.use(limiter);
 // any user/OIDC identity, so that single path additionally accepts the
 // shared DEVICE_ENROLLMENT_TOKEN via the x-enrollment-token header. The
 // highly sensitive computer endpoints (LAPS passwords, BitLocker recovery
-// keys, machine-password reset) are deliberately NOT in enrollmentPaths —
-// they stay strictly JWT-only.
+// keys, machine-password reset, unjoin) are deliberately NOT in
+// enrollmentPaths — they stay strictly JWT-only, and additionally require
+// requireDeviceAdmin (an admin/helpdesk role or device.admin scope on the
+// verified token) at the individual route level, since a valid JWT alone
+// only proves identity, not authorization for device secrets.
 // ---------------------------------------------------------------------------
 app.use(oidcAuth({
   skipPaths: ['/health'],
@@ -354,8 +357,11 @@ app.put('/api/computers/:name', async (req, res) => {
  * DELETE /api/computers/:name/join
  * Domain unjoin (delete or disable computer account).
  * Body: { disableOnly }
+ *
+ * Role-gated (see requireDeviceAdmin): unjoining a computer is destructive
+ * and must not be reachable by any authenticated-but-unprivileged caller.
  */
-app.delete('/api/computers/:name/join', async (req, res) => {
+app.delete('/api/computers/:name/join', requireDeviceAdmin, async (req, res) => {
   try {
     const { name } = req.params;
     const { disableOnly } = req.body || {};
@@ -370,9 +376,11 @@ app.delete('/api/computers/:name/join', async (req, res) => {
  * POST /api/computers/:name/reset-machine-password
  * Reset the machine account password.
  *
- * Strictly JWT-only (no enrollment-token bypass — see oidcAuth mount above).
+ * Strictly JWT-only (no enrollment-token bypass — see oidcAuth mount above)
+ * and role-gated (see requireDeviceAdmin) — resetting the machine account
+ * password breaks the computer's domain trust relationship until it rejoins.
  */
-app.post('/api/computers/:name/reset-machine-password', async (req, res) => {
+app.post('/api/computers/:name/reset-machine-password', requireDeviceAdmin, async (req, res) => {
   try {
     const { name } = req.params;
     const result = await computerManager.resetMachinePassword(name);
@@ -390,13 +398,13 @@ app.post('/api/computers/:name/reset-machine-password', async (req, res) => {
  * requestingUserId is derived from the verified token subject, never from
  * the (client-controlled, unverified) query parameter, so the audit trail
  * in computerManager.getLAPSPassword can't be spoofed by whoever is calling.
- * TODO(authz): oidcAuth only proves *who* is asking, not that they're
- * *allowed* to read this computer's LAPS password — computerManager
- * currently just logs requestingUserId. Add real role/scope-based
- * authorization (e.g. "LAPS readers" group / per-OU delegation) here before
- * this is safe to expose broadly.
+ * Role-gated via requireDeviceAdmin: oidcAuth alone only proves *who* is
+ * asking, not that they're *allowed* to read this computer's cleartext LAPS
+ * password, so the route additionally requires an admin/helpdesk role (or
+ * device.admin scope) — see middleware/oidcAuth.js for the claim shapes
+ * checked.
  */
-app.get('/api/computers/:name/laps-password', async (req, res) => {
+app.get('/api/computers/:name/laps-password', requireDeviceAdmin, async (req, res) => {
   try {
     const { name } = req.params;
     const requestingUserId = req.user.sub;
@@ -411,8 +419,10 @@ app.get('/api/computers/:name/laps-password', async (req, res) => {
 /**
  * POST /api/computers/:name/laps-rotate
  * Rotate the LAPS password.
+ *
+ * Role-gated (see requireDeviceAdmin).
  */
-app.post('/api/computers/:name/laps-rotate', async (req, res) => {
+app.post('/api/computers/:name/laps-rotate', requireDeviceAdmin, async (req, res) => {
   try {
     const { name } = req.params;
     const result = await computerManager.rotateLAPSPassword(name);
@@ -426,8 +436,10 @@ app.post('/api/computers/:name/laps-rotate', async (req, res) => {
  * POST /api/computers/:name/bitlocker-keys
  * Escrow a BitLocker recovery key.
  * Body: { volumeType, recoveryKeyId, recoveryKey, tpmThumbprint }
+ *
+ * Role-gated (see requireDeviceAdmin).
  */
-app.post('/api/computers/:name/bitlocker-keys', async (req, res) => {
+app.post('/api/computers/:name/bitlocker-keys', requireDeviceAdmin, async (req, res) => {
   try {
     const { name } = req.params;
     const { volumeType, recoveryKeyId, recoveryKey, tpmThumbprint } = req.body;
@@ -446,8 +458,11 @@ app.post('/api/computers/:name/bitlocker-keys', async (req, res) => {
 /**
  * GET /api/computers/:name/bitlocker-keys
  * List BitLocker keys for a computer (metadata only, no key material).
+ *
+ * Role-gated (see requireDeviceAdmin) — even metadata (which recovery keys
+ * exist, when they were escrowed) is sensitive enough to restrict.
  */
-app.get('/api/computers/:name/bitlocker-keys', async (req, res) => {
+app.get('/api/computers/:name/bitlocker-keys', requireDeviceAdmin, async (req, res) => {
   try {
     const { name } = req.params;
     const keys = await computerManager.listBitLockerKeys(name);
@@ -465,13 +480,13 @@ app.get('/api/computers/:name/bitlocker-keys', async (req, res) => {
  * requestingUserId is derived from the verified token subject, never from
  * the (client-controlled, unverified) query parameter, so the audit trail
  * in computerManager.getBitLockerKey can't be spoofed by whoever is calling.
- * TODO(authz): oidcAuth only proves *who* is asking, not that they're
- * *allowed* to read this computer's BitLocker key — computerManager
- * currently just logs requestingUserId. Add real role/scope-based
- * authorization (e.g. "BitLocker readers" group / per-OU delegation) here
- * before this is safe to expose broadly.
+ * Role-gated via requireDeviceAdmin: oidcAuth alone only proves *who* is
+ * asking, not that they're *allowed* to read this computer's BitLocker
+ * recovery key, so the route additionally requires an admin/helpdesk role
+ * (or device.admin scope) — see middleware/oidcAuth.js for the claim shapes
+ * checked.
  */
-app.get('/api/computers/:name/bitlocker-keys/:keyId', async (req, res) => {
+app.get('/api/computers/:name/bitlocker-keys/:keyId', requireDeviceAdmin, async (req, res) => {
   try {
     const { name, keyId } = req.params;
     const requestingUserId = req.user.sub;

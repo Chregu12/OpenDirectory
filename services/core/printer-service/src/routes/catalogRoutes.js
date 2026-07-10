@@ -79,7 +79,7 @@ router.post('/import', async (req, res) => {
     }
 
     const driver = await appService.importCatalogEntry(entry);
-    res.json({ success: true, driver });
+    res.json({ success: true, data: driver });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -93,7 +93,7 @@ router.post('/import-url', async (req, res) => {
     if (!url) return res.status(400).json({ success: false, error: 'url is required' });
 
     const driver = await appService.importFromUrl(url, metadata);
-    res.json({ success: true, driver });
+    res.json({ success: true, data: driver });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -90,4 +90,59 @@ function oidcAuth({ skipPaths = [], enrollmentPaths = [] } = {}) {
   };
 }
 
-module.exports = { oidcAuth };
+// -----------------------------------------------------------------------
+// Role/scope authorization for highly-sensitive computer endpoints (LAPS
+// cleartext passwords, BitLocker recovery keys, machine-password reset,
+// domain unjoin). A verified JWT only proves *who* is asking; these routes
+// additionally require the caller to hold an admin/helpdesk role or a
+// device.admin scope.
+// -----------------------------------------------------------------------
+
+// Role claim (req.user.roles, and the Keycloak-style req.user.realm_access.roles
+// fallback) that grants access to device-secrets endpoints.
+const DEVICE_SECRET_ROLES = ['admin', 'helpdesk'];
+// Scope claim (space-delimited req.user.scope string, or an array under
+// req.user.scopes) that grants the same access.
+const DEVICE_SECRET_SCOPES = ['device.admin'];
+
+/**
+ * True if the given verified-JWT payload carries a role or scope authorized
+ * to read/rotate device secrets (LAPS passwords, BitLocker keys) or perform
+ * destructive computer-account operations (reset-machine-password, unjoin).
+ *
+ * Defensive by design: any shape mismatch (missing claims, wrong types)
+ * resolves to false rather than throwing, since the caller (requireDeviceAdmin)
+ * must fail closed on anything it can't positively verify.
+ */
+function hasDeviceAdminAccess(user) {
+  if (!user || typeof user !== 'object') return false;
+
+  const roles = Array.isArray(user.roles) ? user.roles : [];
+  const realmRoles = Array.isArray(user.realm_access?.roles) ? user.realm_access.roles : [];
+  if (roles.some(r => DEVICE_SECRET_ROLES.includes(r))) return true;
+  if (realmRoles.some(r => DEVICE_SECRET_ROLES.includes(r))) return true;
+
+  const scopeList = typeof user.scope === 'string'
+    ? user.scope.split(/\s+/).filter(Boolean)
+    : Array.isArray(user.scopes) ? user.scopes : [];
+  if (scopeList.some(s => DEVICE_SECRET_SCOPES.includes(s))) return true;
+
+  return false;
+}
+
+/**
+ * Route middleware: mount AFTER oidcAuth() on the specific routes that
+ * expose LAPS/BitLocker secrets or perform reset/unjoin operations. Requires
+ * req.user (set by oidcAuth from a verified JWT) to carry an admin/helpdesk
+ * role or a device.admin scope. A token with no roles/scopes at all, or one
+ * missing req.user entirely (e.g. the enrollment-token bypass, which is not
+ * whitelisted for these paths anyway), is rejected — this fails closed.
+ */
+function requireDeviceAdmin(req, res, next) {
+  if (!hasDeviceAdminAccess(req.user)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  next();
+}
+
+module.exports = { oidcAuth, requireDeviceAdmin, hasDeviceAdminAccess };

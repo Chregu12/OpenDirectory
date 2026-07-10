@@ -251,17 +251,22 @@ class RoutingMiddleware {
       },
       
       // Notifications
-      '/api/notifications': {
-        service: 'notification-service',
-        port: 3016,
-        description: 'Notification Service'
-      },
-      '/api/alerts': {
-        service: 'notification-service',
-        port: 3016,
-        description: 'Alert Management'
-      },
-      
+      // NOTE: 'notification-service' has no corresponding container in any
+      // docker-compose*.yml (verified via grep — 0 matches). Routing to it
+      // results in ECONNREFUSED/timeout since nothing is listening on
+      // port 3016. Disabled until the service is actually deployed;
+      // re-enable this block once it exists in docker-compose.yml.
+      // '/api/notifications': {
+      //   service: 'notification-service',
+      //   port: 3016,
+      //   description: 'Notification Service'
+      // },
+      // '/api/alerts': {
+      //   service: 'notification-service',
+      //   port: 3016,
+      //   description: 'Alert Management'
+      // },
+
       // Deployment
       '/api/deployment': {
         service: 'deployment-service',
