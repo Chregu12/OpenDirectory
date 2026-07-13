@@ -526,17 +526,22 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
         <SidebarContent />
       </aside>
 
-      {/* Main area — offset by sidebar width on desktop */}
+      {/* Main area — offset by sidebar width on desktop.
+          The offset MUST come from the `lg:ml-[...]` class, not an inline
+          style: an inline `marginLeft` always wins over the Tailwind class
+          (inline styles beat class selectors), which pinned the margin to 0
+          at every breakpoint and let the fixed 240px sidebar overlap the
+          content (e.g. the DevicesView tab bar) on lg+ screens. Keep the
+          left margin out of the inline style block entirely. */}
       <div
         style={{
-          marginLeft: 0,
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
           height: '100%',
         }}
-        className="lg:ml-[240px]"
+        className="ml-0 lg:ml-[var(--sidebar-width)]"
       >
         {/* Top bar */}
         <header
