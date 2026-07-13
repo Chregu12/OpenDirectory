@@ -182,7 +182,7 @@ function DriverCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-medium text-gray-900 text-sm truncate">{entry.name}</p>
+              <p className="font-medium text-gray-900 text-sm truncate" title={entry.name}>{entry.name}</p>
               <p className="text-xs text-gray-400 mt-0.5">
                 v{entry.version} · {entry.vendor} · {entry.architecture}
               </p>
@@ -218,7 +218,7 @@ function DriverCard({
 
       {/* Description */}
       {entry.description && (
-        <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
+        <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed" title={entry.description}>
           {entry.description}
         </p>
       )}
@@ -333,8 +333,9 @@ function UrlImportPanel({
   return (
     <div className="space-y-2.5">
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">URL</label>
+        <label htmlFor="url-import-url" className="block text-xs font-medium text-gray-600 mb-1">URL</label>
         <input
+          id="url-import-url"
           value={url}
           onChange={e => { setUrl(e.target.value); setSuccess(false); }}
           className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -342,8 +343,9 @@ function UrlImportPanel({
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+        <label htmlFor="url-import-name" className="block text-xs font-medium text-gray-600 mb-1">Name</label>
         <input
+          id="url-import-name"
           value={name}
           onChange={e => setName(e.target.value)}
           className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -352,8 +354,9 @@ function UrlImportPanel({
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Version</label>
+          <label htmlFor="url-import-version" className="block text-xs font-medium text-gray-600 mb-1">Version</label>
           <input
+            id="url-import-version"
             value={version}
             onChange={e => setVersion(e.target.value)}
             className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -361,8 +364,9 @@ function UrlImportPanel({
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Hersteller</label>
+          <label htmlFor="url-import-vendor" className="block text-xs font-medium text-gray-600 mb-1">Hersteller</label>
           <input
+            id="url-import-vendor"
             value={vendor}
             onChange={e => setVendor(e.target.value)}
             className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -371,8 +375,9 @@ function UrlImportPanel({
         </div>
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Betriebssystem</label>
+        <label htmlFor="url-import-os" className="block text-xs font-medium text-gray-600 mb-1">Betriebssystem</label>
         <select
+          id="url-import-os"
           value={os}
           onChange={e => setOs(e.target.value)}
           className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -385,8 +390,9 @@ function UrlImportPanel({
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Gerätetyp</label>
+          <label htmlFor="url-import-devicetype" className="block text-xs font-medium text-gray-600 mb-1">Gerätetyp</label>
           <select
+            id="url-import-devicetype"
             value={deviceType}
             onChange={e => setDeviceType(e.target.value)}
             className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -398,8 +404,9 @@ function UrlImportPanel({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Format</label>
+          <label htmlFor="url-import-format" className="block text-xs font-medium text-gray-600 mb-1">Format</label>
           <select
+            id="url-import-format"
             value={format}
             onChange={e => setFormat(e.target.value)}
             className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -453,6 +460,9 @@ export default function DriverCatalogBrowser({ onClose, onImported, importTarget
   const [importStates, setImportStates] = useState<ImportState[]>([]);
   const [total, setTotal]               = useState(0);
   const [hasSearched, setHasSearched]   = useState(false);
+  const [searchError, setSearchError]   = useState<string | null>(null);
+
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // ── Load vendors ────────────────────────────────────────────────────────────
 
@@ -505,15 +515,21 @@ export default function DriverCatalogBrowser({ onClose, onImported, importTarget
       const items: CatalogEntry[] = data?.entries ?? data?.results ?? data ?? [];
       setResults(items);
       setTotal(data?.total ?? items.length);
-    } catch {
+      setSearchError(null);
+    } catch (err: any) {
       if (seq !== searchSeqRef.current) return;
-      // Show empty state on error
+      // Show empty state (with retry) on error
       setResults([]);
       setTotal(0);
+      setSearchError(err?.response?.data?.error ?? 'Katalog konnte nicht durchsucht werden');
     } finally {
       if (seq === searchSeqRef.current) setLoading(false);
     }
   }, []);
+
+  const retrySearch = useCallback(() => {
+    doSearch(query, selectedVendor, selectedOs, selectedType);
+  }, [doSearch, query, selectedVendor, selectedOs, selectedType]);
 
   // Initial load — show all
   useEffect(() => {
@@ -583,20 +599,73 @@ export default function DriverCatalogBrowser({ onClose, onImported, importTarget
     if (e.key === 'Enter') handleSearch();
   };
 
+  // Escape closes the dialog; Tab/Shift+Tab is trapped within it while open.
+  useEffect(() => {
+    const handleWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const list = Array.from(focusable);
+        const first = list[0];
+        const last = list[list.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        if (e.shiftKey) {
+          if (!active || active === first || !dialogRef.current.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleWindowKeyDown);
+    return () => window.removeEventListener('keydown', handleWindowKeyDown);
+  }, [onClose]);
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="driver-catalog-title"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Treiber-Katalog</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Treiber aus Online-Quellen suchen und importieren</p>
+          <div className="flex items-center gap-2">
+            <div>
+              <h2 id="driver-catalog-title" className="text-lg font-semibold text-gray-900">Treiber-Katalog</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Treiber aus Online-Quellen suchen und importieren</p>
+            </div>
+            {!loading && hasSearched && !searchError && (
+              <span
+                className="inline-flex items-center justify-center min-w-[1.5rem] h-5 px-1.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700"
+                title={`${total} Treiber gefunden`}
+              >
+                {total}
+              </span>
+            )}
           </div>
           <button
             onClick={onClose}
+            aria-label="Schließen"
+            title="Schließen"
             className="text-gray-400 hover:text-gray-700 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <XMarkIcon className="w-5 h-5" />
@@ -607,8 +676,10 @@ export default function DriverCatalogBrowser({ onClose, onImported, importTarget
         <div className="px-6 py-3 border-b border-gray-100 flex-shrink-0 space-y-2.5">
           <div className="flex gap-2">
             <div className="flex-1 relative">
+              <label htmlFor="catalog-search-input" className="sr-only">Treiber suchen</label>
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
+                id="catalog-search-input"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -714,9 +785,9 @@ export default function DriverCatalogBrowser({ onClose, onImported, importTarget
           </div>
 
           {/* Results pane */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4" aria-live="polite" aria-busy={loading}>
             {/* Result count header */}
-            {!loading && hasSearched && (
+            {!loading && hasSearched && !searchError && (
               <p className="text-xs text-gray-500 mb-3 px-0.5">
                 {results.length === 0
                   ? 'Keine Ergebnisse'
@@ -747,8 +818,24 @@ export default function DriverCatalogBrowser({ onClose, onImported, importTarget
               </div>
             )}
 
+            {/* Error state with retry */}
+            {!loading && hasSearched && results.length === 0 && searchError && (
+              <div className="flex flex-col items-center justify-center py-20 text-center text-gray-400 space-y-3">
+                <ExclamationCircleIcon className="w-12 h-12 opacity-30 text-red-400" />
+                <p className="font-medium text-gray-600">Katalog konnte nicht durchsucht werden</p>
+                <p className="text-sm max-w-sm">{searchError}</p>
+                <button
+                  onClick={retrySearch}
+                  className="mt-2 flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                >
+                  <ArrowPathIcon className="w-4 h-4" />
+                  Erneut versuchen
+                </button>
+              </div>
+            )}
+
             {/* Empty state */}
-            {!loading && hasSearched && results.length === 0 && (
+            {!loading && hasSearched && results.length === 0 && !searchError && (
               <div className="flex flex-col items-center justify-center py-20 text-center text-gray-400 space-y-3">
                 <MagnifyingGlassIcon className="w-12 h-12 opacity-30" />
                 <p className="font-medium text-gray-600">Keine Treiber gefunden</p>

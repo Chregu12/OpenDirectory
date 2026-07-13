@@ -1,1 +1,5 @@
 tsconfig.tsbuildinfo
+e2e/test-results/
+e2e/screenshots/
+next-env.d.ts
+test-results/

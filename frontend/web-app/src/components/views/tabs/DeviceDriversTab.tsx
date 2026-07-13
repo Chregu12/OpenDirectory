@@ -11,6 +11,7 @@ import {
   SparklesIcon,
   CloudArrowDownIcon,
   CheckCircleIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { api } from '@/lib/api';
 import { DriverCatalogBrowser } from '@/components/drivers';
@@ -68,6 +69,7 @@ const DEVICE_TYPE_COLOR: Record<string, string> = {
 export default function DeviceDriversTab() {
   const [drivers, setDrivers]               = useState<DeviceDriver[]>([]);
   const [loading, setLoading]               = useState(true);
+  const [driversError, setDriversError]     = useState(false);
   const [showCatalog, setShowCatalog]       = useState(false);
   const [uploading, setUploading]           = useState(false);
   const [deletingId, setDeletingId]         = useState<string | null>(null);
@@ -83,12 +85,14 @@ export default function DeviceDriversTab() {
 
   const loadDrivers = useCallback(async () => {
     setLoading(true);
+    setDriversError(false);
     try {
       const res = await api.get('/api/devices/drivers');
       const data = res.data?.drivers ?? res.data?.data ?? res.data ?? [];
       setDrivers(Array.isArray(data) ? data : []);
     } catch {
       setDrivers([]);
+      setDriversError(true);
     } finally {
       setLoading(false);
     }
@@ -193,7 +197,11 @@ export default function DeviceDriversTab() {
     <div className="space-y-6">
 
       {/* ── Recommendations panel ── */}
-      <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+      <div
+        className="rounded-2xl border border-blue-100 bg-blue-50/60 p-5"
+        aria-live="polite"
+        aria-busy={recsLoading}
+      >
         <div className="flex items-center gap-2 mb-3">
           <SparklesIcon className="w-5 h-5 text-blue-600" />
           <h3 className="text-sm font-semibold text-blue-900">Treiber-Empfehlungen für ein Gerät</h3>
@@ -203,8 +211,10 @@ export default function DeviceDriversTab() {
         </p>
         <div className="flex gap-2">
           <div className="relative flex-1">
+            <label htmlFor="device-driver-hostname" className="sr-only">Hostname für Treiber-Empfehlungen</label>
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
+              id="device-driver-hostname"
               type="text"
               value={deviceSearch}
               onChange={e => setDeviceSearch(e.target.value)}
@@ -243,7 +253,7 @@ export default function DeviceDriversTab() {
                     return (
                       <div key={rec.id} className="flex items-center gap-3 px-4 py-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{rec.name}</p>
+                          <p className="text-sm font-medium text-gray-900 truncate" title={rec.name}>{rec.name}</p>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                             {rec.version && <span className="text-xs text-gray-400">v{rec.version}</span>}
                             {rec.deviceType && (
@@ -312,7 +322,10 @@ export default function DeviceDriversTab() {
             <p className="text-xs text-gray-400 mt-0.5">Netzwerkadapter, Grafikkarten, USB-Geräte und mehr</p>
           </div>
           <div className="flex gap-2">
-            <label className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+            <label
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+              title="Erlaubte Formate: INF, EXE, DEB, RPM, ZIP, TAR, KO, SYS"
+            >
               {uploading ? (
                 <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Hochladen…</>
               ) : (
@@ -336,11 +349,27 @@ export default function DeviceDriversTab() {
           </div>
         </div>
 
+        <div aria-live="polite" aria-busy={loading}>
         {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />
             ))}
+          </div>
+        ) : driversError ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center text-gray-400 space-y-2">
+            <ExclamationTriangleIcon className="w-12 h-12 opacity-30 text-red-400" />
+            <p className="font-medium text-gray-600">Treiber konnten nicht geladen werden</p>
+            <p className="text-sm max-w-xs">
+              Beim Laden der Geräte-Treiber ist ein Fehler aufgetreten.
+            </p>
+            <button
+              onClick={() => loadDrivers()}
+              className="mt-2 flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+            >
+              <ArrowPathIcon className="w-4 h-4" />
+              Erneut versuchen
+            </button>
           </div>
         ) : drivers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center text-gray-400 space-y-2">
@@ -362,7 +391,7 @@ export default function DeviceDriversTab() {
             {drivers.map(driver => (
               <div key={driver.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition-colors">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{driver.name}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate" title={driver.name}>{driver.name}</p>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     {driver.version && <span className="text-xs text-gray-400">v{driver.version}</span>}
                     {driver.vendor && <span className="text-xs text-gray-500">{driver.vendor}</span>}
@@ -386,6 +415,7 @@ export default function DeviceDriversTab() {
                 <button
                   onClick={() => handleDelete(driver)}
                   disabled={deletingId === driver.id}
+                  aria-label={`Treiber "${driver.name}" löschen`}
                   className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
                   title="Treiber löschen"
                 >
@@ -399,6 +429,7 @@ export default function DeviceDriversTab() {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       {/* Catalog browser modal */}

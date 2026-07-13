@@ -7,6 +7,7 @@ import {
   BookOpenIcon,
   TrashIcon,
   CheckBadgeIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { api } from '@/lib/api';
 import { DriverCatalogBrowser } from '@/components/drivers';
@@ -37,6 +38,7 @@ function toOsList(os?: string[] | string): string[] {
 export default function PrinterDriversTab() {
   const [drivers, setDrivers]           = useState<PrinterDriver[]>([]);
   const [loading, setLoading]           = useState(true);
+  const [driversError, setDriversError] = useState(false);
   const [showCatalog, setShowCatalog]   = useState(false);
   const [uploading, setUploading]       = useState(false);
   const [deletingId, setDeletingId]     = useState<string | null>(null);
@@ -45,12 +47,14 @@ export default function PrinterDriversTab() {
 
   const loadDrivers = useCallback(async () => {
     setLoading(true);
+    setDriversError(false);
     try {
       const res = await api.get('/api/printer/drivers');
       const data = res.data?.drivers ?? res.data?.data ?? res.data ?? [];
       setDrivers(Array.isArray(data) ? data : []);
     } catch {
       setDrivers([]);
+      setDriversError(true);
     } finally {
       setLoading(false);
     }
@@ -118,7 +122,10 @@ export default function PrinterDriversTab() {
         </div>
         <div className="flex gap-2">
           {/* Upload button */}
-          <label className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+          <label
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+            title="Erlaubte Formate: PPD, INF, EXE, DEB, RPM, ZIP, TAR"
+          >
             {uploading ? (
               <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Hochladen…</>
             ) : (
@@ -145,11 +152,27 @@ export default function PrinterDriversTab() {
       </div>
 
       {/* Driver list */}
+      <div aria-live="polite" aria-busy={loading}>
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />
           ))}
+        </div>
+      ) : driversError ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center text-gray-400 space-y-2">
+          <ExclamationTriangleIcon className="w-12 h-12 opacity-30 text-red-400" />
+          <p className="font-medium text-gray-600">Treiber konnten nicht geladen werden</p>
+          <p className="text-sm max-w-xs">
+            Beim Laden der Drucker-Treiber ist ein Fehler aufgetreten.
+          </p>
+          <button
+            onClick={() => loadDrivers()}
+            className="mt-2 flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+          >
+            <ArrowPathIcon className="w-4 h-4" />
+            Erneut versuchen
+          </button>
         </div>
       ) : drivers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center text-gray-400 space-y-2">
@@ -171,7 +194,7 @@ export default function PrinterDriversTab() {
           {drivers.map(driver => (
             <div key={driver.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition-colors">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{driver.name}</p>
+                <p className="text-sm font-medium text-gray-900 truncate" title={driver.name}>{driver.name}</p>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {driver.version && (
                     <span className="text-xs text-gray-400">v{driver.version}</span>
@@ -197,6 +220,7 @@ export default function PrinterDriversTab() {
               <button
                 onClick={() => handleDelete(driver)}
                 disabled={deletingId === driver.id}
+                aria-label={`Treiber "${driver.name}" löschen`}
                 className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
                 title="Treiber löschen"
               >
@@ -210,6 +234,7 @@ export default function PrinterDriversTab() {
           ))}
         </div>
       )}
+      </div>
 
       {/* Catalog browser modal */}
       {showCatalog && (
