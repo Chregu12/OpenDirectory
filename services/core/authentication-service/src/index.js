@@ -20,6 +20,8 @@ const { buildInteractionsRouter } = require('./oidc/interactions');
 // ─── DDD Infrastructure ────────────────────────────────────────────────────────
 const PostgresUserRepository = require('./infrastructure/repositories/PostgresUserRepository');
 const AuthApplicationService = require('./application/AuthApplicationService');
+const PasswordApplicationService = require('./application/PasswordApplicationService');
+const InMemoryTtlCache = require('./infrastructure/cache/InMemoryTtlCache');
 
 const logger = require('./utils/logger');
 const config = require('./utils/config');
@@ -57,6 +59,18 @@ class UnifiedAuthenticationService {
       messageBus: null,
       config: { jwtSecret: process.env.JWT_SECRET || config.jwt.secret },
       logger,
+    });
+
+    // Password-reset tokens: kept in-process (matches the legacy Map-based
+    // behavior it replaces) — see InMemoryTtlCache. tokenGenerator preserves
+    // the exact 32-byte-hex token format the HTTP layer used to mint itself.
+    this.passwordResetCache = new InMemoryTtlCache();
+    this.passwordAppService = new PasswordApplicationService({
+      userRepository: this.userRepository,
+      cache: this.passwordResetCache,
+      messageBus: null,
+      logger,
+      tokenGenerator: () => require('crypto').randomBytes(32).toString('hex'),
     });
 
     // ─── Legacy Services (now repository-aware) ──────────────────────────────
@@ -332,15 +346,16 @@ class UnifiedAuthenticationService {
     // Build services bag passed to every route factory.
     // Auth middleware factories are included so route modules can apply them.
     const services = {
-      authManager:    this.authManager,
-      tokenService:   this.tokenService,
-      mfaService:     this.mfaService,
-      zeroTrust:      this.zeroTrust,
-      sessionManager: this.sessionManager,
-      userService:    this.userService,
-      auditService:   this.auditService,
-      requireAuth:    () => this.requireAuth(),
-      requireAdmin:   () => this.requireAdmin(),
+      authManager:        this.authManager,
+      tokenService:       this.tokenService,
+      mfaService:         this.mfaService,
+      zeroTrust:          this.zeroTrust,
+      sessionManager:     this.sessionManager,
+      userService:        this.userService,
+      auditService:       this.auditService,
+      passwordAppService: this.passwordAppService,
+      requireAuth:        () => this.requireAuth(),
+      requireAdmin:       () => this.requireAdmin(),
     };
 
     // NOTE: /api/auth/login is kept for backwards-compatible direct API access.

@@ -80,7 +80,7 @@ const db = require('./db');
 const PostgresDeviceRepository = require('./infrastructure/repositories/PostgresDeviceRepository');
 
 // Import enhanced services
-const DeviceManager = require('./services/deviceManager');
+const DeviceApplicationService = require('./application/DeviceApplicationService');
 const driverRoutes = require('./routes/driverRoutes');
 const PolicyEngine = require('./services/policyEngine');
 const ComplianceScanner = require('./services/complianceScanner');
@@ -140,7 +140,6 @@ class EnterpriseDeviceManagementService {
     this.deviceRepository = new PostgresDeviceRepository(db);
     
     // Initialize services
-    this.deviceManager = new DeviceManager({ db: this.db, deviceRepository: this.deviceRepository, cache: this.cache, eventBus: this.eventBus });
     this.policyEngine = new PolicyEngine(this.db, this.eventBus);
     this.complianceScanner = new ComplianceScanner({ db: this.db, deviceRepository: this.deviceRepository, eventBus: this.eventBus });
     this.enrollmentRepository = new PostgresEnrollmentRepository(db);
@@ -168,6 +167,17 @@ class EnterpriseDeviceManagementService {
     this._eventBus = new EventBusClient({ source: 'device-service' });
     this._eventBus.connect().catch(err => {
       logger.warn('EventBus connect failed at startup (will retry in background)', { error: err.message });
+    });
+
+    // Device CRUD/list/checkin routes are wired to the DDD application
+    // service (ported from the old transaction-script DeviceManager — see
+    // DeviceApplicationService.js for the behavior-preservation rationale).
+    this.deviceApplicationService = new DeviceApplicationService({
+      deviceRepository: this.deviceRepository,
+      messageBus: this._eventBus,
+      logger,
+      db: this.db,
+      eventBus: this.eventBus,
     });
 
     // RabbitMQ command bus — kept only for per-device command-queue operations
@@ -350,7 +360,7 @@ class EnterpriseDeviceManagementService {
         });
 
         // Update last seen in database
-        this.deviceManager.updateLastSeen(ws.deviceId).catch(() => {});
+        this.deviceApplicationService.touchLastSeen(ws.deviceId).catch(() => {});
       }
 
       logger.info('WebSocket connection established', {
@@ -436,7 +446,7 @@ class EnterpriseDeviceManagementService {
             eventBus: await this.eventBus.healthCheck()
           },
           metrics: {
-            activeDevices: await this.deviceManager.getActiveDeviceCount(),
+            activeDevices: await this.deviceApplicationService.countActiveDevices(),
             pendingEnrollments: await this.enrollmentService.getPendingCount(),
             complianceViolations: await this.complianceScanner.getViolationCount(),
             wsConnections: this.wss.clients.size
@@ -838,7 +848,7 @@ class EnterpriseDeviceManagementService {
         ws.hostname = data.hostname;
         if (ws.deviceId) {
           this.connectedAgents.set(ws.deviceId, ws);
-          this.deviceManager.updateLastSeen(ws.deviceId).catch(() => {});
+          this.deviceApplicationService.touchLastSeen(ws.deviceId).catch(() => {});
         }
         ws.send(JSON.stringify({
           type: 'agent_registered',
@@ -879,7 +889,7 @@ class EnterpriseDeviceManagementService {
 
       case 'device_heartbeat':
         if (ws.deviceId || data.deviceId) {
-          await this.deviceManager.updateLastSeen(ws.deviceId || data.deviceId);
+          await this.deviceApplicationService.touchLastSeen(ws.deviceId || data.deviceId);
           ws.send(JSON.stringify({
             type: 'heartbeat_ack',
             timestamp: new Date().toISOString(),
@@ -1058,7 +1068,7 @@ class EnterpriseDeviceManagementService {
 
       const result = await this.circuitBreaker.execute(
         'get-devices',
-        () => this.deviceManager.getDevices({
+        () => this.deviceApplicationService.listDevicesPaginated({
           page: parseInt(page),
           limit: parseInt(limit),
           search,
@@ -1091,7 +1101,7 @@ class EnterpriseDeviceManagementService {
       
       const device = await this.circuitBreaker.execute(
         'create-device',
-        () => this.deviceManager.createDevice(deviceData, req.user)
+        () => this.deviceApplicationService.createDeviceRecord(deviceData, req.user)
       );
 
       this.eventBus.emit('device:created', { device, user: req.user });
@@ -1118,7 +1128,7 @@ class EnterpriseDeviceManagementService {
 
       const device = await this.circuitBreaker.execute(
         'get-device',
-        () => this.deviceManager.getDevice(deviceId, {
+        () => this.deviceApplicationService.getDeviceWithExtras(deviceId, {
           includeCompliance,
           includeHistory
         })
@@ -1304,7 +1314,7 @@ class EnterpriseDeviceManagementService {
       const { deviceId } = req.params;
       const checkinData = req.body;
 
-      await this.deviceManager.updateLastSeen(deviceId);
+      await this.deviceApplicationService.touchLastSeen(deviceId);
 
       if (this.cache) {
         await this.cache.set(`agent:${deviceId}`, JSON.stringify({
@@ -1740,7 +1750,7 @@ class EnterpriseDeviceManagementService {
   async updateDevice(req, res) {
     try {
       const { deviceId } = req.params;
-      const device = await this.deviceManager.updateDevice(deviceId, req.body);
+      const device = await this.deviceApplicationService.updateDeviceRecord(deviceId, req.body);
       if (!device) {
         return res.status(404).json({ error: 'Device not found', requestId: req.id });
       }
@@ -1754,7 +1764,7 @@ class EnterpriseDeviceManagementService {
   async deleteDevice(req, res) {
     try {
       const { deviceId } = req.params;
-      const deleted = await this.deviceManager.deleteDevice(deviceId);
+      const deleted = await this.deviceApplicationService.deleteDeviceRecord(deviceId);
       if (!deleted) {
         return res.status(404).json({ error: 'Device not found', requestId: req.id });
       }
@@ -2207,7 +2217,7 @@ class EnterpriseDeviceManagementService {
     try {
       const { devices } = req.body;
       if (!devices || !Array.isArray(devices)) return res.status(400).json({ error: 'devices array required', requestId: req.id });
-      const results = await Promise.allSettled(devices.map(d => this.deviceManager.createDevice(d, req.user)));
+      const results = await Promise.allSettled(devices.map(d => this.deviceApplicationService.createDeviceRecord(d, req.user)));
       const imported = results.filter(r => r.status === 'fulfilled').map(r => r.value);
       const failed = results.filter(r => r.status === 'rejected').map((r, i) => ({ index: i, error: r.reason?.message }));
       res.json({ success: true, imported: imported.length, failed: failed.length, failures: failed, requestId: req.id });

@@ -2,25 +2,55 @@
 const { randomUUID } = require('crypto');
 
 class PasswordApplicationService {
-  constructor({ userRepository, messageBus, cache, logger }) {
+  constructor({ userRepository, messageBus, cache, logger, tokenGenerator }) {
     this._userRepo = userRepository;
     this._bus = messageBus;
     this._cache = cache;
     this._log = logger || console;
+    // Defaults to a UUID; callers that need to preserve a specific legacy
+    // token format (e.g. the 32-byte hex tokens the HTTP layer used to mint
+    // itself) can inject their own generator.
+    this._tokenGenerator = tokenGenerator || (() => randomUUID());
   }
 
   async requestReset(email) {
     const user = await this._userRepo.findByEmail(email);
     if (!user) return null; // silent — don't leak user existence
 
-    const token = randomUUID();
+    const token = this._tokenGenerator();
     const expiry = Date.now() + 60 * 60 * 1000; // 1h
 
     if (this._cache) {
       await this._cache.set(`pwd_reset:${token}`, JSON.stringify({ userId: user.id, expiry }), 'EX', 3600);
     }
 
-    return { userId: user.id, token, expiry };
+    return { userId: user.id, token, expiry, username: user.username, email: user.email };
+  }
+
+  /**
+   * Read-only lookup of a pending reset token — does NOT consume/delete it.
+   * Returns the same { userId, expiry } shape stored by requestReset(), or
+   * null when the token is unknown or the cache is unavailable. Callers that
+   * need the target userId ahead of actually performing the reset (e.g. for
+   * policy validation or audit logging before the token is consumed) should
+   * use this instead of resetWithToken().
+   */
+  async peekToken(token) {
+    if (!this._cache) return null;
+    const raw = await this._cache.get(`pwd_reset:${token}`);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+
+  /**
+   * Delete a reset token from the cache without touching the user's
+   * password. Used by callers that perform the actual password mutation
+   * themselves (e.g. via a different, already-battle-tested code path) and
+   * only need PasswordApplicationService to manage the token's lifecycle.
+   */
+  async consumeToken(token) {
+    if (!this._cache) return;
+    await this._cache.del(`pwd_reset:${token}`);
   }
 
   async resetWithToken(token, newPlainPassword) {

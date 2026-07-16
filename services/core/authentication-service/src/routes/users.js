@@ -42,9 +42,6 @@ async function recordPasswordHash(userId, plaintextPassword) {
   } catch {}
 }
 
-// ─── Password Reset Token Store ───────────────────────────────────────────────
-const passwordResetTokens = new Map();
-
 // ─── Nodemailer transport (lazy, config-driven) ───────────────────────────────
 let mailer = null;
 function getMailer() {
@@ -64,7 +61,7 @@ function getMailer() {
 
 function createUserRoutes(services) {
   const router = Router();
-  const { authManager, userService, sessionManager, auditService, requireAuth, requireAdmin } = services;
+  const { authManager, userService, sessionManager, auditService, passwordAppService, requireAuth, requireAdmin } = services;
   const auth = requireAuth();
   const admin = requireAdmin(); // returns [requireAuth(), adminCheck] array
 
@@ -233,35 +230,34 @@ function createUserRoutes(services) {
     try {
       const { email } = req.body;
 
-      const user = await userService.getUserByEmail(email);
-      if (user) {
-        const crypto = require('crypto');
-        const resetToken = crypto.randomBytes(32).toString('hex');
-        const expiresAt = Date.now() + 3600_000;
-
-        passwordResetTokens.set(resetToken, { userId: user.id, email: user.email, expiresAt });
-
-        await auditService.logUserEvent('password_reset_requested', user.id, req);
+      // PasswordApplicationService.requestReset() looks up the user, mints a
+      // token (same 32-byte-hex format the route used to mint itself — see
+      // index.js's tokenGenerator wiring) and stores it (1h TTL). Returns
+      // null silently when the user doesn't exist, matching the previous
+      // no-enumeration behavior.
+      const result = await passwordAppService.requestReset(email);
+      if (result) {
+        await auditService.logUserEvent('password_reset_requested', result.userId, req);
 
         const transport = getMailer();
         if (transport) {
           try {
-            const resetUrl = `${process.env.APP_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+            const resetUrl = `${process.env.APP_URL || 'http://localhost:3000'}/reset-password?token=${result.token}`;
             await transport.sendMail({
               from: process.env.SMTP_FROM || 'OpenDirectory <noreply@opendirectory.local>',
-              to: user.email,
+              to: result.email,
               subject: 'Passwort zurücksetzen — OpenDirectory',
               html: `
                 <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
                   <h2 style="color:#1e293b">Passwort zurücksetzen</h2>
-                  <p>Hallo ${user.name || user.username},</p>
+                  <p>Hallo ${result.username},</p>
                   <p>Sie haben eine Passwort-Zurücksetzung angefordert. Klicken Sie auf den folgenden Link:</p>
                   <a href="${resetUrl}" style="display:inline-block;margin:16px 0;padding:12px 24px;background:#3b82f6;color:#fff;text-decoration:none;border-radius:8px">Passwort zurücksetzen</a>
                   <p style="color:#64748b;font-size:12px">Dieser Link ist 1 Stunde gültig. Falls Sie keine Zurücksetzung angefordert haben, ignorieren Sie diese E-Mail.</p>
                 </div>
               `,
             });
-            console.log(`[password-reset] Email sent to ${user.email}`);
+            console.log(`[password-reset] Email sent to ${result.email}`);
           } catch (err) {
             console.error('[password-reset] Email send error:', err.message);
           }
@@ -287,8 +283,11 @@ function createUserRoutes(services) {
         return res.status(400).json({ error: 'token and newPassword required' });
       }
 
-      const resetRecord = passwordResetTokens.get(token);
-      if (!resetRecord || resetRecord.expiresAt < Date.now()) {
+      // Read-only lookup first (does not consume the token) so we can run
+      // policy/history validation — and know the target userId for the audit
+      // log below — before the token is actually spent by resetWithToken().
+      const resetRecord = await passwordAppService.peekToken(token);
+      if (!resetRecord || resetRecord.expiry < Date.now()) {
         return res.status(400).json({ error: 'Ungültiger oder abgelaufener Token' });
       }
 
@@ -319,10 +318,21 @@ function createUserRoutes(services) {
         return res.status(400).json({ error: 'Dieses Passwort wurde bereits verwendet. Bitte wählen Sie ein anderes.' });
       }
 
+      // NOTE: intentionally NOT using passwordAppService.resetWithToken() here.
+      // That method has a pre-existing bug (`const { Password } = require(...)`
+      // against a module that exports the class directly, so `Password` is
+      // always undefined there) which is otherwise only ever exercised by
+      // application/__tests__ via a require.cache monkeypatch. The very same
+      // destructuring bug is relied upon (silently, via its catch-fallback to
+      // bcrypt) by the already-wired AuthApplicationService.login(), so
+      // fixing it is out of scope here and would risk an unrelated login
+      // regression for bcrypt-hashed users. We keep using the
+      // proven bcryptjs-based userService.changePassword() to actually
+      // mutate the password, and only use PasswordApplicationService for the
+      // reset-token's lifecycle (issue / peek / consume).
       await userService.changePassword(resetRecord.userId, newPassword);
       recordPasswordHash(resetRecord.userId, newPassword).catch(() => {});
-
-      passwordResetTokens.delete(token);
+      await passwordAppService.consumeToken(token);
 
       await auditService.logUserEvent('password_reset_completed', resetRecord.userId, req);
 

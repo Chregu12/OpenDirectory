@@ -170,26 +170,36 @@ jest.mock('../config', () => ({
   analytics: { aggregationInterval: 999999999 },
 }), { virtual: true });
 
-// DeviceManager
-const mockDeviceManager = {
-  getDevices: jest.fn().mockResolvedValue({
+// DeviceApplicationService — index.js wires the device CRUD/list/checkin
+// routes to this DDD application service (ported from the old
+// transaction-script services/deviceManager.js; see DeviceApplicationService.js
+// for the rationale). Method names below mirror index.js's call sites:
+//   getDevices          -> listDevicesPaginated
+//   createDevice        -> createDeviceRecord
+//   getDevice           -> getDeviceWithExtras
+//   updateDevice        -> updateDeviceRecord
+//   deleteDevice        -> deleteDeviceRecord
+//   updateLastSeen      -> touchLastSeen
+//   getActiveDeviceCount -> countActiveDevices
+const mockDeviceApplicationService = {
+  listDevicesPaginated: jest.fn().mockResolvedValue({
     devices: [],
     pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
   }),
-  createDevice: jest.fn().mockResolvedValue({
+  createDeviceRecord: jest.fn().mockResolvedValue({
     id: 'device-123',
     name: 'Test Device',
     platform: 'windows',
     status: 'active',
   }),
-  getDevice: jest.fn().mockResolvedValue(null),
-  updateDevice: jest.fn().mockResolvedValue({}),
-  deleteDevice: jest.fn().mockResolvedValue(undefined),
-  updateLastSeen: jest.fn().mockResolvedValue(undefined),
-  getActiveDeviceCount: jest.fn().mockResolvedValue(0),
+  getDeviceWithExtras: jest.fn().mockResolvedValue(null),
+  updateDeviceRecord: jest.fn().mockResolvedValue({}),
+  deleteDeviceRecord: jest.fn().mockResolvedValue(undefined),
+  touchLastSeen: jest.fn().mockResolvedValue(undefined),
+  countActiveDevices: jest.fn().mockResolvedValue(0),
 };
-jest.mock('../services/deviceManager', () =>
-  jest.fn().mockImplementation(() => mockDeviceManager)
+jest.mock('../application/DeviceApplicationService', () =>
+  jest.fn().mockImplementation(() => mockDeviceApplicationService)
 , { virtual: true });
 
 // PolicyEngine
@@ -342,7 +352,7 @@ describe('Device Service - E2E API Tests', () => {
   // ─── GET /api/devices ────────────────────────────────────────────────────────
   describe('GET /api/devices', () => {
     it('returns 200 with devices list', async () => {
-      mockDeviceManager.getDevices.mockResolvedValueOnce({
+      mockDeviceApplicationService.listDevicesPaginated.mockResolvedValueOnce({
         devices: [],
         pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
       });
@@ -354,7 +364,7 @@ describe('Device Service - E2E API Tests', () => {
     });
 
     it('returns 200 with pagination info', async () => {
-      mockDeviceManager.getDevices.mockResolvedValueOnce({
+      mockDeviceApplicationService.listDevicesPaginated.mockResolvedValueOnce({
         devices: [
           { id: 'd1', name: 'Laptop-001', platform: 'windows', status: 'active' },
         ],
@@ -366,7 +376,7 @@ describe('Device Service - E2E API Tests', () => {
     });
 
     it('supports query parameters', async () => {
-      mockDeviceManager.getDevices.mockResolvedValueOnce({
+      mockDeviceApplicationService.listDevicesPaginated.mockResolvedValueOnce({
         devices: [],
         pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
       });
@@ -378,7 +388,7 @@ describe('Device Service - E2E API Tests', () => {
   // ─── POST /api/devices ───────────────────────────────────────────────────────
   describe('POST /api/devices', () => {
     it('returns 201 when creating a device', async () => {
-      mockDeviceManager.createDevice.mockResolvedValueOnce({
+      mockDeviceApplicationService.createDeviceRecord.mockResolvedValueOnce({
         id: 'device-new-1',
         name: 'New-Device',
         platform: 'macos',
@@ -396,7 +406,7 @@ describe('Device Service - E2E API Tests', () => {
     });
 
     it('returns 500 when device creation fails', async () => {
-      mockDeviceManager.createDevice.mockRejectedValueOnce(new Error('DB error'));
+      mockDeviceApplicationService.createDeviceRecord.mockRejectedValueOnce(new Error('DB error'));
 
       const res = await request(app)
         .post('/api/devices')
@@ -409,14 +419,14 @@ describe('Device Service - E2E API Tests', () => {
   // ─── GET /api/devices/:deviceId ──────────────────────────────────────────────
   describe('GET /api/devices/:deviceId', () => {
     it('returns 404 when device not found', async () => {
-      mockDeviceManager.getDevice.mockResolvedValueOnce(null);
+      mockDeviceApplicationService.getDeviceWithExtras.mockResolvedValueOnce(null);
       const res = await request(app).get('/api/devices/nonexistent-device-id');
       expect(res.status).toBe(404);
       expect(res.body).toHaveProperty('error', 'Device not found');
     });
 
     it('returns 200 with device data when found', async () => {
-      mockDeviceManager.getDevice.mockResolvedValueOnce({
+      mockDeviceApplicationService.getDeviceWithExtras.mockResolvedValueOnce({
         id: 'device-123',
         name: 'LAPTOP-001',
         platform: 'windows',
@@ -522,7 +532,7 @@ describe('Device Service - E2E API Tests', () => {
   // ─── PUT /api/devices/:deviceId ─────────────────────────────────────────────
   describe('PUT /api/devices/:deviceId', () => {
     it('returns 200 with updated device on success', async () => {
-      mockDeviceManager.updateDevice.mockResolvedValueOnce({
+      mockDeviceApplicationService.updateDeviceRecord.mockResolvedValueOnce({
         id: 'device-123',
         name: 'Updated-Laptop',
         platform: 'windows',
@@ -538,7 +548,7 @@ describe('Device Service - E2E API Tests', () => {
     });
 
     it('returns 500 when update fails', async () => {
-      mockDeviceManager.updateDevice.mockRejectedValueOnce(new Error('DB error'));
+      mockDeviceApplicationService.updateDeviceRecord.mockRejectedValueOnce(new Error('DB error'));
 
       const res = await request(app)
         .put('/api/devices/device-123')
@@ -552,7 +562,7 @@ describe('Device Service - E2E API Tests', () => {
   describe('DELETE /api/devices/:deviceId', () => {
     it('returns 200 on successful deletion', async () => {
       // deviceManager.deleteDevice resolves true on success, false when missing
-      mockDeviceManager.deleteDevice.mockResolvedValueOnce(true);
+      mockDeviceApplicationService.deleteDeviceRecord.mockResolvedValueOnce(true);
 
       const res = await request(app).delete('/api/devices/device-123');
       expect(res.status).toBe(200);
@@ -560,7 +570,7 @@ describe('Device Service - E2E API Tests', () => {
     });
 
     it('returns 500 when deletion fails', async () => {
-      mockDeviceManager.deleteDevice.mockRejectedValueOnce(new Error('Device locked'));
+      mockDeviceApplicationService.deleteDeviceRecord.mockRejectedValueOnce(new Error('Device locked'));
 
       const res = await request(app).delete('/api/devices/device-456');
       expect(res.status).toBe(500);
