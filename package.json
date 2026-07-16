@@ -11,7 +11,8 @@
   "scripts": {
     "dev": "docker-compose up -d",
     "build": "echo 'Build completed - using Docker builds'",
-    "test": "echo 'Running basic health checks...'",
+    "test": "bash scripts/test-all.sh",
+    "test:all": "INCLUDE_NON_GATING=1 bash scripts/test-all.sh",
     "lint": "echo 'Linting completed'",
     "format": "prettier --write .",
     "clean": "docker-compose down -v",

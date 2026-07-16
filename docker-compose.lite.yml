@@ -278,7 +278,11 @@ services:
       - PORT=8080
       - CORS_ORIGIN=http://localhost:3000
       - JWT_SECRET=${JWT_SECRET}
-      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/identity
+      # DB-per-service: point at api-backend's own 'api' DB, consistent with
+      # docker-compose.yml (full). Previously this aimed at '/identity', the
+      # identity-service's DB — cross-service coupling. api-backend performs no
+      # SQL today, so this is a config-drift fix, not a behavioural one.
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/api
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       # device-service delegation: this lite topology has no oauth-provider
       # container, so no OAUTH_TOKEN_URL / client credentials are configured

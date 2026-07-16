@@ -92,6 +92,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
 
+    env:
+      # Use the Chromium that is pre-baked into the runner image for
+      # Playwright. Never run `playwright install` in this job.
+      PLAYWRIGHT_BROWSERS_PATH: /opt/pw-browsers
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
     steps:
       - uses: actions/checkout@v4
 
@@ -100,46 +106,133 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # ---------------------------------------------------------------
+      # Preflight: fail the job immediately if any test path we expect to
+      # run has moved or disappeared. This guarantees a wrong `cd` can NOT
+      # silently pass CI any more, even for the steps that still carry
+      # continue-on-error below (a stale path there would otherwise be
+      # invisible). Every directory listed here must have a package.json.
+      # ---------------------------------------------------------------
+      - name: Verify expected test paths exist
+        run: |
+          set -e
+          missing=0
+          for d in \
+            services/core/authentication-service \
+            services/core/device-service \
+            services/core/policy-service \
+            services/core/conditional-access \
+            services/core/api-gateway \
+            services/core/printer-service \
+            services/core/samba-ad-dc \
+            services/platform/quick-actions \
+            services/platform/api-backend \
+            services/platform/api-gateway \
+            frontend/web-app ; do
+            if [ ! -f "$d/package.json" ]; then
+              echo "::error::Expected test path missing: $d/package.json"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "One or more expected test paths are missing — failing the job."
+            exit 1
+          fi
+          echo "All expected test paths present."
+
+      # ---------------------------------------------------------------
+      # GREEN suites — verified locally, no continue-on-error: these gate CI.
+      # ---------------------------------------------------------------
+      - name: Test device-service
+        id: test_device
+        run: cd services/core/device-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test conditional-access
+        id: test_conditional_access
+        run: cd services/core/conditional-access && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test api-gateway (core)
+        id: test_api_gateway
+        run: cd services/core/api-gateway && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test printer-service
+        id: test_printer
+        run: cd services/core/printer-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # samba-ad-dc uses node's built-in test runner (`node --test`), which
+      # does NOT accept the jest flags, so invoke npm test with no extra args.
+      - name: Test samba-ad-dc
+        id: test_samba
+        run: cd services/core/samba-ad-dc && npm install --ignore-scripts && npm test
+
+      - name: Test api-backend (platform)
+        id: test_api_backend
+        run: cd services/platform/api-backend && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test api-gateway (platform)
+        id: test_platform_api_gateway
+        run: cd services/platform/api-gateway && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # ---------------------------------------------------------------
+      # RED / fragile suites — kept as continue-on-error until fixed so the
+      # rest of the pipeline still runs. Each has a documented reason.
+      # ---------------------------------------------------------------
+      # authentication-service: api.e2e.test.js mocks `amqplib`, which is not
+      # a declared dependency, so that one suite fails to resolve the module
+      # (the other 11 suites / 181 tests pass). Re-enable gating after amqplib
+      # is added to the service's devDependencies (or the mock is removed).
       - name: Test authentication-service
         id: test_authentication
         continue-on-error: true
-        run: cd services/platform/authentication-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+        run: cd services/core/authentication-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
 
-      - name: Test device-service
-        id: test_device
-        continue-on-error: true
-        run: cd services/platform/device-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
-
+      # policy-service: 17 tests currently fail (e.g. ComplianceSaga assertion
+      # counts). Keep non-gating until those are fixed.
       - name: Test policy-service
         id: test_policy
         continue-on-error: true
-        run: cd services/platform/policy-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+        run: cd services/core/policy-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
 
+      # quick-actions: 3 tests currently fail (275 pass). Keep non-gating.
       - name: Test quick-actions
         id: test_quick_actions
         continue-on-error: true
         run: cd services/platform/quick-actions && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
 
-      - name: Test conditional-access
-        id: test_conditional_access
+      # ---------------------------------------------------------------
+      # Frontend
+      # ---------------------------------------------------------------
+      # Jest: 50 unit tests currently fail (188 pass). Kept non-gating until
+      # fixed so it does not block the pipeline.
+      - name: Frontend unit tests (Jest)
+        id: test_frontend_jest
         continue-on-error: true
-        run: cd services/platform/conditional-access && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+        run: cd frontend/web-app && npm ci && npm test
 
-      - name: Test api-gateway
-        id: test_api_gateway
-        continue-on-error: true
-        run: cd services/core/api-gateway && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+      # Playwright e2e: fully self-contained — every /api/** call is mocked via
+      # page.route(), and it uses the pre-installed Chromium (no browser
+      # download). Verified green locally, so this GATES CI.
+      - name: Frontend e2e tests (Playwright)
+        id: test_frontend_e2e
+        run: cd frontend/web-app && npm ci && npm run test:e2e
 
       - name: Test summary
         if: always()
         run: |
           echo "=== Service Test Results ==="
-          echo "authentication-service : ${{ steps.test_authentication.outcome }}"
-          echo "device-service         : ${{ steps.test_device.outcome }}"
-          echo "policy-service         : ${{ steps.test_policy.outcome }}"
-          echo "quick-actions          : ${{ steps.test_quick_actions.outcome }}"
-          echo "conditional-access     : ${{ steps.test_conditional_access.outcome }}"
-          echo "api-gateway            : ${{ steps.test_api_gateway.outcome }}"
+          echo "device-service           : ${{ steps.test_device.outcome }} (gating)"
+          echo "conditional-access       : ${{ steps.test_conditional_access.outcome }} (gating)"
+          echo "api-gateway (core)       : ${{ steps.test_api_gateway.outcome }} (gating)"
+          echo "printer-service          : ${{ steps.test_printer.outcome }} (gating)"
+          echo "samba-ad-dc              : ${{ steps.test_samba.outcome }} (gating)"
+          echo "api-backend (platform)   : ${{ steps.test_api_backend.outcome }} (gating)"
+          echo "api-gateway (platform)   : ${{ steps.test_platform_api_gateway.outcome }} (gating)"
+          echo "frontend e2e (playwright): ${{ steps.test_frontend_e2e.outcome }} (gating)"
+          echo "--- non-gating (continue-on-error) ---"
+          echo "authentication-service   : ${{ steps.test_authentication.outcome }} (amqplib mock unresolved)"
+          echo "policy-service           : ${{ steps.test_policy.outcome }} (17 tests failing)"
+          echo "quick-actions            : ${{ steps.test_quick_actions.outcome }} (3 tests failing)"
+          echo "frontend unit (jest)     : ${{ steps.test_frontend_jest.outcome }} (50 tests failing)"
 
   # ===================
   # Security Scanning

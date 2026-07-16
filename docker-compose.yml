@@ -305,7 +305,12 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=${POSTGRES_DB:-opendirectory}
+      # DB-per-service: api-gateway owns its own physical DB. Previously this
+      # defaulted to ${POSTGRES_DB:-opendirectory}, colliding with app-store
+      # in the shared 'opendirectory' maintenance DB. Hardcoded to match the
+      # service code default (services/core/api-gateway/src/index.js) and the
+      # init-databases.sh provisioning list.
+      - DB_NAME=api_gateway
       - DB_USER=${POSTGRES_USER:-postgres}
       - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       - INTEGRATION_HUB_HOST=integration-hub
@@ -834,7 +839,12 @@ services:
       NODE_ENV: production
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-opendirectory}
+      # DB-per-service: app-store owns its own physical DB. Previously this
+      # defaulted to ${DB_NAME:-opendirectory}, colliding with api-gateway in
+      # the shared 'opendirectory' maintenance DB. Hardcoded to match the
+      # service code default (services/enterprise/app-store/src/index.js) and
+      # the init-databases.sh provisioning list.
+      DB_NAME: app_store
       DB_USER: ${DB_USER:-opendirectory}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       DEVICE_SERVICE_URL: http://device-service:3003
