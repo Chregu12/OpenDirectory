@@ -139,10 +139,27 @@ describe('ComplianceSaga', () => {
   });
 
   describe('policy change handler', () => {
+    // NOTE: as of commit 22619c6 ("fix: resolve critical database isolation
+    // violations across 3 services"), the policy-change handler no longer
+    // queries the devices table directly (cross-service DB access) — it calls
+    // device-service over HTTP via the Node 18 built-in fetch(), falling back
+    // to the event payload's deviceId if the call fails. These tests mock
+    // global.fetch instead of db.query to match that behaviour.
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
     it('publishes recheck events for each active device', async () => {
       const bus = makeBus(true);
       const db = makeDb();
-      db.query.mockResolvedValue({ rows: [{ id: 'dev-1', platform: 'windows' }, { id: 'dev-2', platform: 'macos' }] });
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          devices: [{ id: 'dev-1', platform: 'windows' }, { id: 'dev-2', platform: 'macos' }],
+        }),
+      });
 
       let policyChangeHandler;
       bus.subscribe.mockImplementation(async (queueName, routingKeys, handler) => {
@@ -160,15 +177,19 @@ describe('ComplianceSaga', () => {
 
       await policyChangeHandler({ policyId: 'pol-1' });
 
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/devices?status=active&limit=1000'),
+        expect.any(Object)
+      );
       expect(bus.publish).toHaveBeenCalledTimes(2);
       expect(bus.publish).toHaveBeenCalledWith('device.compliance.recheck', expect.objectContaining({ deviceId: 'dev-1' }));
       expect(bus.publish).toHaveBeenCalledWith('device.compliance.recheck', expect.objectContaining({ deviceId: 'dev-2' }));
     });
 
-    it('logs warning when DB query fails', async () => {
+    it('logs warning and falls back to the event payload when device-service is unreachable', async () => {
       const bus = makeBus(true);
       const db = makeDb();
-      db.query.mockRejectedValue(new Error('DB down'));
+      global.fetch = jest.fn().mockRejectedValue(new Error('device-service unreachable'));
       const logger = { info: jest.fn(), warn: jest.fn() };
 
       let policyChangeHandler;
@@ -180,8 +201,32 @@ describe('ComplianceSaga', () => {
       saga.start();
       await jest.runAllTimersAsync();
 
+      // No deviceId on the payload → fallback list stays empty → no publish, no throw.
       await expect(policyChangeHandler({ policyId: 'pol-1' })).resolves.toBeUndefined();
       expect(logger.warn).toHaveBeenCalled();
+      expect(bus.publish).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the event payload deviceId when device-service is unreachable', async () => {
+      const bus = makeBus(true);
+      const db = makeDb();
+      global.fetch = jest.fn().mockRejectedValue(new Error('device-service unreachable'));
+      const logger = { info: jest.fn(), warn: jest.fn() };
+
+      let policyChangeHandler;
+      bus.subscribe.mockImplementation(async (queueName, routingKeys, handler) => {
+        if (queueName === 'compliance.policy-change') policyChangeHandler = handler;
+      });
+
+      const saga = new ComplianceSaga({ messageBus: bus, policyApplicationService: makeSvc(), db, logger });
+      saga.start();
+      await jest.runAllTimersAsync();
+
+      await policyChangeHandler({ policyId: 'pol-1', deviceId: 'dev-fallback', platform: 'linux' });
+
+      expect(logger.warn).toHaveBeenCalled();
+      expect(bus.publish).toHaveBeenCalledTimes(1);
+      expect(bus.publish).toHaveBeenCalledWith('device.compliance.recheck', expect.objectContaining({ deviceId: 'dev-fallback' }));
     });
   });
 });

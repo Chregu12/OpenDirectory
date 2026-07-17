@@ -456,3 +456,9 @@ function shutdown(signal) {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
+
+module.exports = UnifiedAuthenticationService;
+// Expose the module-level singleton so tests (and any other in-process
+// consumers) can reach the fully wired instance without triggering a second
+// startup/listen cycle.
+module.exports._instance = authService;

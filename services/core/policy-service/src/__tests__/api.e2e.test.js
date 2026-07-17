@@ -24,10 +24,14 @@ jest.mock('pg', () => {
   return { Pool: jest.fn().mockImplementation(() => mockPool) };
 });
 
-// Mock amqplib — connectBus() must not throw
+// Mock amqplib — connectBus() must not throw.
+// amqplib is not a direct dependency of policy-service (only transitively used by
+// packages/service-contracts/src/messageBus, which itself is fully mocked below),
+// so it is not present in node_modules here. Mark this mock virtual so Jest doesn't
+// try to resolve the real module before registering the mock.
 jest.mock('amqplib', () => ({
   connect: jest.fn().mockRejectedValue(new Error('No RabbitMQ in tests')),
-}));
+}), { virtual: true });
 
 // Mock service-contracts messageBus
 jest.mock('../../../../packages/service-contracts/src/messageBus', () => {

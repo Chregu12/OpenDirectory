@@ -174,30 +174,31 @@ jobs:
         run: cd services/platform/api-gateway && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
 
       # ---------------------------------------------------------------
+      # policy-service: 227 tests / 7 suites, all green (stale duplicate test
+      # removed, ComplianceSaga test moved onto the HTTP cross-service path,
+      # supertest added as a devDependency). Gates CI.
+      - name: Test policy-service
+        run: cd services/core/policy-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # quick-actions: 278 tests / 7 suites, all green (onboard response
+      # temporaryPassword regression fixed). Gates CI.
+      - name: Test quick-actions
+        run: cd services/platform/quick-actions && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
       # RED / fragile suites — kept as continue-on-error until fixed so the
       # rest of the pipeline still runs. Each has a documented reason.
       # ---------------------------------------------------------------
-      # authentication-service: api.e2e.test.js mocks `amqplib`, which is not
-      # a declared dependency, so that one suite fails to resolve the module
-      # (the other 11 suites / 181 tests pass). Re-enable gating after amqplib
-      # is added to the service's devDependencies (or the mock is removed).
+      # authentication-service: 12 of 13 suites / 258 tests pass. The one red
+      # suite (api.e2e.test.js, 75 tests) is a real product-feature regression:
+      # a prior "God-file split" refactor dropped ~35 endpoints (OU/groups/DNS/
+      # PIM/service-accounts/bulk-import/metrics/lockouts) that the e2e suite
+      # still exercises. Kept non-gating until those endpoints are restored or
+      # the obsolete assertions are retired. (The stray amqplib mock and a lost
+      # module.exports were already fixed.)
       - name: Test authentication-service
         id: test_authentication
         continue-on-error: true
         run: cd services/core/authentication-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
-
-      # policy-service: 17 tests currently fail (e.g. ComplianceSaga assertion
-      # counts). Keep non-gating until those are fixed.
-      - name: Test policy-service
-        id: test_policy
-        continue-on-error: true
-        run: cd services/core/policy-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
-
-      # quick-actions: 3 tests currently fail (275 pass). Keep non-gating.
-      - name: Test quick-actions
-        id: test_quick_actions
-        continue-on-error: true
-        run: cd services/platform/quick-actions && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
 
       # ---------------------------------------------------------------
       # Frontend

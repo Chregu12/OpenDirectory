@@ -81,24 +81,6 @@ jest.mock('connect-redis', () => {
   return { default: MockRedisStore };
 });
 
-// Mock amqplib
-jest.mock('amqplib', () => ({
-  connect: jest.fn().mockResolvedValue({
-    createChannel: jest.fn().mockResolvedValue({
-      assertExchange: jest.fn().mockResolvedValue({}),
-      assertQueue: jest.fn().mockResolvedValue({ queue: 'test-queue' }),
-      bindQueue: jest.fn().mockResolvedValue({}),
-      publish: jest.fn().mockReturnValue(true),
-      consume: jest.fn().mockResolvedValue({}),
-      ack: jest.fn(),
-      nack: jest.fn(),
-      prefetch: jest.fn(),
-    }),
-    on: jest.fn(),
-    close: jest.fn().mockResolvedValue(undefined),
-  }),
-}));
-
 // Mock passport-ldapauth
 jest.mock('passport-ldapauth', () => {
   const Strategy = jest.fn().mockImplementation((opts, verify) => ({

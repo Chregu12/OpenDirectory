@@ -186,12 +186,15 @@ async function onboardUser({ firstName, lastName, email, department = 'General',
   const username = email.split('@')[0];
   await publish('user.onboarded', { userId, username, email, _source: 'quick-actions' });
 
-  // temporaryPassword is sent via welcome notification (Step 7) — never returned in API response
+  // temporaryPassword is also delivered via the welcome notification (Step 7),
+  // but is returned here too so the caller (e.g. an admin UI) can display it once.
+  // It is only meaningful if the auth account was actually created.
   return {
     success: failed.length === 0,
     userId,
     userDn,
     email,
+    temporaryPassword: s2.ok ? temporaryPwd : null,
     assignedDevice,
     groupMemberships,
     policiesApplied,
