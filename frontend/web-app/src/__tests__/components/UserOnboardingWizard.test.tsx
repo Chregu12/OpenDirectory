@@ -2,21 +2,21 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UserOnboardingWizard from '../../components/views/UserOnboardingWizard';
-import { api } from '../../lib/api';
 
-const mockedApi = api as jest.Mocked<typeof api>;
-
+// UserOnboardingWizard talks to the quick-actions service via `qaPost`
+// (raw `fetch`), not the axios-based `api` client. Mock global.fetch.
 describe('UserOnboardingWizard', () => {
   const onClose = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedApi.post = jest.fn().mockResolvedValue({
-      data: {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
         temp_password: 'Temp@Test1234',
         username: 'jane.smith',
-      },
-    });
+      }),
+    } as any);
   });
 
   test('renders wizard header', () => {

@@ -1,52 +1,48 @@
 import React from 'react';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import ThreatDashboardView from '../../components/views/ThreatDashboardView';
+import { api } from '../../lib/api';
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+const mockedApi = api as jest.Mocked<typeof api>;
 
-const emptyData = { threats: [], anomalies: [], recommendations: [] };
+// ThreatDashboardView fetches threats/anomalies/recommendations independently
+// via the axios-based `api` client (api.get('/api/analytics/...')), not a
+// single raw `fetch('/api/threats')` call. Mock `api.get` accordingly.
 
-const threatData = {
-  threats: [
-    {
-      id: 'threat-1',
-      title: 'Brute Force Attack',
-      severity: 'high' as const,
-      description: 'Multiple failed login attempts detected.',
-      detectedAt: new Date().toISOString(),
-      status: 'active' as const,
-      source: 'auth-service',
-    },
-  ],
-  anomalies: [],
-  recommendations: [],
-};
+function mockEmptyResponses() {
+  mockedApi.get = jest.fn().mockResolvedValue({ data: [] });
+}
 
-function makeFetch(data: object) {
-  return jest.fn().mockResolvedValue({
-    ok: true,
-    json: async () => data,
-  } as unknown as Response);
+function mockThreatResponses() {
+  mockedApi.get = jest.fn((url: string) => {
+    if (url.includes('/api/analytics/threats')) {
+      return Promise.resolve({
+        data: [
+          {
+            id: 'threat-1',
+            type: 'Brute Force Attack',
+            severity: 'high',
+            device: 'server-02',
+            detectedAt: new Date().toISOString(),
+            status: 'active',
+          },
+        ],
+      });
+    }
+    return Promise.resolve({ data: [] });
+  }) as any;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 describe('ThreatDashboardView', () => {
-  let originalFetch: typeof global.fetch;
-
   beforeEach(() => {
-    originalFetch = global.fetch;
-    jest.useFakeTimers();
-  });
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-    jest.useRealTimers();
     jest.clearAllMocks();
+    mockedApi.post = jest.fn().mockResolvedValue({ data: {} });
   });
 
   test('renders without crashing (empty data)', async () => {
-    global.fetch = makeFetch(emptyData);
+    mockEmptyResponses();
     await act(async () => {
       render(<ThreatDashboardView />);
     });
@@ -54,36 +50,32 @@ describe('ThreatDashboardView', () => {
     expect(document.body).toBeTruthy();
   });
 
-  test('shows "Active Threats" heading', async () => {
-    global.fetch = makeFetch(emptyData);
+  test('shows "Threat Detection" heading', async () => {
+    mockEmptyResponses();
     await act(async () => {
       render(<ThreatDashboardView />);
     });
-    // The h1 contains "Active Threats" (the summary card also shows the text,
-    // so we target the heading role specifically).
-    const heading = screen.getByRole('heading', { name: /Active Threats/ });
+    const heading = screen.getByRole('heading', { name: /Threat Detection/ });
     expect(heading).toBeInTheDocument();
   });
 
-  test('severity filter dropdown renders with correct options', async () => {
-    global.fetch = makeFetch(emptyData);
+  test('severity filter buttons render with correct options', async () => {
+    mockEmptyResponses();
     await act(async () => {
       render(<ThreatDashboardView />);
     });
 
-    const select = screen.getByLabelText('Filter by severity');
-    expect(select).toBeInTheDocument();
-
-    const options = Array.from(select.querySelectorAll('option')).map(o => o.value);
-    expect(options).toContain('all');
-    expect(options).toContain('critical');
-    expect(options).toContain('high');
-    expect(options).toContain('medium');
-    expect(options).toContain('low');
+    // Severity filtering is a row of toggle buttons, not a <select>.
+    expect(screen.getByText('Severity:')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'critical' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'high' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'medium' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'low' })).toBeInTheDocument();
   });
 
   test('"Resolve" button present when an active threat is in mock data', async () => {
-    global.fetch = makeFetch(threatData);
+    mockThreatResponses();
     await act(async () => {
       render(<ThreatDashboardView />);
     });
@@ -94,7 +86,7 @@ describe('ThreatDashboardView', () => {
   });
 
   test('threat title is rendered from mock data', async () => {
-    global.fetch = makeFetch(threatData);
+    mockThreatResponses();
     await act(async () => {
       render(<ThreatDashboardView />);
     });
@@ -104,9 +96,9 @@ describe('ThreatDashboardView', () => {
     });
   });
 
-  test('auto-refresh interval is set via setInterval at 60 000 ms', async () => {
+  test('auto-refresh interval is set via setInterval at 30 000 ms', async () => {
     const setIntervalSpy = jest.spyOn(global, 'setInterval');
-    global.fetch = makeFetch(emptyData);
+    mockEmptyResponses();
 
     await act(async () => {
       render(<ThreatDashboardView />);
@@ -114,7 +106,7 @@ describe('ThreatDashboardView', () => {
 
     expect(setIntervalSpy).toHaveBeenCalledWith(
       expect.any(Function),
-      60_000,
+      30_000,
     );
 
     setIntervalSpy.mockRestore();
@@ -122,7 +114,7 @@ describe('ThreatDashboardView', () => {
 
   test('interval is cleared on unmount', async () => {
     const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
-    global.fetch = makeFetch(emptyData);
+    mockEmptyResponses();
 
     let unmount: () => void;
     await act(async () => {
@@ -138,14 +130,15 @@ describe('ThreatDashboardView', () => {
     clearIntervalSpy.mockRestore();
   });
 
-  test('fetch is called with /api/threats on mount', async () => {
-    const fetchMock = makeFetch(emptyData);
-    global.fetch = fetchMock;
+  test('api.get is called for threats, anomalies, and recommendations on mount', async () => {
+    mockEmptyResponses();
 
     await act(async () => {
       render(<ThreatDashboardView />);
     });
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/threats');
+    expect(mockedApi.get).toHaveBeenCalledWith('/api/analytics/threats');
+    expect(mockedApi.get).toHaveBeenCalledWith('/api/analytics/anomalies');
+    expect(mockedApi.get).toHaveBeenCalledWith('/api/analytics/recommendations');
   });
 });

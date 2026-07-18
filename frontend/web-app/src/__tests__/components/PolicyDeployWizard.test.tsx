@@ -11,8 +11,15 @@ describe('PolicyDeployWizard', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Policy list still comes from the axios `api` client (falls back to
+    // MOCK_POLICIES when unavailable).
     mockedApi.get = jest.fn().mockRejectedValue(new Error('API unavailable'));
     mockedApi.post = jest.fn().mockResolvedValue({ data: {} });
+    // Deployment itself goes through the quick-actions service via raw fetch.
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as any);
   });
 
   test('renders wizard header', () => {
@@ -51,7 +58,7 @@ describe('PolicyDeployWizard', () => {
 
   test('Continue is disabled until a policy is selected', () => {
     render(<PolicyDeployWizard onClose={onClose} />);
-    const continueBtn = screen.getByText('Continue →');
+    const continueBtn = screen.getByText('Continue');
     expect(continueBtn).toBeDisabled();
   });
 
@@ -59,7 +66,7 @@ describe('PolicyDeployWizard', () => {
     const user = userEvent.setup();
     render(<PolicyDeployWizard onClose={onClose} />);
     await user.click(screen.getByText('Enforce Disk Encryption'));
-    const continueBtn = screen.getByText('Continue →');
+    const continueBtn = screen.getByText('Continue');
     expect(continueBtn).not.toBeDisabled();
   });
 
@@ -67,7 +74,7 @@ describe('PolicyDeployWizard', () => {
     const user = userEvent.setup();
     render(<PolicyDeployWizard onClose={onClose} />);
     await user.click(screen.getByText('Password Complexity'));
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
     expect(screen.getByText('All Devices')).toBeInTheDocument();
     expect(screen.getByText('By OS')).toBeInTheDocument();
     expect(screen.getByText('By OU')).toBeInTheDocument();
@@ -80,8 +87,8 @@ describe('PolicyDeployWizard', () => {
     const user = userEvent.setup();
     render(<PolicyDeployWizard onClose={onClose} />);
     await user.click(screen.getByText('Antivirus Required'));
-    await user.click(screen.getByText('Continue →'));
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
+    await user.click(screen.getByText('Continue'));
     expect(screen.getByText('Enforced')).toBeInTheDocument();
   });
 
@@ -89,8 +96,8 @@ describe('PolicyDeployWizard', () => {
     const user = userEvent.setup();
     render(<PolicyDeployWizard onClose={onClose} />);
     await user.click(screen.getByText('Antivirus Required'));
-    await user.click(screen.getByText('Continue →'));
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
+    await user.click(screen.getByText('Continue'));
     expect(screen.getByText('Dry Run')).toBeInTheDocument();
   });
 
@@ -98,8 +105,8 @@ describe('PolicyDeployWizard', () => {
     const user = userEvent.setup();
     render(<PolicyDeployWizard onClose={onClose} />);
     await user.click(screen.getByText('Antivirus Required'));
-    await user.click(screen.getByText('Continue →'));
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
+    await user.click(screen.getByText('Continue'));
     expect(screen.getByText(/Block users from changing this setting/i)).toBeInTheDocument();
   });
 
@@ -107,8 +114,8 @@ describe('PolicyDeployWizard', () => {
     const user = userEvent.setup();
     render(<PolicyDeployWizard onClose={onClose} />);
     await user.click(screen.getByText('Antivirus Required'));
-    await user.click(screen.getByText('Continue →'));
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
+    await user.click(screen.getByText('Continue'));
     expect(screen.getByText(/Simulate deployment/i)).toBeInTheDocument();
   });
 
@@ -116,9 +123,9 @@ describe('PolicyDeployWizard', () => {
     const user = userEvent.setup();
     render(<PolicyDeployWizard onClose={onClose} />);
     await user.click(screen.getByText('Antivirus Required'));
-    await user.click(screen.getByText('Continue →'));
-    await user.click(screen.getByText('Continue →'));
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
+    await user.click(screen.getByText('Continue'));
+    await user.click(screen.getByText('Continue'));
     expect(screen.getByText('Ready to deploy')).toBeInTheDocument();
     expect(screen.getByText('Deploy Now')).toBeInTheDocument();
   });
@@ -127,9 +134,9 @@ describe('PolicyDeployWizard', () => {
     const user = userEvent.setup();
     render(<PolicyDeployWizard onClose={onClose} />);
     await user.click(screen.getByText('Antivirus Required'));
-    await user.click(screen.getByText('Continue →'));
-    await user.click(screen.getByText('Continue →'));
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
+    await user.click(screen.getByText('Continue'));
+    await user.click(screen.getByText('Continue'));
     await user.click(screen.getByText('Deploy Now'));
     await waitFor(() => {
       expect(screen.getByText('Policy Deployed')).toBeInTheDocument();
@@ -140,8 +147,8 @@ describe('PolicyDeployWizard', () => {
     const user = userEvent.setup();
     render(<PolicyDeployWizard onClose={onClose} />);
     await user.click(screen.getByText('Antivirus Required'));
-    await user.click(screen.getByText('Continue →'));
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
+    await user.click(screen.getByText('Continue'));
     // Step 3: find all toggle buttons (they are the small oval buttons)
     // The Dry Run toggle is in a section that contains "Dry Run" text
     // Find the button nearest to "Dry Run" text
@@ -153,7 +160,7 @@ describe('PolicyDeployWizard', () => {
         await user.click(toggleBtn);
       }
     }
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
     // After toggling dry run, step 4 should show "Run Dry Run" button
     await waitFor(() => {
       expect(screen.getByText(/Run Dry Run|Deploy Now/)).toBeInTheDocument();
@@ -164,8 +171,8 @@ describe('PolicyDeployWizard', () => {
     const user = userEvent.setup();
     render(<PolicyDeployWizard onClose={onClose} />);
     await user.click(screen.getByText('Enforce Disk Encryption'));
-    await user.click(screen.getByText('Continue →'));
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
+    await user.click(screen.getByText('Continue'));
     // Toggle dry run on
     const allButtons = screen.getAllByRole('button');
     const dryRunToggle = allButtons.find((btn, idx) => {
@@ -173,7 +180,7 @@ describe('PolicyDeployWizard', () => {
       return parent?.textContent?.includes('Dry Run');
     });
     if (dryRunToggle) await user.click(dryRunToggle);
-    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue'));
     // click the run button (Run Dry Run or Deploy Now)
     const deployBtn = screen.getByRole('button', { name: /Run Dry Run|Deploy Now/i });
     await user.click(deployBtn);

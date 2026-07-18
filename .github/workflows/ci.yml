@@ -203,11 +203,11 @@ jobs:
       # ---------------------------------------------------------------
       # Frontend
       # ---------------------------------------------------------------
-      # Jest: 50 unit tests currently fail (188 pass). Kept non-gating until
-      # fixed so it does not block the pipeline.
+      # Jest: 239 tests / 15 suites, all green (stale tests updated to the
+      # current fetch/quick-actions client + UI copy; a missing complianceApi
+      # export in lib/api.ts was restored). Gates CI.
       - name: Frontend unit tests (Jest)
         id: test_frontend_jest
-        continue-on-error: true
         run: cd frontend/web-app && npm ci && npm test
 
       # Playwright e2e: fully self-contained — every /api/** call is mocked via

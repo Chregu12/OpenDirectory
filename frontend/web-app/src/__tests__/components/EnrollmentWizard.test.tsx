@@ -2,21 +2,22 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import EnrollmentWizard from '../../components/views/EnrollmentWizard';
-import { api } from '../../lib/api';
 
-const mockedApi = api as jest.Mocked<typeof api>;
-
+// EnrollmentWizard talks to the quick-actions service via `qaPost`
+// (raw `fetch`), not the axios-based `api` client. Mock global.fetch.
 describe('EnrollmentWizard', () => {
   const onClose = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedApi.post = jest.fn().mockResolvedValue({
-      data: {
-        token: 'ODM-TESTTOKEN1',
-        enrollment_token: 'ODM-TESTTOKEN1',
-      },
-    });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        deviceId: 'device-123',
+        enrollmentUrl: 'ODM-TESTTOKEN1',
+        nextSteps: [],
+      }),
+    } as any);
   });
 
   test('renders wizard header', () => {
@@ -162,7 +163,8 @@ describe('EnrollmentWizard', () => {
     await user.click(screen.getByText('Continue →'));
     await user.click(screen.getByText('Enroll Now'));
     await waitFor(() => {
-      expect(screen.getByText('Enrollment Token')).toBeInTheDocument();
+      // The success screen labels the credential field "Enrollment URL / Token"
+      expect(screen.getByText('Enrollment URL / Token')).toBeInTheDocument();
     });
   });
 

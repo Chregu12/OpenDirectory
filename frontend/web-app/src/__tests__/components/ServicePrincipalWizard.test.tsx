@@ -3,27 +3,22 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ServicePrincipalWizard from '../../components/views/ServicePrincipalWizard';
 
-// Get mocked axios instance
-import axios from 'axios';
-const mockedAxios = axios as jest.Mocked<typeof axios>;
-
-// Get the api instance (it uses axios.create)
-import { api } from '../../lib/api';
-const mockedApi = api as jest.Mocked<typeof api>;
-
+// ServicePrincipalWizard talks to the quick-actions service via `qaPost`
+// (raw `fetch`), not the axios-based `api` client. Mock global.fetch.
 describe('ServicePrincipalWizard', () => {
   const onClose = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Default: API resolves with mock credentials
-    mockedApi.post = jest.fn().mockResolvedValue({
-      data: {
+    // Default: quick-actions service resolves with mock credentials
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
         client_id: 'test-client-id-1234',
         client_secret: 'test-secret-abc123def456',
         spn: 'app/test-app@opendirectory.local',
-      },
-    });
+      }),
+    } as any);
   });
 
   test('renders the wizard modal', () => {
@@ -128,7 +123,7 @@ describe('ServicePrincipalWizard', () => {
     render(<ServicePrincipalWizard onClose={onClose} />);
     await user.click(screen.getByText('Cancel'));
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(mockedApi.post).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   test('Download .env button is shown after creation', async () => {

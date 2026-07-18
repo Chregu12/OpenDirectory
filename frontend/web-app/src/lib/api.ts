@@ -566,6 +566,29 @@ export const securityApi = {
     api.get('/api/security/dlp/policies'),
 };
 
+// Compliance API → compliance-engine service (/api/compliance/*)
+// Consumed by ComplianceView (fleet compliance dashboard: baselines,
+// per-device scores, violations, waivers, report export).
+export const complianceApi = {
+  getStatus: () =>
+    api.get('/api/compliance/dashboard'),
+
+  getBaselines: () =>
+    api.get('/api/compliance/baselines'),
+
+  getWaivers: () =>
+    api.get('/api/compliance/waivers'),
+
+  triggerScan: (deviceId: string) =>
+    api.post(`/api/compliance/evaluate/${deviceId}`),
+
+  deleteWaiver: (waiverId: string) =>
+    api.delete(`/api/compliance/waivers/${waiverId}`),
+
+  generateReport: (params?: Record<string, unknown>) =>
+    api.post('/api/compliance/reports/generate', params),
+};
+
 // Backup & DR API
 export const backupApi = {
   getBackups: () =>
