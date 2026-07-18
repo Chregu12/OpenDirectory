@@ -191,7 +191,22 @@ function createUserRoutes(services) {
       const { currentPassword, newPassword } = req.body;
 
       const user = await userService.getUserById(userId);
-      const validPassword = await authManager.verifyPassword(currentPassword, user.password);
+      if (!user) {
+        // Falls into the catch block below -> 500 "Failed to change password",
+        // matching this route's existing behavior for an unresolvable user id
+        // (previously an accidental TypeError from `user.password` on null).
+        throw new Error('User not found');
+      }
+
+      // NOTE: user.password is never populated — UserService._toPublic()
+      // intentionally omits the password hash from every user object it
+      // returns, to avoid leaking it through profile/read APIs. Comparing
+      // against user.password here used to always be `undefined`, so
+      // verifyPassword() short-circuited to false and this endpoint returned
+      // 401 for every user regardless of the submitted currentPassword.
+      // verifyCurrentPassword() fetches the hash internally and never
+      // returns it, so the hash stays out of this route entirely.
+      const validPassword = await userService.verifyCurrentPassword(userId, currentPassword);
 
       if (!validPassword) {
         return res.status(401).json({ error: 'Current password is incorrect' });

@@ -13,14 +13,25 @@
  * AuthenticationManager, the legacy MFAService, and (after wiring)
  * MFAApplicationService / PasswordApplicationService.
  *
- * Purpose: pin down CURRENT observable behavior (status codes + body shapes,
- * including pre-existing quirks/bugs) before any DDD re-wiring, so that after
- * the wiring these same assertions still pass unchanged.
+ * Purpose: pin down CURRENT observable behavior (status codes + body shapes)
+ * before any DDD re-wiring, so that after the wiring these same assertions
+ * still pass unchanged.
+ *
+ * UPDATE: the change-password and mfa/disable blocks below used to pin two
+ * real bugs as "current ground truth" — both routes verified the submitted
+ * password against `user.password`, which UserService._toPublic() always
+ * strips (by design), so verifyPassword() always short-circuited to false
+ * and every request was rejected with 401, regardless of whether the
+ * password was actually correct. Now that userService.verifyCurrentPassword()
+ * exists (see src/services/userService.js) and the routes use it instead,
+ * those tests have been rewritten to assert the CORRECT behavior: a correct
+ * password succeeds, and only a wrong password is rejected with 401.
  */
 
 const request = require('supertest');
 const express = require('express');
 const speakeasy = require('speakeasy');
+const bcrypt = require('bcryptjs');
 
 const { createMfaRoutes } = require('../routes/mfa');
 const { createUserRoutes } = require('../routes/users');
@@ -276,25 +287,44 @@ describe('MFA + Password live endpoints — GOLDEN MASTER characterization', () 
       expect(res.status).toBe(401);
     });
 
-    // NOTE — pre-existing behavior being pinned down here, not a desired spec:
-    // UserService._toPublic() never includes the password hash (by design, to
-    // avoid leaking it through the profile/user-read APIs). This route reads
-    // the user via userService.getUserById() and then checks
-    // authManager.verifyPassword(password, user.password) — but `user.password`
-    // is therefore always undefined, so verifyPassword short-circuits to
-    // `false` unconditionally. The route currently returns 401 "Invalid
-    // password" for ANY password value, correct or not, whenever the user
-    // exists. This characterization intentionally captures that as current
-    // ground truth.
-    it('returns 401 "Invalid password" even for a plausible password (existing user)', async () => {
+    // BUG FIX — this used to pin buggy behavior, now pins the corrected
+    // behavior: UserService._toPublic() never includes the password hash (by
+    // design, to avoid leaking it through the profile/user-read APIs). This
+    // route used to read the user via userService.getUserById() and then
+    // check authManager.verifyPassword(password, user.password) — but
+    // `user.password` was therefore always undefined, so verifyPassword
+    // short-circuited to `false` unconditionally and the route returned 401
+    // "Invalid password" for EVERY password, correct or not, for any
+    // existing user. It now calls userService.verifyCurrentPassword(userId,
+    // password), which resolves the hash internally via the repository and
+    // never returns it — so a correct password now actually succeeds.
+    it('returns 200 and disables MFA for the correct current password', async () => {
       const { services, repo } = buildServices();
-      const user = seedUser(repo, { id: 'mfa-disable-user-1' });
+      const plaintext = 'CorrectHorseBatteryStaple1!';
+      const passwordHash = await bcrypt.hash(plaintext, 4);
+      const user = seedUser(repo, { id: 'mfa-disable-user-1', passwordHash });
       const app = buildApp(createMfaRoutes(services));
 
       const res = await request(app)
         .post('/api/auth/mfa/disable')
         .set('Authorization', bearer({ id: user.id }))
-        .send({ password: 'CorrectHorseBatteryStaple1!' });
+        .send({ password: plaintext });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, message: 'MFA disabled successfully' });
+      expect(services.auditService.logSecurityEvent).toHaveBeenCalledWith('mfa_disabled', user.id, expect.anything());
+    });
+
+    it('returns 401 "Invalid password" for an incorrect current password (existing user)', async () => {
+      const { services, repo } = buildServices();
+      const passwordHash = await bcrypt.hash('TheRealPassword1!', 4);
+      const user = seedUser(repo, { id: 'mfa-disable-user-2', passwordHash });
+      const app = buildApp(createMfaRoutes(services));
+
+      const res = await request(app)
+        .post('/api/auth/mfa/disable')
+        .set('Authorization', bearer({ id: user.id }))
+        .send({ password: 'TotallyWrongPassword1!' });
 
       expect(res.status).toBe(401);
       expect(res.body).toEqual({ error: 'Invalid password' });
@@ -394,21 +424,53 @@ describe('MFA + Password live endpoints — GOLDEN MASTER characterization', () 
       expect(res.body).toHaveProperty('error', 'Validation failed');
     });
 
-    // NOTE — pre-existing behavior being pinned down here, not a desired spec:
-    // same root cause as MFA disable above — userService.getUserById() never
-    // returns a password hash, so authManager.verifyPassword() is always
-    // false. The endpoint therefore always answers 401 "Current password is
+    // BUG FIX — this used to pin buggy behavior, now pins the corrected
+    // behavior: same root cause as MFA disable above — userService.getUserById()
+    // never returns a password hash, so authManager.verifyPassword() was
+    // always false, and the endpoint always answered 401 "Current password is
     // incorrect" for a valid, existing user, regardless of the submitted
-    // currentPassword.
-    it('returns 401 "Current password is incorrect" for a validly-shaped request (existing user)', async () => {
+    // currentPassword. It now calls
+    // userService.verifyCurrentPassword(userId, currentPassword), which
+    // resolves the hash internally and never returns it — so a correct
+    // current password now actually succeeds and changes the password.
+    it('returns 200 and changes the password for the correct current password', async () => {
       const { services, repo } = buildServices();
-      const user = seedUser(repo, { id: 'cp-user-1' });
+      const oldPlaintext = 'OldPassword1!';
+      const passwordHash = await bcrypt.hash(oldPlaintext, 4);
+      const user = seedUser(repo, { id: 'cp-user-1', passwordHash });
       const app = buildApp(createUserRoutes(services));
 
       const res = await request(app)
         .post('/api/auth/change-password')
         .set('Authorization', bearer({ id: user.id }))
-        .send({ currentPassword: 'OldPassword1!', newPassword: 'NewPassword1!' });
+        .send({ currentPassword: oldPlaintext, newPassword: 'NewPassword1!' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        success: true,
+        message: 'Password changed successfully. Please login again.',
+      });
+      expect(services.auditService.logSecurityEvent).toHaveBeenCalledWith('password_changed', user.id, expect.anything());
+      expect(services.sessionManager.revokeAllUserSessions).toHaveBeenCalledWith(user.id);
+
+      // The new password must actually be persisted — verifying against the
+      // OLD password should now fail.
+      const stillOld = await services.userService.verifyCurrentPassword(user.id, oldPlaintext);
+      expect(stillOld).toBe(false);
+      const nowNew = await services.userService.verifyCurrentPassword(user.id, 'NewPassword1!');
+      expect(nowNew).toBe(true);
+    });
+
+    it('returns 401 "Current password is incorrect" for a wrong current password (existing user)', async () => {
+      const { services, repo } = buildServices();
+      const passwordHash = await bcrypt.hash('TheRealOldPassword1!', 4);
+      const user = seedUser(repo, { id: 'cp-user-2', passwordHash });
+      const app = buildApp(createUserRoutes(services));
+
+      const res = await request(app)
+        .post('/api/auth/change-password')
+        .set('Authorization', bearer({ id: user.id }))
+        .send({ currentPassword: 'TotallyWrongPassword1!', newPassword: 'NewPassword1!' });
 
       expect(res.status).toBe(401);
       expect(res.body).toEqual({ error: 'Current password is incorrect' });

@@ -125,12 +125,23 @@ describe('PasswordApplicationService', () => {
         .rejects.toMatchObject({ status: 404 });
     });
 
+    // Previously, PasswordApplicationService used
+    // `const { Password } = require('../domain/value-objects/Password')` —
+    // but that module does `module.exports = Password` (the class directly),
+    // so destructuring it always produced `undefined`, and
+    // `Password.fromPlaintext(...)` always threw. There was no try/catch
+    // around it in resetWithToken(), so the throw propagated straight out —
+    // every real call to resetWithToken() failed outright. These two tests
+    // used to work around that by reaching into require.cache and swapping
+    // in a `{ Password: ... }`-shaped fake module so the (buggy) destructure
+    // would "succeed" against the fake shape. Now that the source uses a
+    // plain `const Password = require(...)`, the real class is used
+    // directly, so we just spy on Password.fromPlaintext() like any other
+    // unit test — no module-cache patching needed.
     it('resets password and deletes token on success', async () => {
-      // PasswordApplicationService uses `const { Password } = require(...)` which gets
-      // undefined because the module exports the class directly. We must patch it.
       const PasswordClass = require('../domain/value-objects/Password');
       const fakePw = { hash: 'new-salt:new-hash' };
-      jest.spyOn(PasswordClass, 'fromPlaintext').mockResolvedValueOnce(fakePw);
+      const spy = jest.spyOn(PasswordClass, 'fromPlaintext').mockResolvedValueOnce(fakePw);
 
       const validData = { userId: 'user-1', expiry: Date.now() + 60000 };
       const cache = makeCache();
@@ -143,27 +154,18 @@ describe('PasswordApplicationService', () => {
       };
       const svc = makeService({ userRepo, cache });
 
-      // The service destructures { Password } — which is undefined — so fromPlaintext
-      // will throw. We need to override the internal require by patching the module cache.
-      const Module = require('module');
-      const pwModPath = require.resolve('../domain/value-objects/Password');
-      const origExports = require.cache[pwModPath].exports;
-      require.cache[pwModPath].exports = { Password: PasswordClass };
+      const result = await svc.resetWithToken('some-token', 'NewPassword1!');
+      expect(result).toEqual({ success: true });
+      expect(userRepo.save).toHaveBeenCalled();
+      expect(cache.del).toHaveBeenCalled();
 
-      try {
-        const result = await svc.resetWithToken('some-token', 'NewPassword1!');
-        expect(result).toEqual({ success: true });
-        expect(userRepo.save).toHaveBeenCalled();
-        expect(cache.del).toHaveBeenCalled();
-      } finally {
-        require.cache[pwModPath].exports = origExports;
-        jest.restoreAllMocks();
-      }
+      spy.mockRestore();
     });
 
     it('emits PASSWORD_RESET domain event via message bus on success', async () => {
       const PasswordClass = require('../domain/value-objects/Password');
       const fakePw = { hash: 'new-salt:new-hash' };
+      const spy = jest.spyOn(PasswordClass, 'fromPlaintext').mockResolvedValueOnce(fakePw);
 
       const validData = { userId: 'user-1', expiry: Date.now() + 60000 };
       const cache = makeCache();
@@ -177,19 +179,13 @@ describe('PasswordApplicationService', () => {
       const bus = { isConnected: jest.fn(() => true), publish: jest.fn() };
       const svc = makeService({ userRepo, cache, bus });
 
-      const pwModPath = require.resolve('../domain/value-objects/Password');
-      const origExports = require.cache[pwModPath].exports;
-      require.cache[pwModPath].exports = { Password: { fromPlaintext: jest.fn().mockResolvedValue(fakePw) } };
+      await svc.resetWithToken('some-token', 'NewPassword1!');
+      expect(bus.publish).toHaveBeenCalledWith(
+        AuthEvents.PASSWORD_RESET,
+        expect.objectContaining({ _source: 'auth-service' }),
+      );
 
-      try {
-        await svc.resetWithToken('some-token', 'NewPassword1!');
-        expect(bus.publish).toHaveBeenCalledWith(
-          AuthEvents.PASSWORD_RESET,
-          expect.objectContaining({ _source: 'auth-service' }),
-        );
-      } finally {
-        require.cache[pwModPath].exports = origExports;
-      }
+      spy.mockRestore();
     });
   });
 

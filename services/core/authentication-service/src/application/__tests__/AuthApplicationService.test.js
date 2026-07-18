@@ -1,16 +1,23 @@
 'use strict';
 
-// Mock the Password value object so tests don't need real scrypt hashes
-jest.mock('../../domain/value-objects/Password', () => {
-  return {
-    Password: {
-      fromHash: jest.fn(),
-    },
-  };
-});
+// Mock the Password value object so tests don't need real scrypt hashes.
+//
+// The real module does `module.exports = Password` (the class directly), not
+// `{ Password: ... }`. This mock used to be shaped as `{ Password: { ... } }`
+// to match AuthApplicationService's old (buggy)
+// `const { Password } = require(...)` destructuring — which meant this test
+// file only ever exercised the *fake* shape, never proving the real
+// production code (which destructured `undefined` from the real module and
+// silently fell back to bcrypt every time) actually worked. Now that the
+// source does a plain `const Password = require(...)` and explicitly
+// branches on hash format (bcrypt vs scrypt — see AuthApplicationService.js),
+// the mock must return the class-like shape directly.
+jest.mock('../../domain/value-objects/Password', () => ({
+  fromHash: jest.fn(),
+}));
 
 const AuthApplicationService = require('../AuthApplicationService');
-const { Password } = require('../../domain/value-objects/Password');
+const Password = require('../../domain/value-objects/Password');
 
 // ---------------------------------------------------------------------------
 // Helpers

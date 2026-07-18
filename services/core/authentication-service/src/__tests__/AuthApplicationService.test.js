@@ -78,37 +78,50 @@ describe('AuthApplicationService', () => {
         .rejects.toMatchObject({ status: 403 });
     });
 
-    it('throws 401 and records failure when password is wrong', async () => {
+    it('throws 401 and records failure when password is wrong (scrypt-shaped hash, no bcrypt prefix)', async () => {
       const { svc, userRepo } = makeService();
-      // Use a user with a password hash that won't match (bcrypt fallback will also fail)
+      // Not a $2*$-prefixed hash, so login() takes the scrypt/Password-VO
+      // branch directly (see BUG FIX note below) rather than the bcrypt one.
       const user = makeUser({ passwordHash: 'invalid:hash:nomatchwillhappen' });
       userRepo.findByUsername.mockResolvedValue(user);
 
-      // The internal require of Password will destructure undefined since module exports directly,
-      // causing it to fall back to bcryptjs, which will return false for non-bcrypt hash.
       await expect(svc.login({ username: 'alice', password: 'wrongpass', ip: '1.1.1.1' }))
         .rejects.toMatchObject({ status: 401 });
       expect(userRepo.save).toHaveBeenCalled();
     });
 
-    it('returns token and mfaRequired=false on successful login', async () => {
-      // AuthApplicationService.login calls `const { Password } = require(...)` which
-      // destructures undefined from the module (which exports the class directly),
-      // so it falls back to bcryptjs. We use a real scrypt hash paired with
-      // Password.fromHash to test a full password match via the non-destructured path.
-      // Instead, we mock the password verification by using a scrypt hash that we verify
-      // manually and then spy on Password to make the test reliable.
+    // BUG FIX — this test used to pin buggy behavior. AuthApplicationService
+    // used to do `const { Password } = require('../domain/value-objects/Password')`,
+    // but that module does `module.exports = Password` (the class directly),
+    // so the destructure always produced `undefined`. `Password.fromHash(...)`
+    // therefore always THREW, which was silently swallowed by a catch-block
+    // that fell back to bcryptjs — meaning the DDD Password value object was
+    // NEVER actually exercised in production; every login secretly went
+    // through the bcrypt fallback, and this test only passed because it
+    // mocked bcryptjs.compare() to return true.
+    //
+    // The fix is not just "remove the destructure", though: Password VO's
+    // verify() does NOT throw on a bcrypt-formatted hash — it just returns
+    // false (there's no ':' to split cleanly) — so naively trying the VO
+    // first for every hash would silently break login for the (overwhelming
+    // majority) of real bcrypt-hashed users, with no fallback ever firing.
+    // login() now branches explicitly on hash format ($2[aby]$ prefix =>
+    // bcrypt, else => Password VO) instead of relying on a thrown exception.
+    // These two tests demonstrate both branches now genuinely work.
+    it('returns token and mfaRequired=false on successful login via the Password VO (scrypt hash)', async () => {
       const PasswordClass = require('../domain/value-objects/Password');
       const plaintext = 'TestPassword1';
       const pwObj = await PasswordClass.fromPlaintext(plaintext);
+      expect(pwObj.hash).not.toMatch(/^\$2[aby]?\$/); // sanity: genuinely a scrypt hash, not bcrypt
 
-      // The service's login() destructures { Password } from the module but gets undefined.
-      // So it falls back to bcryptjs. We need to intercept that path.
-      // Use jest.spyOn to mock bcryptjs.compare on the already-loaded module.
+      // If the buggy fallback-to-bcrypt path were still active, this would
+      // be the *only* way password verification could succeed — so proving
+      // it is NOT called demonstrates the real VO path is what verified the
+      // password below.
       const bcryptjs = require('bcryptjs');
-      const compareSpy = jest.spyOn(bcryptjs, 'compare').mockResolvedValueOnce(true);
+      const compareSpy = jest.spyOn(bcryptjs, 'compare');
 
-      const { svc, userRepo, sessionRepo } = makeService();
+      const { svc, userRepo } = makeService();
       const user = makeUser({ passwordHash: pwObj.hash });
       userRepo.findByUsername.mockResolvedValue(user);
 
@@ -116,8 +129,28 @@ describe('AuthApplicationService', () => {
       expect(result).toHaveProperty('token');
       expect(result).toHaveProperty('mfaRequired', false);
       expect(result.user.username).toBe('alice');
+      expect(compareSpy).not.toHaveBeenCalled();
 
       compareSpy.mockRestore();
+    });
+
+    it('returns token on successful login via bcrypt (production UserService hash format)', async () => {
+      // UserService.createUser()/changePassword() only ever produce bcrypt
+      // ($2a$/$2b$/$2y$-prefixed) hashes — this is the hash format the
+      // overwhelming majority of real users have, so it must keep working
+      // after the Password-VO destructuring fix.
+      const bcryptjs = require('bcryptjs');
+      const plaintext = 'RealUserPassword1';
+      const bcryptHash = await bcryptjs.hash(plaintext, 4);
+      expect(bcryptHash).toMatch(/^\$2[aby]?\$/);
+
+      const { svc, userRepo } = makeService();
+      const user = makeUser({ passwordHash: bcryptHash });
+      userRepo.findByUsername.mockResolvedValue(user);
+
+      const result = await svc.login({ username: 'alice', password: plaintext, ip: '127.0.0.1', userAgent: 'test' });
+      expect(result).toHaveProperty('token');
+      expect(result.user.username).toBe('alice');
     });
   });
 

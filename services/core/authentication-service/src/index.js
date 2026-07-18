@@ -414,6 +414,22 @@ class UnifiedAuthenticationService {
   }
 
   async start(port = process.env.PORT || 3001) {
+    // Initialize the audit/password-history Postgres pool. db.initDb() is
+    // fully self-contained: it catches its own connection errors, logs a
+    // warning, and leaves db.isAvailable() === false rather than throwing —
+    // so this is safe to call unconditionally, including in environments
+    // with no database configured. Without this call, db.isAvailable()
+    // stayed false forever and the password-history check in routes/users.js
+    // (checkPasswordHistory/recordPasswordHash) was permanently dead code.
+    const db = require('./db');
+    try {
+      await db.initDb();
+    } catch (err) {
+      // initDb() already swallows connection errors internally; this catch
+      // is an extra safety net only, so a DB outage can never block startup.
+      logger.warn('db.initDb() failed unexpectedly, continuing without password-history support:', err.message);
+    }
+
     // Initialize the OIDC provider before accepting connections
     const issuer = process.env.ISSUER_URL || `http://localhost:${port}`;
     try {

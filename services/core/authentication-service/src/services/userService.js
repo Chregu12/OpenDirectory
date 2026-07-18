@@ -436,6 +436,43 @@ class UserService {
   }
 
   /**
+   * Verify a plaintext password against a user's *stored* password hash,
+   * without ever returning or exposing that hash to the caller.
+   *
+   * This exists because _toPublic() intentionally strips the password hash
+   * from every user object this service returns (to avoid leaking it through
+   * profile/admin read APIs) — so callers that only have a public user object
+   * (e.g. from getUserById()) can never verify a password themselves. Routes
+   * that need to confirm "does this plaintext match the user's current
+   * password" (change-password, MFA disable) must go through this method
+   * instead of reading a `.password` field off a public user object.
+   *
+   * Returns a boolean only. Never returns the hash.
+   */
+  async verifyCurrentPassword(userId, plaintext) {
+    if (!userId || !plaintext) return false;
+
+    let hash = null;
+
+    if (this._userRepository) {
+      try {
+        const aggregate = await this._userRepository.findById(userId);
+        hash = aggregate ? aggregate.passwordHash : null;
+      } catch (err) {
+        this._logger.warn('UserService.verifyCurrentPassword: repository query failed', { error: err.message });
+        const user = this._users.get(userId);
+        hash = user ? user.password_hash : null;
+      }
+    } else {
+      const user = this._users.get(userId);
+      hash = user ? user.password_hash : null;
+    }
+
+    if (!hash) return false;
+    return bcrypt.compare(plaintext, hash);
+  }
+
+  /**
    * Lock a user account.  Loads aggregate, calls recordLoginFailure() iteratively
    * (or directly sets locked via aggregate rebuild), saves.
    *

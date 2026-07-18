@@ -67,7 +67,11 @@ class PasswordApplicationService {
     const user = await this._userRepo.findById(userId);
     if (!user) throw Object.assign(new Error('User not found'), { status: 404 });
 
-    const { Password } = require('../domain/value-objects/Password');
+    // NOTE: the value-objects/Password module exports the class directly
+    // (module.exports = Password), not { Password }. Destructuring it here
+    // used to yield `undefined`, so every call below threw and the whole
+    // reset silently failed. Require it as a plain default import.
+    const Password = require('../domain/value-objects/Password');
     const pwObj = await Password.fromPlaintext(newPlainPassword);
     user.resetPassword(pwObj.hash);
     await this._userRepo.save(user);
