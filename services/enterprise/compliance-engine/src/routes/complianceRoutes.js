@@ -3,6 +3,18 @@
 const express = require('express');
 const logger = require('../utils/logger');
 
+// Score -> status bucket thresholds, kept identical to the distribution
+// buckets already used by ComplianceEvaluator.getFleetScore() so that the
+// per-device roster and the fleet dashboard agree on what "compliant" means.
+function scoreToStatus(score) {
+  if (score >= 90) return 'compliant';
+  if (score >= 70) return 'partially_compliant';
+  if (score >= 50) return 'at_risk';
+  return 'non_compliant';
+}
+
+const SEVERITIES = ['critical', 'high', 'medium', 'low'];
+
 /**
  * Create compliance API routes.
  * @param {object} deps - Injected dependencies
@@ -273,6 +285,221 @@ function createComplianceRoutes(deps) {
       logger.error(`Failed to revoke waiver: ${error.message}`, { error });
       const status = error.message.includes('not found') ? 404 : 500;
       res.status(status).json({ success: false, error: error.message });
+    }
+  });
+
+  // ─── Fleet Device Roster ──────────────────────────────────────────
+
+  // GET /api/compliance/devices - Fleet-wide per-device compliance roster.
+  // Aggregated from the latest compliance_results row per (device, baseline)
+  // pair, the same "latest scan" window used by getFleetScore()/getDomainScore().
+  //
+  // Known limitation: compliance-engine's own tables only ever store a bare
+  // device_id string - hostname/friendly-name metadata lives in device-service
+  // and is not queryable from this service's database. `hostname` is
+  // therefore always null here rather than a fabricated/guessed value; callers
+  // that need a friendly name must resolve deviceId against device-service.
+  router.get('/devices', async (req, res) => {
+    try {
+      const { framework, platform } = req.query;
+
+      let query = `
+        SELECT
+          cr.device_id,
+          MAX(cr.scanned_at) AS last_evaluated_at,
+          COUNT(DISTINCT cr.baseline_id) AS baselines_evaluated,
+          AVG(cr.score) AS overall_score,
+          SUM(cr.critical_failures) AS critical_failures,
+          SUM(cr.high_failures) AS high_failures,
+          SUM(cr.medium_failures) AS medium_failures,
+          SUM(cr.low_failures) AS low_failures,
+          SUM(cr.failed_checks) AS total_failures,
+          array_agg(DISTINCT cb.platform) FILTER (WHERE cb.platform IS NOT NULL AND cb.platform <> 'all') AS platforms
+        FROM compliance_results cr
+        JOIN compliance_baselines cb ON cr.baseline_id = cb.id
+        WHERE cr.scanned_at = (
+          SELECT MAX(scanned_at) FROM compliance_results
+          WHERE device_id = cr.device_id AND baseline_id = cr.baseline_id
+        )
+      `;
+      const params = [];
+
+      if (framework) {
+        params.push(framework);
+        query += ` AND cb.framework = $${params.length}`;
+      }
+
+      if (platform) {
+        params.push(platform);
+        query += ` AND cb.platform = $${params.length}`;
+      }
+
+      query += ` GROUP BY cr.device_id ORDER BY overall_score ASC`;
+
+      if (req.query.limit) {
+        params.push(parseInt(req.query.limit, 10));
+        query += ` LIMIT $${params.length}`;
+      } else {
+        query += ` LIMIT 500`;
+      }
+
+      if (req.query.offset) {
+        params.push(parseInt(req.query.offset, 10));
+        query += ` OFFSET $${params.length}`;
+      }
+
+      const { rows } = await deps.db.query(query, params);
+
+      let devices = rows.map(r => {
+        const score = parseFloat(parseFloat(r.overall_score || 0).toFixed(2));
+        return {
+          deviceId: r.device_id,
+          hostname: null,
+          platform: (r.platforms && r.platforms[0]) || 'unknown',
+          overallScore: score,
+          status: scoreToStatus(score),
+          lastEvaluatedAt: r.last_evaluated_at,
+          baselinesEvaluated: parseInt(r.baselines_evaluated, 10) || 0,
+          violations: {
+            critical: parseInt(r.critical_failures, 10) || 0,
+            high: parseInt(r.high_failures, 10) || 0,
+            medium: parseInt(r.medium_failures, 10) || 0,
+            low: parseInt(r.low_failures, 10) || 0,
+            total: parseInt(r.total_failures, 10) || 0,
+          },
+        };
+      });
+
+      if (req.query.status) {
+        devices = devices.filter(d => d.status === req.query.status);
+      }
+
+      res.json({
+        success: true,
+        data: devices,
+        count: devices.length,
+        meta: {
+          hostnameAvailable: false,
+          note: 'hostname is not stored by compliance-engine; resolve deviceId via device-service if a friendly name is required',
+        },
+      });
+    } catch (error) {
+      logger.error(`Failed to build device compliance roster: ${error.message}`, { error });
+      res.status(500).json({ success: false, error: 'Failed to get device compliance roster' });
+    }
+  });
+
+  // ─── Violations Summary ───────────────────────────────────────────
+
+  // GET /api/compliance/violations - Fleet-wide violations grouped by
+  // severity, aggregated from the same "latest scan per device+baseline"
+  // snapshot as the device roster and the fleet score. Per-severity counts
+  // come from the compliance_results summary columns; the top offending
+  // checks are parsed out of the per-check `details` JSONB blob (the same
+  // technique TrendAnalyzer._getTopFailedChecks() uses for its top-failures
+  // report), additionally excluding waived checks since a waived failure is
+  // not an open violation.
+  router.get('/violations', async (req, res) => {
+    try {
+      const { framework, platform } = req.query;
+      const topLimit = req.query.limit ? parseInt(req.query.limit, 10) : 5;
+
+      let countQuery = `
+        SELECT
+          SUM(cr.critical_failures) AS critical,
+          SUM(cr.high_failures) AS high,
+          SUM(cr.medium_failures) AS medium,
+          SUM(cr.low_failures) AS low,
+          SUM(cr.failed_checks) AS total
+        FROM compliance_results cr
+        JOIN compliance_baselines cb ON cr.baseline_id = cb.id
+        WHERE cr.scanned_at = (
+          SELECT MAX(scanned_at) FROM compliance_results
+          WHERE device_id = cr.device_id AND baseline_id = cr.baseline_id
+        )
+      `;
+      const countParams = [];
+
+      if (framework) {
+        countParams.push(framework);
+        countQuery += ` AND cb.framework = $${countParams.length}`;
+      }
+
+      if (platform) {
+        countParams.push(platform);
+        countQuery += ` AND cb.platform = $${countParams.length}`;
+      }
+
+      let detailQuery = `
+        SELECT
+          detail->>'checkId' AS check_id,
+          detail->>'title' AS title,
+          COALESCE(detail->>'severity', 'medium') AS severity,
+          detail->>'category' AS category,
+          COUNT(*) AS failure_count,
+          COUNT(DISTINCT cr.device_id) AS affected_devices
+        FROM compliance_results cr
+        JOIN compliance_baselines cb ON cr.baseline_id = cb.id,
+             jsonb_array_elements(cr.details) AS detail
+        WHERE cr.scanned_at = (
+          SELECT MAX(scanned_at) FROM compliance_results
+          WHERE device_id = cr.device_id AND baseline_id = cr.baseline_id
+        )
+        AND (detail->>'passed')::boolean = false
+        AND (detail->>'waived')::boolean IS DISTINCT FROM true
+        AND (detail->>'skipped')::boolean IS DISTINCT FROM true
+      `;
+      const detailParams = [];
+
+      if (framework) {
+        detailParams.push(framework);
+        detailQuery += ` AND cb.framework = $${detailParams.length}`;
+      }
+
+      if (platform) {
+        detailParams.push(platform);
+        detailQuery += ` AND cb.platform = $${detailParams.length}`;
+      }
+
+      detailQuery += ` GROUP BY check_id, title, severity, category ORDER BY failure_count DESC LIMIT 100`;
+
+      const [countResult, detailResult] = await Promise.all([
+        deps.db.query(countQuery, countParams),
+        deps.db.query(detailQuery, detailParams),
+      ]);
+
+      const totals = countResult.rows[0] || {};
+      const bySeverity = { critical: [], high: [], medium: [], low: [] };
+
+      for (const row of detailResult.rows) {
+        const severity = SEVERITIES.includes(row.severity) ? row.severity : 'medium';
+        if (bySeverity[severity].length < topLimit) {
+          bySeverity[severity].push({
+            checkId: row.check_id,
+            title: row.title,
+            severity,
+            category: row.category,
+            affectedDevices: parseInt(row.affected_devices, 10) || 0,
+            failureCount: parseInt(row.failure_count, 10) || 0,
+          });
+        }
+      }
+
+      const data = SEVERITIES.map(severity => ({
+        severity,
+        count: parseInt(totals[severity], 10) || 0,
+        items: bySeverity[severity],
+      }));
+
+      res.json({
+        success: true,
+        data,
+        count: data.length,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error(`Failed to build violations summary: ${error.message}`, { error });
+      res.status(500).json({ success: false, error: 'Failed to get violations summary' });
     }
   });
 
