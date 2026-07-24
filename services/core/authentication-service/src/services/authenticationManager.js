@@ -115,7 +115,13 @@ class AuthenticationManager {
 
     if (!hash) return null;
 
-    const valid = await bcrypt.compare(password, hash);
+    // Format-agnostic: stored hash may be bcrypt (legacy writes) or scrypt
+    // (DDD Password value object writes, e.g. via
+    // PasswordApplicationService.resetWithToken()). See utils/passwordHash
+    // for the shared detection logic also used by
+    // AuthApplicationService.login() and UserService.verifyCurrentPassword().
+    const { verifyPasswordAnyFormat } = require('../utils/passwordHash');
+    const valid = await verifyPasswordAnyFormat(password, hash);
     if (!valid) return null;
 
     // Check account lock
@@ -134,10 +140,16 @@ class AuthenticationManager {
 
   /**
    * Verify a plain-text password against a stored hash.
+   *
+   * Format-agnostic: `hash` may be bcrypt (legacy writes) or scrypt (DDD
+   * Password value object writes). See utils/passwordHash for the shared
+   * detection logic also used by AuthApplicationService.login() and
+   * UserService.verifyCurrentPassword().
    */
   async verifyPassword(plaintext, hash) {
     if (!plaintext || !hash) return false;
-    return bcrypt.compare(plaintext, hash);
+    const { verifyPasswordAnyFormat } = require('../utils/passwordHash');
+    return verifyPasswordAnyFormat(plaintext, hash);
   }
 
   /**

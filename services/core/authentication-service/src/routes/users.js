@@ -333,21 +333,29 @@ function createUserRoutes(services) {
         return res.status(400).json({ error: 'Dieses Passwort wurde bereits verwendet. Bitte wählen Sie ein anderes.' });
       }
 
-      // NOTE: intentionally NOT using passwordAppService.resetWithToken() here.
-      // That method has a pre-existing bug (`const { Password } = require(...)`
-      // against a module that exports the class directly, so `Password` is
-      // always undefined there) which is otherwise only ever exercised by
-      // application/__tests__ via a require.cache monkeypatch. The very same
-      // destructuring bug is relied upon (silently, via its catch-fallback to
-      // bcrypt) by the already-wired AuthApplicationService.login(), so
-      // fixing it is out of scope here and would risk an unrelated login
-      // regression for bcrypt-hashed users. We keep using the
-      // proven bcryptjs-based userService.changePassword() to actually
-      // mutate the password, and only use PasswordApplicationService for the
-      // reset-token's lifecycle (issue / peek / consume).
-      await userService.changePassword(resetRecord.userId, newPassword);
+      // Delegates the actual password mutation + token consumption to
+      // PasswordApplicationService.resetWithToken(), which writes a scrypt
+      // hash via the DDD Password value object (domain/value-objects/Password.js).
+      //
+      // This used to be routed around resetWithToken() and hand-rolled here
+      // with userService.changePassword() (bcrypt) instead, because
+      // resetWithToken() had a pre-existing bug (`const { Password } =
+      // require(...)` against a module that exports the class directly, so
+      // `Password` was always undefined) that made every real call throw —
+      // AND because the rest of the service (verifyCurrentPassword /
+      // authenticateLocal / login) used to be bcrypt-only, so a scrypt hash
+      // written here would have made every subsequent change-password /
+      // login attempt fail with no way to recover. Both blockers are now
+      // fixed: the destructuring bug is gone (resetWithToken() uses a plain
+      // `require`), and hash-format detection is centralized in
+      // utils/passwordHash and used by every verification path in this
+      // service (login, verifyCurrentPassword, verifyPassword/
+      // authenticateLocal) — so a scrypt hash written by a reset is now
+      // verifiable everywhere a bcrypt hash would have been.
+      // resetWithToken() re-validates + deletes the cache token itself, so
+      // there's no separate consumeToken() call needed here anymore.
+      await passwordAppService.resetWithToken(token, newPassword);
       recordPasswordHash(resetRecord.userId, newPassword).catch(() => {});
-      await passwordAppService.consumeToken(token);
 
       await auditService.logUserEvent('password_reset_completed', resetRecord.userId, req);
 

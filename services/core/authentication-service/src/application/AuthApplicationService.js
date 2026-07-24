@@ -25,41 +25,16 @@ class AuthApplicationService {
       throw Object.assign(new Error('Account is locked'), { status: 403 });
     }
 
-    // Verify password. Two hash formats coexist in production:
-    //   - bcrypt ($2a$/$2b$/$2y$ prefix) — written by the legacy UserService /
-    //     AuthenticationManager (createUser, changePassword, admin resets).
-    //     This is what the overwhelming majority of real users have.
-    //   - scrypt ("salt:derivedHex") — written by the DDD Password value
-    //     object (PasswordApplicationService.resetWithToken()).
-    //
-    // The hash format must be detected up front rather than inferred from a
-    // thrown exception: value-objects/Password exports the class directly
-    // (module.exports = Password), so `const { Password } = require(...)`
-    // used to destructure `undefined`, making `Password.fromHash(...)` throw
-    // on *every* login and fall into the bcrypt catch-block below — which
-    // coincidentally kept bcrypt logins working while leaving the scrypt/VO
-    // path completely dead. Fixing the destructuring bug naively (still
-    // trying Password.fromHash().verify() first, unconditionally) would
-    // regress in the other direction: verify() does NOT throw on a bcrypt
-    // hash, it just returns false (there's no ':' to split cleanly), so
-    // real bcrypt-hashed users would silently fail to log in with no
-    // fallback ever triggering. Detecting the format explicitly avoids both
-    // failure modes.
-    let passwordValid = false;
-    const storedHash = user.passwordHash || '';
-    const isBcryptHash = /^\$2[aby]?\$/.test(storedHash);
-    try {
-      if (isBcryptHash) {
-        const bcrypt = require('bcryptjs');
-        passwordValid = await bcrypt.compare(password, storedHash);
-      } else {
-        const Password = require('../domain/value-objects/Password');
-        const pw = Password.fromHash(storedHash);
-        passwordValid = await pw.verify(password);
-      }
-    } catch (e) {
-      passwordValid = false;
-    }
+    // Verify password. Two hash formats coexist in production — bcrypt
+    // (legacy UserService/AuthenticationManager) and scrypt (DDD Password
+    // value object). Format detection + verification is centralized in
+    // utils/passwordHash so login(), UserService.verifyCurrentPassword(),
+    // and AuthenticationManager.verifyPassword()/authenticateLocal() all
+    // branch on hash format identically — see that module for the full
+    // rationale (why detection must happen up front rather than via a
+    // thrown-exception fallback).
+    const { verifyPasswordAnyFormat } = require('../utils/passwordHash');
+    const passwordValid = await verifyPasswordAnyFormat(password, user.passwordHash || '');
 
     if (!passwordValid) {
       user.recordLoginFailure(ip);

@@ -146,15 +146,24 @@ function createMfaRoutes(services) {
   // same lifetime as every other module-scoped store in this service) wires
   // it back up.
   //
-  // NOTE / honest caveat: there is currently no endpoint that *writes* a
-  // secret into this map — the class-based `/api/auth/mfa/setup` above uses
-  // `mfaService.setupMFA()`, a different abstraction entirely, and doesn't
-  // populate `userMfaSecrets`. So while `validate` and this `disable` route
-  // are fully real and correctly gated, nothing in the current UI-facing
-  // setup flow can actually put a user into a state where the login-time
-  // challenge fires. Unifying the two MFA subsystems (or adding a real
-  // "enable login-time TOTP" endpoint) is a follow-up, not attempted here —
-  // it's out of the scope of restoring these two specific routes.
+  // UPDATE — the two MFA subsystems ARE unified, via this exact Map.
+  // `mfaService.enableMFA()` (src/services/mfaService.js, called by the
+  // verifySetupHandler above once a submitted TOTP code is confirmed) does
+  // `global.__od_userMfaSecrets.set(uid, secret)` on success, and
+  // `mfaService.disableMFA()` removes it again. Because `userMfaSecrets`
+  // above reuses the existing `global.__od_userMfaSecrets` Map (creating one
+  // only if none exists yet) rather than always allocating a fresh Map, and
+  // this route factory runs once at app start — before any request can call
+  // setup/verify — every write mfaService makes lands in this same Map by
+  // reference. So a user who completes `/api/auth/mfa/setup` +
+  // `/api/auth/mfa/verify-setup` DOES end up in a state where the
+  // login-time challenge (`validate` below, and the identical inline check
+  // in routes/auth.js's login handler) fires and accepts their TOTP code.
+  // See src/__tests__/mfaLoginTimeUnification.test.js for an end-to-end
+  // proof (setup → verify-setup → login mfaRequired → correct/incorrect
+  // TOTP). An earlier version of this comment claimed no endpoint wrote
+  // into this map — that was stale/incorrect by the time these two routes
+  // were restored; mfaService.enableMFA()'s write predates this file.
   let speakeasy;
   try { speakeasy = require('speakeasy'); } catch { /* optional dependency not installed */ }
   const userMfaSecrets = global.__od_userMfaSecrets instanceof Map ? global.__od_userMfaSecrets : new Map();

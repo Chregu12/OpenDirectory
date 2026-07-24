@@ -448,6 +448,14 @@ class UserService {
    * instead of reading a `.password` field off a public user object.
    *
    * Returns a boolean only. Never returns the hash.
+   *
+   * Format-agnostic: a user's stored hash may be bcrypt (legacy
+   * UserService/AuthenticationManager writes) or scrypt (DDD Password
+   * value object writes, e.g. via PasswordApplicationService.resetWithToken()).
+   * Detection + verification is centralized in utils/passwordHash so this
+   * method, AuthApplicationService.login(), and
+   * AuthenticationManager.verifyPassword()/authenticateLocal() all branch
+   * on hash format identically.
    */
   async verifyCurrentPassword(userId, plaintext) {
     if (!userId || !plaintext) return false;
@@ -469,7 +477,8 @@ class UserService {
     }
 
     if (!hash) return false;
-    return bcrypt.compare(plaintext, hash);
+    const { verifyPasswordAnyFormat } = require('../utils/passwordHash');
+    return verifyPasswordAnyFormat(plaintext, hash);
   }
 
   /**

@@ -635,5 +635,68 @@ describe('MFA + Password live endpoints — GOLDEN MASTER characterization', () 
         randSpy.mockRestore();
       }
     });
+
+    // NEW — proves a previously-impossible sequence now works.
+    //
+    // /api/auth/password-reset/confirm is now wired onto
+    // PasswordApplicationService.resetWithToken() (see routes/users.js),
+    // which writes a scrypt hash via the DDD Password value object. Before
+    // hash-format detection was centralized (see src/utils/passwordHash.js)
+    // and wired into UserService.verifyCurrentPassword() /
+    // AuthenticationManager.verifyPassword()/authenticateLocal(), those
+    // methods only ever ran bcryptjs.compare() against the stored hash — so
+    // a scrypt hash written by a reset could never be verified again, and
+    // /api/auth/change-password would return 401 "Current password is
+    // incorrect" for EVERY subsequent attempt, no matter the password. This
+    // test exercises the exact sequence a real user hits after "forgot
+    // password": reset, then immediately change the (just-reset) password.
+    it('reset-password then change-password with the newly-reset password succeeds (previously broken: scrypt hash from reset was unverifiable by the then-bcrypt-only change-password path)', async () => {
+      const { services, repo } = buildServices();
+      const user = seedUser(repo, { id: 'pr-user-then-cp', email: 'resetthencp@example.com' });
+      const app = buildApp(createUserRoutes(services));
+
+      const crypto = require('crypto');
+      const randSpy = jest.spyOn(crypto, 'randomBytes').mockReturnValueOnce(Buffer.from('c'.repeat(64), 'hex'));
+      try {
+        await request(app).post('/api/auth/reset-password').send({ email: 'resetthencp@example.com' });
+
+        const resetRes = await request(app)
+          .post('/api/auth/password-reset/confirm')
+          .send({ token: 'c'.repeat(64), newPassword: 'ResetPassword1!' });
+        expect(resetRes.status).toBe(200);
+
+        // Sanity: the stored hash is now scrypt-shaped ("salt:derivedHex"),
+        // not bcrypt — proves resetWithToken() (the DDD Password VO path),
+        // not the legacy bcrypt userService.changePassword(), performed the
+        // write.
+        const updatedUser = await repo.findById(user.id);
+        expect(updatedUser.passwordHash).not.toMatch(/^\$2[aby]?\$/);
+        expect(updatedUser.passwordHash).toMatch(/^[0-9a-f]+:[0-9a-f]+$/);
+
+        // The freshly-reset (scrypt) password must verify directly too.
+        const verifiedAfterReset = await services.userService.verifyCurrentPassword(user.id, 'ResetPassword1!');
+        expect(verifiedAfterReset).toBe(true);
+
+        // This is the sequence that used to be broken end-to-end: submit the
+        // just-reset password as currentPassword to change-password.
+        const cpRes = await request(app)
+          .post('/api/auth/change-password')
+          .set('Authorization', bearer({ id: user.id }))
+          .send({ currentPassword: 'ResetPassword1!', newPassword: 'FollowUpPassword1!' });
+
+        expect(cpRes.status).toBe(200);
+        expect(cpRes.body).toEqual({
+          success: true,
+          message: 'Password changed successfully. Please login again.',
+        });
+
+        // The new password (bcrypt again — change-password/UserService still
+        // writes bcrypt) verifies too, and the old reset password no longer does.
+        expect(await services.userService.verifyCurrentPassword(user.id, 'FollowUpPassword1!')).toBe(true);
+        expect(await services.userService.verifyCurrentPassword(user.id, 'ResetPassword1!')).toBe(false);
+      } finally {
+        randSpy.mockRestore();
+      }
+    });
   });
 });
