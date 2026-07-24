@@ -3,6 +3,51 @@
 /**
  * E2E API tests for Authentication Service
  * Uses supertest in-process with mocked external dependencies
+ *
+ * ─── Removed test blocks (God-file split regression cleanup) ──────────────────
+ *
+ * A previous "God-file split" (commit 1617f2c) broke this suite by removing
+ * ~35 endpoints from src/index.js without updating the tests that exercised
+ * them. Each removed endpoint was re-investigated individually and falls into
+ * exactly one of three buckets. Two of those buckets are addressed here by
+ * deleting the now-obsolete test blocks — auth-service is not (and in the
+ * migrated case, should no longer be) the owner of these endpoints, so
+ * re-adding them here would reintroduce dead/duplicated surface rather than
+ * fix a real regression:
+ *
+ *   (c) DEAD — no consumer anywhere in the codebase (Gateway, frontend, or
+ *       any backend service). Removed entirely, no replacement needed:
+ *         - GET  /metrics
+ *         - GET  /api/password-policy
+ *         - PUT  /api/password-policy
+ *         - POST /api/users/bulk-import
+ *         - GET  /api/auth/lockouts
+ *         - DELETE /api/auth/lockouts/:username
+ *
+ *   (b) MIGRATED — the capability lives (or belongs) in a different service;
+ *       auth-service is no longer the owner. Removed here; coverage belongs
+ *       in the owning service's own test suite instead:
+ *         - GET/POST /api/groups, GET /api/groups/:id,
+ *           POST /api/groups/:id/members
+ *             → owned by identity-service (reachable via the API-gateway
+ *               proxy today).
+ *         - GET /api/audit/events, POST /api/audit/log
+ *             → owned by audit-service / enterprise-directory (not yet bound
+ *               at the Gateway — tracked separately, not an auth-service gap).
+ *         - GET/POST /api/dns/records, DELETE /api/dns/records/:name
+ *             → owned by network-infrastructure under /api/network/dns/*
+ *               (the /api/dns/* path here was a stale pre-split alias).
+ *
+ * The remaining removed endpoints are genuine regressions with live
+ * consumers (Gateway routes and/or frontend callers still pointing at
+ * auth-service) and are intentionally NOT covered by this cleanup:
+ *   - /api/pim/*, /api/service-accounts*, /api/config/domain, /api/ous
+ *     still have failing test blocks below (kept red on purpose — the
+ *     underlying routes are genuinely missing and need to be reimplemented
+ *     in a follow-up change, tracked separately from this cleanup).
+ *   - MFA verify-setup/status were fixed directly (real alias routes added
+ *     to src/routes/mfa.js with the same requireAuth middleware as the rest
+ *     of the MFA routes) — see the 'MFA routes' section below.
  */
 
 // ─── Mock all external / missing dependencies BEFORE any require ───────────────
@@ -573,15 +618,6 @@ describe('Authentication Service - E2E API Tests', () => {
     });
   });
 
-  // ─── Metrics ─────────────────────────────────────────────────────────────────
-  describe('GET /metrics', () => {
-    it('returns prometheus metrics', async () => {
-      const res = await request(app).get('/metrics');
-      expect(res.status).toBe(200);
-      expect(res.headers['content-type']).toMatch(/text\/plain/);
-    });
-  });
-
   // ─── Helper: build a signed JWT for authenticated requests ───────────────────
   function makeJwt(payload = {}) {
     const jwt = require('jsonwebtoken');
@@ -597,10 +633,17 @@ describe('Authentication Service - E2E API Tests', () => {
   }
 
   // ─── MFA routes ──────────────────────────────────────────────────────────────
-  // Note: POST /api/auth/mfa/setup is registered by BOTH the class (no auth middleware,
-  // first in route stack) and the IIFE (requireJwt, second). Express hits the class
-  // route first, which accesses req.user.id directly → crashes to 500 when no session.
-  // The IIFE-only routes (verify-setup, validate, DELETE disable, GET status) work correctly.
+  // src/routes/mfa.js registers real, requireAuth-gated routes for setup,
+  // verify (+ verify-setup alias), disable (POST), recovery-codes, and now
+  // status (added below, see 'GET /api/auth/mfa/status'). There is no
+  // duplicate/unauthenticated "class route" registration anymore — that is
+  // stale, pre-split behavior. The 'setup', 'validate', and 'DELETE disable'
+  // blocks immediately below still describe that stale, no-longer-accurate
+  // shape (setup now requires auth and returns 401, not 500; there is no
+  // /api/auth/mfa/validate route; /disable is POST, not DELETE) and are
+  // left red intentionally — fixing them is out of scope for this pass,
+  // which only covers the two endpoints with live frontend consumers
+  // (verify-setup, status).
 
   describe('POST /api/auth/mfa/setup', () => {
     it('returns 500 when called without user context (class route lacks requireAuth)', async () => {
@@ -610,6 +653,10 @@ describe('Authentication Service - E2E API Tests', () => {
     });
   });
 
+  // /api/auth/mfa/verify-setup is a real alias for /api/auth/mfa/verify (same
+  // handler, same requireAuth middleware) added because the frontend's MFA
+  // setup flow (IdentityProviderView.tsx) calls this exact path name with a
+  // `token` field rather than `code`. See src/routes/mfa.js.
   describe('POST /api/auth/mfa/verify-setup', () => {
     it('returns 401 when no auth token provided', async () => {
       const res = await request(app)
@@ -618,21 +665,44 @@ describe('Authentication Service - E2E API Tests', () => {
       expect(res.status).toBe(401);
     });
 
-    it('returns 400 when no pending MFA setup exists', async () => {
+    it('returns 200 with valid:false for an incorrect code (authenticated)', async () => {
+      // The passport 'jwt' strategy itself resolves req.user via
+      // userService.getUserById(payload.sub) before the route handler runs —
+      // this mock backs that lookup, not anything inside the handler.
       service.userService.getUserById.mockResolvedValueOnce({
-        id: 'user-no-pending',
+        id: 'user-test-1',
         username: 'testuser',
         roles: ['user'],
       });
+      service.mfaService.verifyCode.mockResolvedValueOnce(false);
 
-      const token = makeJwt({ sub: 'user-no-pending' });
+      const jwt = makeJwt();
       const res = await request(app)
         .post('/api/auth/mfa/verify-setup')
-        .set('Authorization', `Bearer ${token}`)
+        .set('Authorization', `Bearer ${jwt}`)
         .send({ token: '123456' });
 
-      // No pending secret → 400, or 501 if speakeasy not available
-      expect([400, 501]).toContain(res.status);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('valid', false);
+    });
+
+    it('returns 200 with valid:true and enables MFA for a correct code (authenticated)', async () => {
+      service.userService.getUserById.mockResolvedValueOnce({
+        id: 'user-test-1',
+        username: 'testuser',
+        roles: ['user'],
+      });
+      service.mfaService.verifyCode.mockResolvedValueOnce(true);
+
+      const jwt = makeJwt();
+      const res = await request(app)
+        .post('/api/auth/mfa/verify-setup')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({ token: '654321' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('valid', true);
+      expect(service.mfaService.enableMFA).toHaveBeenCalled();
     });
   });
 
@@ -678,18 +748,39 @@ describe('Authentication Service - E2E API Tests', () => {
     });
   });
 
+  // GET /api/auth/mfa/status is a new real, requireAuth-gated route (added
+  // alongside verify-setup above) — the frontend polls it to know whether MFA
+  // is currently enabled for the logged-in user. See src/routes/mfa.js.
   describe('GET /api/auth/mfa/status', () => {
     it('returns 401 when no auth token provided', async () => {
       const res = await request(app).get('/api/auth/mfa/status');
       expect(res.status).toBe(401);
     });
 
-    it('returns mfa enabled status for authenticated user', async () => {
-      service.userService.getUserById.mockResolvedValueOnce({
-        id: 'user-test-1',
-        username: 'testuser',
-        roles: ['user'],
-      });
+    it('returns 404 when the authenticated user cannot be resolved', async () => {
+      // Two getUserById calls happen for this route: (1) the passport 'jwt'
+      // strategy resolving req.user from the token — must succeed for the
+      // request to reach the handler at all — and (2) the status handler's
+      // own lookup, which here simulates the user having been deleted after
+      // the token was issued.
+      service.userService.getUserById
+        .mockResolvedValueOnce({ id: 'user-test-1', username: 'testuser', roles: ['user'] })
+        .mockResolvedValueOnce(null);
+
+      const token = makeJwt();
+      const res = await request(app)
+        .get('/api/auth/mfa/status')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(404);
+      expect(res.body).toHaveProperty('error', 'User not found');
+    });
+
+    it('returns enabled:false for a user without MFA configured', async () => {
+      const user = { id: 'user-test-1', username: 'testuser', roles: ['user'], mfaEnabled: false };
+      service.userService.getUserById
+        .mockResolvedValueOnce(user) // passport 'jwt' strategy auth lookup
+        .mockResolvedValueOnce(user); // status handler's own lookup
 
       const token = makeJwt();
       const res = await request(app)
@@ -697,8 +788,22 @@ describe('Authentication Service - E2E API Tests', () => {
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('enabled');
-      expect(typeof res.body.enabled).toBe('boolean');
+      expect(res.body).toHaveProperty('enabled', false);
+    });
+
+    it('returns enabled:true for a user with MFA configured', async () => {
+      const user = { id: 'user-test-1', username: 'testuser', roles: ['user'], mfaEnabled: true };
+      service.userService.getUserById
+        .mockResolvedValueOnce(user) // passport 'jwt' strategy auth lookup
+        .mockResolvedValueOnce(user); // status handler's own lookup
+
+      const token = makeJwt();
+      const res = await request(app)
+        .get('/api/auth/mfa/status')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('enabled', true);
     });
   });
 
@@ -1138,69 +1243,6 @@ describe('Authentication Service - E2E API Tests', () => {
     });
   });
 
-  // ─── Account lockout admin endpoints ─────────────────────────────────────────
-
-  describe('GET /api/auth/lockouts', () => {
-    it('returns 401 when no auth token provided', async () => {
-      const res = await request(app).get('/api/auth/lockouts');
-      expect(res.status).toBe(401);
-    });
-
-    it('returns 403 for non-admin user', async () => {
-      service.userService.getUserById.mockResolvedValueOnce({
-        id: 'user-test-1',
-        username: 'testuser',
-        roles: ['user'],
-      });
-
-      const token = makeJwt({ roles: ['user'] });
-      const res = await request(app)
-        .get('/api/auth/lockouts')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(403);
-    });
-
-    it('returns locked accounts list for admin', async () => {
-      service.userService.getUserById.mockResolvedValueOnce({
-        id: 'admin-1',
-        username: 'admin',
-        roles: ['admin'],
-      });
-
-      const token = makeAdminJwt();
-      const res = await request(app)
-        .get('/api/auth/lockouts')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
-    });
-  });
-
-  describe('DELETE /api/auth/lockouts/:username', () => {
-    it('returns 401 when no auth token provided', async () => {
-      const res = await request(app).delete('/api/auth/lockouts/lockeduser');
-      expect(res.status).toBe(401);
-    });
-
-    it('returns 200 success when admin unlocks account', async () => {
-      service.userService.getUserById.mockResolvedValueOnce({
-        id: 'admin-1',
-        username: 'admin',
-        roles: ['admin'],
-      });
-
-      const token = makeAdminJwt();
-      const res = await request(app)
-        .delete('/api/auth/lockouts/lockeduser')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('success', true);
-    });
-  });
-
   // ─── Directory: OUs ───────────────────────────────────────────────────────────
 
   describe('GET /api/ous', () => {
@@ -1247,146 +1289,6 @@ describe('Authentication Service - E2E API Tests', () => {
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('name', 'Finance');
       expect(res.body).toHaveProperty('id');
-    });
-  });
-
-  // ─── Directory: Groups ────────────────────────────────────────────────────────
-
-  describe('GET /api/groups', () => {
-    it('returns 401 when no auth token provided', async () => {
-      const res = await request(app).get('/api/groups');
-      expect(res.status).toBe(401);
-    });
-
-    it('returns groups list with Bearer token', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .get('/api/groups')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
-      // Seeded groups should be present
-      expect(res.body.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('POST /api/groups', () => {
-    it('returns 400 when name is missing', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/groups')
-        .set('Authorization', `Bearer ${token}`)
-        .send({});
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error', 'name required');
-    });
-
-    it('returns 201 with created group', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/groups')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'QA Team', description: 'Quality assurance' });
-
-      expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('name', 'QA Team');
-      expect(res.body).toHaveProperty('id');
-    });
-  });
-
-  describe('GET /api/groups/:id', () => {
-    it('returns 404 for unknown group', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .get('/api/groups/nonexistent-group-id')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(404);
-      expect(res.body).toHaveProperty('error', 'Group not found');
-    });
-
-    it('returns group data for seeded group', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .get('/api/groups/g-developers')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('id', 'g-developers');
-      expect(res.body).toHaveProperty('members');
-    });
-  });
-
-  describe('POST /api/groups/:id/members', () => {
-    it('returns 400 when userId is missing', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/groups/g-developers/members')
-        .set('Authorization', `Bearer ${token}`)
-        .send({});
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error', 'userId required');
-    });
-
-    it('returns 201 when adding a member to a group', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/groups/g-developers/members')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ userId: 'user-new-member' });
-
-      expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('userId', 'user-new-member');
-    });
-
-    it('returns 404 for unknown group', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/groups/nonexistent-group/members')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ userId: 'user-1' });
-
-      expect(res.status).toBe(404);
-    });
-  });
-
-  // ─── Password Policy ──────────────────────────────────────────────────────────
-
-  describe('GET /api/password-policy', () => {
-    it('returns 401 when no auth token provided', async () => {
-      const res = await request(app).get('/api/password-policy');
-      expect(res.status).toBe(401);
-    });
-
-    it('returns password policy with Bearer token', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .get('/api/password-policy')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('minLength');
-    });
-  });
-
-  describe('PUT /api/password-policy', () => {
-    it('returns 401 when no auth token provided', async () => {
-      const res = await request(app).put('/api/password-policy').send({ minLength: 16 });
-      expect(res.status).toBe(401);
-    });
-
-    it('returns updated policy with Bearer token', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .put('/api/password-policy')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ minLength: 16, requireUppercase: true });
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('minLength', 16);
     });
   });
 
@@ -1487,45 +1389,6 @@ describe('Authentication Service - E2E API Tests', () => {
     });
   });
 
-  // ─── Bulk import ──────────────────────────────────────────────────────────────
-
-  describe('POST /api/users/bulk-import', () => {
-    it('returns 401 when no auth token provided', async () => {
-      const res = await request(app)
-        .post('/api/users/bulk-import')
-        .send({ users: [] });
-      expect(res.status).toBe(401);
-    });
-
-    it('returns 400 when users is not an array', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/users/bulk-import')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ users: 'not-an-array' });
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error', 'users array required');
-    });
-
-    it('returns 207 with partial results (name/email required per entry)', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/users/bulk-import')
-        .set('Authorization', `Bearer ${token}`)
-        .send({
-          users: [
-            { name: 'Alice Smith', email: 'alice@test.com' },
-            { email: 'no-name@test.com' }, // missing name — should error
-          ],
-        });
-
-      expect(res.status).toBe(207);
-      expect(res.body).toHaveProperty('created', 1);
-      expect(res.body.errors.length).toBe(1);
-    });
-  });
-
   // ─── Domain config ────────────────────────────────────────────────────────────
 
   describe('POST /api/config/domain', () => {
@@ -1580,125 +1443,6 @@ describe('Authentication Service - E2E API Tests', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('domain');
-    });
-  });
-
-  // ─── Audit log endpoints ──────────────────────────────────────────────────────
-
-  describe('GET /api/audit/events', () => {
-    it('returns audit events (no auth required — dashboard access)', async () => {
-      const res = await request(app).get('/api/audit/events');
-      // This endpoint deliberately skips auth (if req.path.startsWith('/audit/'))
-      expect([200, 500]).toContain(res.status);
-      if (res.status === 200) {
-        expect(Array.isArray(res.body)).toBe(true);
-      }
-    });
-  });
-
-  describe('POST /api/audit/log', () => {
-    it('returns 400 when message is missing', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/audit/log')
-        .set('Authorization', `Bearer ${token}`)
-        .send({});
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error', 'message required');
-    });
-
-    it('returns 200 success when message is provided', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/audit/log')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ message: 'Test audit event', eventType: 'test', severity: 'info' });
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('success', true);
-    });
-  });
-
-  // ─── DNS records ──────────────────────────────────────────────────────────────
-
-  describe('GET /api/dns/records', () => {
-    it('returns 401 when no auth token provided', async () => {
-      const res = await request(app).get('/api/dns/records');
-      expect(res.status).toBe(401);
-    });
-
-    it('returns DNS records with Bearer token', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .get('/api/dns/records')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('POST /api/dns/records', () => {
-    it('returns 400 when required fields are missing', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/dns/records')
-        .set('Authorization', `Bearer ${token}`)
-        .send({});
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error', 'name, type, value required');
-    });
-
-    it('returns 400 for invalid DNS record type', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/dns/records')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'test.local', type: 'INVALID', value: '1.2.3.4' });
-
-      expect(res.status).toBe(400);
-    });
-
-    it('returns 201 with created DNS record', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .post('/api/dns/records')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'new.test.local', type: 'A', value: '10.0.0.5', ttl: 600 });
-
-      expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('name', 'new.test.local');
-      expect(res.body).toHaveProperty('type', 'A');
-    });
-  });
-
-  describe('DELETE /api/dns/records/:name', () => {
-    it('returns 404 when DNS record not found', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .delete('/api/dns/records/nonexistent.local')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(404);
-    });
-
-    it('returns success when deleting existing DNS record', async () => {
-      const token = makeJwt();
-      // Create then delete
-      await request(app)
-        .post('/api/dns/records')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'delete-me.local', type: 'A', value: '1.2.3.4' });
-
-      const res = await request(app)
-        .delete('/api/dns/records/delete-me.local')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('success', true);
     });
   });
 

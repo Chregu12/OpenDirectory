@@ -26,13 +26,17 @@ function createMfaRoutes(services) {
     }
   });
 
-  // POST /api/auth/mfa/verify
-  router.post('/api/auth/mfa/verify', auth, async (req, res) => {
+  // Shared handler for MFA setup verification. Registered under both
+  // /api/auth/mfa/verify (legacy/internal path) and /api/auth/mfa/verify-setup
+  // (the path the frontend actually calls — see routes below). Both routes
+  // run behind the same real `auth` (requireAuth) middleware; this is a pure
+  // alias, not a weaker/duplicate implementation.
+  async function verifySetupHandler(req, res) {
     try {
       const userId = req.user.id;
-      const { code } = req.body;
+      const { code, token } = req.body;
 
-      const valid = await mfaService.verifyCode(userId, code);
+      const valid = await mfaService.verifyCode(userId, code || token);
 
       if (valid) {
         await mfaService.enableMFA(userId);
@@ -44,7 +48,15 @@ function createMfaRoutes(services) {
       logger.error('MFA verification error:', error);
       res.status(500).json({ error: 'MFA verification failed' });
     }
-  });
+  }
+
+  // POST /api/auth/mfa/verify
+  router.post('/api/auth/mfa/verify', auth, verifySetupHandler);
+
+  // POST /api/auth/mfa/verify-setup
+  // Alias for /api/auth/mfa/verify — the frontend's MFA setup flow calls this
+  // path name specifically. Same handler, same requireAuth middleware.
+  router.post('/api/auth/mfa/verify-setup', auth, verifySetupHandler);
 
   // POST /api/auth/mfa/disable
   router.post('/api/auth/mfa/disable', auth, async (req, res) => {
@@ -83,6 +95,26 @@ function createMfaRoutes(services) {
     } catch (error) {
       logger.error('MFA disable error:', error);
       res.status(500).json({ error: 'Failed to disable MFA' });
+    }
+  });
+
+  // GET /api/auth/mfa/status
+  // The frontend polls this to know whether MFA is currently enabled for the
+  // logged-in user. Behind the same real requireAuth middleware as every
+  // other MFA route — no anonymous access.
+  router.get('/api/auth/mfa/status', auth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+
+      const user = await userService.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      res.json({ enabled: Boolean(user.mfaEnabled) });
+    } catch (error) {
+      logger.error('MFA status error:', error);
+      res.status(500).json({ error: 'Failed to get MFA status' });
     }
   });
 
