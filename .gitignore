@@ -125,6 +125,11 @@ database/
 *.sql
 !migrations/*.sql
 !schema/*.sql
+# Migrations/schema live under each service (services/*/migrations, src/db/migrations);
+# the un-anchored patterns above only match top-level, so keep nested ones too.
+!**/migrations/*.sql
+!**/schema/*.sql
+!**/db/migrations/*.sql
 
 # Docker
 docker-compose.override.yml

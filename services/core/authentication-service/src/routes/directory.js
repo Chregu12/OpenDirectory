@@ -3,7 +3,7 @@ const { Router } = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const logger = require('../utils/logger');
-const { requireBearerAuth } = require('../middleware/bearerAuth');
+const { requireBearerAuth, requireAdminBearerAuth } = require('../middleware/bearerAuth');
 
 /**
  * Directory routes: Organizational Units + domain configuration.
@@ -28,13 +28,22 @@ const { requireBearerAuth } = require('../middleware/bearerAuth');
  * is unavailable, or in tests where `pg` is mocked and never actually
  * persists what it "inserts".
  *
- * Domain config: in-memory only (global.__od_domain_config), matching the
- * pre-split behavior exactly — there was no DB-backed config store for this
- * before either.
+ * Domain config: DB-first (singleton `domain_config` table — see
+ * migrations/008_domain_config.sql), with global.__od_domain_config used as
+ * the in-memory fallback/mirror whenever the DB is unavailable, has no row
+ * yet, or (as in tests, where `pg` is mocked and every query resolves
+ * `{ rows: [] }`) a write never actually lands — matching the pre-split
+ * in-memory-only behavior for that case exactly.
+ *
+ * Authorization: OU create/update/delete and writing domain config are
+ * admin-only — `requireAdminBearerAuth` (src/middleware/bearerAuth.js),
+ * which additionally requires 'admin' in the token's roles claim. Reads
+ * (GET /api/ous, GET /api/config/domain) stay on plain `requireBearerAuth`.
  */
 function createDirectoryRoutes(services) { // eslint-disable-line no-unused-vars -- services kept for signature parity with sibling route modules
   const router = Router();
   const auth = requireBearerAuth;
+  const admin = requireAdminBearerAuth;
 
   // ── OUs ──────────────────────────────────────────────────────────────────
 
@@ -71,8 +80,8 @@ function createDirectoryRoutes(services) { // eslint-disable-line no-unused-vars
     res.json(buildTree(list));
   });
 
-  // POST /api/ous
-  router.post('/api/ous', auth, async (req, res) => {
+  // POST /api/ous (admin only)
+  router.post('/api/ous', admin, async (req, res) => {
     const { name, parentId, description } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
 
@@ -101,8 +110,8 @@ function createDirectoryRoutes(services) { // eslint-disable-line no-unused-vars
     res.status(201).json(ouData);
   });
 
-  // PUT /api/ous/:id
-  router.put('/api/ous/:id', auth, async (req, res) => {
+  // PUT /api/ous/:id (admin only)
+  router.put('/api/ous/:id', admin, async (req, res) => {
     const { id } = req.params;
     const { name, parentId, description } = req.body;
     const updates = {
@@ -135,8 +144,8 @@ function createDirectoryRoutes(services) { // eslint-disable-line no-unused-vars
     res.json(ou);
   });
 
-  // DELETE /api/ous/:id
-  router.delete('/api/ous/:id', auth, async (req, res) => {
+  // DELETE /api/ous/:id (admin only)
+  router.delete('/api/ous/:id', admin, async (req, res) => {
     const { id } = req.params;
     const ou = ous.get(id);
     if (!ou) return res.status(404).json({ error: 'OU not found' });
@@ -155,17 +164,48 @@ function createDirectoryRoutes(services) { // eslint-disable-line no-unused-vars
 
   // ── Domain configuration ────────────────────────────────────────────────
 
-  // POST /api/config/domain
-  router.post('/api/config/domain', auth, (req, res) => {
+  async function getDomainConfigFromDb() {
+    if (!db.isAvailable()) return null;
+    try {
+      const r = await db.query('SELECT domain, issuer, configured_at FROM domain_config WHERE id = 1');
+      if (r.rows.length === 0) return null;
+      return {
+        domain: r.rows[0].domain,
+        issuer: r.rows[0].issuer,
+        configuredAt: r.rows[0].configured_at,
+      };
+    } catch (err) {
+      logger.warn('Directory: getDomainConfigFromDb failed, falling back to in-memory', { error: err.message });
+      return null;
+    }
+  }
+
+  // POST /api/config/domain (admin only)
+  router.post('/api/config/domain', admin, async (req, res) => {
     const { domain, issuer } = req.body;
     if (!domain) return res.status(400).json({ error: 'domain required' });
-    global.__od_domain_config = { domain, issuer, configuredAt: new Date().toISOString() };
+    const configuredAt = new Date().toISOString();
+
+    if (db.isAvailable()) {
+      try {
+        await db.query(
+          `INSERT INTO domain_config(id, domain, issuer, configured_at) VALUES(1, $1, $2, $3)
+           ON CONFLICT (id) DO UPDATE SET domain=$1, issuer=$2, configured_at=$3`,
+          [domain, issuer ?? null, configuredAt]
+        );
+      } catch (err) {
+        logger.error('Directory: domain config DB upsert failed:', err);
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    global.__od_domain_config = { domain, issuer, configuredAt };
     res.json({ success: true, domain, issuer });
   });
 
   // GET /api/config/domain
-  router.get('/api/config/domain', auth, (req, res) => {
-    res.json(global.__od_domain_config || { domain: null, issuer: null });
+  router.get('/api/config/domain', auth, async (req, res) => {
+    const dbConfig = await getDomainConfigFromDb();
+    res.json(dbConfig ?? global.__od_domain_config ?? { domain: null, issuer: null });
   });
 
   return router;

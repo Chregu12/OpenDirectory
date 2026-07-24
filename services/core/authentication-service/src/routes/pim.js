@@ -3,7 +3,7 @@ const { Router } = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const logger = require('../utils/logger');
-const { requireBearerAuth } = require('../middleware/bearerAuth');
+const { requireBearerAuth, requireAdminBearerAuth } = require('../middleware/bearerAuth');
 
 /**
  * PIM (Privileged Identity Management) routes.
@@ -30,10 +30,20 @@ const { requireBearerAuth } = require('../middleware/bearerAuth');
  * mocked and never actually persists what it "inserts"). Every write goes to
  * both places so a request immediately following a create within the same
  * process sees consistent data regardless of whether a real DB is attached.
+ *
+ * Authorization: role management (create/update/delete a PIM role) and
+ * approval decisions (approve/deny/revoke) are admin-only —
+ * `requireAdminBearerAuth` (src/middleware/bearerAuth.js), which additionally
+ * requires 'admin' in the token's roles claim. Requesting activation of a
+ * role for yourself (POST /api/pim/requests) and all reads stay on plain
+ * `requireBearerAuth` — any authenticated user may self-serve a request or
+ * read the catalog/queue, but only an admin may define roles or decide
+ * outstanding requests.
  */
 function createPimRoutes(services) { // eslint-disable-line no-unused-vars -- services kept for signature parity with sibling route modules
   const router = Router();
   const auth = requireBearerAuth;
+  const admin = requireAdminBearerAuth;
 
   // In-memory mirror / fallback store.
   const pimRoles = new Map();
@@ -76,8 +86,8 @@ function createPimRoutes(services) { // eslint-disable-line no-unused-vars -- se
     res.json([...pimRoles.values()]);
   });
 
-  // POST /api/pim/roles
-  router.post('/api/pim/roles', auth, async (req, res) => {
+  // POST /api/pim/roles (admin only)
+  router.post('/api/pim/roles', admin, async (req, res) => {
     const { name, description, target_group_id, target_group_name, max_duration_hours, requires_approval, approver_group_id } = req.body;
     if (!name || !target_group_id) {
       return res.status(400).json({ error: 'name and target_group_id required' });
@@ -112,8 +122,8 @@ function createPimRoutes(services) { // eslint-disable-line no-unused-vars -- se
     res.status(201).json(role);
   });
 
-  // PUT /api/pim/roles/:id
-  router.put('/api/pim/roles/:id', auth, async (req, res) => {
+  // PUT /api/pim/roles/:id (admin only)
+  router.put('/api/pim/roles/:id', admin, async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
     const now = new Date().toISOString();
@@ -146,8 +156,8 @@ function createPimRoutes(services) { // eslint-disable-line no-unused-vars -- se
     res.json(role);
   });
 
-  // DELETE /api/pim/roles/:id
-  router.delete('/api/pim/roles/:id', auth, async (req, res) => {
+  // DELETE /api/pim/roles/:id (admin only)
+  router.delete('/api/pim/roles/:id', admin, async (req, res) => {
     const { id } = req.params;
     if (db.isAvailable()) {
       try {
@@ -279,8 +289,8 @@ function createPimRoutes(services) { // eslint-disable-line no-unused-vars -- se
     };
   }
 
-  // POST /api/pim/requests/:id/approve
-  router.post('/api/pim/requests/:id/approve', auth, decisionHandler({
+  // POST /api/pim/requests/:id/approve (admin only)
+  router.post('/api/pim/requests/:id/approve', admin, decisionHandler({
     fromStatus: 'pending',
     toStatus: 'active',
     actorField: 'decided_by',
@@ -292,8 +302,8 @@ function createPimRoutes(services) { // eslint-disable-line no-unused-vars -- se
     },
   }));
 
-  // POST /api/pim/requests/:id/deny
-  router.post('/api/pim/requests/:id/deny', auth, decisionHandler({
+  // POST /api/pim/requests/:id/deny (admin only)
+  router.post('/api/pim/requests/:id/deny', admin, decisionHandler({
     fromStatus: 'pending',
     toStatus: 'denied',
     actorField: 'decided_by',
@@ -301,8 +311,8 @@ function createPimRoutes(services) { // eslint-disable-line no-unused-vars -- se
     extra: (request, now, actor) => ({ decided_at: now.toISOString(), decided_by: actor }),
   }));
 
-  // POST /api/pim/requests/:id/revoke
-  router.post('/api/pim/requests/:id/revoke', auth, decisionHandler({
+  // POST /api/pim/requests/:id/revoke (admin only)
+  router.post('/api/pim/requests/:id/revoke', admin, decisionHandler({
     fromStatus: 'active',
     toStatus: 'revoked',
     actorField: 'revoked_by',

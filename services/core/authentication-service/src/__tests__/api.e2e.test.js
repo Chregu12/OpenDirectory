@@ -1275,8 +1275,21 @@ describe('Authentication Service - E2E API Tests', () => {
       expect(res.status).toBe(401);
     });
 
+    it('returns 403 for a non-admin token (OU mutation is admin-only)', async () => {
+      // Security-regression guard: any authenticated user used to be able to
+      // create directory objects. Only 'admin' may now do so.
+      const token = makeJwt({ roles: ['user'] });
+      const res = await request(app)
+        .post('/api/ous')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'ShouldBeRejected' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty('error', 'Admin access required');
+    });
+
     it('returns 400 when name is missing', async () => {
-      const token = makeJwt();
+      const token = makeAdminJwt();
       const res = await request(app)
         .post('/api/ous')
         .set('Authorization', `Bearer ${token}`)
@@ -1287,7 +1300,7 @@ describe('Authentication Service - E2E API Tests', () => {
     });
 
     it('returns 201 with created OU', async () => {
-      const token = makeJwt();
+      const token = makeAdminJwt();
       const res = await request(app)
         .post('/api/ous')
         .set('Authorization', `Bearer ${token}`)
@@ -1321,8 +1334,21 @@ describe('Authentication Service - E2E API Tests', () => {
   });
 
   describe('POST /api/service-accounts', () => {
+    it('returns 403 for a non-admin token (service-account creation is admin-only)', async () => {
+      // Security-regression guard: any authenticated user used to be able to
+      // create service accounts. Only 'admin' may now do so.
+      const token = makeJwt({ roles: ['user'] });
+      const res = await request(app)
+        .post('/api/service-accounts')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'should-be-rejected' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty('error', 'Admin access required');
+    });
+
     it('returns 400 when name is missing', async () => {
-      const token = makeJwt();
+      const token = makeAdminJwt();
       const res = await request(app)
         .post('/api/service-accounts')
         .set('Authorization', `Bearer ${token}`)
@@ -1333,7 +1359,7 @@ describe('Authentication Service - E2E API Tests', () => {
     });
 
     it('returns 201 with token on creation', async () => {
-      const token = makeJwt();
+      const token = makeAdminJwt();
       const res = await request(app)
         .post('/api/service-accounts')
         .set('Authorization', `Bearer ${token}`)
@@ -1346,8 +1372,18 @@ describe('Authentication Service - E2E API Tests', () => {
   });
 
   describe('DELETE /api/service-accounts/:id', () => {
+    it('returns 403 for a non-admin token (service-account deletion is admin-only)', async () => {
+      const token = makeJwt({ roles: ['user'] });
+      const res = await request(app)
+        .delete('/api/service-accounts/sa-ci-runner')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty('error', 'Admin access required');
+    });
+
     it('returns 404 when service account not found', async () => {
-      const token = makeJwt();
+      const token = makeAdminJwt();
       const res = await request(app)
         .delete('/api/service-accounts/nonexistent-sa-id')
         .set('Authorization', `Bearer ${token}`);
@@ -1358,7 +1394,7 @@ describe('Authentication Service - E2E API Tests', () => {
 
     it('returns 204 when service account is deleted', async () => {
       // First create a service account to delete
-      const token = makeJwt();
+      const token = makeAdminJwt();
       const createRes = await request(app)
         .post('/api/service-accounts')
         .set('Authorization', `Bearer ${token}`)
@@ -1406,8 +1442,21 @@ describe('Authentication Service - E2E API Tests', () => {
       expect(res.status).toBe(401);
     });
 
+    it('returns 403 for a non-admin token (domain config write is admin-only)', async () => {
+      // Security-regression guard: any authenticated user used to be able to
+      // overwrite the domain config. Only 'admin' may now do so.
+      const token = makeJwt({ roles: ['user'] });
+      const res = await request(app)
+        .post('/api/config/domain')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ domain: 'should-be-rejected.com' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty('error', 'Admin access required');
+    });
+
     it('returns 400 when domain is missing', async () => {
-      const token = makeJwt();
+      const token = makeAdminJwt();
       const res = await request(app)
         .post('/api/config/domain')
         .set('Authorization', `Bearer ${token}`)
@@ -1418,7 +1467,7 @@ describe('Authentication Service - E2E API Tests', () => {
     });
 
     it('returns success with configured domain', async () => {
-      const token = makeJwt();
+      const token = makeAdminJwt();
       const res = await request(app)
         .post('/api/config/domain')
         .set('Authorization', `Bearer ${token}`)
@@ -1437,13 +1486,15 @@ describe('Authentication Service - E2E API Tests', () => {
     });
 
     it('returns domain config with Bearer token', async () => {
-      // Set it first
-      const token = makeJwt();
+      // Set it first (write requires an admin token)
+      const adminToken = makeAdminJwt();
       await request(app)
         .post('/api/config/domain')
-        .set('Authorization', `Bearer ${token}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ domain: 'test.local' });
 
+      // Reading it back only needs a plain authenticated token
+      const token = makeJwt();
       const res = await request(app)
         .get('/api/config/domain')
         .set('Authorization', `Bearer ${token}`);
@@ -1475,8 +1526,22 @@ describe('Authentication Service - E2E API Tests', () => {
   });
 
   describe('POST /api/pim/roles', () => {
+    it('returns 403 for a non-admin token (PIM role management is admin-only)', async () => {
+      // Security-regression guard: any authenticated user used to be able to
+      // define PIM roles (which govern who can request privileged access).
+      // Only 'admin' may now do so.
+      const token = makeJwt({ roles: ['user'] });
+      const res = await request(app)
+        .post('/api/pim/roles')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Should Be Rejected', target_group_id: 'grp-x' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty('error', 'Admin access required');
+    });
+
     it('returns 400 when required fields are missing', async () => {
-      const token = makeJwt();
+      const token = makeAdminJwt();
       const res = await request(app)
         .post('/api/pim/roles')
         .set('Authorization', `Bearer ${token}`)
@@ -1487,7 +1552,7 @@ describe('Authentication Service - E2E API Tests', () => {
     });
 
     it('returns 201 with created PIM role', async () => {
-      const token = makeJwt();
+      const token = makeAdminJwt();
       const res = await request(app)
         .post('/api/pim/roles')
         .set('Authorization', `Bearer ${token}`)
@@ -1545,12 +1610,15 @@ describe('Authentication Service - E2E API Tests', () => {
     });
 
     it('returns 201 when creating a valid PIM request', async () => {
+      // Defining the role is admin-only; requesting activation of it is
+      // self-service and stays on a plain (non-admin) token.
+      const adminToken = makeAdminJwt();
       const token = makeJwt();
 
       // Create a role first (no approval required for auto-activate)
       const createRole = await request(app)
         .post('/api/pim/roles')
-        .set('Authorization', `Bearer ${token}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({
           name: 'Test Role',
           target_group_id: 'grp-test',
@@ -1573,6 +1641,51 @@ describe('Authentication Service - E2E API Tests', () => {
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('role_id', roleId);
       expect(res.body).toHaveProperty('status', 'active'); // auto-approved
+    });
+  });
+
+  // Approve/deny/revoke are decisions on someone else's request and are
+  // admin-only — requireAdminBearerAuth rejects a non-admin token with 403
+  // before the handler ever looks up the request, so a nonexistent :id is
+  // sufficient to prove the gate itself works (business-logic paths for
+  // these decisions are exercised by the underlying decisionHandler and are
+  // unaffected by this authorization change).
+  describe('POST /api/pim/requests/:id/approve', () => {
+    it('returns 403 for a non-admin token (approval is admin-only)', async () => {
+      const token = makeJwt({ roles: ['user'] });
+      const res = await request(app)
+        .post('/api/pim/requests/nonexistent-request-id/approve')
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty('error', 'Admin access required');
+    });
+  });
+
+  describe('POST /api/pim/requests/:id/deny', () => {
+    it('returns 403 for a non-admin token (denial is admin-only)', async () => {
+      const token = makeJwt({ roles: ['user'] });
+      const res = await request(app)
+        .post('/api/pim/requests/nonexistent-request-id/deny')
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty('error', 'Admin access required');
+    });
+  });
+
+  describe('POST /api/pim/requests/:id/revoke', () => {
+    it('returns 403 for a non-admin token (revocation is admin-only)', async () => {
+      const token = makeJwt({ roles: ['user'] });
+      const res = await request(app)
+        .post('/api/pim/requests/nonexistent-request-id/revoke')
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty('error', 'Admin access required');
     });
   });
 });

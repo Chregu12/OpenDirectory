@@ -42,4 +42,32 @@ function requireBearerAuth(req, res, next) {
   }
 }
 
-module.exports = { requireBearerAuth };
+/**
+ * requireAdminBearerAuth
+ *
+ * Same JWT verification as requireBearerAuth, plus a role check: the
+ * decoded token's `roles` claim must include 'admin'. Used to gate
+ * directory-mutation endpoints (PIM role management + approve/deny/revoke,
+ * OU create/update/delete, service-account create/delete, domain-config
+ * writes) that were previously reachable by *any* authenticated principal —
+ * any user holding a validly-signed token, regardless of role, could create
+ * or delete directory objects. Reads and the self-service "request a PIM
+ * role for myself" endpoint intentionally stay on plain requireBearerAuth;
+ * only the operations listed above required admin.
+ *
+ * Mirrors the shape/message of index.js's requireAdmin() (used by the
+ * passport-backed routes/audit.js and routes/users.js) so the two admin
+ * gates behave identically from a caller's point of view: 401 for a
+ * missing/invalid/expired token, 403 with the same 'Admin access required'
+ * body for a valid token that lacks the admin role.
+ */
+function requireAdminBearerAuth(req, res, next) {
+  requireBearerAuth(req, res, () => {
+    if (!req.user?.roles?.includes('admin')) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    next();
+  });
+}
+
+module.exports = { requireBearerAuth, requireAdminBearerAuth };
