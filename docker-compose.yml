@@ -11,7 +11,10 @@ services:
     environment:
       POSTGRES_USER: opendirectory
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
-      POSTGRES_MULTIPLE_DATABASES: identity,auth,policy,audit,integration,printers,network,oauth,certs,mdm
+      # DB-per-service provisioning is driven entirely by init-databases.sh's
+      # CREATE DATABASE loop (mounted below) — that script does NOT read a
+      # POSTGRES_MULTIPLE_DATABASES variable, so one is intentionally not set
+      # here. To add a database, edit infrastructure/postgres/init-databases.sh.
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
@@ -872,10 +875,23 @@ services:
     environment:
       LEAST_PRIVILEGE_PORT: 3011
       NODE_ENV: production
+      # DB-per-service: without these, services/core/least-privilege/src/db.js
+      # defaults to host=localhost, which doesn't resolve to the postgres
+      # container. The service degrades gracefully to an in-memory fallback
+      # in that case, but that silently drops persistence — point it at its
+      # own 'least_privilege' DB (provisioned by init-databases.sh) instead.
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: least_privilege
+      DB_USER: ${DB_USER:-opendirectory}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
     ports:
       - "3011:3011"
     networks:
       - opendirectory
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3011/health"]

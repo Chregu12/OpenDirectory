@@ -30,9 +30,17 @@ services:
     environment:
       POSTGRES_USER: opendirectory
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
-      POSTGRES_MULTIPLE_DATABASES: identity,auth,policy,audit,printers,network
+      # DB-per-service provisioning is driven entirely by init-databases.sh's
+      # CREATE DATABASE loop (mounted below) — that script does NOT read a
+      # POSTGRES_MULTIPLE_DATABASES variable, so one is intentionally not set
+      # here. To add a database, edit infrastructure/postgres/init-databases.sh.
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Previously missing here (present in docker-compose.yml): without this
+      # mount, only the default 'opendirectory' maintenance DB existed and
+      # identity-service/auth-service/policy-service/api-backend (and the
+      # network/printers modules) all failed to connect to their own DBs.
+      - ./infrastructure/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
     ports:
       - "5432:5432"
     networks:
