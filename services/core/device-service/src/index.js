@@ -78,9 +78,11 @@ const Events = (() => {
 // PostgreSQL persistence layer
 const db = require('./db');
 const PostgresDeviceRepository = require('./infrastructure/repositories/PostgresDeviceRepository');
+const PostgresInstallJobRepository = require('./infrastructure/repositories/PostgresInstallJobRepository');
 
 // Import enhanced services
 const DeviceApplicationService = require('./application/DeviceApplicationService');
+const InstallApplicationService = require('./application/InstallApplicationService');
 const driverRoutes = require('./routes/driverRoutes');
 const PolicyEngine = require('./services/policyEngine');
 const ComplianceScanner = require('./services/complianceScanner');
@@ -138,7 +140,11 @@ class EnterpriseDeviceManagementService {
 
     // Device repository (wraps db module, owns all device SQL)
     this.deviceRepository = new PostgresDeviceRepository(db);
-    
+    // Install-job repository (wraps db module, owns all install_jobs SQL) —
+    // used by InstallApplicationService only as a best-effort durability
+    // write-through; see InstallApplicationService's class-level comment.
+    this.installJobRepository = new PostgresInstallJobRepository(db);
+
     // Initialize services
     this.policyEngine = new PolicyEngine(this.db, this.eventBus);
     this.complianceScanner = new ComplianceScanner({ db: this.db, deviceRepository: this.deviceRepository, eventBus: this.eventBus });
@@ -178,6 +184,18 @@ class EnterpriseDeviceManagementService {
       logger,
       db: this.db,
       eventBus: this.eventBus,
+    });
+
+    // Install-app/install-jobs/install-jobs/:id/result routes are wired to
+    // the DDD application service (ported from the old in-process
+    // global.__od_installJobs Map — see InstallApplicationService.js for the
+    // behavior-preservation rationale, in particular why DB persistence is
+    // best-effort rather than authoritative here).
+    this.installApplicationService = new InstallApplicationService({
+      deviceRepository: this.deviceRepository,
+      installJobRepository: this.installJobRepository,
+      messageBus: this._eventBus,
+      logger,
     });
 
     // RabbitMQ command bus — kept only for per-device command-queue operations
@@ -1426,7 +1444,13 @@ class EnterpriseDeviceManagementService {
       const APP_STORE_URL = process.env.APP_STORE_URL || 'http://app-store';
       const pkgDownloadUrl = downloadUrl || `${APP_STORE_URL}/api/appstore/packages/${packageId}/download`;
 
-      const jobId = `install-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      // Persist the job — DDD-wired via InstallApplicationService (in-memory
+      // source of truth + best-effort Postgres durability write; see that
+      // class's comments for why the DB write can't be authoritative here).
+      const job = await this.installApplicationService.createInstallJobRecord({
+        deviceId, appId, appName, packageId, format, version,
+      });
+      const jobId = job.jobId;
 
       // Build store_install command for the agent — reuses existing command type
       const command = {
@@ -1447,13 +1471,6 @@ class EnterpriseDeviceManagementService {
           },
         },
       };
-
-      // Track in-memory job
-      if (!global.__od_installJobs) global.__od_installJobs = new Map();
-      global.__od_installJobs.set(jobId, {
-        jobId, deviceId, appId, appName, packageId, format, version,
-        status: 'queued', queuedAt: new Date().toISOString(),
-      });
 
       // Push via WebSocket — if offline, queue via RabbitMQ (preferred) or Redis (fallback)
       const delivered = this.sendToDevice(deviceId, command);
@@ -1490,20 +1507,14 @@ class EnterpriseDeviceManagementService {
 
   async getInstallJobs(req, res) {
     const { deviceId } = req.params;
-    const jobs = global.__od_installJobs
-      ? [...global.__od_installJobs.values()].filter(j => j.deviceId === deviceId)
-      : [];
+    const jobs = this.installApplicationService.getJobsForDeviceRecord(deviceId);
     res.json(jobs);
   }
 
   async reportInstallResult(req, res) {
     const { jobId } = req.params;
     const { status, output, error } = req.body;
-    let job = null;
-    if (global.__od_installJobs?.has(jobId)) {
-      job = global.__od_installJobs.get(jobId);
-      Object.assign(job, { status, output, error, completedAt: new Date().toISOString() });
-    }
+    const job = this.installApplicationService.recordInstallResult(jobId, { status, output, error });
 
     // Publish install result event via generic EventBusClient (fire-and-forget)
     if (job) {

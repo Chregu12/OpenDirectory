@@ -20,9 +20,34 @@
 
 function makeStatefulDb() {
   const rows = new Map(); // id -> row (snake_case columns, as PostgresDeviceRepository writes them)
+  const installJobRows = new Map(); // job_id -> row, simulating the real install_jobs table
 
   async function query(sql, params = []) {
     const text = sql.replace(/\s+/g, ' ').trim();
+
+    // PostgresInstallJobRepository#save(): INSERT INTO install_jobs ...
+    // Faithfully simulates the real schema's
+    // `device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE` —
+    // an insert for a deviceId not present in the `devices` table throws,
+    // exactly like real Postgres would. This is what proves
+    // InstallApplicationService#createInstallJobRecord's best-effort
+    // try/catch around the durability write is load-bearing, not
+    // decorative — see deviceInstallCharacterization tests below.
+    if (text.startsWith('INSERT INTO install_jobs')) {
+      const [job_id, device_id, app_id, app_name, package_id, format, version, status, queued_at, completed_at, error] = params;
+      if (!rows.has(device_id)) {
+        throw new Error(`insert or update on table "install_jobs" violates foreign key constraint — device_id "${device_id}" is not present in table "devices"`);
+      }
+      installJobRows.set(job_id, { job_id, device_id, app_id, app_name, package_id, format, version, status, queued_at, completed_at, error });
+      return { rows: [], rowCount: 1 };
+    }
+
+    // PostgresInstallJobRepository#findById(): SELECT * FROM install_jobs WHERE job_id = $1
+    if (text.startsWith('SELECT * FROM install_jobs WHERE job_id')) {
+      const jobId = params[0];
+      const row = installJobRows.get(jobId);
+      return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
+    }
 
     // save(): INSERT ... ON CONFLICT (id) DO UPDATE ...
     if (text.startsWith('INSERT INTO devices')) {
@@ -85,6 +110,7 @@ function makeStatefulDb() {
     healthCheck: jest.fn().mockResolvedValue({ status: 'healthy' }),
     pool: {},
     _rows: rows,
+    _installJobRows: installJobRows,
   };
 }
 
@@ -353,6 +379,7 @@ describe('Device Service — Golden Master characterization (real repo/aggregate
 
   beforeEach(() => {
     mockStatefulDb._rows.clear();
+    mockStatefulDb._installJobRows.clear();
     if (global.__od_installJobs) global.__od_installJobs.clear();
   });
 
@@ -545,9 +572,14 @@ describe('Device Service — Golden Master characterization (real repo/aggregate
     });
   });
 
-  // ── Install job flow (currently NOT backed by DeviceApplicationService/
-  //    InstallApplicationService — uses the in-process global.__od_installJobs
-  //    Map plus WebSocket push / RabbitMQ / Redis offline fallback) ──────────
+  // ── Install job flow (backed by InstallApplicationService#createInstallJobRecord/
+  //    getJobsForDeviceRecord/recordInstallResult — an in-process Map inside
+  //    the application service, replacing the old global.__od_installJobs,
+  //    plus a best-effort Postgres durability write-through and unchanged
+  //    WebSocket push / RabbitMQ / Redis offline fallback). The in-memory Map
+  //    remains authoritative for reads: install_jobs.device_id has a real FK
+  //    to devices(id), which the "unenrolled device" test below proves the
+  //    durability write tolerates without altering the HTTP response.) ──────
 
   describe('POST /api/devices/:deviceId/install-app', () => {
     it('returns 400 without packageId or downloadUrl', async () => {
@@ -572,11 +604,49 @@ describe('Device Service — Golden Master characterization (real repo/aggregate
     it('succeeds even for a deviceId that was never enrolled in the device repository', async () => {
       // Characterizes a real divergence from InstallApplicationService.createInstallJob,
       // which throws "Device not found" when deviceRepository.findById() returns null.
+      // createInstallJobRecord (what the live route actually calls) never throws
+      // for this — see the next test for proof that the best-effort Postgres
+      // write it also attempts (and which WOULD violate install_jobs' FK on
+      // devices(id) for this exact deviceId) is swallowed rather than surfaced.
       const res = await request(app)
         .post('/api/devices/totally-unknown-device/install-app')
         .send({ appId: 'app-1', packageId: 'com.example.app' });
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('jobId');
+    });
+
+    it('swallows the install_jobs FK-violation durability write for an unenrolled device without affecting the response', async () => {
+      // The mockStatefulDb above faithfully simulates install_jobs.device_id's
+      // real `REFERENCES devices(id)` constraint: an INSERT for a deviceId
+      // absent from `devices` throws, exactly like real Postgres. This proves
+      // InstallApplicationService#createInstallJobRecord's try/catch around
+      // that write is load-bearing — without it, this request would 500.
+      const res = await request(app)
+        .post('/api/devices/fk-violating-device/install-app')
+        .send({ appId: 'app-1', packageId: 'com.example.app' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('jobId');
+      // Proves the write really was attempted and really did fail — this
+      // isn't passing merely because the durability write was never called.
+      expect(mockStatefulDb._installJobRows.has(res.body.jobId)).toBe(false);
+      // The in-memory record (read back via GET) is unaffected by the DB failure.
+      const jobs = await request(app).get('/api/devices/fk-violating-device/install-jobs');
+      expect(jobs.body.some(j => j.jobId === res.body.jobId)).toBe(true);
+    });
+
+    it('persists the job to install_jobs (best-effort durability) when the device IS enrolled', async () => {
+      await request(app).post('/api/devices').send({ id: 'dev-gm-install-known', hostname: 'h', platform: 'linux' });
+
+      const res = await request(app)
+        .post('/api/devices/dev-gm-install-known/install-app')
+        .send({ appId: 'app-known', packageId: 'com.example.known' });
+
+      expect(res.status).toBe(200);
+      expect(mockStatefulDb._installJobRows.has(res.body.jobId)).toBe(true);
+      expect(mockStatefulDb._installJobRows.get(res.body.jobId)).toMatchObject({
+        device_id: 'dev-gm-install-known', app_id: 'app-known', status: 'queued',
+      });
     });
   });
 
@@ -617,6 +687,17 @@ describe('Device Service — Golden Master characterization (real repo/aggregate
       const job = jobs.body.find(j => j.jobId === jobId);
       expect(job.status).toBe('success');
       expect(job.output).toBe('installed ok');
+    });
+
+    it('returns { ok: true } for a jobId that was never created, without throwing', async () => {
+      // recordInstallResult() returns null for an unknown jobId (no in-memory
+      // record to update); the route must still answer 200/{ok:true} exactly
+      // as before, and must not attempt to publish an install-result event.
+      const res = await request(app)
+        .post('/api/devices/some-device/install-jobs/never-created-job/result')
+        .send({ status: 'success', output: 'n/a' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ ok: true });
     });
   });
 });
