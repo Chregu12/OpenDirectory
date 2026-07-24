@@ -18,6 +18,9 @@ const nextConfig = {
     const authServiceUrl       = process.env.AUTH_SERVICE_URL               || 'http://auth-service:3001';
     const deviceServiceUrl     = process.env.DEVICE_SERVICE_URL             || 'http://device-service:3003';
     const sambaUrl             = process.env.SAMBA_SERVICE_URL              || 'http://samba-ad-dc:3010';
+    const complianceEngineUrl  = process.env.COMPLIANCE_ENGINE_URL          || 'http://compliance-engine:3907';
+    const auditServiceUrl      = process.env.AUDIT_SERVICE_URL              || 'http://audit-service:3908';
+    const networkInfraUrl      = process.env.NETWORK_INFRA_URL              || 'http://network-infrastructure:3007';
     return [
       // OIDC endpoints → auth-service (same-origin, avoids CORS)
       { source: '/oidc/:path*', destination: `${authServiceUrl}/:path*` },
@@ -47,8 +50,33 @@ const nextConfig = {
       // App Store routes -> app-store service
       { source: '/api/store/:path*',        destination: `${appStoreUrl}/api/store/:path*` },
       { source: '/api/appstore/:path*',     destination: `${appStoreUrl}/api/appstore/:path*` },
-      // Audit log -> enterprise-directory service (port 3000)
-      { source: '/api/audit/:path*',        destination: `${enterpriseDirUrl}/api/audit/:path*` },
+      // Compliance dashboard/baselines/waivers/frameworks/reports ->
+      // compliance-engine service (must come before the /api/:path*
+      // catch-all; api-backend has none of these routes).
+      { source: '/api/compliance/:path*',   destination: `${complianceEngineUrl}/api/compliance/:path*` },
+      // Network infrastructure (DHCP/shares/discovery/monitoring/devices) ->
+      // network-infrastructure service. This prefix had no rewrite rule at
+      // all, so every /api/network/* call (api.ts, NetworkInfrastructureIntegration,
+      // PrintersView/PoliciesView/AppStoreView's /api/network/shares) was
+      // silently falling through to the api-backend catch-all. Must come
+      // before the /api/:path* catch-all.
+      { source: '/api/network/:path*',      destination: `${networkInfraUrl}/api/network/:path*` },
+      // DNS management: some call sites (NetworkInfrastructureIntegration's
+      // records list/create/delete) still use the wrong /api/dns/* prefix
+      // instead of /api/network/dns/*. Rewrite the path (not just the host)
+      // so those keep working too — must come before the /api/:path* catch-all.
+      { source: '/api/dns/:path*',          destination: `${networkInfraUrl}/api/network/dns/:path*` },
+      // Audit trail routes are split across two services that both mount
+      // paths under /api/audit/*: enterprise-directory owns the
+      // directory-change audit log (/log, /objects/:dn/history,
+      // /actors/:id/activity); audit-service owns everything else (events,
+      // timeline, stats, categories, search, integrity, reports, alerts,
+      // retention, SIEM). The enterprise-directory rules must precede the
+      // audit-service catch-all below, or they would be shadowed by it.
+      { source: '/api/audit/log',           destination: `${enterpriseDirUrl}/api/audit/log` },
+      { source: '/api/audit/objects/:path*',destination: `${enterpriseDirUrl}/api/audit/objects/:path*` },
+      { source: '/api/audit/actors/:path*', destination: `${enterpriseDirUrl}/api/audit/actors/:path*` },
+      { source: '/api/audit/:path*',        destination: `${auditServiceUrl}/api/audit/:path*` },
       // PIM sessions & break-glass -> conditional-access service (port 3007)
       { source: '/api/v1/pim/:path*',       destination: `${conditionalAccessUrl}/api/v1/pim/:path*` },
       // Quick actions (compliance snapshot, policy deploy) -> quick-actions service (port 3950)

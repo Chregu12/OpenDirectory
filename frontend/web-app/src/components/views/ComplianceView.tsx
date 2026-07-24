@@ -90,16 +90,68 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
         complianceApi.getWaivers().catch(() => null),
       ]);
 
-      if (statusRes?.data) {
-        setFleetScore(statusRes.data.fleetScore || 0);
-        setDevices(statusRes.data.devices || []);
-        setViolations(statusRes.data.violations || []);
-        setTrendData(statusRes.data.trend || []);
+      // compliance-engine wraps every response as { success, data, count? }.
+      // /api/compliance/dashboard's `data` is { fleet, domain, waivers, trends,
+      // generatedAt } — it has no fleetScore/devices/violations/trend fields
+      // (that shape was this component's original assumption, not what the
+      // service actually returns).
+      const dashboard = statusRes?.data?.data;
+      if (dashboard) {
+        setFleetScore(dashboard.fleet?.averageScore ?? 0);
+        setTrendData(
+          (dashboard.trends?.fleetTrend || []).map((point: any) => ({
+            date: typeof point.date === 'string' ? point.date.slice(0, 10) : new Date(point.date).toISOString().slice(0, 10),
+            score: point.averageScore ?? 0,
+          }))
+        );
+        // compliance-engine has no endpoint that returns a fleet-wide
+        // per-device roster or a violations-by-severity breakdown (only
+        // per-device results via /results/:deviceId and aggregate scores).
+        // Until such an endpoint exists, these stay empty rather than being
+        // backfilled with fabricated data.
+        setDevices([]);
+        setViolations([]);
       } else {
         loadDemoData();
       }
-      if (baselinesRes?.data) setBaselines(baselinesRes.data.baselines || baselinesRes.data || []);
-      if (waiversRes?.data) setWaivers(waiversRes.data.waivers || waiversRes.data || []);
+
+      // /api/compliance/baselines and /api/compliance/waivers return
+      // { success, data: [...], count } — unwrap the actual array instead of
+      // reading nonexistent `.baselines`/`.waivers` keys off the envelope.
+      const baselineRows = baselinesRes?.data?.data;
+      if (Array.isArray(baselineRows)) {
+        setBaselines(
+          baselineRows.map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            // The baseline row itself only carries the definition
+            // (framework/platform/checks) — per-baseline device coverage,
+            // pass rate and trend are not computed anywhere in
+            // compliance-engine today, so these default to neutral values.
+            devicesCovered: b.devicesCovered ?? 0,
+            passRate: b.passRate ?? 0,
+            trend: b.trend ?? 'stable',
+          }))
+        );
+      }
+
+      const waiverRows = waiversRes?.data?.data;
+      if (Array.isArray(waiverRows)) {
+        setWaivers(
+          waiverRows.map((w: any) => ({
+            id: w.id,
+            checkId: w.check_id ?? w.checkId,
+            // No separate "check title" is stored on the waiver — fall back
+            // to the baseline name (joined in by the API) or the check id.
+            checkTitle: w.baseline_name ?? w.check_id ?? w.checkId ?? 'Unknown check',
+            deviceId: w.device_id ?? w.deviceId,
+            reason: w.reason,
+            approvedBy: w.approved_by ?? w.approvedBy,
+            expiresAt: w.expires_at ?? w.expiresAt,
+            status: w.status,
+          }))
+        );
+      }
     } catch {
       loadDemoData();
     } finally {

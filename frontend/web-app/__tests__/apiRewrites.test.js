@@ -127,6 +127,113 @@ describe('printer-service routing', () => {
   });
 });
 
+// ─── Compliance-engine routes ──────────────────────────────────────────────────
+
+describe('compliance-engine routing', () => {
+  test.each([
+    '/api/compliance/dashboard',
+    '/api/compliance/baselines',
+    '/api/compliance/baselines/abc123',
+    '/api/compliance/waivers',
+    '/api/compliance/waivers/w1',
+    '/api/compliance/evaluate/device-1',
+    '/api/compliance/score/fleet',
+    '/api/compliance/trend/device-1',
+    '/api/compliance/reports/generate',
+    '/api/compliance/frameworks',
+  ])('%s → compliance-engine', urlPath => {
+    expectRoute(urlPath, 'compliance-engine:3907', '/api/compliance');
+  });
+});
+
+// ─── DNS routes (path-rewritten to network-infrastructure) ────────────────────
+
+describe('DNS routing', () => {
+  test.each([
+    ['/api/dns/records',            '/api/network/dns/records'],
+    ['/api/dns/records/abc123',     '/api/network/dns/records'],
+    ['/api/dns/zones',              '/api/network/dns/zones'],
+  ])('%s → network-infrastructure %s (path rewritten, not just host)', (urlPath, expectedPath) => {
+    const hit = expectRoute(urlPath, 'network-infrastructure:3007');
+    expect(destPathPrefix(hit.destination).startsWith('/api/network/dns/')).toBe(true);
+  });
+});
+
+// ─── Network infrastructure routes (DHCP/shares/discovery/monitoring) ─────────
+
+describe('network-infrastructure routing', () => {
+  test.each([
+    '/api/network/dns/zones',
+    '/api/network/dns/records',
+    '/api/network/dhcp/scopes',
+    '/api/network/dhcp/leases',
+    '/api/network/dhcp/reservations',
+    '/api/network/shares',
+    '/api/network/devices',
+    '/api/network/discovery/scan',
+    '/api/network/discovery/devices',
+    '/api/network/discovery/topology',
+    '/api/network/monitoring/status',
+    '/api/network/monitoring/metrics',
+    '/api/network/monitoring/alerts',
+    '/api/network/monitoring/bandwidth',
+  ])('%s → network-infrastructure (host + path unchanged)', urlPath => {
+    // Unlike the /api/dns/* rewrite, /api/network/* is a straight host swap:
+    // the path is not rewritten.
+    expectRoute(urlPath, 'network-infrastructure:3007', '/api/network/');
+  });
+
+  test('the /api/network rule precedes the /api/:path* catch-all', () => {
+    const networkRule = rules.findIndex(r => r.source === '/api/network/:path*');
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    expect(networkRule).toBeGreaterThan(-1);
+    expect(networkRule).toBeLessThan(catchAllIndex);
+  });
+});
+
+// ─── Audit routes (split between enterprise-directory and audit-service) ──────
+
+describe('audit routing', () => {
+  test.each([
+    ['/api/audit/log',                          '/api/audit/log'],
+    ['/api/audit/objects/ZG49...base64/history', '/api/audit/objects'],
+    ['/api/audit/actors/user-1/activity',        '/api/audit/actors'],
+  ])('%s → enterprise-directory', (urlPath, pathPrefix) => {
+    expectRoute(urlPath, 'enterprise-directory:3000', pathPrefix);
+  });
+
+  test.each([
+    '/api/audit/events',
+    '/api/audit/events/abc-123',
+    '/api/audit/events/correlation/corr-1',
+    '/api/audit/timeline/device/device-1',
+    '/api/audit/stats',
+    '/api/audit/categories',
+    '/api/audit/search',
+    '/api/audit/integrity',
+    '/api/audit/reports/pdf',
+    '/api/audit/alerts',
+    '/api/audit/retention',
+    '/api/audit/siem/test',
+  ])('%s → audit-service', urlPath => {
+    expectRoute(urlPath, 'audit-service:3908', '/api/audit');
+  });
+
+  test('enterprise-directory audit rules precede the audit-service catch-all', () => {
+    const log = rules.findIndex(r => r.source === '/api/audit/log');
+    const objects = rules.findIndex(r => r.source === '/api/audit/objects/:path*');
+    const actors = rules.findIndex(r => r.source === '/api/audit/actors/:path*');
+    const generic = rules.findIndex(r => r.source === '/api/audit/:path*');
+    expect(log).toBeGreaterThan(-1);
+    expect(objects).toBeGreaterThan(-1);
+    expect(actors).toBeGreaterThan(-1);
+    expect(generic).toBeGreaterThan(-1);
+    expect(log).toBeLessThan(generic);
+    expect(objects).toBeLessThan(generic);
+    expect(actors).toBeLessThan(generic);
+  });
+});
+
 // ─── Rule ordering ────────────────────────────────────────────────────────────
 
 describe('rule ordering', () => {
