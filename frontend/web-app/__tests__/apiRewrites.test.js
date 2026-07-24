@@ -234,6 +234,52 @@ describe('audit routing', () => {
   });
 });
 
+// ─── Least-privilege routes (permission matrix + PIM elevation) ───────────────
+// Neither prefix had a rewrite rule before this suite: both silently fell
+// through to the api-backend catch-all, which has no handlers for them.
+// /api/pim/elevation/* is deliberately distinct from bare /api/pim/* (which
+// is not routed by this file at all — /api/v1/pim/* above targets
+// conditional-access, a third, unrelated PIM-shaped feature) so it never
+// collides with authentication-service's own /api/pim/* (role-based PIM),
+// even though nothing here currently routes that bare prefix.
+
+describe('least-privilege routing', () => {
+  test.each([
+    '/api/permissions/matrix',
+    '/api/permissions/unused',
+    '/api/permissions/revoke-unused',
+    '/api/permissions/risk-scores',
+    '/api/permissions/users/user-bob/assign',
+  ])('%s → least-privilege', urlPath => {
+    expectRoute(urlPath, 'least-privilege:3011', '/api/permissions');
+  });
+
+  test.each([
+    '/api/pim/elevation/requests',
+    '/api/pim/elevation/request',
+    '/api/pim/elevation/active',
+    '/api/pim/elevation/requests/req-1/approve',
+    '/api/pim/elevation/requests/req-1/deny',
+  ])('%s → least-privilege', urlPath => {
+    expectRoute(urlPath, 'least-privilege:3011', '/api/pim/elevation');
+  });
+
+  test('/api/pim/elevation does not collide with /api/v1/pim (conditional-access)', () => {
+    expectRoute('/api/v1/pim/sessions', 'conditional-access:3007');
+    expectRoute('/api/pim/elevation/active', 'least-privilege:3011');
+  });
+
+  test('least-privilege rules precede the /api/:path* catch-all', () => {
+    const perms = rules.findIndex(r => r.source === '/api/permissions/:path*');
+    const pimElevation = rules.findIndex(r => r.source === '/api/pim/elevation/:path*');
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    expect(perms).toBeGreaterThan(-1);
+    expect(pimElevation).toBeGreaterThan(-1);
+    expect(perms).toBeLessThan(catchAllIndex);
+    expect(pimElevation).toBeLessThan(catchAllIndex);
+  });
+});
+
 // ─── Rule ordering ────────────────────────────────────────────────────────────
 
 describe('rule ordering', () => {

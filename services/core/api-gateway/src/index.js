@@ -344,6 +344,66 @@ class APIGateway {
     const enabledModules = configManager.getEnabledModules();
     const connectedServices = [];
 
+    // least-privilege service: resource/level permission matrix
+    // (/api/permissions/*) and its own JIT elevation flow
+    // (/api/pim/elevation/*) — see
+    // services/core/least-privilege/src/index.js for why /api/pim/elevation
+    // is a distinct prefix from bare /api/pim/*: authentication-service owns
+    // bare /api/pim/* for a different capability (role-based PIM tied to a
+    // directory group; see routes/pim.js there), and least-privilege's
+    // resource/level JIT elevation is not the same feature reimplemented —
+    // it operates on this service's own permission matrix, not directory
+    // roles/groups, and has an incompatible request shape. These two proxy
+    // registrations MUST come before the generic 'pim' registration below
+    // (bare /api/pim -> authentication-service), or Express/
+    // http-proxy-middleware's registration-order matching would let the
+    // generic /api/pim rule claim /api/pim/elevation/* requests first and
+    // silently shadow this service — same reasoning as the /api/config/domain
+    // special case a few lines down. Mounted directly (not via
+    // setupServiceProxy) because that helper's generic `pathPrefix -> '/api'`
+    // rewrite would strip 'permissions' / 'pim/elevation' from the path —
+    // wrong here, since least-privilege's own routes are the full paths (no
+    // rewrite needed, forwarded as-is).
+    this.app.use('/api/pim/elevation', createProxyMiddleware({
+      target: 'http://least-privilege:3011',
+      changeOrigin: true,
+      onError: (err, req, res) => {
+        logger.error('Proxy error for pim-elevation:', err);
+        res.status(503).json({
+          error: 'Service temporarily unavailable',
+          service: 'pim-elevation',
+          timestamp: new Date().toISOString()
+        });
+      },
+    }));
+    this.services.set('pim-elevation', {
+      name: 'pim-elevation',
+      target: 'http://least-privilege:3011',
+      pathPrefix: '/api/pim/elevation',
+      status: 'active',
+      lastCheck: new Date().toISOString()
+    });
+
+    this.app.use('/api/permissions', createProxyMiddleware({
+      target: 'http://least-privilege:3011',
+      changeOrigin: true,
+      onError: (err, req, res) => {
+        logger.error('Proxy error for least-privilege:', err);
+        res.status(503).json({
+          error: 'Service temporarily unavailable',
+          service: 'least-privilege',
+          timestamp: new Date().toISOString()
+        });
+      },
+    }));
+    this.services.set('least-privilege', {
+      name: 'least-privilege',
+      target: 'http://least-privilege:3011',
+      pathPrefix: '/api/permissions',
+      status: 'active',
+      lastCheck: new Date().toISOString()
+    });
+
     // Core services (always enabled)
     this.setupServiceProxy('authentication', 'http://authentication-service', '/api/auth');
     this.setupServiceProxy('pim', 'http://authentication-service', '/api/pim');
@@ -381,7 +441,7 @@ class APIGateway {
     });
 
     this.setupServiceProxy('configuration', 'http://configuration-service', '/api/config');
-    connectedServices.push('authentication', 'pim', 'config-domain', 'configuration');
+    connectedServices.push('authentication', 'pim', 'pim-elevation', 'least-privilege', 'config-domain', 'configuration');
 
     // Health service (if exists)
     this.setupServiceProxy('health', 'http://health-service', '/api/health');

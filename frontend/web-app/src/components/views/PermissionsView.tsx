@@ -302,8 +302,8 @@ function PimTab() {
   const loadData = useCallback(async () => {
     try {
       const [reqRes, actRes, riskRes] = await Promise.allSettled([
-        fetch('/api/pim/requests').then(r => r.json()),
-        fetch('/api/pim/active').then(r => r.json()),
+        fetch('/api/pim/elevation/requests').then(r => r.json()),
+        fetch('/api/pim/elevation/active').then(r => r.json()),
         fetch('/api/permissions/risk-scores').then(r => r.json()),
       ]);
       if (reqRes.status === 'fulfilled' && Array.isArray(reqRes.value)) setRequests(reqRes.value);
@@ -318,7 +318,7 @@ function PimTab() {
     if (!form.reason.trim()) { toast.error('Begründung angeben'); return; }
     setSubmitting(true);
     try {
-      const res = await fetch('/api/pim/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const res = await fetch('/api/pim/elevation/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       if (res.ok) {
         toast.success('PIM-Anfrage gestellt');
         setForm(f => ({ ...f, reason: '' }));
@@ -330,7 +330,7 @@ function PimTab() {
 
   const processRequest = async (id: string, action: 'approve' | 'deny') => {
     try {
-      await fetch(`/api/pim/requests/${id}/${action}`, { method: 'PUT' });
+      await fetch(`/api/pim/elevation/requests/${id}/${action}`, { method: 'PUT' });
       toast.success(action === 'approve' ? 'Genehmigt' : 'Abgelehnt');
       loadData();
     } catch { toast.error('Fehler'); }

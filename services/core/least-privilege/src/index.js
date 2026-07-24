@@ -253,8 +253,30 @@ app.get('/api/permissions/risk-scores', (req, res) => {
 });
 
 // ─── PIM Requests ─────────────────────────────────────────────────────────────────
+//
+// NOTE ON THE PATH PREFIX: this is deliberately namespaced under
+// /api/pim/elevation/*, NOT bare /api/pim/*. authentication-service (see
+// services/core/authentication-service/src/routes/pim.js) already owns
+// /api/pim/* for a *different* capability — role-based PIM (admin-defined
+// "pim_roles" tied to an AD/Entra group; users request activation of a
+// named role; decisions via POST .../approve|deny|revoke; GET
+// /api/pim/activations). This service's PIM is resource/level-based
+// just-in-time elevation (request write/admin on one of RESOURCES for N
+// hours; decisions via PUT .../approve|deny; GET /api/pim/active) — it
+// operates on this service's own permission matrix (userPermissions /
+// ROLE_DEFAULTS above), not on directory groups, and has an incompatible
+// request shape (resource+duration_hours vs role_id). These are two
+// different features that happened to collide on the same prefix, not the
+// same feature implemented twice. Both api-gateway
+// (services/core/api-gateway/src/index.js) and the frontend's Next.js
+// rewrite layer (frontend/web-app/next.config.js — see apiRewrites.test.js,
+// which documents that these rewrites ARE the effective gateway for the
+// browser) route bare /api/pim/* to authentication-service, which would
+// silently shadow these routes if they stayed on that prefix.
+// PermissionsView.tsx (frontend/web-app/src/components/views/PermissionsView.tsx)
+// is the sole consumer and has been updated to match this prefix.
 
-app.get('/api/pim/requests', async (req, res) => {
+app.get('/api/pim/elevation/requests', async (req, res) => {
   if (db.isAvailable()) {
     try {
       const rows = await db.getPimRequests(req.query.status);
@@ -264,7 +286,7 @@ app.get('/api/pim/requests', async (req, res) => {
   res.json([...pimRequests.values()]);
 });
 
-app.post('/api/pim/request', (req, res) => {
+app.post('/api/pim/elevation/request', (req, res) => {
   const { userId, resource, duration_hours, reason } = req.body;
   if (!userId || !resource || !duration_hours) return res.status(400).json({ error: 'userId, resource, duration_hours required' });
   const id = uuidv4();
@@ -274,7 +296,7 @@ app.post('/api/pim/request', (req, res) => {
   res.status(201).json(request);
 });
 
-app.put('/api/pim/requests/:id/approve', async (req, res) => {
+app.put('/api/pim/elevation/requests/:id/approve', async (req, res) => {
   if (db.isAvailable()) {
     try {
       const result = await db.approvePimRequest(req.params.id, req.body.approvedBy || 'admin');
@@ -296,14 +318,14 @@ app.put('/api/pim/requests/:id/approve', async (req, res) => {
   res.json(request);
 });
 
-app.put('/api/pim/requests/:id/deny', (req, res) => {
+app.put('/api/pim/elevation/requests/:id/deny', (req, res) => {
   const request = pimRequests.get(req.params.id);
   if (!request) return res.status(404).json({ error: 'Request not found' });
   request.status = 'denied';
   res.json(request);
 });
 
-app.get('/api/pim/active', async (req, res) => {
+app.get('/api/pim/elevation/active', async (req, res) => {
   if (db.isAvailable()) {
     try {
       const rows = await db.getActiveElevations();

@@ -21,6 +21,7 @@ const nextConfig = {
     const complianceEngineUrl  = process.env.COMPLIANCE_ENGINE_URL          || 'http://compliance-engine:3907';
     const auditServiceUrl      = process.env.AUDIT_SERVICE_URL              || 'http://audit-service:3908';
     const networkInfraUrl      = process.env.NETWORK_INFRA_URL              || 'http://network-infrastructure:3007';
+    const leastPrivilegeUrl    = process.env.LEAST_PRIVILEGE_URL            || 'http://least-privilege:3011';
     return [
       // OIDC endpoints → auth-service (same-origin, avoids CORS)
       { source: '/oidc/:path*', destination: `${authServiceUrl}/:path*` },
@@ -87,6 +88,19 @@ const nextConfig = {
       // on the backend, so that specific rule must come first.
       { source: '/api/samba/computers/:path*', destination: `${sambaUrl}/api/computers/:path*` },
       { source: '/api/samba/:path*',           destination: `${sambaUrl}/api/samba/:path*` },
+      // Least-privilege service: permission matrix / unused-permission
+      // sweeps / risk scores (/api/permissions/*) and its own JIT resource
+      // elevation flow (/api/pim/elevation/*), consumed by PermissionsView.tsx.
+      // /api/pim/elevation is a deliberately distinct prefix from bare
+      // /api/pim/* — see services/core/least-privilege/src/index.js for why:
+      // authentication-service's directory-role PIM (consumed by PIMView.tsx)
+      // and this service's resource/level JIT elevation are different
+      // features that happened to collide on the same path, not the same
+      // feature twice. Neither had a rewrite rule before, so both silently
+      // fell through to the api-backend catch-all (which has no handlers for
+      // them) and PermissionsView.tsx ran on demo data only.
+      { source: '/api/permissions/:path*',  destination: `${leastPrivilegeUrl}/api/permissions/:path*` },
+      { source: '/api/pim/elevation/:path*', destination: `${leastPrivilegeUrl}/api/pim/elevation/:path*` },
       // Everything else -> api-backend
       { source: '/api/:path*',              destination: `${apiBackendUrl}/api/:path*` },
     ];
