@@ -39,7 +39,10 @@ interface DeviceCompliance {
   platform: string;
   score: number;
   lastScan: string;
-  status: 'compliant' | 'non_compliant' | 'pending';
+  // compliance-engine buckets devices into four states (see scoreToStatus in
+  // complianceRoutes.js); 'pending' is a frontend-only state used for the
+  // demo-data fallback where no evaluation has happened yet.
+  status: 'compliant' | 'partially_compliant' | 'at_risk' | 'non_compliant' | 'pending';
 }
 
 interface ViolationGroup {
@@ -84,10 +87,12 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [statusRes, baselinesRes, waiversRes] = await Promise.all([
+      const [statusRes, baselinesRes, waiversRes, devicesRes, violationsRes] = await Promise.all([
         complianceApi.getStatus().catch(() => null),
         complianceApi.getBaselines().catch(() => null),
         complianceApi.getWaivers().catch(() => null),
+        complianceApi.getDevices().catch(() => null),
+        complianceApi.getViolations().catch(() => null),
       ]);
 
       // compliance-engine wraps every response as { success, data, count? }.
@@ -104,15 +109,48 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
             score: point.averageScore ?? 0,
           }))
         );
-        // compliance-engine has no endpoint that returns a fleet-wide
-        // per-device roster or a violations-by-severity breakdown (only
-        // per-device results via /results/:deviceId and aggregate scores).
-        // Until such an endpoint exists, these stay empty rather than being
-        // backfilled with fabricated data.
-        setDevices([]);
-        setViolations([]);
       } else {
         loadDemoData();
+      }
+
+      // /api/compliance/devices returns { success, data: [...], count, meta }
+      // — a fleet-wide per-device roster aggregated from the latest scan per
+      // device+baseline. `hostname` is always null (compliance-engine only
+      // stores device_id, not device metadata), so fall back to the id
+      // itself rather than fabricating a display name.
+      const deviceRows = devicesRes?.data?.data;
+      if (Array.isArray(deviceRows)) {
+        setDevices(
+          deviceRows.map((d: any) => ({
+            deviceId: d.deviceId,
+            deviceName: d.hostname ?? d.deviceId,
+            platform: d.platform ?? 'unknown',
+            score: d.overallScore ?? 0,
+            lastScan: d.lastEvaluatedAt ?? new Date(0).toISOString(),
+            status: d.status ?? 'pending',
+          }))
+        );
+      }
+
+      // /api/compliance/violations returns { success, data: [...], count }
+      // where data is already one entry per severity ({ severity, count,
+      // items }) — matches ViolationGroup 1:1, no reshaping needed beyond
+      // picking the fields this view uses.
+      const violationRows = violationsRes?.data?.data;
+      if (Array.isArray(violationRows)) {
+        setViolations(
+          violationRows.map((v: any) => ({
+            severity: v.severity,
+            count: v.count ?? 0,
+            items: Array.isArray(v.items)
+              ? v.items.map((item: any) => ({
+                  checkId: item.checkId,
+                  title: item.title,
+                  affectedDevices: item.affectedDevices ?? 0,
+                }))
+              : [],
+          }))
+        );
       }
 
       // /api/compliance/baselines and /api/compliance/waivers return
@@ -260,6 +298,8 @@ export default function ComplianceView({ onOpenWizard }: ComplianceViewProps) {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'compliant': return <span className="inline-flex items-center gap-1 text-xs font-medium text-green-400 bg-green-900/40 px-2 py-0.5 rounded-full"><CheckCircleIcon className="w-3 h-3" />Compliant</span>;
+      case 'partially_compliant': return <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-400 bg-yellow-900/40 px-2 py-0.5 rounded-full"><ExclamationTriangleIcon className="w-3 h-3" />Partially Compliant</span>;
+      case 'at_risk': return <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-400 bg-orange-900/40 px-2 py-0.5 rounded-full"><ExclamationTriangleIcon className="w-3 h-3" />At Risk</span>;
       case 'non_compliant': return <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-900/40 px-2 py-0.5 rounded-full"><XCircleIcon className="w-3 h-3" />Non-Compliant</span>;
       default: return <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full" style={{ color: 'var(--text-secondary, #8b949e)', background: 'rgba(255,255,255,0.05)' }}><ClockIcon className="w-3 h-3" />Pending</span>;
     }

@@ -579,6 +579,16 @@ export const complianceApi = {
   getWaivers: () =>
     api.get('/api/compliance/waivers'),
 
+  // Fleet-wide per-device compliance roster. hostname is always null in the
+  // response — compliance-engine only stores device_id, not device metadata.
+  getDevices: () =>
+    api.get('/api/compliance/devices'),
+
+  // Violations grouped by severity (critical/high/medium/low), each with a
+  // fleet-wide count and a short list of the top offending checks.
+  getViolations: () =>
+    api.get('/api/compliance/violations'),
+
   triggerScan: (deviceId: string) =>
     api.post(`/api/compliance/evaluate/${deviceId}`),
 
