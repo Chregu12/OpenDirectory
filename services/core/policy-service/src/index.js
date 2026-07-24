@@ -14,9 +14,18 @@ const db = require('./db/postgres');
 const { RSOPEngine } = require('./engines/gpoProcessor');
 const { ConflictResolver } = require('./engines/conflictResolver');
 const { InheritanceEngine } = require('./engines/inheritanceEngine');
-const { WindowsPolicyCompiler } = require('./compilers/windowsCompiler');
-const { MacOSPolicyCompiler } = require('./compilers/macosCompiler');
-const { LinuxPolicyCompiler } = require('./compilers/linuxCompiler');
+// Shared Policy Compiler package — hosts both the deployable-artifact compilers
+// (used by enterprise-directory) and these RSoP-consuming compilers (used here).
+// Same require-with-fallback pattern as other cross-package imports in this repo
+// (see e.g. @opendirectory/driver-catalog in device-service), so the service
+// still resolves the package when it isn't installed as a workspace dependency
+// in a service-only Docker build context.
+let WindowsPolicyCompiler, MacOSPolicyCompiler, LinuxPolicyCompiler;
+try {
+  ({ WindowsPolicyCompiler, MacOSPolicyCompiler, LinuxPolicyCompiler } = require('@opendirectory/policy-compilers'));
+} catch (_) {
+  ({ WindowsPolicyCompiler, MacOSPolicyCompiler, LinuxPolicyCompiler } = require('../../../../packages/policy-compilers/src'));
+}
 
 const PostgresPolicyRepository = require('./infrastructure/repositories/PostgresPolicyRepository');
 const PolicyApplicationService = require('./application/PolicyApplicationService');

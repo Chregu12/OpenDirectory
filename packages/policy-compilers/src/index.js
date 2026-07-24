@@ -8,9 +8,9 @@
 // microservice boundaries).
 // =============================================================================
 
-const { compileWindows } = require('./WindowsPolicyCompiler');
-const { compileLinux } = require('./LinuxPolicyCompiler');
-const { compileMacOS } = require('./MacOSPolicyCompiler');
+const { compileWindows, WindowsPolicyCompiler } = require('./WindowsPolicyCompiler');
+const { compileLinux, LinuxPolicyCompiler } = require('./LinuxPolicyCompiler');
+const { compileMacOS, MacOSPolicyCompiler } = require('./MacOSPolicyCompiler');
 const { compileNetworkDrives } = require('./NetworkDrivesCompiler');
 const { compilePrinters } = require('./PrintersCompiler');
 const { uuid, now } = require('./helpers');
@@ -61,4 +61,11 @@ function compile(policy) {
   return result;
 }
 
-module.exports = { compile, compileWindows, compileLinux, compileMacOS, compileNetworkDrives, compilePrinters };
+module.exports = {
+  compile, compileWindows, compileLinux, compileMacOS, compileNetworkDrives, compilePrinters,
+  // RSoP (Resultant Set of Policy) class-based compilers: consume the merged/flattened
+  // output of an RSOP engine and return a structured effective-settings payload, as
+  // opposed to the compile*() functions above which turn authored policy.settings into
+  // deployable file artifacts. See the class doc-comments in each compiler module.
+  WindowsPolicyCompiler, LinuxPolicyCompiler, MacOSPolicyCompiler,
+};
