@@ -132,6 +132,69 @@ function createMfaRoutes(services) {
     }
   });
 
+  // ─── Login-time TOTP challenge (restored, pre-god-file-split) ─────────────
+  //
+  // Separate subsystem from the class-based mfaService setup/verify-setup/
+  // status routes above: a plain speakeasy secret keyed by userId, restored
+  // from `git show 1617f2c^:services/core/authentication-service/src/
+  // index.js` (~line 1685). Restoring it matters beyond just these two
+  // routes: src/routes/auth.js's login handler already reads
+  // `global.__od_userMfaSecrets` / `global.__od_speakeasy` to challenge for
+  // a TOTP code mid-login (see its `hasTotpMfa` branch) — those globals were
+  // never set anywhere after the god-file split, so that branch has been
+  // permanently dead code. Setting them here (once, at route-factory init,
+  // same lifetime as every other module-scoped store in this service) wires
+  // it back up.
+  //
+  // NOTE / honest caveat: there is currently no endpoint that *writes* a
+  // secret into this map — the class-based `/api/auth/mfa/setup` above uses
+  // `mfaService.setupMFA()`, a different abstraction entirely, and doesn't
+  // populate `userMfaSecrets`. So while `validate` and this `disable` route
+  // are fully real and correctly gated, nothing in the current UI-facing
+  // setup flow can actually put a user into a state where the login-time
+  // challenge fires. Unifying the two MFA subsystems (or adding a real
+  // "enable login-time TOTP" endpoint) is a follow-up, not attempted here —
+  // it's out of the scope of restoring these two specific routes.
+  let speakeasy;
+  try { speakeasy = require('speakeasy'); } catch { /* optional dependency not installed */ }
+  const userMfaSecrets = global.__od_userMfaSecrets instanceof Map ? global.__od_userMfaSecrets : new Map();
+  global.__od_userMfaSecrets = userMfaSecrets;
+  global.__od_speakeasy = speakeasy;
+
+  // POST /api/auth/mfa/validate
+  // Deliberately UNAUTHENTICATED (no `auth` middleware): this is called
+  // *during* the login flow, before the caller holds a session JWT — by
+  // definition there is no Bearer token to require yet. It performs no
+  // mutation; it only checks a submitted TOTP code against an
+  // already-configured secret for the given userId, matching the pre-split
+  // semantics exactly (400 for a missing field, 400 when the user has no
+  // configured secret, 401 for a wrong code, 200 {valid:true} for a match).
+  router.post('/api/auth/mfa/validate', async (req, res) => {
+    if (!speakeasy) return res.status(501).json({ error: 'TOTP library not installed' });
+    const { userId, token } = req.body;
+    if (!userId || !token) return res.status(400).json({ error: 'userId and token required' });
+    const secret = userMfaSecrets.get(userId);
+    if (!secret) return res.status(400).json({ error: 'MFA not configured for user' });
+    const valid = speakeasy.totp.verify({ secret, encoding: 'base32', token, window: 2 });
+    if (!valid) return res.status(401).json({ error: 'Ungültiger TOTP-Code' });
+    res.json({ valid: true });
+  });
+
+  // DELETE /api/auth/mfa/disable
+  // Clears the login-time TOTP secret (the Map above) for the authenticated
+  // caller — distinct from POST /api/auth/mfa/disable above, which disables
+  // the class-based mfaService MFA and requires re-verifying the current
+  // password. This mirrors the pre-split behavior exactly (no password
+  // check) and sits behind the same real requireAuth (real JWT
+  // verification, not a presence check) as every other route in this file —
+  // an unauthenticated request is rejected with 401 before ever touching
+  // req.user.
+  router.delete('/api/auth/mfa/disable', auth, (req, res) => {
+    const userId = req.user.id;
+    userMfaSecrets.delete(userId);
+    res.json({ success: true });
+  });
+
   return router;
 }
 

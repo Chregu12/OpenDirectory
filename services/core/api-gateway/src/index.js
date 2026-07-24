@@ -347,8 +347,41 @@ class APIGateway {
     // Core services (always enabled)
     this.setupServiceProxy('authentication', 'http://authentication-service', '/api/auth');
     this.setupServiceProxy('pim', 'http://authentication-service', '/api/pim');
+
+    // /api/config/domain is owned by authentication-service (see
+    // src/routes/directory.js there — restored alongside PIM/OUs/service-
+    // accounts), NOT configuration-service. It must be registered BEFORE the
+    // generic '/api/config' -> configuration-service proxy below so this
+    // more specific rule wins (Express/http-proxy-middleware matches
+    // registration order; whichever proxy claims the request first handles
+    // it fully). Unlike setupServiceProxy()'s other registrations, this is
+    // mounted directly (not through that helper) because its generic
+    // `pathPrefix -> '/api'` rewrite convention would collapse
+    // '/api/config/domain' down to bare '/api' — wrong here, since
+    // authentication-service's own route is the full '/api/config/domain'
+    // path (no rewrite needed, forwarded as-is).
+    this.app.use('/api/config/domain', createProxyMiddleware({
+      target: 'http://authentication-service',
+      changeOrigin: true,
+      onError: (err, req, res) => {
+        logger.error('Proxy error for config-domain:', err);
+        res.status(503).json({
+          error: 'Service temporarily unavailable',
+          service: 'config-domain',
+          timestamp: new Date().toISOString()
+        });
+      },
+    }));
+    this.services.set('config-domain', {
+      name: 'config-domain',
+      target: 'http://authentication-service',
+      pathPrefix: '/api/config/domain',
+      status: 'active',
+      lastCheck: new Date().toISOString()
+    });
+
     this.setupServiceProxy('configuration', 'http://configuration-service', '/api/config');
-    connectedServices.push('authentication', 'pim', 'configuration');
+    connectedServices.push('authentication', 'pim', 'config-domain', 'configuration');
 
     // Health service (if exists)
     this.setupServiceProxy('health', 'http://health-service', '/api/health');

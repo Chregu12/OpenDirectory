@@ -34,6 +34,9 @@ const { createSessionRoutes }   = require('./routes/sessions');
 const { createSsoRoutes }       = require('./routes/sso');
 const { createAuditRoutes }     = require('./routes/audit');
 const { createZeroTrustRoutes } = require('./routes/zeroTrust');
+const { createPimRoutes }             = require('./routes/pim');
+const { createServiceAccountRoutes }  = require('./routes/serviceAccounts');
+const { createDirectoryRoutes }       = require('./routes/directory');
 
 
 class UnifiedAuthenticationService {
@@ -212,12 +215,26 @@ class UnifiedAuthenticationService {
           });
           user = result ? result.user : null;
         } catch (appServiceErr) {
-          // AuthApplicationService throws on invalid credentials (401/403) —
-          // treat as authentication failure rather than a system error.
-          if (appServiceErr.status === 401 || appServiceErr.status === 403) {
+          // AuthApplicationService throws { status: 403 } when it found the
+          // user in Postgres AND that account is locked — an authoritative
+          // state that must never be bypassed by falling back to the legacy
+          // manager.
+          //
+          // Every other case — 401 (no such user in Postgres, or a wrong
+          // password for one that IS there), or any infrastructure error —
+          // falls back to the legacy authManager. This matters for accounts
+          // that only exist in the legacy/LDAP-backed store and have never
+          // been migrated into Postgres: AuthApplicationService.login()
+          // throws 401 the moment userRepository.findByUsername() comes back
+          // empty, which is *every* login attempt when Postgres doesn't
+          // (yet) have the user — that must not be treated as a final
+          // "invalid credentials" verdict, only as "the DDD path doesn't
+          // know this user; ask the legacy path." Previously this branch
+          // took the 401 as authoritative too, which made the legacy
+          // fallback unreachable for any account not already migrated.
+          if (appServiceErr.status === 403) {
             user = null;
           } else {
-            // DB unavailable or other infrastructure error — fall back to legacy
             logger.warn('AuthApplicationService.login failed, falling back to legacy:', appServiceErr.message);
             user = await this.authManager.authenticateLocal(username, password);
           }
@@ -381,6 +398,19 @@ class UnifiedAuthenticationService {
 
     // Audit log routes
     this.app.use(createAuditRoutes(services));
+
+    // PIM (Privileged Identity Management) routes — real requireBearerAuth
+    // (JWT verification), DB-first with in-memory fallback (see
+    // src/routes/pim.js for restoration notes).
+    this.app.use(createPimRoutes(services));
+
+    // Service account routes — real requireBearerAuth, in-memory persistence
+    // (see src/routes/serviceAccounts.js for restoration notes).
+    this.app.use(createServiceAccountRoutes(services));
+
+    // Directory routes: OUs (DB-first) + domain config (in-memory) — real
+    // requireBearerAuth (see src/routes/directory.js for restoration notes).
+    this.app.use(createDirectoryRoutes(services));
 
     // Error handling
     this.app.use(this.errorHandler.bind(this));

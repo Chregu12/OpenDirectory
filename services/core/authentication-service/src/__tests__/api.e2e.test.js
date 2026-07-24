@@ -634,22 +634,20 @@ describe('Authentication Service - E2E API Tests', () => {
 
   // ─── MFA routes ──────────────────────────────────────────────────────────────
   // src/routes/mfa.js registers real, requireAuth-gated routes for setup,
-  // verify (+ verify-setup alias), disable (POST), recovery-codes, and now
-  // status (added below, see 'GET /api/auth/mfa/status'). There is no
-  // duplicate/unauthenticated "class route" registration anymore — that is
-  // stale, pre-split behavior. The 'setup', 'validate', and 'DELETE disable'
-  // blocks immediately below still describe that stale, no-longer-accurate
-  // shape (setup now requires auth and returns 401, not 500; there is no
-  // /api/auth/mfa/validate route; /disable is POST, not DELETE) and are
-  // left red intentionally — fixing them is out of scope for this pass,
-  // which only covers the two endpoints with live frontend consumers
-  // (verify-setup, status).
+  // verify (+ verify-setup alias), disable (POST + DELETE — two distinct
+  // MFA subsystems, see routes/mfa.js), recovery-codes, status, and the
+  // unauthenticated login-time TOTP validate endpoint. There is no
+  // duplicate/unauthenticated "class route" registration anymore — that was
+  // stale, pre-split behavior.
 
   describe('POST /api/auth/mfa/setup', () => {
-    it('returns 500 when called without user context (class route lacks requireAuth)', async () => {
+    it('returns 401 without an auth token', async () => {
+      // src/routes/mfa.js runs the real requireAuth middleware — an
+      // unauthenticated request is rejected with 401 before the handler
+      // ever touches req.user. Previously pinned a stale, insecure shape
+      // ("500 — class route lacks requireAuth").
       const res = await request(app).post('/api/auth/mfa/setup').send({});
-      // Class route has no requireAuth — handler crashes on req.user.id
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(401);
     });
   });
 
@@ -808,71 +806,78 @@ describe('Authentication Service - E2E API Tests', () => {
   });
 
   // ─── Session management ───────────────────────────────────────────────────────
-  // Note: Session routes have no requireAuth middleware in the class registration.
-  // Accessing req.user.id without passport authentication crashes them.
+  // Session routes (src/routes/sessions.js) run behind the real requireAuth
+  // (passport 'jwt') middleware — an unauthenticated request is rejected with
+  // 401 before the handler ever touches req.user. These tests previously
+  // pinned a stale, insecure shape ("500 — route lacks requireAuth"); updated
+  // to the correct secure behavior.
 
   describe('GET /api/auth/sessions', () => {
-    it('returns 500 without user context (route lacks requireAuth)', async () => {
+    it('returns 401 without an auth token', async () => {
       const res = await request(app).get('/api/auth/sessions');
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(401);
     });
 
-    it('returns 500 when session manager throws (no user context)', async () => {
+    it('returns 401 without an auth token even if the session manager would throw', async () => {
       service.sessionManager.getUserSessions.mockRejectedValueOnce(new Error('DB error'));
       const res = await request(app).get('/api/auth/sessions');
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(401);
     });
   });
 
   describe('DELETE /api/auth/sessions/:sessionId', () => {
-    it('returns 500 without user context (route lacks requireAuth)', async () => {
+    it('returns 401 without an auth token', async () => {
       const res = await request(app).delete('/api/auth/sessions/session-abc');
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(401);
     });
   });
 
   describe('POST /api/auth/sessions/revoke-all', () => {
-    it('returns 500 without user context (route lacks requireAuth)', async () => {
+    it('returns 401 without an auth token', async () => {
       const res = await request(app).post('/api/auth/sessions/revoke-all').send({});
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(401);
     });
   });
 
   // ─── Profile endpoints ────────────────────────────────────────────────────────
-  // Note: Profile routes have no requireAuth middleware — they crash without req.user.
+  // Profile routes (src/routes/users.js) run behind the real requireAuth
+  // middleware — an unauthenticated request is rejected with 401 before the
+  // handler ever touches req.user. Previously pinned a stale, insecure shape.
 
   describe('GET /api/auth/profile', () => {
-    it('returns 500 without user context (route lacks requireAuth)', async () => {
+    it('returns 401 without an auth token', async () => {
       const res = await request(app).get('/api/auth/profile');
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(401);
     });
   });
 
   describe('PUT /api/auth/profile', () => {
-    it('returns 500 without user context (route lacks requireAuth)', async () => {
+    it('returns 401 without an auth token', async () => {
       const res = await request(app).put('/api/auth/profile').send({ firstName: 'New' });
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(401);
     });
   });
 
   // ─── Change password ──────────────────────────────────────────────────────────
-  // Note: POST /api/auth/change-password has validate('changePassword') middleware
-  // but no requireAuth — it crashes at req.user.id when auth fields are valid.
+  // POST /api/auth/change-password (src/routes/users.js) runs requireAuth
+  // BEFORE validate('changePassword'), so an unauthenticated request is
+  // rejected with 401 regardless of body shape — the validator never runs.
+  // Previously pinned a stale, insecure shape (400 for missing fields, 500
+  // for a well-formed body, both without ever checking for a token).
 
   describe('POST /api/auth/change-password', () => {
-    it('returns 400 when required fields are missing', async () => {
+    it('returns 401 without an auth token, even with an empty body', async () => {
       const res = await request(app)
         .post('/api/auth/change-password')
         .send({});
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(401);
     });
 
-    it('returns 500 when valid fields are sent but route lacks requireAuth', async () => {
-      // validate('changePassword') passes, then handler crashes on req.user.id
+    it('returns 401 without an auth token, even with a well-formed body', async () => {
       const res = await request(app)
         .post('/api/auth/change-password')
         .send({ currentPassword: 'OldPass1!', newPassword: 'NewPass123!' });
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(401);
     });
   });
 
@@ -1195,10 +1200,12 @@ describe('Authentication Service - E2E API Tests', () => {
   // ─── Audit endpoints ──────────────────────────────────────────────────────────
 
   describe('GET /api/auth/audit/login-history', () => {
-    it('returns 500 without user context (route lacks requireAuth)', async () => {
-      // Class route accesses req.user.id without any auth middleware
+    it('returns 401 without an auth token', async () => {
+      // src/routes/audit.js runs the real requireAuth middleware — an
+      // unauthenticated request is rejected with 401 before the handler
+      // ever touches req.user. Previously pinned a stale, insecure shape.
       const res = await request(app).get('/api/auth/audit/login-history');
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(401);
     });
   });
 
