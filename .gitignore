@@ -120,7 +120,9 @@ pnpm-lock.yaml
 *.sqlite3
 *.db
 data/
-db/
+# anchored to top-level: a bare `db/` also matched source dirs like
+# services/*/src/db/, hiding their migration runners + *.sql schema.
+/db/
 database/
 *.sql
 !migrations/*.sql
@@ -129,6 +131,9 @@ database/
 # the un-anchored patterns above only match top-level, so keep nested ones too.
 !**/migrations/*.sql
 !**/schema/*.sql
+# `db/` above ignores the whole dir; git can't re-include a file whose parent
+# dir is excluded, so re-include the migrations dir itself before its *.sql.
+!**/db/migrations/
 !**/db/migrations/*.sql
 
 # Docker
