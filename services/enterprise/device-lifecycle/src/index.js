@@ -17,6 +17,7 @@ function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(
 
 const LifecycleManager = require('./services/lifecycleManager');
 const RiskScorer = require('./services/riskScorer');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 class DeviceLifecycleService extends EventEmitter {
     constructor() {
@@ -96,6 +97,19 @@ class DeviceLifecycleService extends EventEmitter {
             });
             next();
         });
+
+        // ── Auth ────────────────────────────────────────────────────────────
+        // P0 fix: this service previously had ZERO HTTP authentication (only
+        // helmet/cors/rate-limiting above) — any unauthenticated caller could
+        // list every device, and worse, drive devices (individually or in
+        // bulk) through lifecycle transitions including 'Retiring'/'Retired',
+        // i.e. unauthenticated mass device decommissioning. Every route below
+        // (other than /health) now requires a verified bearer token; the two
+        // mutation routes (POST .../transition, POST /bulk-transition)
+        // additionally require an admin role/scope — see
+        // src/middleware/oidcAuth.js for the full rationale, including why no
+        // internal-service-token bypass is needed here.
+        this.app.use(oidcAuth({ skipPaths: ['/health'] }));
     }
 
     /**
@@ -164,7 +178,8 @@ class DeviceLifecycleService extends EventEmitter {
         });
 
         // POST /api/lifecycle/devices/:id/transition - Transition device state
-        this.app.post('/api/lifecycle/devices/:id/transition', (req, res) => {
+        // (includes Retiring/Retired — requireAdmin: see src/middleware/oidcAuth.js)
+        this.app.post('/api/lifecycle/devices/:id/transition', requireAdmin, (req, res) => {
             try {
                 const { targetState, performedBy, reason } = req.body;
 
@@ -230,7 +245,8 @@ class DeviceLifecycleService extends EventEmitter {
         });
 
         // POST /api/lifecycle/bulk-transition - Bulk state transition
-        this.app.post('/api/lifecycle/bulk-transition', (req, res) => {
+        // (bulk retire/decommission — requireAdmin: see src/middleware/oidcAuth.js)
+        this.app.post('/api/lifecycle/bulk-transition', requireAdmin, (req, res) => {
             try {
                 const { deviceIds, targetState, performedBy, reason } = req.body;
 
@@ -410,8 +426,6 @@ class DeviceLifecycleService extends EventEmitter {
     }
 }
 
-module.exports = DeviceLifecycleService;
-
 if (require.main === module) {
     const service = new DeviceLifecycleService();
     service.start().catch((error) => {
@@ -419,3 +433,22 @@ if (require.main === module) {
         process.exit(1);
     });
 }
+
+// Build a single instance for require()-based consumers (the e2e auth test
+// suite via supertest, or any future embedder) so they get the same
+// {app, start, service} shape used elsewhere in the fleet (see e.g.
+// services/core/network-infrastructure/src/index.js) — `mod.app` for
+// supertest(app) and `mod.start()` to also exercise the real listen/
+// event-bus-connect path, without going through the CLI entrypoint above.
+// Guarded so the CLI path (require.main === module) never constructs a
+// second, port-binding instance in addition to the one built above.
+const _serviceInstance = require.main === module ? undefined : new DeviceLifecycleService();
+
+module.exports = require.main === module
+    ? DeviceLifecycleService
+    : {
+        app: _serviceInstance.app,
+        start: (...args) => _serviceInstance.start(...args),
+        service: _serviceInstance,
+        DeviceLifecycleService,
+    };
