@@ -127,6 +127,13 @@ services:
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/identity
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}@rabbitmq:5672
+      # OIDC token verification (oidcAuth middleware, added alongside DB
+      # persistence — see migrations/001_identity_schema.sql). Must match
+      # oauth-provider's issuer claim (OAUTH_ISSUER), NOT its host:port,
+      # since that's just where the JWKS happens to be served from — same
+      # convention as device-service/samba-ad-dc above.
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
     ports:
       - "3001:3001"
     networks:
@@ -161,6 +168,10 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
       - LDAP_URL=ldap://lldap:3890
+      # Must match KDC_INTERNAL_TOKEN on the kerberos-kdc service above —
+      # used to authenticate the server-to-server sync-user calls made from
+      # src/routes/users.js on registration/password-change.
+      - KDC_INTERNAL_TOKEN=${KDC_INTERNAL_TOKEN:-}
     ports:
       - "3002:3002"
     networks:
@@ -912,6 +923,15 @@ services:
       - DB_NAME=certs
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD}
+      # OIDC token verification for state-changing/sensitive CA endpoints
+      # (oidcAuth middleware) — must match oauth-provider's issuer claim.
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
+      # Encrypts the persisted root CA private key at rest (AES-256-GCM, see
+      # src/crypto/fieldEncryption.js). MUST be a 32-byte hex string (64 hex
+      # chars) in any real deployment — without it the key is only
+      # base64-encoded, not encrypted (a loud warning is logged at boot).
+      - ENCRYPTION_KEY=${CA_ENCRYPTION_KEY:-}
     depends_on:
       - postgres
     restart: unless-stopped
@@ -934,6 +954,18 @@ services:
       - KRB5_ADMIN_PASSWORD=${KRB5_ADMIN_PASSWORD:-changeme}
       - KRB5_DB_PASSWORD=${KRB5_DB_PASSWORD:-changeme}
       - KDC_API_PORT=3013
+      # P0 auth fix: every kerberos-kdc route now requires a verified OIDC
+      # JWT (see src/middleware/oidcAuth.js) except /health and the
+      # KDC_INTERNAL_TOKEN-gated POST /api/kerberos/sync-user, mirroring
+      # samba-ad-dc's/device-service's JWKS_URI + DEVICE_ENROLLMENT_TOKEN
+      # pattern below.
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
+      # Shared secret for authentication-service's server-to-server
+      # registration/password-change sync calls to POST /api/kerberos/sync-user
+      # (see services/core/authentication-service/src/routes/users.js and the
+      # KDC_INTERNAL_TOKEN entry on auth-service below; must match).
+      - KDC_INTERNAL_TOKEN=${KDC_INTERNAL_TOKEN:-}
     volumes:
       - kerberos_data:/var/lib/krb5kdc
     restart: unless-stopped
