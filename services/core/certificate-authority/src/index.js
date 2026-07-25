@@ -1,11 +1,15 @@
 'use strict';
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const forge = require('node-forge');
 const { v4: uuidv4 } = require('uuid');
 const { Pool } = require('pg');
 const cors = require('cors');
 const helmet = require('helmet');
+const { oidcAuth } = require('./middleware/oidcAuth');
+const rootCaService = require('./services/rootCaService');
 
 const promClient = require('prom-client');
 const register = new promClient.Registry();
@@ -82,6 +86,25 @@ const pool = new Pool({
 
 let dbReady = false;
 
+// Applies numbered *.sql files from ../migrations in order. Currently just
+// 001_ca_root_key.sql (the root-CA-key persistence table) — the
+// ca_certificates table above is created inline for now, matching this
+// service's pre-existing convention.
+async function runMigrations() {
+  const migrationsDir = path.join(__dirname, '..', 'migrations');
+  if (!fs.existsSync(migrationsDir)) return;
+  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+  for (const file of files) {
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+    try {
+      await pool.query(sql);
+    } catch (err) {
+      console.error(`[CA] Migration ${file} failed:`, err.message);
+    }
+  }
+  if (files.length) console.log(`[CA] ${files.length} migration(s) applied`);
+}
+
 async function initDb() {
   try {
     await pool.query('SELECT 1');
@@ -104,6 +127,7 @@ async function initDb() {
       CREATE INDEX IF NOT EXISTS idx_ca_certs_issued_to ON ca_certificates(issued_to);
       CREATE INDEX IF NOT EXISTS idx_ca_certs_expires ON ca_certificates(expires_at);
     `);
+    await runMigrations();
     dbReady = true;
     console.log('[CA] Database ready');
   } catch (err) {
@@ -116,36 +140,26 @@ async function initDb() {
 let caKey, caCert;
 let caKeyPem, caCertPem;
 
-function initCA() {
-  console.log('[CA] Generating CA key pair...');
-  const keys = forge.pki.rsa.generateKeyPair({ bits: 4096, e: 0x10001 });
-  caKey = keys.privateKey;
-
-  const cert = forge.pki.createCertificate();
-  cert.publicKey = keys.publicKey;
-  cert.serialNumber = '01';
-  cert.validity.notBefore = new Date();
-  cert.validity.notAfter = new Date();
-  cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + CA_VALIDITY_YEARS);
-
-  const attrs = [
-    { name: 'commonName', value: CA_COMMON_NAME },
-    { name: 'organizationName', value: CA_ORG },
-    { name: 'countryName', value: CA_COUNTRY },
-  ];
-  cert.setSubject(attrs);
-  cert.setIssuer(attrs);
-  cert.setExtensions([
-    { name: 'basicConstraints', cA: true, critical: true },
-    { name: 'keyUsage', keyCertSign: true, cRLSign: true, critical: true },
-    { name: 'subjectKeyIdentifier' },
-  ]);
-
-  cert.sign(caKey, forge.md.sha256.create());
-  caCert = cert;
-  caKeyPem = forge.pki.privateKeyToPem(caKey);
-  caCertPem = forge.pki.certificateToPem(caCert);
-  console.log(`[CA] Root CA ready: ${CA_COMMON_NAME}`);
+// Loads the root CA key/cert from the DB if one was already persisted
+// (normal case after the first boot); only generates + persists a new key
+// pair when none exists yet. See src/services/rootCaService.js for the full
+// rationale — this replaces the old behavior of unconditionally generating
+// (and never saving) a new root key on every single boot, which silently
+// invalidated every certificate this service had ever issued.
+async function initCA() {
+  const result = await rootCaService.loadOrCreateRootCa({
+    pool,
+    dbReady,
+    commonName: CA_COMMON_NAME,
+    org: CA_ORG,
+    country: CA_COUNTRY,
+    validityYears: CA_VALIDITY_YEARS,
+  });
+  caKey = result.caKey;
+  caCert = result.caCert;
+  caKeyPem = result.caKeyPem;
+  caCertPem = result.caCertPem;
+  console.log(`[CA] Root CA ready (${result.loadedFromDb ? 'loaded from database' : 'newly generated'}): ${CA_COMMON_NAME}`);
 }
 
 function issueCertificate({ commonName, sans = [], durationDays = 365, isServer = true, isClient = false }) {
@@ -196,6 +210,27 @@ function issueCertificate({ commonName, sans = [], durationDays = 365, isServer 
     expiresAt: cert.validity.notAfter,
   };
 }
+
+// ─── Auth ───────────────────────────────────────────────────────────────────
+//
+// This service previously had NO authentication at all — POST /ca/issue
+// would hand out a signed certificate *and its private key* to any caller
+// who could reach the port. Every route below now requires a verified OIDC
+// bearer token (see src/middleware/oidcAuth.js), EXCEPT the routes that are
+// intentionally public by normal PKI convention:
+//   - /health, /metrics       - operational probes
+//   - /ca/root, /ca/root/json - root CA certificate download (clients need
+//                                this to build a trust chain; it contains no
+//                                secret — the private key never leaves this
+//                                service except via the authenticated
+//                                /ca/issue response for the leaf cert being
+//                                issued)
+//   - /ca/crl                 - certificate revocation list (must be
+//                                fetchable by anyone validating a cert, by
+//                                definition)
+// GET /ca/certificates (issued-cert inventory) and POST /ca/issue /
+// /ca/revoke/:id (state-changing / secret-bearing) all require auth.
+app.use(oidcAuth({ skipPaths: ['/health', '/metrics', '/ca/root', '/ca/crl'] }));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -257,10 +292,23 @@ app.get('/ca/crl', (req, res) => {
 
 app.get('/health', (req, res) => res.json({ status: 'ok', caReady: !!caCert }));
 
-initCA();
-initDb().then(() => {
+// initDb() must run before initCA(): initCA() reads/writes the ca_root_key
+// table that initDb()'s migrations create. Only once the root CA is loaded
+// (or generated+persisted on first boot) do we start accepting traffic.
+//
+// Exposed as app.ready so tests can deterministically await full boot
+// (DB init + root CA load-or-generate, which involves real RSA keygen and
+// can take longer than any fixed setTimeout) before issuing requests,
+// instead of guessing a sleep duration.
+const ready = initDb().then(initCA).then(() => {
   app.listen(PORT, () => {
     console.log(`[certificate-authority] listening on :${PORT}`);
     connectBus();
   });
+}).catch(err => {
+  console.error('[CA] Fatal error during startup:', err.message);
+  process.exit(1);
 });
+
+app.ready = ready;
+module.exports = app;
