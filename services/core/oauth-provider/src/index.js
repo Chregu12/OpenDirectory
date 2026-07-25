@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { APP_CATALOG } = require('./appCatalog');
 const db = require('./db');
+const { oidcAuth, configureJwks, requireAdmin, requireAdminOrInternal } = require('./middleware/oidcAuth');
 
 // ─── Event Bus ───────────────────────────────────────────────────────────────
 const EventBusClient = (() => {
@@ -128,6 +129,31 @@ function buildJwk() {
   };
 }
 
+// Wire the admin-auth middleware (src/middleware/oidcAuth.js) up to the
+// signing key generated above, so it can verify oauth-provider's own tokens
+// without a self-referential HTTP call — see that module's header comment
+// for the full rationale. Must happen before any request can reach the
+// middleware (module load time is fine, well before app.listen()).
+configureJwks({ keys: [buildJwk()] });
+
+// Admin-auth middleware instances for oauth-provider's management surface
+// (client registry, SCIM directory, MDM command issuance, enrollment
+// tokens, update rings, SCIM connections). `isTokenRevoked` is defined
+// further up in this file (Redis-backed blacklist with in-memory
+// fallback) — wiring it in here means a revoked admin token is rejected
+// the same way it already is at /oauth/userinfo.
+//
+// adminAuth            - requires a valid, non-revoked bearer JWT.
+// adminAuthOrInternal  - same, but a request with NO Authorization header
+//                        may instead present OAUTH_PROVIDER_INTERNAL_TOKEN
+//                        via x-oauth-internal-token. Mounted ONLY on the
+//                        two routes server-to-server callers
+//                        (antivirus-protection, policy-service) hit without
+//                        an admin JWT today: GET /api/devices/registry and
+//                        POST /api/devices/:deviceId/commands.
+const adminAuth = oidcAuth({ isTokenRevoked });
+const adminAuthOrInternal = oidcAuth({ isTokenRevoked, allowInternalToken: true });
+
 // ─── In-memory stores ─────────────────────────────────────────────────────────
 
 const clients         = new Map(); // clientId → ClientRecord
@@ -244,7 +270,11 @@ const updateRings = new Map([
     name:         'Grafana Dashboard',
     redirectUris: ['https://grafana.example.com/login/generic_oauth'],
     scopes:       ['openid', 'profile', 'email', 'groups'],
-    grantTypes:   ['authorization_code', 'refresh_token'],
+    // client_credentials included: Grafana's backend also mints service
+    // tokens (e.g. to call oauth-provider admin/introspection APIs) — see
+    // getAdminToken() in the e2e test suite for the same pattern used to
+    // mint admin-scoped test tokens.
+    grantTypes:   ['authorization_code', 'refresh_token', 'client_credentials'],
   },
   {
     clientId:     'devportal-od-client',
@@ -255,7 +285,13 @@ const updateRings = new Map([
     name:         'Internal Dev Portal',
     redirectUris: ['https://dev.example.com/auth/callback', 'http://localhost:4000/callback'],
     scopes:       ['openid', 'profile', 'email'],
-    grantTypes:   ['authorization_code'],
+    // Deliberately NOT client_credentials — this client is used to
+    // regression-test grantTypes enforcement (an authorization_code/
+    // refresh_token/device-flow client must not also be able to mint
+    // tokens via client_credentials just by asserting a different
+    // grant_type). See "grantTypes enforcement" describe block in
+    // src/__tests__/api.e2e.test.js.
+    grantTypes:   ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],
   },
 ].forEach(c => {
   clients.set(c.clientId, c);
@@ -474,16 +510,57 @@ app.post('/oauth/authorize/login', async (req, res) => {
 
 // ─── Token Endpoint ───────────────────────────────────────────────────────────────
 
+// RFC 7636 §4.6 — verify code_verifier against the code_challenge stored at
+// /oauth/authorize time. 'plain' is RFC 7636's default when
+// code_challenge_method is omitted but a code_challenge was supplied.
+// Constant-time comparison (both branches) since this is effectively a
+// credential check — a timing side-channel on the challenge comparison
+// would erode the whole point of PKCE.
+function safeEqual(a, b) {
+  const aBuf = Buffer.from(String(a ?? ''));
+  const bBuf = Buffer.from(String(b ?? ''));
+  if (aBuf.length !== bBuf.length) return false;
+  try { return crypto.timingSafeEqual(aBuf, bBuf); } catch { return false; }
+}
+
+function verifyPkce(codeChallenge, codeChallengeMethod, verifier) {
+  if (!verifier) return false;
+  const method = (codeChallengeMethod || 'plain').toLowerCase();
+  if (method === 's256') {
+    const computed = crypto.createHash('sha256').update(verifier).digest('base64url');
+    return safeEqual(computed, codeChallenge);
+  }
+  if (method === 'plain') {
+    return safeEqual(verifier, codeChallenge);
+  }
+  return false; // unrecognized method -> fail closed
+}
+
+// Grant types this token endpoint actually implements. The client.grantTypes
+// allowlist (set via POST /api/clients, or the seed data below) is only
+// enforced for these — an entirely-unimplemented grant_type (e.g. the
+// never-supported 'password'/ROPC) must keep falling through to the generic
+// unsupported_grant_type response at the bottom of this handler rather than
+// being reported as unauthorized_client.
+const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
+const IMPLEMENTED_GRANT_TYPES = ['authorization_code', 'refresh_token', 'client_credentials', DEVICE_GRANT];
+
 app.post('/oauth/token', async (req, res) => {
   const { grant_type, code, redirect_uri, client_id, client_secret, code_verifier, refresh_token, device_code } = req.body;
 
   // Device code grant does not require client secret for public clients
-  const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
-
   if (grant_type !== DEVICE_GRANT) {
     const client = clients.get(client_id);
     if (!client || (client.clientSecret && client.clientSecret !== client_secret)) {
       return res.status(401).json({ error: 'invalid_client' });
+    }
+    // Per-client grant-type allowlist (RFC 6749 §3.2.1 / §5.2 unauthorized_client):
+    // a client registered only for e.g. authorization_code must not be able
+    // to mint tokens via client_credentials (or any other implemented grant
+    // it wasn't configured for) just by asserting a different grant_type.
+    if (IMPLEMENTED_GRANT_TYPES.includes(grant_type) &&
+        !(Array.isArray(client.grantTypes) && client.grantTypes.includes(grant_type))) {
+      return res.status(400).json({ error: 'unauthorized_client' });
     }
   }
 
@@ -493,6 +570,25 @@ app.post('/oauth/token', async (req, res) => {
       return res.status(400).json({ error: 'invalid_grant' });
     }
     authCodes.delete(code);
+
+    // RFC 6749 §4.1.3 — redirect_uri, if present at /oauth/authorize time,
+    // must match byte-for-byte at redemption time. Without this a code
+    // obtained via one registered redirect_uri (e.g. leaked through a
+    // referrer header or an open redirect on that endpoint) could be
+    // redeemed by an attacker in control of a *different* registered
+    // redirect_uri for the same client.
+    if (record.redirectUri && record.redirectUri !== redirect_uri) {
+      return res.status(400).json({ error: 'invalid_grant' });
+    }
+
+    // RFC 7636 — if the authorize request included a code_challenge, the
+    // token request MUST supply a matching code_verifier. Previously
+    // code_verifier was read off req.body but never compared against
+    // anything, making PKCE a complete no-op despite discovery advertising
+    // S256/plain support.
+    if (record.codeChallenge && !verifyPkce(record.codeChallenge, record.codeChallengeMethod, code_verifier)) {
+      return res.status(400).json({ error: 'invalid_grant' });
+    }
 
     // Device compliance check — try DB first, then in-memory registry, then external device service
     const deviceId = record.deviceId; // may be undefined for browser flows
@@ -592,6 +688,19 @@ app.post('/oauth/token', async (req, res) => {
   }
 
   if (grant_type === DEVICE_GRANT) {
+    // Device grant skips the client_secret check above (public clients),
+    // but a *named* client_id is still subject to the grantTypes allowlist
+    // — an authorization_code-only client shouldn't be able to mint tokens
+    // via the device flow either. An anonymous/omitted client_id (no
+    // registered client to check against) falls through unchanged, matching
+    // the existing `aud: client_id ?? 'device-client'` fallback below.
+    if (client_id) {
+      const deviceClient = clients.get(client_id);
+      if (!deviceClient || !(Array.isArray(deviceClient.grantTypes) && deviceClient.grantTypes.includes(DEVICE_GRANT))) {
+        return res.status(400).json({ error: 'unauthorized_client' });
+      }
+    }
+
     const record = deviceCodes.get(device_code);
     if (!record) return res.status(400).json({ error: 'expired_token' });
     if (record.expiresAt < Date.now()) { deviceCodes.delete(device_code); return res.status(400).json({ error: 'expired_token' }); }
@@ -887,7 +996,7 @@ app.get('/saml/metadata', (req, res) => {
 
 // ─── OAuth2 Client Management API (full CRUD) ─────────────────────────────────────
 
-app.get('/api/clients', async (req, res) => {
+app.get('/api/clients', adminAuth, requireAdmin, async (req, res) => {
   if (db.isAvailable()) {
     try {
       const dbClients = await db.getAllClients();
@@ -898,7 +1007,7 @@ app.get('/api/clients', async (req, res) => {
   res.json([...clients.values()]);
 });
 
-app.post('/api/clients', (req, res) => {
+app.post('/api/clients', adminAuth, requireAdmin, (req, res) => {
   const { name, redirectUris, scopes, grantTypes } = req.body;
   if (!name || !redirectUris?.length) return res.status(400).json({ error: 'name and redirectUris required' });
   const clientId     = `${name.toLowerCase().replace(/\s+/g, '-')}-${uuidv4().slice(0, 8)}`;
@@ -910,7 +1019,7 @@ app.post('/api/clients', (req, res) => {
   res.status(201).json({ clientId, clientSecret, name });
 });
 
-app.put('/api/clients/:id', (req, res) => {
+app.put('/api/clients/:id', adminAuth, requireAdmin, (req, res) => {
   const client = clients.get(req.params.id);
   if (!client) return res.status(404).json({ error: 'Client not found' });
   const { name, redirectUris, scopes, grantTypes } = req.body;
@@ -920,7 +1029,7 @@ app.put('/api/clients/:id', (req, res) => {
   res.json(safe);
 });
 
-app.delete('/api/clients/:id', (req, res) => {
+app.delete('/api/clients/:id', adminAuth, requireAdmin, (req, res) => {
   if (!clients.has(req.params.id)) return res.status(404).json({ error: 'Client not found' });
   clients.delete(req.params.id);
   db.deleteClient(req.params.id).catch(err => console.error('[clients-db]', err.message));
@@ -953,12 +1062,12 @@ function scimGroupResource(g) {
 }
 
 // SCIM Users
-app.get('/scim/v2/Users', (req, res) => {
+app.get('/scim/v2/Users', adminAuth, requireAdmin, (req, res) => {
   const list = [...scimUsers.values()].map(scimUserResource);
   res.json({ schemas: ['urn:ietf:params:scim:api:messages:2.0:ListResponse'], totalResults: list.length, Resources: list });
 });
 
-app.post('/scim/v2/Users', (req, res) => {
+app.post('/scim/v2/Users', adminAuth, requireAdmin, (req, res) => {
   const id = uuidv4();
   const user = { id, userName: req.body.userName, displayName: req.body.displayName ?? req.body.userName, emails: req.body.emails ?? [], active: req.body.active !== false, groups: [] };
   scimUsers.set(id, user);
@@ -968,13 +1077,13 @@ app.post('/scim/v2/Users', (req, res) => {
   res.status(201).json(scimUserResource(user));
 });
 
-app.get('/scim/v2/Users/:id', (req, res) => {
+app.get('/scim/v2/Users/:id', adminAuth, requireAdmin, (req, res) => {
   const u = scimUsers.get(req.params.id);
   if (!u) return res.status(404).json({ schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'], status: 404, detail: 'User not found' });
   res.json(scimUserResource(u));
 });
 
-app.put('/scim/v2/Users/:id', (req, res) => {
+app.put('/scim/v2/Users/:id', adminAuth, requireAdmin, (req, res) => {
   const existing = scimUsers.get(req.params.id);
   if (!existing) return res.status(404).json({ status: 404, detail: 'User not found' });
   const user = { id: req.params.id, userName: req.body.userName, displayName: req.body.displayName, emails: req.body.emails ?? [], active: req.body.active !== false, groups: req.body.groups ?? [] };
@@ -989,7 +1098,7 @@ app.put('/scim/v2/Users/:id', (req, res) => {
   res.json(scimUserResource(user));
 });
 
-app.delete('/scim/v2/Users/:id', (req, res) => {
+app.delete('/scim/v2/Users/:id', adminAuth, requireAdmin, (req, res) => {
   if (!scimUsers.has(req.params.id)) return res.status(404).json({ status: 404, detail: 'User not found' });
   scimUsers.delete(req.params.id);
   if (db.isAvailable()) {
@@ -999,25 +1108,25 @@ app.delete('/scim/v2/Users/:id', (req, res) => {
 });
 
 // SCIM Groups
-app.get('/scim/v2/Groups', (req, res) => {
+app.get('/scim/v2/Groups', adminAuth, requireAdmin, (req, res) => {
   const list = [...scimGroups.values()].map(scimGroupResource);
   res.json({ schemas: ['urn:ietf:params:scim:api:messages:2.0:ListResponse'], totalResults: list.length, Resources: list });
 });
 
-app.post('/scim/v2/Groups', (req, res) => {
+app.post('/scim/v2/Groups', adminAuth, requireAdmin, (req, res) => {
   const id = uuidv4();
   const group = { id, displayName: req.body.displayName, members: req.body.members ?? [] };
   scimGroups.set(id, group);
   res.status(201).json(scimGroupResource(group));
 });
 
-app.get('/scim/v2/Groups/:id', (req, res) => {
+app.get('/scim/v2/Groups/:id', adminAuth, requireAdmin, (req, res) => {
   const g = scimGroups.get(req.params.id);
   if (!g) return res.status(404).json({ status: 404, detail: 'Group not found' });
   res.json(scimGroupResource(g));
 });
 
-app.put('/scim/v2/Groups/:id', (req, res) => {
+app.put('/scim/v2/Groups/:id', adminAuth, requireAdmin, (req, res) => {
   const existing = scimGroups.get(req.params.id);
   if (!existing) return res.status(404).json({ status: 404, detail: 'Group not found' });
   const group = { id: req.params.id, displayName: req.body.displayName, members: req.body.members ?? [] };
@@ -1033,7 +1142,7 @@ app.put('/scim/v2/Groups/:id', (req, res) => {
   res.json(scimGroupResource(group));
 });
 
-app.delete('/scim/v2/Groups/:id', (req, res) => {
+app.delete('/scim/v2/Groups/:id', adminAuth, requireAdmin, (req, res) => {
   if (!scimGroups.has(req.params.id)) return res.status(404).json({ status: 404, detail: 'Group not found' });
   scimGroups.delete(req.params.id);
   res.status(204).send();
@@ -1096,7 +1205,7 @@ setInterval(() => {
   console.log(`[device-quarantine] flagged=${flagged} quarantined=${quarantined}`);
 }, 30_000);
 
-app.get('/api/devices/registry', async (req, res) => {
+app.get('/api/devices/registry', adminAuthOrInternal, requireAdminOrInternal, async (req, res) => {
   if (db.isAvailable()) {
     try {
       const rows = await db.getAllDevices();
@@ -1106,7 +1215,7 @@ app.get('/api/devices/registry', async (req, res) => {
   res.json([...deviceRegistry.values()]);
 });
 
-app.put('/api/devices/:id/status', (req, res) => {
+app.put('/api/devices/:id/status', adminAuth, requireAdmin, (req, res) => {
   const device = deviceRegistry.get(req.params.id);
   if (!device) return res.status(404).json({ error: 'Device not found' });
   const { status } = req.body;
@@ -1121,7 +1230,7 @@ app.put('/api/devices/:id/status', (req, res) => {
 
 const mdmCommands = new Map(); // deviceId → [command]
 
-app.post('/api/devices/:deviceId/commands', (req, res) => {
+app.post('/api/devices/:deviceId/commands', adminAuthOrInternal, requireAdminOrInternal, (req, res) => {
   const { command, payload } = req.body;
   const VALID_COMMANDS = ['wipe', 'lock', 'unlock', 'update_policy', 'restart', 'collect_logs', 'install_app', 'uninstall_app'];
   if (!VALID_COMMANDS.includes(command)) return res.status(400).json({ error: `Unknown command. Valid: ${VALID_COMMANDS.join(', ')}` });
@@ -1144,15 +1253,19 @@ app.post('/api/devices/:deviceId/commands', (req, res) => {
   res.status(201).json(cmdRecord);
 });
 
-// Agent polls this endpoint to get pending commands
-app.get('/api/devices/:deviceId/commands/pending', (req, res) => {
+// Agent polls this endpoint to get pending commands, authenticating with the
+// long-lived deviceToken it received at enrollment (see /api/enrollment/
+// register below) — any valid, non-revoked bearer JWT is sufficient here
+// (no admin role required); the device is only ever able to see/ack its own
+// command queue via the :deviceId path param.
+app.get('/api/devices/:deviceId/commands/pending', adminAuth, (req, res) => {
   const deviceId = req.params.deviceId;
   const queue = (mdmCommands.get(deviceId) || []).filter(c => c.status === 'pending');
   res.json(queue);
 });
 
-// Agent reports command result
-app.patch('/api/devices/:deviceId/commands/:cmdId', (req, res) => {
+// Agent reports command result — device-authenticated (see comment above).
+app.patch('/api/devices/:deviceId/commands/:cmdId', adminAuth, (req, res) => {
   const { deviceId, cmdId } = req.params;
   const { status, result } = req.body;
   const queue = mdmCommands.get(deviceId) || [];
@@ -1164,15 +1277,18 @@ app.patch('/api/devices/:deviceId/commands/:cmdId', (req, res) => {
   res.json(cmd);
 });
 
-// List all commands for a device
-app.get('/api/devices/:deviceId/commands', (req, res) => {
+// List all commands for a device (admin UI use — distinct from the agent's
+// own /commands/pending poll above).
+app.get('/api/devices/:deviceId/commands', adminAuth, requireAdmin, (req, res) => {
   const queue = mdmCommands.get(req.params.deviceId) || [];
   res.json(queue);
 });
 
 // ─── Compliance Check Endpoint ────────────────────────────────────────────────────
 
-app.post('/api/devices/:deviceId/compliance-check', async (req, res) => {
+// Device-authenticated (see comment on /commands/pending above) — the agent
+// reports its own compliance settings using its deviceToken.
+app.post('/api/devices/:deviceId/compliance-check', adminAuth, async (req, res) => {
   const { deviceId } = req.params;
   const { settings } = req.body; // device reports its current settings
 
@@ -1249,11 +1365,11 @@ PLATFORMS.forEach(p => {
   enrollmentTokens.set(p, { platform: p, token, created: new Date().toISOString().split('T')[0], expires: new Date(Date.now() + 30 * 86400_000).toISOString().split('T')[0], uses: 0, maxUses: p === 'linux' ? 100 : p === 'windows' || p === 'macos' ? 50 : 25, devices: new Map() });
 });
 
-app.get('/api/enrollment/tokens', (req, res) => {
+app.get('/api/enrollment/tokens', adminAuth, requireAdmin, (req, res) => {
   res.json([...enrollmentTokens.values()].map(({ devices: _, ...t }) => t));
 });
 
-app.post('/api/enrollment/tokens/:platform/rotate', (req, res) => {
+app.post('/api/enrollment/tokens/:platform/rotate', adminAuth, requireAdmin, (req, res) => {
   const { platform } = req.params;
   if (!PLATFORMS.includes(platform)) return res.status(400).json({ error: 'unknown platform' });
   const existing = enrollmentTokens.get(platform);
@@ -1518,7 +1634,8 @@ app.get('/api/enroll/ios/profile.mobileconfig', (req, res) => {
 
 // ─── Device Heartbeat ─────────────────────────────────────────────────────────────
 
-app.post('/api/devices/:id/heartbeat', (req, res) => {
+// Device-authenticated (see comment on /commands/pending above).
+app.post('/api/devices/:id/heartbeat', adminAuth, (req, res) => {
   const { id } = req.params;
   // Update last_seen across enrollment token records
   for (const rec of enrollmentTokens.values()) {
@@ -1531,7 +1648,7 @@ app.post('/api/devices/:id/heartbeat', (req, res) => {
 
 // ─── SCIM Push Log ────────────────────────────────────────────────────────────────
 
-app.get('/api/scim-push/log', (req, res) => {
+app.get('/api/scim-push/log', adminAuth, requireAdmin, (req, res) => {
   res.json(scimPushLog.slice(-50));
 });
 
@@ -1554,11 +1671,11 @@ const scimConflicts = new Map();
   ]);
 });
 
-app.get('/api/scim/connections', (req, res) => {
+app.get('/api/scim/connections', adminAuth, requireAdmin, (req, res) => {
   res.json([...scimConnections.values()]);
 });
 
-app.post('/api/scim/connections', (req, res) => {
+app.post('/api/scim/connections', adminAuth, requireAdmin, (req, res) => {
   const { name, provider, endpoint, bearerToken, syncInterval } = req.body;
   if (!name || !provider) return res.status(400).json({ error: 'name and provider are required' });
   if (!['google', 'entra', 'custom'].includes(provider)) return res.status(400).json({ error: 'provider must be google, entra, or custom' });
@@ -1582,7 +1699,7 @@ app.post('/api/scim/connections', (req, res) => {
   res.status(201).json(safe);
 });
 
-app.put('/api/scim/connections/:id', (req, res) => {
+app.put('/api/scim/connections/:id', adminAuth, requireAdmin, (req, res) => {
   const connection = scimConnections.get(req.params.id);
   if (!connection) return res.status(404).json({ error: 'Connection not found' });
   const { name, provider, endpoint, bearerToken, syncInterval } = req.body;
@@ -1600,14 +1717,14 @@ app.put('/api/scim/connections/:id', (req, res) => {
   res.json(safe);
 });
 
-app.delete('/api/scim/connections/:id', (req, res) => {
+app.delete('/api/scim/connections/:id', adminAuth, requireAdmin, (req, res) => {
   if (!scimConnections.has(req.params.id)) return res.status(404).json({ error: 'Connection not found' });
   scimConnections.delete(req.params.id);
   scimSyncLog.delete(req.params.id);
   res.status(204).send();
 });
 
-app.post('/api/scim/connections/:id/sync', (req, res) => {
+app.post('/api/scim/connections/:id/sync', adminAuth, requireAdmin, (req, res) => {
   const connection = scimConnections.get(req.params.id);
   if (!connection) return res.status(404).json({ error: 'Connection not found' });
   // Simulate a sync
@@ -1636,18 +1753,18 @@ app.post('/api/scim/connections/:id/sync', (req, res) => {
   res.json({ message: 'Sync started', logId, startedAt });
 });
 
-app.get('/api/scim/connections/:id/log', (req, res) => {
+app.get('/api/scim/connections/:id/log', adminAuth, requireAdmin, (req, res) => {
   if (!scimConnections.has(req.params.id)) return res.status(404).json({ error: 'Connection not found' });
   const log = scimSyncLog.get(req.params.id) || [];
   res.json(log.slice(0, 50));
 });
 
-app.get('/api/scim/conflicts', (req, res) => {
+app.get('/api/scim/conflicts', adminAuth, requireAdmin, (req, res) => {
   const all = [...scimConflicts.values()].filter(c => !c.resolved);
   res.json(all);
 });
 
-app.post('/api/scim/conflicts/:id/resolve', (req, res) => {
+app.post('/api/scim/conflicts/:id/resolve', adminAuth, requireAdmin, (req, res) => {
   const conflict = scimConflicts.get(req.params.id);
   if (!conflict) return res.status(404).json({ error: 'Conflict not found' });
   const { action } = req.body;
@@ -1661,11 +1778,11 @@ app.post('/api/scim/conflicts/:id/resolve', (req, res) => {
 
 // ─── Update Rings ─────────────────────────────────────────────────────────────────
 
-app.get('/api/update-rings', (req, res) => {
+app.get('/api/update-rings', adminAuth, requireAdmin, (req, res) => {
   res.json([...updateRings.values()]);
 });
 
-app.put('/api/update-rings/:id', (req, res) => {
+app.put('/api/update-rings/:id', adminAuth, requireAdmin, (req, res) => {
   const ring = updateRings.get(req.params.id);
   if (!ring) return res.status(404).json({ error: 'Ring not found' });
   const { deferralDays, description } = req.body;
@@ -1679,7 +1796,7 @@ app.put('/api/update-rings/:id', (req, res) => {
   res.json(ring);
 });
 
-app.post('/api/update-rings/:id/assign', (req, res) => {
+app.post('/api/update-rings/:id/assign', adminAuth, requireAdmin, (req, res) => {
   const ring = updateRings.get(req.params.id);
   if (!ring) return res.status(404).json({ error: 'Ring not found' });
   const { deviceId } = req.body;
@@ -1698,7 +1815,7 @@ app.get('/api/app-catalog', (req, res) => {
   res.json(APP_CATALOG);
 });
 
-app.post('/api/scim-push/:appId/provision', (req, res) => {
+app.post('/api/scim-push/:appId/provision', adminAuth, requireAdmin, (req, res) => {
   const { appId } = req.params;
   const { userId, action } = req.body;
   if (!['create', 'update', 'deactivate'].includes(action)) return res.status(400).json({ error: 'invalid action' });
@@ -1727,7 +1844,7 @@ app.get('/api/packages/:id', (req, res) => {
   res.json(pkg);
 });
 
-app.post('/api/packages', (req, res) => {
+app.post('/api/packages', adminAuth, requireAdmin, (req, res) => {
   const { name, version, platform, type, downloadUrl, silent, installScript } = req.body;
   if (!name || !platform) return res.status(400).json({ error: 'name and platform required' });
   const id = `pkg-${uuidv4().slice(0, 8)}`;
@@ -1737,7 +1854,7 @@ app.post('/api/packages', (req, res) => {
 });
 
 // Deploy package to a device
-app.post('/api/packages/:pkgId/deploy/:deviceId', (req, res) => {
+app.post('/api/packages/:pkgId/deploy/:deviceId', adminAuth, requireAdmin, (req, res) => {
   const pkg = appPackages.get(req.params.pkgId);
   if (!pkg) return res.status(404).json({ error: 'Package not found' });
 
@@ -1755,7 +1872,7 @@ app.post('/api/packages/:pkgId/deploy/:deviceId', (req, res) => {
 });
 
 // Bulk deploy to all devices by platform
-app.post('/api/packages/:pkgId/deploy-all', (req, res) => {
+app.post('/api/packages/:pkgId/deploy-all', adminAuth, requireAdmin, (req, res) => {
   const pkg = appPackages.get(req.params.pkgId);
   if (!pkg) return res.status(404).json({ error: 'Package not found' });
 

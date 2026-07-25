@@ -30,6 +30,19 @@ try {
 const PostgresPolicyRepository = require('./infrastructure/repositories/PostgresPolicyRepository');
 const PolicyApplicationService = require('./application/PolicyApplicationService');
 
+// oauth-provider now requires auth on its device-registry/MDM-command
+// endpoints (P0 fix — it previously accepted unauthenticated device
+// listing and wipe/lock/update_policy commands from anyone who could reach
+// it). GPO/blueprint push below call it server-to-server with no end-user
+// JWT in hand, so they present the shared internal-service token instead
+// (see services/core/oauth-provider/src/middleware/oidcAuth.js's
+// allowInternalToken option, mounted only on those two routes).
+function oauthProviderInternalHeaders() {
+  return process.env.OAUTH_PROVIDER_INTERNAL_TOKEN
+    ? { 'x-oauth-internal-token': process.env.OAUTH_PROVIDER_INTERNAL_TOKEN }
+    : {};
+}
+
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
@@ -939,14 +952,16 @@ app.post('/api/gpo/:id/apply', async (req, res) => {
 
   try {
     // Get all devices from registry
-    const devRes = await fetch(`${OAUTH_PROVIDER}/api/devices/registry`);
+    const devRes = await fetch(`${OAUTH_PROVIDER}/api/devices/registry`, {
+      headers: oauthProviderInternalHeaders(),
+    });
     const devices = devRes.ok ? await devRes.json() : [];
 
     const results = [];
     for (const device of devices.filter(d => gpo.platforms.includes(d.platform || 'unknown'))) {
       const cmdRes = await fetch(`${OAUTH_PROVIDER}/api/devices/${device.id}/commands`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...oauthProviderInternalHeaders() },
         body: JSON.stringify({ command: 'update_policy', payload: { gpoId: gpo.id, gpoName: gpo.name, settings: gpo.settings } })
       });
       results.push({ deviceId: device.id, hostname: device.hostname, success: cmdRes.ok });
@@ -1273,7 +1288,7 @@ app.post('/api/blueprints/:id/apply', async (req, res) => {
         try {
           const cmdRes = await fetch(`${OAUTH_PROVIDER}/api/devices/${assignment.target_id}/commands`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...oauthProviderInternalHeaders() },
             body: JSON.stringify({
               command: 'apply_blueprint_config',
               payload: {

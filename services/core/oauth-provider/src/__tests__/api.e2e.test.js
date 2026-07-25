@@ -96,6 +96,7 @@ jest.mock('@opendirectory/grpc-event-bus', () => ({
 
 // ─── Now require the app ───────────────────────────────────────────────────
 
+const crypto = require('crypto');
 const request = require('supertest');
 const app = require('../index');
 
@@ -103,6 +104,51 @@ const app = require('../index');
 function codeFromRedirect(location) {
   const url = new URL(location);
   return url.searchParams.get('code');
+}
+
+// ─── Auth helpers for the admin-surface tests ──────────────────────────────
+//
+// grafana-od-client is seeded with client_credentials in its grantTypes
+// allowlist (see src/index.js's seed data) specifically so tests can mint
+// real, JWKS-verifiable tokens through the actual /oauth/token endpoint
+// rather than hand-rolling JWTs — scope is client-requested and flows
+// straight into the token payload's `scope` claim, so requesting
+// `oauth.admin` here exercises exactly the same code path
+// src/middleware/oidcAuth.js's hasAdminAccess() checks in production.
+
+/** Mints a real access token carrying the oauth.admin scope. */
+async function getAdminToken() {
+  const res = await request(app).post('/oauth/token').send({
+    grant_type: 'client_credentials',
+    client_id: 'grafana-od-client',
+    client_secret: 'test-grafana-secret',
+    scope: 'oauth.admin',
+  });
+  if (res.status !== 200) throw new Error(`getAdminToken: /oauth/token returned ${res.status}: ${JSON.stringify(res.body)}`);
+  return res.body.access_token;
+}
+
+/** Mints a real, validly-signed access token that does NOT carry admin rights. */
+async function getNonAdminToken() {
+  const res = await request(app).post('/oauth/token').send({
+    grant_type: 'client_credentials',
+    client_id: 'grafana-od-client',
+    client_secret: 'test-grafana-secret',
+    scope: 'openid profile',
+  });
+  if (res.status !== 200) throw new Error(`getNonAdminToken: /oauth/token returned ${res.status}: ${JSON.stringify(res.body)}`);
+  return res.body.access_token;
+}
+
+/** Enrolls a device (public endpoint) and returns its long-lived deviceToken. */
+async function enrollDevice(hostname = `test-device-${Math.random().toString(36).slice(2)}`) {
+  const adminToken = await getAdminToken();
+  const tokensRes = await request(app).get('/api/enrollment/tokens').set('Authorization', `Bearer ${adminToken}`);
+  const linuxToken = tokensRes.body.find((t) => t.platform === 'linux').token;
+  const res = await request(app).post('/api/enrollment/register').send({
+    token: linuxToken, platform: 'linux', hostname, os: '6.8.0',
+  });
+  return { deviceId: res.body.deviceId, deviceToken: res.body.deviceToken };
 }
 
 describe('oauth-provider E2E', () => {
@@ -450,9 +496,27 @@ describe('oauth-provider E2E', () => {
   });
 
   // ── Enrollment tokens (device-join depends on these) ─────────────────────
+  //
+  // GET /api/enrollment/tokens and the rotate endpoint are admin-only (P0
+  // fix — they previously leaked raw, immediately-usable enrollment tokens
+  // to anyone who could reach the service). POST /api/enrollment/register
+  // stays public/unauthenticated by design: a device presents the
+  // enrollment token itself as its credential, since it has no JWT yet.
   describe('Enrollment tokens', () => {
-    it('GET /api/enrollment/tokens lists one token per platform', async () => {
+    it('GET /api/enrollment/tokens requires admin auth (401 with no token)', async () => {
       const res = await request(app).get('/api/enrollment/tokens');
+      expect(res.status).toBe(401);
+    });
+
+    it('GET /api/enrollment/tokens rejects a non-admin token (403)', async () => {
+      const nonAdminToken = await getNonAdminToken();
+      const res = await request(app).get('/api/enrollment/tokens').set('Authorization', `Bearer ${nonAdminToken}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('GET /api/enrollment/tokens (admin) lists one token per platform', async () => {
+      const adminToken = await getAdminToken();
+      const res = await request(app).get('/api/enrollment/tokens').set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       const platforms = res.body.map((t) => t.platform).sort();
       expect(platforms).toEqual(['android', 'ios', 'linux', 'macos', 'windows']);
@@ -462,7 +526,7 @@ describe('oauth-provider E2E', () => {
       }
     });
 
-    it('register with an invalid token → 401', async () => {
+    it('register with an invalid token → 401 (public endpoint, no admin auth needed)', async () => {
       const res = await request(app).post('/api/enrollment/register').send({
         token: 'NOT-A-REAL-TOKEN', platform: 'linux', hostname: 'attacker-box',
       });
@@ -471,7 +535,8 @@ describe('oauth-provider E2E', () => {
     });
 
     it('register with a valid token issues a device + long-lived device token', async () => {
-      const tokensRes = await request(app).get('/api/enrollment/tokens');
+      const adminToken = await getAdminToken();
+      const tokensRes = await request(app).get('/api/enrollment/tokens').set('Authorization', `Bearer ${adminToken}`);
       const linuxToken = tokensRes.body.find((t) => t.platform === 'linux').token;
 
       const res = await request(app).post('/api/enrollment/register').send({
@@ -484,7 +549,8 @@ describe('oauth-provider E2E', () => {
     });
 
     it('a token issued for one platform is rejected when submitted with a different platform', async () => {
-      const tokensRes = await request(app).get('/api/enrollment/tokens');
+      const adminToken = await getAdminToken();
+      const tokensRes = await request(app).get('/api/enrollment/tokens').set('Authorization', `Bearer ${adminToken}`);
       const windowsToken = tokensRes.body.find((t) => t.platform === 'windows').token;
 
       const res = await request(app).post('/api/enrollment/register').send({
@@ -495,10 +561,11 @@ describe('oauth-provider E2E', () => {
     });
 
     it('rotating a platform token invalidates the previous token', async () => {
-      const before = await request(app).get('/api/enrollment/tokens');
+      const adminToken = await getAdminToken();
+      const before = await request(app).get('/api/enrollment/tokens').set('Authorization', `Bearer ${adminToken}`);
       const oldMacToken = before.body.find((t) => t.platform === 'macos').token;
 
-      const rotateRes = await request(app).post('/api/enrollment/tokens/macos/rotate');
+      const rotateRes = await request(app).post('/api/enrollment/tokens/macos/rotate').set('Authorization', `Bearer ${adminToken}`);
       expect(rotateRes.status).toBe(200);
       expect(rotateRes.body.token).not.toBe(oldMacToken);
       expect(rotateRes.body.uses).toBe(0);
@@ -514,13 +581,20 @@ describe('oauth-provider E2E', () => {
       expect(registerWithNew.status).toBe(201);
     });
 
+    it('POST /api/enrollment/tokens/:platform/rotate requires admin auth (401 with no token)', async () => {
+      const res = await request(app).post('/api/enrollment/tokens/macos/rotate');
+      expect(res.status).toBe(401);
+    });
+
     it('rotating an unknown platform returns 400', async () => {
-      const res = await request(app).post('/api/enrollment/tokens/solaris/rotate');
+      const adminToken = await getAdminToken();
+      const res = await request(app).post('/api/enrollment/tokens/solaris/rotate').set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(400);
     });
 
     it('a token is rejected once it has been used maxUses times (429 token exhausted)', async () => {
-      const tokensRes = await request(app).get('/api/enrollment/tokens');
+      const adminToken = await getAdminToken();
+      const tokensRes = await request(app).get('/api/enrollment/tokens').set('Authorization', `Bearer ${adminToken}`);
       const android = tokensRes.body.find((t) => t.platform === 'android'); // maxUses: 25
 
       for (let i = 0; i < android.maxUses; i++) {
@@ -539,9 +613,23 @@ describe('oauth-provider E2E', () => {
   });
 
   // ── SCIM 2.0 Users ────────────────────────────────────────────────────────
+  //
+  // The whole /scim/v2/* surface is admin-only (P0 fix — it previously
+  // exposed the full user/group directory, including emails, to anyone who
+  // could reach the service, and allowed unauthenticated writes).
   describe('SCIM 2.0 /scim/v2/Users', () => {
-    it('GET lists the seeded users in ListResponse shape', async () => {
-      const res = await request(app).get('/scim/v2/Users');
+    it('GET /scim/v2/Users requires admin auth (401 with no token, 403 for a non-admin token)', async () => {
+      const noAuth = await request(app).get('/scim/v2/Users');
+      expect(noAuth.status).toBe(401);
+
+      const nonAdminToken = await getNonAdminToken();
+      const forbidden = await request(app).get('/scim/v2/Users').set('Authorization', `Bearer ${nonAdminToken}`);
+      expect(forbidden.status).toBe(403);
+    });
+
+    it('GET lists the seeded users in ListResponse shape (admin)', async () => {
+      const adminToken = await getAdminToken();
+      const res = await request(app).get('/scim/v2/Users').set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.schemas).toContain('urn:ietf:params:scim:api:messages:2.0:ListResponse');
       expect(res.body.totalResults).toBeGreaterThanOrEqual(2);
@@ -549,8 +637,20 @@ describe('oauth-provider E2E', () => {
       expect(userNames).toEqual(expect.arrayContaining(['alice', 'bob']));
     });
 
-    it('POST creates a new user with a SCIM User resource shape', async () => {
+    it('POST without a token is rejected (401), never creates the user', async () => {
       const res = await request(app).post('/scim/v2/Users').send({
+        userName: 'mallory', displayName: 'Should Not Exist',
+      });
+      expect(res.status).toBe(401);
+
+      const adminToken = await getAdminToken();
+      const listRes = await request(app).get('/scim/v2/Users').set('Authorization', `Bearer ${adminToken}`);
+      expect(listRes.body.Resources.map((u) => u.userName)).not.toContain('mallory');
+    });
+
+    it('POST (admin) creates a new user with a SCIM User resource shape', async () => {
+      const adminToken = await getAdminToken();
+      const res = await request(app).post('/scim/v2/Users').set('Authorization', `Bearer ${adminToken}`).send({
         userName: 'carol', displayName: 'Carol Contractor', emails: [{ value: 'carol@opendirectory.local', primary: true }],
       });
       expect(res.status).toBe(201);
@@ -560,109 +660,429 @@ describe('oauth-provider E2E', () => {
       expect(res.body.meta.resourceType).toBe('User');
 
       // Newly created user is immediately visible via GET (list is in-memory, not DB-backed)
-      const listRes = await request(app).get('/scim/v2/Users');
+      const listRes = await request(app).get('/scim/v2/Users').set('Authorization', `Bearer ${adminToken}`);
       expect(listRes.body.Resources.map((u) => u.userName)).toContain('carol');
     });
 
-    it('GET /scim/v2/Users/:id 404s for an unknown id', async () => {
-      const res = await request(app).get('/scim/v2/Users/00000000-0000-0000-0000-000000000000');
+    it('GET /scim/v2/Users/:id 404s for an unknown id (admin)', async () => {
+      const adminToken = await getAdminToken();
+      const res = await request(app).get('/scim/v2/Users/00000000-0000-0000-0000-000000000000').set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(404);
     });
   });
 
-  // ── Security findings ─────────────────────────────────────────────────────
+  // ── Security fixes — regression coverage ─────────────────────────────────
   //
-  // The tests below are intentionally written to assert CURRENT behavior,
-  // not desired/secure behavior. They are green on purpose: they document
-  // real gaps this test-authoring pass surfaced in oauth-provider, so a
-  // future change that "accidentally" locks these down will show up as a
-  // (welcome) test failure here rather than silently changing behavior.
-  // See the test-agent report for full write-up, severity, and suggested
-  // fixes for each. Do NOT read a passing test in this block as "this is
-  // fine" — read it as "this is what happens today".
-  describe('Security findings (documented, not fixed here)', () => {
-    it('[FINDING] GET /api/enrollment/tokens requires no authentication and leaks raw, usable enrollment tokens for every platform', async () => {
-      const res = await request(app).get('/api/enrollment/tokens'); // no Authorization header at all
-      expect(res.status).toBe(200);
-      expect(res.body.find((t) => t.platform === 'windows').token).toMatch(/^WE-/);
-      // Anyone who can reach this service (no service-mesh mTLS boundary
-      // assumed by the code itself) can list and use these tokens to
-      // self-enroll a device on any supported platform.
+  // This block used to be "Security findings (documented, not fixed here)":
+  // four tests that deliberately pinned CURRENT (insecure) behavior so a
+  // future accidental fix would show up as a "surprising" green-to-red
+  // diff. All four gaps have since been fixed (P0 auth pass) — the tests
+  // below assert the SECURE behavior instead, so a regression now shows up
+  // the normal way: a red test.
+  describe('Security fixes — regression coverage', () => {
+    describe('Admin auth on the enrollment-token surface (was: unauthenticated leak)', () => {
+      it('GET /api/enrollment/tokens no longer leaks tokens without authentication', async () => {
+        const res = await request(app).get('/api/enrollment/tokens'); // no Authorization header at all
+        expect(res.status).toBe(401);
+        expect(res.body.token).toBeUndefined();
+      });
     });
 
-    it('[FINDING] POST /api/devices/:deviceId/commands accepts a "wipe" command with no authentication', async () => {
+    describe('Auth on MDM command issuance (was: unauthenticated wipe/lock)', () => {
+      it('POST /api/devices/:deviceId/commands rejects an unauthenticated "wipe" with 401', async () => {
+        const res = await request(app)
+          .post('/api/devices/dev-001/commands') // dev-001 is a real seeded device
+          .send({ command: 'wipe', payload: {} });
+        expect(res.status).toBe(401);
+      });
+
+      it('rejects a wipe from a valid but non-admin, non-internal caller (403)', async () => {
+        const nonAdminToken = await getNonAdminToken();
+        const res = await request(app)
+          .post('/api/devices/dev-001/commands')
+          .set('Authorization', `Bearer ${nonAdminToken}`)
+          .send({ command: 'wipe', payload: {} });
+        expect(res.status).toBe(403);
+      });
+
+      it('an admin token can issue a wipe command', async () => {
+        const adminToken = await getAdminToken();
+        const res = await request(app)
+          .post('/api/devices/dev-001/commands')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ command: 'wipe', payload: {} });
+        expect(res.status).toBe(201);
+        expect(res.body.command).toBe('wipe');
+      });
+
+      // Server-to-server callers (antivirus-protection dispatching AV scans,
+      // policy-service pushing GPO/blueprint MDM commands) have no end-user
+      // JWT to present — they use the shared internal-service-token bypass
+      // instead (src/middleware/oidcAuth.js's allowInternalToken option).
+      describe('internal-service-token bypass', () => {
+        const prevToken = process.env.OAUTH_PROVIDER_INTERNAL_TOKEN;
+        beforeEach(() => { process.env.OAUTH_PROVIDER_INTERNAL_TOKEN = 'e2e-internal-secret'; });
+        afterEach(() => {
+          if (prevToken === undefined) delete process.env.OAUTH_PROVIDER_INTERNAL_TOKEN;
+          else process.env.OAUTH_PROVIDER_INTERNAL_TOKEN = prevToken;
+        });
+
+        it('a correct internal token issues the command with no Authorization header at all', async () => {
+          // update_policy is the command policy-service's GPO/blueprint push
+          // actually sends; run_av_scan (antivirus-protection's real command
+          // name) is not yet in this endpoint's VALID_COMMANDS allowlist —
+          // a separate, pre-existing gap outside this auth fix's scope.
+          const res = await request(app)
+            .post('/api/devices/dev-001/commands')
+            .set('x-oauth-internal-token', 'e2e-internal-secret')
+            .send({ command: 'update_policy', payload: {} });
+          expect(res.status).toBe(201);
+        });
+
+        it('a wrong internal token is rejected (401)', async () => {
+          const res = await request(app)
+            .post('/api/devices/dev-001/commands')
+            .set('x-oauth-internal-token', 'not-the-secret')
+            .send({ command: 'update_policy', payload: {} });
+          expect(res.status).toBe(401);
+        });
+
+        it('the bypass fails closed when OAUTH_PROVIDER_INTERNAL_TOKEN is unset', async () => {
+          delete process.env.OAUTH_PROVIDER_INTERNAL_TOKEN;
+          const res = await request(app)
+            .post('/api/devices/dev-001/commands')
+            .set('x-oauth-internal-token', 'e2e-internal-secret')
+            .send({ command: 'update_policy', payload: {} });
+          expect(res.status).toBe(401);
+        });
+
+        it('a present (even garbage) Bearer token is never silently downgraded to the internal-token path', async () => {
+          const res = await request(app)
+            .post('/api/devices/dev-001/commands')
+            .set('Authorization', 'Bearer not-a-real-jwt')
+            .set('x-oauth-internal-token', 'e2e-internal-secret')
+            .send({ command: 'update_policy', payload: {} });
+          expect(res.status).toBe(403); // JWT verify fails; internal token is not consulted
+        });
+
+        it('GET /api/devices/registry also accepts the internal-token bypass', async () => {
+          const res = await request(app)
+            .get('/api/devices/registry')
+            .set('x-oauth-internal-token', 'e2e-internal-secret');
+          expect(res.status).toBe(200);
+          expect(Array.isArray(res.body)).toBe(true);
+        });
+      });
+    });
+
+    describe('PKCE is now enforced (was: code_verifier accepted but never checked)', () => {
+      function s256Challenge(verifier) {
+        return crypto.createHash('sha256').update(verifier).digest('base64url');
+      }
+
+      it('redeeming a PKCE-protected code with NO code_verifier now fails (400 invalid_grant)', async () => {
+        const loginRes = await request(app).post('/oauth/authorize/login').send({
+          client_id: 'devportal-od-client',
+          redirect_uri: 'http://localhost:4000/callback',
+          scope: 'openid',
+          code_challenge: 'some-s256-challenge-value',
+          code_challenge_method: 'S256',
+          username: 'alice',
+          password: 'whatever',
+        });
+        const code = codeFromRedirect(loginRes.headers.location);
+
+        const tokenRes = await request(app).post('/oauth/token').send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:4000/callback',
+          client_id: 'devportal-od-client',
+          client_secret: 'test-devportal-secret',
+          // code_verifier intentionally omitted
+        });
+        expect(tokenRes.status).toBe(400);
+        expect(tokenRes.body.error).toBe('invalid_grant');
+      });
+
+      it('redeeming with a WRONG code_verifier fails (400 invalid_grant)', async () => {
+        const loginRes = await request(app).post('/oauth/authorize/login').send({
+          client_id: 'devportal-od-client',
+          redirect_uri: 'http://localhost:4000/callback',
+          scope: 'openid',
+          code_challenge: s256Challenge('the-real-verifier'),
+          code_challenge_method: 'S256',
+          username: 'alice',
+          password: 'whatever',
+        });
+        const code = codeFromRedirect(loginRes.headers.location);
+
+        const tokenRes = await request(app).post('/oauth/token').send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:4000/callback',
+          client_id: 'devportal-od-client',
+          client_secret: 'test-devportal-secret',
+          code_verifier: 'a-completely-different-verifier',
+        });
+        expect(tokenRes.status).toBe(400);
+        expect(tokenRes.body.error).toBe('invalid_grant');
+      });
+
+      it('a matching S256 code_verifier succeeds', async () => {
+        const verifier = 'a-valid-code-verifier-1234567890';
+        const loginRes = await request(app).post('/oauth/authorize/login').send({
+          client_id: 'devportal-od-client',
+          redirect_uri: 'http://localhost:4000/callback',
+          scope: 'openid',
+          code_challenge: s256Challenge(verifier),
+          code_challenge_method: 'S256',
+          username: 'alice',
+          password: 'whatever',
+        });
+        const code = codeFromRedirect(loginRes.headers.location);
+
+        const tokenRes = await request(app).post('/oauth/token').send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:4000/callback',
+          client_id: 'devportal-od-client',
+          client_secret: 'test-devportal-secret',
+          code_verifier: verifier,
+        });
+        expect(tokenRes.status).toBe(200);
+        expect(typeof tokenRes.body.access_token).toBe('string');
+      });
+
+      it('a matching plain code_verifier succeeds (code_challenge_method: plain)', async () => {
+        const verifier = 'plain-verifier-used-as-is';
+        const loginRes = await request(app).post('/oauth/authorize/login').send({
+          client_id: 'devportal-od-client',
+          redirect_uri: 'http://localhost:4000/callback',
+          scope: 'openid',
+          code_challenge: verifier, // plain: challenge === verifier
+          code_challenge_method: 'plain',
+          username: 'alice',
+          password: 'whatever',
+        });
+        const code = codeFromRedirect(loginRes.headers.location);
+
+        const tokenRes = await request(app).post('/oauth/token').send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:4000/callback',
+          client_id: 'devportal-od-client',
+          client_secret: 'test-devportal-secret',
+          code_verifier: verifier,
+        });
+        expect(tokenRes.status).toBe(200);
+      });
+
+      it('a code obtained WITHOUT a code_challenge still redeems fine with no verifier (PKCE is optional, not mandatory)', async () => {
+        const loginRes = await request(app).post('/oauth/authorize/login').send({
+          client_id: 'devportal-od-client',
+          redirect_uri: 'http://localhost:4000/callback',
+          scope: 'openid',
+          username: 'alice',
+          password: 'whatever',
+        });
+        const code = codeFromRedirect(loginRes.headers.location);
+
+        const tokenRes = await request(app).post('/oauth/token').send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:4000/callback',
+          client_id: 'devportal-od-client',
+          client_secret: 'test-devportal-secret',
+        });
+        expect(tokenRes.status).toBe(200);
+      });
+    });
+
+    describe('redirect_uri is now re-validated at the token endpoint (was: never checked)', () => {
+      it('a redirect_uri that differs from the one used at /oauth/authorize now fails (400 invalid_grant)', async () => {
+        const loginRes = await request(app).post('/oauth/authorize/login').send({
+          client_id: 'devportal-od-client',
+          redirect_uri: 'http://localhost:4000/callback', // registered URI used at authorize time
+          scope: 'openid',
+          username: 'alice',
+          password: 'whatever',
+        });
+        const code = codeFromRedirect(loginRes.headers.location);
+
+        const tokenRes = await request(app).post('/oauth/token').send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'https://dev.example.com/auth/callback', // a *different* registered URI for the same client
+          client_id: 'devportal-od-client',
+          client_secret: 'test-devportal-secret',
+        });
+        expect(tokenRes.status).toBe(400);
+        expect(tokenRes.body.error).toBe('invalid_grant');
+      });
+
+      it('a matching redirect_uri still succeeds', async () => {
+        const loginRes = await request(app).post('/oauth/authorize/login').send({
+          client_id: 'devportal-od-client',
+          redirect_uri: 'http://localhost:4000/callback',
+          scope: 'openid',
+          username: 'alice',
+          password: 'whatever',
+        });
+        const code = codeFromRedirect(loginRes.headers.location);
+
+        const tokenRes = await request(app).post('/oauth/token').send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:4000/callback',
+          client_id: 'devportal-od-client',
+          client_secret: 'test-devportal-secret',
+        });
+        expect(tokenRes.status).toBe(200);
+      });
+    });
+
+    describe('per-client grantTypes allowlist is now enforced (was: never checked)', () => {
+      it('a client registered only for authorization_code/refresh_token can no longer mint tokens via client_credentials', async () => {
+        // devportal-od-client is seeded WITHOUT client_credentials in grantTypes.
+        const res = await request(app).post('/oauth/token').send({
+          grant_type: 'client_credentials',
+          client_id: 'devportal-od-client',
+          client_secret: 'test-devportal-secret',
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('unauthorized_client');
+      });
+
+      it('a client WITH client_credentials in its allowlist can still use it (grafana-od-client)', async () => {
+        const res = await request(app).post('/oauth/token').send({
+          grant_type: 'client_credentials',
+          client_id: 'grafana-od-client',
+          client_secret: 'test-grafana-secret',
+        });
+        expect(res.status).toBe(200);
+        expect(typeof res.body.access_token).toBe('string');
+      });
+
+      it('a client without the device-code grant in its allowlist cannot use the device flow', async () => {
+        // grafana-od-client's grantTypes are authorization_code/refresh_token/client_credentials only.
+        const codeRes = await request(app).post('/oauth/device/code').send({ client_id: 'grafana-od-client' });
+        const res = await request(app).post('/oauth/token').send({
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+          device_code: codeRes.body.device_code,
+          client_id: 'grafana-od-client',
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('unauthorized_client');
+      });
+
+      it('an entirely unimplemented grant_type still reports unsupported_grant_type, not unauthorized_client', async () => {
+        // Regression guard: the grantTypes allowlist check must only apply to
+        // grant types this server actually implements — 'password' (ROPC)
+        // was never implemented at all and must keep falling through to the
+        // generic unsupported_grant_type response.
+        const res = await request(app).post('/oauth/token').send({
+          grant_type: 'password',
+          client_id: 'grafana-od-client',
+          client_secret: 'test-grafana-secret',
+          username: 'alice',
+          password: 'irrelevant',
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('unsupported_grant_type');
+      });
+    });
+  });
+
+  // ── Admin surface auth enforcement (broad sampling) ──────────────────────
+  //
+  // Representative sweep across the rest of the management surface (client
+  // registry, SCIM groups, device status, SCIM push log/connections/
+  // conflicts, update rings, app-catalog provisioning, package deploy) to
+  // catch a route that was missed when auth was added, without hand-writing
+  // a full request/response test for every single one (the sections above
+  // already cover the highest-severity routes in depth).
+  describe('Admin surface auth enforcement (401 with no bearer token)', () => {
+    const routes = [
+      ['get',    '/api/clients'],
+      ['post',   '/api/clients'],
+      ['put',    '/api/clients/dummy-id'],
+      ['delete', '/api/clients/dummy-id'],
+      ['get',    '/scim/v2/Groups'],
+      ['post',   '/scim/v2/Groups'],
+      ['get',    '/scim/v2/Groups/dummy-id'],
+      ['put',    '/scim/v2/Groups/dummy-id'],
+      ['delete', '/scim/v2/Groups/dummy-id'],
+      ['get',    '/api/devices/registry'],
+      ['put',    '/api/devices/dummy-id/status'],
+      ['get',    '/api/devices/dummy-id/commands'],
+      ['get',    '/api/scim-push/log'],
+      ['get',    '/api/scim/connections'],
+      ['post',   '/api/scim/connections'],
+      ['put',    '/api/scim/connections/dummy-id'],
+      ['delete', '/api/scim/connections/dummy-id'],
+      ['post',   '/api/scim/connections/dummy-id/sync'],
+      ['get',    '/api/scim/connections/dummy-id/log'],
+      ['get',    '/api/scim/conflicts'],
+      ['post',   '/api/scim/conflicts/dummy-id/resolve'],
+      ['get',    '/api/update-rings'],
+      ['put',    '/api/update-rings/stable'],
+      ['post',   '/api/update-rings/stable/assign'],
+      ['post',   '/api/scim-push/someapp/provision'],
+      ['post',   '/api/packages'],
+      ['post',   '/api/packages/pkg-x/deploy/dev-x'],
+      ['post',   '/api/packages/pkg-x/deploy-all'],
+    ];
+
+    it.each(routes)('%s %s -> 401 without a bearer token', async (method, path) => {
+      const res = await request(app)[method](path);
+      expect(res.status).toBe(401);
+    });
+  });
+
+  // ── Device-self routes ────────────────────────────────────────────────────
+  //
+  // These are called by the device agent itself using the long-lived
+  // deviceToken it receives at enrollment (see agent/internal/commands/
+  // executor.go and agent/internal/compliance/checker.go — both already send
+  // `Authorization: Bearer <DeviceToken>`), not an admin token. They require
+  // SOME valid, non-revoked bearer JWT but not the oauth.admin scope/role.
+  describe('Device-self routes require a bearer token (any valid JWT, not admin)', () => {
+    it('GET /api/devices/:id/commands/pending -> 401 with no token', async () => {
+      const res = await request(app).get('/api/devices/dev-001/commands/pending');
+      expect(res.status).toBe(401);
+    });
+
+    it('a freshly-enrolled device token can poll its own pending-commands queue', async () => {
+      const { deviceId, deviceToken } = await enrollDevice();
       const res = await request(app)
-        .post('/api/devices/dev-001/commands') // dev-001 is a real seeded device
-        .send({ command: 'wipe', payload: {} });
-      expect(res.status).toBe(201);
-      expect(res.body.command).toBe('wipe');
-      // No credential of any kind (bearer token, API key, mTLS identity) is
-      // required to queue a remote wipe on an arbitrary enrolled device.
-      // Same applies to lock/unlock/install_app/uninstall_app.
-    });
-
-    it('[FINDING] PKCE code_verifier is accepted but never validated against code_challenge', async () => {
-      // Authorize with a PKCE challenge...
-      const loginRes = await request(app).post('/oauth/authorize/login').send({
-        client_id: 'devportal-od-client',
-        redirect_uri: 'http://localhost:4000/callback',
-        scope: 'openid',
-        code_challenge: 'some-s256-challenge-value',
-        code_challenge_method: 'S256',
-        username: 'alice',
-        password: 'whatever',
-      });
-      const code = codeFromRedirect(loginRes.headers.location);
-
-      // ...then redeem it with NO code_verifier at all (and, separately, a
-      // wrong one would behave identically — the field is read off req.body
-      // in /oauth/token but never compared against the stored challenge).
-      const tokenRes = await request(app).post('/oauth/token').send({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: 'http://localhost:4000/callback',
-        client_id: 'devportal-od-client',
-        client_secret: 'test-devportal-secret',
-        // code_verifier intentionally omitted
-      });
-      expect(tokenRes.status).toBe(200); // RFC 7636 says this exchange should fail without a matching verifier
-      expect(typeof tokenRes.body.access_token).toBe('string');
-    });
-
-    it('[FINDING] the token endpoint does not re-validate redirect_uri against the one used at /oauth/authorize', async () => {
-      const loginRes = await request(app).post('/oauth/authorize/login').send({
-        client_id: 'devportal-od-client',
-        redirect_uri: 'http://localhost:4000/callback', // registered URI used at authorize time
-        scope: 'openid',
-        username: 'alice',
-        password: 'whatever',
-      });
-      const code = codeFromRedirect(loginRes.headers.location);
-
-      const tokenRes = await request(app).post('/oauth/token').send({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: 'https://dev.example.com/auth/callback', // a *different* registered URI for the same client
-        client_id: 'devportal-od-client',
-        client_secret: 'test-devportal-secret',
-      });
-      // RFC 6749 §4.1.3 requires this redirect_uri to match the one from the
-      // authorization request bit-for-bit; the code never compares them.
-      expect(tokenRes.status).toBe(200);
-    });
-
-    it('[FINDING] a client registered only for authorization_code can still mint tokens via client_credentials', async () => {
-      // devportal-od-client is seeded with grantTypes: ['authorization_code'] only.
-      const res = await request(app).post('/oauth/token').send({
-        grant_type: 'client_credentials',
-        client_id: 'devportal-od-client',
-        client_secret: 'test-devportal-secret',
-      });
-      // /oauth/token never checks client.grantTypes for any grant type, so
-      // grant-type restrictions configured via POST /api/clients are not
-      // enforced anywhere.
+        .get(`/api/devices/${deviceId}/commands/pending`)
+        .set('Authorization', `Bearer ${deviceToken}`);
       expect(res.status).toBe(200);
-      expect(typeof res.body.access_token).toBe('string');
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    it('PATCH /api/devices/:id/commands/:cmdId -> 401 with no token', async () => {
+      const res = await request(app).patch('/api/devices/dev-001/commands/some-cmd-id').send({ status: 'completed' });
+      expect(res.status).toBe(401);
+    });
+
+    it('POST /api/devices/:id/compliance-check -> 401 with no token', async () => {
+      const res = await request(app).post('/api/devices/dev-001/compliance-check').send({ settings: {} });
+      expect(res.status).toBe(401);
+    });
+
+    it('a device token can report its own compliance-check', async () => {
+      const { deviceId, deviceToken } = await enrollDevice();
+      const res = await request(app)
+        .post(`/api/devices/${deviceId}/compliance-check`)
+        .set('Authorization', `Bearer ${deviceToken}`)
+        .send({ settings: {}, platform: 'linux' });
+      expect(res.status).toBe(200);
+    });
+
+    it('POST /api/devices/:id/heartbeat -> 401 with no token', async () => {
+      const res = await request(app).post('/api/devices/dev-001/heartbeat').send({});
+      expect(res.status).toBe(401);
     });
   });
 });

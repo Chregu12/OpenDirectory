@@ -331,7 +331,18 @@ class AntivirusProtectionService extends EventEmitter {
                     try {
                         const resp = await fetch(`${OAUTH_PROVIDER_URL}/api/devices/${deviceId}/commands`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                                'Content-Type': 'application/json',
+                                // oauth-provider now requires auth on this route (P0 fix —
+                                // it previously accepted unauthenticated wipe/lock/etc MDM
+                                // commands); this server-to-server call has no end-user JWT
+                                // in hand, so it presents the shared internal-service token
+                                // instead (see services/core/oauth-provider/src/middleware/
+                                // oidcAuth.js's allowInternalToken option).
+                                ...(process.env.OAUTH_PROVIDER_INTERNAL_TOKEN
+                                    ? { 'x-oauth-internal-token': process.env.OAUTH_PROVIDER_INTERNAL_TOKEN }
+                                    : {}),
+                            },
                             body: JSON.stringify({ command: 'run_av_scan', payload: { scanType, paths } }),
                         });
                         dispatched.push({ deviceId, status: resp.ok ? 'queued' : 'error', httpStatus: resp.status });
