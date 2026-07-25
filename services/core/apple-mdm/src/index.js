@@ -17,6 +17,7 @@ const helmet = require('helmet');
 const { v4: uuidv4 } = require('uuid');
 const { Pool } = require('pg');
 const { XMLParser, XMLBuilder } = require('fast-xml-parser');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 // ─── Prometheus metrics ───────────────────────────────────────────────────────
 
@@ -585,6 +586,35 @@ app.use('/api', express.json({ limit: '1mb' }));
 app.use(cors());
 app.use(helmet({ contentSecurityPolicy: false }));
 
+// ─── P0 fix: authentication ───────────────────────────────────────────────────
+//
+// apple-mdm previously had NO HTTP authentication at all — any unauthenticated
+// caller on the network could POST /api/mdm/devices/:udid/wipe (Apple
+// EraseDevice — full remote destruction of an enrolled device), .../lock
+// (DeviceLock), and ~13 further mutating endpoints (command enqueue, blueprint
+// apply, profile install/remove, DEP assignment, MDM push-cert config). Every
+// route now requires a verified OIDC JWT (see middleware/oidcAuth.js), except:
+//   - /health, /metrics: liveness/readiness probe and Prometheus scrape —
+//     no credentials available to either caller.
+//   - /mdm/*: the Apple MDM protocol endpoints (GET /mdm/enroll enrollment
+//     profile download, PUT /mdm/checkin device check-in, PUT /mdm/commands
+//     command polling/result-reporting). Real Apple devices call these
+//     directly per Apple's MDM spec and authenticate via their enrollment
+//     identity certificate / the Apple-defined check-in handshake — they
+//     carry no OIDC/OAuth user token and cannot be made to send one (Apple,
+//     not this codebase, controls that HTTP client). Putting oidcAuth in
+//     front of /mdm/* would not add real security here (this codebase does
+//     not implement MDM client-certificate verification, which is the
+//     actual trust boundary for that protocol) and WOULD break every
+//     enrolled device's check-in/command flow. See middleware/oidcAuth.js
+//     file header for the full rationale.
+//
+// Every mutating /api/mdm/* route (lock, wipe, push, install/remove profile,
+// blueprint apply, DEP assign, profile create/delete, MDM config) additionally
+// requires the admin role/scope via requireAdmin — a verified JWT only proves
+// *who* is asking, not that they're allowed to remote-wipe a device.
+app.use(oidcAuth({ skipPaths: ['/health', '/metrics', '/mdm'] }));
+
 // Prometheus request tracking
 app.use((req, res, next) => {
   const start = Date.now();
@@ -870,7 +900,7 @@ app.get('/api/mdm/devices', async (req, res) => {
 });
 
 // POST /api/mdm/devices/:udid/push — trigger APNs push to wake device
-app.post('/api/mdm/devices/:udid/push', async (req, res) => {
+app.post('/api/mdm/devices/:udid/push', requireAdmin, async (req, res) => {
   const { udid } = req.params;
   try {
     const device = await getDevice(udid);
@@ -886,7 +916,7 @@ app.post('/api/mdm/devices/:udid/push', async (req, res) => {
 });
 
 // POST /api/mdm/devices/:udid/lock — queue DeviceLock command
-app.post('/api/mdm/devices/:udid/lock', async (req, res) => {
+app.post('/api/mdm/devices/:udid/lock', requireAdmin, async (req, res) => {
   const { udid } = req.params;
   const { pin, message } = req.body || {};
   try {
@@ -912,7 +942,7 @@ app.post('/api/mdm/devices/:udid/lock', async (req, res) => {
 });
 
 // POST /api/mdm/devices/:udid/wipe — queue EraseDevice command
-app.post('/api/mdm/devices/:udid/wipe', async (req, res) => {
+app.post('/api/mdm/devices/:udid/wipe', requireAdmin, async (req, res) => {
   const { udid } = req.params;
   const { pin } = req.body || {};
   try {
@@ -936,7 +966,7 @@ app.post('/api/mdm/devices/:udid/wipe', async (req, res) => {
 });
 
 // POST /api/mdm/devices/:udid/install-app — queue InstallApplication command
-app.post('/api/mdm/devices/:udid/install-app', async (req, res) => {
+app.post('/api/mdm/devices/:udid/install-app', requireAdmin, async (req, res) => {
   const { udid } = req.params;
   const { manifest_url, identifier, options } = req.body || {};
   if (!manifest_url) {
@@ -964,7 +994,7 @@ app.post('/api/mdm/devices/:udid/install-app', async (req, res) => {
 });
 
 // POST /api/mdm/devices/:udid/install-profile — queue InstallProfile command
-app.post('/api/mdm/devices/:udid/install-profile', async (req, res) => {
+app.post('/api/mdm/devices/:udid/install-profile', requireAdmin, async (req, res) => {
   const { udid } = req.params;
   const { profile_payload } = req.body || {};
   if (!profile_payload) {
@@ -989,7 +1019,7 @@ app.post('/api/mdm/devices/:udid/install-profile', async (req, res) => {
 });
 
 // POST /api/mdm/devices/:udid/remove-profile — queue RemoveProfile command
-app.post('/api/mdm/devices/:udid/remove-profile', async (req, res) => {
+app.post('/api/mdm/devices/:udid/remove-profile', requireAdmin, async (req, res) => {
   const { udid } = req.params;
   const { identifier } = req.body || {};
   if (!identifier) {
@@ -1014,7 +1044,7 @@ app.post('/api/mdm/devices/:udid/remove-profile', async (req, res) => {
 
 // ─── Blueprint Apply ─ POST /api/mdm/blueprints/:blueprintId/apply ────────────
 
-app.post('/api/mdm/blueprints/:blueprintId/apply', async (req, res) => {
+app.post('/api/mdm/blueprints/:blueprintId/apply', requireAdmin, async (req, res) => {
   const { blueprintId } = req.params;
   const { deviceIds } = req.body || {};
 
@@ -1140,7 +1170,7 @@ app.get('/api/mdm/dep/devices', (req, res) => {
 
 // ─── DEP Assign ─ POST /api/mdm/dep/assign ───────────────────────────────────
 
-app.post('/api/mdm/dep/assign', (req, res) => {
+app.post('/api/mdm/dep/assign', requireAdmin, (req, res) => {
   const { serialNumbers, blueprintId } = req.body || {};
   if (!Array.isArray(serialNumbers) || serialNumbers.length === 0) {
     return res.status(400).json({ error: 'serialNumbers array is required' });
@@ -1175,7 +1205,7 @@ app.get('/api/mdm/profiles', async (req, res) => {
 });
 
 // POST /api/mdm/profiles — create a new profile
-app.post('/api/mdm/profiles', async (req, res) => {
+app.post('/api/mdm/profiles', requireAdmin, async (req, res) => {
   const { name, description, payload_type, payload } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name is required' });
   try {
@@ -1188,7 +1218,7 @@ app.post('/api/mdm/profiles', async (req, res) => {
 });
 
 // DELETE /api/mdm/profiles/:profileId
-app.delete('/api/mdm/profiles/:profileId', async (req, res) => {
+app.delete('/api/mdm/profiles/:profileId', requireAdmin, async (req, res) => {
   const { profileId } = req.params;
   try {
     const deleted = await deleteProfile(profileId);
@@ -1214,7 +1244,7 @@ app.get('/api/mdm/config', (req, res) => {
 // In-memory config store (persisted to env-overrides file in production via volume mount)
 let runtimeConfig = {};
 
-app.post('/api/mdm/config', async (req, res) => {
+app.post('/api/mdm/config', requireAdmin, async (req, res) => {
   const { topic, serverUrl, orgName, apnsCert, apnsKey } = req.body || {};
 
   if (topic)     runtimeConfig.APNS_TOPIC    = topic;
@@ -1260,23 +1290,32 @@ async function start() {
   apnsProvider = initApns();
   connectBus();
 
-  app.listen(PORT, () => {
-    console.log(`[apple-mdm] Apple MDM server listening on port ${PORT}`);
-    console.log(`[apple-mdm] Enrollment profile: GET ${MDM_SERVER_URL}/mdm/enroll`);
-    console.log(`[apple-mdm] Check-in endpoint:  PUT ${MDM_SERVER_URL}/mdm/checkin`);
-    console.log(`[apple-mdm] Command endpoint:   PUT ${MDM_SERVER_URL}/mdm/commands`);
-    console.log(`[apple-mdm] Admin API:          ${MDM_SERVER_URL}/api/mdm/devices`);
-    console.log(`[apple-mdm] DB backend:         ${dbReady ? 'PostgreSQL' : 'in-memory (no persistence)'}`);
-    console.log(`[apple-mdm] APNs push:          ${apnsProvider ? 'enabled' : 'disabled (APNS_CERT/APNS_KEY/APNS_TOPIC not set)'}`);
+  return new Promise(resolve => {
+    const server = app.listen(PORT, () => {
+      console.log(`[apple-mdm] Apple MDM server listening on port ${PORT}`);
+      console.log(`[apple-mdm] Enrollment profile: GET ${MDM_SERVER_URL}/mdm/enroll`);
+      console.log(`[apple-mdm] Check-in endpoint:  PUT ${MDM_SERVER_URL}/mdm/checkin`);
+      console.log(`[apple-mdm] Command endpoint:   PUT ${MDM_SERVER_URL}/mdm/commands`);
+      console.log(`[apple-mdm] Admin API:          ${MDM_SERVER_URL}/api/mdm/devices`);
+      console.log(`[apple-mdm] DB backend:         ${dbReady ? 'PostgreSQL' : 'in-memory (no persistence)'}`);
+      console.log(`[apple-mdm] APNs push:          ${apnsProvider ? 'enabled' : 'disabled (APNS_CERT/APNS_KEY/APNS_TOPIC not set)'}`);
+      resolve(server);
+    });
   });
 }
 
-start().catch(err => {
-  console.error('[apple-mdm] Fatal startup error:', err);
-  process.exit(1);
-});
+// Only auto-start when run directly (docker entrypoint: `node src/index.js`).
+// When required as a module — e.g. by the e2e test suite, which needs to
+// mock pg *before* start() runs and needs the returned server handle to
+// close it after tests — the caller drives start() itself.
+if (require.main === module) {
+  start().catch(err => {
+    console.error('[apple-mdm] Fatal startup error:', err);
+    process.exit(1);
+  });
 
-process.on('SIGTERM', () => { pgPool.end().catch(() => {}); process.exit(0); });
-process.on('SIGINT',  () => { pgPool.end().catch(() => {}); process.exit(0); });
+  process.on('SIGTERM', () => { pgPool.end().catch(() => {}); process.exit(0); });
+  process.on('SIGINT',  () => { pgPool.end().catch(() => {}); process.exit(0); });
+}
 
-module.exports = app;
+module.exports = { app, start };
