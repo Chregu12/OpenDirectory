@@ -204,6 +204,13 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/oauth
+      # Shared secret checked by oidcAuth's internal-token bypass (see
+      # src/middleware/oidcAuth.js) on the /api/devices admin endpoints —
+      # accepted via the x-oauth-internal-token header from other services
+      # (e.g. antivirus-protection, policy-service) making server-to-server
+      # calls. No JWKS_URI here: oauth-provider verifies/signs against its
+      # own in-process key, it is the issuer.
+      - OAUTH_PROVIDER_INTERNAL_TOKEN=${OAUTH_PROVIDER_INTERNAL_TOKEN:-}
     ports:
       - "3015:3010"
     networks:
@@ -248,6 +255,10 @@ services:
       # Shared enrollment secret (X-Enrollment-Token) — samba-ad-dc attaches
       # this header when calling device-service's enrollment endpoints.
       - DEVICE_ENROLLMENT_TOKEN=${DEVICE_ENROLLMENT_TOKEN:-}
+      # Appended (agent_token query param) to the app-store download URL
+      # device-service builds for agents (see src/index.js); must match
+      # APPSTORE_AGENT_TOKEN on the app-store service above.
+      - APPSTORE_AGENT_TOKEN=${APPSTORE_AGENT_TOKEN:-}
     ports:
       - "3003:3003"
     networks:
@@ -284,6 +295,10 @@ services:
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/policy
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - DEVICE_SERVICE_URL=http://device-service:3003
+      # Sent as x-oauth-internal-token on outbound GPO/blueprint-push calls
+      # to oauth-provider (see src/index.js); must match
+      # OAUTH_PROVIDER_INTERNAL_TOKEN on the oauth-provider service above.
+      - OAUTH_PROVIDER_INTERNAL_TOKEN=${OAUTH_PROVIDER_INTERNAL_TOKEN:-}
     ports:
       - "3004:3004"
     networks:
@@ -507,6 +522,11 @@ services:
       - BIND_CONFIG_PATH=/etc/bind
       - DHCP_CONFIG_PATH=/etc/dhcp
       - SAMBA_CONFIG_PATH=/etc/samba
+      # OIDC token verification (oidcAuth middleware) — must match
+      # oauth-provider's issuer claim, same convention as apple-mdm/
+      # kerberos-kdc above.
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
     ports:
       - "3007:3007"
     networks:
@@ -803,6 +823,18 @@ services:
       NODE_ENV: production
       DEVICE_SERVICE_URL: http://device-service:3003
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      # OIDC token verification (oidcAuth middleware) — must match
+      # oauth-provider's issuer claim, same convention as apple-mdm/
+      # kerberos-kdc above.
+      OIDC_ISSUER: ${OAUTH_ISSUER:-https://opendirectory.local}
+      JWKS_URI: http://oauth-provider:3010/.well-known/jwks.json
+      # Sent as x-oauth-internal-token on outbound calls to oauth-provider
+      # (see src/index.js); must match OAUTH_PROVIDER_INTERNAL_TOKEN on the
+      # oauth-provider service below.
+      OAUTH_PROVIDER_INTERNAL_TOKEN: ${OAUTH_PROVIDER_INTERNAL_TOKEN:-}
+      # Shared agent-report bypass (x-enrollment-token) for device agent
+      # callbacks — mirrors device-service's DEVICE_ENROLLMENT_TOKEN.
+      DEVICE_ENROLLMENT_TOKEN: ${DEVICE_ENROLLMENT_TOKEN:-}
     ports:
       - "3905:3905"
     networks:
@@ -863,6 +895,15 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       DEVICE_SERVICE_URL: http://device-service:3003
       LLDAP_URL: http://lldap:17170
+      # OIDC token verification (oidcAuth middleware) — must match
+      # oauth-provider's issuer claim, same convention as apple-mdm/
+      # kerberos-kdc above.
+      OIDC_ISSUER: ${OAUTH_ISSUER:-https://opendirectory.local}
+      JWKS_URI: http://oauth-provider:3010/.well-known/jwks.json
+      # Shared device/agent-callback bypass (x-appstore-agent-token or
+      # ?agent_token=) for the app download endpoint — must match
+      # APPSTORE_AGENT_TOKEN on device-service below.
+      APPSTORE_AGENT_TOKEN: ${APPSTORE_AGENT_TOKEN:-}
     ports:
       - "3906:3906"
     networks:
@@ -896,6 +937,11 @@ services:
       DB_NAME: least_privilege
       DB_USER: ${DB_USER:-opendirectory}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      # OIDC token verification (oidcAuth middleware) — must match
+      # oauth-provider's issuer claim, same convention as apple-mdm/
+      # kerberos-kdc above.
+      OIDC_ISSUER: ${OAUTH_ISSUER:-https://opendirectory.local}
+      JWKS_URI: http://oauth-provider:3010/.well-known/jwks.json
     ports:
       - "3011:3011"
     networks:
@@ -1000,6 +1046,18 @@ services:
       - DB_NAME=mdm
       - DB_USER=${DB_USER:-opendirectory}
       - DB_PASSWORD=${DB_PASSWORD}
+      # P0 auth fix: every /api/mdm/* admin route now requires a verified
+      # OIDC JWT, and mutating routes (wipe/lock/push/install-app/
+      # install-profile/remove-profile/blueprint-apply/DEP-assign/profile
+      # CRUD/config) additionally require the admin role (see
+      # src/middleware/oidcAuth.js). The Apple MDM protocol endpoints under
+      # /mdm/* (enrollment, check-in, command polling) are deliberately left
+      # unauthenticated here — real Apple devices authenticate via their
+      # enrollment identity certificate, not an OIDC JWT; see
+      # src/middleware/oidcAuth.js for the full rationale. Mirrors
+      # kerberos-kdc's JWKS_URI/OIDC_ISSUER wiring below.
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
     depends_on:
       postgres:
         condition: service_healthy
