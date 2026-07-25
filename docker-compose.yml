@@ -431,6 +431,8 @@ services:
       - GRAFANA_URL=${GRAFANA_URL:-http://grafana:3000}
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://prometheus:9090}
       - VAULT_URL=${VAULT_URL:-http://vault:8200}
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
     ports:
       - "4000:4000"
     networks:
@@ -730,6 +732,8 @@ services:
       DEVICE_SERVICE_URL: http://device-service:3003
       AUTH_SERVICE_URL: http://auth-service:3002
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      OIDC_ISSUER: ${OAUTH_ISSUER:-https://opendirectory.local}
+      JWKS_URI: http://oauth-provider:3010/.well-known/jwks.json
     ports:
       - "3900:3900"
     networks:
@@ -753,6 +757,8 @@ services:
       NODE_ENV: production
       DEVICE_SERVICE_URL: http://device-service:3003
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      OIDC_ISSUER: ${OAUTH_ISSUER:-https://opendirectory.local}
+      JWKS_URI: http://oauth-provider:3010/.well-known/jwks.json
     ports:
       - "3901:3901"
     networks:
@@ -777,6 +783,8 @@ services:
       DEVICE_SERVICE_URL: http://device-service:3003
       AUTH_SERVICE_URL: http://auth-service:3002
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      OIDC_ISSUER: ${OAUTH_ISSUER:-https://opendirectory.local}
+      JWKS_URI: http://oauth-provider:3010/.well-known/jwks.json
     ports:
       - "3902:3902"
     networks:
@@ -800,6 +808,8 @@ services:
       NODE_ENV: production
       DEVICE_SERVICE_URL: http://device-service:3003
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      OIDC_ISSUER: ${OAUTH_ISSUER:-https://opendirectory.local}
+      JWKS_URI: http://oauth-provider:3010/.well-known/jwks.json
     ports:
       - "3903:3903"
     networks:
@@ -859,6 +869,8 @@ services:
       DEVICE_SERVICE_URL: http://device-service:3003
       SECURITY_SCANNER_URL: http://security-scanner:3902
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      OIDC_ISSUER: ${OAUTH_ISSUER:-https://opendirectory.local}
+      JWKS_URI: http://oauth-provider:3010/.well-known/jwks.json
     ports:
       - "3904:3904"
     networks:
