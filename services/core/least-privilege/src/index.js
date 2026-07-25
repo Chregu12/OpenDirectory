@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./db');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 const promClient = require('prom-client');
 const register = new promClient.Registry();
@@ -60,6 +61,16 @@ app.get('/metrics', async (req, res) => {
   res.setHeader('Content-Type', register.contentType);
   res.send(await register.metrics());
 });
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+//
+// Every route below (other than /health and /metrics) manages or reveals
+// privilege state — the permission matrix, permission assignment, and PIM
+// elevation — so all of it requires a verified bearer token. Assigning a
+// permission and approving/denying a PIM elevation request additionally
+// require an admin role (see requireAdmin on those specific routes below);
+// oidcAuth alone only proves *who* is asking.
+app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
 
 // ─── Permission Model ─────────────────────────────────────────────────────────
 
@@ -181,7 +192,7 @@ app.get('/api/permissions/users/:userId', (req, res) => {
   res.json({ userId: req.params.userId, name: rec.name, role: rec.role, permissions: perms, riskScore: calcRiskScore(req.params.userId) });
 });
 
-app.post('/api/permissions/users/:userId/assign', (req, res) => {
+app.post('/api/permissions/users/:userId/assign', requireAdmin, (req, res) => {
   const { resource, level } = req.body;
   if (!RESOURCES.includes(resource)) return res.status(400).json({ error: 'invalid resource' });
   if (!LEVELS.includes(level)) return res.status(400).json({ error: 'invalid level' });
@@ -276,32 +287,102 @@ app.get('/api/permissions/risk-scores', (req, res) => {
 // PermissionsView.tsx (frontend/web-app/src/components/views/PermissionsView.tsx)
 // is the sole consumer and has been updated to match this prefix.
 
+// ─── PIM Persistence Helpers ───────────────────────────────────────────────
+//
+// create/approve/deny/get all branch on db.isAvailable() the *same* way, so
+// a request created while the DB is up is the exact row approve/deny later
+// mutate (and vice versa for the in-memory fallback). Previously the POST
+// handler unconditionally wrote to the in-memory Map regardless of
+// db.isAvailable(), while approve() unconditionally consulted Postgres when
+// available — so with a real DB configured, db.createPimRequest was never
+// called, pim_requests stayed empty, and every approval 404'd against a
+// request that only ever existed in memory. denyPimRequest had the same
+// problem (never called at all). Fixed by giving create/approve/deny an
+// identical db.isAvailable() branch, each backed by the same store.
+
+const DEFAULT_ELEVATION_LEVEL = 'write'; // matches the level active elevations grant — see getEffectivePermissions
+
+function lookupUserName(userId) {
+  return userPermissions.get(userId)?.name ?? userId;
+}
+
+function toIso(value) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+// Normalizes a raw Postgres pim_requests row (snake_case, no user_name
+// column) into the same shape the in-memory fallback already produces.
+// Also tolerates db.approvePimRequest's return value, which merges the
+// pre-update row with a camelCase `expiresAt` override.
+function toApiPimRequest(row) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    userName: lookupUserName(row.user_id),
+    resource: row.resource,
+    duration_hours: row.duration_hours,
+    reason: row.justification ?? '',
+    status: row.status,
+    createdAt: toIso(row.requested_at),
+    expiresAt: toIso(row.expiresAt ?? row.expires_at),
+  };
+}
+
+// The identity performing the request, from the verified JWT (see
+// src/middleware/oidcAuth.js). Used below to block a requester from
+// approving their own PIM elevation request, even if they also hold an
+// admin role — a verified JWT + an admin role only proves *who* is asking
+// and *that* they're an admin, not that this specific approval is
+// independent of the request.
+function callerIdentity(req) {
+  return req.user?.sub ?? req.user?.preferred_username ?? req.user?.userId ?? null;
+}
+
 app.get('/api/pim/elevation/requests', async (req, res) => {
   if (db.isAvailable()) {
     try {
       const rows = await db.getPimRequests(req.query.status);
-      return res.json(rows);
+      return res.json(rows.map(toApiPimRequest));
     } catch (err) { console.error('[pim-get-db]', err.message); }
   }
   res.json([...pimRequests.values()]);
 });
 
-app.post('/api/pim/elevation/request', (req, res) => {
-  const { userId, resource, duration_hours, reason } = req.body;
+app.post('/api/pim/elevation/request', async (req, res) => {
+  const { userId, resource, duration_hours, reason, level } = req.body;
   if (!userId || !resource || !duration_hours) return res.status(400).json({ error: 'userId, resource, duration_hours required' });
   const id = uuidv4();
-  const rec = userPermissions.get(userId);
-  const request = { id, userId, userName: rec?.name ?? userId, resource, duration_hours, reason: reason ?? '', status: 'pending', createdAt: new Date().toISOString(), expiresAt: null };
+  const elevationLevel = level ?? DEFAULT_ELEVATION_LEVEL;
+
+  if (db.isAvailable()) {
+    try {
+      const row = await db.createPimRequest(id, userId, lookupUserName(userId), resource, elevationLevel, reason ?? '', duration_hours);
+      return res.status(201).json(toApiPimRequest(row));
+    } catch (err) {
+      console.error('[pim-create-db]', err.message);
+    }
+  }
+  // In-memory fallback
+  const request = { id, userId, userName: lookupUserName(userId), resource, duration_hours, reason: reason ?? '', status: 'pending', createdAt: new Date().toISOString(), expiresAt: null };
   pimRequests.set(id, request);
   res.status(201).json(request);
 });
 
-app.put('/api/pim/elevation/requests/:id/approve', async (req, res) => {
+app.put('/api/pim/elevation/requests/:id/approve', requireAdmin, async (req, res) => {
+  const caller = callerIdentity(req);
+
   if (db.isAvailable()) {
     try {
-      const result = await db.approvePimRequest(req.params.id, req.body.approvedBy || 'admin');
+      const target = await db.getPimRequestById(req.params.id);
+      if (!target) return res.status(404).json({ error: 'Request not found' });
+      if (caller && caller === target.user_id) {
+        return res.status(403).json({ error: 'forbidden', message: 'cannot approve your own elevation request' });
+      }
+      if (target.status !== 'pending') return res.status(400).json({ error: 'Request already processed' });
+      const result = await db.approvePimRequest(req.params.id, caller || req.body.approvedBy || 'admin');
       if (!result) return res.status(404).json({ error: 'Request not found' });
-      return res.json(result);
+      return res.json(toApiPimRequest(result));
     } catch (err) {
       console.error('[pim-approve-db]', err.message);
     }
@@ -309,6 +390,9 @@ app.put('/api/pim/elevation/requests/:id/approve', async (req, res) => {
   // In-memory fallback
   const request = pimRequests.get(req.params.id);
   if (!request) return res.status(404).json({ error: 'Request not found' });
+  if (caller && caller === request.userId) {
+    return res.status(403).json({ error: 'forbidden', message: 'cannot approve your own elevation request' });
+  }
   if (request.status !== 'pending') return res.status(400).json({ error: 'Request already processed' });
   request.status = 'approved';
   const expiresAt = Date.now() + request.duration_hours * 3600_000;
@@ -318,7 +402,17 @@ app.put('/api/pim/elevation/requests/:id/approve', async (req, res) => {
   res.json(request);
 });
 
-app.put('/api/pim/elevation/requests/:id/deny', (req, res) => {
+app.put('/api/pim/elevation/requests/:id/deny', requireAdmin, async (req, res) => {
+  if (db.isAvailable()) {
+    try {
+      const result = await db.denyPimRequest(req.params.id);
+      if (!result) return res.status(404).json({ error: 'Request not found' });
+      return res.json(toApiPimRequest(result));
+    } catch (err) {
+      console.error('[pim-deny-db]', err.message);
+    }
+  }
+  // In-memory fallback
   const request = pimRequests.get(req.params.id);
   if (!request) return res.status(404).json({ error: 'Request not found' });
   request.status = 'denied';

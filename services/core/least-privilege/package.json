@@ -13,9 +13,10 @@
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
+    "jose": "^5.10.0",
     "pg": "^8.11.0",
-    "uuid": "^9.0.0",
-    "prom-client": "^15.1.0"
+    "prom-client": "^15.1.0",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",

@@ -73,6 +73,11 @@ async function getPimRequests(status) {
   return result.rows;
 }
 
+async function getPimRequestById(id) {
+  const result = await query('SELECT * FROM pim_requests WHERE id=$1', [id]);
+  return result.rows[0] || null;
+}
+
 async function createPimRequest(id, userId, userName, resource, level, justification, durationHours) {
   const result = await query(`
     INSERT INTO pim_requests(id, user_id, resource, level, justification, duration_hours, status)
@@ -130,4 +135,4 @@ async function getEscalationAlerts() {
   return result.rows;
 }
 
-module.exports = { initDb, query, isAvailable, pool, getPermissionMatrix, upsertPermission, getPimRequests, createPimRequest, approvePimRequest, denyPimRequest, getActiveElevations, insertEscalationAlert, getEscalationAlerts };
+module.exports = { initDb, query, isAvailable, pool, getPermissionMatrix, upsertPermission, getPimRequests, getPimRequestById, createPimRequest, approvePimRequest, denyPimRequest, getActiveElevations, insertEscalationAlert, getEscalationAlerts };
