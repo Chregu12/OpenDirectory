@@ -33,9 +33,21 @@ import {
   NoSymbolIcon,
 } from '@heroicons/react/24/outline';
 import { appStoreApi } from '@/lib/api';
+import { getAccessToken } from '@/lib/auth';
 import { useUiMode } from '@/lib/ui-mode';
 import SimpleViewLayout from '@/components/shared/SimpleViewLayout';
 import toast from 'react-hot-toast';
+
+// app-store's /api/appstore/* routes now require an OIDC bearer token (see
+// the app-store auth audit — the service previously had zero HTTP auth).
+// This view talks to those routes via raw fetch() rather than the `api`
+// axios instance (lib/api.ts), which doesn't automatically attach the
+// Authorization header, so every /api/appstore/* fetch below must build its
+// own headers via this helper (mirrors buildHeaders() in lib/quickActionsApi.ts).
+function appStoreAuthHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = getAccessToken();
+  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extra };
+}
 
 // --- Types ---
 interface StoreApp {
@@ -281,7 +293,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
       let summary = packageSummaries[app.id];
       if (!summary) {
         try {
-          const r = await fetch(`/api/appstore/apps/${app.id}/packages/summary`);
+          const r = await fetch(`/api/appstore/apps/${app.id}/packages/summary`, { headers: appStoreAuthHeaders() });
           if (r.ok) { summary = await r.json(); setPackageSummaries(prev => ({ ...prev, [app.id]: summary })); }
         } catch {}
       }
@@ -398,7 +410,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
 
   const loadDeployments = useCallback(async () => {
     try {
-      const res = await fetch('/api/appstore/deployments');
+      const res = await fetch('/api/appstore/deployments', { headers: appStoreAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setDeployments(data.deployments || []);
@@ -414,7 +426,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
 
   const handleCancelDeployment = async (deploymentId: string) => {
     try {
-      const res = await fetch(`/api/appstore/deployments/${deploymentId}/cancel`, { method: 'PUT' });
+      const res = await fetch(`/api/appstore/deployments/${deploymentId}/cancel`, { method: 'PUT', headers: appStoreAuthHeaders() });
       if (res.ok) {
         toast.success('Deployment abgebrochen');
         loadDeployments();
@@ -430,7 +442,7 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
   // --- Package distribution helpers ---
   const loadPackageSummary = async (appId: string) => {
     try {
-      const res = await fetch(`/api/appstore/apps/${appId}/packages/summary`);
+      const res = await fetch(`/api/appstore/apps/${appId}/packages/summary`, { headers: appStoreAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setPackageSummaries(prev => ({ ...prev, [appId]: data }));
@@ -455,7 +467,9 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
       form.append('version', pkgVersion);
       form.append('architecture', pkgArch);
       form.append('release_notes', pkgReleaseNotes);
-      const res = await fetch(`/api/appstore/apps/${packageTarget.id}/packages`, { method: 'POST', body: form });
+      // Don't set Content-Type manually — the browser needs to add its own
+      // multipart boundary for FormData; only attach the Authorization header.
+      const res = await fetch(`/api/appstore/apps/${packageTarget.id}/packages`, { method: 'POST', headers: appStoreAuthHeaders(), body: form });
       if (res.ok) {
         toast.success('Paket hochgeladen');
         setPkgFile(null); setPkgVersion('');
@@ -471,16 +485,29 @@ export default function AppStoreView({ onOpenWizard }: AppStoreViewProps) {
     }
   };
 
-  const handlePackageDownload = (pkg: AppPackage) => {
-    const a = document.createElement('a');
-    a.href = `/api/appstore/packages/${pkg.id}/download`;
-    a.download = pkg.filename;
-    a.click();
+  const handlePackageDownload = async (pkg: AppPackage) => {
+    // A plain <a href> navigation can't carry an Authorization header, and
+    // this route now requires one (or the device-agent token — see
+    // app-store's oidcAuth middleware). Fetch as a blob with the header
+    // attached instead, then trigger the save via an object URL.
+    try {
+      const res = await fetch(`/api/appstore/packages/${pkg.id}/download`, { headers: appStoreAuthHeaders() });
+      if (!res.ok) { toast.error('Download fehlgeschlagen'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = pkg.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Download fehlgeschlagen');
+    }
   };
 
   const handlePackageDelete = async (pkgId: string, appId: string) => {
     try {
-      const res = await fetch(`/api/appstore/packages/${pkgId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/appstore/packages/${pkgId}`, { method: 'DELETE', headers: appStoreAuthHeaders() });
       if (res.ok) {
         toast.success('Paket gelöscht');
         loadPackageSummary(appId);
@@ -1689,7 +1716,7 @@ function DeployModal({
     try {
       const res = await fetch(`/api/appstore/apps/${app.id}/deploy`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: appStoreAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           targets,
           mandatory,

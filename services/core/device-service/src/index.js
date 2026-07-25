@@ -1440,9 +1440,23 @@ class EnterpriseDeviceManagementService {
         return res.status(400).json({ error: 'packageId oder downloadUrl erforderlich' });
       }
 
-      // Build the download URL if only packageId given
+      // Build the download URL if only packageId given.
+      //
+      // app-store's package-download route now requires either an OIDC
+      // Bearer token or the shared APPSTORE_AGENT_TOKEN (see app-store's
+      // auth audit and src/middleware/oidcAuth.js — that route used to be
+      // completely unauthenticated). The device agent that actually issues
+      // the GET has no OIDC identity of its own and downloads via a bare
+      // URL it cannot attach custom headers to, so the token has to travel
+      // as a query parameter here, appended by the one caller (this
+      // service) that holds the shared secret. Left unset, this becomes a
+      // no-op (`?agent_token=` is omitted) and app-store will correctly
+      // 401 the download — fail closed, not silently public, if ops never
+      // configured APPSTORE_AGENT_TOKEN on both services.
       const APP_STORE_URL = process.env.APP_STORE_URL || 'http://app-store';
-      const pkgDownloadUrl = downloadUrl || `${APP_STORE_URL}/api/appstore/packages/${packageId}/download`;
+      const APPSTORE_AGENT_TOKEN = process.env.APPSTORE_AGENT_TOKEN || '';
+      const agentTokenQuery = APPSTORE_AGENT_TOKEN ? `?agent_token=${encodeURIComponent(APPSTORE_AGENT_TOKEN)}` : '';
+      const pkgDownloadUrl = downloadUrl || `${APP_STORE_URL}/api/appstore/packages/${packageId}/download${agentTokenQuery}`;
 
       // Persist the job — DDD-wired via InstallApplicationService (in-memory
       // source of truth + best-effort Postgres durability write; see that
