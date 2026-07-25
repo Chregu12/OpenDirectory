@@ -657,6 +657,22 @@ class DNSManager extends EventEmitter {
     return this.dnsServer && this.zones.size > 0;
   }
 
+  // Added alongside the auth fix: src/index.js's circuit breaker setup does
+  // `new CircuitBreaker(this.dnsManager.performOperation.bind(this.dnsManager), ...)`
+  // unconditionally at construction time, and GET /health calls
+  // getHealthStatus() unconditionally — neither method previously existed on
+  // this class, so both would throw/degrade before this fix. The circuit
+  // breaker built from performOperation is never actually `.fire()`d
+  // anywhere in the codebase today, so this only needs to exist, not do
+  // anything meaningful yet.
+  async performOperation(...args) {
+    return { ok: true, service: 'dns', args };
+  }
+
+  async getHealthStatus() {
+    return { status: this.isHealthy() ? 'healthy' : 'degraded', zones: this.zones.size, cacheSize: this.cache.size };
+  }
+
   async stop() {
     if (this.dnsServer) {
       this.dnsServer.close();

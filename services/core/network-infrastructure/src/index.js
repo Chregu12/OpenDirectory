@@ -23,6 +23,7 @@ function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(
 const logger = require('./utils/logger');
 const config = require('./utils/config');
 const db = require('./db');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 // Enhanced network management modules
 const DNSManager = require('./services/dnsManager');
@@ -88,7 +89,15 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
       password: config.redis.password,
       retryDelayOnFailover: 100,
       maxRetriesPerRequest: 3,
-      lazyConnect: true
+      lazyConnect: true,
+      // Without this, ioredis's default backoff reconnects forever against
+      // an unreachable Redis (every audit-log write triggers a connection
+      // attempt via lazyConnect). That's an unbounded timer the process
+      // never lets go of — harmless in production (Redis is expected to
+      // come back), but it keeps the event loop alive and hangs the e2e
+      // test suite on shutdown. One failed attempt is enough to log and
+      // move on; auditLog() already treats Redis as best-effort (.catch()).
+      retryStrategy: () => null
     });
     
     this.redis.on('connect', () => {
@@ -200,11 +209,38 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         next();
       }
     });
+
+    // ── P0 auth fix ──────────────────────────────────────────────────────
+    // This service previously had ZERO HTTP authentication on any of its
+    // ~60 Express routes: DNS record/zone CRUD, DHCP lease/reservation/scope
+    // CRUD, VLAN CRUD, firewall rule CRUD, SMB share CRUD, VPN/bandwidth/
+    // load-balancer/policy/compliance endpoints — all reachable by anyone
+    // who could reach the service on the network, with no Authorization
+    // check at all (the only "auth" in this file was a WebSocket-level mock
+    // token check in handleAuthentication()/validateAuthToken(), which never
+    // covered the HTTP surface). Every route below now requires a verified
+    // OIDC JWT (see src/middleware/oidcAuth.js), except:
+    //   - GET /health: liveness/readiness probe (docker-compose healthcheck
+    //     and integration-service's dashboard status check both call this
+    //     with no credentials available).
+    // No server-to-server internal-token bypass is configured — a repo-wide
+    // audit found no service calling this API without a user's own JWT (see
+    // oidcAuth.js's header comment for detail); the frontend's /api/network/*
+    // calls go through the Next.js rewrite with the end user's Bearer token
+    // attached. Read-only "discovery" routes (devices/topology/scan/trace)
+    // were deliberately NOT added to skipPaths alongside /health: they
+    // disclose live network topology and device inventory, which is
+    // reconnaissance-grade information an unauthenticated caller must not
+    // get for free.
+    this.app.use(oidcAuth({ skipPaths: ['/health'] }));
   }
 
   initializeWebSocket() {
-    this.wss = new WebSocket.Server({ 
-      port: config.websocket.port || 8081,
+    // `?? 8081`, not `|| 8081`: WEBSOCKET_PORT=0 (OS-assigned free port,
+    // used by the e2e test suite to avoid clashing with a real instance) is
+    // a legitimate value that `||` would incorrectly discard as falsy.
+    this.wss = new WebSocket.Server({
+      port: config.websocket.port ?? 8081,
       verifyClient: this.verifyWebSocketClient.bind(this),
       perMessageDeflate: true,
       maxPayload: 1024 * 1024 // 1MB
@@ -279,6 +315,10 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     });
     
     // Enhanced health check with activity monitoring
+    // .unref() so this background timer never keeps the process (or an e2e
+    // test's Node process) alive on its own — matches gracefulShutdown()'s
+    // intent of a clean exit without needing every timer explicitly tracked
+    // and cleared.
     setInterval(() => {
       const now = Date.now();
       this.wss.clients.forEach((ws) => {
@@ -286,24 +326,24 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
           logger.warn('⚠️ Terminating inactive WebSocket client', { clientId: ws.id });
           return ws.terminate();
         }
-        
+
         // Check for inactive connections (30 minutes)
         if (now - ws.lastActivity > 30 * 60 * 1000) {
           logger.warn('⚠️ Terminating idle WebSocket client', { clientId: ws.id });
           return ws.terminate();
         }
-        
+
         ws.isAlive = false;
         ws.ping();
       });
-    }, 30000);
-    
+    }, 30000).unref();
+
     // Broadcast network status updates
     setInterval(() => {
       this.broadcastNetworkStatus();
-    }, 60000);
+    }, 60000).unref();
     
-    logger.info(`🌐 Enhanced Network WebSocket server started on port ${config.websocket.port || 8081}`);
+    logger.info(`🌐 Enhanced Network WebSocket server started on port ${config.websocket.port ?? 8081}`);
   }
 
   async handleWebSocketMessage(ws, message) {
@@ -983,7 +1023,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
           },
           websocket: {
             connected: this.wss.clients.size,
-            port: config.websocket.port || 8081
+            port: config.websocket.port ?? 8081
           },
           redis: this.redis ? 'connected' : 'disconnected'
         };
@@ -1016,7 +1056,9 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     this.app.put('/api/network/dns/records/:id', this.updateDNSRecord.bind(this));
     this.app.delete('/api/network/dns/records/:id', this.deleteDNSRecord.bind(this));
     this.app.get('/api/network/dns/zones', this.getDNSZones.bind(this));
-    this.app.post('/api/network/dns/zones', this.createDNSZone.bind(this));
+    // DNS zone creation is network-critical (a new/hijacked zone can redirect
+    // resolution for an entire domain) -> admin only.
+    this.app.post('/api/network/dns/zones', requireAdmin, this.createDNSZone.bind(this));
     this.app.get('/api/network/dns/analytics', this.getDNSAnalytics.bind(this));
     
     // DHCP management routes with reservation management
@@ -1049,20 +1091,22 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     this.app.get('/api/network/shares/:id/permissions', this.getSharePermissions.bind(this));
     this.app.post('/api/network/shares/:id/permissions', this.setSharePermissions.bind(this));
     
-    // VLAN management with advanced features
+    // VLAN management with advanced features. Mutations are network-critical
+    // (re-segmenting the network / moving ports between VLANs) -> admin only.
     this.app.get('/api/network/vlans', this.getVLANs.bind(this));
-    this.app.post('/api/network/vlans', this.createVLAN.bind(this));
-    this.app.put('/api/network/vlans/:id', this.updateVLAN.bind(this));
-    this.app.delete('/api/network/vlans/:id', this.deleteVLAN.bind(this));
+    this.app.post('/api/network/vlans', requireAdmin, this.createVLAN.bind(this));
+    this.app.put('/api/network/vlans/:id', requireAdmin, this.updateVLAN.bind(this));
+    this.app.delete('/api/network/vlans/:id', requireAdmin, this.deleteVLAN.bind(this));
     this.app.get('/api/network/vlans/:id/devices', this.getVLANDevices.bind(this));
-    
-    // Enhanced firewall management
+
+    // Enhanced firewall management. Mutations are network-critical (perimeter
+    // rules / traffic blocking) -> admin only.
     this.app.get('/api/network/firewall/rules', this.getFirewallRules.bind(this));
-    this.app.post('/api/network/firewall/rules', this.createFirewallRule.bind(this));
-    this.app.put('/api/network/firewall/rules/:id', this.updateFirewallRule.bind(this));
-    this.app.delete('/api/network/firewall/rules/:id', this.deleteFirewallRule.bind(this));
+    this.app.post('/api/network/firewall/rules', requireAdmin, this.createFirewallRule.bind(this));
+    this.app.put('/api/network/firewall/rules/:id', requireAdmin, this.updateFirewallRule.bind(this));
+    this.app.delete('/api/network/firewall/rules/:id', requireAdmin, this.deleteFirewallRule.bind(this));
     this.app.get('/api/network/firewall/logs', this.getFirewallLogs.bind(this));
-    this.app.post('/api/network/firewall/block', this.blockTraffic.bind(this));
+    this.app.post('/api/network/firewall/block', requireAdmin, this.blockTraffic.bind(this));
     
     // VPN management with certificate handling
     this.app.get('/api/network/vpn/connections', this.getVPNConnections.bind(this));
@@ -1155,18 +1199,25 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     await this.loadDbCacheIntoMemory();
     connectBus();
 
-    this.server = this.app.listen(port, () => {
-      logger.info(`🌐 Enterprise Network Infrastructure Service started on port ${port}`);
-      logger.info(`📊 Health check: http://localhost:${port}/health`);
-      logger.info(`🔧 Network management: http://localhost:${port}/api/network`);
-      logger.info(`🌐 WebSocket server: ws://localhost:${config.websocket.port || 8081}`);
-      logger.info(`🔒 Security features: Enabled`);
-      logger.info(`📈 Analytics: Enabled`);
-      logger.info(`📋 Compliance monitoring: Enabled`);
-      logger.info(`🗄️ Database persistence: ${db.isAvailable() ? 'enabled' : 'in-memory fallback'}`);
+    // Returns a Promise resolving to the listening http.Server (mirrors
+    // services/core/kerberos-kdc's src/index.js start()) so a caller —
+    // notably the e2e test suite, which needs the handle to close it in
+    // after() — can await startup instead of racing app.listen()'s callback.
+    return new Promise((resolve) => {
+      this.server = this.app.listen(port, () => {
+        logger.info(`🌐 Enterprise Network Infrastructure Service started on port ${port}`);
+        logger.info(`📊 Health check: http://localhost:${port}/health`);
+        logger.info(`🔧 Network management: http://localhost:${port}/api/network`);
+        logger.info(`🌐 WebSocket server: ws://localhost:${config.websocket.port ?? 8081}`);
+        logger.info(`🔒 Security features: Enabled`);
+        logger.info(`📈 Analytics: Enabled`);
+        logger.info(`📋 Compliance monitoring: Enabled`);
+        logger.info(`🗄️ Database persistence: ${db.isAvailable() ? 'enabled' : 'in-memory fallback'}`);
 
-      // Start background services
-      this.startBackgroundServices();
+        // Start background services
+        this.startBackgroundServices();
+        resolve(this.server);
+      });
     });
   }
 
@@ -1203,6 +1254,9 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
   
   startBackgroundServices() {
     // Start continuous network monitoring
+    // .unref()'d for the same reason as the WebSocket timers above — a
+    // background poller shouldn't be the thing keeping the process (or an
+    // e2e test run) alive.
     setInterval(async () => {
       try {
         await this.networkMonitoring.performHealthCheck();
@@ -1211,8 +1265,8 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
       } catch (error) {
         logger.error('❌ Background service error:', error);
       }
-    }, 5 * 60 * 1000); // Every 5 minutes
-    
+    }, 5 * 60 * 1000).unref(); // Every 5 minutes
+
     // Start analytics collection
     setInterval(async () => {
       try {
@@ -1220,8 +1274,8 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
       } catch (error) {
         logger.error('❌ Analytics collection error:', error);
       }
-    }, 60 * 1000); // Every minute
-    
+    }, 60 * 1000).unref(); // Every minute
+
     logger.info('🔄 Background services started');
   }
   
@@ -1402,7 +1456,17 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         const zones = [...new Set(records.map(r => r.zone))].map(z => ({ zone: z }));
         return res.json({ zones, source: 'db', timestamp: new Date().toISOString() });
       }
-      const zones = await this.dnsManager.getZones ? this.dnsManager.getZones() : [];
+      // Found while adding e2e auth coverage (see __tests__/api.e2e.test.js):
+      // this and the 11 other `await (x.y ? x.y(z) : w)` call sites below
+      // were previously written as `await x.y ? x.y(z) : w`. `await` binds
+      // tighter than `?:`, so that parsed as `(await x.y) ? x.y(z) : w` —
+      // the manager call was never awaited (a truthy function reference was
+      // returned on the happy path instead of its result) and, on the
+      // in-memory-fallback DHCP/VLAN routes, an unawaited rejection became
+      // an unhandled promise rejection — which crashes the Node process by
+      // default. Not an auth issue, but a real stability bug an
+      // authenticated caller could trigger; fixed with explicit parens.
+      const zones = await (this.dnsManager.getZones ? this.dnsManager.getZones() : []);
       res.json({ zones, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('getDNSZones error:', error);
@@ -1412,7 +1476,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
 
   async createDNSZone(req, res) {
     try {
-      const zone = await this.dnsManager.createZone ? this.dnsManager.createZone(req.body) : req.body;
+      const zone = await (this.dnsManager.createZone ? this.dnsManager.createZone(req.body) : req.body);
       res.status(201).json({ zone, timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('createDNSZone error:', error);
@@ -1428,7 +1492,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         const leases = await db.getDhcpLeases();
         return res.json({ leases, source: 'db', timestamp: new Date().toISOString() });
       }
-      const leases = await this.dhcpManager.getLeases ? this.dhcpManager.getLeases() : [];
+      const leases = await (this.dhcpManager.getLeases ? this.dhcpManager.getLeases() : []);
       res.json({ leases, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('getDHCPLeases error:', error);
@@ -1445,7 +1509,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         publish('network.dhcp.lease.issued', { deviceId: lease.deviceId || lease.hostname, ip: lease.ip || lease.ip_address, mac: lease.mac || lease.mac_address });
         return res.status(201).json({ lease, source: 'db', timestamp: new Date().toISOString() });
       }
-      const lease = await this.dhcpManager.createLease ? this.dhcpManager.createLease(req.body) : req.body;
+      const lease = await (this.dhcpManager.createLease ? this.dhcpManager.createLease(req.body) : req.body);
       publish('network.dhcp.lease.issued', { deviceId: lease.deviceId || lease.hostname, ip: lease.ip || lease.ip_address, mac: lease.mac || lease.mac_address });
       res.status(201).json({ lease, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
@@ -1470,28 +1534,28 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
 
   async getDHCPReservations(req, res) {
     try {
-      const reservations = await this.dhcpManager.getReservations ? this.dhcpManager.getReservations() : [];
+      const reservations = await (this.dhcpManager.getReservations ? this.dhcpManager.getReservations() : []);
       res.json({ reservations, timestamp: new Date().toISOString() });
     } catch (error) { res.status(500).json({ error: 'Failed to retrieve DHCP reservations' }); }
   }
 
   async createDHCPReservation(req, res) {
     try {
-      const reservation = await this.dhcpManager.createReservation ? this.dhcpManager.createReservation(req.body) : req.body;
+      const reservation = await (this.dhcpManager.createReservation ? this.dhcpManager.createReservation(req.body) : req.body);
       res.status(201).json({ reservation, timestamp: new Date().toISOString() });
     } catch (error) { res.status(500).json({ error: 'Failed to create DHCP reservation' }); }
   }
 
   async getDHCPScopes(req, res) {
     try {
-      const scopes = await this.dhcpManager.getScopes ? this.dhcpManager.getScopes() : [];
+      const scopes = await (this.dhcpManager.getScopes ? this.dhcpManager.getScopes() : []);
       res.json({ scopes, timestamp: new Date().toISOString() });
     } catch (error) { res.status(500).json({ error: 'Failed to retrieve DHCP scopes' }); }
   }
 
   async createDHCPScope(req, res) {
     try {
-      const scope = await this.dhcpManager.createScope ? this.dhcpManager.createScope(req.body) : req.body;
+      const scope = await (this.dhcpManager.createScope ? this.dhcpManager.createScope(req.body) : req.body);
       res.status(201).json({ scope, timestamp: new Date().toISOString() });
     } catch (error) { res.status(500).json({ error: 'Failed to create DHCP scope' }); }
   }
@@ -1504,7 +1568,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         const vlans = await db.getVlans();
         return res.json({ vlans, source: 'db', timestamp: new Date().toISOString() });
       }
-      const vlans = await this.vlanManager.getVlans ? this.vlanManager.getVlans() : [];
+      const vlans = await (this.vlanManager.getVlans ? this.vlanManager.getVlans() : []);
       res.json({ vlans, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('getVLANs error:', error);
@@ -1520,7 +1584,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         publish('network.vlan.created', { vlanId: vlan.id || vlan.vlan_id, name: vlan.name });
         return res.status(201).json({ vlan, source: 'db', timestamp: new Date().toISOString() });
       }
-      const vlan = await this.vlanManager.createVlan ? this.vlanManager.createVlan(req.body) : req.body;
+      const vlan = await (this.vlanManager.createVlan ? this.vlanManager.createVlan(req.body) : req.body);
       publish('network.vlan.created', { vlanId: vlan.id || vlan.vlan_id, name: vlan.name });
       res.status(201).json({ vlan, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
@@ -1537,7 +1601,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
         this.auditLog('VLAN_UPDATED', vlan);
         return res.json({ vlan, source: 'db', timestamp: new Date().toISOString() });
       }
-      const vlan = await this.vlanManager.updateVlan ? this.vlanManager.updateVlan(req.params.id, req.body) : payload;
+      const vlan = await (this.vlanManager.updateVlan ? this.vlanManager.updateVlan(req.params.id, req.body) : payload);
       res.json({ vlan, source: 'memory', timestamp: new Date().toISOString() });
     } catch (error) {
       logger.error('updateVLAN error:', error);
@@ -1554,7 +1618,7 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
 
   async getVLANDevices(req, res) {
     try {
-      const devices = await this.vlanManager.getDevices ? this.vlanManager.getDevices(req.params.id) : [];
+      const devices = await (this.vlanManager.getDevices ? this.vlanManager.getDevices(req.params.id) : []);
       res.json({ devices, timestamp: new Date().toISOString() });
     } catch (error) { res.status(500).json({ error: 'Failed to retrieve VLAN devices' }); }
   }
@@ -1617,31 +1681,68 @@ process.on('SIGINT', () => {
   }
 });
 
-// Start the service if not in cluster mode
-if (!cluster.isMaster) {
-  const networkService = new EnterpriseNetworkInfrastructureService();
-  global.networkService = networkService;
-  networkService.start();
-} else {
-  // Cluster mode: fork workers
-  const numCPUs = Math.min(os.cpus().length, config.cluster?.maxWorkers || 4);
-  logger.info(`🖥️ Starting ${numCPUs} network service workers`);
-  
-  for (let i = 0; i < numCPUs; i++) {
-    cluster.fork();
-  }
-  
-  cluster.on('exit', (worker, code, signal) => {
-    logger.warn(`⚠️ Worker ${worker.process.pid} died (code: ${code}, signal: ${signal})`);
-    if (!worker.exitedAfterDisconnect) {
-      logger.info('🔄 Restarting worker');
+// Only run the production entrypoint (cluster fork / auto-start) when this
+// file is executed directly (docker entrypoint: `node src/index.js`).
+// Previously there was no require.main guard at all here, so simply
+// `require()`ing this module — e.g. from a test suite — either started a
+// full HTTP+WebSocket server as a side effect of the import (in a
+// non-cluster-master process) or forked worker processes (in a
+// cluster-master process, which every plain `node -e "require(...)"`
+// invocation is). That made the service untestable via the supertest
+// pattern used elsewhere in this repo (see e.g.
+// services/core/kerberos-kdc/src/index.js). Production behavior is
+// unchanged: `node src/index.js` still hits this branch exactly as before.
+if (require.main === module) {
+  if (!cluster.isMaster) {
+    const networkService = new EnterpriseNetworkInfrastructureService();
+    global.networkService = networkService;
+    networkService.start();
+  } else {
+    // Cluster mode: fork workers
+    const numCPUs = Math.min(os.cpus().length, config.cluster?.maxWorkers || 4);
+    logger.info(`🖥️ Starting ${numCPUs} network service workers`);
+
+    for (let i = 0; i < numCPUs; i++) {
       cluster.fork();
     }
-  });
-  
-  cluster.on('listening', (worker, address) => {
-    logger.info(`✅ Worker ${worker.process.pid} listening on ${address.address}:${address.port}`);
-  });
+
+    cluster.on('exit', (worker, code, signal) => {
+      logger.warn(`⚠️ Worker ${worker.process.pid} died (code: ${code}, signal: ${signal})`);
+      if (!worker.exitedAfterDisconnect) {
+        logger.info('🔄 Restarting worker');
+        cluster.fork();
+      }
+    });
+
+    cluster.on('listening', (worker, address) => {
+      logger.info(`✅ Worker ${worker.process.pid} listening on ${address.address}:${address.port}`);
+    });
+  }
 }
 
-module.exports = EnterpriseNetworkInfrastructureService;
+// Build the exported instance, taking care not to construct a *second*,
+// port-binding instance in the cluster-master process above (that branch
+// only forks workers and never builds a networkService of its own — its
+// module.exports is never consumed by anything, so there's nothing to build
+// here for it). In every other case — a worker process running directly, or
+// this file required as a module by the e2e test suite / a future embedder
+// — reuse the one instance already on global.networkService, or build it
+// fresh (bypassing cluster forking entirely) so callers get the same
+// {app, start} shape kerberos-kdc/identity-service/etc. export, letting
+// supertest drive the real Express app directly and await start() for the
+// listening server handle to close afterwards.
+const isClusterMaster = require.main === module && cluster.isMaster;
+let networkServiceExport = global.networkService;
+if (!networkServiceExport && !isClusterMaster) {
+  networkServiceExport = new EnterpriseNetworkInfrastructureService();
+  global.networkService = networkServiceExport;
+}
+
+module.exports = isClusterMaster
+  ? { EnterpriseNetworkInfrastructureService }
+  : {
+      app: networkServiceExport.app,
+      start: (port) => networkServiceExport.start(port),
+      service: networkServiceExport,
+      EnterpriseNetworkInfrastructureService,
+    };
