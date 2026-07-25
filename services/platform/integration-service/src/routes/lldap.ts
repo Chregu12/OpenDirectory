@@ -1,9 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { LLDAPService } from '../services/lldap.service';
+import { requireAdmin } from '../middleware/oidcAuth';
 import logger from '../lib/logger';
 
 const router = Router();
 const lldapService = new LLDAPService();
+
+// Reads below (GET) are gated by oidcAuth alone (mounted globally in
+// src/index.ts) — any authenticated platform user may look up directory
+// users/groups. Real directory mutation (user/group create-update-delete,
+// group-membership changes) additionally requires requireAdmin: those were
+// previously reachable with NO auth at all (src/routes/lldap.ts:49,72,120),
+// i.e. anyone on the network could create, rewrite, or delete LDAP users and
+// groups.
 
 // Users endpoints
 router.get('/users', async (req: Request, res: Response) => {
@@ -46,7 +55,7 @@ router.get('/users/:userId', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/users', async (req: Request, res: Response) => {
+router.post('/users', requireAdmin, async (req: Request, res: Response) => {
   try {
     const userData = req.body;
     const user = await lldapService.createUser(userData);
@@ -57,7 +66,7 @@ router.post('/users', async (req: Request, res: Response) => {
   }
 });
 
-router.put('/users/:userId', async (req: Request, res: Response) => {
+router.put('/users/:userId', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     const userData = req.body;
@@ -69,7 +78,7 @@ router.put('/users/:userId', async (req: Request, res: Response) => {
   }
 });
 
-router.delete('/users/:userId', async (req: Request, res: Response) => {
+router.delete('/users/:userId', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     await lldapService.deleteUser(userId);
@@ -117,7 +126,7 @@ router.get('/groups/:groupId', async (req: Request, res: Response) => {
 });
 
 // Group membership management
-router.post('/groups/:groupId/members', async (req: Request, res: Response) => {
+router.post('/groups/:groupId/members', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { userId } = req.body;
@@ -134,7 +143,7 @@ router.post('/groups/:groupId/members', async (req: Request, res: Response) => {
   }
 });
 
-router.delete('/groups/:groupId/members/:userId', async (req: Request, res: Response) => {
+router.delete('/groups/:groupId/members/:userId', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { groupId, userId } = req.params;
     await lldapService.removeUserFromGroup(userId, groupId);
@@ -146,7 +155,12 @@ router.delete('/groups/:groupId/members/:userId', async (req: Request, res: Resp
 });
 
 // Authentication endpoints
-router.post('/auth/validate', async (req: Request, res: Response) => {
+// requireAdmin here too: this is a raw credential-testing oracle (arbitrary
+// username/password pairs checked against LDAP) — letting any authenticated
+// non-admin user hit it would allow online password-guessing against other
+// accounts. No current caller was found for this route (grepped the
+// frontend and other services), so restricting it costs nothing today.
+router.post('/auth/validate', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
     

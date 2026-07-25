@@ -1,9 +1,21 @@
 import { Router, Request, Response } from 'express';
 import { GrafanaService } from '../services/grafana.service';
+import { requireAdmin } from '../middleware/oidcAuth';
 import logger from '../lib/logger';
 
 const router = Router();
 const grafanaService = new GrafanaService();
+
+// Criticality split for this router (all routes already require a verified
+// JWT via the globally-mounted oidcAuth): dashboard/folder/annotation/query
+// mutations are content-level changes visible to any platform user and stay
+// at plain-authenticated level. Data-source creation, the raw Grafana proxy,
+// and the OpenDirectory setup routine are gated with requireAdmin below
+// because they are materially more dangerous — a data source carries
+// credentials for whatever it points at, the proxy forwards arbitrary
+// method/path calls straight to Grafana's own API (i.e. it can do anything
+// Grafana's admin API can do), and the setup routine provisions
+// infrastructure (folders/dashboards) rather than editing existing content.
 
 // Dashboard endpoints
 router.get('/dashboards', async (req: Request, res: Response) => {
@@ -136,7 +148,7 @@ router.get('/datasources', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/datasources', async (req: Request, res: Response) => {
+router.post('/datasources', requireAdmin, async (req: Request, res: Response) => {
   try {
     const dataSource = req.body;
     const result = await grafanaService.createDataSource(dataSource);
@@ -275,7 +287,7 @@ router.get('/status', async (req: Request, res: Response) => {
 });
 
 // OpenDirectory dashboard management
-router.post('/setup/opendirectory', async (req: Request, res: Response) => {
+router.post('/setup/opendirectory', requireAdmin, async (req: Request, res: Response) => {
   try {
     // Create OpenDirectory folder if it doesn't exist
     const folders = await grafanaService.getFolders();
@@ -300,7 +312,7 @@ router.post('/setup/opendirectory', async (req: Request, res: Response) => {
 });
 
 // Proxy endpoints for direct Grafana integration
-router.get('/proxy/*', async (req: Request, res: Response) => {
+router.get('/proxy/*', requireAdmin, async (req: Request, res: Response) => {
   try {
     // This allows proxying arbitrary Grafana API calls
     const path = req.path.replace('/proxy', '');

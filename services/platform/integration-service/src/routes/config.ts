@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { requireAdmin } from '../middleware/oidcAuth';
 import logger from '../lib/logger';
 
 const router = Router();
@@ -24,7 +25,9 @@ router.get('/modules/:moduleId', (req: Request, res: Response) => {
   res.json(moduleConfig[moduleId]);
 });
 
-router.post('/modules/:moduleId', (req: Request, res: Response) => {
+// requireAdmin: this toggles a platform module on/off for every user, a
+// system-wide administrative action, not a per-user preference.
+router.post('/modules/:moduleId', requireAdmin, (req: Request, res: Response) => {
   const { moduleId } = req.params;
   const { enabled } = req.body;
   if (!moduleConfig[moduleId]) {
