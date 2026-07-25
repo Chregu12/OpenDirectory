@@ -90,6 +90,7 @@ const ScanOrchestrator = require('./services/scanOrchestrator');
 const SignatureManager = require('./services/signatureManager');
 const QuarantineManager = require('./services/quarantineManager');
 const ThreatIntelligence = require('./services/threatIntelligence');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 const OAUTH_PROVIDER_URL = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider:3010';
 
@@ -205,6 +206,22 @@ class AntivirusProtectionService extends EventEmitter {
         });
         this.app.use('/api', limiter);
 
+        // OIDC token verification (RS256 via JWKS). P0 fix: this service
+        // previously had no HTTP authentication at all — see
+        // middleware/oidcAuth.js for the full rationale.
+        //
+        // enrollmentPaths lets the ClamAV device agent report scan results
+        // and AV status (POST .../devices/:deviceId/report and
+        // .../devices/:deviceId/status) using the shared
+        // DEVICE_ENROLLMENT_TOKEN (x-enrollment-token header) instead of a
+        // user JWT, since the agent runs on the device with no end-user
+        // identity in hand. Every other route — including the generic
+        // GET .../devices and GET .../devices/:deviceId — stays JWT-only.
+        this.app.use(oidcAuth({
+            skipPaths: ['/health'],
+            enrollmentPaths: ['*/report', '*/status'],
+        }));
+
         // Request logging
         this.app.use((req, res, next) => {
             const start = Date.now();
@@ -283,7 +300,8 @@ class AntivirusProtectionService extends EventEmitter {
         // -- Scan endpoints --
 
         // POST /api/antivirus/scan - Initiate scan (dispatches run_av_scan MDM command)
-        router.post('/scan', async (req, res, next) => {
+        // Admin-gated: this is a fleet-wide MDM command dispatch.
+        router.post('/scan', requireAdmin, async (req, res, next) => {
             try {
                 const { error, value } = schemas.initiateScan.validate(req.body);
                 if (error) {
@@ -433,7 +451,10 @@ class AntivirusProtectionService extends EventEmitter {
         });
 
         // POST /api/antivirus/quarantine/:fileId/restore - Restore quarantined file
-        router.post('/quarantine/:fileId/restore', (req, res, next) => {
+        // Admin-gated: un-quarantining releases a file flagged as malicious
+        // back onto the device — the exact capability an unauthenticated
+        // attacker must not have.
+        router.post('/quarantine/:fileId/restore', requireAdmin, (req, res, next) => {
             try {
                 const result = this.quarantineManager.restoreFile(req.params.fileId);
                 res.json(result);
@@ -443,7 +464,8 @@ class AntivirusProtectionService extends EventEmitter {
         });
 
         // DELETE /api/antivirus/quarantine/:fileId - Delete quarantined file
-        router.delete('/quarantine/:fileId', (req, res, next) => {
+        // Admin-gated: permanently destroys quarantine evidence.
+        router.delete('/quarantine/:fileId', requireAdmin, (req, res, next) => {
             try {
                 const result = this.quarantineManager.deleteFile(req.params.fileId);
                 res.json(result);
@@ -465,7 +487,8 @@ class AntivirusProtectionService extends EventEmitter {
         });
 
         // POST /api/antivirus/signatures/update - Trigger signature update
-        router.post('/signatures/update', (req, res, next) => {
+        // Admin-gated: fleet-wide signature/definition update dispatch.
+        router.post('/signatures/update', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.signatureUpdate.validate(req.body);
                 if (error) {
@@ -579,7 +602,8 @@ class AntivirusProtectionService extends EventEmitter {
         // -- Schedule endpoints --
 
         // POST /api/antivirus/schedule - Schedule recurring scan
-        router.post('/schedule', (req, res, next) => {
+        // Admin-gated: creates a recurring fleet-wide scan command.
+        router.post('/schedule', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.schedule.validate(req.body);
                 if (error) {
