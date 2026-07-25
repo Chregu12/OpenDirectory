@@ -86,6 +86,7 @@ function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(
 const RemediationEngine = require('./services/remediationEngine');
 const ScriptGenerator = require('./services/scriptGenerator');
 const PlaybookManager = require('./services/playbookManager');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 // ====================================================================== //
 //  Validation schemas
@@ -211,6 +212,16 @@ class AutoRemediationService extends EventEmitter {
             next();
         });
 
+        // OIDC bearer-token auth (see src/middleware/oidcAuth.js for why: this
+        // service previously had NO HTTP authentication at all, so any
+        // unauthenticated caller could trigger remediation actions that
+        // change real systems). Mounted globally, ahead of every route below
+        // — only /health is exempt (liveness/readiness probes). Individual
+        // mutation routes additionally require requireAdmin (see
+        // _initializeRoutes()); a verified JWT alone proves *who* is asking,
+        // not that they're allowed to execute remediation.
+        this.app.use(oidcAuth({ skipPaths: ['/health'] }));
+
         logger.info('Middleware setup completed');
     }
 
@@ -319,7 +330,13 @@ class AutoRemediationService extends EventEmitter {
         });
 
         // POST /api/remediation/execute/:issueId - Execute remediation
-        router.post('/execute/:issueId', (req, res, next) => {
+        // requireAdmin: this is the P0 finding — an authenticated-but-
+        // unprivileged (or, before this fix, entirely unauthenticated)
+        // caller could set force=true to bypass the approval workflow and
+        // execute a high/critical-severity remediation immediately. That
+        // directly changes real systems (BitLocker, firewall, agent
+        // installs, ...), so it's admin-only regardless of the force flag.
+        router.post('/execute/:issueId', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.executeRemediation.validate(req.body || {});
                 if (error) {
@@ -394,7 +411,11 @@ class AutoRemediationService extends EventEmitter {
         });
 
         // POST /api/remediation/playbooks - Create custom playbook
-        router.post('/playbooks', (req, res, next) => {
+        // requireAdmin: a playbook defines the steps future remediations
+        // will execute against devices — letting any authenticated user
+        // author one is effectively letting them script unattended,
+        // system-changing actions, so this is admin-only alongside execute.
+        router.post('/playbooks', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.createPlaybook.validate(req.body);
                 if (error) {
@@ -452,7 +473,9 @@ class AutoRemediationService extends EventEmitter {
         });
 
         // POST /api/remediation/bulk-execute - Bulk remediation
-        router.post('/bulk-execute', (req, res, next) => {
+        // requireAdmin: same force-bypass concern as single-issue execute
+        // above, multiplied across every issueId in the batch.
+        router.post('/bulk-execute', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.bulkExecute.validate(req.body);
                 if (error) {
@@ -593,12 +616,25 @@ class AutoRemediationService extends EventEmitter {
 //  Export & auto-start
 // ====================================================================== //
 
-module.exports = AutoRemediationService;
+// Only auto-start (bind a port, connect the event bus) when this file is run
+// directly (docker entrypoint: `node src/index.js`). When required as a
+// module — e.g. by the e2e test suite, which needs the real Express app to
+// drive with supertest and needs to control start()/close() itself — the
+// caller decides when (or whether) to listen. Building the instance here
+// either way keeps `.app` available synchronously in both cases, since the
+// constructor only wires up Express (no port binding happens until start()).
+const service = new AutoRemediationService();
 
 if (require.main === module) {
-    const service = new AutoRemediationService();
     service.start().catch((err) => {
         logger.error('Failed to start Auto Remediation Engine', { message: err.message });
         process.exit(1);
     });
 }
+
+module.exports = {
+    app: service.app,
+    start: (...args) => service.start(...args),
+    service,
+    AutoRemediationService,
+};

@@ -79,6 +79,7 @@ const GraphBuilder = require('./services/graphBuilder');
 const { NODE_TYPES, EDGE_TYPES, RISK_LEVELS } = require('./services/graphBuilder');
 const AttackPathAnalyzer = require('./services/attackPathAnalyzer');
 const ShadowAdminDetector = require('./services/shadowAdminDetector');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 // ====================================================================== //
 //  Validation schemas
@@ -176,6 +177,14 @@ class GraphExplorerService extends EventEmitter {
             skip: (req) => req.path === '/health' || req.path === '/metrics',
         });
         this.app.use('/api', limiter);
+
+        // OIDC token verification (RS256 via JWKS). P0 fix: this service
+        // previously had no HTTP authentication at all — see
+        // middleware/oidcAuth.js for the full rationale. Mounted globally;
+        // only /health is exempt. The one admin-gated route (POST
+        // /api/graph/refresh) additionally requires requireAdmin — see
+        // _initializeRoutes().
+        this.app.use(oidcAuth({ skipPaths: ['/health'] }));
 
         // Request logging
         this.app.use((req, res, next) => {
@@ -616,7 +625,9 @@ class GraphExplorerService extends EventEmitter {
         });
 
         // POST /api/graph/refresh - Rebuild graph from collectors
-        router.post('/refresh', (req, res, next) => {
+        // (admin-only: recomputes attack-path/shadow-admin analysis and
+        // broadcasts the result to every connected WebSocket client)
+        router.post('/refresh', requireAdmin, (req, res, next) => {
             try {
                 logger.info('Graph refresh requested');
                 const previousStats = this.graphBuilder.getStatistics();

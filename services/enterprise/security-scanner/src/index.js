@@ -13,6 +13,7 @@ const Joi = require('joi');
 const { v4: uuidv4 } = require('uuid');
 const http = require('http');
 const WebSocket = require('ws');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 // ====================================================================== //
 //  Logger setup
@@ -515,6 +516,13 @@ class SecurityScannerService extends EventEmitter {
       next();
     });
 
+    // OIDC bearer-token auth (see src/middleware/oidcAuth.js). Mounted
+    // globally so every route defined in _initializeRoutes() below requires
+    // a verified JWT, except /health (liveness probe). Mutating routes
+    // additionally require requireAdmin — wired directly on those routes in
+    // _initializeRoutes().
+    this.app.use(oidcAuth({ skipPaths: ['/health'] }));
+
     logger.info('Middleware setup completed');
   }
 
@@ -565,8 +573,9 @@ class SecurityScannerService extends EventEmitter {
 
     const router = express.Router();
 
-    // POST /api/scanner/scan - Start a new scan
-    router.post('/scan', async (req, res, next) => {
+    // POST /api/scanner/scan - Start a new scan (admin-only: fleet-wide
+    // GPO/AD/device exposure scan, resource-intensive and disclosure-heavy)
+    router.post('/scan', requireAdmin, async (req, res, next) => {
       try {
         const { error, value } = schemas.startScan.validate(req.body);
         if (error) {
@@ -703,8 +712,9 @@ class SecurityScannerService extends EventEmitter {
       }
     });
 
-    // POST /api/scanner/schedule - Schedule a recurring scan
-    router.post('/schedule', (req, res, next) => {
+    // POST /api/scanner/schedule - Schedule a recurring scan (admin-only:
+    // persists a cron job that repeatedly triggers fleet-wide scans)
+    router.post('/schedule', requireAdmin, (req, res, next) => {
       try {
         const { error, value } = schemas.scheduleScan.validate(req.body);
         if (error) {

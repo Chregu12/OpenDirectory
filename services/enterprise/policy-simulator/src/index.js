@@ -87,6 +87,7 @@ const SimulationEngine = require('./services/simulationEngine');
 const ImpactAnalyzer = require('./services/impactAnalyzer');
 const DriftDetector = require('./services/driftDetector');
 const ComplianceTimeline = require('./services/complianceTimeline');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 // ====================================================================== //
 //  Validation schemas
@@ -184,6 +185,14 @@ class PolicySimulatorService extends EventEmitter {
             skip: (req) => req.path === '/health' || req.path === '/metrics',
         });
         this.app.use('/api', limiter);
+
+        // OIDC token verification (RS256 via JWKS). P0 fix: this service
+        // previously had no HTTP authentication at all — see
+        // middleware/oidcAuth.js for the full rationale. Mounted globally;
+        // only /health is exempt. The one admin-gated route (POST
+        // /api/simulator/rollback-plan) additionally requires requireAdmin —
+        // see _initializeRoutes().
+        this.app.use(oidcAuth({ skipPaths: ['/health'] }));
 
         // Request logging
         this.app.use((req, res, next) => {
@@ -354,7 +363,11 @@ class PolicySimulatorService extends EventEmitter {
         });
 
         // POST /api/simulator/rollback-plan
-        router.post('/rollback-plan', (req, res, next) => {
+        // (admin-only: surfaces fleet-wide affected-device counts, rollback
+        // timing, and service-interruption risk for a production policy —
+        // see middleware/oidcAuth.js for why this is gated but /simulate is
+        // not)
+        router.post('/rollback-plan', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.rollbackPlan.validate(req.body);
                 if (error) {
