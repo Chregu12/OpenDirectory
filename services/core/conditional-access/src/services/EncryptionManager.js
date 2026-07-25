@@ -5,14 +5,23 @@
 
 const EventEmitter = require('events');
 const crypto = require('crypto');
+const { encrypt: fieldEncrypt, decrypt: fieldDecrypt } = require('../crypto/fieldEncryption');
 
 class EncryptionManager extends EventEmitter {
-    constructor(deviceService = null) {
+    /**
+     * @param {object} [deviceService] - Optional device WebSocket service for agent dispatch.
+     * @param {import('pg').Pool|null} [db] - PostgreSQL pool with initDb()/isAvailable()
+     *   (see src/db.js). Recovery keys are persisted here when the DB is reachable;
+     *   an in-memory Map is always kept as a fallback/cache so retrieval never
+     *   hard-fails purely because of a transient DB outage.
+     */
+    constructor(deviceService = null, db = null) {
         super();
         this.deviceService = deviceService;
+        this.db = db || null;
         this.encryptionPolicies = new Map();
         this.deviceEncryptionStates = new Map();
-        this.recoveryKeys = new Map(); // Secured key escrow
+        this.recoveryKeys = new Map(); // In-memory fallback/cache for key escrow
         this.encryptionJobs = new Map();
         
         // Platform-specific encryption managers
@@ -465,27 +474,81 @@ class EncryptionManager extends EventEmitter {
         return null;
     }
 
+    /**
+     * Store a device's recovery key.
+     *
+     * DB-first with in-memory fallback: when a Postgres pool was wired in
+     * (see constructor) the encrypted key is upserted into
+     * `encryption_recovery_keys` so it survives a service restart. The
+     * in-memory Map is always kept in sync too, both as a cache and as the
+     * fallback used when no DB is configured or the write fails.
+     */
     async storeRecoveryKey(deviceId, recoveryKey) {
-        // In production, this would use a secure key vault
         const encryptedKey = this.encryptRecoveryKey(recoveryKey);
-        
+        const storedAt = new Date();
+
         this.recoveryKeys.set(deviceId, {
             deviceId,
             key: encryptedKey,
-            storedAt: new Date(),
+            storedAt,
             accessCount: 0
         });
+
+        if (this.db) {
+            try {
+                await this.db.query(
+                    `INSERT INTO encryption_recovery_keys (device_id, key_encrypted, stored_at, access_count, updated_at)
+                     VALUES ($1, $2, $3, 0, NOW())
+                     ON CONFLICT (device_id) DO UPDATE
+                         SET key_encrypted = EXCLUDED.key_encrypted,
+                             stored_at = EXCLUDED.stored_at,
+                             access_count = 0,
+                             updated_at = NOW()`,
+                    [deviceId, encryptedKey, storedAt]
+                );
+            } catch (err) {
+                console.warn(`[EncryptionManager] Failed to persist recovery key for ${deviceId} (using in-memory fallback): ${err.message}`);
+            }
+        }
     }
 
+    /**
+     * Retrieve a device's recovery key.
+     * Reads from the DB when available (and bumps access_count/last_accessed
+     * there); falls back to the in-memory cache when the DB is unavailable,
+     * the row hasn't been persisted yet, or the query fails.
+     */
     async getRecoveryKey(deviceId) {
+        if (this.db) {
+            try {
+                const result = await this.db.query(
+                    `UPDATE encryption_recovery_keys
+                     SET access_count = access_count + 1, last_accessed = NOW()
+                     WHERE device_id = $1
+                     RETURNING key_encrypted, stored_at, access_count`,
+                    [deviceId]
+                );
+                if (result.rows.length > 0) {
+                    const row = result.rows[0];
+                    return {
+                        key: this.decryptRecoveryKey(row.key_encrypted),
+                        storedAt: row.stored_at,
+                        accessCount: row.access_count
+                    };
+                }
+            } catch (err) {
+                console.warn(`[EncryptionManager] Failed to read recovery key for ${deviceId} from DB (falling back to in-memory): ${err.message}`);
+            }
+        }
+
         const keyData = this.recoveryKeys.get(deviceId);
         if (!keyData) {
             throw new Error('Recovery key not found');
         }
-        
+
         keyData.accessCount++;
         keyData.lastAccessed = new Date();
-        
+
         return {
             key: this.decryptRecoveryKey(keyData.key),
             storedAt: keyData.storedAt,
@@ -499,19 +562,20 @@ class EncryptionManager extends EventEmitter {
         return true;
     }
 
+    /**
+     * Encrypt a recovery key at rest using AES-256-GCM (src/crypto/fieldEncryption.js).
+     *
+     * Previously used crypto.createCipher('aes-256-cbc', ...), which was
+     * removed from Node.js entirely (createCipher/createDecipher throw
+     * "not a function" on current Node runtimes) — every recovery-key
+     * retrieval/rotation call was silently broken before this fix.
+     */
     encryptRecoveryKey(recoveryKey) {
-        // In production, use proper key management service
-        const cipher = crypto.createCipher('aes-256-cbc', process.env.RECOVERY_KEY_SECRET || 'default-secret');
-        let encrypted = cipher.update(recoveryKey, 'utf8', 'hex');
-        encrypted += cipher.final('hex');
-        return encrypted;
+        return fieldEncrypt(recoveryKey);
     }
 
     decryptRecoveryKey(encryptedKey) {
-        const decipher = crypto.createDecipher('aes-256-cbc', process.env.RECOVERY_KEY_SECRET || 'default-secret');
-        let decrypted = decipher.update(encryptedKey, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-        return decrypted;
+        return fieldDecrypt(encryptedKey);
     }
 
     /**

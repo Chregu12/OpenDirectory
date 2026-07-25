@@ -6,6 +6,7 @@
 
 const EventEmitter = require('events');
 const crypto = require('crypto');
+const BreakGlassAuditRepository = require('../db/BreakGlassAuditRepository');
 
 const AD_BASE_URL = process.env.ENTERPRISE_DIRECTORY_URL || 'http://enterprise-directory';
 const AD_SYNC_TIMEOUT_MS = 5000;
@@ -15,8 +16,12 @@ class PIMService extends EventEmitter {
      * @param {object} [opts]
      * @param {Function} [opts.publishFn]      - (routingKey, payload) => void — event bus publisher
      * @param {object}  [opts.sessionRecorder] - SessionRecorder instance
+     * @param {import('pg').Pool|null} [opts.db] - PostgreSQL pool (see src/db.js). When
+     *   provided, break-glass activation/termination events are persisted to the
+     *   WORM `break_glass_audit` table via BreakGlassAuditRepository, in addition
+     *   to the in-memory `breakGlassEvents` map used for the live API responses.
      */
-    constructor({ publishFn, sessionRecorder } = {}) {
+    constructor({ publishFn, sessionRecorder, db } = {}) {
         super();
         this.privilegedRoles = new Map();
         this.accessRequests = new Map();
@@ -31,6 +36,7 @@ class PIMService extends EventEmitter {
         // Optional integrations
         this._publish = typeof publishFn === 'function' ? publishFn : null;
         this._sessionRecorder = sessionRecorder || null;
+        this._breakGlassAuditRepo = db ? new BreakGlassAuditRepository(db) : null;
 
         // Role management
         this.roleManager = new RoleManager();
@@ -538,6 +544,26 @@ class PIMService extends EventEmitter {
         event.activatedAt = new Date();
         event.expiresAt = expiresAt;
 
+        // Persist activation to the WORM break-glass audit table (best-effort;
+        // a DB outage must not block granting break-glass access — the
+        // in-memory breakGlassEvents map is always the source of truth for
+        // the live API and still records the event either way).
+        if (this._breakGlassAuditRepo) {
+            try {
+                await this._breakGlassAuditRepo.recordBreakGlassEvent({
+                    sessionId: breakGlassId,
+                    userId: event.requestedBy,
+                    reason: event.reason,
+                    approverId: managerId,
+                    startedAt: event.activatedAt,
+                    endedAt: null,
+                    actions: event.activities
+                });
+            } catch (err) {
+                console.warn(`[PIM] Failed to persist break-glass activation audit record for ${breakGlassId}: ${err.message}`);
+            }
+        }
+
         // Auto-terminate on expiry
         setTimeout(() => {
             const current = this.breakGlassEvents.get(breakGlassId);
@@ -592,6 +618,24 @@ class PIMService extends EventEmitter {
         event.terminatedBy = terminatedBy;
         event.terminatedAt = new Date();
         event.outcome = outcome;
+
+        // Persist termination as a second, separate WORM audit row (append-only —
+        // the activation row above is never updated/deleted).
+        if (this._breakGlassAuditRepo) {
+            try {
+                await this._breakGlassAuditRepo.recordBreakGlassEvent({
+                    sessionId: breakGlassId,
+                    userId: event.requestedBy,
+                    reason: `SESSION_ENDED: ${outcome || terminatedBy}`,
+                    approverId: event.activatedBy,
+                    startedAt: event.activatedAt,
+                    endedAt: event.terminatedAt,
+                    actions: event.activities
+                });
+            } catch (err) {
+                console.warn(`[PIM] Failed to persist break-glass termination audit record for ${breakGlassId}: ${err.message}`);
+            }
+        }
 
         this._publishEvent('security.breakglass.terminated', {
             breakGlassId,

@@ -30,7 +30,7 @@ const EmergencyAccessController = require('./controllers/EmergencyAccessControll
 // Import middleware
 const { oidcAuth } = require('./middleware/oidcAuth');
 const auditMiddleware = require('./middleware/audit');
-const rateLimitMiddleware = require('./middleware/rateLimit');
+const { rateLimitMiddleware } = require('./middleware/rateLimit');
 
 // Import database pool
 const db = require('./db');
@@ -57,19 +57,26 @@ class ConditionalAccessService {
         // Initialize core engines
         this.conditionalAccessEngine = new ConditionalAccessEngine();
         this.deviceComplianceEngine = new DeviceComplianceEngine();
-        this.encryptionManager = new EncryptionManager();
+        // Encryption manager — pass the DB pool so recovery keys survive a restart
+        // (DB-first with in-memory fallback; see EncryptionManager.storeRecoveryKey/getRecoveryKey)
+        this.encryptionManager = new EncryptionManager(null, db);
         this.autopilotDeployment = new AutopilotDeployment();
         this.edrIntegration = new EDRIntegration();
-        this.emergencyAccessService = new EmergencyAccessService();
+        // Emergency access (break-glass) — pass the DB pool so grant/terminate
+        // events are written to the WORM break_glass_audit table via BreakGlassAuditRepository
+        this.emergencyAccessService = new EmergencyAccessService(db);
         this.auditLogger = new AuditLogger();
 
         // Session recorder — pass the real DB pool so sessions are persisted
         this.sessionRecorder = new SessionRecorder(db);
 
-        // PIM service — wire in event bus publisher and session recorder
+        // PIM service — wire in event bus publisher, session recorder, and the DB
+        // pool (break-glass activate/terminate events are persisted via
+        // BreakGlassAuditRepository; see PIMService constructor)
         this.pimService = new PIMService({
             publishFn: publish,
-            sessionRecorder: this.sessionRecorder
+            sessionRecorder: this.sessionRecorder,
+            db
         });
 
         // Initialize controllers
@@ -357,6 +364,19 @@ class ConditionalAccessService {
         try {
             this.logger.info('Initializing Conditional Access Service...');
 
+            // Initialize the Postgres pool (encryption recovery keys, break-glass
+            // WORM audit, PIM session recordings). db.initDb() is fully
+            // self-contained: it catches its own connection errors, logs a
+            // warning, and leaves db.isAvailable() === false rather than
+            // throwing — so this is safe to call unconditionally, including in
+            // environments with no database configured. Without this call the
+            // migrations never run and dependents silently stayed in-memory-only.
+            try {
+                await db.initDb();
+            } catch (err) {
+                this.logger.warn(`db.initDb() failed unexpectedly, continuing with in-memory fallback: ${err.message}`);
+            }
+
             await this.conditionalAccessEngine.initialize();
             await this.deviceComplianceEngine.initialize();
             await this.encryptionManager.initialize();
@@ -415,15 +435,13 @@ class ConditionalAccessService {
     startBackgroundServices() {
         this.deviceComplianceEngine.startContinuousMonitoring();
         this.edrIntegration.startThreatMonitoring();
-<<<<<<< HEAD
+
+        // Start PIM session monitoring (startSessionMonitoring() is the
+        // backward-compat alias for startPeriodicSessionMonitoring(),
+        // see PIMService.js)
         this.pimService.startSessionMonitoring();
-=======
-        
-        // Start PIM session monitoring
-        this.pimService.startPeriodicSessionMonitoring();
-        
+
         // Start audit log processing
->>>>>>> 26df081 (fix: wire PasswordPolicyEnforcer into auth flows and connect SessionRecorder DB pool)
         this.auditLogger.startLogProcessing();
         this.logger.info('Background services started');
     }

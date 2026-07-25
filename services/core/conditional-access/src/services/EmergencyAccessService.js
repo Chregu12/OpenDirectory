@@ -251,16 +251,22 @@ class EmergencyAccessService extends EventEmitter {
         this.activeEmergencyAccess.set(accessId, emergencyAccess);
 
         // Persist to WORM audit table (append-only; no update/delete possible).
+        // Best-effort: a transient DB outage must not block granting access
+        // (the in-memory audit trail below still records the event either way).
         if (this._auditRepo) {
-            await this._auditRepo.recordBreakGlassEvent({
-                sessionId: accessId,
-                userId: request.requesterId,
-                reason: request.businessJustification,
-                approverId: request.approvals.length > 0 ? request.approvals[0].approverId : null,
-                startedAt: timestamp,
-                endedAt: null,
-                actions: []
-            });
+            try {
+                await this._auditRepo.recordBreakGlassEvent({
+                    sessionId: accessId,
+                    userId: request.requesterId,
+                    reason: request.businessJustification,
+                    approverId: request.approvals.length > 0 ? request.approvals[0].approverId : null,
+                    startedAt: timestamp,
+                    endedAt: null,
+                    actions: []
+                });
+            } catch (err) {
+                console.warn(`[EmergencyAccessService] Failed to persist break-glass grant audit record for ${accessId}: ${err.message}`);
+            }
         }
 
         // Update request status
@@ -387,19 +393,23 @@ class EmergencyAccessService extends EventEmitter {
         emergencyAccess.actualEndTime = new Date();
         emergencyAccess.terminationReason = reason;
 
-        // Persist session-end to WORM audit table.
+        // Persist session-end to WORM audit table (best-effort; see grant path above).
         if (this._auditRepo) {
-            await this._auditRepo.recordBreakGlassEvent({
-                sessionId: accessId,
-                userId: emergencyAccess.userId,
-                reason: `SESSION_ENDED: ${reason}`,
-                approverId: emergencyAccess.approvals && emergencyAccess.approvals.length > 0
-                    ? emergencyAccess.approvals[0].approverId
-                    : null,
-                startedAt: emergencyAccess.startTime,
-                endedAt: emergencyAccess.actualEndTime,
-                actions: emergencyAccess.activities || []
-            });
+            try {
+                await this._auditRepo.recordBreakGlassEvent({
+                    sessionId: accessId,
+                    userId: emergencyAccess.userId,
+                    reason: `SESSION_ENDED: ${reason}`,
+                    approverId: emergencyAccess.approvals && emergencyAccess.approvals.length > 0
+                        ? emergencyAccess.approvals[0].approverId
+                        : null,
+                    startedAt: emergencyAccess.startTime,
+                    endedAt: emergencyAccess.actualEndTime,
+                    actions: emergencyAccess.activities || []
+                });
+            } catch (err) {
+                console.warn(`[EmergencyAccessService] Failed to persist break-glass termination audit record for ${accessId}: ${err.message}`);
+            }
         }
 
         // Stop monitoring
