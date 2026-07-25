@@ -160,11 +160,20 @@ function createUserRoutes(services) {
         await authManager.createLdapUser(user);
       }
 
-      // Sync to Kerberos KDC
+      // Sync to Kerberos KDC. kerberos-kdc now requires auth on every route
+      // (P0 fix — it previously accepted unauthenticated principal/password
+      // writes); this call runs server-to-server with no end-user JWT in
+      // hand, so it presents the shared KDC_INTERNAL_TOKEN instead (see
+      // services/core/kerberos-kdc/src/middleware/oidcAuth.js
+      // internalServicePaths, scoped to exactly this route).
       const KDC_API = process.env.KDC_API_URL || 'http://kerberos-kdc:3013';
+      const kdcHeaders = { 'Content-Type': 'application/json' };
+      if (process.env.KDC_INTERNAL_TOKEN) {
+        kdcHeaders['x-kdc-internal-token'] = process.env.KDC_INTERNAL_TOKEN;
+      }
       fetch(`${KDC_API}/api/kerberos/sync-user`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: kdcHeaders,
         body: JSON.stringify({ username: user.username || username, password })
       }).catch(err => console.warn('[kerberos-sync]', err.message));
 
@@ -222,11 +231,17 @@ function createUserRoutes(services) {
       await sessionManager.revokeAllUserSessions(userId);
       await auditService.logSecurityEvent('password_changed', userId, req);
 
-      // Sync new password to Kerberos KDC
+      // Sync new password to Kerberos KDC (see the registration-route
+      // comment above re: KDC_INTERNAL_TOKEN — same server-to-server auth
+      // requirement applies here).
       const KDC_API_CP = process.env.KDC_API_URL || 'http://kerberos-kdc:3013';
+      const kdcCpHeaders = { 'Content-Type': 'application/json' };
+      if (process.env.KDC_INTERNAL_TOKEN) {
+        kdcCpHeaders['x-kdc-internal-token'] = process.env.KDC_INTERNAL_TOKEN;
+      }
       fetch(`${KDC_API_CP}/api/kerberos/sync-user`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: kdcCpHeaders,
         body: JSON.stringify({ username: user.username, password: newPassword })
       }).catch(err => console.warn('[kerberos-sync]', err.message));
 

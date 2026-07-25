@@ -9,11 +9,29 @@ const path = require('path');
 
 const DelegationManager = require('./delegation/delegationManager');
 const ProtectedUsersPolicy = require('./security/protectedUsersPolicy');
+const { oidcAuth, requireKdcAdmin, requireKdcAdminOrInternal } = require('./middleware/oidcAuth');
 
 const app = express();
 app.use(cors());
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
+
+// P0: kerberos-kdc previously had NO HTTP auth at all — any unauthenticated
+// caller could reset any principal's password (realm takeover), mint
+// keytabs, and configure delegation. Every route below requires a verified
+// OIDC JWT (see middleware/oidcAuth.js), except:
+//   - /health: liveness/readiness probe (docker-compose healthcheck, no
+//     credentials available to it).
+//   - POST /api/kerberos/sync-user: called server-to-server by
+//     authentication-service on registration/password-change, with no
+//     end-user JWT in hand. Accepts the shared KDC_INTERNAL_TOKEN instead
+//     (see oidcAuth.js internalServicePaths); a JWT presented on this route
+//     is still verified normally and, absent the internal token, must carry
+//     admin rights (requireKdcAdminOrInternal).
+app.use(oidcAuth({
+  skipPaths: ['/health'],
+  internalServicePaths: ['/api/kerberos/sync-user'],
+}));
 
 const PORT = parseInt(process.env.KDC_API_PORT || '3013');
 const REALM = process.env.KRB5_REALM || 'OPENDIRECTORY.LOCAL';
@@ -102,7 +120,7 @@ app.get('/health', (req, res) => {
 
 // ─── Kerberos Principal Management ───────────────────────────────────────────
 
-// List all principals
+// List all principals (read-only; any authenticated caller — see oidcAuth above)
 app.get('/api/kerberos/principals', (req, res) => {
   try {
     const output = kadminLocal('listprincs');
@@ -115,7 +133,7 @@ app.get('/api/kerberos/principals', (req, res) => {
   }
 });
 
-// Get principal details
+// Get principal details (read-only; any authenticated caller)
 app.get('/api/kerberos/principals/:name', (req, res) => {
   try {
     const output = kadminLocal(`getprinc ${req.params.name}@${REALM}`);
@@ -131,8 +149,8 @@ app.get('/api/kerberos/principals/:name', (req, res) => {
   }
 });
 
-// Create principal
-app.post('/api/kerberos/principals', (req, res) => {
+// Create principal — admin-only: minting a new Kerberos identity
+app.post('/api/kerberos/principals', requireKdcAdmin, (req, res) => {
   const { name, password, noexpiry = true } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
   try {
@@ -147,8 +165,10 @@ app.post('/api/kerberos/principals', (req, res) => {
   }
 });
 
-// Change principal password
-app.put('/api/kerberos/principals/:name/password', (req, res) => {
+// Change principal password — admin-only. This is the realm-takeover
+// endpoint: without gating, any caller could set the password of ANY
+// principal (including admin/krbtgt-adjacent service accounts).
+app.put('/api/kerberos/principals/:name/password', requireKdcAdmin, (req, res) => {
   const { password } = req.body;
   if (!password) return res.status(400).json({ error: 'password required' });
   try {
@@ -159,8 +179,9 @@ app.put('/api/kerberos/principals/:name/password', (req, res) => {
   }
 });
 
-// Delete principal
-app.delete('/api/kerberos/principals/:name', (req, res) => {
+// Delete principal — admin-only: destructive, can remove any account incl.
+// service principals.
+app.delete('/api/kerberos/principals/:name', requireKdcAdmin, (req, res) => {
   try {
     kadminLocal(`delprinc -force ${req.params.name}@${REALM}`);
     res.json({ success: true });
@@ -169,8 +190,9 @@ app.delete('/api/kerberos/principals/:name', (req, res) => {
   }
 });
 
-// Generate keytab for a service principal
-app.post('/api/kerberos/keytabs/:name', (req, res) => {
+// Generate keytab for a service principal — admin-only: a keytab is a
+// long-lived, offline-usable credential for that principal.
+app.post('/api/kerberos/keytabs/:name', requireKdcAdmin, (req, res) => {
   const keytabPath = `/tmp/keytab-${req.params.name.replace(/[^a-zA-Z0-9]/g, '_')}.keytab`;
   try {
     kadminLocal(`ktadd -k ${keytabPath} ${req.params.name}@${REALM}`);
@@ -184,8 +206,13 @@ app.post('/api/kerberos/keytabs/:name', (req, res) => {
   }
 });
 
-// Sync user from OpenDirectory (create Kerberos principal for LLDAP user)
-app.post('/api/kerberos/sync-user', (req, res) => {
+// Sync user from OpenDirectory (create Kerberos principal for LLDAP user).
+// Called server-to-server by authentication-service (register / change-
+// password) using the shared KDC_INTERNAL_TOKEN — see oidcAuth.js. Just as
+// sensitive as the password-set endpoint (it can set an arbitrary
+// principal's password too), so any caller that did NOT use the internal
+// token must present an admin JWT.
+app.post('/api/kerberos/sync-user', requireKdcAdminOrInternal, (req, res) => {
   const { username, password } = req.body;
   if (!username) return res.status(400).json({ error: 'username required' });
   try {
@@ -209,7 +236,7 @@ app.post('/api/kerberos/sync-user', (req, res) => {
 
 // ─── Ticket Policy endpoints ──────────────────────────────────────────────────
 
-// GET /api/ticket-policy — get realm-wide ticket policy
+// GET /api/ticket-policy — get realm-wide ticket policy (read-only; any authenticated caller)
 app.get('/api/ticket-policy', requireDb, async (req, res) => {
   try {
     const { rows } = await db.query(
@@ -232,8 +259,8 @@ app.get('/api/ticket-policy', requireDb, async (req, res) => {
   }
 });
 
-// PUT /api/ticket-policy — update realm-wide ticket policy
-app.put('/api/ticket-policy', requireDb, async (req, res) => {
+// PUT /api/ticket-policy — update realm-wide ticket policy — admin-only
+app.put('/api/ticket-policy', requireDb, requireKdcAdmin, async (req, res) => {
   const { maxTicketLife, maxRenewLife, forwardable, proxiable, renewable, noAddress } = req.body;
   try {
     const { rows } = await db.query(
@@ -266,7 +293,7 @@ app.put('/api/ticket-policy', requireDb, async (req, res) => {
   }
 });
 
-// GET /api/principals/:name/ticket-policy — per-principal policy override
+// GET /api/principals/:name/ticket-policy — per-principal policy override (read-only; any authenticated caller)
 app.get('/api/principals/:name/ticket-policy', requireDb, async (req, res) => {
   try {
     const { rows } = await db.query(
@@ -292,8 +319,8 @@ app.get('/api/principals/:name/ticket-policy', requireDb, async (req, res) => {
   }
 });
 
-// PUT /api/principals/:name/ticket-policy — set per-principal override
-app.put('/api/principals/:name/ticket-policy', requireDb, async (req, res) => {
+// PUT /api/principals/:name/ticket-policy — set per-principal override — admin-only
+app.put('/api/principals/:name/ticket-policy', requireDb, requireKdcAdmin, async (req, res) => {
   const { maxTicketLife, maxRenewLife, forwardable, proxiable, renewable, noAddress } = req.body;
   const principal = req.params.name;
   if (principal === 'REALM_DEFAULT') {
@@ -330,8 +357,8 @@ app.put('/api/principals/:name/ticket-policy', requireDb, async (req, res) => {
   }
 });
 
-// DELETE /api/principals/:name/ticket-policy — remove per-principal override
-app.delete('/api/principals/:name/ticket-policy', requireDb, async (req, res) => {
+// DELETE /api/principals/:name/ticket-policy — remove per-principal override — admin-only
+app.delete('/api/principals/:name/ticket-policy', requireDb, requireKdcAdmin, async (req, res) => {
   const principal = req.params.name;
   if (principal === 'REALM_DEFAULT') {
     return res.status(400).json({ error: 'Cannot delete the realm default policy' });
@@ -349,9 +376,14 @@ app.delete('/api/principals/:name/ticket-policy', requireDb, async (req, res) =>
 });
 
 // ─── Delegation endpoints ─────────────────────────────────────────────────────
+// All admin-only: delegation configuration (constrained/RBCD/unconstrained)
+// controls Kerberos trust paths and impersonation rights — misconfiguration
+// or disclosure is a direct privilege-escalation/lateral-movement vector. No
+// other service calls these routes (verified against the codebase), so
+// there is no internal-token bypass need here, unlike sync-user.
 
 // GET /api/delegation — list all delegation configurations
-app.get('/api/delegation', requireDb, async (req, res) => {
+app.get('/api/delegation', requireDb, requireKdcAdmin, async (req, res) => {
   try {
     const result = await delegationManager.listDelegations({ type: 'all' });
     res.json(result);
@@ -361,7 +393,7 @@ app.get('/api/delegation', requireDb, async (req, res) => {
 });
 
 // GET /api/delegation/constrained/:principal — get constrained delegation
-app.get('/api/delegation/constrained/:principal', requireDb, async (req, res) => {
+app.get('/api/delegation/constrained/:principal', requireDb, requireKdcAdmin, async (req, res) => {
   try {
     const config = await delegationManager.getConstrainedDelegation(req.params.principal);
     if (!config) return res.status(404).json({ error: 'No constrained delegation configured for this principal' });
@@ -372,7 +404,7 @@ app.get('/api/delegation/constrained/:principal', requireDb, async (req, res) =>
 });
 
 // POST /api/delegation/constrained — set constrained delegation
-app.post('/api/delegation/constrained', requireDb, async (req, res) => {
+app.post('/api/delegation/constrained', requireDb, requireKdcAdmin, async (req, res) => {
   const { servicePrincipal, allowedTargets, protocol } = req.body;
   if (!servicePrincipal) return res.status(400).json({ error: 'servicePrincipal required' });
   try {
@@ -387,7 +419,7 @@ app.post('/api/delegation/constrained', requireDb, async (req, res) => {
 });
 
 // DELETE /api/delegation/constrained/:principal — remove constrained delegation
-app.delete('/api/delegation/constrained/:principal', requireDb, async (req, res) => {
+app.delete('/api/delegation/constrained/:principal', requireDb, requireKdcAdmin, async (req, res) => {
   try {
     const result = await delegationManager.removeConstrainedDelegation(req.params.principal);
     if (!result.removed) return res.status(404).json({ error: 'No constrained delegation found' });
@@ -398,7 +430,7 @@ app.delete('/api/delegation/constrained/:principal', requireDb, async (req, res)
 });
 
 // POST /api/delegation/rbcd — set RBCD on a resource
-app.post('/api/delegation/rbcd', requireDb, async (req, res) => {
+app.post('/api/delegation/rbcd', requireDb, requireKdcAdmin, async (req, res) => {
   const { resourcePrincipal, allowedDelegators } = req.body;
   if (!resourcePrincipal) return res.status(400).json({ error: 'resourcePrincipal required' });
   try {
@@ -412,7 +444,7 @@ app.post('/api/delegation/rbcd', requireDb, async (req, res) => {
 });
 
 // GET /api/delegation/rbcd/:resource — get RBCD config for a resource
-app.get('/api/delegation/rbcd/:resource', requireDb, async (req, res) => {
+app.get('/api/delegation/rbcd/:resource', requireDb, requireKdcAdmin, async (req, res) => {
   try {
     const config = await delegationManager.getRBCD(req.params.resource);
     if (!config) return res.status(404).json({ error: 'No RBCD configuration found for this resource' });
@@ -423,7 +455,7 @@ app.get('/api/delegation/rbcd/:resource', requireDb, async (req, res) => {
 });
 
 // DELETE /api/delegation/rbcd/:resource — remove RBCD config
-app.delete('/api/delegation/rbcd/:resource', requireDb, async (req, res) => {
+app.delete('/api/delegation/rbcd/:resource', requireDb, requireKdcAdmin, async (req, res) => {
   try {
     const result = await delegationManager.removeRBCD(req.params.resource);
     if (!result.removed) return res.status(404).json({ error: 'No RBCD configuration found' });
@@ -434,7 +466,7 @@ app.delete('/api/delegation/rbcd/:resource', requireDb, async (req, res) => {
 });
 
 // GET /api/delegation/unconstrained — security audit: list unconstrained delegation
-app.get('/api/delegation/unconstrained', requireDb, async (req, res) => {
+app.get('/api/delegation/unconstrained', requireDb, requireKdcAdmin, async (req, res) => {
   try {
     const list = await delegationManager.listUnconstrainedDelegations();
     res.json({
@@ -448,7 +480,7 @@ app.get('/api/delegation/unconstrained', requireDb, async (req, res) => {
 });
 
 // POST /api/delegation/unconstrained — set/unset unconstrained delegation
-app.post('/api/delegation/unconstrained', requireDb, async (req, res) => {
+app.post('/api/delegation/unconstrained', requireDb, requireKdcAdmin, async (req, res) => {
   const { principal, enabled } = req.body;
   if (!principal) return res.status(400).json({ error: 'principal required' });
   try {
@@ -460,7 +492,7 @@ app.post('/api/delegation/unconstrained', requireDb, async (req, res) => {
 });
 
 // POST /api/delegation/simulate/s4u2self — simulate S4U2Self
-app.post('/api/delegation/simulate/s4u2self', requireDb, async (req, res) => {
+app.post('/api/delegation/simulate/s4u2self', requireDb, requireKdcAdmin, async (req, res) => {
   const { servicePrincipal, userPrincipal } = req.body;
   if (!servicePrincipal || !userPrincipal) {
     return res.status(400).json({ error: 'servicePrincipal and userPrincipal required' });
@@ -474,7 +506,7 @@ app.post('/api/delegation/simulate/s4u2self', requireDb, async (req, res) => {
 });
 
 // POST /api/delegation/simulate/s4u2proxy — validate S4U2Proxy
-app.post('/api/delegation/simulate/s4u2proxy', requireDb, async (req, res) => {
+app.post('/api/delegation/simulate/s4u2proxy', requireDb, requireKdcAdmin, async (req, res) => {
   const { servicePrincipal, targetServiceSPN, evidenceTicket } = req.body;
   if (!servicePrincipal || !targetServiceSPN) {
     return res.status(400).json({ error: 'servicePrincipal and targetServiceSPN required' });
@@ -492,7 +524,7 @@ app.post('/api/delegation/simulate/s4u2proxy', requireDb, async (req, res) => {
 });
 
 // GET /api/delegation/audit — query delegation audit log
-app.get('/api/delegation/audit', requireDb, async (req, res) => {
+app.get('/api/delegation/audit', requireDb, requireKdcAdmin, async (req, res) => {
   const { from, to, servicePrincipal, limit } = req.query;
   try {
     const entries = await delegationManager.getDelegationAuditLog({
@@ -510,7 +542,7 @@ app.get('/api/delegation/audit', requireDb, async (req, res) => {
 // ─── Protected Users endpoints ────────────────────────────────────────────────
 
 // GET /api/protected-users — list members
-app.get('/api/protected-users', requireDb, async (req, res) => {
+app.get('/api/protected-users', requireDb, requireKdcAdmin, async (req, res) => {
   try {
     const members = await protectedUsersPolicy.listMembers();
     res.json({ count: members.length, members });
@@ -520,7 +552,7 @@ app.get('/api/protected-users', requireDb, async (req, res) => {
 });
 
 // POST /api/protected-users — add a member
-app.post('/api/protected-users', requireDb, async (req, res) => {
+app.post('/api/protected-users', requireDb, requireKdcAdmin, async (req, res) => {
   const { userPrincipal, addedBy } = req.body;
   if (!userPrincipal) return res.status(400).json({ error: 'userPrincipal required' });
   try {
@@ -532,7 +564,7 @@ app.post('/api/protected-users', requireDb, async (req, res) => {
 });
 
 // DELETE /api/protected-users/:principal — remove a member
-app.delete('/api/protected-users/:principal', requireDb, async (req, res) => {
+app.delete('/api/protected-users/:principal', requireDb, requireKdcAdmin, async (req, res) => {
   const { removedBy } = req.body || {};
   try {
     const result = await protectedUsersPolicy.removeMember(req.params.principal, removedBy || null);
@@ -544,7 +576,7 @@ app.delete('/api/protected-users/:principal', requireDb, async (req, res) => {
 });
 
 // GET /api/protected-users/report — protection report
-app.get('/api/protected-users/report', requireDb, async (req, res) => {
+app.get('/api/protected-users/report', requireDb, requireKdcAdmin, async (req, res) => {
   try {
     const report = await protectedUsersPolicy.getProtectionReport();
     res.json(report);
@@ -554,7 +586,7 @@ app.get('/api/protected-users/report', requireDb, async (req, res) => {
 });
 
 // POST /api/protected-users/:principal/check — check if an operation is allowed
-app.post('/api/protected-users/:principal/check', requireDb, async (req, res) => {
+app.post('/api/protected-users/:principal/check', requireDb, requireKdcAdmin, async (req, res) => {
   const { operation } = req.body;
   if (!operation) return res.status(400).json({ error: 'operation required' });
   try {
@@ -576,12 +608,23 @@ async function start() {
     console.log('[kdc] DelegationManager and ProtectedUsersPolicy initialised');
   }
 
-  app.listen(PORT, () => {
-    console.log(`[kerberos-admin-api] REST API on :${PORT}, Realm: ${REALM}`);
+  return new Promise(resolve => {
+    const server = app.listen(PORT, () => {
+      console.log(`[kerberos-admin-api] REST API on :${PORT}, Realm: ${REALM}`);
+      resolve(server);
+    });
   });
 }
 
-start().catch(err => {
-  console.error('[kdc] Startup error:', err);
-  process.exit(1);
-});
+// Only auto-start when run directly (docker entrypoint: `node src/index.js`).
+// When required as a module — e.g. by the e2e test suite, which needs to
+// mock pg/child_process/JWKS *before* start() runs and needs the returned
+// server handle to close it after tests — the caller drives start() itself.
+if (require.main === module) {
+  start().catch(err => {
+    console.error('[kdc] Startup error:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { app, start };
