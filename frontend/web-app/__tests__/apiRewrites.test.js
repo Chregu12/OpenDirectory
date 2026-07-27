@@ -238,10 +238,10 @@ describe('audit routing', () => {
 // Neither prefix had a rewrite rule before this suite: both silently fell
 // through to the api-backend catch-all, which has no handlers for them.
 // /api/pim/elevation/* is deliberately distinct from bare /api/pim/* (which
-// is not routed by this file at all — /api/v1/pim/* above targets
-// conditional-access, a third, unrelated PIM-shaped feature) so it never
-// collides with authentication-service's own /api/pim/* (role-based PIM),
-// even though nothing here currently routes that bare prefix.
+// is routed separately, to authentication-service — see the "PIM roles &
+// requests routing" describe block below) and from /api/v1/pim/* above
+// (conditional-access, a third, unrelated PIM-shaped feature), so it never
+// collides with authentication-service's own /api/pim/* (role-based PIM).
 
 describe('least-privilege routing', () => {
   test.each([
@@ -277,6 +277,129 @@ describe('least-privilege routing', () => {
     expect(pimElevation).toBeGreaterThan(-1);
     expect(perms).toBeLessThan(catchAllIndex);
     expect(pimElevation).toBeLessThan(catchAllIndex);
+  });
+});
+
+// ─── PIM roles & requests routing (authentication-service) ────────────────────
+// PIMView.tsx's role catalog + approval queue. Distinct from
+// /api/pim/elevation/* (least-privilege, tested above) and /api/v1/pim/*
+// (conditional-access) — see services/core/authentication-service/src/routes/
+// pim.js for the real route list this mirrors.
+
+describe('PIM roles & requests routing (authentication-service)', () => {
+  test.each([
+    '/api/pim/roles',
+    '/api/pim/roles/role-1',
+    '/api/pim/requests',
+    '/api/pim/requests/req-1/approve',
+    '/api/pim/requests/req-1/deny',
+    '/api/pim/requests/req-1/revoke',
+    '/api/pim/activations',
+  ])('%s → authentication-service', urlPath => {
+    expectRoute(urlPath, 'auth-service:3001', '/api/pim');
+  });
+
+  test('/api/pim/elevation precedes the broader /api/pim/:path* rule (still least-privilege, not shadowed)', () => {
+    const elevation = rules.findIndex(r => r.source === '/api/pim/elevation/:path*');
+    const generic = rules.findIndex(r => r.source === '/api/pim/:path*');
+    expect(elevation).toBeGreaterThan(-1);
+    expect(generic).toBeGreaterThan(-1);
+    expect(elevation).toBeLessThan(generic);
+    expectRoute('/api/pim/elevation/active', 'least-privilege:3011');
+  });
+
+  test('the /api/pim/:path* rule precedes the /api/:path* catch-all', () => {
+    const generic = rules.findIndex(r => r.source === '/api/pim/:path*');
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    expect(generic).toBeGreaterThan(-1);
+    expect(generic).toBeLessThan(catchAllIndex);
+  });
+});
+
+// ─── Auth routes: api-backend's four vs. authentication-service's rest ────────
+// api-backend (services/platform/api-backend/server.js) only implements
+// login/logout/profile/change-password. Everything else under /api/auth/* is
+// authentication-service-only and must NOT be shadowed by those four —
+// the literals have to win via ordering, not path specificity (both are
+// nested under /api/auth/).
+
+describe('auth routing split (api-backend vs authentication-service)', () => {
+  test.each([
+    '/api/auth/login',
+    '/api/auth/logout',
+    '/api/auth/profile',
+    '/api/auth/change-password',
+  ])('%s stays on api-backend', urlPath => {
+    expectRoute(urlPath, 'api-backend:8080', '/api/auth');
+  });
+
+  test.each([
+    '/api/auth/register',
+    '/api/auth/refresh',
+    '/api/auth/validate',
+    '/api/auth/sessions',
+    '/api/auth/sessions/session-1',
+    '/api/auth/sessions/revoke-all',
+    '/api/auth/trust-score',
+    '/api/auth/verify-device',
+    '/api/auth/verify-location',
+    '/api/auth/step-up',
+    '/api/auth/mfa/setup',
+    '/api/auth/mfa/verify',
+    '/api/auth/mfa/status',
+    '/api/auth/mfa/recovery-codes',
+    '/api/auth/reset-password',
+    '/api/auth/password-reset/confirm',
+    '/api/auth/users',
+    '/api/auth/users/user-1',
+    '/api/auth/users/user-1/lock',
+    '/api/auth/sso/providers',
+    '/api/auth/audit/login-history',
+    '/api/auth/audit/security-events',
+  ])('%s → authentication-service (dead route via api-backend before this fix)', urlPath => {
+    expectRoute(urlPath, 'auth-service:3001', '/api/auth');
+  });
+
+  test('the four api-backend literals precede the broad /api/auth/:path* rule', () => {
+    const broad = rules.findIndex(r => r.source === '/api/auth/:path*');
+    expect(broad).toBeGreaterThan(-1);
+    for (const literal of ['/api/auth/login', '/api/auth/logout', '/api/auth/profile', '/api/auth/change-password']) {
+      const idx = rules.findIndex(r => r.source === literal);
+      expect(idx).toBeGreaterThan(-1);
+      expect(idx).toBeLessThan(broad);
+    }
+  });
+
+  test('the broad /api/auth/:path* rule precedes the /api/:path* catch-all', () => {
+    const broad = rules.findIndex(r => r.source === '/api/auth/:path*');
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    expect(broad).toBeGreaterThan(-1);
+    expect(broad).toBeLessThan(catchAllIndex);
+  });
+});
+
+// ─── Service accounts & domain config (authentication-service) ────────────────
+
+describe('service-accounts & config/domain routing (authentication-service)', () => {
+  test.each([
+    '/api/service-accounts',
+    '/api/service-accounts/sa-1',
+    '/api/service-accounts/sa-1/token',
+  ])('%s → authentication-service', urlPath => {
+    expectRoute(urlPath, 'auth-service:3001', '/api/service-accounts');
+  });
+
+  test('/api/config/domain → authentication-service (not the integration-service /api/config/* rules above)', () => {
+    expectRoute('/api/config/domain', 'auth-service:3001', '/api/config/domain');
+  });
+
+  test('these rules precede the /api/:path* catch-all', () => {
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    for (const source of ['/api/service-accounts', '/api/service-accounts/:path*', '/api/config/domain']) {
+      const idx = rules.findIndex(r => r.source === source);
+      expect(idx).toBeGreaterThan(-1);
+      expect(idx).toBeLessThan(catchAllIndex);
+    }
   });
 });
 

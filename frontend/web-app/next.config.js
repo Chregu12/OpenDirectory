@@ -101,6 +101,75 @@ const nextConfig = {
       // them) and PermissionsView.tsx ran on demo data only.
       { source: '/api/permissions/:path*',  destination: `${leastPrivilegeUrl}/api/permissions/:path*` },
       { source: '/api/pim/elevation/:path*', destination: `${leastPrivilegeUrl}/api/pim/elevation/:path*` },
+      // PIM (Privileged Identity Management) roles & approval queue ->
+      // authentication-service (consumed by PIMView.tsx: GET/POST
+      // /api/pim/roles, PUT/DELETE /api/pim/roles/:id, GET/POST
+      // /api/pim/requests, POST /api/pim/requests/:id/{approve,deny,revoke} —
+      // see services/core/authentication-service/src/routes/pim.js). This is
+      // a DIFFERENT feature from /api/pim/elevation/* (least-privilege,
+      // resource/level JIT elevation) and /api/v1/pim/* (conditional-access,
+      // break-glass sessions) above — they only share the "pim" word. The
+      // narrower /api/pim/elevation/:path* rule MUST precede this broader
+      // /api/pim/:path* rule, or it would shadow it.
+      { source: '/api/pim/:path*',          destination: `${authServiceUrl}/api/pim/:path*` },
+      // Additional authentication-service routes beyond what api-backend
+      // implements. api-backend (services/platform/api-backend/server.js)
+      // only implements four /api/auth/* routes: login, logout, profile
+      // (GET/PUT), change-password — those MUST keep going to api-backend
+      // (pinned below as literals) since they work there today. Every other
+      // /api/auth/* path — register, refresh, validate, sessions*,
+      // trust-score, verify-device, verify-location, step-up, mfa/*,
+      // reset-password, password-reset/confirm, users* (admin), sso*,
+      // audit/login-history, audit/security-events — is only implemented by
+      // authentication-service (see src/routes/{auth,mfa,sessions,zeroTrust,
+      // users,sso,audit}.js) and was silently 404ing via the api-backend
+      // catch-all. The four literals MUST precede this broad rule, or they'd
+      // be shadowed by it.
+      { source: '/api/auth/login',           destination: `${apiBackendUrl}/api/auth/login` },
+      { source: '/api/auth/logout',          destination: `${apiBackendUrl}/api/auth/logout` },
+      { source: '/api/auth/profile',         destination: `${apiBackendUrl}/api/auth/profile` },
+      { source: '/api/auth/change-password', destination: `${apiBackendUrl}/api/auth/change-password` },
+      { source: '/api/auth/:path*',          destination: `${authServiceUrl}/api/auth/:path*` },
+      // Service accounts (SettingsView / service-account management) ->
+      // authentication-service (src/routes/serviceAccounts.js). quick-actions
+      // already calls this service directly server-to-server; this rule adds
+      // the browser-facing path.
+      { source: '/api/service-accounts',       destination: `${authServiceUrl}/api/service-accounts` },
+      { source: '/api/service-accounts/:path*', destination: `${authServiceUrl}/api/service-accounts/:path*` },
+      // Domain configuration (OnboardingWizard) -> authentication-service
+      // (src/routes/directory.js: GET/POST /api/config/domain). Distinct
+      // from the /api/config/{modules,features,settings} rules above, which
+      // target integration-service.
+      { source: '/api/config/domain',       destination: `${authServiceUrl}/api/config/domain` },
+      // ── NOT routed (investigated, deliberately left as-is) ──────────────
+      // /api/devices/:id/{software,hardware,network,logs,policies,compliance},
+      // /api/mdm/*, /api/policies/{ou-tree,templates,:id/compiled,
+      // :id/versions,:id/gpos}, /api/monitoring/status,
+      // /api/security/{pam/sessions,dlp/policies}, /api/gateway/stats:
+      // these handlers exist ONLY in services/platform/integration-service/
+      // index.js, a pre-DDD-rewrite file that is NOT part of what actually
+      // runs. package.json's "start" script runs `node dist/index.js`,
+      // compiled by tsc from tsconfig.json's `rootDir: "./src"` /
+      // `include: ["src/**/*"]` — the top-level index.js is outside that
+      // tree and is never built into dist/ or executed. The real, deployed
+      // integration-service (src/index.ts + src/routes/*.ts) only mounts
+      // lldap, grafana, prometheus, vault, config and services. Pointing
+      // these paths at integration-service would trade one 404 (api-backend
+      // catch-all) for another (integration-service's own 404 handler) —
+      // no reachability gained. /api/mdm/* additionally has THREE competing
+      // candidate backends with no clear owner: apple-mdm (real, deployed,
+      // docker-compose port 3014, implements /api/mdm/devices + device
+      // commands), quick-actions' own 'mdm' service alias (MDM_SERVICE_URL,
+      // defaults to http://mobile-management — a host that doesn't appear in
+      // docker-compose.yml at all), and the dead integration-service code
+      // above. /api/policies/{ou-tree,templates,:id/compiled,...} similarly
+      // has no real implementation: policy-service (real, deployed, port
+      // 3004) has policy CRUD/assign/deploy/compliance-scan but none of
+      // these sub-routes. Resolving any of this requires a service-level
+      // decision (which backend should own the route, and building/wiring
+      // it there) — out of scope for a routing-layer change, and explicitly
+      // out of scope for this task (no service files touched). Left as-is
+      // rather than blindly rerouted.
       // Everything else -> api-backend
       { source: '/api/:path*',              destination: `${apiBackendUrl}/api/:path*` },
     ];

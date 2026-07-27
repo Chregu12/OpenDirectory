@@ -711,11 +711,22 @@ export const auditApi = {
   getIntegrity: () =>
     api.get(`${DIRECTORY_BASE}/api/audit/integrity`),
 
+  // audit-service exposes this as /api/audit/events/correlation/:id (not
+  // /api/audit/correlations/:id — that path doesn't exist on any service).
   getCorrelations: (correlationId: string) =>
-    api.get(`${DIRECTORY_BASE}/api/audit/correlations/${correlationId}`),
+    api.get(`${DIRECTORY_BASE}/api/audit/events/correlation/${correlationId}`),
 
-  exportEvents: (params?: { format?: string; category?: string; severity?: string }) =>
-    api.post(`${DIRECTORY_BASE}/api/audit/export`, params),
+  // audit-service has no /api/audit/export route; report generation is
+  // POST /api/audit/reports/{csv,pdf} with a { filters } body (see
+  // services/enterprise/audit-service/src/index.js). category/severity are
+  // passed through as filters to match that contract.
+  exportEvents: (params?: { format?: string; category?: string; severity?: string }) => {
+    const format = params?.format === 'pdf' ? 'pdf' : 'csv';
+    const filters: Record<string, string> = {};
+    if (params?.category) filters.category = params.category;
+    if (params?.severity) filters.severity = params.severity;
+    return api.post(`${DIRECTORY_BASE}/api/audit/reports/${format}`, { filters });
+  },
 };
 
 // PIM Sessions API (conditional-access service, port 3007)
