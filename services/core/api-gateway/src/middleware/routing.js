@@ -316,6 +316,13 @@ class RoutingMiddleware {
         service: 'identity-service',
         port: 3001,
         description: 'Role Management'
+      },
+      // identity-service is the canonical OU owner (authentication-service's
+      // competing /api/ous implementation was consolidated away).
+      '/api/ous': {
+        service: 'identity-service',
+        port: 3001,
+        description: 'Organizational Unit Management'
       }
     };
     
