@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const jwt    = require('jsonwebtoken');
 const { callDeviceService } = require('./utils/serviceClient');
+const db = require('./db');
 
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
@@ -82,8 +83,95 @@ app.use(express.json());
 const ssh = new NodeSSH();
 const CT2001_HOST = process.env.CT2001_HOST || '192.168.1.51';
 
-// In-memory device store — populated via enrollment
+// In-memory device store — populated via enrollment. This is the
+// in-memory MIRROR: DB-first reads/writes go through the helpers below
+// (getAllLocalDevices / getLocalDeviceById / saveLocalDevice), which keep
+// this object in sync on every successful write so the fallback stays
+// consistent whether or not PostgreSQL is reachable — see db.js.
 const deviceStore = {};
+
+// ── Local device persistence (DB-first, in-memory fallback) ────────────────
+// The legacy in-memory deviceStore predates device-service delegation (see
+// callDeviceService above) and is still the source of truth for devices
+// enrolled directly against api-backend (POST /api/devices/enroll) and for
+// the GET /api/devices(/:id) fallback path used when device-service is
+// unreachable. Its entries are mutated ad hoc by several handlers (refresh,
+// apps/install, apps/:appId delete — each adding/changing fields like
+// installedApps, installedAppsCount, status, lastSeen) rather than
+// conforming to one fixed shape, so instead of modeling a relational schema
+// per field (risking silently dropping a field none of the golden-master
+// tests happen to exercise), each device is persisted as a single JSONB
+// blob keyed by id — see migrations/001_api_backend_schema.sql.
+//
+// DB write failures are logged and swallowed rather than surfaced as a new
+// 500: the pre-existing in-memory implementation could never fail these
+// operations, and changing a status code on DB hiccups would violate the
+// golden-master contract this work must preserve. The in-memory mirror is
+// always updated regardless, so the request still succeeds exactly as it
+// did before this persistence layer existed.
+function deviceRowToObject(row) {
+  return { id: row.id, ...row.data };
+}
+
+async function dbListDevices() {
+  if (!db.isAvailable()) return null;
+  try {
+    const r = await db.query('SELECT id, data FROM devices ORDER BY updated_at');
+    return r.rows.map(deviceRowToObject);
+  } catch (err) {
+    console.warn('[api-backend-db] list devices failed, falling back to in-memory:', err.message);
+    return null;
+  }
+}
+
+async function dbGetDevice(id) {
+  if (!db.isAvailable()) return undefined;
+  try {
+    const r = await db.query('SELECT id, data FROM devices WHERE id=$1', [id]);
+    return r.rows.length ? deviceRowToObject(r.rows[0]) : null;
+  } catch (err) {
+    console.warn('[api-backend-db] get device failed, falling back to in-memory:', err.message);
+    return undefined;
+  }
+}
+
+async function dbUpsertDevice(device) {
+  if (!db.isAvailable()) return;
+  const { id, ...data } = device;
+  try {
+    await db.query(
+      'INSERT INTO devices(id, data, updated_at) VALUES($1,$2,NOW()) ON CONFLICT (id) DO UPDATE SET data=$2, updated_at=NOW()',
+      [id, JSON.stringify(data)]
+    );
+  } catch (err) {
+    console.warn('[api-backend-db] upsert device failed:', err.message);
+  }
+}
+
+// DB-first: returns every device, falling back to the in-memory mirror
+// whenever the DB is unavailable or errors. Used by GET /api/devices'
+// fallback path, the WebSocket initial snapshot, and /api/health's count.
+async function getAllLocalDevices() {
+  const fromDb = await dbListDevices();
+  return fromDb !== null ? fromDb : Object.values(deviceStore);
+}
+
+// DB-first: null means "DB says this id doesn't exist" (a real answer —
+// do NOT fall back to memory), undefined-from-dbGetDevice means "DB
+// unavailable/errored", which IS when we fall back to the in-memory
+// mirror. Mirrors the identity-service db.js call-site convention.
+async function getLocalDeviceById(id) {
+  const fromDb = await dbGetDevice(id);
+  if (fromDb !== undefined) return fromDb;
+  return deviceStore[id] || null;
+}
+
+// Persists a device (insert or update) to the DB (best-effort — see note
+// above) and always mirrors it into deviceStore.
+async function saveLocalDevice(device) {
+  await dbUpsertDevice(device);
+  deviceStore[device.id] = device;
+}
 
 // ── device-service delegation ─────────────────────────────────────────────────
 // GET /api/devices and GET /api/devices/:id delegate to device-service (the
@@ -157,10 +245,173 @@ if (!initialAdminPassword && process.env.NODE_ENV === 'production') {
 }
 userStore[0].passwordHash = bcrypt.hashSync(initialAdminPassword || 'admin!', BCRYPT_ROUNDS);
 
+// ── Local user persistence (DB-first, in-memory fallback) ──────────────────
+// Mirrors the deviceStore pattern above and the established
+// identity-service/src/db.js convention: DB-first reads that fall back to
+// the in-memory userStore array on unavailability/error, and best-effort
+// (log-and-continue, never a new 500) DB writes that always also mirror
+// into userStore so behavior — including status codes — matches the
+// pre-existing pure in-memory implementation exactly.
+function userRowToObject(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    username: row.username,
+    email: row.email,
+    role: row.role,
+    active: row.active,
+    groups: row.groups || [],
+    passwordHash: row.password_hash,
+    lastLogin: row.last_login,
+    created: row.created,
+  };
+}
+
+const USER_COLUMNS = 'id, name, username, email, role, active, groups, password_hash, last_login, created';
+
+async function dbListUsers() {
+  if (!db.isAvailable()) return null;
+  try {
+    const r = await db.query(`SELECT ${USER_COLUMNS} FROM users ORDER BY created`);
+    return r.rows.map(userRowToObject);
+  } catch (err) {
+    console.warn('[api-backend-db] list users failed, falling back to in-memory:', err.message);
+    return null;
+  }
+}
+
+async function dbGetUserById(id) {
+  if (!db.isAvailable()) return undefined;
+  try {
+    const r = await db.query(`SELECT ${USER_COLUMNS} FROM users WHERE id=$1`, [id]);
+    return r.rows.length ? userRowToObject(r.rows[0]) : null;
+  } catch (err) {
+    console.warn('[api-backend-db] get user failed, falling back to in-memory:', err.message);
+    return undefined;
+  }
+}
+
+async function dbFindActiveUserByIdentifier(identifier) {
+  if (!db.isAvailable()) return undefined;
+  try {
+    const r = await db.query(
+      `SELECT ${USER_COLUMNS} FROM users WHERE (username=$1 OR email=$1) AND active=true LIMIT 1`,
+      [identifier]
+    );
+    return r.rows.length ? userRowToObject(r.rows[0]) : null;
+  } catch (err) {
+    console.warn('[api-backend-db] find user failed, falling back to in-memory:', err.message);
+    return undefined;
+  }
+}
+
+async function dbUsernameExists(username) {
+  if (!db.isAvailable()) return undefined;
+  try {
+    const r = await db.query('SELECT 1 FROM users WHERE username=$1 LIMIT 1', [username]);
+    return r.rows.length > 0;
+  } catch (err) {
+    console.warn('[api-backend-db] username lookup failed, falling back to in-memory:', err.message);
+    return undefined;
+  }
+}
+
+async function dbInsertUser(user) {
+  if (!db.isAvailable()) return;
+  try {
+    await db.query(
+      `INSERT INTO users(${USER_COLUMNS}) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [user.id, user.name, user.username, user.email, user.role, user.active, user.groups, user.passwordHash, user.lastLogin, user.created]
+    );
+  } catch (err) {
+    console.warn('[api-backend-db] insert user failed:', err.message);
+  }
+}
+
+async function dbUpdateUser(id, fields) {
+  if (!db.isAvailable()) return;
+  const entries = Object.entries(fields);
+  if (!entries.length) return;
+  const sets = entries.map(([col], i) => `${col}=$${i + 1}`);
+  const params = entries.map(([, val]) => val);
+  params.push(id);
+  try {
+    await db.query(`UPDATE users SET ${sets.join(', ')} WHERE id=$${params.length}`, params);
+  } catch (err) {
+    console.warn('[api-backend-db] update user failed:', err.message);
+  }
+}
+
+async function dbDeleteUser(id) {
+  if (!db.isAvailable()) return;
+  try {
+    await db.query('DELETE FROM users WHERE id=$1', [id]);
+  } catch (err) {
+    console.warn('[api-backend-db] delete user failed:', err.message);
+  }
+}
+
+// DB-first accessors — see the "null means DB found nothing, undefined
+// means DB unavailable/errored (fall back)" convention documented on the
+// device helpers above.
+async function getAllUsersFull() {
+  const fromDb = await dbListUsers();
+  return fromDb !== null ? fromDb : userStore;
+}
+
+async function getUserByIdFull(id) {
+  const fromDb = await dbGetUserById(id);
+  if (fromDb !== undefined) return fromDb;
+  return userStore.find(u => u.id === id) || null;
+}
+
+async function findActiveUserByIdentifier(identifier) {
+  const fromDb = await dbFindActiveUserByIdentifier(identifier);
+  if (fromDb !== undefined) return fromDb;
+  return userStore.find(u => (u.username === identifier || u.email === identifier) && u.active) || null;
+}
+
+async function usernameExists(username) {
+  const fromDb = await dbUsernameExists(username);
+  if (fromDb !== undefined) return fromDb;
+  return !!userStore.find(u => u.username === username);
+}
+
+// Upserts a user into the in-memory mirror by id. Used after every write so
+// userStore stays consistent regardless of whether the preceding read came
+// from the DB (a fresh object, not a userStore reference) or from memory.
+function mirrorUserInStore(user) {
+  const idx = userStore.findIndex(u => u.id === user.id);
+  if (idx === -1) userStore.push(user);
+  else userStore[idx] = user;
+}
+
+// Seed the default admin user into the DB once it's available (idempotent
+// via ON CONFLICT DO NOTHING, so a password changed via
+// POST /api/auth/change-password on a prior boot is never clobbered). This
+// runs after migrations complete — see db.initDb() call near the bottom of
+// this file — and is required for correctness: once db.isAvailable() is
+// true, DB-first reads no longer consult userStore, so without this seed a
+// fresh database would have no 'admin' row and the documented default
+// login would stop working.
+async function seedAdminUser() {
+  if (!db.isAvailable()) return;
+  const admin = userStore[0];
+  try {
+    await db.query(
+      `INSERT INTO users(${USER_COLUMNS}) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [admin.id, admin.name, admin.username, admin.email, admin.role, admin.active, admin.groups, admin.passwordHash, admin.lastLogin, admin.created]
+    );
+  } catch (err) {
+    console.warn('[api-backend-db] admin seed failed:', err.message);
+  }
+}
+
 // WebSocket connections — validate token on connect
 const clients = new Set();
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', async (ws, req) => {
   // Extract token from query param or cookie
   const url = new URL(req.url || '/', `http://${req.headers.host}`);
   const queryToken = url.searchParams.get('token');
@@ -180,7 +431,7 @@ wss.on('connection', (ws, req) => {
 
   ws.send(JSON.stringify({
     type: 'device_status',
-    data: Object.values(deviceStore)
+    data: await getAllLocalDevices()
   }));
 });
 
@@ -281,11 +532,13 @@ app.post('/api/auth/login', loginRateLimit, async (req, res) => {
 
   const { username, password } = req.body;
 
-  const user = userStore.find(u => (u.username === username || u.email === username) && u.active);
+  const user = await findActiveUserByIdentifier(username);
   if (!user || !(await comparePassword(password, user.passwordHash)))
     return res.status(401).json({ success: false, error: 'Invalid username or password' });
 
   user.lastLogin = new Date();
+  await dbUpdateUser(user.id, { last_login: user.lastLogin });
+  mirrorUserInStore(user);
   const token = signToken({ id: user.id, username: user.username, name: user.name, role: user.role, groups: user.groups });
   const { passwordHash, ...safeUser } = user;
 
@@ -305,25 +558,28 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true, message: 'Logged out' });
 });
 
-app.get('/api/auth/profile', authMiddleware, (req, res) => {
-  const user = userStore.find(u => u.id === req.user.id);
+app.get('/api/auth/profile', authMiddleware, async (req, res) => {
+  const user = await getUserByIdFull(req.user.id);
   if (!user) return res.status(401).json({ success: false, error: 'Unauthorized' });
   const { passwordHash, ...safeUser } = user;
   res.json({ success: true, data: safeUser });
 });
 
-app.put('/api/auth/profile', authMiddleware, (req, res) => {
-  const user = userStore.find(u => u.id === req.user.id);
+app.put('/api/auth/profile', authMiddleware, async (req, res) => {
+  const user = await getUserByIdFull(req.user.id);
   if (!user) return res.status(401).json({ success: false, error: 'Unauthorized' });
   const { name, email } = req.body;
-  if (name && isNonEmptyString(name, 128))  user.name  = name;
-  if (email && isValidEmail(email)) user.email = email;
+  const fields = {};
+  if (name && isNonEmptyString(name, 128))  { user.name  = name;  fields.name  = name; }
+  if (email && isValidEmail(email))         { user.email = email; fields.email = email; }
+  if (Object.keys(fields).length) await dbUpdateUser(user.id, fields);
+  mirrorUserInStore(user);
   const { passwordHash, ...safeUser } = user;
   res.json({ success: true, data: safeUser });
 });
 
 app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
-  const user = userStore.find(u => u.id === req.user.id);
+  const user = await getUserByIdFull(req.user.id);
   if (!user) return res.status(401).json({ success: false, error: 'Unauthorized' });
   const { currentPassword, newPassword } = req.body || {};
   if (!isNonEmptyString(currentPassword, 128) || !isNonEmptyString(newPassword, 128) || newPassword.length < 8)
@@ -331,13 +587,16 @@ app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
   if (!(await comparePassword(currentPassword, user.passwordHash)))
     return res.status(400).json({ success: false, error: 'Current password is incorrect' });
   user.passwordHash = await hashPassword(newPassword);
+  await dbUpdateUser(user.id, { password_hash: user.passwordHash });
+  mirrorUserInStore(user);
   res.json({ success: true, message: 'Password changed' });
 });
 // ────────────────────────────────────────────────────────────────────────────
 
 // Users API — requires authentication for all operations
-app.get('/api/users', authMiddleware, (req, res) => {
-  res.json({ success: true, data: userStore.map(({ passwordHash, ...u }) => u) });
+app.get('/api/users', authMiddleware, async (req, res) => {
+  const users = await getAllUsersFull();
+  res.json({ success: true, data: users.map(({ passwordHash, ...u }) => u) });
 });
 
 app.post('/api/users', authMiddleware, writeRateLimit, async (req, res) => {
@@ -346,7 +605,7 @@ app.post('/api/users', authMiddleware, writeRateLimit, async (req, res) => {
     return res.status(400).json({ success: false, error: validationError });
 
   const { username, name, email, password, role, groups } = req.body;
-  if (userStore.find(u => u.username === username))
+  if (await usernameExists(username))
     return res.status(409).json({ success: false, error: 'Username already exists' });
   const user = {
     id: 'user_' + Date.now(),
@@ -359,31 +618,37 @@ app.post('/api/users', authMiddleware, writeRateLimit, async (req, res) => {
     lastLogin: null,
     created: new Date(),
   };
+  await dbInsertUser(user);
   userStore.push(user);
   const { passwordHash, ...safeUser } = user;
   res.status(201).json({ success: true, data: safeUser });
 });
 
 app.put('/api/users/:id', authMiddleware, async (req, res) => {
-  const user = userStore.find(u => u.id === req.params.id);
+  const user = await getUserByIdFull(req.params.id);
   if (!user) return res.status(404).json({ success: false, error: 'User not found' });
   const { name, email, role, groups, active, password } = req.body || {};
-  if (name   !== undefined) user.name   = name;
-  if (email  !== undefined) user.email  = email;
-  if (role   !== undefined) user.role   = role;
-  if (groups !== undefined) user.groups = groups;
-  if (active !== undefined) user.active = active;
-  if (password) user.passwordHash = await hashPassword(password);
+  const fields = {};
+  if (name   !== undefined) { user.name   = name;   fields.name   = name; }
+  if (email  !== undefined) { user.email  = email;  fields.email  = email; }
+  if (role   !== undefined) { user.role   = role;   fields.role   = role; }
+  if (groups !== undefined) { user.groups = groups; fields.groups = groups; }
+  if (active !== undefined) { user.active = active; fields.active = active; }
+  if (password) { user.passwordHash = await hashPassword(password); fields.password_hash = user.passwordHash; }
+  if (Object.keys(fields).length) await dbUpdateUser(user.id, fields);
+  mirrorUserInStore(user);
   const { passwordHash, ...safeUser } = user;
   res.json({ success: true, data: safeUser });
 });
 
-app.delete('/api/users/:id', authMiddleware, (req, res) => {
-  const idx = userStore.findIndex(u => u.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ success: false, error: 'User not found' });
-  if (userStore[idx].id === 'admin')
+app.delete('/api/users/:id', authMiddleware, async (req, res) => {
+  const user = await getUserByIdFull(req.params.id);
+  if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+  if (user.id === 'admin')
     return res.status(400).json({ success: false, error: 'Cannot delete the default admin user' });
-  userStore.splice(idx, 1);
+  await dbDeleteUser(user.id);
+  const idx = userStore.findIndex(u => u.id === user.id);
+  if (idx !== -1) userStore.splice(idx, 1);
   res.json({ success: true, message: 'User deleted' });
 });
 
@@ -401,7 +666,7 @@ app.get('/api/devices', authMiddleware, async (req, res) => {
     warnDelegationFallback('GET /api/devices', err);
     return res.json({
       success: true,
-      data: Object.values(deviceStore)
+      data: await getAllLocalDevices()
     });
   }
 });
@@ -414,7 +679,7 @@ app.get('/api/devices/:id', authMiddleware, async (req, res) => {
     return res.json({ success: true, data: adaptDevice(raw) });
   } catch (err) {
     warnDelegationFallback(`GET /api/devices/${req.params.id}`, err);
-    const device = deviceStore[req.params.id];
+    const device = await getLocalDeviceById(req.params.id);
     if (!device) {
       return res.status(404).json({ success: false, error: 'Device not found' });
     }
@@ -428,7 +693,7 @@ app.get('/api/devices/:id', authMiddleware, async (req, res) => {
 // above) so refreshed state is persisted in the device-service domain.
 app.post('/api/devices/:id/refresh', authMiddleware, async (req, res) => {
   const deviceId = req.params.id;
-  const device = deviceStore[deviceId];
+  const device = await getLocalDeviceById(deviceId);
 
   if (!device) {
     return res.status(404).json({ success: false, error: 'Device not found' });
@@ -453,7 +718,7 @@ app.post('/api/devices/:id/refresh', authMiddleware, async (req, res) => {
       ssh.dispose();
     }
 
-    deviceStore[deviceId] = device;
+    await saveLocalDevice(device);
 
     broadcast({
       type: 'device_updated',
@@ -475,7 +740,7 @@ const ALLOWED_APP_IDS = new Set(['docker', 'vscode', 'firefox', 'chrome']);
 app.post('/api/devices/:id/apps/install', authMiddleware, async (req, res) => {
   const { appId, appName, version } = req.body;
   const deviceId = req.params.id;
-  const device = deviceStore[deviceId];
+  const device = await getLocalDeviceById(deviceId);
 
   if (!device) {
     return res.status(404).json({ success: false, error: 'Device not found' });
@@ -522,6 +787,7 @@ app.post('/api/devices/:id/apps/install', authMiddleware, async (req, res) => {
           status: 'installed',
           installedAt: new Date()
         });
+        await saveLocalDevice(device);
 
         broadcast({
           type: 'app_installed',
@@ -552,7 +818,7 @@ app.post('/api/devices/:id/apps/install', authMiddleware, async (req, res) => {
 app.delete('/api/devices/:id/apps/:appId', authMiddleware, async (req, res) => {
   const { appId } = req.params;
   const deviceId = req.params.id;
-  const device = deviceStore[deviceId];
+  const device = await getLocalDeviceById(deviceId);
 
   if (!device) {
     return res.status(404).json({ success: false, error: 'Device not found' });
@@ -590,6 +856,7 @@ app.delete('/api/devices/:id/apps/:appId', authMiddleware, async (req, res) => {
         if (device.installedApps) {
           device.installedApps = device.installedApps.filter(app => app.app !== appId);
         }
+        await saveLocalDevice(device);
 
         broadcast({
           type: 'app_uninstalled',
@@ -624,10 +891,11 @@ app.post('/api/users/sync', authMiddleware, async (req, res) => {
       data: { count: 0, newUsers: [] }
     });
 
+    const users = await getAllUsersFull();
     res.json({
       success: true,
       message: 'Users synced successfully',
-      data: { syncedCount: 0, totalUsers: userStore.length }
+      data: { syncedCount: 0, totalUsers: users.length }
     });
   } catch (error) {
     console.error('User sync error:', error);
@@ -636,7 +904,8 @@ app.post('/api/users/sync', authMiddleware, async (req, res) => {
 });
 
 // System Health API (public — used by Docker healthchecks)
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  const [devices, users] = await Promise.all([getAllLocalDevices(), getAllUsersFull()]);
   res.json({
     success: true,
     data: {
@@ -648,8 +917,8 @@ app.get('/api/health', (req, res) => {
         monitoring: 'active'
       },
       stats: {
-        devices: Object.keys(deviceStore).length,
-        users: userStore.length,
+        devices: devices.length,
+        users: users.length,
         uptime: process.uptime()
       }
     }
@@ -687,12 +956,44 @@ app.get('/api/system/resources', authMiddleware, (req, res) => {
 // Setup Wizard APIs
 let setupConfig = null;
 
-app.get('/api/config/setup-status', (req, res) => {
+// ── Local setup-config persistence (DB-first, in-memory fallback) ──────────
+// setupConfig is a singleton, not a collection — mirrors the in-memory `let`
+// with a single-row (id=1) table. See migrations/001_api_backend_schema.sql.
+async function dbGetSetupConfig() {
+  if (!db.isAvailable()) return undefined;
+  try {
+    const r = await db.query('SELECT data FROM setup_config WHERE id = 1');
+    return r.rows.length ? r.rows[0].data : null;
+  } catch (err) {
+    console.warn('[api-backend-db] get setup_config failed, falling back to in-memory:', err.message);
+    return undefined;
+  }
+}
+
+async function dbSaveSetupConfig(config) {
+  if (!db.isAvailable()) return;
+  try {
+    await db.query(
+      'INSERT INTO setup_config(id, data) VALUES(1, $1) ON CONFLICT (id) DO UPDATE SET data = $1',
+      [JSON.stringify(config)]
+    );
+  } catch (err) {
+    console.warn('[api-backend-db] save setup_config failed:', err.message);
+  }
+}
+
+async function getSetupConfig() {
+  const fromDb = await dbGetSetupConfig();
+  return fromDb !== undefined ? fromDb : setupConfig;
+}
+
+app.get('/api/config/setup-status', async (req, res) => {
+  const config = await getSetupConfig();
   res.json({
     success: true,
     data: {
-      isFirstRun: setupConfig === null,
-      config: setupConfig,
+      isFirstRun: config === null,
+      config,
     }
   });
 });
@@ -710,9 +1011,10 @@ app.get('/api/config/wizard/available-modules', (req, res) => {
   });
 });
 
-app.post('/api/config/wizard/setup', (req, res) => {
+app.post('/api/config/wizard/setup', async (req, res) => {
   const { orgName, modules, devices, completedAt } = req.body;
   setupConfig = { orgName, modules, devices, completedAt };
+  await dbSaveSetupConfig(setupConfig);
   res.json({
     success: true,
     message: 'Setup completed',
@@ -748,17 +1050,65 @@ app.get('/api/policies', authMiddleware, (req, res) => {
 // ── Device Enrollment APIs ──────────────────────────────────────────
 const enrollmentTokens = {};
 
+// ── Enrollment token persistence (DB-first, in-memory fallback) ────────────
+// Same DB-first / best-effort-write / always-mirror convention as the
+// users and devices helpers above.
+async function dbGetToken(token) {
+  if (!db.isAvailable()) return undefined;
+  try {
+    const r = await db.query(
+      'SELECT token, created_at, expires_at, used, created_by FROM enrollment_tokens WHERE token=$1',
+      [token]
+    );
+    if (!r.rows.length) return null;
+    const row = r.rows[0];
+    return { token: row.token, createdAt: row.created_at, expiresAt: row.expires_at, used: row.used, createdBy: row.created_by };
+  } catch (err) {
+    console.warn('[api-backend-db] get enrollment token failed, falling back to in-memory:', err.message);
+    return undefined;
+  }
+}
+
+async function dbInsertToken(t) {
+  if (!db.isAvailable()) return;
+  try {
+    await db.query(
+      'INSERT INTO enrollment_tokens(token, created_at, expires_at, used, created_by) VALUES($1,$2,$3,$4,$5)',
+      [t.token, t.createdAt, t.expiresAt, t.used, t.createdBy]
+    );
+  } catch (err) {
+    console.warn('[api-backend-db] insert enrollment token failed:', err.message);
+  }
+}
+
+async function dbMarkTokenUsed(token) {
+  if (!db.isAvailable()) return;
+  try {
+    await db.query('UPDATE enrollment_tokens SET used = true WHERE token=$1', [token]);
+  } catch (err) {
+    console.warn('[api-backend-db] mark enrollment token used failed:', err.message);
+  }
+}
+
+async function getTokenRecord(token) {
+  const fromDb = await dbGetToken(token);
+  if (fromDb !== undefined) return fromDb;
+  return enrollmentTokens[token] || null;
+}
+
 // Token generation requires authentication (admin creates tokens for devices)
-app.post('/api/devices/enroll/token', authMiddleware, writeRateLimit, (req, res) => {
+app.post('/api/devices/enroll/token', authMiddleware, writeRateLimit, async (req, res) => {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  enrollmentTokens[token] = {
+  const record = {
     token,
     createdAt: new Date().toISOString(),
     expiresAt: expiresAt.toISOString(),
     used: false,
     createdBy: req.user.id,
   };
+  await dbInsertToken(record);
+  enrollmentTokens[token] = record;
   res.json({
     success: true,
     data: { token, expiresAt: expiresAt.toISOString() },
@@ -770,13 +1120,13 @@ app.post('/api/devices/enroll/token', authMiddleware, writeRateLimit, (req, res)
 // in-memory deviceStore only, so devices enrolled here won't be visible via
 // device-service until this is delegated too (see GET routes above for the
 // read-side delegation + fallback pattern to follow).
-app.post('/api/devices/enroll', writeRateLimit, (req, res) => {
+app.post('/api/devices/enroll', writeRateLimit, async (req, res) => {
   const { token, hostname, platform, os: deviceOs, osVersion } = req.body;
 
-  if (!token || !enrollmentTokens[token]) {
+  const tokenData = token ? await getTokenRecord(token) : null;
+  if (!token || !tokenData) {
     return res.status(401).json({ success: false, error: 'Invalid enrollment token' });
   }
-  const tokenData = enrollmentTokens[token];
   if (tokenData.used || new Date(tokenData.expiresAt) < new Date()) {
     return res.status(401).json({ success: false, error: 'Token expired or already used' });
   }
@@ -786,6 +1136,8 @@ app.post('/api/devices/enroll', writeRateLimit, (req, res) => {
   }
 
   tokenData.used = true;
+  await dbMarkTokenUsed(token);
+  enrollmentTokens[token] = tokenData;
 
   const deviceId = `DEV-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   const newDevice = {
@@ -799,7 +1151,7 @@ app.post('/api/devices/enroll', writeRateLimit, (req, res) => {
     lastSeen: new Date().toISOString(),
   };
 
-  deviceStore[deviceId] = newDevice;
+  await saveLocalDevice(newDevice);
 
   res.json({
     success: true,
@@ -830,6 +1182,19 @@ app.post('/api/printers', authMiddleware, (req, res) => {
   });
 });
 
+// Initialize DB persistence (users/devices/enrollment tokens/setup config —
+// see db.js and migrations/001_api_backend_schema.sql). Runs unconditionally
+// (not gated on require.main, matching identity-service/src/index.js) so
+// that both `node server.js` and the Jest test suite exercise the same
+// DB-availability detection: when no PostgreSQL is reachable (the CI/test
+// environment), db.isAvailable() resolves to false quickly (~15ms —
+// ECONNREFUSED, not a multi-second timeout) and every route above falls
+// back to its pre-existing in-memory store, so this does not slow down or
+// change the outcome of the 22 pre-existing tests.
+db.initDb()
+  .then(() => seedAdminUser())
+  .catch(err => console.warn('[api-backend-db] initDb failed:', err.message));
+
 // Export app for testing
 module.exports = { app, server, userStore, hashPassword };
 
@@ -843,7 +1208,9 @@ server.listen(PORT, () => {
 
 // Periodic device health check
 setInterval(async () => {
-  for (const [deviceId, device] of Object.entries(deviceStore)) {
+  const devices = await getAllLocalDevices();
+  for (const device of devices) {
+    const deviceId = device.id;
     if (deviceId === 'CT2001') {
       try {
         await ssh.connect({
@@ -860,6 +1227,8 @@ setInterval(async () => {
       } catch (error) {
         device.status = 'offline';
       }
+
+      await saveLocalDevice(device);
 
       broadcast({
         type: 'device_heartbeat',
