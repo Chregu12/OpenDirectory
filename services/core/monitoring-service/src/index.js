@@ -32,9 +32,28 @@ const config = require('./config');
 const EventBus = require('./events/eventBus');
 
 // ── RabbitMQ Event Bus ────────────────────────────────────────────────────────
+// Resolves through the published package name, then the in-repo shared-kernel
+// path, then an inert no-op client so the service still boots and simply runs
+// without cross-service event publishing. The third level matters: the
+// Dockerfile only copies this service's own directory, so packages/ is absent
+// in the container and BOTH requires fail there — without the no-op the throw
+// escaped this IIFE and killed the service at module load.
+// (Same three-level pattern as device-service/src/index.js.)
 const EventBusClient = (() => {
   try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
-  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+  catch (_) {
+    try { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+    catch (_) {
+      return class NoopEventBusClient {
+        constructor() {}
+        async connect() {}
+        async publish() { return false; }
+        async subscribe() {}
+        async close() {}
+        isConnected() { return false; }
+      };
+    }
+  }
 })();
 const _bus = new EventBusClient({ source: 'monitoring-service' });
 async function connectBus() { await _bus.connect(); }
