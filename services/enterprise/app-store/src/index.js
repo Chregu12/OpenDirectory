@@ -19,7 +19,7 @@ const CatalogManager = require('./catalog/catalogManager');
 const ClientDetector = require('./detection/clientDetector');
 const DistributionEngine = require('./distribution/distributionEngine');
 const AssignmentEngine = require('./assignment/assignmentEngine');
-const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
+const { oidcAuth, requireAdmin, verifyToken } = require('./middleware/oidcAuth');
 
 // ── EventBusClient ────────────────────────────────────────────────────────────
 const EventBusClient = (() => {
@@ -70,9 +70,61 @@ const app = express();
 const server = http.createServer(app);
 
 // WebSocket server for real-time install status updates
+//
+// P0 fix: this endpoint had NO authentication at all while every HTTP route
+// in this service is now gated behind oidcAuth() (see middleware/oidcAuth.js
+// header comment) — an unauthenticated caller could open /ws/store and
+// receive live install-status/distribution events for the entire fleet.
+// Auth happens here (in the 'connection' handler, after the WS handshake
+// completes) rather than in the `ws` library's `verifyClient` hook: this
+// service's own admin-scope check style aside, `verifyClient` would reject
+// with a raw HTTP status during the upgrade (no WS close code, harder for a
+// browser/native WS client to introspect); closing the just-opened socket
+// with an explicit code+reason is easier for callers to detect and log, and
+// mirrors how a rejected write on an already-open connection is handled
+// elsewhere in this codebase's WS surfaces.
+//
+// The token travels one of two ways, since a WebSocket handshake can't carry
+// a normal Authorization header from a browser client:
+//   - `?token=<jwt>` query parameter, or
+//   - the `Sec-WebSocket-Protocol` header (the first comma-separated value)
+// ...verified with the exact same verifyToken() (jose + JWKS) the HTTP
+// middleware uses — no duplicated verification logic.
+const WS_CLOSE_UNAUTHORIZED = 4401; // app-defined (RFC 6455 private-use range 4000-4999)
+
+function extractWsToken(req) {
+  try {
+    const { searchParams } = new URL(req.url, 'http://localhost');
+    const fromQuery = searchParams.get('token');
+    if (fromQuery) return fromQuery;
+  } catch { /* malformed URL — fall through to the protocol header */ }
+
+  const proto = req.headers['sec-websocket-protocol'];
+  if (proto) {
+    const first = proto.split(',')[0].trim();
+    if (first) return first;
+  }
+  return null;
+}
+
 const wss = new WebSocket.Server({ server, path: '/ws/store' });
-wss.on('connection', (ws) => {
-  logger.info('WebSocket client connected');
+wss.on('connection', async (ws, req) => {
+  const token = extractWsToken(req);
+  if (!token) {
+    logger.warn('WebSocket connection rejected: no token presented');
+    ws.close(WS_CLOSE_UNAUTHORIZED, 'unauthorized');
+    return;
+  }
+
+  try {
+    ws.user = await verifyToken(token);
+  } catch (err) {
+    logger.warn('WebSocket connection rejected: invalid token', { error: err.message });
+    ws.close(WS_CLOSE_UNAUTHORIZED, 'unauthorized');
+    return;
+  }
+
+  logger.info('WebSocket client connected', { sub: ws.user.sub });
   ws.on('close', () => logger.debug('WebSocket client disconnected'));
 });
 
@@ -1201,4 +1253,10 @@ process.on('SIGINT', async () => {
 
 start();
 
+// The underlying http.Server (not just the Express `app`) is attached here
+// so tests can open a real WebSocket connection against /ws/store — the WS
+// upgrade handling lives on `server`/`wss`, not on `app` itself, and
+// supertest's own ephemeral per-request server never exercises it. See
+// src/__tests__/api.e2e.test.js's WebSocket auth suite.
+app.server = server;
 module.exports = app;

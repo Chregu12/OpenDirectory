@@ -189,10 +189,14 @@ class PolicySimulatorService extends EventEmitter {
         // OIDC token verification (RS256 via JWKS). P0 fix: this service
         // previously had no HTTP authentication at all — see
         // middleware/oidcAuth.js for the full rationale. Mounted globally;
-        // only /health is exempt. The one admin-gated route (POST
-        // /api/simulator/rollback-plan) additionally requires requireAdmin —
-        // see _initializeRoutes().
-        this.app.use(oidcAuth({ skipPaths: ['/health'] }));
+        // /health and /metrics are exempt (the latter is a Prometheus scrape
+        // target — see infrastructure/monitoring/prometheus.yml, whose
+        // scrape_configs never send a bearer token, matching every other
+        // Prometheus-scraped OpenDirectory service; this /metrics payload is
+        // only process uptime/memory/cpu, no secrets). The one admin-gated
+        // route (POST /api/simulator/rollback-plan) additionally requires
+        // requireAdmin — see _initializeRoutes().
+        this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
 
         // Request logging
         this.app.use((req, res, next) => {

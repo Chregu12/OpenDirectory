@@ -456,9 +456,19 @@ describe('oauth-provider E2E', () => {
 
   // ── Introspection + revocation ───────────────────────────────────────────
   describe('POST /oauth/introspect + /oauth/revoke', () => {
-    async function issueClientCredsToken() {
+    // `scope` is optional and otherwise unused by the assertions below — its
+    // only purpose is to let a caller force a distinct token when issuing
+    // more than one client_credentials token for the same client within the
+    // same wall-clock second. RS256/PKCS#1v1.5 signing is deterministic, and
+    // the token payload here (sub/iss/aud/iat/scope) has no per-call nonce,
+    // so two same-second, same-scope calls for the same client produce
+    // byte-identical JWTs (and therefore identical revocation hashes) —
+    // without this, tests that revoke/introspect distinct "tokens" in quick
+    // succession could accidentally collide with each other's tokens.
+    async function issueClientCredsToken(scope) {
       const res = await request(app).post('/oauth/token').send({
         grant_type: 'client_credentials', client_id: 'grafana-od-client', client_secret: 'test-grafana-secret',
+        ...(scope ? { scope } : {}),
       });
       return res.body.access_token;
     }
@@ -484,14 +494,91 @@ describe('oauth-provider E2E', () => {
       expect(res.body.active).toBe(false);
     });
 
-    it('revoking a token makes it inactive on subsequent introspection', async () => {
-      const token = await issueClientCredsToken();
-      const revokeRes = await request(app).post('/oauth/revoke').send({ token });
+    it('revoking a token (with correct client auth) makes it inactive on subsequent introspection', async () => {
+      const token = await issueClientCredsToken('test-revoke-basic');
+      const revokeRes = await request(app).post('/oauth/revoke').send({
+        token, client_id: 'grafana-od-client', client_secret: 'test-grafana-secret',
+      });
       expect(revokeRes.status).toBe(200);
       expect(revokeRes.body.ok).toBe(true);
 
       const introspectRes = await request(app).post('/oauth/introspect').send({ token, client_id: 'grafana-od-client', client_secret: 'test-grafana-secret' });
       expect(introspectRes.body.active).toBe(false);
+    });
+
+    // ── Regression coverage: /oauth/revoke previously had NO client
+    // authentication at all — any caller who had (or could guess the SHA-256
+    // hash of) a token could revoke it for someone else, a pure DoS/sabotage
+    // primitive against any client's users. RFC 7009 §2.1 requires the same
+    // client auth the token endpoint uses; this block proves it's now
+    // enforced the same way /oauth/introspect enforces it (client_id +
+    // client_secret in the body), and that a non-owning-but-authenticated
+    // client cannot revoke another client's token.
+    describe('client authentication on /oauth/revoke (was: none — RFC 7009 gap)', () => {
+      it('rejects a revoke with no client credentials at all (401 invalid_client)', async () => {
+        const token = await issueClientCredsToken('test-revoke-no-creds');
+        const res = await request(app).post('/oauth/revoke').send({ token });
+        expect(res.status).toBe(401);
+        expect(res.body.error).toBe('invalid_client');
+
+        // The token must still be live — an unauthenticated caller must not
+        // be able to revoke it as a side effect of the failed attempt.
+        const introspectRes = await request(app).post('/oauth/introspect').send({
+          token, client_id: 'grafana-od-client', client_secret: 'test-grafana-secret',
+        });
+        expect(introspectRes.body.active).toBe(true);
+      });
+
+      it('rejects a revoke with a wrong client_secret (401 invalid_client)', async () => {
+        const token = await issueClientCredsToken('test-revoke-wrong-secret');
+        const res = await request(app).post('/oauth/revoke').send({
+          token, client_id: 'grafana-od-client', client_secret: 'wrong',
+        });
+        expect(res.status).toBe(401);
+        expect(res.body.error).toBe('invalid_client');
+      });
+
+      it('rejects a revoke from an unknown client_id (401 invalid_client)', async () => {
+        const token = await issueClientCredsToken('test-revoke-unknown-client');
+        const res = await request(app).post('/oauth/revoke').send({
+          token, client_id: 'nonexistent-client', client_secret: 'whatever',
+        });
+        expect(res.status).toBe(401);
+        expect(res.body.error).toBe('invalid_client');
+      });
+
+      it('a DIFFERENT, correctly-authenticated client cannot revoke a token it does not own', async () => {
+        // grafana-od-client mints the token; devportal-od-client (a real,
+        // separately-authenticated client) tries to revoke it. Per RFC 7009
+        // §2.2 this must not leak anything — still 200 — but the token must
+        // survive, unlike the pre-fix behavior where ANY caller could kill
+        // ANY client's token.
+        const token = await issueClientCredsToken('test-revoke-cross-client');
+        const res = await request(app).post('/oauth/revoke').send({
+          token, client_id: 'devportal-od-client', client_secret: 'test-devportal-secret',
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.ok).toBe(true);
+
+        const introspectRes = await request(app).post('/oauth/introspect').send({
+          token, client_id: 'grafana-od-client', client_secret: 'test-grafana-secret',
+        });
+        expect(introspectRes.body.active).toBe(true);
+      });
+
+      it('the owning client can still revoke its own token (no functional regression)', async () => {
+        const token = await issueClientCredsToken('test-revoke-owning-client');
+        const res = await request(app).post('/oauth/revoke').send({
+          token, client_id: 'grafana-od-client', client_secret: 'test-grafana-secret',
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.ok).toBe(true);
+
+        const introspectRes = await request(app).post('/oauth/introspect').send({
+          token, client_id: 'grafana-od-client', client_secret: 'test-grafana-secret',
+        });
+        expect(introspectRes.body.active).toBe(false);
+      });
     });
   });
 
@@ -729,14 +816,27 @@ describe('oauth-provider E2E', () => {
 
         it('a correct internal token issues the command with no Authorization header at all', async () => {
           // update_policy is the command policy-service's GPO/blueprint push
-          // actually sends; run_av_scan (antivirus-protection's real command
-          // name) is not yet in this endpoint's VALID_COMMANDS allowlist —
-          // a separate, pre-existing gap outside this auth fix's scope.
+          // actually sends.
           const res = await request(app)
             .post('/api/devices/dev-001/commands')
             .set('x-oauth-internal-token', 'e2e-internal-secret')
             .send({ command: 'update_policy', payload: {} });
           expect(res.status).toBe(201);
+        });
+
+        it('run_av_scan (antivirus-protection\'s real MDM command name) is accepted via the internal-token bypass', async () => {
+          // Regression coverage: VALID_COMMANDS previously did not include
+          // 'run_av_scan', the exact command name antivirus-protection's
+          // POST /api/antivirus/scan dispatches (see
+          // services/enterprise/antivirus-protection/src/index.js) — every
+          // fleet-wide AV scan dispatch 400'd here. Fixed by adding it to
+          // the allowlist.
+          const res = await request(app)
+            .post('/api/devices/dev-001/commands')
+            .set('x-oauth-internal-token', 'e2e-internal-secret')
+            .send({ command: 'run_av_scan', payload: { scanType: 'quick', paths: null } });
+          expect(res.status).toBe(201);
+          expect(res.body.command).toBe('run_av_scan');
         });
 
         it('a wrong internal token is rejected (401)', async () => {

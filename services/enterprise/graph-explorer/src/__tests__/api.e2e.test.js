@@ -122,14 +122,26 @@ describe('Read endpoints require authentication', () => {
     expect(res.status).toBe(401);
   });
 
-  it('GET / and GET /metrics also require a token (only /health is a skip path)', async () => {
+  it('GET / still requires a token (only /health and /metrics are skip paths)', async () => {
     const rootRes = await request(app).get('/');
     expect(rootRes.status).toBe(401);
-    const metricsRes = await request(app).get('/metrics');
-    expect(metricsRes.status).toBe(401);
-
     expect((await asUser(request(app).get('/'))).status).toBe(200);
-    expect((await asUser(request(app).get('/metrics'))).status).toBe(200);
+  });
+});
+
+// ─── /metrics (skipPaths) ───────────────────────────────────────────────────
+//
+// Regression coverage: /metrics used to be gated behind oidcAuth like every
+// other route (was asserted 401-without-a-token right here), inconsistent
+// with how Prometheus actually scrapes this fleet (no bearer token — see
+// infrastructure/monitoring/prometheus.yml) and with siblings that already
+// treated /metrics as public (oauth-provider, app-store, identity-service,
+// ...). See the skipPaths comment on oidcAuth() in src/index.js.
+describe('GET /metrics — public Prometheus scrape target (skipPaths)', () => {
+  it('is reachable with no auth token', async () => {
+    const res = await request(app).get('/metrics');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('uptime');
   });
 });
 

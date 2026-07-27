@@ -31,7 +31,10 @@
  * (app._router.stack, including the nested '/api/remediation' router)
  * rather than hand-copied, so every route actually registered in
  * src/index.js gets the correct assertion automatically:
- *   - GET /health                          -> reachable with no token (skipPaths)
+ *   - GET /health, GET /metrics             -> reachable with no token (skipPaths —
+ *                                              /metrics is a Prometheus scrape
+ *                                              target, see the skipPaths comment
+ *                                              on oidcAuth() in src/index.js)
  *   - ADMIN_ROUTES (execute/:id incl. force, bulk-execute, playbook create)
  *                                           -> no token: 401, non-admin: 403, admin: passes
  *   - every other route                    -> no token: 401, any authenticated
@@ -155,13 +158,28 @@ describe('GET /health — public liveness probe (skipPaths)', () => {
   });
 });
 
+describe('GET /metrics — public Prometheus scrape target (skipPaths)', () => {
+  // Regression coverage: /metrics used to be gated behind oidcAuth like
+  // every other route, inconsistent with how Prometheus actually scrapes
+  // this fleet (no bearer token — see infrastructure/monitoring/
+  // prometheus.yml) and with siblings that already treated /metrics as
+  // public (oauth-provider, app-store, identity-service, ...).
+  test('reachable with no token at all', async () => {
+    const res = await request(app).get('/metrics');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('uptime');
+  });
+});
+
 describe('every non-admin route requires at least authentication', () => {
   const routes = getAllRoutes(app).filter(
-    (r) => `${r.method} ${r.path}` !== 'GET /health' && !ADMIN_ROUTES.has(`${r.method} ${r.path}`)
+    (r) => `${r.method} ${r.path}` !== 'GET /health' && `${r.method} ${r.path}` !== 'GET /metrics' && !ADMIN_ROUTES.has(`${r.method} ${r.path}`)
   );
 
   test('sanity: the route table was not accidentally emptied', () => {
-    expect(routes.length).toBeGreaterThanOrEqual(8);
+    // Was >= 8 before /metrics moved to skipPaths (and out of this "requires
+    // auth" set) alongside /health.
+    expect(routes.length).toBeGreaterThanOrEqual(7);
   });
 
   test.each(routes)('$method $path -> 401 with no token', async ({ method, path }) => {

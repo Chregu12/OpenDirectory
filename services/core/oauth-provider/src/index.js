@@ -755,9 +755,60 @@ app.post('/oauth/introspect', async (req, res) => {
 
 // ─── Token Revocation ────────────────────────────────────────────────────────────
 
+// RFC 7009 §2.1 requires the revocation endpoint to authenticate the client
+// the same way /oauth/token does; previously this endpoint had NO client
+// auth at all, so any caller who merely obtained (or guessed the hash of) a
+// token could revoke it for someone else — a trivial DoS/sabotage primitive
+// against any client's users. Client auth here mirrors /oauth/introspect
+// immediately above (client_id + client_secret in the body, not a Basic-Auth
+// header — this service has never used Basic Auth for client auth anywhere,
+// including /oauth/token, so body-based auth is the established convention
+// to stay consistent with, not a gap of its own).
 app.post('/oauth/revoke', async (req, res) => {
-  const { token } = req.body;
+  const { token, client_id, client_secret } = req.body;
+  const client = clients.get(client_id);
+  if (!client || client.clientSecret !== client_secret) return res.status(401).json({ error: 'invalid_client' });
+
   const hash = crypto.createHash('sha256').update(token ?? '').digest('hex');
+
+  // Ownership check: a client may only revoke tokens that were issued to it
+  // (RFC 7009 §2.1 "the authorization server SHOULD verify ... that the
+  // token belongs to the client"). Every token record's `aud` claim is set
+  // to the client_id it was minted for (see /oauth/token above). If we can
+  // determine an owner and it doesn't match the authenticated caller, treat
+  // this exactly like an already-invalid/unknown token per RFC 7009 §2.2:
+  // still respond 200 without revoking, so a non-owning-but-authenticated
+  // client can't learn anything about a token it doesn't hold by probing
+  // this endpoint.
+  const record = tokens.get(hash);
+  let owningClientId = record?.aud;
+  // Fallback for grant types that mint a signed JWT access token but never
+  // populate the in-memory `tokens` Map (client_credentials and the device
+  // grant both call signToken() directly without a matching tokens.set() —
+  // see /oauth/token above). Without this fallback those tokens have no
+  // discoverable owner, silently degrading to "unknown owner" and letting
+  // ANY authenticated client revoke ANY other client's client_credentials
+  // token. Every access token this server issues is a JWT whose `aud` claim
+  // is always the client_id it was minted for, so a plain decode (not a
+  // verify — revocation must still work on an expired/tampered token per
+  // RFC 7009) recovers ownership. jwt.decode() returns null rather than
+  // throwing for non-JWT input (e.g. opaque refresh-token UUIDs), so this is
+  // a safe no-op fallback for those.
+  if (!owningClientId) {
+    const decoded = jwt.decode(token);
+    if (decoded && typeof decoded === 'object') owningClientId = decoded.aud;
+  }
+  if (!owningClientId && db.isAvailable()) {
+    try {
+      const dbRecord = await db.getToken(hash);
+      owningClientId = dbRecord?.client_id ?? owningClientId;
+    } catch { /* DB optional — fall through and treat as unknown owner */ }
+  }
+
+  if (owningClientId && owningClientId !== client_id) {
+    return res.status(200).json({ ok: true });
+  }
+
   tokens.delete(hash);
   await blacklistToken(hash, TOKEN_TTL);
   if (db.isAvailable()) { db.revokeToken(hash).catch(() => {}); }
@@ -1232,7 +1283,13 @@ const mdmCommands = new Map(); // deviceId → [command]
 
 app.post('/api/devices/:deviceId/commands', adminAuthOrInternal, requireAdminOrInternal, (req, res) => {
   const { command, payload } = req.body;
-  const VALID_COMMANDS = ['wipe', 'lock', 'unlock', 'update_policy', 'restart', 'collect_logs', 'install_app', 'uninstall_app'];
+  // 'run_av_scan' is antivirus-protection's real MDM command name (see
+  // POST /api/antivirus/scan in services/enterprise/antivirus-protection/
+  // src/index.js, which dispatches exactly this command via the
+  // internal-service-token bypass below) — it was missing from this
+  // allowlist, so every AV-scan dispatch 400'd here and the fleet-wide scan
+  // feature was silently broken end-to-end.
+  const VALID_COMMANDS = ['wipe', 'lock', 'unlock', 'update_policy', 'restart', 'collect_logs', 'install_app', 'uninstall_app', 'run_av_scan'];
   if (!VALID_COMMANDS.includes(command)) return res.status(400).json({ error: `Unknown command. Valid: ${VALID_COMMANDS.join(', ')}` });
 
   const deviceId = req.params.deviceId;

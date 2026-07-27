@@ -232,6 +232,14 @@ class EnterpriseNetworkInfrastructureService extends EventEmitter {
     // disclose live network topology and device inventory, which is
     // reconnaissance-grade information an unauthenticated caller must not
     // get for free.
+    //
+    // /metrics consistency check (repo-wide audit, see the sibling comment
+    // on device-lifecycle/auto-remediation/graph-explorer/policy-simulator/
+    // security-scanner's oidcAuth() mounts): this service has no Prometheus-
+    // style `/metrics` route at all — GET /api/network/metrics below is a
+    // business-data endpoint (live network metrics/stats), not a scrape
+    // target, and correctly stays behind this same auth gate like every
+    // other /api/network/* route. Nothing to add to skipPaths here.
     this.app.use(oidcAuth({ skipPaths: ['/health'] }));
   }
 

@@ -104,12 +104,20 @@ class DeviceLifecycleService extends EventEmitter {
         // list every device, and worse, drive devices (individually or in
         // bulk) through lifecycle transitions including 'Retiring'/'Retired',
         // i.e. unauthenticated mass device decommissioning. Every route below
-        // (other than /health) now requires a verified bearer token; the two
-        // mutation routes (POST .../transition, POST /bulk-transition)
-        // additionally require an admin role/scope — see
+        // (other than /health and /metrics) now requires a verified bearer
+        // token; the two mutation routes (POST .../transition, POST
+        // /bulk-transition) additionally require an admin role/scope — see
         // src/middleware/oidcAuth.js for the full rationale, including why no
         // internal-service-token bypass is needed here.
-        this.app.use(oidcAuth({ skipPaths: ['/health'] }));
+        //
+        // /metrics is a skipPath alongside /health, not gated: it's a
+        // Prometheus scrape target (see infrastructure/monitoring/
+        // prometheus.yml's scrape_configs — no job there sends a bearer
+        // token, matching every other Prometheus-scraped OpenDirectory
+        // service, e.g. oauth-provider/app-store/identity-service, which all
+        // also treat /metrics as public), and its payload here is just
+        // process uptime/memory/cpu — no secrets to protect.
+        this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
     }
 
     /**

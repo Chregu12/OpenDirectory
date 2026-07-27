@@ -29,11 +29,13 @@
  * Route matrix is derived by walking the real Express app's route table
  * (app._router.stack) rather than hand-copied, so every route actually
  * registered in src/index.js gets the correct assertion automatically:
- *   - GET /health                         -> reachable with no token (skipPaths)
+ *   - GET /health, GET /metrics           -> reachable with no token (skipPaths —
+ *                                             /metrics is a Prometheus scrape
+ *                                             target, see the skipPaths comment
+ *                                             on oidcAuth() in src/index.js)
  *   - MUTATION_ROUTES (single + bulk device-lifecycle transitions, which
  *     includes retire/decommission)       -> no token: 401, non-admin: 403, admin: passes
- *   - every other route (reads, incl. /, /metrics)
- *                                          -> no token: 401, any authenticated
+ *   - every other route (reads, incl. /)  -> no token: 401, any authenticated
  *                                             token (admin or not): passes
  */
 
@@ -151,9 +153,22 @@ describe('GET /health — public liveness probe (skipPaths)', () => {
   });
 });
 
+describe('GET /metrics — public Prometheus scrape target (skipPaths)', () => {
+  // Regression coverage: /metrics used to be gated behind oidcAuth like
+  // every other route, inconsistent with how Prometheus actually scrapes
+  // this fleet (no bearer token — see infrastructure/monitoring/
+  // prometheus.yml) and with siblings that already treated /metrics as
+  // public (oauth-provider, app-store, identity-service, ...).
+  test('reachable with no token at all', async () => {
+    const res = await request(app).get('/metrics');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('uptime');
+  });
+});
+
 describe('every non-mutation route requires at least authentication', () => {
   const routes = getAllRoutes(app).filter(
-    (r) => `${r.method} ${r.path}` !== 'GET /health' && !MUTATION_ROUTES.has(`${r.method} ${r.path}`)
+    (r) => `${r.method} ${r.path}` !== 'GET /health' && `${r.method} ${r.path}` !== 'GET /metrics' && !MUTATION_ROUTES.has(`${r.method} ${r.path}`)
   );
 
   test('sanity: the route table was not accidentally emptied', () => {

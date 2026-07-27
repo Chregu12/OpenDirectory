@@ -216,11 +216,16 @@ class AutoRemediationService extends EventEmitter {
         // service previously had NO HTTP authentication at all, so any
         // unauthenticated caller could trigger remediation actions that
         // change real systems). Mounted globally, ahead of every route below
-        // — only /health is exempt (liveness/readiness probes). Individual
-        // mutation routes additionally require requireAdmin (see
-        // _initializeRoutes()); a verified JWT alone proves *who* is asking,
-        // not that they're allowed to execute remediation.
-        this.app.use(oidcAuth({ skipPaths: ['/health'] }));
+        // — /health and /metrics are exempt (liveness/readiness probes and
+        // the Prometheus scrape target, respectively — see
+        // infrastructure/monitoring/prometheus.yml, whose scrape_configs
+        // never send a bearer token, matching every other Prometheus-scraped
+        // OpenDirectory service; /metrics here is only process uptime/
+        // memory/cpu, no secrets). Individual mutation routes additionally
+        // require requireAdmin (see _initializeRoutes()); a verified JWT
+        // alone proves *who* is asking, not that they're allowed to execute
+        // remediation.
+        this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
 
         logger.info('Middleware setup completed');
     }

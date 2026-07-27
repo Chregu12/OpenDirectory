@@ -518,10 +518,14 @@ class SecurityScannerService extends EventEmitter {
 
     // OIDC bearer-token auth (see src/middleware/oidcAuth.js). Mounted
     // globally so every route defined in _initializeRoutes() below requires
-    // a verified JWT, except /health (liveness probe). Mutating routes
-    // additionally require requireAdmin — wired directly on those routes in
-    // _initializeRoutes().
-    this.app.use(oidcAuth({ skipPaths: ['/health'] }));
+    // a verified JWT, except /health (liveness probe) and /metrics
+    // (Prometheus scrape target — see infrastructure/monitoring/
+    // prometheus.yml, whose scrape_configs never send a bearer token,
+    // matching every other Prometheus-scraped OpenDirectory service; this
+    // /metrics payload is only process uptime/memory/cpu, no secrets).
+    // Mutating routes additionally require requireAdmin — wired directly on
+    // those routes in _initializeRoutes().
+    this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
 
     logger.info('Middleware setup completed');
   }
@@ -566,6 +570,24 @@ class SecurityScannerService extends EventEmitter {
         findings: {
           total: this.scanner.findings.size,
         },
+      });
+    });
+
+    // ---- Metrics ----
+    //
+    // Was referenced by the rate-limiter's `skip` check above (and implied
+    // by this service's own comment there) but never actually registered —
+    // GET /metrics 401'd/404'd for every caller. Added here to match the
+    // exact pattern used by device-lifecycle/auto-remediation/graph-explorer/
+    // policy-simulator's /metrics (process uptime/memory/cpu JSON, no
+    // secrets); see the skipPaths comment on oidcAuth() below for why it's
+    // public.
+    this.app.get('/metrics', (_req, res) => {
+      res.json({
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        cpu: process.cpuUsage(),
       });
     });
 

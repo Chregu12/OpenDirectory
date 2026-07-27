@@ -49,6 +49,19 @@ function getJWKS() {
   return JWKS;
 }
 
+/**
+ * Verifies a raw bearer token against the same JWKS/issuer the HTTP
+ * middleware below uses, and returns the verified payload (or throws the
+ * same jose errors oidcAuth() catches). Extracted so every authenticated
+ * surface in this service — HTTP via oidcAuth() below, and the /ws/store
+ * WebSocket handshake in src/index.js — verifies tokens exactly one way,
+ * instead of each call site reimplementing its own jwtVerify() call.
+ */
+async function verifyToken(token) {
+  const { payload } = await jwtVerify(token, getJWKS(), { issuer: ISSUER });
+  return payload;
+}
+
 // startsWith(p + '/') — never a bare startsWith(p): a bare prefix match would
 // let e.g. '/health-probe-that-mutates-things' piggy-back on the '/health'
 // skip entry. The trailing slash enforces a path-segment boundary.
@@ -136,8 +149,7 @@ function oidcAuth({ skipPaths = [], agentTokenPaths = [] } = {}) {
     }
 
     try {
-      const { payload } = await jwtVerify(auth.slice(7), getJWKS(), { issuer: ISSUER });
-      req.user = payload;
+      req.user = await verifyToken(auth.slice(7));
       next();
     } catch (err) {
       const status = err.code === 'ERR_JWT_EXPIRED' ? 401 : 403;
@@ -203,4 +215,5 @@ module.exports = {
   requireAdmin,
   hasAdminAccess,
   isValidAgentToken,
+  verifyToken,
 };

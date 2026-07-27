@@ -109,6 +109,27 @@ describe('GET /health', () => {
   });
 });
 
+// ─── /metrics (skipPaths) ───────────────────────────────────────────────────
+//
+// Regression coverage, two bugs at once:
+//   1. GET /metrics was never actually registered as a route (only
+//      referenced in the rate-limiter's `skip` check), so it always
+//      401'd/404'd regardless of auth — a dead reference. Added in
+//      src/index.js, matching the exact JSON shape used by
+//      device-lifecycle/auto-remediation/graph-explorer/policy-simulator's
+//      /metrics.
+//   2. Now that it exists, it must be public like those siblings — it's a
+//      Prometheus scrape target (see infrastructure/monitoring/
+//      prometheus.yml, whose scrape_configs never send a bearer token) and
+//      carries no secrets (process uptime/memory/cpu only).
+describe('GET /metrics — public Prometheus scrape target (skipPaths)', () => {
+  it('is reachable with no auth token', async () => {
+    const res = await request(app).get('/metrics');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('uptime');
+  });
+});
+
 // ─── Auth matrix: reads require a valid JWT, no particular role ───────────
 
 describe('Read endpoints require authentication', () => {

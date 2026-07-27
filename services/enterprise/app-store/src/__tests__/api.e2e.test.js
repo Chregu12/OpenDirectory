@@ -420,3 +420,76 @@ describe('middleware/oidcAuth — hasAdminAccess / isValidAgentToken', () => {
     expect(isValidAgentToken('test-agent-shared-secret')).toBe(true);
   });
 });
+
+// ─── WebSocket auth on /ws/store (was: none) ───────────────────────────────
+//
+// P0 fix: /ws/store previously had NO authentication at all — while every
+// HTTP route in this service is gated behind oidcAuth(), an unauthenticated
+// caller could open this WebSocket directly and receive live install-status
+// / distribution events for the entire fleet. The fix (src/index.js) verifies
+// a token — from the `?token=` query param or the first
+// `Sec-WebSocket-Protocol` value — using the exact same verifyToken() (jose +
+// JWKS) the HTTP middleware uses (middleware/oidcAuth.js), and closes an
+// unauthenticated/invalid connection with app-defined close code 4401.
+//
+// This suite drives a REAL `ws` client against the REAL http.Server
+// (`app.server`, attached at the bottom of src/index.js specifically so
+// tests can reach it) — supertest can't exercise this at all, since it spins
+// its own ephemeral server per request and never touches the WS upgrade
+// path.
+describe('WebSocket auth on /ws/store (was: none)', () => {
+  const WebSocketClient = require('ws');
+
+  function wsUrl(query = '') {
+    const port = app.server.address().port;
+    return `ws://127.0.0.1:${port}/ws/store${query}`;
+  }
+
+  it('rejects a connection with no token at all (close code 4401)', (done) => {
+    const client = new WebSocketClient(wsUrl());
+    client.on('close', (code) => {
+      expect(code).toBe(4401);
+      done();
+    });
+    client.on('error', () => {}); // the close assertion above is the real check
+  });
+
+  it('rejects a connection with an invalid/garbage token (close code 4401)', (done) => {
+    const client = new WebSocketClient(wsUrl('?token=garbage'));
+    client.on('close', (code) => {
+      expect(code).toBe(4401);
+      done();
+    });
+    client.on('error', () => {});
+  });
+
+  it('accepts a connection with a valid token via the ?token= query param', (done) => {
+    const client = new WebSocketClient(wsUrl(`?token=${userToken}`));
+    client.on('close', (code) => {
+      if (code === 4401) done(new Error('a valid token via query param was rejected'));
+    });
+    client.on('open', () => {
+      setTimeout(() => {
+        expect(client.readyState).toBe(WebSocketClient.OPEN);
+        client.close();
+        done();
+      }, 50);
+    });
+    client.on('error', done);
+  });
+
+  it('accepts a connection with a valid token via the Sec-WebSocket-Protocol header', (done) => {
+    const client = new WebSocketClient(wsUrl(), [userToken]);
+    client.on('close', (code) => {
+      if (code === 4401) done(new Error('a valid token via Sec-WebSocket-Protocol was rejected'));
+    });
+    client.on('open', () => {
+      setTimeout(() => {
+        expect(client.readyState).toBe(WebSocketClient.OPEN);
+        client.close();
+        done();
+      }, 50);
+    });
+    client.on('error', done);
+  });
+});
