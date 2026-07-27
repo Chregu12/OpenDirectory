@@ -41,13 +41,31 @@
  * The remaining removed endpoints are genuine regressions with live
  * consumers (Gateway routes and/or frontend callers still pointing at
  * auth-service) and are intentionally NOT covered by this cleanup:
- *   - /api/pim/*, /api/service-accounts*, /api/config/domain, /api/ous
+ *   - /api/pim/*, /api/service-accounts*, /api/config/domain
  *     still have failing test blocks below (kept red on purpose — the
  *     underlying routes are genuinely missing and need to be reimplemented
  *     in a follow-up change, tracked separately from this cleanup).
  *   - MFA verify-setup/status were fixed directly (real alias routes added
  *     to src/routes/mfa.js with the same requireAuth middleware as the rest
  *     of the MFA routes) — see the 'MFA routes' section below.
+ *
+ * ─── /api/ous (added, then re-migrated away) ───────────────────────────────
+ *
+ * /api/ous was later reimplemented DB-first in src/routes/directory.js
+ * (see git history / that file's former header comment) with its own test
+ * coverage here. It was then removed again — for a different reason than
+ * the "MIGRATED" bucket above: identity-service had, independently and
+ * concurrently, also grown a DB-first /api/ous implementation against its
+ * own separate "identity" database. Two services owning the same directory
+ * entity in two different databases is a split-brain hazard, so /api/ous
+ * was consolidated onto identity-service (the platform's identity/directory
+ * store, which already owns users/groups/roles and is already what
+ * api-gateway proxies /api/groups, /api/users, /api/roles to — see
+ * services/core/api-gateway/src/middleware/routing.js). See the NOTE at the
+ * top of src/routes/directory.js for the full rationale, and
+ * services/core/identity-service/src/index.js for the merged
+ * implementation, which now also returns the parent/child `tree` shape
+ * this service's version used to build.
  */
 
 // ─── Mock all external / missing dependencies BEFORE any require ───────────────
@@ -1250,67 +1268,10 @@ describe('Authentication Service - E2E API Tests', () => {
     });
   });
 
-  // ─── Directory: OUs ───────────────────────────────────────────────────────────
-
-  describe('GET /api/ous', () => {
-    it('returns 401 when no auth token provided', async () => {
-      const res = await request(app).get('/api/ous');
-      expect(res.status).toBe(401);
-    });
-
-    it('returns OU tree with Bearer token', async () => {
-      const token = makeJwt();
-      const res = await request(app)
-        .get('/api/ous')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
-    });
-  });
-
-  describe('POST /api/ous', () => {
-    it('returns 401 when no auth token provided', async () => {
-      const res = await request(app).post('/api/ous').send({ name: 'TestOU' });
-      expect(res.status).toBe(401);
-    });
-
-    it('returns 403 for a non-admin token (OU mutation is admin-only)', async () => {
-      // Security-regression guard: any authenticated user used to be able to
-      // create directory objects. Only 'admin' may now do so.
-      const token = makeJwt({ roles: ['user'] });
-      const res = await request(app)
-        .post('/api/ous')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'ShouldBeRejected' });
-
-      expect(res.status).toBe(403);
-      expect(res.body).toHaveProperty('error', 'Admin access required');
-    });
-
-    it('returns 400 when name is missing', async () => {
-      const token = makeAdminJwt();
-      const res = await request(app)
-        .post('/api/ous')
-        .set('Authorization', `Bearer ${token}`)
-        .send({});
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error', 'name required');
-    });
-
-    it('returns 201 with created OU', async () => {
-      const token = makeAdminJwt();
-      const res = await request(app)
-        .post('/api/ous')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'Finance', description: 'Finance department' });
-
-      expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('name', 'Finance');
-      expect(res.body).toHaveProperty('id');
-    });
-  });
+  // Directory: OUs (GET/POST /api/ous) — removed; see the "/api/ous (added,
+  // then re-migrated away)" note at the top of this file. Coverage now
+  // lives in services/core/identity-service/src/__tests__/api.e2e.test.js
+  // ('OUs CRUD roundtrip' describe block).
 
   // ─── Service Accounts ─────────────────────────────────────────────────────────
 

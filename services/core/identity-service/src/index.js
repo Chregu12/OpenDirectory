@@ -321,10 +321,36 @@ app.delete('/api/groups/:id', requireAdmin, async (req, res) => {
 // OUs: DB-first reads
 //
 // The pre-existing stub declared an `ous` in-memory Map but wired up no
-// routes for it at all — dead code. These routes are new (see task audit),
-// modeled on the users/groups CRUD conventions already established in this
-// file, and are DB-backed + auth-gated from the start.
+// routes for it at all — dead code. These routes were added (see task
+// audit), modeled on the users/groups CRUD conventions already established
+// in this file, and are DB-backed + auth-gated from the start.
+//
+// This is now the canonical /api/ous implementation for the whole
+// platform: authentication-service independently grew its own DB-first
+// /api/ous (against a different `organizational_units` table in its own
+// separate "auth" database — migrations/003_groups_ous.sql there), which
+// meant two services owned the same directory entity in two different
+// databases — a split-brain hazard. It was consolidated here because
+// identity-service is the platform's identity/directory store by design
+// (see migrations/001_identity_schema.sql), already owns the related
+// users/groups/roles entities, and api-gateway already proxies
+// /api/groups, /api/users, and /api/roles here (see
+// services/core/api-gateway/src/middleware/routing.js) — /api/ous
+// belongs next to those. See authentication-service's
+// src/routes/directory.js for the removal-side notes.
+//
+// buildOuTree() below ports the one capability the authentication-service
+// version had that this one didn't: a parent/child nested view (it built
+// this over its whole in-memory list on every GET /api/ous). Exposed as an
+// additional `tree` field on GET /api/ous, alongside the existing flat
+// `ous` list, so no existing consumer of the flat shape is affected.
 // ==================
+function buildOuTree(list, parentId = null) {
+  return list
+    .filter((o) => (o.parentId ?? null) === parentId)
+    .map((o) => ({ ...o, children: buildOuTree(list, o.id) }));
+}
+
 async function getAllOus() {
   if (db.isAvailable()) {
     try {
@@ -354,7 +380,7 @@ async function getOuById(id) {
 // ==================
 app.get('/api/ous', async (req, res) => {
   const list = await getAllOus();
-  res.json({ ous: list, total: list.length });
+  res.json({ ous: list, total: list.length, tree: buildOuTree(list) });
 });
 
 app.get('/api/ous/:id', async (req, res) => {

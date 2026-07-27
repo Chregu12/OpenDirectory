@@ -408,8 +408,10 @@ class UnifiedAuthenticationService {
     // (see src/routes/serviceAccounts.js for restoration notes).
     this.app.use(createServiceAccountRoutes(services));
 
-    // Directory routes: OUs (DB-first) + domain config (in-memory) — real
-    // requireBearerAuth (see src/routes/directory.js for restoration notes).
+    // Directory routes: domain configuration only — real requireBearerAuth
+    // (see src/routes/directory.js for restoration notes). OUs used to live
+    // here too; they moved to identity-service to resolve a namespace
+    // collision — see the NOTE at the top of src/routes/directory.js.
     this.app.use(createDirectoryRoutes(services));
 
     // Error handling

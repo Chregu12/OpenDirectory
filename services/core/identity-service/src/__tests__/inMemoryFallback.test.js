@@ -123,6 +123,18 @@ it('runs a full OU CRUD roundtrip purely on the in-memory fallback', async () =>
   expect(updated.status).toBe(200);
   expect(updated.body.description).toBe('updated');
 
+  // Ported feature (see buildOuTree() in ../index.js): the nested
+  // parent/child tree is computed in-process from whatever list getAllOus()
+  // returns, so it works the same on the in-memory fallback as on the DB
+  // path.
+  const child = await admin(request(app).post('/api/ous')).send({ name: 'nodb-ou-child', parentId: id });
+  expect(child.status).toBe(201);
+
+  const list = await admin(request(app).get('/api/ous'));
+  expect(list.status).toBe(200);
+  const parentNode = list.body.tree.find((o) => o.id === id);
+  expect(parentNode.children.some((c) => c.name === 'nodb-ou-child')).toBe(true);
+
   const deleted = await admin(request(app).delete(`/api/ous/${id}`));
   expect(deleted.status).toBe(204);
 });

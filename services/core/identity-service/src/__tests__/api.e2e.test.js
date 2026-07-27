@@ -453,6 +453,22 @@ describe('OUs CRUD roundtrip', () => {
     expect(res.body.parentId).toBe(ouId);
   });
 
+  // Ported from authentication-service's now-removed /api/ous implementation
+  // (src/routes/directory.js there used to build this same parent/child
+  // nesting on every GET /api/ous) as part of consolidating /api/ous onto
+  // this service — see the comment above buildOuTree() in ../index.js.
+  it('GET /api/ous also returns a nested parent/child tree alongside the flat list', async () => {
+    const res = await admin(request(app).get('/api/ous'));
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.tree)).toBe(true);
+
+    const financeNode = res.body.tree.find((o) => o.id === ouId);
+    expect(financeNode).toBeDefined();
+    expect(financeNode.children.some((c) => c.name === 'Accounting')).toBe(true);
+    // The flat `ous`/`total` shape existing consumers rely on is unchanged.
+    expect(res.body.ous.some((o) => o.id === ouId)).toBe(true);
+  });
+
   it('PUT /api/ous/:id updates and persists via the DB path', async () => {
     const res = await admin(request(app).put(`/api/ous/${ouId}`)).send({ description: 'Updated' });
     expect(res.status).toBe(200);
