@@ -16,6 +16,7 @@ const nextConfig = {
     const conditionalAccessUrl = process.env.CONDITIONAL_ACCESS_URL         || 'http://conditional-access:3007';
     const quickActionsUrl      = process.env.QUICK_ACTIONS_URL              || 'http://quick-actions:3950';
     const authServiceUrl       = process.env.AUTH_SERVICE_URL               || 'http://auth-service:3001';
+    const identityServiceUrl   = process.env.IDENTITY_SERVICE_URL           || 'http://identity-service:3001';
     const deviceServiceUrl     = process.env.DEVICE_SERVICE_URL             || 'http://device-service:3003';
     const sambaUrl             = process.env.SAMBA_SERVICE_URL              || 'http://samba-ad-dc:3010';
     const complianceEngineUrl  = process.env.COMPLIANCE_ENGINE_URL          || 'http://compliance-engine:3907';
@@ -141,6 +142,15 @@ const nextConfig = {
       // from the /api/config/{modules,features,settings} rules above, which
       // target integration-service.
       { source: '/api/config/domain',       destination: `${authServiceUrl}/api/config/domain` },
+
+      // Organizational units -> identity-service, the canonical OU owner.
+      // (authentication-service briefly had a competing /api/ous backed by a
+      // second table in its own DB; that was consolidated away — identity-service
+      // owns the directory entities and already serves /api/users, /api/groups,
+      // /api/roles.) Without this rule /api/ous falls into the api-backend
+      // catch-all below and 404s.
+      { source: '/api/ous',                 destination: `${identityServiceUrl}/api/ous` },
+      { source: '/api/ous/:path*',          destination: `${identityServiceUrl}/api/ous/:path*` },
       // ── NOT routed (investigated, deliberately left as-is) ──────────────
       // /api/devices/:id/{software,hardware,network,logs,policies,compliance},
       // /api/mdm/*, /api/policies/{ou-tree,templates,:id/compiled,

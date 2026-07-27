@@ -403,6 +403,32 @@ describe('service-accounts & config/domain routing (authentication-service)', ()
   });
 });
 
+// ─── Organizational units (identity-service is the canonical owner) ───────────
+
+describe('OU routing (identity-service)', () => {
+  test.each([
+    '/api/ous',
+    '/api/ous/ou-1',
+    '/api/ous/ou-1/children',
+  ])('%s → identity-service', urlPath => {
+    expectRoute(urlPath, 'identity-service:3001', '/api/ous');
+  });
+
+  test('OUs do NOT go to authentication-service (its competing impl was consolidated away)', () => {
+    const hit = resolve(rules, '/api/ous');
+    expect(serviceOf(hit.destination)).not.toBe('auth-service:3001');
+  });
+
+  test('these rules precede the /api/:path* catch-all', () => {
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    for (const source of ['/api/ous', '/api/ous/:path*']) {
+      const idx = rules.findIndex(r => r.source === source);
+      expect(idx).toBeGreaterThan(-1);
+      expect(idx).toBeLessThan(catchAllIndex);
+    }
+  });
+});
+
 // ─── Rule ordering ────────────────────────────────────────────────────────────
 
 describe('rule ordering', () => {
