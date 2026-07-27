@@ -318,6 +318,41 @@ services:
       - ./services/core/policy-service:/app
       - /app/node_modules
 
+  monitoring-service:
+    build:
+      context: ./services/core/monitoring-service
+      dockerfile: Dockerfile
+    container_name: od-monitoring-service
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3005
+      # src/db/client.js prefers DATABASE_URL and only falls back to the
+      # discrete DB_HOST/DB_NAME/... vars from src/config/index.js. Using
+      # DATABASE_URL here matches the rest of the fleet and avoids the
+      # POSTGRES_HOST-vs-DB_HOST naming mismatch that left this service
+      # permanently on its in-memory fallback in the prod compose file.
+      - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/monitoring
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+    ports:
+      - "3005:3005"
+    networks:
+      - opendirectory
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    volumes:
+      - ./services/core/monitoring-service:/app
+      - /app/node_modules
+
   # ===================
   # Platform Services
   # ===================

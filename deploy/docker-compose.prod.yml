@@ -388,6 +388,11 @@ services:
     environment:
       PORT: "3005"
       NODE_ENV: production
+      # src/db/client.js reads DATABASE_URL first and otherwise falls back to
+      # DB_HOST/DB_NAME/... from src/config/index.js — it never reads
+      # POSTGRES_HOST/POSTGRES_PASSWORD, so those alone left the service
+      # silently on its in-memory fallback (alerts lost on restart).
+      DATABASE_URL: postgres://${POSTGRES_USER:-opendirectory}:${POSTGRES_PASSWORD:?}@postgres/monitoring
       POSTGRES_HOST: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
