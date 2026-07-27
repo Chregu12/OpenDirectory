@@ -63,19 +63,18 @@ function notifyDeviceService(payload) {
 }
 
 // ---------------------------------------------------------------------------
-// PostgreSQL pool (optional — service degrades gracefully without it)
+// PostgreSQL pool + migration runner (optional — service degrades
+// gracefully without it). See src/db/index.js: this now actually applies
+// migrations/*.sql (domain_trusts, laps_passwords, bitlocker_keys, ...)
+// instead of just handing managers a raw, unmigrated Pool. initDb() is
+// fire-and-forget here (matches identity-service/least-privilege): the
+// server starts serving immediately, and db.isAvailable() flips true once
+// connectivity + migrations are confirmed. Managers below receive the `db`
+// module itself (not a raw Pool) so their `this.db.query(...)` calls are
+// gated by isAvailable() rather than by "does a Pool object exist".
 // ---------------------------------------------------------------------------
-let db = null;
-if (process.env.DATABASE_URL) {
-  try {
-    const { Pool } = require('pg');
-    db = new Pool({ connectionString: process.env.DATABASE_URL });
-    db.on('error', (err) => logger.warn('PG pool error', { error: err.message }));
-    logger.info('PostgreSQL pool initialised');
-  } catch (err) {
-    logger.warn('pg module not available — DB features disabled', { error: err.message });
-  }
-}
+const db = require('./db');
+db.initDb().catch(err => logger.warn('db.initDb() failed unexpectedly', { error: err.message }));
 
 // ---------------------------------------------------------------------------
 // Service modules
@@ -140,7 +139,7 @@ app.get('/health', async (req, res) => {
   res.json({
     status: ldapStatus.connected ? 'ok' : 'degraded',
     ldap: ldapStatus,
-    database: db ? 'configured' : 'disabled',
+    database: db.isAvailable() ? 'connected' : (process.env.DATABASE_URL ? 'configured-not-ready' : 'disabled'),
     uptime: process.uptime(),
     timestamp: new Date().toISOString()
   });

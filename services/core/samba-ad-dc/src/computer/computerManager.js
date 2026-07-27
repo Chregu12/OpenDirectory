@@ -238,7 +238,7 @@ class ComputerManager {
     const encrypted = encrypt(password);
 
     // Persist to DB
-    if (this.db) {
+    if (this._dbReady()) {
       try {
         await this.db.query(
           `INSERT INTO laps_passwords (computer_name, encrypted_password, expires_at, set_at)
@@ -297,7 +297,7 @@ class ComputerManager {
     let password = null;
     let expiresAt = null;
 
-    if (this.db) {
+    if (this._dbReady()) {
       try {
         const { rows } = await this.db.query(
           'SELECT encrypted_password, expires_at FROM laps_passwords WHERE computer_name = $1',
@@ -409,21 +409,43 @@ class ComputerManager {
     if (!recoveryKeyId) throw new Error('recoveryKeyId is required');
     if (!recoveryKey) throw new Error('recoveryKey is required');
 
+    // Persistence decision (see src/db/index.js for the isAvailable() gate
+    // this relies on): a BitLocker recovery key exists for exactly one
+    // reason — being recoverable later. There is deliberately NO in-memory
+    // fallback here. An in-memory "escrow" would let this call return
+    // success:true, the caller/admin would believe the key is safely
+    // stored, and the key would then evaporate on the next restart/crash —
+    // silently, with no way to tell after the fact that recovery is
+    // impossible. That is strictly worse than refusing the request: a loud
+    // failure here tells the admin (or the calling client) to retry once
+    // the DB is back, or to escalate. Compare with setLAPSPassword() below,
+    // which degrades more gracefully on DB failure because a LAPS password
+    // has a live authoritative fallback (LDAP ms-Mcs-AdmPwd, rotated daily)
+    // — BitLocker recovery keys have no such fallback; the DB row IS the
+    // only durable copy this service ever produces.
+    if (!this._dbReady()) {
+      logger.error('BitLocker key escrow refused: no database available to persist the recovery key', {
+        computerName, recoveryKeyId, volumeType
+      });
+      throw new Error(
+        'BitLocker recovery key was NOT escrowed: no database is configured or available. ' +
+        'Refusing to report success for a recovery key that would not be durably stored.'
+      );
+    }
+
     const encrypted = encrypt(recoveryKey);
 
-    if (this.db) {
-      try {
-        await this.db.query(
-          `INSERT INTO bitlocker_keys
-             (computer_name, volume_type, recovery_key_id, encrypted_recovery_key, tpm_thumbprint)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (recovery_key_id) DO NOTHING`,
-          [computerName.toUpperCase(), volumeType, recoveryKeyId, encrypted, tpmThumbprint || null]
-        );
-      } catch (dbErr) {
-        logger.warn('escrowBitLockerKey DB write failed', { error: dbErr.message });
-        throw new Error(`Failed to escrow BitLocker key: ${dbErr.message}`);
-      }
+    try {
+      await this.db.query(
+        `INSERT INTO bitlocker_keys
+           (computer_name, volume_type, recovery_key_id, encrypted_recovery_key, tpm_thumbprint)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (recovery_key_id) DO NOTHING`,
+        [computerName.toUpperCase(), volumeType, recoveryKeyId, encrypted, tpmThumbprint || null]
+      );
+    } catch (dbErr) {
+      logger.warn('escrowBitLockerKey DB write failed', { error: dbErr.message });
+      throw new Error(`Failed to escrow BitLocker key: ${dbErr.message}`);
     }
 
     logger.info('BitLocker key escrowed', { computerName, recoveryKeyId, volumeType });
@@ -453,7 +475,7 @@ class ComputerManager {
     let recoveryKey = null;
     let keyRecord = null;
 
-    if (this.db) {
+    if (this._dbReady()) {
       try {
         const { rows } = await this.db.query(
           `SELECT * FROM bitlocker_keys
@@ -498,7 +520,7 @@ class ComputerManager {
   async listBitLockerKeys(computerName) {
     if (!computerName) throw new Error('computerName is required');
 
-    if (this.db) {
+    if (this._dbReady()) {
       try {
         const { rows } = await this.db.query(
           `SELECT id, computer_name, volume_type, recovery_key_id, tpm_thumbprint, escrowed_at
@@ -638,6 +660,20 @@ class ComputerManager {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * True when a DB is present AND (as far as it reports) actually ready to
+   * accept writes. `this.db` can be either the src/db/index.js module
+   * (production wiring — exposes isAvailable()) or, in tests, a plain fake
+   * object with just a `query()` method; the latter is treated as "ready"
+   * whenever it's present, since it has no isAvailable() concept to defer
+   * to.
+   */
+  _dbReady() {
+    if (!this.db) return false;
+    if (typeof this.db.isAvailable === 'function') return this.db.isAvailable();
+    return true;
+  }
 
   _encodePassword(password) {
     return Buffer.from(`"${password}"`, 'utf16le');
