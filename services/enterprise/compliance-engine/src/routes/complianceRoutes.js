@@ -174,17 +174,13 @@ function createComplianceRoutes(deps) {
   });
 
   // ─── Scores ───────────────────────────────────────────────────────
-
-  // GET /api/compliance/score/:deviceId - Get device compliance score
-  router.get('/score/:deviceId', async (req, res) => {
-    try {
-      const score = await evaluator.getDeviceScore(req.params.deviceId);
-      res.json({ success: true, data: score });
-    } catch (error) {
-      logger.error(`Failed to get device score: ${error.message}`, { error });
-      res.status(500).json({ success: false, error: 'Failed to get device score' });
-    }
-  });
+  //
+  // NOTE: the static/nested routes (`/score/fleet`, `/score/ou/:ouId`) must be
+  // registered before the catch-all `/score/:deviceId` - Express matches
+  // routes in registration order, and `:deviceId` matches any single path
+  // segment (including the literal "fleet"), so registering it first would
+  // silently swallow every request to `/score/fleet` as
+  // getDeviceScore('fleet') and make the fleet-score endpoint unreachable.
 
   // GET /api/compliance/score/fleet - Get fleet-wide score
   router.get('/score/fleet', async (req, res) => {
@@ -210,6 +206,17 @@ function createComplianceRoutes(deps) {
     } catch (error) {
       logger.error(`Failed to get OU score: ${error.message}`, { error });
       res.status(500).json({ success: false, error: 'Failed to get OU score' });
+    }
+  });
+
+  // GET /api/compliance/score/:deviceId - Get device compliance score
+  router.get('/score/:deviceId', async (req, res) => {
+    try {
+      const score = await evaluator.getDeviceScore(req.params.deviceId);
+      res.json({ success: true, data: score });
+    } catch (error) {
+      logger.error(`Failed to get device score: ${error.message}`, { error });
+      res.status(500).json({ success: false, error: 'Failed to get device score' });
     }
   });
 
