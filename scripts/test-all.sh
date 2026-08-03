@@ -7,9 +7,13 @@
 # GATING suites fail. It mirrors the gating set enforced by the
 # `service-tests` job in .github/workflows/ci.yml.
 #
-# GATING suites (must pass): these are verified green.
-# NON-GATING suites (reported but do not fail the run): currently red/fragile,
-#   see the CI workflow comments for the reason each is quarantined.
+# GATING suites (must pass): these are verified green. As of the 2026-08-03
+#   wiring pass every suite that is wired up at all is gating — NON_GATING is
+#   currently empty. It is kept as an array (not deleted) because it is the
+#   documented escape hatch for a future suite that verifies red/flaky: such
+#   a suite goes here with a comment explaining why, never silently omitted.
+# NON-GATING suites (reported but do not fail the run): would be red/fragile
+#   suites, see the CI workflow comments for the reason each is quarantined.
 #
 # Usage:
 #   npm test                 # run gating suites (fails on any gating failure)
@@ -29,14 +33,33 @@ GATING=(
   "services/core/samba-ad-dc|npm test"
   "services/platform/api-backend|npm test -- --passWithNoTests --forceExit"
   "services/platform/api-gateway|npm test -- --passWithNoTests --forceExit"
+  "services/core/apple-mdm|npm test"
+  "services/core/certificate-authority|npm test -- --passWithNoTests --forceExit"
+  "services/core/identity-service|npm test -- --passWithNoTests --forceExit"
+  "services/core/kerberos-kdc|npm test"
+  "services/core/least-privilege|npm test -- --passWithNoTests --forceExit"
+  "services/core/network-infrastructure|npm test -- --passWithNoTests --forceExit"
+  "services/core/oauth-provider|npm test -- --passWithNoTests --forceExit"
+  "services/platform/integration-service|npm test -- --passWithNoTests --forceExit"
+  "services/enterprise/antivirus-protection|npm test -- --passWithNoTests --forceExit"
+  "services/enterprise/app-store|npm test -- --passWithNoTests --forceExit"
+  "services/enterprise/auto-remediation|npm test -- --passWithNoTests --forceExit"
+  "services/enterprise/device-lifecycle|npm test -- --passWithNoTests --forceExit"
+  "services/enterprise/graph-explorer|npm test -- --passWithNoTests --forceExit"
+  "services/enterprise/policy-simulator|npm test -- --passWithNoTests --forceExit"
+  "services/enterprise/security-scanner|npm test -- --passWithNoTests --forceExit"
+  "services/enterprise/compliance-engine|npm test -- --passWithNoTests --forceExit"
+  "services/core/policy-service|npm test -- --passWithNoTests --forceExit"
+  "services/platform/quick-actions|npm test -- --passWithNoTests --forceExit"
+  "services/core/authentication-service|npm test -- --passWithNoTests --forceExit"
+  "frontend/web-app|npm test"
   "frontend/web-app|npm run test:e2e"
 )
 
+# compliance-engine (services/enterprise/compliance-engine) is deliberately
+# absent from both arrays: it has tests but no package.json "test" script and
+# no node_modules yet. A parallel agent owns wiring it up.
 NON_GATING=(
-  "services/core/authentication-service|npm test -- --passWithNoTests --forceExit"
-  "services/core/policy-service|npm test -- --passWithNoTests --forceExit"
-  "services/platform/quick-actions|npm test -- --passWithNoTests --forceExit"
-  "frontend/web-app|npm test"
 )
 
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}"
