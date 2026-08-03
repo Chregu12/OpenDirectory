@@ -102,7 +102,15 @@ class EnterpriseMonitoringService {
     this.initializeWebSocket();
     this.initializeRoutes();
     this.initializeEventHandlers();
-    this.startBackgroundJobs();
+    // NOTE: startBackgroundJobs() is intentionally NOT called here. It used
+    // to run unconditionally from the constructor, which meant every
+    // `require('./index')` — including from a test suite that just wants
+    // the Express `app` — silently spun up six setInterval timers (metrics
+    // broadcast, anomaly detection, predictive analytics, SLA checks, log
+    // cleanup, cost analysis) as a side effect of construction. It is now
+    // started from start() itself, once the HTTP server is actually
+    // listening, matching services/core/network-infrastructure's
+    // startBackgroundServices() pattern.
   }
 
   initializeMiddleware() {
@@ -227,7 +235,10 @@ class EnterpriseMonitoringService {
     });
 
     // WebSocket heartbeat
-    setInterval(() => {
+    // .unref()'d so this timer never keeps the process (or a test's Node
+    // process) alive on its own — it runs unconditionally from the
+    // constructor, unlike the jobs in startBackgroundJobs() below.
+    const heartbeatTimer = setInterval(() => {
       this.wss.clients.forEach((ws) => {
         if (!ws.isAlive) {
           return ws.terminate();
@@ -236,6 +247,7 @@ class EnterpriseMonitoringService {
         ws.ping();
       });
     }, 30000);
+    if (heartbeatTimer.unref) heartbeatTimer.unref();
   }
 
   initializeRoutes() {
@@ -501,8 +513,16 @@ class EnterpriseMonitoringService {
   }
 
   startBackgroundJobs() {
+    // Called from start() once the HTTP server is listening (see start()
+    // below) rather than from the constructor, so `require()`ing this
+    // module never spins up these timers as a side effect. Each one is
+    // also .unref()'d so an explicit call to start() (e.g. from a test that
+    // exercises full startup) still doesn't keep the process alive on its
+    // own — matches services/core/network-infrastructure's
+    // startBackgroundServices().
+
     // Real-time metrics broadcasting
-    setInterval(async () => {
+    const metricsTimer = setInterval(async () => {
       try {
         const metrics = await this.dashboardService.getRealTimeMetrics();
         this.broadcastToSubscribers('real-time-metrics', {
@@ -514,51 +534,57 @@ class EnterpriseMonitoringService {
         logger.error('Real-time metrics broadcast error:', error);
       }
     }, config.realTime.metricsInterval);
+    if (metricsTimer.unref) metricsTimer.unref();
 
     // Anomaly detection
-    setInterval(async () => {
+    const anomalyTimer = setInterval(async () => {
       try {
         await this.anomalyDetector.detectAnomalies();
       } catch (error) {
         logger.error('Anomaly detection error:', error);
       }
     }, config.anomalyDetection.interval);
+    if (anomalyTimer.unref) anomalyTimer.unref();
 
     // Predictive analytics
-    setInterval(async () => {
+    const predictiveTimer = setInterval(async () => {
       try {
         await this.predictiveAnalytics.generatePredictions();
       } catch (error) {
         logger.error('Predictive analytics error:', error);
       }
     }, config.predictiveAnalytics.interval);
+    if (predictiveTimer.unref) predictiveTimer.unref();
 
     // SLA monitoring
-    setInterval(async () => {
+    const slaTimer = setInterval(async () => {
       try {
         await this.slaMonitor.checkSLAs();
       } catch (error) {
         logger.error('SLA monitoring error:', error);
       }
     }, config.sla.checkInterval);
+    if (slaTimer.unref) slaTimer.unref();
 
     // Log retention cleanup
-    setInterval(async () => {
+    const logCleanupTimer = setInterval(async () => {
       try {
         await this.logAggregator.cleanupOldLogs();
       } catch (error) {
         logger.error('Log cleanup error:', error);
       }
     }, config.logging.cleanupInterval);
+    if (logCleanupTimer.unref) logCleanupTimer.unref();
 
     // Cost analysis
-    setInterval(async () => {
+    const costTimer = setInterval(async () => {
       try {
         await this.costAnalyzer.generateCostReports();
       } catch (error) {
         logger.error('Cost analysis error:', error);
       }
     }, config.costAnalysis.reportInterval);
+    if (costTimer.unref) costTimer.unref();
   }
 
   // ── Alert API Handlers ────────────────────────────────────────────────────
@@ -1220,10 +1246,19 @@ class EnterpriseMonitoringService {
   }
 
   start(port = process.env.PORT || 3009) {
-    // Connect to RabbitMQ event bus (fire and forget)
-    connectBus();
+    // Connect to RabbitMQ event bus (fire and forget).
+    // .catch() is required, not cosmetic: connectBus() is `async function
+    // connectBus() { await _bus.connect(); }`, so an unhandled rejection
+    // here (e.g. the real @opendirectory/grpc-event-bus package resolving
+    // fine but amqplib not being installed, or no broker reachable) crashes
+    // the whole process — observed via `node src/index.js` in this repo,
+    // where packages/grpc-event-bus resolves as a real module but its
+    // RabbitMQTransport throws 'amqplib not installed'. That defeats the
+    // graceful degradation the NoopEventBusClient fallback above exists
+    // for. Same fix as services/core/enterprise-directory/src/index.js.
+    connectBus().catch((err) => logger.warn('monitoring-service: event bus connect failed', { error: err.message }));
 
-    setTimeout(async () => {
+    const eventSubTimer = setTimeout(async () => {
       await subscribeToEvents('monitoring.events', [
         'device.non_compliant',
         'app.install.failed',
@@ -1252,15 +1287,28 @@ class EnterpriseMonitoringService {
         }
       });
     }, 3000);
+    if (eventSubTimer.unref) eventSubTimer.unref();
 
-    this.server.listen(port, () => {
-      publishEvent('admin.service.health', { service: 'monitoring', status: 'healthy', timestamp: new Date().toISOString() });
-      logger.info(`📊 Enterprise Monitoring Service started on port ${port}`);
-      logger.info(`🔍 Health check: http://localhost:${port}/health`);
-      logger.info(`📈 Metrics: http://localhost:${port}/metrics`);
-      logger.info(`🔌 WebSocket: ws://localhost:${port}/ws/monitoring`);
-      logger.info(`📺 Features: Real-time Dashboards, Predictive Analytics, SLA Monitoring`);
-      logger.info(`🚨 Alerts: Anomaly Detection, Performance Monitoring, Cost Analysis`);
+    // Returns a Promise resolving to the listening http.Server (mirrors
+    // services/core/kerberos-kdc & network-infrastructure's start()) so a
+    // caller — notably an e2e test suite — can await startup instead of
+    // racing server.listen()'s callback, and get the handle back to close
+    // it afterwards.
+    return new Promise((resolve) => {
+      this.server.listen(port, () => {
+        publishEvent('admin.service.health', { service: 'monitoring', status: 'healthy', timestamp: new Date().toISOString() });
+        logger.info(`📊 Enterprise Monitoring Service started on port ${port}`);
+        logger.info(`🔍 Health check: http://localhost:${port}/health`);
+        logger.info(`📈 Metrics: http://localhost:${port}/metrics`);
+        logger.info(`🔌 WebSocket: ws://localhost:${port}/ws/monitoring`);
+        logger.info(`📺 Features: Real-time Dashboards, Predictive Analytics, SLA Monitoring`);
+        logger.info(`🚨 Alerts: Anomaly Detection, Performance Monitoring, Cost Analysis`);
+
+        // Background jobs only start once the server is actually up — see
+        // the note in startBackgroundJobs() and the constructor.
+        this.startBackgroundJobs();
+        resolve(this.server);
+      });
     });
   }
 
@@ -1305,9 +1353,37 @@ process.on('SIGTERM', () => {
   }
 });
 
-// Start the service
-const monitoringService = new EnterpriseMonitoringService();
-global.monitoringService = monitoringService;
-monitoringService.start();
+// Only run the production entrypoint (auto-start) when this file is
+// executed directly (docker entrypoint: `node src/index.js`). Previously
+// there was no require.main guard here at all, so a plain
+// `require('./index')` — e.g. from a test suite — opened a real listening
+// HTTP server (and, after 3s, an event-bus subscription) as a side effect
+// of the import, which never returned control until the process was
+// killed. Production behavior is unchanged: `node src/index.js` still hits
+// this branch exactly as before. Same pattern as
+// services/core/kerberos-kdc and services/core/network-infrastructure.
+if (require.main === module) {
+  const monitoringService = new EnterpriseMonitoringService();
+  global.monitoringService = monitoringService;
+  monitoringService.start().catch((err) => {
+    logger.error('Failed to start monitoring service:', err);
+    process.exit(1);
+  });
+}
 
-module.exports = EnterpriseMonitoringService;
+// Build the exported instance — reuse the already-constructed instance from
+// the branch above when running directly, or build one fresh (without
+// starting it — no listen(), no background timers beyond the .unref()'d
+// ones) when required as a module, e.g. by the e2e test suite. Callers get
+// the same {app, start} shape as kerberos-kdc/network-infrastructure, so
+// supertest can drive the real Express app directly and, if a test wants
+// full startup, await start() for the listening server handle to close
+// afterwards.
+const monitoringServiceExport = global.monitoringService || new EnterpriseMonitoringService();
+if (!global.monitoringService) global.monitoringService = monitoringServiceExport;
+
+module.exports = {
+  app: monitoringServiceExport.app,
+  start: (port) => monitoringServiceExport.start(port),
+  EnterpriseMonitoringService,
+};

@@ -146,6 +146,7 @@ jobs:
             services/enterprise/policy-simulator \
             services/enterprise/security-scanner \
             services/enterprise/compliance-engine \
+            services/core/monitoring-service \
             frontend/web-app ; do
             if [ ! -f "$d/package.json" ]; then
               echo "::error::Expected test path missing: $d/package.json"
@@ -270,6 +271,13 @@ jobs:
       - name: Test compliance-engine
         id: test_compliance_engine
         run: cd services/enterprise/compliance-engine && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # monitoring-service became testable in the same pass (require.main guard
+      # + background jobs moved out of the constructor); 30 tests covering the
+      # DB-first alert store, its in-memory fallback and the event-bus noop.
+      - name: Test monitoring-service
+        id: test_monitoring_service
+        run: cd services/core/monitoring-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
 
       # ---------------------------------------------------------------
       # policy-service: 227 tests / 7 suites, all green (stale duplicate test

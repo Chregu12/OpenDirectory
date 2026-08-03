@@ -49,6 +49,7 @@ GATING=(
   "services/enterprise/policy-simulator|npm test -- --passWithNoTests --forceExit"
   "services/enterprise/security-scanner|npm test -- --passWithNoTests --forceExit"
   "services/enterprise/compliance-engine|npm test -- --passWithNoTests --forceExit"
+  "services/core/monitoring-service|npm test -- --passWithNoTests --forceExit"
   "services/core/policy-service|npm test -- --passWithNoTests --forceExit"
   "services/platform/quick-actions|npm test -- --passWithNoTests --forceExit"
   "services/core/authentication-service|npm test -- --passWithNoTests --forceExit"
@@ -56,9 +57,6 @@ GATING=(
   "frontend/web-app|npm run test:e2e"
 )
 
-# compliance-engine (services/enterprise/compliance-engine) is deliberately
-# absent from both arrays: it has tests but no package.json "test" script and
-# no node_modules yet. A parallel agent owns wiring it up.
 NON_GATING=(
 )
 
