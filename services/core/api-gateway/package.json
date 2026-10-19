@@ -17,6 +17,8 @@
     "helmet": "^7.1.0",
     "express-rate-limit": "^7.1.5",
     "jsonwebtoken": "^9.0.2",
+    "jose": "^5.10.0",
+    "pg": "^8.11.3",
     "redis": "^4.6.10",
     "express-validator": "^7.0.1",
     "morgan": "^1.10.0",

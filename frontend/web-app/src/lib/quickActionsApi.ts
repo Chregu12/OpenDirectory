@@ -1,18 +1,4 @@
-/**
- * Quick-Actions API client — talks directly to the quick-actions service at
- * NEXT_PUBLIC_QUICK_ACTIONS_URL (defaults to http://localhost:3950).
- *
- * Unlike the main `api` client this does NOT go through the Next.js rewrite
- * proxy; the quick-actions service is a standalone Express app.
- */
-
-import { getAccessToken, refreshTokens, setTokens, startLogin } from './auth';
-
-const BASE =
-  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_QUICK_ACTIONS_URL) ||
-  'http://localhost:3950';
-
-// ─── Result interfaces ────────────────────────────────────────────────────────
+import { ensureSession, getAccessToken } from './auth';
 
 export interface CreateSPResult {
   clientId: string;
@@ -49,114 +35,28 @@ export interface RotateSecretResult {
   rotatedAt?: string;
 }
 
-// ─── Auth helpers ─────────────────────────────────────────────────────────────
-
-function buildHeaders(): Record<string, string> {
-  const token = getAccessToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-}
-
-async function handleUnauthorized(): Promise<boolean> {
-  const storedRefreshToken = localStorage.getItem('refresh_token');
-  if (!storedRefreshToken) return false;
+async function qaRequest<Result>(method: string, path: string, body?: unknown): Promise<Result> {
+  if (!path.startsWith('/api/quick/') || path.includes('\\')) throw new Error('Invalid quick-actions path');
+  const token = getAccessToken() || (await ensureSession()).access_token;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
   try {
-    const tokens = await refreshTokens(storedRefreshToken);
-    setTokens(tokens);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// ─── Core helpers ─────────────────────────────────────────────────────────────
-
-export async function qaPost<T = unknown>(path: string, body?: unknown): Promise<T> {
-  const url = `${BASE}${path}`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: buildHeaders(),
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-
-  if (response.status === 401) {
-    const refreshed = await handleUnauthorized();
-    if (refreshed) {
-      const retry = await fetch(url, {
-        method: 'POST',
-        headers: buildHeaders(),
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-      });
-      if (retry.status === 401) {
-        startLogin();
-        return Promise.reject(new Error('Unauthorized'));
-      }
-      if (!retry.ok) throw new Error(`Request failed: ${retry.status}`);
-      return retry.json() as Promise<T>;
+    const response = await fetch(path, {
+      method, credentials: 'same-origin', redirect: 'error', signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+    const data = await response.json();
+    if (response.status === 207 || data?.success === false || (Number.isInteger(data?.failed) && data.failed > 0)) {
+      const operation = response.headers?.get('x-od-operation-id');
+      const reference = operation && /^[a-f0-9-]{36}$/i.test(operation) ? ` Vorgang: ${operation}.` : '';
+      throw new Error('Vorgang nicht vollständig bestätigt. Teilobjekte können bereits bestehen; vor einem weiteren Versuch prüfen.' + reference);
     }
-    startLogin();
-    return Promise.reject(new Error('Unauthorized'));
-  }
-
-  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-  return response.json() as Promise<T>;
+    return data as Result;
+  } finally { clearTimeout(timer); }
 }
 
-export async function qaGet<T = unknown>(path: string): Promise<T> {
-  const url = `${BASE}${path}`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: buildHeaders(),
-  });
-
-  if (response.status === 401) {
-    const refreshed = await handleUnauthorized();
-    if (refreshed) {
-      const retry = await fetch(url, {
-        method: 'GET',
-        headers: buildHeaders(),
-      });
-      if (retry.status === 401) {
-        startLogin();
-        return Promise.reject(new Error('Unauthorized'));
-      }
-      if (!retry.ok) throw new Error(`Request failed: ${retry.status}`);
-      return retry.json() as Promise<T>;
-    }
-    startLogin();
-    return Promise.reject(new Error('Unauthorized'));
-  }
-
-  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-  return response.json() as Promise<T>;
-}
-
-export async function qaDelete<T = unknown>(path: string): Promise<T> {
-  const url = `${BASE}${path}`;
-  const response = await fetch(url, {
-    method: 'DELETE',
-    headers: buildHeaders(),
-  });
-
-  if (response.status === 401) {
-    const refreshed = await handleUnauthorized();
-    if (refreshed) {
-      const retry = await fetch(url, {
-        method: 'DELETE',
-        headers: buildHeaders(),
-      });
-      if (retry.status === 401) {
-        startLogin();
-        return Promise.reject(new Error('Unauthorized'));
-      }
-      if (!retry.ok) throw new Error(`Request failed: ${retry.status}`);
-      return retry.json() as Promise<T>;
-    }
-    startLogin();
-    return Promise.reject(new Error('Unauthorized'));
-  }
-
-  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-  return response.json() as Promise<T>;
-}
+export function qaPost<Result = unknown>(path: string, body?: unknown): Promise<Result> { return qaRequest('POST', path, body); }
+export function qaGet<Result = unknown>(path: string): Promise<Result> { return qaRequest('GET', path); }
+export function qaDelete<Result = unknown>(path: string): Promise<Result> { return qaRequest('DELETE', path); }

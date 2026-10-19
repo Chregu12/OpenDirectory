@@ -3,12 +3,14 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const createProxyMiddleware = require('./middleware/proxy');
 const WebSocket = require('ws');
 const http = require('http');
+const { gatewayAccess, getGatewayPermissions } = require('./middleware/gatewayAccess');
 const { Pool } = require('pg');
 
 const pgPool = new Pool({
+  ...(process.env.DATABASE_URL ? { connectionString: process.env.DATABASE_URL } : {}),
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || process.env.POSTGRES_DB || 'api_gateway',
@@ -19,9 +21,8 @@ const pgPool = new Pool({
 });
 
 let apiGwDbReady = false;
-pgPool.query('SELECT 1').then(() => {
-  apiGwDbReady = true;
-  pgPool.query(`
+const databaseReady = pgPool.query('SELECT 1').then(async () => {
+  await pgPool.query(`
     CREATE TABLE IF NOT EXISTS api_keys (
       id VARCHAR(255) PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
@@ -31,8 +32,8 @@ pgPool.query('SELECT 1').then(() => {
       last_used TIMESTAMPTZ,
       active BOOLEAN DEFAULT TRUE
     )
-  `).catch(() => {});
-  pgPool.query(`
+  `);
+  await pgPool.query(`
     CREATE TABLE IF NOT EXISTS webhooks (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(255) NOT NULL,
@@ -45,8 +46,8 @@ pgPool.query('SELECT 1').then(() => {
       delivery_count INTEGER DEFAULT 0,
       failure_count INTEGER DEFAULT 0
     )
-  `).catch(() => {});
-  pgPool.query(`
+  `);
+  await pgPool.query(`
     CREATE TABLE IF NOT EXISTS webhook_deliveries (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       webhook_id UUID REFERENCES webhooks(id) ON DELETE CASCADE,
@@ -56,7 +57,8 @@ pgPool.query('SELECT 1').then(() => {
       delivered_at TIMESTAMPTZ DEFAULT NOW(),
       success BOOLEAN DEFAULT false
     )
-  `).catch(() => {});
+  `);
+  apiGwDbReady = true;
 }).catch(() => {});
 
 const logger = require('./config/logger');
@@ -77,7 +79,9 @@ const configManager = require('./config/configManager');
 const healthCheck = require('./middleware/health');
 
 class APIGateway {
-  constructor() {
+  constructor({ authentication = authMiddleware, discover = true, enabledModules } = {}) {
+    this.authentication = typeof authentication === 'function' ? { middleware: authentication, authenticate: authentication.authenticate } : authentication;
+    this.enabledModules = enabledModules;
     this.app = express();
     this.server = null;
     this.wsServer = null;
@@ -107,7 +111,7 @@ class APIGateway {
     this.initializeMiddleware();
     this.initializeWebSocket();
     this.initializeRoutes();
-    this.initializeServiceDiscovery();
+    if (discover) this.initializeServiceDiscovery();
   }
 
   initializeMiddleware() {
@@ -128,50 +132,44 @@ class APIGateway {
       ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
       : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000'];
 
+    this.app.use((_req, res, next) => { res.vary('Origin'); next(); });
     this.app.use(cors({
       origin: function (origin, callback) {
-        // Reject origin-less requests in production (they are browser-initiated cross-site requests without an Origin header only in edge cases, but tools like curl/Postman should use API keys instead)
-        if (!origin) {
-          if (process.env.NODE_ENV === 'production') {
-            return callback(new Error('Origin header is required'), false);
-          }
+        if (origin === undefined) return callback(null, false);
+
+        if (origin && origin !== 'null' && allowedOrigins.includes(origin)) {
           return callback(null, true);
         }
 
-        if (allowedOrigins.includes(origin)) {
-          return callback(null, true);
-        }
-
-        return callback(new Error(`Origin ${origin} not allowed by CORS policy`), false);
+        return callback(Object.assign(new Error('Browser origin not allowed by CORS policy'), { status: 403 }), false);
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
       allowedHeaders: [
         'Content-Type',
         'Authorization',
+        'If-Match',
         'X-Requested-With',
         'X-API-Key',
         'X-Service-Auth',
         'X-Service-Name',
         'X-Client-Type'
       ],
-      exposedHeaders: ['X-Total-Count', 'X-Response-Time', 'X-Rate-Limit-Remaining'],
+      exposedHeaders: ['ETag', 'X-Total-Count', 'X-Response-Time', 'X-Rate-Limit-Remaining'],
     }));
 
     // Dynamic rate limiting based on authentication type
-    this.app.use((req, res, next) => {
-      const limiter = this.getRateLimiter(req);
-      limiter(req, res, next);
-    });
+
 
     // Logging
-    this.app.use(morgan('combined', {
+    morgan.token('safe-path', req => req.path);
+    this.app.use(morgan(':method :safe-path :status :response-time ms', {
       stream: { write: (message) => logger.info(message.trim()) }
     }));
 
     // Body parsing
-    this.app.use(express.json({ limit: '10mb' }));
-    this.app.use(express.urlencoded({ extended: true }));
+    this.app.use(['/api/gateway', '/api/admin', '/api/config/modules'], express.json({ limit: '256kb' }));
+    this.app.use(['/api/gateway', '/api/admin', '/api/config/modules'], express.urlencoded({ extended: false, limit: '256kb' }));
 
     // Request logging and client type detection
     this.app.use((req, res, next) => {
@@ -201,78 +199,80 @@ class APIGateway {
     });
 
     // Custom middleware
-    this.app.use(authMiddleware);
+    this.app.use(this.apiClientLimiter);
+    this.app.use(this.authentication.middleware);
+    this.app.use((req, res, next) => {
+      const limiter = this.getRateLimiter(req);
+      limiter(req, res, next);
+    });
     this.app.use(routingMiddleware);
+    this.app.use(gatewayAccess(path => [...this.services.values()].filter(service => path === service.pathPrefix || path.startsWith(`${service.pathPrefix}/`))
+      .sort((first, second) => second.pathPrefix.length - first.pathPrefix.length)[0]));
   }
 
   initializeWebSocket() {
     this.server = http.createServer(this.app);
-
-    this.wsServer = new WebSocket.Server({
-      server: this.server,
-      path: '/ws'
-    });
-
-    this.wsServer.on('connection', (ws, req) => {
-      // Validate token before allowing the connection
-      const url = new URL(req.url || '/', `http://${req.headers.host}`);
-      const queryToken = url.searchParams.get('token');
-      const cookieHeader = req.headers.cookie || '';
-      const cookieToken = cookieHeader.split(';')
-        .map(c => c.trim())
-        .find(c => c.startsWith('auth_token='))
-        ?.split('=')[1];
-      const bearerToken = req.headers.authorization?.startsWith('Bearer ')
-        ? req.headers.authorization.slice(7)
-        : null;
-      const token = queryToken || cookieToken || bearerToken;
-
-      if (!token) {
-        ws.close(4401, 'Authentication required');
-        return;
-      }
-
+    this.wsServer = new WebSocket.Server({ noServer: true, maxPayload: 16384 });
+    let pending = 0;
+    this.server.on('upgrade', async (req, socket, head) => {
+      socket.on('error', () => socket.destroy());
+      const reject = status => { if (!socket.destroyed) socket.end('HTTP/1.1 ' + status + ' ' + http.STATUS_CODES[status] + '\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); };
+      if (req.url !== '/ws') return reject(404);
+      if (pending >= 8 || this.wsServer.clients.size >= 32) return reject(503);
+      const origin = req.headers.origin;
+      const allowed = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:3001').split(',').map(value => value.trim());
+      if (origin && !allowed.includes(origin)) return reject(403);
+      pending++;
+      socket.setTimeout(6000, () => socket.destroy());
       try {
-        const jwt = require('jsonwebtoken');
-        const jwtSecret = process.env.JWT_SECRET || 'dev-jwt-secret-not-for-production';
-        jwt.verify(token, jwtSecret);
-      } catch {
-        ws.close(4401, 'Invalid or expired token');
-        return;
-      }
-
-      logger.info(`WebSocket connection established from ${req.socket.remoteAddress}`);
-      
-      ws.on('message', (data) => {
+        req.user = await this.authentication.authenticate(req);
+        if (!getGatewayPermissions(req.user).includes('gateway.events.read')) return reject(403);
+        if (socket.destroyed) return;
+        socket.setTimeout(0);
+        this.wsServer.handleUpgrade(req, socket, head, ws => this.wsServer.emit('connection', ws, req));
+      } catch (error) { reject(error.status || 503); }
+      finally { pending--; }
+    });
+    this.wsServer.on('connection', (ws, req) => {
+      ws.principal = req.user;
+      let processing = false;
+      const expiry = setTimeout(() => ws.close(4401, 'Access token expired'), Math.min(2147483647, Math.max(1, req.user.exp * 1000 - Date.now())));
+      expiry.unref();
+      let checking = false;
+      const stateCheck = setInterval(async () => {
+        if (checking || ws.readyState !== WebSocket.OPEN) return;
+        checking = true;
         try {
-          const message = JSON.parse(data);
-          this.handleWebSocketMessage(ws, message);
-        } catch (error) {
-          logger.error('WebSocket message error:', error);
-          ws.send(JSON.stringify({ error: 'Invalid message format' }));
-        }
+          const principal = await this.authentication.authenticate(req);
+          if (!getGatewayPermissions(principal).includes('gateway.events.read')) return ws.close(4403, 'Permission required');
+          ws.principal = principal;
+        } catch (error) { ws.close(error.status === 503 ? 1013 : 4401, 'Access token state unavailable or revoked'); }
+        finally { checking = false; }
+      }, 5000);
+      stateCheck.unref();
+      ws.on('message', async data => {
+        if (processing) return ws.close(4408, 'Message rate exceeded');
+        processing = true;
+        try {
+          const principal = await this.authentication.authenticate(req);
+          if (!getGatewayPermissions(principal).includes('gateway.events.read')) return ws.close(4403, 'Permission required');
+          ws.principal = principal;
+          this.handleWebSocketMessage(ws, JSON.parse(data.toString()));
+        } catch { ws.close(4401, 'Invalid message or access token'); }
+        finally { processing = false; }
       });
-
-      ws.on('close', () => {
-        logger.info('WebSocket connection closed');
-      });
-
-      ws.on('error', (error) => {
-        logger.error('WebSocket error:', error);
-      });
-
-      // Send initial connection confirmation
-      ws.send(JSON.stringify({ 
-        type: 'connection', 
-        status: 'connected',
-        gateway: 'OpenDirectory API Gateway'
-      }));
+      ws.on('close', () => { clearTimeout(expiry); clearInterval(stateCheck); });
+      ws.on('error', () => ws.terminate());
+      ws.send(JSON.stringify({ type: 'connection', status: 'connected', gateway: 'OpenDirectory API Gateway' }));
     });
   }
 
   initializeRoutes() {
+    this.app.get('/api/gateway/access', (req, res) => res.set('Cache-Control', 'no-store').json({ subject: req.user.sub, permissions: getGatewayPermissions(req.user),
+      keyIssuanceEnabled: false, websocketAuthentication: 'bearer-header' }));
     // Health check endpoints (public)
-    this.app.get('/health', healthCheck);
+    this.app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'api-gateway' }));
+    this.app.get('/health/live', (_req, res) => res.json({ status: 'ok', service: 'api-gateway' }));
     this.app.get('/health/detailed', this.getDetailedHealth.bind(this));
     this.app.get('/health/*', healthCheck);
 
@@ -294,9 +294,9 @@ class APIGateway {
     this.app.post('/api/config/modules/:moduleId', this.updateModuleConfiguration.bind(this));
 
     // API Key management (admin only)
-    this.app.get('/api/admin/keys', authMiddleware.requireAdmin(), this.getApiKeys.bind(this));
-    this.app.post('/api/admin/keys', authMiddleware.requireAdmin(), this.createApiKey.bind(this));
-    this.app.delete('/api/admin/keys/:keyId', authMiddleware.requireAdmin(), this.deleteApiKey.bind(this));
+    this.app.get('/api/admin/keys', this.getApiKeys.bind(this));
+    this.app.post('/api/admin/keys', this.createApiKey.bind(this));
+    this.app.delete('/api/admin/keys/:keyId', this.deleteApiKey.bind(this));
 
     // Public API key / webhook management endpoints (used by frontend)
     this.app.get('/api/gateway/api-keys', this.getApiKeys.bind(this));
@@ -341,7 +341,7 @@ class APIGateway {
   }
 
   setupDynamicProxies() {
-    const enabledModules = configManager.getEnabledModules();
+    const enabledModules = this.enabledModules || configManager.getEnabledModules();
     const connectedServices = [];
 
     // least-privilege service: resource/level permission matrix
@@ -471,8 +471,9 @@ class APIGateway {
     }
 
     if (enabledModules.includes('device-management')) {
-      this.setupServiceProxy('devices', 'http://device-service', '/api/devices');
-      this.setupServiceProxy('device', 'http://device-service', '/api/device'); // Singular route
+      const inventoryTarget=process.env.DEVICE_SERVICE_URL || 'http://device-service:3003';
+      this.app.use('/api/devices',require('./middleware/deviceInventoryProxy').deviceInventoryReceiver(inventoryTarget),createProxyMiddleware({target:inventoryTarget,changeOrigin:true}));
+      this.services.set('devices',{name:'devices',target:inventoryTarget,pathPrefix:'/api/devices',status:'active',lastCheck:new Date().toISOString()});
       connectedServices.push('device-management');
     }
 
@@ -534,16 +535,40 @@ class APIGateway {
 
     // Identity and Policy services from core
     if (enabledModules.includes('identity-service')) {
-      this.setupServiceProxy('identity', 'http://identity-service', '/api/identity');
-      this.setupServiceProxy('users', 'http://identity-service', '/api/users');
-      this.setupServiceProxy('groups', 'http://identity-service', '/api/groups');
+      const membershipReviewTarget=process.env.IDENTITY_SERVICE_URL||'http://identity-service:3001';
+      this.app.use('/api/identity/license-sources',createProxyMiddleware({target:membershipReviewTarget,changeOrigin:true}));
+      this.services.set('license-source-grants',{name:'license-source-grants',target:membershipReviewTarget,pathPrefix:'/api/identity/license-sources',status:'active',lastCheck:new Date().toISOString()});
+      this.app.use('/api/identity/membership-reviews',createProxyMiddleware({target:membershipReviewTarget,changeOrigin:true}));
+      this.services.set('membership-reviews',{name:'membership-reviews',target:membershipReviewTarget,pathPrefix:'/api/identity/membership-reviews',status:'active',lastCheck:new Date().toISOString()});
+      for (const [name,pathPrefix] of [['identity','/api/identity'],['users','/api/users'],['groups','/api/groups'],['ous','/api/ous']]) {
+        this.app.use(pathPrefix,createProxyMiddleware({target:membershipReviewTarget,changeOrigin:true}));
+        this.services.set(name,{name,target:membershipReviewTarget,pathPrefix,status:'active',lastCheck:new Date().toISOString()});
+      }
+      this.app.use('/api/license-groups', createProxyMiddleware({ target: process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001', changeOrigin: true }));
+      this.app.use('/api/license-users', createProxyMiddleware({ target: process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001', changeOrigin: true }));
+      this.app.use('/api/license-reviewers', createProxyMiddleware({ target: process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001', changeOrigin: true }));
+      this.app.use('/api/license-delegates', createProxyMiddleware({ target: process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001', changeOrigin: true }));
+      this.app.use('/api/license-activation-reviewers', createProxyMiddleware({ target: process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001', changeOrigin: true }));
+      this.app.use('/api/license-scope-reviewers', createProxyMiddleware({ target: process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001', changeOrigin: true }));
       connectedServices.push('identity-service');
     }
 
+    if (enabledModules.includes('quick-actions')) {
+      const target = process.env.QUICK_ACTIONS_URL || 'http://quick-actions:3950';
+      this.app.use('/api/quick', createProxyMiddleware({ target, changeOrigin: true }));
+      this.services.set('quick-actions', { name: 'quick-actions', target, pathPrefix: '/api/quick', status: 'active', lastCheck: new Date().toISOString() });
+      connectedServices.push('quick-actions');
+    }
+
     if (enabledModules.includes('policy-service')) {
-      this.setupServiceProxy('policies', 'http://policy-service', '/api/policies');
-      this.setupServiceProxy('blueprints', 'http://policy-service', '/api/blueprints');
-      this.setupServiceProxy('licenses', 'http://policy-service', '/api/licenses');
+      const licenseTarget = process.env.POLICY_SERVICE_URL || 'http://policy-service:3004';
+      for (const name of ['policies', 'blueprints', 'company-blueprints', 'company-blueprint-assignments', 'gpo', 'update-rings']) {
+        const pathPrefix = '/api/' + name;
+        this.app.use(pathPrefix, createProxyMiddleware({ target: licenseTarget, changeOrigin: true }));
+        this.services.set(name, { name, target: licenseTarget, pathPrefix, status: 'active', lastCheck: new Date().toISOString() });
+      }
+      this.app.use('/api/licenses', createProxyMiddleware({ target: licenseTarget, changeOrigin: true }));
+      this.services.set('licenses', { name: 'licenses', target: licenseTarget, pathPrefix: '/api/licenses', status: 'active', lastCheck: new Date().toISOString() });
       connectedServices.push('policy-service');
     }
 
@@ -563,8 +588,9 @@ class APIGateway {
 
     // License Management Service
     if (enabledModules.includes('license-management')) {
-      this.setupServiceProxy('license', 'http://license-management', '/api/license');
-      this.setupServiceProxy('licenses', 'http://license-management', '/api/license'); // Alternative route
+      const licenseAdapterTarget = process.env.LICENSE_ADAPTER_URL || 'http://license-management:3018';
+      this.app.use('/api/license', createProxyMiddleware({ target: licenseAdapterTarget, changeOrigin: true }));
+      this.services.set('license', { name: 'license', target: licenseAdapterTarget, pathPrefix: '/api/license', status: 'active', lastCheck: new Date().toISOString() });
       connectedServices.push('license-management');
     }
 
@@ -676,10 +702,11 @@ class APIGateway {
   }
 
   initializeServiceDiscovery() {
+    healthCheck.start?.();
     serviceDiscovery.start();
     
     // Update service registry periodically
-    setInterval(async () => {
+    this.discoveryTimer = setInterval(async () => {
       await this.updateServiceRegistry();
     }, 30000); // Every 30 seconds
   }
@@ -714,14 +741,15 @@ class APIGateway {
       case 'subscribe':
         // Subscribe to service updates
         ws.subscriptions = ws.subscriptions || [];
-        if (data.service && !ws.subscriptions.includes(data.service)) {
+        if (getGatewayPermissions(ws.principal).includes('gateway.status.read') && typeof data?.service === 'string' && this.services.has(data.service) && ws.subscriptions.length < 32 && !ws.subscriptions.includes(data.service)) {
           ws.subscriptions.push(data.service);
         }
+        ws.send(JSON.stringify({ type: 'subscription', accepted: ws.subscriptions.includes(data?.service) }));
         break;
 
       case 'unsubscribe':
         // Unsubscribe from service updates
-        if (ws.subscriptions && data.service) {
+        if (ws.subscriptions && typeof data?.service === 'string') {
           ws.subscriptions = ws.subscriptions.filter(s => s !== data.service);
         }
         break;
@@ -785,7 +813,8 @@ class APIGateway {
   }
 
   getModuleConfiguration(req, res) {
-    res.json(configManager.getModuleConfiguration());
+    const modules = configManager.getModuleConfiguration();
+    res.json(Object.fromEntries(Object.entries(modules).map(([name, value]) => [name, { enabled: value.enabled, port: value.port, features: value.features }])));
   }
 
   async updateModuleConfiguration(req, res) {
@@ -824,12 +853,7 @@ class APIGateway {
   }
 
   getRateLimiter(req) {
-    if (req.headers['x-api-key']) return this.apiClientLimiter;
-    const origin = req.headers.origin || '';
-    if (origin.includes('localhost:3000') || origin.includes('app.opendirectory')) {
-      return this.frontendLimiter;
-    }
-    return this.defaultLimiter;
+    return req.auth ? this.frontendLimiter : this.defaultLimiter;
   }
 
   getApiDocs(req, res) {
@@ -840,12 +864,14 @@ class APIGateway {
       endpoints: {
         public: {
           health: '/health',
+          documentation: '/docs'
+        },
+        protected: {
           'health-detailed': '/health/detailed',
           'gateway-info': '/api/gateway/info',
           'gateway-routes': '/api/gateway/routes',
           services: '/api/services',
-          'module-config': '/api/config/modules',
-          documentation: '/docs'
+          'module-config': '/api/config/modules'
         },
         authenticated: {
           'all-service-endpoints': '/api/*',
@@ -856,14 +882,13 @@ class APIGateway {
         }
       },
       authentication: {
-        types: ['JWT Bearer Token', 'API Key (X-API-Key header)'],
-        'api-key-example': 'X-API-Key: your-api-key-here',
+        types: ['OIDC Bearer access token'],
         'jwt-example': 'Authorization: Bearer your-jwt-token-here'
       },
       'rate-limits': {
-        'frontend-clients': '1000 requests per 15 minutes',
-        'api-clients': '5000 requests per 15 minutes',
-        'unauthenticated': '100 requests per 15 minutes'
+        'all-client-ingress': '5000 requests per 15 minutes',
+        'authenticated': '1000 requests per 15 minutes',
+        'public': '100 requests per 15 minutes'
       }
     });
   }
@@ -884,25 +909,23 @@ class APIGateway {
           BearerAuth: {
             type: 'http',
             scheme: 'bearer'
-          },
-          ApiKeyAuth: {
-            type: 'apiKey',
-            in: 'header',
-            name: 'X-API-Key'
           }
         }
       },
+      security: [{ BearerAuth: [] }],
       paths: {
         '/health': {
           get: {
             summary: 'Health check',
+            security: [],
             responses: { '200': { description: 'Service is healthy' } }
           }
         },
         '/api/services': {
           get: {
             summary: 'List all services',
-            responses: { '200': { description: 'List of services' } }
+            description: 'Requires the server-issued gateway.status.read permission',
+            responses: { '200': { description: 'List of services' }, '401': { description: 'Bearer access token required' }, '403': { description: 'Permission required' } }
           }
         }
       }
@@ -929,8 +952,8 @@ class APIGateway {
     // Add static routes
     routes.push(
       { path: '/health', method: 'GET', auth: 'public' },
-      { path: '/api/services', method: 'GET', auth: 'public' },
-      { path: '/api/config/modules', method: 'GET', auth: 'public' },
+      { path: '/api/services', method: 'GET', auth: 'required', permission: 'gateway.status.read' },
+      { path: '/api/config/modules', method: 'GET', auth: 'required', permission: 'gateway.config.read' },
       { path: '/docs', method: 'GET', auth: 'public' }
     );
     
@@ -948,152 +971,107 @@ class APIGateway {
   }
 
   async getApiKeys(req, res) {
-    if (apiGwDbReady) {
-      try {
-        const r = await pgPool.query('SELECT id, name, permissions, created_at as created FROM api_keys WHERE active=true ORDER BY created_at');
-        if (r.rows.length > 0) return res.json(r.rows);
-      } catch {}
-    }
-    // Fallback: read from env vars
-    const keys = [];
-    if (process.env.API_KEY_READ_ONLY) keys.push({ id: 'env-ro', name: 'Read-Only Key (env)', permissions: ['read'], created: new Date().toISOString() });
-    if (process.env.API_KEY_FULL) keys.push({ id: 'env-full', name: 'Full Access Key (env)', permissions: ['read', 'write'], created: new Date().toISOString() });
-    if (process.env.API_KEY_ADMIN) keys.push({ id: 'env-admin', name: 'Admin Key (env)', permissions: ['read', 'write', 'admin'], created: new Date().toISOString() });
-    res.json(keys);
+    if (!apiGwDbReady) return res.status(503).json({ error: 'Gateway credential metadata storage unavailable' });
+    try {
+      const result = await pgPool.query('SELECT id,name,permissions,created_at AS created,last_used,active FROM api_keys ORDER BY created_at DESC');
+      res.json(result.rows.map(row => ({ ...row, credentialStatus: 'retired' })));
+    } catch { res.status(503).json({ error: 'Gateway credential metadata storage unavailable' }); }
   }
 
   async createApiKey(req, res) {
-    const { name, permissions } = req.body;
-    if (!name) return res.status(400).json({ error: 'name required' });
-    const crypto = require('crypto');
-    const id = crypto.randomBytes(8).toString('hex');
-    const rawKey = crypto.randomBytes(32).toString('hex');
-    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
-    if (apiGwDbReady) {
-      try {
-        await pgPool.query(
-          'INSERT INTO api_keys(id, name, key_hash, permissions) VALUES($1,$2,$3,$4)',
-          [id, name, keyHash, JSON.stringify(permissions || ['read'])]
-        );
-      } catch (err) {
-        return res.status(500).json({ error: err.message });
-      }
-    }
-    res.status(201).json({ id, name, key: rawKey, permissions: permissions || ['read'], created: new Date().toISOString() });
+    res.status(410).json({ error: 'Legacy gateway API keys are retired; use authorized OAuth application credentials', replacement: 'oauth-client-registration' });
   }
 
   async deleteApiKey(req, res) {
-    const { keyId } = req.params;
-    if (apiGwDbReady) {
-      try {
-        await pgPool.query('UPDATE api_keys SET active=false WHERE id=$1', [keyId]);
-      } catch (err) {
-        return res.status(500).json({ error: err.message });
-      }
-    }
-    res.json({ message: `API key ${keyId} deleted` });
+    if (!apiGwDbReady) return res.status(503).json({ error: 'Gateway credential metadata storage unavailable' });
+    try {
+      const result = await pgPool.query('UPDATE api_keys SET active=false WHERE id=$1 RETURNING id', [req.params.keyId]);
+      if (!result.rows.length) return res.status(404).json({ error: 'Legacy key record not found' });
+      res.json({ id: req.params.keyId, active: false });
+    } catch { res.status(503).json({ error: 'Gateway credential metadata storage unavailable' }); }
   }
 
-  // ── In-memory webhook store (fallback when DB not ready) ──────────────────
-  _webhooks = new Map();
-  _webhookDeliveries = new Map(); // webhookId → [deliveries]
-
   async getWebhooks(req, res) {
-    if (apiGwDbReady) {
-      try {
-        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks ORDER BY created_at DESC');
-        return res.json(r.rows);
-      } catch {}
-    }
-    res.json([...this._webhooks.values()]);
+    if (!apiGwDbReady) return res.status(503).json({ error: 'Gateway webhook storage unavailable' });
+    try {
+      const result = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks ORDER BY created_at DESC');
+      return res.json(result.rows);
+    } catch { return res.status(503).json({ error: 'Gateway webhook storage unavailable' }); }
   }
 
   async createWebhook(req, res) {
-    const { name, url, events, secret } = req.body;
+    if (!apiGwDbReady) return res.status(503).json({ error: 'Gateway webhook storage unavailable' });
+    if (req.body.secret) return res.status(422).json({ error: 'Signed webhook delivery is not implemented; do not submit a signing secret' });
+    if (req.body.url !== undefined) {
+      try {
+        const target = new URL(req.body.url);
+        if (target.protocol !== 'https:' || target.username || target.password || target.hash) throw new Error('Invalid URL');
+      } catch { return res.status(400).json({ error: 'A credential-free HTTPS webhook URL is required' }); }
+    }
+    const { name, url, events } = req.body;
     if (!name || !url) return res.status(400).json({ error: 'name and url are required' });
     const crypto = require('crypto');
-    const id = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
-    const secretHash = secret ? crypto.createHash('sha256').update(secret).digest('hex') : null;
-    const now = new Date().toISOString();
-    const webhook = { id, name, url, events: events || [], secretHash, active: true, createdAt: now, lastTriggered: null, deliveryCount: 0, failureCount: 0 };
-    if (apiGwDbReady) {
-      try {
-        await pgPool.query(
-          'INSERT INTO webhooks(id, name, url, events, secret_hash, active) VALUES($1,$2,$3,$4,$5,true)',
-          [id, name, url, events || [], secretHash]
-        );
-        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks WHERE id=$1', [id]);
-        return res.status(201).json(r.rows[0]);
-      } catch (err) {
-        return res.status(500).json({ error: err.message });
-      }
-    }
-    this._webhooks.set(id, webhook);
-    this._webhookDeliveries.set(id, []);
-    const { secretHash: _, ...safe } = webhook;
-    res.status(201).json(safe);
+    try {
+      const result = await pgPool.query(
+        'INSERT INTO webhooks(id, name, url, events, active) VALUES($1,$2,$3,$4,true) RETURNING id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count',
+        [crypto.randomUUID(), name, url, events || []]
+      );
+      return res.status(201).json(result.rows[0]);
+    } catch { return res.status(503).json({ error: 'Gateway webhook storage unavailable' }); }
   }
 
   async updateWebhook(req, res) {
-    const { webhookId } = req.params;
-    const { name, url, events, secret, active } = req.body;
-    if (apiGwDbReady) {
+    if (!apiGwDbReady) return res.status(503).json({ error: 'Gateway webhook storage unavailable' });
+    if (req.body.secret) return res.status(422).json({ error: 'Signed webhook delivery is not implemented; do not submit a signing secret' });
+    if (req.body.url !== undefined) {
       try {
-        const crypto = require('crypto');
-        const secretHash = secret ? crypto.createHash('sha256').update(secret).digest('hex') : undefined;
-        const updates = [];
-        const vals = [];
-        let idx = 1;
-        if (name !== undefined) { updates.push(`name=$${idx++}`); vals.push(name); }
-        if (url !== undefined) { updates.push(`url=$${idx++}`); vals.push(url); }
-        if (events !== undefined) { updates.push(`events=$${idx++}`); vals.push(events); }
-        if (secretHash !== undefined) { updates.push(`secret_hash=$${idx++}`); vals.push(secretHash); }
-        if (active !== undefined) { updates.push(`active=$${idx++}`); vals.push(active); }
-        if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
-        vals.push(webhookId);
-        await pgPool.query(`UPDATE webhooks SET ${updates.join(',')} WHERE id=$${idx}`, vals);
-        const r = await pgPool.query('SELECT id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count FROM webhooks WHERE id=$1', [webhookId]);
-        if (r.rows.length === 0) return res.status(404).json({ error: 'Webhook not found' });
-        return res.json(r.rows[0]);
-      } catch (err) {
-        return res.status(500).json({ error: err.message });
-      }
+        const target = new URL(req.body.url);
+        if (target.protocol !== 'https:' || target.username || target.password || target.hash) throw new Error('Invalid URL');
+      } catch { return res.status(400).json({ error: 'A credential-free HTTPS webhook URL is required' }); }
     }
-    const wh = this._webhooks.get(webhookId);
-    if (!wh) return res.status(404).json({ error: 'Webhook not found' });
-    const updated = { ...wh, ...(name && { name }), ...(url && { url }), ...(events && { events }), ...(active !== undefined && { active }) };
-    this._webhooks.set(webhookId, updated);
-    const { secretHash: _, ...safe } = updated;
-    res.json(safe);
+    const { webhookId } = req.params;
+    const { name, url, events, active } = req.body;
+    try {
+      const updates = [];
+      const values = [];
+      let index = 1;
+      if (name !== undefined) { updates.push(`name=$${index++}`); values.push(name); }
+      if (url !== undefined) { updates.push(`url=$${index++}`); values.push(url); }
+      if (events !== undefined) { updates.push(`events=$${index++}`); values.push(events); }
+      if (active !== undefined) { updates.push(`active=$${index++}`); values.push(active); }
+      if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+      values.push(webhookId);
+      const result = await pgPool.query(`UPDATE webhooks SET ${updates.join(',')} WHERE id=$${index} RETURNING id, name, url, events, active, created_at, last_triggered, delivery_count, failure_count`, values);
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Webhook not found' });
+      return res.json(result.rows[0]);
+    } catch { return res.status(503).json({ error: 'Gateway webhook storage unavailable' }); }
   }
 
   async deleteWebhook(req, res) {
+    if (!apiGwDbReady) return res.status(503).json({ error: 'Gateway webhook storage unavailable' });
     const { webhookId } = req.params;
-    if (apiGwDbReady) {
-      try {
-        await pgPool.query('DELETE FROM webhooks WHERE id=$1', [webhookId]);
-      } catch (err) {
-        return res.status(500).json({ error: err.message });
-      }
-    } else {
-      this._webhooks.delete(webhookId);
-      this._webhookDeliveries.delete(webhookId);
-    }
+    try {
+      await pgPool.query('DELETE FROM webhooks WHERE id=$1', [webhookId]);
+    } catch { return res.status(503).json({ error: 'Gateway webhook storage unavailable' }); }
     res.status(204).send();
   }
 
   async testWebhook(req, res) {
+    if (!apiGwDbReady) return res.status(503).json({ error: 'Gateway webhook storage unavailable' });
     const { webhookId } = req.params;
     let webhook = null;
-    if (apiGwDbReady) {
-      try {
-        const r = await pgPool.query('SELECT * FROM webhooks WHERE id=$1', [webhookId]);
-        if (r.rows.length > 0) webhook = r.rows[0];
-      } catch {}
-    } else {
-      webhook = this._webhooks.get(webhookId);
-    }
+    try {
+      const result = await pgPool.query('SELECT id, url FROM webhooks WHERE id=$1', [webhookId]);
+      if (result.rows.length > 0) webhook = result.rows[0];
+    } catch { return res.status(503).json({ error: 'Gateway webhook storage unavailable' }); }
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
+
+    let target;
+    try {
+      target = new URL(webhook.url);
+      const allowed = (process.env.GATEWAY_WEBHOOK_ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean);
+      if (target.protocol !== 'https:' || target.username || target.password || target.hash || !allowed.includes(target.origin)) throw new Error('Not approved');
+    } catch { return res.status(403).json({ error: 'Webhook destination is not approved by deployment egress policy' }); }
 
     const testPayload = {
       event: 'test',
@@ -1104,14 +1082,12 @@ class APIGateway {
     let responseStatus = null;
     let success = false;
     try {
-      const resp = await Promise.race([
-        fetch(webhook.url || webhook.URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-OpenDirectory-Event': 'test' },
-          body: JSON.stringify(testPayload),
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
-      ]);
+      const resp = await fetch(target, {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
+        headers: { 'Content-Type': 'application/json', 'X-OpenDirectory-Event': 'test', 'X-OpenDirectory-Delivery': 'unsigned-test' },
+        body: JSON.stringify(testPayload),
+      });
+      await resp.body?.cancel();
       responseStatus = resp.status;
       success = resp.ok;
     } catch (err) {
@@ -1119,38 +1095,26 @@ class APIGateway {
       success = false;
     }
 
-    // Record delivery
-    const delivery = { id: require('crypto').randomBytes(8).toString('hex'), webhookId, eventType: 'test', payload: testPayload, responseStatus, deliveredAt: new Date().toISOString(), success };
-    if (apiGwDbReady) {
-      try {
-        await pgPool.query(
-          'INSERT INTO webhook_deliveries(webhook_id, event_type, payload, response_status, success) VALUES($1,$2,$3,$4,$5)',
-          [webhookId, 'test', testPayload, responseStatus, success]
-        );
-        await pgPool.query('UPDATE webhooks SET delivery_count=delivery_count+1, last_triggered=NOW() WHERE id=$1', [webhookId]);
-      } catch {}
-    } else {
-      const deliveries = this._webhookDeliveries.get(webhookId) || [];
-      deliveries.unshift(delivery);
-      this._webhookDeliveries.set(webhookId, deliveries);
-    }
-
-    res.json({ success, responseStatus, delivery });
+    try {
+      const result = await pgPool.query(
+        'INSERT INTO webhook_deliveries(webhook_id, event_type, payload, response_status, success) VALUES($1,$2,$3,$4,$5) RETURNING id, webhook_id, event_type, response_status, delivered_at, success',
+        [webhookId, 'test', testPayload, responseStatus, success]
+      );
+      await pgPool.query('UPDATE webhooks SET delivery_count=delivery_count+1, failure_count=failure_count+$2, last_triggered=NOW() WHERE id=$1', [webhookId, success ? 0 : 1]);
+      res.json({ success, responseStatus, delivery: result.rows[0] });
+    } catch { return res.status(503).json({ error: 'Gateway webhook storage unavailable' }); }
   }
 
   async getWebhookDeliveries(req, res) {
+    if (!apiGwDbReady) return res.status(503).json({ error: 'Gateway webhook storage unavailable' });
     const { webhookId } = req.params;
-    if (apiGwDbReady) {
-      try {
-        const r = await pgPool.query(
-          'SELECT id, webhook_id, event_type, response_status, delivered_at, success FROM webhook_deliveries WHERE webhook_id=$1 ORDER BY delivered_at DESC LIMIT 50',
-          [webhookId]
-        );
-        return res.json(r.rows);
-      } catch {}
-    }
-    const deliveries = this._webhookDeliveries.get(webhookId) || [];
-    res.json(deliveries.slice(0, 50));
+    try {
+      const result = await pgPool.query(
+        'SELECT id, webhook_id, event_type, response_status, delivered_at, success FROM webhook_deliveries WHERE webhook_id=$1 ORDER BY delivered_at DESC LIMIT 50',
+        [webhookId]
+      );
+      return res.json(result.rows);
+    } catch { return res.status(503).json({ error: 'Gateway webhook storage unavailable' }); }
   }
 
   getAvailableEndpoints() {
@@ -1167,11 +1131,15 @@ class APIGateway {
       logger.info(`📚 API documentation available at: http://localhost:${port}/docs`);
       logger.info(`🔌 WebSocket server available at: ws://localhost:${port}/ws`);
       logger.info(`📋 Enabled modules: ${configManager.getEnabledModules().join(', ')}`);
-      logger.info(`🔑 API access: Use X-API-Key header for external clients`);
+      logger.info('API access requires issuer-verified OIDC bearer access tokens');
     });
   }
 
   stop() {
+    healthCheck.stop?.();
+    clearInterval(this.discoveryTimer);
+    this.wsServer?.clients.forEach(client => client.terminate());
+    this.wsServer?.close();
     if (this.server) {
       this.server.close(() => {
         logger.info('API Gateway stopped');
@@ -1180,20 +1148,16 @@ class APIGateway {
   }
 }
 
-// Start the gateway
-const gateway = new APIGateway();
-gateway.start();
-
-function shutdown(signal) {
-  logger.info(`Received ${signal}, shutting down gracefully`);
-  gateway.stop();
-  setTimeout(() => {
-    logger.error('Forced shutdown after timeout');
-    process.exit(1);
-  }, 10000);
+if (require.main === module) {
+  const gateway = new APIGateway();
+  gateway.start();
+  const shutdown = () => {
+    gateway.stop();
+    setTimeout(() => process.exit(1), 10000).unref();
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
 }
-
-process.on('SIGINT',  () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-
 module.exports = APIGateway;
+module.exports.databaseReady = databaseReady;
+module.exports.closeDatabase = () => pgPool.end();

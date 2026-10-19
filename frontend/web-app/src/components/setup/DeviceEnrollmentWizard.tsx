@@ -1,20 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ComputerDesktopIcon,
-  DeviceTabletIcon,
-  ServerIcon,
-  PrinterIcon,
   CheckIcon,
   ClipboardDocumentIcon,
   PlusIcon,
-  CommandLineIcon,
   TableCellsIcon,
   ExclamationTriangleIcon,
-  XMarkIcon,
 } from '@heroicons/react/24/outline';
-import { deviceApi, api } from '@/lib/api';
+import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import WizardLayout from '@/components/shared/WizardLayout';
 
@@ -30,22 +25,59 @@ interface BulkDevice {
 
 interface BulkEnrollResult {
   deviceName: string;
-  status: 'success' | 'failed';
+  status: 'success' | 'failed' | 'unconfirmed';
   steps?: string[];
   error?: string;
 }
 
 const STEPS = [{ n: 1 as const, label: 'Plattform' }, { n: 2 as const, label: 'Einrichten' }];
+const UNCONFIRMED = 'Enrollment could not be confirmed. Check device inventory before retrying.';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseBulkResults(data: unknown, devices: BulkDevice[]): BulkEnrollResult[] {
+  if (!isRecord(data) || data.total !== devices.length || !Array.isArray(data.results) || data.results.length !== devices.length) {
+    throw new Error(UNCONFIRMED);
+  }
+  const results = data.results.map((entry: unknown, index: number): BulkEnrollResult => {
+    if (!isRecord(entry) || entry.index !== index || entry.deviceName !== devices[index].deviceName || typeof entry.success !== 'boolean') {
+      throw new Error(UNCONFIRMED);
+    }
+    if (entry.result === null) {
+      if (entry.success !== false || typeof entry.error !== 'string' || !entry.error.trim()) throw new Error(UNCONFIRMED);
+      return { deviceName: entry.deviceName, status: 'failed', error: entry.error };
+    }
+    const result = entry.result;
+    if (!isRecord(result) || result.success !== entry.success || entry.error !== null ||
+        typeof result.deviceId !== 'string' || !result.deviceId.trim() || result.platform !== devices[index].platform ||
+        !Array.isArray(result.completedSteps) || result.completedSteps.length === 0 ||
+        (result.error !== undefined && typeof result.error !== 'string')) {
+      throw new Error(UNCONFIRMED);
+    }
+    const steps = result.completedSteps.map((step: unknown) => {
+      if (!isRecord(step) || typeof step.name !== 'string' || !step.name.trim() || typeof step.ok !== 'boolean' ||
+          (step.error !== undefined && typeof step.error !== 'string')) throw new Error(UNCONFIRMED);
+      return { name: step.name, ok: step.ok, error: step.error };
+    });
+    if (entry.success !== steps.every(step => step.ok)) throw new Error(UNCONFIRMED);
+    return {
+      deviceName: entry.deviceName,
+      status: entry.success ? 'success' : 'failed',
+      steps: steps.map(step => `${step.name}: ${step.ok ? 'ok' : 'failed'}${step.error ? ` (${step.error})` : ''}`),
+      error: typeof result.error === 'string' ? result.error : undefined,
+    };
+  });
+  const succeeded = results.filter(result => result.status === 'success').length;
+  if (data.succeeded !== succeeded || data.failed !== results.length - succeeded) throw new Error(UNCONFIRMED);
+  return results;
+}
 
 interface DeviceEnrollmentWizardProps {
   onClose: () => void;
   /** Pre-select a platform */
   initialPlatform?: Platform;
-}
-
-interface EnrollmentToken {
-  token: string;
-  expiresAt: string;
 }
 
 const PLATFORMS = [
@@ -86,7 +118,7 @@ function getServerUrl(): string {
   return 'http://YOUR-SERVER:8080';
 }
 
-function EnrollmentInstructions({ platform, token }: { platform: Platform; token: string }) {
+function PrinterInstructions() {
   const serverUrl = getServerUrl();
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -94,9 +126,14 @@ function EnrollmentInstructions({ platform, token }: { platform: Platform; token
     navigator.clipboard.writeText(text).then(() => {
       setCopied(label);
       toast.success(`${label} kopiert`);
-      setTimeout(() => setCopied(null), 2000);
-    });
+    }).catch(() => toast.error('Kopieren fehlgeschlagen'));
   };
+
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = setTimeout(() => setCopied(null), 2000);
+    return () => clearTimeout(timeout);
+  }, [copied]);
 
   const CodeBlock = ({ code, label }: { code: string; label: string }) => (
     <div className="relative group">
@@ -121,157 +158,11 @@ function EnrollmentInstructions({ platform, token }: { platform: Platform; token
     </div>
   );
 
-  if (platform === 'windows') {
-    return (
-      <div className="space-y-5">
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-1">Schritt 1: PowerShell als Administrator öffnen</h4>
-          <p className="text-sm text-gray-500 mb-2">Rechtsklick auf Start → &quot;Windows PowerShell (Administrator)&quot;</p>
-        </div>
-
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-1">Schritt 2: Agent installieren</h4>
-          <CodeBlock
-            label="Windows Install"
-            code={`# OpenDirectory Agent herunterladen und installieren
-Invoke-WebRequest -Uri "${serverUrl}/api/agents/windows/install.ps1" -OutFile "$env:TEMP\\od-install.ps1"
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-& "$env:TEMP\\od-install.ps1" -ServerUrl "${serverUrl}" -Token "${token}"`}
-          />
-        </div>
-
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-1">Schritt 3: Alternativ — Manuell registrieren</h4>
-          <CodeBlock
-            label="Windows Manual"
-            code={`# Gerät manuell registrieren (ohne Agent-Installation)
-$body = @{
-    name = $env:COMPUTERNAME
-    platform = "windows"
-    osVersion = (Get-CimInstance Win32_OperatingSystem).Version
-    serialNumber = (Get-CimInstance Win32_BIOS).SerialNumber
-    enrollmentToken = "${token}"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Uri "${serverUrl}/api/devices/enroll" \`
-    -Method POST -Body $body -ContentType "application/json"`}
-          />
-        </div>
-
-        <div className="bg-blue-50 rounded-lg p-3">
-          <p className="text-xs text-blue-700">
-            <strong>Tipp:</strong> Für Massen-Enrollment nutze GPO oder Intune, um das Skript auf allen Geräten auszuführen.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (platform === 'macos') {
-    return (
-      <div className="space-y-5">
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-1">Schritt 1: Terminal öffnen</h4>
-          <p className="text-sm text-gray-500 mb-2">Spotlight (Cmd+Space) → &quot;Terminal&quot; eingeben</p>
-        </div>
-
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-1">Schritt 2: Agent installieren</h4>
-          <CodeBlock
-            label="macOS Install"
-            code={`# OpenDirectory Agent installieren
-curl -sSL ${serverUrl}/api/agents/macos/install.sh | \\
-    sudo bash -s -- --server "${serverUrl}" --token "${token}"`}
-          />
-        </div>
-
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-1">Schritt 3: Alternativ — Manuell registrieren</h4>
-          <CodeBlock
-            label="macOS Manual"
-            code={`# Gerät manuell registrieren
-curl -X POST ${serverUrl}/api/devices/enroll \\
-    -H "Content-Type: application/json" \\
-    -d '{
-        "name": "'$(hostname)'",
-        "platform": "macos",
-        "osVersion": "'$(sw_vers -productVersion)'",
-        "serialNumber": "'$(ioreg -l | grep IOPlatformSerialNumber | awk "{print \\$4}" | tr -d \\"\\")'",,
-        "enrollmentToken": "${token}"
-    }'`}
-          />
-        </div>
-
-        <div className="bg-blue-50 rounded-lg p-3">
-          <p className="text-xs text-blue-700">
-            <strong>Tipp:</strong> Für MDM-Enrollment können Geräte via Apple DEP automatisch registriert werden.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (platform === 'linux') {
-    return (
-      <div className="space-y-5">
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-1">Schritt 1: Terminal öffnen (SSH oder lokal)</h4>
-        </div>
-
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-1">Schritt 2: Agent installieren</h4>
-          <CodeBlock
-            label="Linux Install"
-            code={`# OpenDirectory Agent installieren (Debian/Ubuntu/RHEL/SUSE)
-curl -sSL ${serverUrl}/api/agents/linux/install.sh | \\
-    sudo bash -s -- --server "${serverUrl}" --token "${token}"`}
-          />
-        </div>
-
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-1">Schritt 3: Systemd-Service aktivieren</h4>
-          <CodeBlock
-            label="Linux Service"
-            code={`# Agent als Systemd-Service registrieren (automatischer Start)
-sudo systemctl enable --now opendirectory-agent
-
-# Status prüfen
-sudo systemctl status opendirectory-agent`}
-          />
-        </div>
-
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-1">Alternativ: Manuell registrieren</h4>
-          <CodeBlock
-            label="Linux Manual"
-            code={`# Gerät manuell registrieren
-curl -X POST ${serverUrl}/api/devices/enroll \\
-    -H "Content-Type: application/json" \\
-    -d '{
-        "name": "'$(hostname)'",
-        "platform": "linux",
-        "osVersion": "'$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d \\")'",
-        "serialNumber": "'$(sudo dmidecode -s system-serial-number 2>/dev/null || echo unknown)'",
-        "enrollmentToken": "${token}"
-    }'`}
-          />
-        </div>
-
-        <div className="bg-blue-50 rounded-lg p-3">
-          <p className="text-xs text-blue-700">
-            <strong>Tipp:</strong> Für mehrere Server nutze Ansible: <code className="bg-blue-100 px-1 rounded">ansible-playbook od-enroll.yml -i hosts</code>
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // Printer
   return (
     <div className="space-y-5">
       <div>
         <h4 className="text-sm font-semibold text-gray-900 mb-1">Option 1: Auto-Discovery (empfohlen)</h4>
-        <p className="text-sm text-gray-500 mb-2">OpenDirectory sucht automatisch nach Druckern im Netzwerk.</p>
+        <p className="text-sm text-gray-500 mb-2">Der folgende Befehl startet die Druckersuche. Passe das Subnetz an dein Netzwerk an.</p>
         <CodeBlock
           label="Printer Discovery"
           code={`# Netzwerk nach Druckern durchsuchen
@@ -283,39 +174,11 @@ curl -X POST ${serverUrl}/api/printers/discover \\
 
       <div>
         <h4 className="text-sm font-semibold text-gray-900 mb-1">Option 2: Manuell hinzufügen</h4>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Drucker-Name</label>
-            <input
-              type="text"
-              placeholder="z.B. Büro-Drucker-OG1"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">IP-Adresse</label>
-            <input
-              type="text"
-              placeholder="z.B. 192.168.1.100"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Protokoll</label>
-            <select className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-              <option value="ipp">IPP (Internet Printing Protocol)</option>
-              <option value="lpd">LPD/LPR</option>
-              <option value="smb">SMB/Windows</option>
-              <option value="socket">Raw/Socket (Port 9100)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-purple-50 rounded-lg p-3">
-        <p className="text-xs text-purple-700">
-          <strong>Tipp:</strong> CUPS-Admin-Oberfläche ist auch direkt erreichbar unter <code className="bg-purple-100 px-1 rounded">{serverUrl.replace(':8080', ':631')}</code>
+        <p className="text-sm text-gray-500 mb-2">
+          Halte Drucker-Name, IP-Adresse und Protokoll (IPP, LPD, SMB oder Socket) bereit.
+          Füge den Drucker in der Druckerverwaltung hinzu; dieser Assistent speichert keine Druckerdaten.
         </p>
+        <a href="/printers" className="text-sm text-blue-600 hover:underline">Druckerverwaltung öffnen</a>
       </div>
     </div>
   );
@@ -324,9 +187,6 @@ curl -X POST ${serverUrl}/api/printers/discover \\
 export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: DeviceEnrollmentWizardProps) {
   const [step, setStep] = useState<WizardStep>(initialPlatform ? 2 : 1);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(initialPlatform || null);
-  const [token, setToken] = useState<EnrollmentToken | null>(null);
-  const [loadingToken, setLoadingToken] = useState(false);
-  const [enrolledCount, setEnrolledCount] = useState(0);
 
   // Bulk enrollment state
   const [enrollMode, setEnrollMode] = useState<EnrollMode>('single');
@@ -335,29 +195,11 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
   const [bulkParseError, setBulkParseError] = useState('');
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkResults, setBulkResults] = useState<BulkEnrollResult[] | null>(null);
+  const bulkRequest = useRef(0);
 
-  // Generate enrollment token when platform is selected
   useEffect(() => {
-    if (selectedPlatform && selectedPlatform !== 'printer') {
-      generateToken();
-    }
-  }, [selectedPlatform]);
-
-  const generateToken = async () => {
-    setLoadingToken(true);
-    try {
-      const response = await deviceApi.generateEnrollmentToken();
-      setToken(response.data?.data?.token ? response.data.data : null);
-    } catch {
-      // Fallback: generate a local demo token
-      setToken({
-        token: `od-enroll-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      });
-    } finally {
-      setLoadingToken(false);
-    }
-  };
+    return () => { bulkRequest.current += 1; };
+  }, []);
 
   const handlePlatformSelect = (platform: Platform) => {
     setSelectedPlatform(platform);
@@ -367,7 +209,6 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
   const handleAddAnother = () => {
     setSelectedPlatform(null);
     setStep(1);
-    setEnrolledCount(prev => prev + 1);
   };
 
   const parseBulkCsv = (csv: string) => {
@@ -384,6 +225,7 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
       if (cols.length < 2) { errors.push(`Line ${startIdx + i + 1}: need at least deviceName,platform`); return; }
       const [deviceName, platform, serialNumber = ''] = cols;
       if (!deviceName || !platform) { errors.push(`Line ${startIdx + i + 1}: missing deviceName or platform`); return; }
+      if (!['windows', 'macos', 'linux'].includes(platform)) { errors.push(`Line ${startIdx + i + 1}: unsupported platform`); return; }
       parsed.push({ deviceName, platform, serialNumber });
     });
     if (errors.length) setBulkParseError(errors.join('; '));
@@ -396,33 +238,38 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
   };
 
   const handleBulkEnroll = async () => {
-    if (!bulkParsed.length) return;
+    if (!bulkParsed.length || bulkParseError || bulkSubmitting) return;
+    const request = ++bulkRequest.current;
     setBulkSubmitting(true);
     setBulkResults(null);
     try {
       const res = await api.post('/api/quick/devices/bulk-enroll', { devices: bulkParsed });
-      const data = res.data;
-      const results: BulkEnrollResult[] = (data.results || data.data?.results || bulkParsed.map(d => ({ deviceName: d.deviceName, status: 'success' as const })));
+      if (request !== bulkRequest.current) return;
+      const results = parseBulkResults(res.data, bulkParsed);
       setBulkResults(results);
       const successCount = results.filter(r => r.status === 'success').length;
       if (successCount === results.length) {
-        toast.success(`All ${successCount} devices enrolled successfully!`);
+        toast.success(`Backend confirmed all ${successCount} enrollment workflows. Check device inventory for device status.`);
       } else {
-        toast.error(`${successCount}/${results.length} devices enrolled. Check results for details.`);
+        toast.error(`Backend confirmed ${successCount}/${results.length} enrollment workflows. Check results for errors.`);
       }
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Bulk enrollment failed';
+    } catch (err: unknown) {
+      if (request !== bulkRequest.current) return;
+      const response = isRecord(err) && isRecord(err.response) ? err.response : null;
+      const data = response && isRecord(response.data) ? response.data : null;
+      const detail = typeof data?.error === 'string' ? data.error : typeof data?.message === 'string' ? data.message : err instanceof Error ? err.message : '';
+      const msg = detail && detail !== UNCONFIRMED ? `${UNCONFIRMED} ${detail}` : UNCONFIRMED;
       toast.error(msg);
-      setBulkResults(bulkParsed.map(d => ({ deviceName: d.deviceName, status: 'failed', error: msg })));
+      setBulkResults(bulkParsed.map(device => ({ deviceName: device.deviceName, status: 'unconfirmed', error: msg })));
     } finally {
-      setBulkSubmitting(false);
+      if (request === bulkRequest.current) setBulkSubmitting(false);
     }
   };
 
   const platformInfo = PLATFORMS.find(p => p.id === selectedPlatform);
 
   const title = enrollMode === 'bulk' ? 'Bulk Enrollment' : (step === 1 ? 'Gerät hinzufügen' : (platformInfo?.icon + ' ' + platformInfo?.name + ' einrichten'));
-  const subtitle = enrollMode === 'bulk' ? 'Enroll multiple devices via CSV' : (enrolledCount > 0 ? `${enrolledCount} Gerät(e) bereits hinzugefügt` : 'Registriere deine Geräte bei OpenDirectory');
+  const subtitle = enrollMode === 'bulk' ? 'Enroll multiple devices via CSV' : 'Einrichtungshinweise für deine Geräte';
 
   return (
     <WizardLayout
@@ -430,9 +277,9 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
       title={title}
       subtitle={subtitle}
       icon={<ComputerDesktopIcon className="h-8 w-8" />}
-      steps={STEPS}
+      steps={enrollMode === 'bulk' ? [{ n: 1, label: 'Bulk Enrollment' }] : STEPS}
       currentStep={step}
-      onStepChange={(s) => setStep(s as WizardStep)}
+      onStepChange={(nextStep) => { if (nextStep === 1 || selectedPlatform) setStep(nextStep as WizardStep); }}
       onClose={onClose}
       onComplete={onClose}
       completeLabel="Fertig"
@@ -443,12 +290,14 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => setEnrollMode('single')}
+            disabled={bulkSubmitting}
             className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition-all ${enrollMode === 'single' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
           >
             Single Device
           </button>
           <button
-            onClick={() => { setEnrollMode('bulk'); setBulkResults(null); setBulkCsv(''); setBulkParsed([]); }}
+            onClick={() => { setEnrollMode('bulk'); setBulkResults(null); setBulkCsv(''); setBulkParsed([]); setBulkParseError(''); }}
+            disabled={bulkSubmitting}
             className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition-all flex items-center justify-center gap-1.5 ${enrollMode === 'bulk' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
           >
             <TableCellsIcon className="h-4 w-4" />
@@ -484,9 +333,11 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
           {!bulkResults ? (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">CSV Input</label>
+                <label htmlFor="bulk-device-csv" className="block text-sm font-medium text-gray-700 mb-1">CSV Input</label>
                 <textarea
+                  id="bulk-device-csv"
                   value={bulkCsv}
+                  disabled={bulkSubmitting}
                   onChange={e => handleBulkCsvChange(e.target.value)}
                   rows={8}
                   placeholder={`deviceName,platform,serialNumber\nworkstation-01,windows,SN12345\nlaptop-02,macos,SN67890\nserver-03,linux,`}
@@ -536,7 +387,7 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
               <div className="flex justify-end">
                 <button
                   onClick={handleBulkEnroll}
-                  disabled={bulkSubmitting || bulkParsed.length === 0}
+                  disabled={bulkSubmitting || bulkParsed.length === 0 || Boolean(bulkParseError)}
                   className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
                 >
                   {bulkSubmitting ? 'Enrolling…' : `Enroll ${bulkParsed.length > 0 ? bulkParsed.length : ''} Device${bulkParsed.length !== 1 ? 's' : ''}`}
@@ -565,10 +416,10 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {bulkResults.map((r, i) => (
-                      <tr key={i} className={r.status === 'failed' ? 'bg-red-50' : 'bg-white'}>
+                      <tr key={i} className={r.status === 'success' ? 'bg-white' : 'bg-red-50'}>
                         <td className="px-3 py-2 font-mono text-gray-800">{r.deviceName}</td>
                         <td className="px-3 py-2">
-                          <span className={`px-1.5 py-0.5 rounded font-medium ${r.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                          <span className={`px-1.5 py-0.5 rounded font-medium ${r.status === 'success' ? 'bg-green-100 text-green-700' : r.status === 'unconfirmed' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>
                             {r.status}
                           </span>
                         </td>
@@ -586,6 +437,7 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
                   </tbody>
                 </table>
               </div>
+              <a href="/devices" className="text-sm text-blue-600 hover:underline">Gerätebestand ansehen</a>
               <div className="flex justify-end">
                 <button
                   onClick={onClose}
@@ -600,47 +452,17 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
       )}
 
       {/* Step: Instructions */}
-      {step === 2 && selectedPlatform && (
+      {step === 2 && enrollMode === 'single' && selectedPlatform && (
         <div className="space-y-5">
-          {/* Token display */}
-          {selectedPlatform !== 'printer' && (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-gray-500">Enrollment-Token</span>
-                {token && (
-                  <span className="text-xs text-gray-400">
-                    Gültig bis {new Date(token.expiresAt).toLocaleString()}
-                  </span>
-                )}
-              </div>
-              {loadingToken ? (
-                <div className="h-8 bg-gray-200 rounded animate-pulse" />
-              ) : token ? (
-                <div className="flex items-center space-x-2">
-                  <code className="flex-1 text-sm font-mono bg-white px-3 py-2 rounded border border-gray-200 select-all">
-                    {token.token}
-                  </code>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(token.token);
-                      toast.success('Token kopiert');
-                    }}
-                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                  >
-                    <ClipboardDocumentIcon className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <p className="text-sm text-red-500">Token konnte nicht generiert werden</p>
-              )}
+          {selectedPlatform === 'printer' ? (
+            <PrinterInstructions />
+          ) : (
+            <div role="alert" className="bg-amber-50 rounded-xl p-4 space-y-2">
+              <p className="text-sm text-amber-800">Token-basiertes Einzel-Enrollment ist derzeit nicht verfügbar.</p>
+              <p className="text-sm text-gray-600">Es wird kein Enrollment-Token ausgegeben und keine Registrierung bestätigt. Prüfe den Gerätebestand oder nutze das Bulk Enrollment mit entsprechender Berechtigung.</p>
+              <a href="/devices" className="text-sm text-blue-600 hover:underline">Gerätebestand ansehen</a>
             </div>
           )}
-
-          {/* Platform-specific instructions */}
-          <EnrollmentInstructions
-            platform={selectedPlatform}
-            token={token?.token || 'TOKEN'}
-          />
 
           {/* Add another device button - moved from footer */}
           <div className="flex justify-center pt-4 border-t border-gray-200">
@@ -649,7 +471,7 @@ export default function DeviceEnrollmentWizard({ onClose, initialPlatform }: Dev
               className="flex items-center px-4 py-2.5 border border-green-600 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50"
             >
               <PlusIcon className="h-4 w-4 mr-1" />
-              Weiteres Gerät hinzufügen
+              Andere Plattform auswählen
             </button>
           </div>
         </div>

@@ -3,6 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import EnrollmentWizard from '../../components/views/EnrollmentWizard';
 
+jest.mock('../../lib/auth', () => ({ getAccessToken: () => 'verified-session-fixture', ensureSession: jest.fn() }));
+
 // EnrollmentWizard talks to the quick-actions service via `qaPost`
 // (raw `fetch`), not the axios-based `api` client. Mock global.fetch.
 describe('EnrollmentWizard', () => {

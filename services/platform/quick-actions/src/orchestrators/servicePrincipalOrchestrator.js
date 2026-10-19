@@ -8,6 +8,22 @@ const { call } = require('../utils/serviceClient');
 function generateClientId()     { return crypto.randomUUID(); }
 function generateClientSecret() { return crypto.randomBytes(32).toString('hex'); }
 
+function publicAccount(record) {
+  const source = record?.data || record;
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
+  const fields = ['id', 'clientId', 'client_id', 'name', 'appName', 'app_name', 'description', 'spn', 'serviceAccountDn',
+    'createdBy', 'createdAt', 'created_at', 'updatedAt', 'disabled', 'status'];
+  const account = Object.fromEntries(fields.filter(field => ['string', 'boolean', 'number'].includes(typeof source[field])).map(field => [field, source[field]]));
+  if (Array.isArray(source.permissions)) account.permissions = source.permissions.filter(permission => typeof permission === 'string');
+  return account;
+}
+
+function publicPermissions(record) {
+  const source = record?.data || record;
+  const permissions = Array.isArray(source) ? source : source?.permissions;
+  return { permissions: Array.isArray(permissions) ? permissions.filter(permission => typeof permission === 'string') : [] };
+}
+
 /**
  * Wrap a single orchestration step. Returns { ok, result } or { ok: false, error }.
  * Never throws — allows the caller to decide whether to continue or abort.
@@ -158,7 +174,9 @@ async function createServicePrincipal({ appName, description = '', permissions =
 async function listServicePrincipals() {
   try {
     const res = await call('auth', 'GET', '/api/service-accounts');
-    return { success: true, data: res.data || res.accounts || res || [] };
+    const accounts = res.data || res.accounts || res || [];
+    if (!Array.isArray(accounts)) throw new Error('Invalid service account list');
+    return { success: true, data: accounts.map(publicAccount).filter(Boolean) };
   } catch (err) {
     return { success: false, error: err.message, data: [] };
   }
@@ -178,8 +196,8 @@ async function getServicePrincipalDetails(clientId) {
   return {
     success: true,
     clientId,
-    account:     authResult.status === 'fulfilled' ? authResult.value : null,
-    permissions: pimResult.status  === 'fulfilled' ? pimResult.value  : null,
+    account:     authResult.status === 'fulfilled' ? publicAccount(authResult.value) : null,
+    permissions: pimResult.status  === 'fulfilled' ? publicPermissions(pimResult.value) : null,
     warnings: [
       authResult.status === 'rejected' ? `auth-service: ${authResult.reason.message}` : null,
       pimResult.status  === 'rejected' ? `pim: ${pimResult.reason.message}`           : null,

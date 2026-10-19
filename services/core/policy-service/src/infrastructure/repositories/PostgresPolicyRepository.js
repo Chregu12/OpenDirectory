@@ -108,7 +108,7 @@ class PostgresPolicyRepository extends IPolicyRepository {
           policy.platform || 'all',
           JSON.stringify(policy.rules || []),
           JSON.stringify(policy.settings || {}),
-          policy.priority || 100,
+          policy.priority ?? 100,
           policy.enforce || false,
           policy.block_inheritance || false,
           policy.wmi_filter ? JSON.stringify(policy.wmi_filter) : null,
@@ -125,7 +125,7 @@ class PostgresPolicyRepository extends IPolicyRepository {
     const result = await this._db.query(
       `UPDATE policies
        SET name = COALESCE($1, name),
-           description = COALESCE($2, description),
+           description = $2,
            type = COALESCE($3, type),
            platform = COALESCE($4, platform),
            rules = COALESCE($5, rules),
@@ -133,8 +133,8 @@ class PostgresPolicyRepository extends IPolicyRepository {
            priority = COALESCE($7, priority),
            enforce = COALESCE($8, enforce),
            block_inheritance = COALESCE($9, block_inheritance),
-           wmi_filter = COALESCE($10, wmi_filter),
-           security_filter = COALESCE($11, security_filter),
+           wmi_filter = $10,
+           security_filter = $11,
            version = version + 1,
            updated_at = NOW()
        WHERE id = $12
@@ -146,7 +146,7 @@ class PostgresPolicyRepository extends IPolicyRepository {
         policy.platform || null,
         policy.rules ? JSON.stringify(policy.rules) : null,
         policy.settings ? JSON.stringify(policy.settings) : null,
-        policy.priority || null,
+        policy.priority ?? null,
         policy.enforce !== undefined ? policy.enforce : null,
         policy.block_inheritance !== undefined ? policy.block_inheritance : null,
         policy.wmi_filter ? JSON.stringify(policy.wmi_filter) : null,

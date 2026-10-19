@@ -255,6 +255,26 @@ describe('onboardUser()', () => {
 // ── offboardUser ──────────────────────────────────────────────────────────────
 
 describe('offboardUser()', () => {
+  test('releases licenses using the operator token and reports the confirmed count', async () => {
+    call.mockImplementation(async (service, method, path) => {
+      if (service === 'policy' && path === '/api/licenses/users/departing-user/offboard') return { userId: 'departing-user', assignmentsRevoked: 3, requestsCancelled: 1 };
+      return { groups: [], data: [] };
+    });
+    const result = await offboardUser('departing-user', { authorization: 'Bearer operator-token' });
+    expect(call).toHaveBeenCalledWith('policy', 'POST', '/api/licenses/users/departing-user/offboard', {}, { authorization: 'Bearer operator-token' });
+    expect(result.licensesReleased).toBe(true);
+    expect(result.licensesRevoked).toBe(3);
+    expect(result.success).toBe(true);
+  });
+
+  test('does not claim successful license release on a failed or malformed reply', async () => {
+    call.mockResolvedValue({ groups: [], data: [] });
+    const result = await offboardUser('departing-user');
+    expect(result.success).toBe(false);
+    expect(result.licensesReleased).toBe(false);
+    expect(result.licensesRevoked).toBeNull();
+    expect(result.warnings).toContain('revoke-license-assignments: License service did not confirm offboarding');
+  });
   test('missing userId → throws', async () => {
     await expect(offboardUser('')).rejects.toThrow('userId is required');
   });

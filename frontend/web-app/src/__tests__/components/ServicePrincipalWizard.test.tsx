@@ -3,6 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ServicePrincipalWizard from '../../components/views/ServicePrincipalWizard';
 
+jest.mock('../../lib/auth', () => ({ getAccessToken: () => 'verified-session-fixture', ensureSession: jest.fn() }));
+
 // ServicePrincipalWizard talks to the quick-actions service via `qaPost`
 // (raw `fetch`), not the axios-based `api` client. Mock global.fetch.
 describe('ServicePrincipalWizard', () => {
@@ -11,19 +13,55 @@ describe('ServicePrincipalWizard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Default: quick-actions service resolves with mock credentials
-    global.fetch = jest.fn().mockResolvedValue({
+    global.fetch = jest.fn().mockImplementation(async (url: string) => ({
       ok: true,
-      json: async () => ({
+      json: async () => url.endsWith('/access') ? { subject: 'operator', permissions: ['applications.create', 'applications.permissions.assign'], delegablePermissions: null } : ({
+        success: true,
         client_id: 'test-client-id-1234',
         client_secret: 'test-secret-abc123def456',
         spn: 'app/test-app@opendirectory.local',
       }),
-    } as any);
+    } as any));
+  });
+
+  test.each([207, 200])('HTTP %i with an explicit partial failure never creates credentials in the UI or retries blindly', async status => {
+    (global.fetch as jest.Mock).mockImplementation(async (url: string) => ({ ok: true, status: url.endsWith('/access') ? 200 : status, json: async () => url.endsWith('/access')
+      ? { subject: 'operator', permissions: ['applications.create'], delegablePermissions: [] }
+      : { success: false, clientId: 'partial', clientSecret: null, completedSteps: [{ name: 'AD', ok: true }] } }));
+    const user = userEvent.setup(); render(<ServicePrincipalWizard onClose={onClose} />);
+    await user.type(screen.getByPlaceholderText('e.g. inventory-service'), 'partial-app'); await user.click(screen.getByRole('button', { name: 'Create →' }));
+    await screen.findByRole('alert'); expect(screen.queryByText('Service Principal Created')).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Create →' })).toBeDisabled();
+    expect((global.fetch as jest.Mock).mock.calls.filter(([url]) => url === '/api/quick/service-principals')).toHaveLength(1);
+  });
+
+  test('missing credentials or success evidence is an unconfirmed result, not an invented SPN or empty-secret success', async () => {
+    (global.fetch as jest.Mock).mockImplementation(async (url: string) => ({ ok: true, status: 200, json: async () => url.endsWith('/access')
+      ? { subject: 'operator', permissions: ['applications.create'], delegablePermissions: [] } : { success: true, clientId: 'incomplete' } }));
+    const user = userEvent.setup(); render(<ServicePrincipalWizard onClose={onClose} />); await user.type(screen.getByPlaceholderText('e.g. inventory-service'), 'incomplete-app');
+    await user.click(screen.getByRole('button', { name: 'Create →' })); await screen.findByRole('alert'); expect(screen.queryByText('Service Principal Created')).not.toBeInTheDocument();
   });
 
   test('renders the wizard modal', () => {
     render(<ServicePrincipalWizard onClose={onClose} />);
     expect(screen.getByText('Create Service Principal')).toBeInTheDocument();
+  });
+
+  test('an application creator cannot choose permissions without separate delegation authority', async () => {
+    (global.fetch as jest.Mock).mockImplementationOnce(async () => ({ ok: true, json: async () => ({ subject: 'operator', permissions: ['applications.create'], delegablePermissions: [] }) }));
+    const user = userEvent.setup();
+    render(<ServicePrincipalWizard onClose={onClose} />);
+    await user.type(screen.getByPlaceholderText('e.g. inventory-service'), 'limited-application');
+    expect(screen.getByText('Create →')).not.toBeDisabled();
+    for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).toBeDisabled();
+  });
+
+  test('a delegated consent operator can select only permissions they hold', async () => {
+    (global.fetch as jest.Mock).mockImplementationOnce(async () => ({ ok: true, json: async () => ({ subject: 'operator', permissions: ['applications.create', 'applications.permissions.assign'], delegablePermissions: ['read_users'] }) }));
+    const user = userEvent.setup();
+    render(<ServicePrincipalWizard onClose={onClose} />);
+    await user.type(screen.getByPlaceholderText('e.g. inventory-service'), 'limited-application');
+    expect(screen.getAllByRole('checkbox')[0]).not.toBeDisabled();
+    for (const checkbox of screen.getAllByRole('checkbox').slice(1)) expect(checkbox).toBeDisabled();
   });
 
   test('renders form fields when open', () => {
@@ -40,6 +78,16 @@ describe('ServicePrincipalWizard', () => {
     expect(screen.getByText('Admin Access')).toBeInTheDocument();
     expect(screen.getByText('API Gateway')).toBeInTheDocument();
     expect(screen.getByText('Audit Logs')).toBeInTheDocument();
+  });
+
+  test('new applications have no preselected permissions', async () => {
+    const user = userEvent.setup();
+    render(<ServicePrincipalWizard onClose={onClose} />);
+    for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).not.toBeChecked();
+    await user.type(screen.getByPlaceholderText('e.g. inventory-service'), 'no-privileges-app');
+    await user.click(screen.getByText('Create →'));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'POST' })));
+    expect(JSON.parse((global.fetch as jest.Mock).mock.calls.find(([, options]) => options.method === 'POST')[1].body).permissions).toEqual([]);
   });
 
   test('Create button is disabled when app name is empty', () => {
@@ -123,7 +171,7 @@ describe('ServicePrincipalWizard', () => {
     render(<ServicePrincipalWizard onClose={onClose} />);
     await user.click(screen.getByText('Cancel'));
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'POST' }));
   });
 
   test('Download .env button is shown after creation', async () => {

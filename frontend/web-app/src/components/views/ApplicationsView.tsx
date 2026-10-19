@@ -219,7 +219,7 @@ function SsoCatalogTab() {
         <div>
           <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>Verbundene Apps ({connected.size})</h3>
           <div className="flex flex-wrap gap-2">
-            {[...connected].map(id => {
+            {Array.from(connected).map(id => {
               const a = catalog.find(c => c.id === id);
               return a ? (
                 <span key={id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium" style={{ color: 'var(--success)', background: 'var(--success-light)', border: '1px solid var(--border)' }}>

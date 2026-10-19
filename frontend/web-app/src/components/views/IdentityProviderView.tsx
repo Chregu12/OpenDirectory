@@ -19,6 +19,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import AppRegistrationsView from './AppRegistrationsView';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -34,16 +35,6 @@ interface SaasApp {
   lastLogin?: string;
 }
 
-interface OAuthClient {
-  id: string;
-  name: string;
-  clientId: string;
-  scopes: string[];
-  redirectUris: string[];
-  grantTypes: string[];
-  status: 'active' | 'inactive';
-}
-
 // ─── Mock Data ──────────────────────────────────────────────────────────────────
 
 const SAAS_APPS: SaasApp[] = [
@@ -53,27 +44,6 @@ const SAAS_APPS: SaasApp[] = [
   { id: '4', name: 'Nextcloud',           logo: '☁️', protocol: 'oidc',  status: 'active',   users: 13, lastLogin: '3 hr ago' },
   { id: '5', name: 'Proxmox VE',         logo: '🖥️', protocol: 'oidc',  status: 'inactive', users: 3,  lastLogin: '2 days ago' },
   { id: '6', name: 'Mattermost',         logo: '💬', protocol: 'oauth2', status: 'pending',  users: 0 },
-];
-
-const OAUTH_CLIENTS: OAuthClient[] = [
-  {
-    id: '1',
-    name: 'Grafana Dashboard',
-    clientId: 'grafana-od-client',
-    scopes: ['openid', 'profile', 'email', 'groups'],
-    redirectUris: ['https://grafana.example.com/login/generic_oauth'],
-    grantTypes: ['authorization_code', 'refresh_token'],
-    status: 'active',
-  },
-  {
-    id: '2',
-    name: 'Internal Dev Portal',
-    clientId: 'devportal-od-client',
-    scopes: ['openid', 'profile', 'email'],
-    redirectUris: ['https://dev.example.com/auth/callback'],
-    grantTypes: ['authorization_code'],
-    status: 'active',
-  },
 ];
 
 // ─── Sub-Components ──────────────────────────────────────────────────────────────
@@ -323,76 +293,7 @@ function AppsTab() {
 // ─── OAuth2 Tab ──────────────────────────────────────────────────────────────────
 
 function OAuthTab() {
-  const [selected, setSelected] = useState<OAuthClient | null>(null);
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">OAuth2 / OIDC Clients</h3>
-        <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Anwendungen, die Authorization Code, Client Credentials oder Device Flow nutzen</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {OAUTH_CLIENTS.map(client => (
-          <div
-            key={client.id}
-            onClick={() => setSelected(client)}
-            className={`bg-[var(--bg-surface,#161b22)] rounded-xl border p-4 cursor-pointer hover:border-[#006FFF] transition-colors ${selected?.id === client.id ? 'border-[#006FFF] ring-1 ring-[rgba(0,111,255,0.3)]' : 'border-[rgba(255,255,255,0.07)]'}`}
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <p className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">{client.name}</p>
-                <p className="text-xs font-mono text-[var(--text-muted,#6e7681)] mt-0.5">{client.clientId}</p>
-              </div>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${client.status === 'active' ? 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]' : 'bg-[rgba(139,148,158,0.15)] text-[#8b949e]'}`}>
-                {client.status}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1 mb-2">
-              {client.scopes.map(s => (
-                <span key={s} className="bg-[rgba(0,111,255,0.15)] text-[#006FFF] text-xs px-1.5 py-0.5 rounded font-mono">{s}</span>
-              ))}
-            </div>
-            <p className="text-xs text-[var(--text-muted,#6e7681)]">{client.grantTypes.join(' · ')}</p>
-          </div>
-        ))}
-
-        <button
-          onClick={() => toast.success('Client-Wizard geöffnet')}
-          className="bg-[var(--bg-surface-raised,#1c2128)] border-2 border-dashed border-[rgba(255,255,255,0.15)] rounded-xl p-4 flex items-center justify-center gap-2 text-[var(--text-muted,#6e7681)] hover:border-[#006FFF] hover:text-[#006FFF] hover:bg-[rgba(0,111,255,0.1)] transition-colors"
-        >
-          <PlusIcon className="w-5 h-5" />
-          <span className="text-sm font-medium">Neuer OAuth2 Client</span>
-        </button>
-      </div>
-
-      {selected && (
-        <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(0,111,255,0.3)] p-5">
-          <h4 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-4">{selected.name} — Konfiguration</h4>
-          <div className="space-y-2">
-            <EndpointRow label="Client ID"     value={selected.clientId} />
-            <EndpointRow label="Client Secret" value="••••••••••••••••••••••••" />
-            {selected.redirectUris.map((uri, i) => (
-              <EndpointRow key={i} label={i === 0 ? 'Redirect URI' : ''} value={uri} />
-            ))}
-          </div>
-
-          <div className="mt-4 p-4 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg">
-            <p className="text-xs font-semibold text-[var(--text-secondary,#8b949e)] mb-2">Grafana-Beispielkonfiguration</p>
-            <pre className="text-xs font-mono text-[var(--text-secondary,#8b949e)] whitespace-pre-wrap">{`[auth.generic_oauth]
-enabled = true
-name = OpenDirectory
-client_id = ${selected.clientId}
-client_secret = <secret>
-scopes = openid profile email groups
-auth_url = https://od.example.com/oauth/authorize
-token_url = https://od.example.com/oauth/token
-api_url = https://od.example.com/oauth/userinfo
-role_attribute_path = contains(groups[*], 'admins') && 'Admin' || 'Viewer'`}</pre>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <AppRegistrationsView />;
 }
 
 // ─── SAML Tab ────────────────────────────────────────────────────────────────────
@@ -954,10 +855,10 @@ export default function IdentityProviderView() {
               <ShieldCheckIcon className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-[var(--text-primary,#e4e6ea)]">Identity Provider</h1>
-            <span className="bg-[rgba(0,111,255,0.15)] text-[#006FFF] text-xs px-2.5 py-1 rounded-full font-medium">Entra ID Ersatz</span>
+            <span className="bg-[rgba(0,111,255,0.15)] text-[#006FFF] text-xs px-2.5 py-1 rounded-full font-medium">Im Ausbau</span>
           </div>
           <p className="text-sm text-[var(--text-muted,#6e7681)] ml-12">
-            OpenDirectory als vollständiger Identity Provider — OAuth2, OIDC, SAML, MFA, Conditional Access
+            OAuth/OIDC-Registrierungen verwenden die kanonische Anwendungsautorität. Andere Tabs enthalten weiterhin Prototypfunktionen und Beispieldaten.
           </p>
         </div>
       </div>

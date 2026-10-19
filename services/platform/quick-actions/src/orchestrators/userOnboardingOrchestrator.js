@@ -216,12 +216,20 @@ async function onboardUser({ firstName, lastName, email, department = 'General',
  * @param {string}  [options.transferFilesTo]     - UserId to transfer data ownership
  * @param {boolean} [options.disableAccount=true] - Whether to disable (vs. delete) the AD account
  */
-async function offboardUser(userId, { revokeDevices = true, transferFilesTo, disableAccount = true } = {}) {
+async function offboardUser(userId, { revokeDevices = true, transferFilesTo, disableAccount = true, authorization } = {}) {
   if (!userId) throw new Error('userId is required');
 
   const completedSteps  = [];
   const devicesRevoked  = [];
   const groupsRemoved   = [];
+  const licenseStep = await step('revoke-license-assignments', async () => {
+    const result = await call('policy', 'POST', `/api/licenses/users/${encodeURIComponent(userId)}/offboard`, {}, { authorization });
+    if (result.userId !== userId || !Number.isInteger(result.assignmentsRevoked) || result.assignmentsRevoked < 0 || !Number.isInteger(result.requestsCancelled) || result.requestsCancelled < 0) {
+      throw new Error('License service did not confirm offboarding');
+    }
+    return result;
+  });
+  completedSteps.push(licenseStep);
 
   // Step 1 – Disable AD account
   const s1 = await step('disable-ad-account', () =>
@@ -304,10 +312,13 @@ async function offboardUser(userId, { revokeDevices = true, transferFilesTo, dis
 
   const failed = completedSteps.filter(s => !s.ok);
 
-  await publish('user.offboarded', { userId, _source: 'quick-actions' });
+  await publish(failed.length ? 'user.offboarding.incomplete' : 'user.offboarded', { userId, _source: 'quick-actions', licensesReleased: licenseStep.ok });
 
   return {
+    success: failed.length === 0,
     disabled: s1.ok || s3.ok,
+    licensesReleased: licenseStep.ok,
+    licensesRevoked: licenseStep.ok ? licenseStep.result.assignmentsRevoked : null,
     userId,
     devicesRevoked,
     groupsRemoved,

@@ -11,6 +11,7 @@ import {
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
 import { qaPost } from '@/lib/quickActionsApi';
+import { useQuickActionAccess } from '@/hooks/useQuickActionAccess';
 import toast from 'react-hot-toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -36,8 +37,8 @@ interface CreatedSP {
 // ─── Permission list ──────────────────────────────────────────────────────────
 
 const PERMISSIONS: Permission[] = [
-  { id: 'read_users',    label: 'Read Users',     desc: 'List and read user objects',          default: true  },
-  { id: 'read_devices',  label: 'Read Devices',   desc: 'List and read managed devices',       default: true  },
+  { id: 'read_users',    label: 'Read Users',     desc: 'List and read user objects',          default: false },
+  { id: 'read_devices',  label: 'Read Devices',   desc: 'List and read managed devices',       default: false },
   { id: 'write_policies',label: 'Write Policies', desc: 'Create and update policies',          default: false },
   { id: 'admin_access',  label: 'Admin Access',   desc: 'Full administrative control',         default: false },
   { id: 'api_gateway',   label: 'API Gateway',    desc: 'Access all API gateway endpoints',    default: false },
@@ -114,13 +115,16 @@ function CopyField({ label, value, secret }: { label: string; value: string; sec
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ServicePrincipalWizard({ onClose }: ServicePrincipalWizardProps) {
+  const { access, can } = useQuickActionAccess();
+  const canGrant = (permission: string) => can('applications.permissions.assign') && (access?.delegablePermissions === null || access?.delegablePermissions?.includes(permission) === true);
   const [name, setName]         = useState('');
   const [desc, setDesc]         = useState('');
   const [permissions, setPerms] = useState<Record<string, boolean>>(
-    Object.fromEntries(PERMISSIONS.map(p => [p.id, p.default]))
+    Object.fromEntries(PERMISSIONS.map(permission => [permission.id, permission.default]))
   );
   const [loading, setLoading]   = useState(false);
   const [created, setCreated]   = useState<CreatedSP | null>(null);
+  const [creationError, setCreationError] = useState('');
 
   const togglePerm = (id: string) => setPerms(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -137,26 +141,32 @@ export default function ServicePrincipalWizard({ onClose }: ServicePrincipalWiza
   };
 
   const handleCreate = async () => {
+    if (!can('applications.create') || creationError) return;
     if (!name.trim()) { toast.error('Application name is required'); return; }
     setLoading(true);
     try {
       const data = await qaPost<{
+        success?: boolean;
         clientId?: string; client_id?: string;
         clientSecret?: string; client_secret?: string;
         spn?: string;
       }>('/api/quick/service-principals', {
         appName:     name.trim(),
         description: desc.trim(),
-        permissions: Object.entries(permissions).filter(([, v]) => v).map(([k]) => k),
+        permissions: Object.entries(permissions).filter(([permission, selected]) => selected && canGrant(permission)).map(([permission]) => permission),
       });
+      const clientId = data.clientId ?? data.client_id;
+      const clientSecret = data.clientSecret ?? data.client_secret;
+      if (data.success !== true || typeof clientId !== 'string' || !clientId || typeof clientSecret !== 'string' || !clientSecret || typeof data.spn !== 'string' || !data.spn) throw new Error('Erstellung nicht bestätigt. Teilobjekte können bestehen; vor erneutem Versuch prüfen.');
       setCreated({
-        clientId:     data.clientId     ?? data.client_id     ?? '',
-        clientSecret: data.clientSecret ?? data.client_secret ?? '',
-        spn:          data.spn          ?? `app/${name.toLowerCase().replace(/\s+/g, '-')}@opendirectory.local`,
+        clientId,
+        clientSecret,
+        spn: data.spn,
         name:         name.trim(),
       });
       toast.success('Service Principal created');
     } catch (err) {
+      setCreationError(err instanceof Error ? err.message : 'Erstellung nicht bestätigt; aktuellen Zustand prüfen.');
       toast.error(err instanceof Error ? err.message : 'Failed to create service principal');
     } finally {
       setLoading(false);
@@ -213,6 +223,7 @@ export default function ServicePrincipalWizard({ onClose }: ServicePrincipalWiza
               <XMarkIcon style={{ width: 20, height: 20 }} />
             </button>
           </div>
+          {creationError && <p role="alert" style={{ fontSize: 13, overflowWrap: 'anywhere' }}>{creationError}</p>}
           <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
             {created ? 'Save the credentials before closing.' : 'Generate app identity and credentials for service-to-service auth.'}
           </p>
@@ -349,6 +360,7 @@ AUTHORITY=https://opendirectory.local`}
                       <input
                         type="checkbox"
                         checked={permissions[p.id] ?? false}
+                        disabled={!canGrant(p.id)}
                         onChange={() => togglePerm(p.id)}
                         style={{ marginTop: 2, accentColor: '#006FFF', flexShrink: 0 }}
                       />
@@ -429,7 +441,7 @@ AUTHORITY=https://opendirectory.local`}
               </button>
               <button
                 onClick={handleCreate}
-                disabled={loading || !name.trim()}
+                disabled={loading || !!creationError || !name.trim() || !can('applications.create')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',

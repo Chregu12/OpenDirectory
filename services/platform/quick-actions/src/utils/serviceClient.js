@@ -1,178 +1,72 @@
 'use strict';
 
-// Base URLs from env or Kubernetes service names
-const SERVICES = {
-  auth:      process.env.AUTH_SERVICE_URL      || 'http://authentication-service',
+const { currentOperator } = require('./delegation');
+const SERVICES = Object.freeze({
+  auth: process.env.AUTH_SERVICE_URL || 'http://authentication-service',
   directory: process.env.DIRECTORY_SERVICE_URL || 'http://enterprise-directory',
-  kerberos:  process.env.KERBEROS_SERVICE_URL  || 'http://kerberos-kdc',
-  samba:     process.env.SAMBA_SERVICE_URL     || 'http://samba-ad-dc',
-  device:    process.env.DEVICE_SERVICE_URL    || 'http://device-service',
-  policy:    process.env.POLICY_SERVICE_URL    || 'http://policy-service',
-  pim:       process.env.PIM_SERVICE_URL       || 'http://conditional-access',
-  mdm:       process.env.MDM_SERVICE_URL       || 'http://mobile-management',
-  appStore:  process.env.APP_STORE_SERVICE_URL || 'http://app-store',
-};
-
-const TIMEOUT_MS = 10_000;
-
-// ── Client Credentials token cache ────────────────────────────────────────────
-
-const TOKEN_ENDPOINT  = process.env.TOKEN_ENDPOINT || 'http://localhost:3001/token';
-const CLIENT_ID       = 'quick-actions';
-const CLIENT_SECRET   = process.env.QA_CLIENT_SECRET;
-
-/** Cached access token state */
-let _cachedToken   = null;
-let _tokenExpiresAt = 0; // ms since epoch
-
-/**
- * Obtain a service access token via OAuth 2.0 Client Credentials grant.
- * The token is cached until it expires (with a 30-second safety buffer).
- *
- * @returns {Promise<string>} Bearer access_token
- */
-async function getServiceToken() {
-  const now = Date.now();
-
-  // Return cached token if still valid
-  if (_cachedToken && now < _tokenExpiresAt) {
-    return _cachedToken;
+  kerberos: process.env.KERBEROS_SERVICE_URL || 'http://kerberos-kdc',
+  samba: process.env.SAMBA_SERVICE_URL || 'http://samba-ad-dc',
+  device: process.env.DEVICE_SERVICE_URL || 'http://device-service',
+  policy: process.env.POLICY_SERVICE_URL || 'http://policy-service',
+  pim: process.env.PIM_SERVICE_URL || 'http://conditional-access',
+  mdm: process.env.MDM_SERVICE_URL || 'http://mobile-management',
+  appStore: process.env.APP_STORE_SERVICE_URL || 'http://app-store',
+});
+function failure(message, status = 502, code = 'DOWNSTREAM_UNAVAILABLE') { return Object.assign(new Error(message), { status, code }); }
+function createServiceClient({ services = SERVICES, timeoutMs = 10000, maxResponseBytes = 1048576 } = {}) {
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 10000 || !Number.isInteger(maxResponseBytes) || maxResponseBytes < 1024 || maxResponseBytes > 1048576) throw new Error('Invalid downstream bounds');
+  const bases = new Map(Object.entries(services).map(([name, value]) => {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash || url.search || url.pathname !== '/') throw new Error('Invalid downstream service URL');
+    return [name, url];
+  }));
+  function target(service, path) {
+    const base = bases.get(service); if (!base) throw failure('Unknown downstream service', 400);
+    if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || /[\u0000-\u0020\u007f\\]/.test(path)) throw failure('Invalid downstream path', 400);
+    const url = new URL(path, base); if (url.origin !== base.origin || url.hash) throw failure('Invalid downstream target', 400);
+    return url;
   }
-
-  if (!CLIENT_SECRET) {
-    throw new Error('QA_CLIENT_SECRET environment variable is required for service authentication');
+  async function send(url, method, body, context) {
+    const { default: fetch } = await import('node-fetch'); const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { method, redirect: 'error', signal: context ? AbortSignal.any([controller.signal, context.signal]) : controller.signal,
+        headers: { Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(context ? { Authorization: context.authorization, 'X-OD-Operation-Id': context.operationId } : {}) },
+        ...(body !== undefined && !['GET', 'HEAD'].includes(method) ? { body: JSON.stringify(body) } : {}) });
+      if (!response.ok) {
+        response.body?.destroy();
+        const error = failure('Downstream rejected delegated operation', response.status);
+        if ([401, 403].includes(response.status)) context?.block(error);
+        throw error;
+      }
+      const chunks = []; let length = 0;
+      for await (const chunk of response.body) { length += chunk.length; if (length > maxResponseBytes) { controller.abort(); throw failure('Downstream response exceeded bounds'); } chunks.push(Buffer.from(chunk)); }
+      if (response.status === 204) return {};
+      const text = Buffer.concat(chunks).toString('utf8');
+      const data = response.headers.get('content-type')?.includes('application/json') ? JSON.parse(text) : { _raw: text };
+      if (data?.success === false) throw failure('Downstream operation was not confirmed');
+      return data;
+    } catch (error) {
+      if (context?.signal.aborted) throw context.signal.reason;
+      if (error.code === 'DOWNSTREAM_UNAVAILABLE') throw error;
+      if (controller.signal.aborted) throw failure('Downstream operation timed out; outcome is unknown', 504, 'ETIMEOUT');
+      throw failure('Downstream operation unavailable; outcome is unknown');
+    } finally { clearTimeout(timer); }
   }
-
-  const { default: fetch } = await import('node-fetch');
-
-  const body = new URLSearchParams({
-    grant_type:    'client_credentials',
-    client_id:     CLIENT_ID,
-    client_secret: CLIENT_SECRET,
-    scope:         'openid roles',
-  });
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  let res;
-  try {
-    res = await fetch(TOKEN_ENDPOINT, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    body.toString(),
-      signal:  controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
+  async function call(service, method, path, body, { authorization } = {}) {
+    const context = currentOperator();
+    if (authorization !== undefined && authorization !== context.authorization) throw failure('Delegated authorization cannot be replaced', 403);
+    if (typeof method !== 'string' || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'].includes(method.toUpperCase())) throw failure('Invalid downstream method', 400);
+    const url = target(service, path); await context.check();
+    return send(url, method.toUpperCase(), body, context);
   }
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Token endpoint returned ${res.status}: ${text}`);
+  async function ping(service) {
+    const started = Date.now();
+    try { await send(target(service, '/health'), 'GET'); return { healthy: true, latencyMs: Date.now() - started }; }
+    catch { return { healthy: false, latencyMs: Date.now() - started, error: 'Health probe unavailable' }; }
   }
-
-  const data = await res.json();
-  const { access_token, expires_in } = data;
-
-  if (!access_token) {
-    throw new Error('Token endpoint did not return an access_token');
-  }
-
-  _cachedToken    = access_token;
-  // expires_in is in seconds; subtract 30s buffer
-  _tokenExpiresAt = now + ((expires_in || 3600) - 30) * 1000;
-
-  return _cachedToken;
+  return { call, ping };
 }
-
-// ── HTTP client ────────────────────────────────────────────────────────────────
-
-/**
- * Make an HTTP call to an internal service.
- *
- * @param {string} service  - key in SERVICES map (e.g. 'auth', 'directory')
- * @param {string} method   - HTTP verb ('GET', 'POST', 'PATCH', 'DELETE', …)
- * @param {string} path     - URL path starting with '/' (e.g. '/api/users')
- * @param {object} [body]   - optional JSON body (only sent for non-GET requests)
- * @returns {Promise<object>} parsed JSON response body
- * @throws  {Error}          if the request times out, the network is unreachable,
- *                           or the server returns a non-2xx status
- */
-async function call(service, method, path, body) {
-  const { default: fetch } = await import('node-fetch');
-
-  const baseUrl = SERVICES[service];
-  if (!baseUrl) throw new Error(`Unknown service: "${service}"`);
-
-  const url = `${baseUrl}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  // Obtain token via Client Credentials before every call (cached internally)
-  const token = await getServiceToken();
-
-  const headers = {
-    'Content-Type':  'application/json',
-    'Authorization': `Bearer ${token}`,
-  };
-
-  const options = {
-    method: method.toUpperCase(),
-    headers,
-    signal: controller.signal,
-  };
-
-  if (body !== undefined && method.toUpperCase() !== 'GET') {
-    options.body = JSON.stringify(body);
-  }
-
-  try {
-    const res = await fetch(url, options);
-    clearTimeout(timer);
-
-    let data;
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      data = await res.json();
-    } else {
-      data = { _raw: await res.text() };
-    }
-
-    if (!res.ok) {
-      const err = new Error(
-        `Service "${service}" returned ${res.status} for ${method} ${path}`
-      );
-      err.status = res.status;
-      err.body   = data;
-      throw err;
-    }
-
-    return data;
-  } catch (err) {
-    clearTimeout(timer);
-    if (err.name === 'AbortError') {
-      const timeoutErr = new Error(
-        `Service "${service}" timed out after ${TIMEOUT_MS}ms for ${method} ${path}`
-      );
-      timeoutErr.code = 'ETIMEOUT';
-      throw timeoutErr;
-    }
-    throw err;
-  }
-}
-
-/**
- * Ping a service's /health endpoint. Returns { healthy, latencyMs, error? }.
- */
-async function ping(service) {
-  const start = Date.now();
-  try {
-    await call(service, 'GET', '/health');
-    return { healthy: true, latencyMs: Date.now() - start };
-  } catch (err) {
-    return { healthy: false, latencyMs: Date.now() - start, error: err.message };
-  }
-}
-
-module.exports = { call, ping, getServiceToken, SERVICES };
+async function getServiceToken() { throw failure('Implicit service credentials are retired; a verified operator is required', 401); }
+module.exports = { ...createServiceClient(), createServiceClient, getServiceToken, SERVICES };

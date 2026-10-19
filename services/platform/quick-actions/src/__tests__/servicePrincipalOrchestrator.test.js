@@ -173,6 +173,10 @@ describe('createServicePrincipal()', () => {
 // ── listServicePrincipals ─────────────────────────────────────────────────────
 
 describe('listServicePrincipals()', () => {
+  test('read operations return an allowlisted projection without stored credentials or arbitrary nested data', async () => {
+    call.mockResolvedValue({ data: [{ clientId: 'client', name: 'app', clientSecret: 'secret', passwordHash: 'hash', credentials: { privateKey: 'key' }, permissions: ['directory.read', { secret: 'hidden' }] }] });
+    expect((await listServicePrincipals()).data).toEqual([{ clientId: 'client', name: 'app', permissions: ['directory.read'] }]);
+  });
   test('returns success: true with data array on success', async () => {
     call.mockResolvedValue({ data: [{ clientId: 'c1' }, { clientId: 'c2' }] });
 
@@ -354,6 +358,14 @@ describe('rotateServicePrincipalSecret()', () => {
 // ── getServicePrincipalDetails ────────────────────────────────────────────────
 
 describe('getServicePrincipalDetails()', () => {
+  test('neither auth-service nor PIM read responses can disclose credentials', async () => {
+    call.mockResolvedValue({ data: { name: 'app', secret: 'secret', refresh_token: 'refresh', permissions: ['directory.read'], raw: { client_secret: 'hidden' } } });
+    const result = await getServicePrincipalDetails('client');
+    expect(result.account).toEqual({ name: 'app', permissions: ['directory.read'] });
+    expect(result.permissions).toEqual({ permissions: ['directory.read'] });
+    expect(JSON.stringify(result)).not.toContain('hidden');
+    expect(JSON.stringify(result)).not.toContain('refresh');
+  });
   test('returns account and permissions on success', async () => {
     call.mockResolvedValue({ name: 'myApp', permissions: ['read:users'] });
 

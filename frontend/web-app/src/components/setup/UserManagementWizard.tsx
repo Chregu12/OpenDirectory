@@ -262,8 +262,8 @@ export default function UserManagementWizard({ onClose }: UserManagementWizardPr
 
   return (
     <WizardLayout
-      title="Benutzer-Verwaltung"
-      subtitle="Gruppen und Benutzer einrichten"
+      title="LLDAP-Anbietereinrichtung"
+      subtitle="Nur LLDAP: kanonische Einträge, Kontosperren und Anmelde-Verknüpfungen werden separat verwaltet"
       icon={<UserGroupIcon className="h-8 w-8" />}
       color="indigo"
       steps={STEPS}

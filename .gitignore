@@ -135,6 +135,13 @@ database/
 # dir is excluded, so re-include the migrations dir itself before its *.sql.
 !**/db/migrations/
 !**/db/migrations/*.sql
+!/services/core/policy-service/scripts/license-fulfillment-grants.sql
+!/services/core/policy-service/scripts/license-capacity-grants.sql
+!/services/core/policy-service/scripts/license-capacity-source.sql
+!/services/core/policy-service/scripts/license-capacity-budget.sql
+!/services/core/identity-service/scripts/tenant-provision.sql
+!/services/core/identity-service/scripts/tenant-adopt.sql
+!/services/core/identity-service/scripts/tenant-enablement.sql
 
 # Docker
 docker-compose.override.yml

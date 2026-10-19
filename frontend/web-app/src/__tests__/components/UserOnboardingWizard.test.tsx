@@ -3,6 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UserOnboardingWizard from '../../components/views/UserOnboardingWizard';
 
+jest.mock('../../lib/auth', () => ({ getAccessToken: () => 'verified-session-fixture', ensureSession: jest.fn() }));
+
 // UserOnboardingWizard talks to the quick-actions service via `qaPost`
 // (raw `fetch`), not the axios-based `api` client. Mock global.fetch.
 describe('UserOnboardingWizard', () => {
@@ -10,18 +12,36 @@ describe('UserOnboardingWizard', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    global.fetch = jest.fn().mockResolvedValue({
+    global.fetch = jest.fn().mockImplementation(async (url: string) => ({
       ok: true,
-      json: async () => ({
+      json: async () => url.endsWith('/access') ? { subject: 'operator', permissions: ['users.onboard', 'users.roles.assign', 'users.groups.assign', 'users.devices.assign'], onboardingDepartments: ['General'] } : ({
         temp_password: 'Temp@Test1234',
         username: 'jane.smith',
       }),
-    } as any);
+    } as any));
   });
 
   test('renders wizard header', () => {
     render(<UserOnboardingWizard onClose={onClose} />);
     expect(screen.getByText('Onboard New User')).toBeInTheDocument();
+  });
+
+  test('a lifecycle operator cannot choose privileged roles, unapproved departments, or assign devices', async () => {
+    (global.fetch as jest.Mock).mockImplementationOnce(async () => ({ ok: true, json: async () => ({ subject: 'operator', permissions: ['users.onboard'], onboardingDepartments: ['Engineering'] }) }));
+    const user = userEvent.setup();
+    render(<UserOnboardingWizard onClose={onClose} />);
+    await screen.findByRole('option', { name: 'Engineering' });
+    expect(screen.queryByRole('option', { name: 'IT' })).not.toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('Jane'), 'Jane');
+    await user.type(screen.getByPlaceholderText('Smith'), 'Smith');
+    await user.type(screen.getByPlaceholderText('jane.smith@company.com'), 'jane@test.com');
+    expect(screen.getByText('Continue →')).toBeDisabled();
+    await user.selectOptions(screen.getByRole('combobox'), 'Engineering');
+    await user.click(screen.getByText('Continue →'));
+    expect(screen.queryByRole('option', { name: 'IT Admin' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Elevated User' })).not.toBeInTheDocument();
+    await user.click(screen.getByText('Continue →'));
+    expect(screen.queryByText('Assign existing device')).not.toBeInTheDocument();
   });
 
   test('step 1 shows First Name and Last Name fields', () => {
@@ -70,7 +90,7 @@ describe('UserOnboardingWizard', () => {
     await user.click(screen.getByText('Continue →'));
     expect(screen.getByText('Standard User')).toBeInTheDocument();
     expect(screen.getByText('IT Admin')).toBeInTheDocument();
-    expect(screen.getByText('Developer')).toBeInTheDocument();
+    expect(screen.getByText('Elevated User')).toBeInTheDocument();
   });
 
   test('step 2 shows Manager field', async () => {
@@ -144,6 +164,23 @@ describe('UserOnboardingWizard', () => {
     await waitFor(() => {
       expect(screen.getByText('Employee Account Created')).toBeInTheDocument();
     });
+    expect(JSON.parse((global.fetch as jest.Mock).mock.calls.find(([, options]) => options.method === 'POST')[1].body).role).toBe('standard');
+  });
+
+  test('submits the canonical privileged role rather than an arbitrary display label', async () => {
+    const user = userEvent.setup();
+    render(<UserOnboardingWizard onClose={onClose} />);
+    await user.type(screen.getByPlaceholderText('Jane'), 'Jane');
+    await user.type(screen.getByPlaceholderText('Smith'), 'Smith');
+    await user.type(screen.getByPlaceholderText('jane.smith@company.com'), 'jane@test.com');
+    await user.click(screen.getByText('Continue →'));
+    await user.selectOptions(screen.getByRole('combobox'), 'admin');
+    expect(screen.queryByRole('option', { name: 'Developer' })).not.toBeInTheDocument();
+    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Continue →'));
+    await user.click(screen.getByText('Create Employee Account'));
+    await screen.findByText('Employee Account Created');
+    expect(JSON.parse((global.fetch as jest.Mock).mock.calls.find(([, options]) => options.method === 'POST')[1].body).role).toBe('admin');
   });
 
   test('success screen shows temporary password', async () => {

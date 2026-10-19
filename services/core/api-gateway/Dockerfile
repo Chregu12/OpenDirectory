@@ -14,13 +14,18 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S gateway -u 1001 -G nodejs
 
 # Copy package files
-COPY package*.json ./
+COPY services/core/api-gateway/package*.json ./
 
 # Install dependencies
 RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
 
 # Copy application code
-COPY src/ ./src/
+COPY services/core/api-gateway/src/ ./src/
+COPY packages/oidc-access-state.js /packages/oidc-access-state.js
+COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
+COPY packages/device-inventory-contract/ /packages/device-inventory-contract/
+COPY packages/grpc-event-bus/ /packages/grpc-event-bus/
+RUN cd /packages/grpc-event-bus && npm install --omit=dev --ignore-scripts --no-audit --no-fund
 
 # Create logs directory
 RUN mkdir -p logs && chown -R gateway:nodejs logs

@@ -126,7 +126,7 @@ function isValidInternalToken(headerValue) {
  *                           only applies when no Authorization header was
  *                           sent at all.
  */
-function oidcAuth({ isTokenRevoked, allowInternalToken = false } = {}) {
+function oidcAuth({ isTokenRevoked, allowInternalToken = false, deviceSelf = false, isDeviceTokenRevoked } = {}) {
   return async (req, res, next) => {
     const auth = req.headers.authorization;
 
@@ -150,11 +150,18 @@ function oidcAuth({ isTokenRevoked, allowInternalToken = false } = {}) {
 
     const token = auth.slice(7);
     try {
-      const { payload } = await jwtVerify(token, localJWKS, { issuer: ISSUER });
+      const apiAudience = process.env.OAUTH_API_AUDIENCE || 'opendirectory-api';
+      const { payload } = await jwtVerify(token, localJWKS, { issuer: ISSUER, algorithms: ['RS256'], audience: deviceSelf ? [apiAudience, 'opendirectory-device-agent'] : apiAudience });
+      if (deviceSelf && payload.token_use === 'device' && payload.aud === 'opendirectory-device-agent') {
+        if (payload.sub !== (req.params.deviceId || req.params.id) || !isDeviceTokenRevoked) return res.status(403).json({ error: 'invalid_device_binding' });
+        if (await isDeviceTokenRevoked(crypto.createHash('sha256').update(token).digest('hex'))) return res.status(401).json({ error: 'token_revoked' });
+        req.user = payload; return next();
+      }
+      if (payload.token_use !== 'access' || (deviceSelf && !hasAdminAccess(payload))) return res.status(403).json({ error: 'invalid_token' });
 
       if (isTokenRevoked) {
         const hash = crypto.createHash('sha256').update(token).digest('hex');
-        if (await isTokenRevoked(hash)) {
+        if (await isTokenRevoked(hash, payload)) {
           return res.status(401).json({ error: 'token_revoked' });
         }
       }
@@ -162,7 +169,7 @@ function oidcAuth({ isTokenRevoked, allowInternalToken = false } = {}) {
       req.user = payload;
       next();
     } catch (err) {
-      const status = err.code === 'ERR_JWT_EXPIRED' ? 401 : 403;
+      const status = err.status === 503 ? 503 : err.code === 'ERR_JWT_EXPIRED' ? 401 : 403;
       res.status(status).json({ error: 'invalid_token', message: err.message });
     }
   };

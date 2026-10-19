@@ -1,4 +1,6 @@
 tsconfig.tsbuildinfo
+.next-browser-auth-*/
+.next-browser-config-*.json
 e2e/test-results/
 e2e/screenshots/
 next-env.d.ts

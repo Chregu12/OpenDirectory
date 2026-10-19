@@ -77,6 +77,11 @@ export async function mockApi(page: Page, options: MockApiOptions = {}) {
     const p = url.pathname;
     const method = route.request().method();
 
+    if (p === '/api/auth/oidc/session' && method === 'POST') return route.fulfill({ json: {
+      access_token: 'e2e-fixture-token-not-a-real-login', expires_at: Date.now() + 3600000,
+      user: { id: 'fixture-user', name: 'E2E Test User', username: 'fixture', email: null, roles: ['user'], role: 'user' },
+    } });
+
     // ── Device drivers tab ──────────────────────────────────────────────
     if (p === '/api/devices/drivers' && method === 'GET') {
       return route.fulfill({ json: { drivers } });
@@ -117,21 +122,8 @@ export async function mockApi(page: Page, options: MockApiOptions = {}) {
   });
 }
 
-/**
- * Seeds localStorage with a fake authenticated session *before* any page
- * script runs, so the `/[view]` route's auth guard (see
- * src/app/[view]/page.tsx) doesn't redirect to /login. This mirrors what
- * `handleCallback()` in src/lib/auth.ts would normally store after a real
- * OIDC login.
- */
 export async function seedAuth(page: Page) {
   await page.addInitScript(() => {
-    window.localStorage.setItem(
-      'auth_user',
-      JSON.stringify({ name: 'E2E Test User', role: 'admin' })
-    );
-    window.localStorage.setItem('access_token', 'e2e-fake-access-token');
-    // Skip the first-run onboarding wizard overlay.
     window.localStorage.setItem('od_onboarded', 'true');
   });
 }

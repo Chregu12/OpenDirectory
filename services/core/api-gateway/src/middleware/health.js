@@ -32,7 +32,6 @@ class HealthCheckMiddleware {
     ];
     
     // Start periodic health checks
-    this.startHealthChecks();
   }
 
   middleware() {
@@ -266,7 +265,7 @@ class HealthCheckMiddleware {
 
   startHealthChecks() {
     // Periodic health checks every 30 seconds
-    setInterval(async () => {
+    this.timer = setInterval(async () => {
       logger.debug('Running periodic health checks');
       await this.checkAllServices();
     }, 30000);
@@ -314,3 +313,5 @@ module.exports.getDetailedHealth = healthCheck.getDetailedHealth.bind(healthChec
 module.exports.getServiceRegistry = healthCheck.getServiceRegistry.bind(healthCheck);
 module.exports.addService = healthCheck.addService.bind(healthCheck);
 module.exports.removeService = healthCheck.removeService.bind(healthCheck);
+module.exports.start = () => { if (!healthCheck.timer) healthCheck.startHealthChecks(); };
+module.exports.stop = () => { clearInterval(healthCheck.timer); healthCheck.timer = null; };

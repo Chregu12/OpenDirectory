@@ -1,256 +1,51 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { api } from '@/lib/api';
+import React from 'react';
+import { DirectoryUser, userName } from '@/lib/directoryUsers';
+export type { DirectoryUser } from '@/lib/directoryUsers';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface DirectoryUser {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'user' | 'read-only' | 'service-account';
-  department?: string;
-  status: 'active' | 'inactive';
-  lastActive?: string;
-  mfa: boolean;
-  groups?: string[];
-  devices?: string[];
-}
-
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_USERS: DirectoryUser[] = [
-  { id: '1', name: 'Alice Mueller',   email: 'alice@company.local',   role: 'admin',           department: 'IT',          status: 'active',   lastActive: '2 hours ago',   mfa: true,  groups: ['IT', 'Admins'],    devices: ['MacBook Pro'] },
-  { id: '2', name: 'Bob Schneider',   email: 'bob@company.local',     role: 'user',            department: 'Engineering', status: 'active',   lastActive: '1 day ago',     mfa: true,  groups: ['Engineering'],     devices: ['Windows 11 Laptop'] },
-  { id: '3', name: 'Carol Weber',     email: 'carol@company.local',   role: 'user',            department: 'Marketing',   status: 'active',   lastActive: '3 days ago',    mfa: false, groups: ['Marketing'],       devices: [] },
-  { id: '4', name: 'David Koch',      email: 'david@company.local',   role: 'read-only',       department: 'Engineering', status: 'inactive', lastActive: '45 days ago',   mfa: false, groups: ['Engineering'],     devices: [] },
-  { id: '5', name: 'Eva Fischer',     email: 'eva@company.local',     role: 'service-account', department: 'IT',          status: 'active',   lastActive: '5 minutes ago', mfa: false, groups: ['IT'],              devices: [] },
-  { id: '6', name: 'Frank Meyer',     email: 'frank@company.local',   role: 'user',            department: 'Marketing',   status: 'active',   lastActive: '2 days ago',    mfa: true,  groups: ['Marketing'],       devices: ['Ubuntu Workstation'] },
-  { id: '7', name: 'Grace Hoffmann',  email: 'grace@company.local',   role: 'admin',           department: 'IT',          status: 'active',   lastActive: '1 hour ago',    mfa: true,  groups: ['IT', 'Admins'],    devices: ['MacBook Air'] },
-  { id: '8', name: 'Hans Bauer',      email: 'hans@company.local',    role: 'user',            department: 'Finance',     status: 'active',   lastActive: '4 hours ago',   mfa: true,  groups: ['Finance'],         devices: ['Windows Laptop'] },
-];
-
-// ─── Avatar initials ──────────────────────────────────────────────────────────
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-}
-
-const AVATAR_COLORS = ['#0071e3', '#34c759', '#ff9500', '#af52de', '#ff3b30', '#5ac8fa', '#30b0c7'];
-
-function avatarColor(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-}
-
-interface UserListColumnProps {
+interface Props {
+  users: DirectoryUser[];
+  total: number;
+  page: number;
   selectedId: string | null;
-  onSelect: (user: DirectoryUser) => void;
+  loading: boolean;
+  error: string;
+  search: string;
+  enabled: string;
+  onSelect: (id: string) => void;
+  onSearch: (value: string) => void;
+  onFilter: (value: string) => void;
+  onPage: (page: number) => void;
+  onReload: () => void;
   onCreateNew?: () => void;
 }
 
-export default function UserListColumn({ selectedId, onSelect, onCreateNew }: UserListColumnProps) {
-  const [users,    setUsers]    = useState<DirectoryUser[]>(MOCK_USERS);
-  const [search,   setSearch]   = useState('');
-  const [filter,   setFilter]   = useState<'all' | 'active' | 'inactive' | 'admin'>('all');
-  const [filterOpen, setFilterOpen] = useState(false);
-
-  const loadUsers = useCallback(async () => {
-    try {
-      const res = await api.get('/api/users').catch(() => api.get('/api/lldap/users'));
-      const raw = Array.isArray(res.data) ? res.data : res.data?.users ?? [];
-      if (raw.length > 0) {
-        setUsers(raw.map((u: any) => ({
-          id: u.id ?? u.username,
-          name: u.displayName ?? u.name ?? u.username ?? u.id,
-          email: u.email ?? '',
-          role: u.role ?? 'user',
-          department: u.department ?? u.ou,
-          status: u.status === 'inaktiv' ? 'inactive' : 'active',
-          lastActive: u.lastActive ?? u.last_active,
-          mfa: u.mfa ?? false,
-          groups: u.groups ?? [],
-          devices: u.devices ?? [],
-        })));
-      }
-    } catch {}
-  }, []);
-
-  useEffect(() => { loadUsers(); }, [loadUsers]);
-
-  useEffect(() => {
-    const handler = () => setFilterOpen(false);
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
-  }, []);
-
-  const filtered = users.filter(u => {
-    if (filter === 'active' && u.status !== 'active') return false;
-    if (filter === 'inactive' && u.status !== 'inactive') return false;
-    if (filter === 'admin' && u.role !== 'admin') return false;
-    const q = search.toLowerCase();
-    return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-  });
-
-  const FILTER_LABELS: Record<typeof filter, string> = { all: 'All', active: 'Active', inactive: 'Inactive', admin: 'Admins' };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-surface, #161b22)', borderRight: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
-      {/* Header */}
-      <div style={{ padding: '16px 16px 10px 16px', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)', margin: 0 }}>Users</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary, #8b949e)' }}>{filtered.length}</span>
-            {onCreateNew && (
-              <button
-                onClick={onCreateNew}
-                style={{
-                  width: 24, height: 24, borderRadius: '50%',
-                  background: '#006FFF', color: 'white',
-                  border: 'none', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 16, flexShrink: 0,
-                }}
-                title="New User"
-              >
-                +
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Search + Filter */}
-        <div style={{ display: 'flex', gap: 6 }}>
-          <input
-            type="text"
-            placeholder="Search users..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{
-              flex: 1, padding: '5px 10px',
-              border: '1px solid var(--border, rgba(255,255,255,0.07))',
-              borderRadius: 6, fontSize: 12, outline: 'none',
-              background: 'var(--bg-surface-raised, #1c2128)',
-              color: 'var(--text-primary, #e4e6ea)',
-            }}
-          />
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={e => { e.stopPropagation(); setFilterOpen(o => !o); }}
-              style={{
-                padding: '5px 10px', border: '1px solid var(--border, rgba(255,255,255,0.07))',
-                borderRadius: 6,
-                background: filter !== 'all' ? 'rgba(0,111,255,0.15)' : 'var(--bg-surface-raised, #1c2128)',
-                fontSize: 12, color: filter !== 'all' ? '#006FFF' : 'var(--text-secondary, #8b949e)',
-                cursor: 'pointer', fontWeight: 500,
-              }}
-            >
-              {FILTER_LABELS[filter]}
-            </button>
-            {filterOpen && (
-              <div
-                style={{
-                  position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 20,
-                  background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))',
-                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.4)', overflow: 'hidden', minWidth: 120,
-                }}
-                onClick={e => e.stopPropagation()}
-              >
-                {(Object.keys(FILTER_LABELS) as Array<typeof filter>).map(key => (
-                  <button
-                    key={key}
-                    onClick={() => { setFilter(key); setFilterOpen(false); }}
-                    style={{
-                      display: 'block', width: '100%', padding: '7px 12px', fontSize: 13,
-                      background: filter === key ? 'rgba(0,111,255,0.15)' : 'none',
-                      color: filter === key ? '#006FFF' : 'var(--text-primary, #e4e6ea)',
-                      border: 'none', cursor: 'pointer', textAlign: 'left',
-                    }}
-                    onMouseEnter={e => { if (filter !== key) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-                    onMouseLeave={e => { if (filter !== key) (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
-                  >
-                    {FILTER_LABELS[key]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+export default function UserListColumn(props: Props) {
+  return <section className="h-full flex flex-col" aria-label="Kanonische Benutzerliste" style={{ background: 'var(--bg-surface, #161b22)', color: 'var(--text-primary, #e4e6ea)' }}>
+    <div className="p-4 space-y-3 border-b border-white/10">
+      <div className="flex justify-between items-center"><h2 className="font-semibold">Benutzer</h2>
+        {props.onCreateNew && <button onClick={props.onCreateNew} className="rounded bg-blue-600 px-3 py-1 text-white" aria-label="Verzeichniseintrag erstellen">Neu</button>}
       </div>
-
-      {/* User list */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        {filtered.map(user => {
-          const isSelected = user.id === selectedId;
-          const color = avatarColor(user.id);
-          return (
-            <button
-              key={user.id}
-              onClick={() => onSelect(user)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                width: '100%', padding: '11px 16px',
-                background: isSelected ? '#006FFF' : 'transparent',
-                border: 'none',
-                borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))',
-                cursor: 'pointer', textAlign: 'left',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-              onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-            >
-              {/* Avatar */}
-              <div style={{
-                width: 34, height: 34, borderRadius: '50%',
-                background: isSelected ? 'rgba(255,255,255,0.25)' : color,
-                color: 'white', fontSize: 13, fontWeight: 700,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-              }}>
-                {getInitials(user.name)}
-              </div>
-
-              {/* Text */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: 13, fontWeight: 600,
-                  color: isSelected ? '#ffffff' : 'var(--text-primary, #e4e6ea)',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {user.name}
-                </div>
-                <div style={{
-                  fontSize: 11, marginTop: 2,
-                  color: isSelected ? 'rgba(255,255,255,0.75)' : 'var(--text-secondary, #8b949e)',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {user.email}
-                </div>
-              </div>
-
-              {/* Status dot */}
-              {!isSelected && (
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%',
-                  background: user.status === 'active' ? '#22c55e' : '#6e7681',
-                  flexShrink: 0,
-                }} />
-              )}
-            </button>
-          );
-        })}
-
-        {filtered.length === 0 && (
-          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted, #6e7681)', fontSize: 13 }}>
-            No users found.
-          </div>
-        )}
-      </div>
+      <label className="block text-xs">Suche<input className="mt-1 w-full rounded border p-2 bg-transparent" value={props.search} maxLength={255} onChange={event => props.onSearch(event.target.value)} placeholder="Name, Benutzername oder E-Mail" /></label>
+      <label className="block text-xs">Kontostatus<select className="mt-1 w-full rounded border p-2 bg-transparent" value={props.enabled} onChange={event => props.onFilter(event.target.value)}>
+        <option value="">Alle</option><option value="true">Freigegeben</option><option value="false">Gesperrt</option>
+      </select></label>
+      <button onClick={props.onReload} disabled={props.loading}>Neu laden</button>
     </div>
-  );
+    <div className="flex-1 overflow-y-auto">
+      {props.loading ? <p className="p-4" role="status">Benutzer werden geladen …</p> : props.error ? <p className="p-4" role="alert">{props.error}</p> :
+        props.users.length === 0 ? <p className="p-4" role="status">Keine Benutzer gefunden.</p> :
+          props.users.map(user => <button key={user.id} aria-label={`Benutzer ${user.username}`} aria-pressed={props.selectedId === user.id} onClick={() => props.onSelect(user.id)}
+            className={`w-full text-left p-4 border-b border-white/10 ${props.selectedId === user.id ? 'bg-blue-600 text-white' : ''}`}>
+            <span className="block font-semibold">{userName(user)}</span><span className="block text-xs">{user.email}</span>
+            <span className="block text-xs mt-1">{user.enabled ? 'Freigegeben' : 'Gesperrt'}</span>
+          </button>)}
+    </div>
+    <div className="p-3 border-t border-white/10 flex flex-wrap items-center gap-3 text-sm">
+      <button disabled={props.loading || props.page <= 1} onClick={() => props.onPage(props.page - 1)}>Zurück</button>
+      <span>{props.loading || props.error ? '…' : `${props.total} Einträge · Seite ${props.page}`}</span>
+      <button disabled={props.loading || !!props.error || props.page * 25 >= props.total} onClick={() => props.onPage(props.page + 1)}>Weiter</button>
+    </div>
+  </section>;
 }

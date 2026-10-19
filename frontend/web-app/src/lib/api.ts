@@ -1,32 +1,25 @@
 import axios from 'axios';
-import { getAccessToken } from './auth';
+import { ensureSession, getAccessToken } from './auth';
 
 // Empty string = relative URLs → requests go through Next.js rewrites (cluster-internal proxy)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+const API_BASE_URL = '';
 
 // Create axios instance with default configuration
 export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  withCredentials: true, // Send httpOnly auth cookie automatically
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor: attach the PKCE access token (localStorage, see
-// lib/auth.ts) as a Bearer header. Several backend services (e.g.
-// device-service) now require OIDC-authenticated requests, and the httpOnly
-// cookie sent via withCredentials is not sufficient for those. Mirrors the
-// manual buildHeaders() approach in lib/quickActionsApi.ts. Never throws if
-// there is no token or we're running outside the browser (SSR) — the header
-// is simply omitted and the request proceeds unauthenticated.
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
   if (typeof window !== 'undefined') {
-    const token = getAccessToken();
-    if (token) {
-      config.headers.set('Authorization', `Bearer ${token}`);
-    }
+    const base = new URL(config.baseURL || '/', window.location.origin);
+    if (new URL(config.url || '/', base).origin !== window.location.origin) throw new Error('Bearer requests must remain same-origin');
+    const token = getAccessToken() || (await ensureSession()).access_token;
+    config.headers.set('Authorization', `Bearer ${token}`);
   }
   return config;
 });
@@ -35,11 +28,6 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
-    }
     return Promise.reject(error);
   }
 );
@@ -666,7 +654,7 @@ export const aiApi = {
 };
 
 // Audit Log API (enterprise-directory service, port 3000)
-const DIRECTORY_BASE = process.env.NEXT_PUBLIC_DIRECTORY_URL || '';
+const DIRECTORY_BASE = '';
 
 export const auditApi = {
   getEvents: (params?: {
@@ -730,7 +718,7 @@ export const auditApi = {
 };
 
 // PIM Sessions API (conditional-access service, port 3007)
-const PIM_BASE = process.env.NEXT_PUBLIC_PIM_URL || '';
+const PIM_BASE = '';
 
 export const pimSessionsApi = {
   getSessions: () =>
@@ -756,7 +744,7 @@ export const pimSessionsApi = {
 };
 
 // Quick Actions API (port 3950)
-const QUICK_ACTIONS_BASE = process.env.NEXT_PUBLIC_QUICK_ACTIONS_URL || '';
+const QUICK_ACTIONS_BASE = '';
 
 export const quickActionsApi = {
   getComplianceSnapshot: () =>
@@ -853,7 +841,6 @@ export const appStoreApi = {
     api.post('/api/store/uninstall', data),
 };
 
-// Groups & Organisational Units API
 export const groupApi = {
   getGroups: () =>
     api.get('/api/groups'),
@@ -875,18 +862,6 @@ export const groupApi = {
 
   removeMember: (groupId: string, userId: string) =>
     api.delete(`/api/groups/${groupId}/members/${userId}`),
-
-  getOUs: () =>
-    api.get('/api/ous'),
-
-  createOU: (data: any) =>
-    api.post('/api/ous', data),
-
-  updateOU: (id: string, data: any) =>
-    api.put(`/api/ous/${id}`, data),
-
-  deleteOU: (id: string) =>
-    api.delete(`/api/ous/${id}`),
 };
 
 export default api;

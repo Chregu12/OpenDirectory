@@ -58,6 +58,9 @@ services:
     subscribes:
       - device.enrolled
       - device.non_compliant
+      - identity.user.deleted
+      - user.offboarded
+      - user.offboarding.incomplete
 
   monitoring-service:
     publishes:
@@ -96,13 +99,8 @@ services:
       - identity.group.created
 
   license-management:
-    publishes:
-      - license.assigned
-      - license.revoked
-      - license.expired
-    subscribes:
-      - identity.user.created
-      - identity.user.deleted
+    publishes: []
+    subscribes: []
 
   backup-service:
     publishes:

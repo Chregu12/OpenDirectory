@@ -7,6 +7,9 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest --forceExit",
+    "test:groups:integration": "node scripts/test-postgres.js",
+    "test:offboarding-access:integration": "node scripts/test-offboarding-access-postgres.js",
+    "authority:review": "node scripts/authority-review.js",
     "lint": "eslint src/"
   },
   "dependencies": {

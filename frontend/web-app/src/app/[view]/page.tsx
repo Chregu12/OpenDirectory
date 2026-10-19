@@ -3,19 +3,24 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { directoryUsers } from '@/lib/directoryUsers';
+import { ensureSession, SessionError } from '@/lib/auth';
 import UnifiLayout from '@/components/layout/UnifiLayout';
+import CompanyRegistrationReviewsView from '@/components/views/CompanyRegistrationReviewsView';
+import CompanyOffboardingAccessView from '@/components/views/CompanyOffboardingAccessView';
+import DeviceReturnsView from '@/components/views/DeviceReturnsView';
 
 // ─── Views ────────────────────────────────────────────────────────────────────
 import DashboardView from '@/components/views/DashboardView';
 import TopologyView from '@/components/views/TopologyView';
-import ApplicationsView from '@/components/views/ApplicationsView';
-import DevicesView from '@/components/views/DevicesView';
+import CompanyApplicationsView from '@/components/views/CompanyApplicationsView';
+import DevicesView from '@/components/views/DeviceInventoryView';
 import UsersView from '@/components/views/UsersView';
 import InfrastructureView from '@/components/views/InfrastructureView';
 import MonitoringView from '@/components/views/MonitoringView';
 import SecretsView from '@/components/views/SecretsView';
 import SettingsView from '@/components/views/SettingsView';
-import PolicyView from '@/components/views/PolicyView';
+import PolicyView from '@/components/views/PolicyGovernanceView';
 import SecurityView from '@/components/views/SecurityView';
 import PrintersView from '@/components/views/PrintersView';
 import IdentityProviderView from '@/components/views/IdentityProviderView';
@@ -27,7 +32,8 @@ import BackupView from '@/components/views/BackupView';
 import AppStoreView from '@/components/views/AppStoreView';
 import ComplianceView from '@/components/views/ComplianceView';
 import SecurityScannerView from '@/components/views/SecurityScannerView';
-import BlueprintsView from '@/components/views/BlueprintsView';
+import BlueprintsView from '@/components/views/BlueprintConfigurationView';
+import CompanyBlueprintsView from '@/components/views/CompanyBlueprintsView';
 import RoadmapView from '@/components/views/RoadmapView';
 import PIMView from '@/components/views/PIMView';
 import LicenseKioskView from '@/components/views/LicenseKioskView';
@@ -53,16 +59,15 @@ import ServicePrincipalsView from '@/components/views/ServicePrincipalsView';
 import SubscriptionView from '@/components/views/SubscriptionView';
 import ActivityView from '@/components/views/ActivityView';
 import LocationsView from '@/components/views/LocationsView';
+import OrganizationView from '@/components/views/OrganizationView';
 import UserGroupsView from '@/components/views/UserGroupsView';
 import RolesView from '@/components/views/RolesView';
 import AssignmentView from '@/components/views/AssignmentView';
 import AppsBooksView from '@/components/views/AppsBooksView';
-import GPOView from '@/components/views/GPOView';
 
 // Quick actions + wizards
 import QuickActionsBar from '@/components/views/QuickActionsBar';
 import EnrollmentWizard from '@/components/views/EnrollmentWizard';
-import UserOnboardingWizard from '@/components/views/UserOnboardingWizard';
 import ServicePrincipalWizard from '@/components/views/ServicePrincipalWizard';
 import PolicyDeployWizard from '@/components/views/PolicyDeployWizard';
 import ComplianceSnapshot from '@/components/views/ComplianceSnapshot';
@@ -102,7 +107,7 @@ const VALID_VIEWS = new Set([
   'users', 'monitoring', 'secrets', 'security', 'threats', 'printers', 'policies', 'settings',
   'identity', 'enrollment', 'permissions',
   'antivirus', 'audit', 'backup', 'appstore', 'compliance', 'scanner',
-  'blueprints', 'sync', 'integrations', 'roadmap', 'pim', 'licenses',
+  'blueprints', 'company-blueprints', 'sync', 'integrations', 'roadmap', 'pim', 'licenses',
   'mfa', 'sspr', 'conditionalaccess', 'alerting', 'certificates', 'radius', 'servicehealth',
   'ldap-schema',
   // ABM-style 3-column views
@@ -114,7 +119,7 @@ const VALID_VIEWS = new Set([
   // Graph Explorer + Policy Simulator
   'graph', 'simulator',
   // ABM×UniFi new views
-  'subscription', 'activity', 'locations', 'usergroups', 'roles',
+  'subscription', 'activity', 'locations', 'organization', 'registration-reviews', 'offboarding-access', 'device-returns', 'usergroups', 'roles',
   'assignment', 'appsbooks', 'gpo',
 ]);
 
@@ -158,23 +163,39 @@ export default function ViewPage() {
   const [enabledModules, setEnabledModules] = useState<string[]>(Object.keys(MODULE_NAV_MAP));
   const [currentUser,    setCurrentUser]    = useState<{ name: string; role: string } | null>(null);
   const [authChecked,    setAuthChecked]    = useState(false);
+  const [authError, setAuthError] = useState('');
   const [onboarded,      setOnboarded]      = useState(true);
+  const [companyOwner, setCompanyOwner] = useState<boolean | null>(null);
 
   // Wizard / panel open state
   const [showEnrollWizard,  setShowEnrollWizard]  = useState(false);
-  const [showUserWizard,    setShowUserWizard]    = useState(false);
   const [showSPWizard,      setShowSPWizard]      = useState(false);
   const [showPolicyWizard,  setShowPolicyWizard]  = useState(false);
   const [showCompliance,    setShowCompliance]    = useState(false);
 
   useEffect(() => {
-    const stored = typeof window !== 'undefined' ? localStorage.getItem('auth_user') : null;
-    if (!stored) { router.push('/login'); return; }
-    try { setCurrentUser(JSON.parse(stored)); } catch { router.push('/login'); return; }
-    // Check onboarding
-    const od = typeof window !== 'undefined' ? localStorage.getItem('od_onboarded') : 'true';
-    setOnboarded(!!od);
-    setAuthChecked(true);
+    let mounted = true;
+    const failed = (error: SessionError) => {
+      if (!mounted) return;
+      setAuthChecked(false); setCurrentUser(null); setAuthError(error.message);
+      if (error.status === 401) router.replace('/login');
+    };
+    const check = () => ensureSession(true).then(session => {
+      if (!mounted) return;
+      setCurrentUser(session.user); setOnboarded(!!localStorage.getItem('od_onboarded'));
+      setAuthError(''); setAuthChecked(true);
+    }).catch(failed);
+    const onError = (event: Event) => failed((event as CustomEvent<SessionError>).detail);
+    const onVisibility = () => { if (document.visibilityState === 'visible') void check(); };
+    void check();
+    const timer = window.setInterval(check, 30000);
+    window.addEventListener('od:session-error', onError);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      mounted = false; window.clearInterval(timer);
+      window.removeEventListener('od:session-error', onError);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [router]);
 
   useEffect(() => {
@@ -187,6 +208,15 @@ export default function ViewPage() {
       })
       .catch(() => {});
   }, [authChecked]);
+
+  useEffect(() => {
+    let active = true;
+    if (authChecked && !onboarded) {
+      setCompanyOwner(null);
+      directoryUsers.access().then(access => { if (active) setCompanyOwner(access.companyOwner === true); }).catch(() => { if (active) setCompanyOwner(false); });
+    }
+    return () => { active = false; };
+  }, [authChecked, onboarded]);
 
   // Update document title based on active view
   useEffect(() => {
@@ -204,7 +234,7 @@ export default function ViewPage() {
 
   const quickActionsProps = {
     onEnrollDevice:       () => setShowEnrollWizard(true),
-    onNewUser:            () => setShowUserWizard(true),
+    onNewUser:            () => router.push('/users'),
     onServicePrincipal:   () => setShowSPWizard(true),
     onDeployPolicy:       () => setShowPolicyWizard(true),
     onComplianceSnapshot: () => setShowCompliance(true),
@@ -221,7 +251,7 @@ export default function ViewPage() {
         case 'serviceprincipals':
           return <ServicePrincipalsView onCreateNew={() => setShowSPWizard(true)} />;
         case 'users':
-          return <UsersView onCreateNew={() => setShowUserWizard(true)} />;
+          return <UsersView />;
       }
     }
 
@@ -231,7 +261,7 @@ export default function ViewPage() {
         case 'dashboard':         return <DashboardView />;
         case 'topology':          return <TopologyView />;
         case 'devices':           return <DevicesView />;
-        case 'applications':      return <ApplicationsView />;
+        case 'applications':      return <CompanyApplicationsView />;
         case 'infrastructure':    return <InfrastructureView />;
         case 'monitoring':        return <MonitoringView />;
         case 'secrets':           return <SecretsView />;
@@ -250,6 +280,7 @@ export default function ViewPage() {
         case 'compliance':        return <ComplianceView />;
         case 'scanner':           return <SecurityScannerView />;
         case 'blueprints':        return <BlueprintsView />;
+        case 'company-blueprints': return <CompanyBlueprintsView />;
         case 'sync':              return <SyncView />;
         case 'integrations':      return <IntegrationsView />;
         case 'roadmap':           return <RoadmapView onViewChange={handleViewChange} />;
@@ -271,11 +302,15 @@ export default function ViewPage() {
         case 'subscription':      return <SubscriptionView />;
         case 'activity':          return <ActivityView />;
         case 'locations':         return <LocationsView />;
+        case 'organization':      return <OrganizationView />;
+        case 'registration-reviews': return <CompanyRegistrationReviewsView />;
         case 'usergroups':        return <UserGroupsView />;
         case 'roles':             return <RolesView />;
+        case 'offboarding-access': return <CompanyOffboardingAccessView />;
+        case 'device-returns': return <DeviceReturnsView />;
         case 'assignment':        return <AssignmentView />;
         case 'appsbooks':         return <AppsBooksView />;
-        case 'gpo':               return <GPOView />;
+        case 'gpo':               return <PolicyView />;
         case 'settings':
           return (
             <div className="p-6">
@@ -294,10 +329,11 @@ export default function ViewPage() {
     );
   };
 
-  if (!authChecked) return null;
+  if (!authChecked) return <main className="p-8" role="status">{authError || 'Sitzung wird geprüft …'}</main>;
 
   // Show onboarding wizard overlay when not yet onboarded (except on settings page)
-  if (!onboarded && activeView !== 'settings') {
+  if (!onboarded && activeView !== 'settings' && activeView !== 'offboarding-access' && activeView !== 'device-returns' && companyOwner === null) return <main className="p-8" role="status">Firmen-Onboarding wird geprüft …</main>;
+  if (!onboarded && activeView !== 'settings' && activeView !== 'offboarding-access' && activeView !== 'device-returns' && !companyOwner) {
     return <OnboardingWizard />;
   }
 
@@ -313,9 +349,6 @@ export default function ViewPage() {
       {/* ── Wizard overlays ─────────────────────────────────────────────────── */}
       {showEnrollWizard && (
         <EnrollmentWizard onClose={() => setShowEnrollWizard(false)} />
-      )}
-      {showUserWizard && (
-        <UserOnboardingWizard onClose={() => setShowUserWizard(false)} />
       )}
       {showSPWizard && (
         <ServicePrincipalWizard onClose={() => setShowSPWizard(false)} />

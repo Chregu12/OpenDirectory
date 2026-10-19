@@ -115,16 +115,49 @@ services:
   # Core Services (from /services/core)
   # ===================
   
+  quick-actions:
+    profiles: [delegated-orchestration]
+    build:
+      context: .
+      dockerfile: services/platform/quick-actions/Dockerfile
+    environment:
+      - NODE_ENV=production
+      - PORT=3950
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - OIDC_AUDIENCE=${OAUTH_API_AUDIENCE:-opendirectory-api}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
+      - OIDC_ACCESS_STATE_URL=http://oauth-provider:3010/oauth/access-state
+      - AUTH_SERVICE_URL=${QUICK_ACTIONS_AUTH_URL:-http://auth-service:3002}
+      - DIRECTORY_SERVICE_URL=${QUICK_ACTIONS_DIRECTORY_URL:-http://enterprise-directory}
+      - KERBEROS_SERVICE_URL=${QUICK_ACTIONS_KERBEROS_URL:-http://kerberos-kdc:3013}
+      - SAMBA_SERVICE_URL=${QUICK_ACTIONS_SAMBA_URL:-http://samba-ad-dc:3010}
+      - DEVICE_SERVICE_URL=${QUICK_ACTIONS_DEVICE_URL:-http://device-service:3003}
+      - POLICY_SERVICE_URL=${QUICK_ACTIONS_POLICY_URL:-http://policy-service:3004}
+      - PIM_SERVICE_URL=${QUICK_ACTIONS_PIM_URL:-http://conditional-access}
+      - MDM_SERVICE_URL=${QUICK_ACTIONS_MDM_URL:-http://mobile-management}
+      - APP_STORE_SERVICE_URL=${QUICK_ACTIONS_APP_STORE_URL:-http://app-store}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+    ports:
+      - "127.0.0.1:${QUICK_ACTIONS_PORT:-3950}:3950"
+    networks: [opendirectory]
+    depends_on: [oauth-provider, identity-service]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
   identity-service:
     build:
-      context: ./services/core/identity-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/core/identity-service/Dockerfile
     container_name: od-identity-service
     restart: unless-stopped
     environment:
+      - IDENTITY_DEMO_MODE=${IDENTITY_DEMO_MODE:-false}
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3001
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/identity
+      - OIDC_TENANT_STATE_URL=http://oauth-provider:3010/oauth/tenant-state
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}@rabbitmq:5672
       # OIDC token verification (oidcAuth middleware, added alongside DB
@@ -133,7 +166,9 @@ services:
       # since that's just where the JWKS happens to be served from — same
       # convention as device-service/samba-ad-dc above.
       - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - OIDC_AUDIENCE=${OAUTH_API_AUDIENCE:-opendirectory-api}
       - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
+      - OIDC_ACCESS_STATE_URL=http://oauth-provider:3010/oauth/access-state
     ports:
       - "3001:3001"
     networks:
@@ -193,14 +228,30 @@ services:
 
   oauth-provider:
     build:
-      context: ./services/core/oauth-provider
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/core/oauth-provider/Dockerfile
     container_name: od-oauth-provider
+    user: "${OAUTH_SERVICE_UID:-1000}:${OAUTH_SERVICE_GID:-1000}"
     restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - OAUTH_PROVIDER_PORT=3010
+      - AUTH_SERVICE_URL=http://auth-service:3002
       - OAUTH_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - OAUTH_API_AUDIENCE=${OAUTH_API_AUDIENCE:-opendirectory-api}
+      - OAUTH_IDENTITY_AUTHORITY_URL=${OAUTH_IDENTITY_AUTHORITY_URL:-http://identity-service:3001/internal/identity/authorization-state}
+      - COMPANY_REGISTRATION_ENABLED=${COMPANY_REGISTRATION_ENABLED:-false}
+      - COMPANY_ACTIVATION_ENABLED=${COMPANY_ACTIVATION_ENABLED:-false}
+      - COMPANY_CONSOLE_CLIENT_ID=${COMPANY_CONSOLE_CLIENT_ID:-web-app}
+      - OAUTH_POLICY_SOURCE_URL=${OAUTH_POLICY_SOURCE_URL:-http://policy-service:3004}
+      - OAUTH_SIGNING_KEY_FILE=/run/opendirectory/oauth-signing.pem
+      - OAUTH_MFA_KEY_FILE=/run/opendirectory/mfa-encryption.key
+      - OAUTH_VERIFICATION_JWKS_FILE=/run/opendirectory/oauth-verification.jwks.json
+      - OAUTH_EPHEMERAL_SIGNING_KEYS=false
+      - OAUTH_WEB_CLIENT_ID=${BROWSER_AUTH_CLIENT_ID:-web-app}
+      - OAUTH_WEB_CLIENT_SECRET_FILE=/run/opendirectory/web-client.secret
+      - OAUTH_WEB_REDIRECT_URIS=${OAUTH_WEB_REDIRECT_URIS:-["https://opendirectory.local/auth/callback"]}
+      - OAUTH_WEB_ALLOW_HTTP_LOOPBACK=${BROWSER_AUTH_ALLOW_HTTP_LOOPBACK:-false}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/oauth
@@ -221,7 +272,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3010/health', response => process.exit(response.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -229,19 +280,40 @@ services:
     volumes:
       - ./services/core/oauth-provider:/app
       - /app/node_modules
+      - type: bind
+        source: ${OAUTH_SIGNING_KEY_HOST_FILE:-./secrets/oauth-signing/active.pem}
+        target: /run/opendirectory/oauth-signing.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OAUTH_MFA_KEY_HOST_FILE:-./secrets/oauth-signing/mfa-encryption.key}
+        target: /run/opendirectory/mfa-encryption.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OAUTH_VERIFICATION_JWKS_HOST_FILE:-./secrets/oauth-signing/verification.jwks.json}
+        target: /run/opendirectory/oauth-verification.jwks.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OAUTH_WEB_CLIENT_SECRET_HOST_FILE:-./secrets/oauth-signing/web-client.secret}
+        target: /run/opendirectory/web-client.secret
+        read_only: true
+        bind:
+          create_host_path: false
 
   device-service:
     build:
-      context: ./services/core/device-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/core/device-service/Dockerfile
     container_name: od-device-service
     restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3003
-      - MONGODB_URL=mongodb://opendirectory:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongodb:27017/devices
-      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
-      - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}@rabbitmq:5672
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=devices
@@ -252,24 +324,16 @@ services:
       # host:port, since that's just where the JWKS happens to be served from.
       - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
       - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
-      # Shared enrollment secret (X-Enrollment-Token) — samba-ad-dc attaches
-      # this header when calling device-service's enrollment endpoints.
-      - DEVICE_ENROLLMENT_TOKEN=${DEVICE_ENROLLMENT_TOKEN:-}
-      # Appended (agent_token query param) to the app-store download URL
-      # device-service builds for agents (see src/index.js); must match
-      # APPSTORE_AGENT_TOKEN on the app-store service above.
-      - APPSTORE_AGENT_TOKEN=${APPSTORE_AGENT_TOKEN:-}
+      - OIDC_ACCESS_STATE_URL=http://oauth-provider:3010/oauth/access-state
+      - IDENTITY_SERVICE_URL=http://identity-service:3001
     ports:
       - "3003:3003"
     networks:
       - opendirectory
     depends_on:
-      - mongodb
-      - redis
-      - rabbitmq
       - postgres
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3003/health',response=>process.exit(response.statusCode===200?0:1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -285,8 +349,8 @@ services:
 
   policy-service:
     build:
-      context: ./services/core/policy-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/core/policy-service/Dockerfile
     container_name: od-policy-service
     restart: unless-stopped
     environment:
@@ -295,10 +359,16 @@ services:
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/policy
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - DEVICE_SERVICE_URL=http://device-service:3003
-      # Sent as x-oauth-internal-token on outbound GPO/blueprint-push calls
-      # to oauth-provider (see src/index.js); must match
-      # OAUTH_PROVIDER_INTERNAL_TOKEN on the oauth-provider service above.
-      - OAUTH_PROVIDER_INTERNAL_TOKEN=${OAUTH_PROVIDER_INTERNAL_TOKEN:-}
+      - LICENSE_DEMO_MODE=${LICENSE_DEMO_MODE:-false}
+      - IDENTITY_SERVICE_URL=http://identity-service:3001
+      - LICENSE_GROUP_READ_TOKEN=${LICENSE_GROUP_READ_TOKEN:-}
+      - LICENSE_SOURCE_CONFIG_FILE=${LICENSE_SOURCE_CONFIG_FILE:-}
+      - LICENSE_USER_READ_TOKEN=${LICENSE_USER_READ_TOKEN:-}
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - OIDC_AUDIENCE=${OAUTH_API_AUDIENCE:-opendirectory-api}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
+      - OIDC_ACCESS_STATE_URL=http://oauth-provider:3010/oauth/access-state
+      - OAUTH_PROVIDER_URL=http://oauth-provider:3010
     ports:
       - "3004:3004"
     networks:
@@ -357,10 +427,93 @@ services:
   # Platform Services
   # ===================
   
+  license-fulfillment:
+    profiles: [license-fulfillment]
+    build:
+      context: .
+      dockerfile: services/core/policy-service/Dockerfile
+    user: "${LICENSE_FULFILLMENT_UID:-1000}:${LICENSE_FULFILLMENT_GID:-1000}"
+    command: [node, scripts/license-fulfillment-worker.js]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${LICENSE_FULFILLMENT_DATABASE_URL:-}
+      - PG_POOL_MAX=4
+      - LICENSE_FULFILLMENT_CONFIG_FILE=/run/opendirectory/license-fulfillment.json
+    volumes:
+      - type: bind
+        source: ${LICENSE_FULFILLMENT_CONFIG_HOST_FILE:-./secrets/license-fulfillment.json}
+        target: /run/opendirectory/license-fulfillment.json
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      disable: true
+    networks: [opendirectory]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      policy-service:
+        condition: service_started
+    restart: unless-stopped
+
+  license-capacity:
+    profiles: [license-capacity]
+    build:
+      context: .
+      dockerfile: services/core/policy-service/Dockerfile
+    user: "${LICENSE_CAPACITY_UID:-1000}:${LICENSE_CAPACITY_GID:-1000}"
+    command: [node, scripts/license-capacity-observer.js]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${LICENSE_CAPACITY_DATABASE_URL:-}
+      - PG_POOL_MAX=3
+      - LICENSE_CAPACITY_CONFIG_FILE=/run/opendirectory/license-capacity.json
+    volumes:
+      - type: bind
+        source: ${LICENSE_CAPACITY_CONFIG_HOST_FILE:-./secrets/license-capacity.json}
+        target: /run/opendirectory/license-capacity.json
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      disable: true
+    networks: [opendirectory]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      policy-service:
+        condition: service_started
+    restart: unless-stopped
+
+  license-management:
+    profiles: [license-compat]
+    build:
+      context: ./services/core/license-management
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - LICENSE_SERVICE_PORT=3018
+      - POLICY_SERVICE_URL=http://policy-service:3004
+      - CORS_ORIGINS=${CORS_ORIGIN:-http://localhost:3000}
+    ports:
+      - "127.0.0.1:3018:3018"
+    networks:
+      - opendirectory
+    depends_on:
+      - policy-service
+
   api-gateway:
     build:
-      context: ./services/core/api-gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/core/api-gateway/Dockerfile
     container_name: od-api-gateway
     restart: unless-stopped
     environment:
@@ -381,6 +534,13 @@ services:
       - INTEGRATION_HUB_GRAPHQL_PORT=3001
       - LOG_LEVEL=info
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001}
+      - POLICY_SERVICE_URL=http://policy-service:3004
+      - LICENSE_ADAPTER_URL=http://license-management:3018
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - OIDC_AUDIENCE=${OAUTH_API_AUDIENCE:-opendirectory-api}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
+      - OIDC_ACCESS_STATE_URL=http://oauth-provider:3010/oauth/access-state
+      - GATEWAY_WEBHOOK_ALLOWED_ORIGINS=${GATEWAY_WEBHOOK_ALLOWED_ORIGINS:-}
     ports:
       # Host port moved from 3010 -> 3016: 3010 collided with samba-ad-dc's
       # REST API (also mapped to host 3010 below). Nothing depends on
@@ -635,12 +795,21 @@ services:
 
   web-app:
     build:
-      context: ./frontend/web-app
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/web-app/Dockerfile
     container_name: od-web-app
+    user: "${WEB_SERVICE_UID:-1001}:${WEB_SERVICE_GID:-1001}"
     restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - BROWSER_AUTH_ORIGIN=${BROWSER_AUTH_ORIGIN:-https://opendirectory.local}
+      - BROWSER_AUTH_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - BROWSER_AUTH_PUBLIC_URL=${BROWSER_AUTH_PUBLIC_URL:-https://opendirectory.local}
+      - BROWSER_AUTH_INTERNAL_URL=http://oauth-provider:3010
+      - BROWSER_AUTH_API_AUDIENCE=${OAUTH_API_AUDIENCE:-opendirectory-api}
+      - BROWSER_AUTH_CLIENT_ID=${BROWSER_AUTH_CLIENT_ID:-web-app}
+      - BROWSER_AUTH_KEY_FILE=/run/opendirectory/browser-cookie.key
+      - BROWSER_AUTH_CLIENT_SECRET_FILE=/run/opendirectory/web-client.secret
+      - BROWSER_AUTH_ALLOW_HTTP_LOOPBACK=${BROWSER_AUTH_ALLOW_HTTP_LOOPBACK:-false}
       - NEXT_PUBLIC_WS_URL=ws://localhost:8080
       - NEXT_PUBLIC_AD_DOMAIN=${AD_DOMAIN:-opendirectory.local}
       - NEXT_PUBLIC_APP_URL=${APP_URL:-https://opendirectory.heusser.local}
@@ -648,6 +817,9 @@ services:
       - INTEGRATION_SERVICE_URL=http://integration-service:4000
       - PRINTER_SERVICE_URL=http://printer-service:3006
       - APP_STORE_URL=http://app-store:3906
+      - CORE_GATEWAY_URL=http://api-gateway:8080
+      - POLICY_SERVICE_URL=http://policy-service:3004
+      - LICENSE_ADAPTER_URL=http://license-management:3018
     ports:
       - "3000:3000"
     networks:
@@ -662,7 +834,19 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    # No source mounts — the Dockerfile builds the app into the image.
+    volumes:
+      - type: bind
+        source: ${BROWSER_AUTH_KEY_HOST_FILE:-./secrets/browser-auth/cookie.key}
+        target: /run/opendirectory/browser-cookie.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${BROWSER_AUTH_CLIENT_SECRET_HOST_FILE:-./secrets/browser-auth/client.secret}
+        target: /run/opendirectory/web-client.secret
+        read_only: true
+        bind:
+          create_host_path: false
 
 
   # ===================

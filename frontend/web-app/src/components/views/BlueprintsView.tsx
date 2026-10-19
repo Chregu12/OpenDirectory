@@ -583,7 +583,7 @@ export default function BlueprintsView() {
       // Refresh statuses
       fetchApplyStatuses(blueprints);
     } catch {
-      toast.error('Blueprint konnte nicht angewendet werden');
+      toast.error('Zustellung nicht vollständig bestätigt; bereits vorgemerkte Befehle möglich. Status prüfen, nicht blind wiederholen.');
     } finally {
       setMdmApplying(false);
     }
@@ -756,10 +756,11 @@ export default function BlueprintsView() {
     setApplying(true);
     try {
       const res = await api.post(`/api/blueprints/${selectedBlueprint.id}/apply`, {});
-      const data = res.data as { assignmentsTargeted: number; configsApplied: number };
-      toast.success(`Blueprint angewendet auf ${data.assignmentsTargeted} Ziel(e) mit ${data.configsApplied} Konfiguration(en)`);
+      const data = res.data as { assignmentsTargeted: number; commandsQueued: number; phase: string; enforcementConfirmed: boolean };
+      if (data.phase !== 'queued' || data.enforcementConfirmed !== false) throw new Error('Unconfirmed blueprint receipt');
+      toast.success(`Blueprint-Zustellung vorgemerkt: ${data.assignmentsTargeted} Ziel(e). Geräteausführung noch nicht bestätigt.`);
     } catch {
-      toast.error('Blueprint konnte nicht angewendet werden');
+      toast.error('Zustellung nicht vollständig bestätigt; bereits vorgemerkte Befehle möglich. Status prüfen, nicht blind wiederholen.');
     } finally {
       setApplying(false);
     }

@@ -22,7 +22,15 @@ import {
 } from '@heroicons/react/24/outline';
 import { ShoppingBagIcon as ShoppingBagSolid } from '@heroicons/react/24/solid';
 import { api } from '@/lib/api';
+import LicenseGrantRevokeDialog from './LicenseGrantRevokeDialog';
+import LicenseReviewsView from './LicenseReviewsView';
+import LicenseDelegationsView from './LicenseDelegationsView';
+import LicenseScopeActivationsView from './LicenseScopeActivationsView';
+import LicenseScopePoliciesView from './LicenseScopePoliciesView';
+import LicenseScopeReviewsView from './LicenseScopeReviewsView';
+import LicenseSourceGrantsView from './LicenseSourceGrantsView';
 import toast from 'react-hot-toast';
+import LicenseFulfillmentView from './LicenseFulfillmentView';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,8 +42,8 @@ interface License {
   license_type: 'per_user' | 'per_device' | 'concurrent' | 'subscription';
   total_seats: number;
   used_seats: number;
-  cost_per_seat: number;
-  currency: string;
+  cost_per_seat?: number | string | null;
+  currency?: string;
   renewal_date?: string;
   auto_approve: boolean;
   description?: string;
@@ -53,13 +61,59 @@ interface LicenseRequest {
   assignee_id?: string;
   assignee_name?: string;
   justification?: string;
-  status: 'pending' | 'approved' | 'denied';
+  status: 'pending' | 'approved' | 'denied' | 'cancelled';
+  allocation_status?: string;
+  identity_bound?: boolean;
   requested_at: string;
   decided_at?: string;
   decided_by?: string;
 }
 
 type Tab = 'kiosk' | 'verwaltung' | 'anfragen';
+
+interface LicenseAccess {
+  subject: string | null;
+  identityState: 'active' | 'unlinked' | 'disabled' | 'unavailable';
+  permissions: string[];
+  demoMode: boolean;
+  groupReconciliationEnabled?: boolean;
+  userReconciliationEnabled?: boolean;
+  groupReconciliationMode?: 'client-credentials'|'static-bearer'|'disabled';
+}
+
+interface LicenseUserState {
+  user_id: string;
+  disabled: boolean;
+  directory_revision?: string;
+  directory_enabled: boolean | null;
+  directory_deleted: boolean | null;
+  directory_checked_at?: string;
+  directory_error?: string;
+}
+
+interface LicenseGroupRule {
+  license_id: string;
+  grant_id?: string;
+  group_id: string;
+  group_name?: string;
+  license_name: string;
+  status: string;
+  last_error?: string;
+  assigned_users: number;
+  desired_users: number;
+  source_revision?: string;
+  last_synced_at?: string;
+  directory_observed_at?: string | null;
+  directory_valid_until?: string | null;
+  membership_valid_until?: string | null;
+  source_authorization_valid_until?: string | null;
+}
+
+const GROUP_STATUS: Record<string, string> = {
+  active: 'Aktiv', pending: 'Abgleich ausstehend', 'capacity-blocked': 'Kapazität fehlt', revoked: 'Entzogen', deleted: 'Gruppe gelöscht', expired: 'Abgelaufen', 'review-expired': 'Prüffrist abgelaufen',
+  'directory-unobserved': 'Verzeichnisnachweis fehlt', 'directory-stale': 'Verzeichnisnachweis abgelaufen', 'membership-expired': 'Mitgliedschaftsfrist abgelaufen',
+  'source-consent-expired':'Service-Lesefreigabe abgelaufen',
+};
 
 const CATEGORY_COLORS: Record<string, { color: string; background: string }> = {
   'Productivity': { color: 'var(--accent)',   background: 'var(--accent-light)' },
@@ -82,8 +136,8 @@ function fmtDate(s?: string) {
   return new Date(s).toLocaleDateString('de-CH');
 }
 
-function fmtCHF(amount: number, currency = 'CHF') {
-  return `${currency} ${amount.toFixed(2)}`;
+function fmtCHF(amount: number | string | null | undefined, currency = 'CHF') {
+  return `${currency} ${Number(amount ?? 0).toFixed(2)}`;
 }
 
 function seatsColor(used: number, total: number) {
@@ -96,8 +150,9 @@ function seatsColor(used: number, total: number) {
 
 // ─── Request Modal ────────────────────────────────────────────────────────────
 
-function RequestModal({ license, onClose, onSubmitted }: {
+function RequestModal({ license, canRequestForOthers, onClose, onSubmitted }: {
   license: License;
+  canRequestForOthers: boolean;
   onClose: () => void;
   onSubmitted: () => void;
 }) {
@@ -106,8 +161,6 @@ function RequestModal({ license, onClose, onSubmitted }: {
     assignee_id: '',
     assignee_name: '',
     justification: '',
-    requester_id: 'current-user',
-    requester_name: 'Aktueller Benutzer',
   });
   const [submitting, setSubmitting] = useState(false);
   const available = license.total_seats - license.used_seats;
@@ -119,8 +172,9 @@ function RequestModal({ license, onClose, onSubmitted }: {
     }
     setSubmitting(true);
     try {
-      await api.post(`/api/licenses/${license.id}/request`, form);
-      toast.success(license.auto_approve ? 'Lizenz sofort zugewiesen!' : 'Anfrage eingereicht — wartet auf Genehmigung');
+      const payload = canRequestForOthers ? form : { justification: form.justification };
+      const response = await api.post(`/api/licenses/${license.id}/request`, payload);
+      toast.success(response.data?.allocation_status === 'capacity-blocked' ? 'Anfrage genehmigt; Gruppenvergabe wartet auf Kapazität' : response.data?.status === 'approved' ? 'Lizenz sofort zugewiesen!' : 'Anfrage eingereicht — wartet auf Genehmigung');
       onSubmitted();
       onClose();
     } catch (err: any) {
@@ -136,23 +190,24 @@ function RequestModal({ license, onClose, onSubmitted }: {
         <div className="flex items-center justify-between px-6 pt-5 pb-0">
           <div>
             <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{license.name} bestellen</h2>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{license.vendor} · {fmtCHF(license.cost_per_seat, license.currency)}/Lizenz</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{license.vendor}</p>
           </div>
           <button onClick={onClose}><XMarkIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} /></button>
         </div>
         <div className="p-6 space-y-4">
-          {available <= 0 && (
+          {license.total_seats > 0 && available <= 0 && (
             <div className="flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: 'var(--danger-light)', border: '1px solid var(--danger)' }}>
               <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--danger)' }} />
               <p className="text-sm" style={{ color: 'var(--danger)' }}>Keine Lizenzen verfügbar — Anfrage trotzdem möglich</p>
             </div>
           )}
-          {license.auto_approve && (
+          {license.auto_approve && (license.total_seats === 0 || available > 0) && (
             <div className="flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: 'var(--success-light)', border: '1px solid var(--success)' }}>
               <CheckCircleIcon className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--success)' }} />
               <p className="text-sm" style={{ color: 'var(--success)' }}>Wird sofort zugewiesen — keine Genehmigung nötig</p>
             </div>
           )}
+          {canRequestForOthers ? <>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Für wen?</label>
             <div className="flex gap-2">
@@ -182,6 +237,7 @@ function RequestModal({ license, onClose, onSubmitted }: {
                 placeholder="Anna Meier" className="input-apple w-full" />
             </div>
           </div>
+          </> : <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Die Lizenz wird für dein angemeldetes Benutzerkonto beantragt.</p>}
           {!license.auto_approve && (
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Begründung</label>
@@ -327,16 +383,64 @@ export default function LicenseKioskView() {
   const [orderLicense, setOrderLicense]   = useState<License | null>(null);
   const [editLicense, setEditLicense]     = useState<License | undefined>();
   const [showLicForm, setShowLicForm]     = useState(false);
+  const [access, setAccess]       = useState<LicenseAccess | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [groupRules, setGroupRules] = useState<LicenseGroupRule[]>([]);
+  const [grantToRevoke, setGrantToRevoke] = useState<{ licenseId: string; grantId: string } | null>(null);
+  const [groupError, setGroupError] = useState('');
+  const [userStates, setUserStates] = useState<LicenseUserState[]>([]);
+  const [userStateError, setUserStateError] = useState('');
+  const canSelfService = access?.identityState === 'active';
+  const canReadCatalog = access?.permissions.includes('licenses.catalog.read') ?? false;
+  const canManageCatalog = access?.permissions.includes('licenses.catalog.manage') ?? false;
+  const canReviewRequests = access?.permissions.includes('licenses.requests.review') ?? false;
+  const canRequestForOthers = access?.permissions.includes('licenses.requests.delegate') ?? false;
+  const canReadAssignments = access?.permissions.includes('licenses.assignments.read') ?? false;
+  const canManageAssignments = access?.permissions.includes('licenses.assignments.manage') ?? false;
+  useEffect(() => { if (!canManageAssignments) setGrantToRevoke(null); }, [canManageAssignments]);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
+    setGroupError('');
+    setUserStateError('');
     try {
-      const [licRes, reqRes] = await Promise.allSettled([
-        api.get('/api/licenses'),
-        api.get('/api/licenses/requests'),
+      const accessResponse = await api.get<LicenseAccess>('/api/licenses/access');
+      const nextAccess = { ...accessResponse.data, permissions: accessResponse.data.identityState === 'active' ? accessResponse.data.permissions : [] };
+      setAccess(nextAccess);
+      if (nextAccess.identityState !== 'active') {
+        setOrderLicense(null);
+        setShowLicForm(false);
+      }
+      if (!nextAccess.permissions.includes('licenses.catalog.read')) {
+        setTab(current => current === 'verwaltung' ? 'kiosk' : current);
+      }
+      const [licRes, reqRes, groupRes, userRes] = await Promise.all([
+        api.get(nextAccess.permissions.includes('licenses.catalog.read') ? '/api/licenses' : '/api/licenses/kiosk'),
+        nextAccess.identityState === 'active' ? api.get('/api/licenses/requests') : Promise.resolve({ data: { requests: [] } }),
+        nextAccess.permissions.includes('licenses.assignments.read') ? api.get('/api/licenses/groups').catch(() => {
+          setGroupError('Gruppenregeln konnten nicht geladen werden.');
+          return { data: { groups: [] } };
+        }) : Promise.resolve({ data: { groups: [] } }),
+        nextAccess.permissions.includes('licenses.assignments.read') ? api.get('/api/licenses/users').catch(() => {
+          setUserStateError('Kontostände konnten nicht geladen werden.');
+          return { data: { users: [] } };
+        }) : Promise.resolve({ data: { users: [] } }),
       ]);
-      if (licRes.status === 'fulfilled') setLicenses(licRes.value.data?.data ?? licRes.value.data ?? []);
-      if (reqRes.status === 'fulfilled') setRequests(reqRes.value.data?.data ?? reqRes.value.data ?? []);
+      setLicenses(licRes.data?.licenses ?? []);
+      setRequests(reqRes.data?.requests ?? []);
+      setGroupRules(groupRes.data?.groups ?? []);
+      setUserStates(userRes.data?.users ?? []);
+    } catch {
+      setAccess(null);
+      setLicenses([]);
+      setRequests([]);
+      setGroupRules([]);
+      setUserStates([]);
+      setTab('kiosk');
+      setOrderLicense(null);
+      setShowLicForm(false);
+      setLoadError('Lizenzdaten konnten nicht geladen werden. Bitte erneut versuchen.');
     } finally {
       setLoading(false);
     }
@@ -344,20 +448,51 @@ export default function LicenseKioskView() {
 
   useEffect(() => { load(); }, [load]);
 
-  const approveLicReq = async (id: string) => {
-    await api.post(`/api/licenses/requests/${id}/approve`);
-    toast.success('Lizenz zugewiesen');
-    load();
+  const reconcileUser = async (userId: string) => {
+    try {
+      const result = await api.post(`/api/licenses/users/${userId}/reconcile`);
+      toast.success(`Kontostand abgeglichen: ${result.data.assignmentsRevoked || 0} lokale Zuweisungen entzogen`);
+      await load();
+    } catch { toast.error('Kontostand konnte nicht abgeglichen werden.'); await load(); }
   };
+
+  const approveLicReq = async (id: string) => {
+    try {
+      const result = await api.post(`/api/licenses/requests/${id}/approve`);
+      toast.success(result.data?.allocation_status === 'capacity-blocked' ? 'Anfrage genehmigt; Gruppenvergabe wartet auf Kapazität' : 'Lizenz zugewiesen');
+      load();
+    } catch {
+      toast.error('Anfrage konnte nicht genehmigt werden');
+      load();
+    }
+  };
+
+  const reconcileGroup = async (rule: LicenseGroupRule) => {
+    try {
+      const result = await api.post(`/api/licenses/${encodeURIComponent(rule.license_id)}/groups/${encodeURIComponent(rule.group_id)}/reconcile`);
+      toast.success(result.data?.rule?.status === 'capacity-blocked' ? 'Abgeglichen; für neue Mitglieder fehlt Kapazität' : 'Gruppe abgeglichen');
+      load();
+    } catch { toast.error('Gruppenabgleich fehlgeschlagen'); }
+  };
+
   const denyLicReq = async (id: string) => {
-    await api.post(`/api/licenses/requests/${id}/deny`);
-    toast.success('Anfrage abgelehnt');
-    load();
+    try {
+      await api.post(`/api/licenses/requests/${id}/deny`);
+      toast.success('Anfrage abgelehnt');
+      load();
+    } catch {
+      toast.error('Anfrage konnte nicht abgelehnt werden');
+      load();
+    }
   };
   const deleteLicense = async (id: string) => {
-    await api.delete(`/api/licenses/${id}`);
-    toast.success('Lizenz entfernt');
-    load();
+    try {
+      await api.delete(`/api/licenses/${id}`);
+      toast.success('Lizenz entfernt');
+      load();
+    } catch {
+      toast.error('Lizenz konnte nicht entfernt werden');
+    }
   };
 
   const categories = Array.from(new Set(licenses.map(l => l.category))).sort();
@@ -372,13 +507,13 @@ export default function LicenseKioskView() {
     return true;
   });
 
-  const totalCost = licenses.reduce((sum, l) => sum + l.cost_per_seat * l.used_seats, 0);
+  const totalCost = licenses.reduce((sum, license) => sum + Number(license.cost_per_seat ?? 0) * license.used_seats, 0);
   const totalSeats = licenses.reduce((sum, l) => sum + l.total_seats, 0);
   const usedSeats  = licenses.reduce((sum, l) => sum + l.used_seats, 0);
 
   const TABS: { key: Tab; label: string; badge?: number }[] = [
     { key: 'kiosk',      label: '🛒 Kiosk' },
-    { key: 'verwaltung', label: 'Verwaltung' },
+    ...(canReadCatalog ? [{ key: 'verwaltung' as Tab, label: 'Verwaltung' }] : []),
     { key: 'anfragen',   label: 'Anfragen', badge: pending.length },
   ];
 
@@ -394,7 +529,7 @@ export default function LicenseKioskView() {
           <button onClick={load} className="p-2 rounded-lg hover:bg-[rgba(255,255,255,0.06)] ">
             <ArrowPathIcon className={`w-5 h-5 text-[var(--text-muted,#8b949e)]  ${loading ? 'animate-spin' : ''}`} />
           </button>
-          {tab === 'verwaltung' && (
+          {tab === 'verwaltung' && canManageCatalog && (
             <button onClick={() => { setEditLicense(undefined); setShowLicForm(true); }}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] rounded-lg hover:bg-[#006FFF]/90">
               <PlusIcon className="w-4 h-4" /> Lizenz hinzufügen
@@ -403,12 +538,20 @@ export default function LicenseKioskView() {
         </div>
       </div>
 
+      {access && <LicenseFulfillmentView permissions={access.permissions} subject={access.subject} />}
+      {loadError && <p role="alert" className="text-sm text-red-500">{loadError}</p>}
+      {access?.demoMode && <p role="status" className="text-sm text-amber-600">Demo-Modus: Bei Datenbankausfall werden Beispieldaten im Arbeitsspeicher verwendet.</p>}
+      {access && !canSelfService && <p role="status" className="text-sm text-amber-600">{access.identityState === 'unlinked'
+        ? 'Dein Konto ist noch keiner Verzeichnis-Identität zugeordnet. Bitte die Administration kontaktieren.'
+        : access.identityState === 'disabled' ? 'Deine Verzeichnis-Identität ist deaktiviert. Lizenzaktionen sind gesperrt.'
+          : 'Die Identitätsquelle ist nicht verfügbar. Lizenzaktionen sind vorübergehend gesperrt.'}</p>}
+
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
           { label: 'Lizenzen total', value: licenses.length,                       sub: 'Produkte' },
           { label: 'Seats vergeben', value: `${usedSeats} / ${totalSeats}`,        sub: 'genutzt / verfügbar' },
-          { label: 'Monatliche Kosten', value: `CHF ${totalCost.toFixed(0)}`,      sub: 'aktuelle Zuweisung' },
+          ...(canReadCatalog ? [{ label: 'Kosten der Zuweisungen', value: `CHF ${totalCost.toFixed(0)}`, sub: 'gemäss Katalogpreisen' }] : []),
           { label: 'Offene Anfragen', value: pending.length,                       sub: 'warten auf Genehmigung' },
         ].map(({ label, value, sub }) => (
           <div key={label} className="rounded-xl p-4" style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid rgba(255,255,255,0.07)' }}>
@@ -418,6 +561,57 @@ export default function LicenseKioskView() {
           </div>
         ))}
       </div>
+
+      {access?.subject && access.permissions.some(permission => permission.startsWith('licenses.reviews.')) && <LicenseReviewsView permissions={access.permissions} userId={access.subject} />}
+      {access?.subject && access.permissions.some(permission => permission.startsWith('licenses.delegations.')) && <LicenseDelegationsView permissions={access.permissions} userId={access.subject} />}
+      {access?.subject && access.permissions.some(permission => permission.startsWith('licenses.delegations.') || permission === 'licenses.scopepim.review') && <LicenseScopeActivationsView permissions={access.permissions} userId={access.subject} />}
+      {access?.subject && access.permissions.includes('licenses.scopepolicies.read') && <LicenseScopePoliciesView permissions={access.permissions} userId={access.subject} />}
+      {access?.subject && access.permissions.some(permission=>permission.startsWith('licenses.scopereviews.')||permission==='licenses.delegations.self') && <LicenseScopeReviewsView permissions={access.permissions} userId={access.subject} />}
+      {access?.subject&&access.permissions.includes('licenses.sources.read')&&<LicenseSourceGrantsView permissions={access.permissions} userId={access.subject}/>}
+      {canReadAssignments && <section aria-label="Gruppenbasierte Lizenzvergabe" className="rounded-xl p-4 space-y-3" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+        <h3 className="font-semibold">Gruppenbasierte Lizenzvergabe</h3>
+        <p className="text-xs">Überlappende Gruppen und Direktzuweisungen verbrauchen zusammen nur einen Sitz je Benutzer. Konfigurierte Hersteller-Connectoren verarbeiten wirksame Änderungen separat; deren Status gesondert prüfen.</p>
+        <p className="text-xs">Gruppenrechte gelten höchstens fünf Minuten ab Verzeichnisbestätigung, bei früherer Mitgliedschafts- oder Prüffrist entsprechend kürzer. Ein Ausfall verlängert keine Rechte.</p>
+        <p className="text-xs">Der angezeigte Status ist ein Lesestand. Die Fristen wirken auch ohne erneutes Laden.</p>
+        {!access?.groupReconciliationEnabled && <p role="status" className="text-xs text-amber-600">Automatischer Gruppenabgleich ist nicht konfiguriert. Ohne rechtzeitigen manuellen Abgleich laufen Gruppenrechte spätestens nach fünf Minuten ab.</p>}
+        {access?.groupReconciliationMode==='client-credentials'&&<p className="text-xs">Automatische Token-Erneuerung ist konfiguriert. Nur ausdrücklich freigegebene Gruppen und lebende Client-Fassungen können einen Nachweis erneuern.</p>}
+        {access?.groupReconciliationMode==='static-bearer'&&<p role="status" className="text-xs text-amber-600">Älterer statischer Quellen-Bearer: keine automatische Erneuerung. Sein Ablauf kann den Gruppenabgleich unterbrechen.</p>}
+        {groupError && <p role="alert">{groupError}</p>}
+        {!loading && groupRules.length === 0 && <p className="text-sm">Keine Gruppenregeln vorhanden.</p>}
+        {groupRules.map(rule => <div key={`${rule.license_id}:${rule.group_id}`} className="flex flex-wrap gap-3 items-center text-sm">
+          <span>{rule.license_name} · {rule.group_name || rule.group_id}</span>
+          <span>{GROUP_STATUS[rule.status] || rule.status}</span>
+          <span>{rule.assigned_users} / {rule.desired_users} Mitglieder</span>
+          <span>Version {rule.source_revision || '—'}</span>
+          <span>Letzter Abgleich: {rule.last_synced_at ? new Date(rule.last_synced_at).toLocaleString('de-CH') : '—'}</span>
+          <span>Verzeichnis gültig bis: {rule.directory_valid_until ? new Date(rule.directory_valid_until).toLocaleString('de-CH') : 'nicht bestätigt'}</span>
+          {rule.membership_valid_until && <span>Früheste Mitgliedschaftsfrist: {new Date(rule.membership_valid_until).toLocaleString('de-CH')}</span>}
+          {rule.source_authorization_valid_until&&<span>Service-Lesefreigabe gültig bis: {new Date(rule.source_authorization_valid_until).toLocaleString('de-CH')}</span>}
+          {rule.last_error && <span role="alert">{rule.last_error}</span>}
+          {canManageAssignments && !['revoked', 'expired', 'deleted', 'review-expired'].includes(rule.status) && <>
+            <button onClick={() => reconcileGroup(rule)} className="text-blue-500">Abgleichen</button>
+            {rule.grant_id && <button onClick={() => setGrantToRevoke({ licenseId: rule.license_id, grantId: rule.grant_id! })} className="text-red-500">Gruppenquelle entziehen</button>}
+          </>}
+        </div>)}
+      </section>}
+
+      {grantToRevoke && canManageAssignments && <LicenseGrantRevokeDialog key={`${grantToRevoke.licenseId}:${grantToRevoke.grantId}`} {...grantToRevoke}
+        onClose={() => setGrantToRevoke(null)} onRevoked={retained => { setGrantToRevoke(null); toast.success(`Quelle lokal entzogen; ${retained} Benutzer behalten andere Vergaben. Herstellerstatus separat prüfen.`); load(); }} />}
+      {canReadAssignments && <section aria-label="Kontostände für Lizenzen" className="rounded-xl p-4 space-y-3" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+        <h3 className="font-semibold">Kontostände für Lizenzen</h3>
+        <p className="text-xs">Letzte bestätigte Verzeichnisstände, maximal 200 Einträge. Sperren und Löschungen entziehen lokale Benutzer-Zuweisungen; eine Reaktivierung stellt Direktlizenzen nicht automatisch wieder her.</p>
+        {!access?.userReconciliationEnabled && <p role="status" className="text-xs text-amber-600">Automatischer Kontenabgleich ist nicht konfiguriert. Bestehende Direktlizenzen müssen manuell abgeglichen werden.</p>}
+        {userStateError && <p role="alert">{userStateError}</p>}
+        {!loading && !userStateError && userStates.length === 0 && <p className="text-sm">Keine geprüften Kontostände vorhanden.</p>}
+        {userStates.map(state => <div key={state.user_id} className="flex flex-wrap gap-3 items-center text-sm">
+          <span>{state.user_id}</span>
+          <span>{state.disabled ? 'Lokal gesperrt' : state.directory_deleted ? 'Im Verzeichnis gelöscht' : state.directory_enabled === false ? 'Im Verzeichnis deaktiviert' : state.directory_enabled ? 'Im Verzeichnis aktiv' : 'Identität ungeklärt'}</span>
+          <span>Version {state.directory_revision || '—'}</span>
+          <span>Letzte Bestätigung: {state.directory_checked_at ? new Date(state.directory_checked_at).toLocaleString('de-CH') : '—'}</span>
+          {state.directory_error && <span role="alert">Abgleichfehler: {state.directory_error}</span>}
+          {canManageAssignments && <button onClick={() => reconcileUser(state.user_id)} className="text-blue-500">Kontostand abgleichen</button>}
+        </div>)}
+      </section>}
 
       {/* Tabs */}
       <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
@@ -489,10 +683,10 @@ export default function LicenseKioskView() {
                         <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]  truncate">{lic.name}</h3>
                         <p className="text-xs text-[var(--text-muted,#8b949e)] ">{lic.vendor}</p>
                       </div>
-                      <div className="text-right flex-shrink-0 ml-3">
+                      {lic.cost_per_seat != null && <div className="text-right flex-shrink-0 ml-3">
                         <p className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] ">{fmtCHF(lic.cost_per_seat, lic.currency)}</p>
                         <p className="text-xs text-[var(--text-muted,#8b949e)] ">pro {TYPE_LABELS[lic.license_type]?.split(' ')[1] ?? 'Seat'}</p>
-                      </div>
+                      </div>}
                     </div>
 
                     {lic.description && (
@@ -504,7 +698,7 @@ export default function LicenseKioskView() {
                       <div className="flex justify-between text-xs mb-1">
                         <span className="text-[var(--text-muted,#8b949e)] ">Verfügbar</span>
                         <span className={seatsColor(lic.used_seats, lic.total_seats)}>
-                          {avail} / {lic.total_seats}
+                          {lic.total_seats === 0 ? 'Unbegrenzt' : `${avail} / ${lic.total_seats}`}
                         </span>
                       </div>
                       <div className="h-1.5 bg-[rgba(255,255,255,0.06)]  rounded-full overflow-hidden">
@@ -514,7 +708,7 @@ export default function LicenseKioskView() {
                     </div>
 
                     <div className="mt-auto">
-                      <button onClick={() => setOrderLicense(lic)}
+                      <button disabled={!canSelfService} onClick={() => setOrderLicense(lic)}
                         className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-white bg-[#006FFF] rounded-lg hover:bg-[#006FFF]/90 transition-colors">
                         <ShoppingBagIcon className="w-4 h-4" />
                         Bestellen
@@ -563,14 +757,14 @@ export default function LicenseKioskView() {
                     <td className="px-4 py-3 text-sm text-[var(--text-secondary,#b1b5bd)] ">{fmtDate(lic.renewal_date)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
-                        <button onClick={() => { setEditLicense(lic); setShowLicForm(true); }}
+                        {canManageCatalog && <button aria-label={`Lizenz ${lic.name} bearbeiten`} onClick={() => { setEditLicense(lic); setShowLicForm(true); }}
                           className="p-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.06)] ">
                           <PencilIcon className="w-4 h-4 text-[var(--text-muted,#8b949e)] " />
-                        </button>
-                        <button onClick={() => deleteLicense(lic.id)}
+                        </button>}
+                        {canManageCatalog && <button aria-label={`Lizenz ${lic.name} entfernen`} onClick={() => deleteLicense(lic.id)}
                           className="p-1.5 rounded-lg hover:bg-red-50">
                           <TrashIcon className="w-4 h-4 text-red-400" />
-                        </button>
+                        </button>}
                       </div>
                     </td>
                   </tr>
@@ -609,7 +803,7 @@ export default function LicenseKioskView() {
                         </td>
                         <td className="px-4 py-3 text-xs text-[var(--text-muted,#8b949e)]  whitespace-nowrap">{fmtDate(r.requested_at)}</td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-2">
+                          {r.identity_bound !== true ? <span className="text-xs text-amber-600">Identität ungeklärt – Anfrage neu erstellen</span> : canReviewRequests && r.requester_id !== access?.subject && !(r.assignee_type === 'user' && r.assignee_id === access?.subject) ? <div className="flex gap-2">
                             <button onClick={() => approveLicReq(r.id)}
                               className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-[#34C759] rounded-lg hover:bg-green-600">
                               <CheckCircleIcon className="w-3.5 h-3.5" /> Genehmigen
@@ -618,7 +812,7 @@ export default function LicenseKioskView() {
                               className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
                               <XCircleIcon className="w-3.5 h-3.5" /> Ablehnen
                             </button>
-                          </div>
+                          </div> : <span className="text-xs text-[var(--text-muted)]">Wartet auf unabhängige Genehmigung</span>}
                         </td>
                       </tr>
                     ))}
@@ -653,7 +847,7 @@ export default function LicenseKioskView() {
                           <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
                             r.status === 'approved' ? 'bg-green-50 text-green-700 border-green-200'
                             : 'bg-red-50 text-red-700 border-red-200'}`}>
-                            {r.status === 'approved' ? 'Genehmigt' : 'Abgelehnt'}
+                            {r.status === 'approved' ? r.assignee_type === 'group' ? `Genehmigt · ${GROUP_STATUS[r.allocation_status || 'pending'] || r.allocation_status}` : 'Genehmigt' : r.status === 'cancelled' ? 'Zurückgezogen' : 'Abgelehnt'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-[var(--text-muted,#8b949e)] ">{fmtDate(r.decided_at)}</td>
@@ -670,9 +864,9 @@ export default function LicenseKioskView() {
 
       {/* Modals */}
       {orderLicense && (
-        <RequestModal license={orderLicense} onClose={() => setOrderLicense(null)} onSubmitted={load} />
+        <RequestModal license={orderLicense} canRequestForOthers={canRequestForOthers} onClose={() => setOrderLicense(null)} onSubmitted={load} />
       )}
-      {showLicForm && (
+      {showLicForm && canManageCatalog && (
         <LicenseFormModal license={editLicense} onClose={() => setShowLicForm(false)} onSaved={load} />
       )}
 

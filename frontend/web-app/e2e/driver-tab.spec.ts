@@ -8,8 +8,8 @@ import { mockApi, seedAuth, DEVICE_DRIVERS_FIXTURE } from './fixtures/api';
  *
  * No real backend is running. Every `/api/**` call is intercepted with
  * page.route() and answered with fixtures (see ./fixtures/api.ts), and the
- * OIDC auth guard in src/app/[view]/page.tsx is bypassed by pre-seeding
- * localStorage the same way a completed login flow would.
+ * session broker is explicitly fixture-mocked; this suite does not prove
+ * a real OIDC login (the separate PostgreSQL/browser gate does).
  */
 
 function trackConsoleProblems(page: Page) {

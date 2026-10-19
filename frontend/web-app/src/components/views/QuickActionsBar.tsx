@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { useQuickActionAccess } from '@/hooks/useQuickActionAccess';
+import { useIdentityAccess } from '@/hooks/useIdentityAccess';
 import {
   PlusIcon,
   UserPlusIcon,
@@ -68,6 +70,9 @@ export default function QuickActionsBar({
   onDeployPolicy,
   onComplianceSnapshot,
 }: QuickActionsBarProps) {
+  const { access, unavailable, can } = useQuickActionAccess();
+  const identity = useIdentityAccess();
+
   return (
     <div
       style={{
@@ -78,32 +83,35 @@ export default function QuickActionsBar({
         flexWrap: 'wrap',
       }}
     >
-      <ActionButton
+      {unavailable && <p role="alert">Quick actions are unavailable. Refresh to check your permissions again.</p>}
+      {!unavailable && access === null && <p role="status">Checking action permissions…</p>}
+      {identity.unavailable && <p role="alert">Verzeichnisberechtigungen sind nicht verfügbar.</p>}
+      {can('devices.enroll') && <ActionButton
         accent
         icon={<PlusIcon style={{ width: 15, height: 15 }} />}
         label="Enroll Device"
         onClick={onEnrollDevice}
-      />
-      <ActionButton
+      />}
+      {(identity.can('users.read') || identity.can('users.create') || identity.can('users.sessions.invalidate')) && <ActionButton
         icon={<UserPlusIcon style={{ width: 15, height: 15 }} />}
-        label="New User"
+        label="Benutzerverwaltung"
         onClick={onNewUser}
-      />
-      <ActionButton
+      />}
+      {can('applications.create') && <ActionButton
         icon={<KeyIcon style={{ width: 15, height: 15 }} />}
         label="Service Principal"
         onClick={onServicePrincipal}
-      />
-      <ActionButton
+      />}
+      {can('policies.deploy') && <ActionButton
         icon={<DocumentCheckIcon style={{ width: 15, height: 15 }} />}
         label="Deploy Policy"
         onClick={onDeployPolicy}
-      />
-      <ActionButton
+      />}
+      {can('compliance.read') && <ActionButton
         icon={<ClipboardDocumentListIcon style={{ width: 15, height: 15 }} />}
         label="Compliance Snapshot"
         onClick={onComplianceSnapshot}
-      />
+      />}
     </div>
   );
 }

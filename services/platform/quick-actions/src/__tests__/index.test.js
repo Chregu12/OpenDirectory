@@ -1,9 +1,11 @@
 'use strict';
 
+const { accessClaims } = require('./fixtures/claims');
+jest.mock('../../../../../packages/oidc-access-state', () => ({ createAccessStateClient: jest.fn(() => jest.fn(async () => {})) }));
 // Mock oidcAuth so tests don't need a real JWKS endpoint.
 // The path resolves to services/shared/oidcAuth (same as the middleware sees it).
-jest.mock('../../../../shared/oidcAuth', () => ({
-  verifyToken: jest.fn().mockResolvedValue({ sub: 'test-user', role: 'admin', scope: 'openid roles' }),
+jest.mock('../middleware/verifyApiToken', () => ({
+  verifyToken: jest.fn().mockResolvedValue(require('./fixtures/claims').accessClaims({ sub: 'test-user', roles: ['admin'], scope: 'openid roles' })),
 }));
 
 // Mock all orchestrators before requiring the app
@@ -24,7 +26,7 @@ const { ping, SERVICES }           = require('../utils/serviceClient.js');
 
 // Generate a Bearer token string (value doesn't matter — verifyToken is mocked)
 function authHeader() {
-  return 'Bearer test-token';
+  return 'Bearer header.payload.signature';
 }
 
 beforeEach(() => {
@@ -189,7 +191,7 @@ describe('GET /api/quick/status', () => {
   test('returns 200 with services object', async () => {
     ping.mockResolvedValue({ healthy: true, latencyMs: 2 });
 
-    const res = await request(app).get('/api/quick/status');
+    const res = await request(app).get('/api/quick/status').set('Authorization', authHeader());
     expect(res.status).toBe(200);
     expect(res.body.services).toBeDefined();
     expect(typeof res.body.services).toBe('object');
@@ -198,14 +200,14 @@ describe('GET /api/quick/status', () => {
   test('includes overall health status', async () => {
     ping.mockResolvedValue({ healthy: true, latencyMs: 2 });
 
-    const res = await request(app).get('/api/quick/status');
+    const res = await request(app).get('/api/quick/status').set('Authorization', authHeader());
     expect(['healthy', 'degraded', 'unhealthy']).toContain(res.body.overall);
   });
 
   test('all services healthy → overall: healthy', async () => {
     ping.mockResolvedValue({ healthy: true, latencyMs: 2 });
 
-    const res = await request(app).get('/api/quick/status');
+    const res = await request(app).get('/api/quick/status').set('Authorization', authHeader());
     expect(res.body.overall).toBe('healthy');
   });
 
@@ -217,7 +219,7 @@ describe('GET /api/quick/status', () => {
       return Promise.resolve({ healthy: true, latencyMs: 2 });
     });
 
-    const res = await request(app).get('/api/quick/status');
+    const res = await request(app).get('/api/quick/status').set('Authorization', authHeader());
     expect(['degraded', 'unhealthy']).toContain(res.body.overall);
   });
 });
@@ -466,6 +468,50 @@ describe('POST /api/quick/users/onboard', () => {
 });
 
 describe('POST /api/quick/users/:id/offboard', () => {
+  test.each([{}, { sub: '' }, { sub: ' ' }])('requires a verified subject even for administrators: %j', claims => {
+    const { verifyToken } = require('../middleware/verifyApiToken');
+    verifyToken.mockResolvedValueOnce(accessClaims({ sub: undefined, ...claims, roles: ['admin'] }));
+    return request(app).post('/api/quick/users/victim/offboard').set('Authorization', authHeader()).send({}).then(response => {
+      expect(response.status).toBe(401);
+      expect(userOnboardingOrchestrator.offboardUser).not.toHaveBeenCalled();
+    });
+  });
+
+  test('accepts a server-issued offboarding permission without global administrator access', async () => {
+    const { verifyToken } = require('../middleware/verifyApiToken');
+    verifyToken.mockResolvedValueOnce(accessClaims({ sub: 'offboarding-operator', permissions: ['users.offboard'] }));
+    const response = await request(app).post('/api/quick/users/victim/offboard').set('Authorization', authHeader()).send({});
+    expect(response.status).toBe(200);
+    expect(userOnboardingOrchestrator.offboardUser).toHaveBeenCalledTimes(1);
+  });
+
+  test('a requested offboarding scope grants no offboarding authority', async () => {
+    const { verifyToken } = require('../middleware/verifyApiToken');
+    verifyToken.mockResolvedValueOnce(accessClaims({ sub: 'ordinary-user', scope: 'users.offboard' }));
+    const response = await request(app).post('/api/quick/users/victim/offboard').set('Authorization', authHeader()).send({});
+    expect(response.status).toBe(403);
+    expect(userOnboardingOrchestrator.offboardUser).not.toHaveBeenCalled();
+  });
+
+  test('ordinary authenticated users cannot offboard another identity', async () => {
+    const { verifyToken } = require('../middleware/verifyApiToken');
+    verifyToken.mockResolvedValueOnce(accessClaims({ sub: 'ordinary-user', roles: ['user'] }));
+    const response = await request(app).post('/api/quick/users/victim/offboard').set('Authorization', authHeader()).send({ role: 'admin' });
+    expect(response.status).toBe(403);
+    expect(userOnboardingOrchestrator.offboardUser).not.toHaveBeenCalled();
+  });
+
+  test('uses the verified bearer header instead of an authorization value in the body', async () => {
+    await request(app).post('/api/quick/users/user-42/offboard').set('Authorization', authHeader()).send({ authorization: 'Bearer forged-body-token' });
+    expect(userOnboardingOrchestrator.offboardUser).toHaveBeenCalledWith('user-42', expect.objectContaining({ authorization: authHeader() }));
+  });
+
+  test('returns partial completion when license release fails', async () => {
+    userOnboardingOrchestrator.offboardUser.mockResolvedValueOnce({ success: false, disabled: true, licensesReleased: false, warnings: ['License service unavailable'] });
+    const response = await request(app).post('/api/quick/users/user-42/offboard').set('Authorization', authHeader()).send({});
+    expect(response.status).toBe(207);
+    expect(response.body.licensesReleased).toBe(false);
+  });
   test('returns 200 with disabled: true', async () => {
     const res = await request(app)
       .post('/api/quick/users/u-abc/offboard')
@@ -605,27 +651,28 @@ describe('Auth middleware', () => {
   test('missing token → 401', async () => {
     const res = await request(app).get('/api/quick/service-principals');
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('unauthorized');
+    expect(res.body.error).toBe('invalid_token');
   });
 
-  test('invalid token → 403', async () => {
-    const { verifyToken } = require('../../../../shared/oidcAuth');
+  test('invalid token → 401', async () => {
+    const { verifyToken } = require('../middleware/verifyApiToken');
     verifyToken.mockRejectedValueOnce(Object.assign(new Error('invalid signature'), { code: 'ERR_JWS_INVALID' }));
 
     const res = await request(app)
       .get('/api/quick/service-principals')
       .set('Authorization', 'Bearer invalid.token.value');
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
     expect(res.body.error).toBe('invalid_token');
   });
 
-  test('service-account bypass with correct SERVICE_TOKEN → 200', async () => {
+  test('a legacy service token no longer authenticates', async () => {
     process.env.SERVICE_TOKEN = 'test-svc-token';
     const res = await request(app)
       .get('/api/quick/service-principals')
       .set('Authorization', 'Bearer svc-test-svc-token');
     delete process.env.SERVICE_TOKEN;
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
+    expect(servicePrincipalOrchestrator.listServicePrincipals).not.toHaveBeenCalled();
   });
 
   test('/health is public (no token needed)', async () => {
@@ -633,8 +680,8 @@ describe('Auth middleware', () => {
     expect(res.status).toBe(200);
   });
 
-  test('/api/quick/status is public (no token needed)', async () => {
+  test('/api/quick/status requires authentication', async () => {
     const res = await request(app).get('/api/quick/status');
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
   });
 });

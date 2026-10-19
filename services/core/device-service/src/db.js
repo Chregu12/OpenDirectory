@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || 'devices',
@@ -26,7 +27,7 @@ async function runMigrations() {
     try {
       await pool.query(sql);
     } catch (err) {
-      console.error(`[device-db] Migration ${file} error:`, err.message);
+      throw new Error(`Device migration ${file} failed`, { cause: err });
     }
   }
   console.log(`[device-db] ${files.length} migration(s) applied`);
@@ -35,12 +36,12 @@ async function runMigrations() {
 async function initDb() {
   try {
     await pool.query('SELECT 1');
-    dbAvailable = true;
     await runMigrations();
+    dbAvailable = true;
     console.log('[device-db] PostgreSQL connected');
   } catch (err) {
-    console.warn('[device-db] PostgreSQL not available, using in-memory fallback:', err.message);
     dbAvailable = false;
+    throw new Error('Device inventory requires migrated PostgreSQL', { cause: err });
   }
 }
 
@@ -69,4 +70,14 @@ module.exports = {
   query,
   healthCheck,
   pool,
+  async transaction(operation, { readOnly = false, beforeCommit } = {}) {
+    if (!dbAvailable) throw Object.assign(new Error('Device storage unavailable'), { status: 503 });
+    const client = await pool.connect();
+    try {
+      await client.query(readOnly ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN');
+      await client.query("SET LOCAL lock_timeout='5s'"); await client.query("SET LOCAL statement_timeout='15s'");
+      const result = await operation(client); if (beforeCommit) await beforeCommit(client); await client.query('COMMIT'); return result;
+    } catch (error) { try { await client.query('ROLLBACK'); } catch {} throw error; }
+    finally { client.release(); }
+  },
 };

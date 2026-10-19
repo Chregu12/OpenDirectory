@@ -14,6 +14,21 @@
  */
 
 const nextConfig = require('../next.config.js');
+test.each(['submit', 'status', 'activate'])('company registration %s has an exact native POST handler before generic API rewrites', operation => {
+  const source = require('fs').readFileSync(require('path').join(__dirname, '../src/app/api/company-registration', operation, 'route.ts'), 'utf8');
+  expect(source).toContain(`getBrowserAuth().companyRegistration(request, '${operation}')`);
+  expect(source).toContain('export async function POST(request: Request)'); expect(source).not.toContain('params');
+});
+test.each(['start', 'confirm'])('MFA enrollment %s has an exact native handler rather than a legacy-auth rewrite', action => {
+  const source = require('fs').readFileSync(require('path').join(__dirname, '../src/app/api/auth/oidc/enrollment', action, 'route.ts'), 'utf8');
+  expect(source).toContain(`getBrowserAuth().enrollment(request, '${action}')`); expect(source).toContain('export async function POST(request: Request)'); expect(source).not.toContain('params');
+});
+test.each(['start', 'confirm'])('MFA recovery %s has an exact native POST route before generic legacy auth rewrites', action => {
+  const source = require('fs').readFileSync(require('path').join(__dirname, '../src/app/api/auth/oidc/recovery', action, 'route.ts'), 'utf8');
+  expect(source).toContain('export async function POST(request: Request)');
+  expect(source).toContain(`getBrowserAuth().recovery(request, '${action}')`);
+  expect(source).not.toContain('params');
+});
 
 // ─── Minimal Next.js source-pattern matcher ───────────────────────────────────
 // Supports the syntax used in our config: literal segments, ':name' (one
@@ -75,7 +90,27 @@ function expectRoute(urlPath, expectedHost, expectedPathPrefix) {
 
 // ─── Device-service routes (driver management & hardware detection) ──────────
 
+describe('license routing', () => {
+  test.each([
+    '/api/licenses',
+    '/api/licenses/access',
+    '/api/licenses/kiosk',
+    '/api/licenses/requests',
+    '/api/licenses/requests/request-id/approve',
+    '/api/licenses/requests/request-id/deny',
+    '/api/licenses/license-id/request',
+    '/api/licenses/license-id/assign',
+    '/api/licenses/license-id/assignments',
+    '/api/licenses/license-id/assignments/user-id',
+  ])('%s reaches policy-service before the generic API fallback', urlPath => {
+    expectRoute(urlPath, 'policy-service:3004', '/api/licenses');
+  });
+});
+
 describe('device-service routing', () => {
+  test.each(['/api/devices/policy-commands', '/api/devices/owned-device/commands/owned-command/cancel'])('%s reaches the canonical issuer without rerouting other device command families', urlPath => {
+    expectRoute(urlPath, 'oauth-provider:3010', '/api/devices');
+  });
   test.each([
     ['/api/devices/drivers',                        '/api/drivers'],
     ['/api/devices/drivers/upload',                 '/api/drivers'],
@@ -89,9 +124,12 @@ describe('device-service routing', () => {
     expectRoute(urlPath, 'device-service:3003', pathPrefix);
   });
 
-  test('generic device CRUD still reaches api-backend (catch-all)', () => {
-    expectRoute('/api/devices', 'api-backend:8080');
-    expectRoute('/api/devices/device-123', 'api-backend:8080');
+  test('canonical inventory routes reach the persistent device receiver without enabling legacy remote actions', () => {
+    expectRoute('/api/devices', 'device-service:3003');
+    expectRoute('/api/devices/capabilities', 'device-service:3003');
+    expectRoute('/api/devices/device-123', 'device-service:3003');
+    expectRoute('/api/devices/device-123/assignment', 'device-service:3003');
+    expectRoute('/api/devices/device-123/history', 'device-service:3003');
     expectRoute('/api/devices/device-123/lock', 'api-backend:8080');
   });
 });
@@ -459,8 +497,17 @@ describe('rule ordering', () => {
 // ─── Fallback behaviour ───────────────────────────────────────────────────────
 
 describe('fallback', () => {
+  test.each(['/api/users', '/api/users/canonical-id', '/api/users/canonical-id/authorization/invalidate', '/api/users/roles', '/api/groups', '/api/groups/canonical-group/members'])('canonical directory ownership never falls back to api-backend: %s', path => {
+    expectRoute(path, 'identity-service:3001');
+  });
+  test('authorization generation invalidation targets canonical identity rather than a legacy user service', () => {
+    expectRoute('/api/users/canonical-id/authorization/invalidate', 'identity-service:3001');
+  });
   test('unknown API paths land on api-backend', () => {
     expectRoute('/api/definitely-not-a-real-route', 'api-backend:8080');
+  });
+  test('canonical application registration, capabilities and credential rotation reach only the actual issuer', () => {
+    for (const route of ['/api/clients','/api/clients/access','/api/clients/known/rotate-secret']) expectRoute(route, 'oauth-provider:3010');
   });
 
   test('every rewrite destination is a syntactically valid URL', () => {

@@ -4,11 +4,15 @@ RUN apk add --no-cache dumb-init
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY services/core/device-service/package*.json ./
 
 RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
 
-COPY . .
+COPY services/core/device-service/ ./
+COPY packages/device-inventory-contract/ /packages/device-inventory-contract/
+COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
+COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-contract.js
+COPY packages/oidc-access-state.js /packages/oidc-access-state.js
 
 RUN addgroup -S appuser && adduser -S -G appuser appuser
 RUN chown -R appuser:appuser /app
@@ -30,4 +34,4 @@ USER appuser
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3003/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"
 
-CMD ["node", "src/index.js"]
+CMD ["node", "src/inventoryServer.js"]

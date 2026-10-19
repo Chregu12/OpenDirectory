@@ -2,11 +2,13 @@
   "name": "@opendirectory/device-service",
   "version": "1.0.0",
   "description": "OpenDirectory Device Management Service",
-  "main": "src/index.js",
+  "main": "src/inventoryServer.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "start": "node src/inventoryServer.js",
+    "dev": "nodemon src/inventoryServer.js",
     "test": "jest --forceExit",
+    "test:inventory:postgres": "node scripts/test-inventory-postgres.js",
+    "test:returns:postgres": "node scripts/test-returns-postgres.js",
     "lint": "eslint src/"
   },
   "dependencies": {

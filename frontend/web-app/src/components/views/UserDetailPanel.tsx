@@ -1,188 +1,67 @@
 'use client';
 
-import React from 'react';
-import { DirectoryUser } from './UserListColumn';
+import React, { useState } from 'react';
 import toast from 'react-hot-toast';
+import { DirectoryUser, directoryUsers, directoryError, userName } from '@/lib/directoryUsers';
+import { ensureSession } from '@/lib/auth';
+import DirectoryUserEditor from './DirectoryUserEditor';
 
-// ─── Avatar ───────────────────────────────────────────────────────────────────
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-}
-
-const AVATAR_COLORS = ['#0071e3', '#34c759', '#ff9500', '#af52de', '#ff3b30', '#5ac8fa', '#30b0c7'];
-function avatarColor(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-}
-
-// ─── Action button ────────────────────────────────────────────────────────────
-
-function ActionBtn({ icon, label, onClick, danger }: { icon: string; label: string; onClick?: () => void; danger?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-        padding: '8px 14px', minWidth: 100,
-        border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8,
-        background: 'var(--bg-surface, #161b22)', cursor: 'pointer', transition: 'background 0.12s',
-      }}
-      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface, #161b22)'; }}
-    >
-      <span style={{ fontSize: 18 }}>{icon}</span>
-      <span style={{ fontSize: 11, color: danger ? '#DC2626' : 'var(--text-secondary, #8b949e)', textAlign: 'center', lineHeight: 1.2 }}>
-        {label}
-      </span>
-    </button>
-  );
-}
-
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <h3 style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 10px 0' }}>
-      {children}
-    </h3>
-  );
-}
-
-function DetailItem({ label, value }: { label: string; value?: string }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 11, color: 'var(--text-muted, #6e7681)', fontWeight: 500 }}>{label}</span>
-      <span style={{ fontSize: 13, color: 'var(--text-primary, #e4e6ea)' }}>{value ?? '—'}</span>
+export function DirectoryConfirmation({ title, children, busy, error, onConfirm, onClose }: { title: string; children: React.ReactNode; busy: boolean; error: string; onConfirm: () => void; onClose: () => void }) {
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5" role="alertdialog" aria-modal="true" aria-label={title}>
+    <div className="rounded-xl p-6 max-w-lg space-y-4" style={{ background: 'var(--bg-surface, #161b22)', color: 'var(--text-primary, #e4e6ea)' }}>
+      <h2 className="text-lg font-semibold">{title}</h2><div>{children}</div>{error && <p role="alert">{error}</p>}
+      <div className="flex justify-end gap-4"><button autoFocus disabled={busy} onClick={onClose}>Abbrechen</button><button className="rounded bg-red-700 px-4 py-2 text-white" disabled={busy || !!error} onClick={onConfirm}>{busy ? 'Wird ausgeführt …' : 'Bestätigen'}</button></div>
     </div>
-  );
+  </div>;
 }
 
-const ROLE_LABELS: Record<DirectoryUser['role'], string> = {
-  admin:           'Administrator',
-  user:            'Standard User',
-  'read-only':     'Read-Only',
-  'service-account': 'Service Account',
-};
-
-interface UserDetailPanelProps {
-  user: DirectoryUser | null;
-}
-
-export default function UserDetailPanel({ user }: UserDetailPanelProps) {
-  if (!user) {
-    return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, color: 'var(--text-muted, #6e7681)', background: 'var(--bg-base, #0e1115)' }}>
-        <span style={{ fontSize: 48 }}>👤</span>
-        <p style={{ fontSize: 14, margin: 0 }}>Select a user to view details</p>
-      </div>
-    );
-  }
-
-  const color = avatarColor(user.id);
-
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', background: 'var(--bg-base, #0e1115)' }}>
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28 }}>
-        <ActionBtn icon="✏️" label="Edit User"       onClick={() => toast.success('Edit user')} />
-        <ActionBtn icon="🔒" label="Reset Password"  onClick={() => toast.success('Password reset link sent')} />
-        <ActionBtn icon="📱" label="Manage MFA"      onClick={() => toast.success('MFA management')} />
-        <ActionBtn icon="🚫" label="Disable Account" onClick={() => { if (confirm(`Disable ${user.name}?`)) toast.success('Account disabled'); }} danger />
-      </div>
-
-      {/* Avatar + name */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
-        <div style={{
-          width: 96, height: 96, borderRadius: '50%',
-          background: color,
-          color: 'white', fontSize: 36, fontWeight: 700,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          marginBottom: 14,
-        }}>
-          {getInitials(user.name)}
-        </div>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)', margin: '0 0 4px 0', textAlign: 'center' }}>
-          {user.name}
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--text-secondary, #8b949e)', margin: '0 0 8px 0' }}>{user.email}</p>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <span style={{
-            padding: '3px 10px', borderRadius: 999,
-            background: user.status === 'active' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)',
-            color: user.status === 'active' ? '#22c55e' : 'var(--text-secondary, #8b949e)',
-            fontSize: 12, fontWeight: 500,
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-          }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: user.status === 'active' ? '#22c55e' : '#6e7681' }} />
-            {user.status === 'active' ? 'Active' : 'Inactive'}
-          </span>
-          <span style={{
-            padding: '3px 10px', borderRadius: 999,
-            background: 'rgba(255,255,255,0.06)',
-            color: 'var(--text-secondary, #8b949e)',
-            fontSize: 12, fontWeight: 500,
-          }}>
-            {ROLE_LABELS[user.role]}
-          </span>
-        </div>
-      </div>
-
-      {/* Overview section */}
-      <section style={{ marginBottom: 28 }}>
-        <SectionHeading>Overview</SectionHeading>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-          <DetailItem label="Department"   value={user.department} />
-          <DetailItem label="Role"         value={ROLE_LABELS[user.role]} />
-          <DetailItem label="MFA Enabled"  value={user.mfa ? 'Yes' : 'No'} />
-        </div>
-      </section>
-
-      <div style={{ height: 1, background: 'var(--border, rgba(255,255,255,0.07))', marginBottom: 24 }} />
-
-      {/* Groups section */}
-      {user.groups && user.groups.length > 0 && (
-        <>
-          <section style={{ marginBottom: 28 }}>
-            <SectionHeading>Groups</SectionHeading>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {user.groups.map(g => (
-                <span key={g} style={{ padding: '4px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary, #8b949e)', fontSize: 12, fontWeight: 500 }}>
-                  {g}
-                </span>
-              ))}
-            </div>
-          </section>
-          <div style={{ height: 1, background: 'var(--border, rgba(255,255,255,0.07))', marginBottom: 24 }} />
-        </>
-      )}
-
-      {/* Devices section */}
-      {user.devices && user.devices.length > 0 && (
-        <>
-          <section style={{ marginBottom: 28 }}>
-            <SectionHeading>Assigned Devices</SectionHeading>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {user.devices.map(d => (
-                <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
-                  <span>💻</span>
-                  <span style={{ fontSize: 13, color: 'var(--text-primary, #e4e6ea)' }}>{d}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-          <div style={{ height: 1, background: 'var(--border, rgba(255,255,255,0.07))', marginBottom: 24 }} />
-        </>
-      )}
-
-      {/* Activity section */}
-      <section style={{ marginBottom: 28 }}>
-        <SectionHeading>Activity</SectionHeading>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-          <DetailItem label="Last Sign-in" value={user.lastActive} />
-        </div>
-      </section>
+export default function UserDetailPanel({ user, permissions, actorUserId, onChanged, onReload, onDenied }: {
+  user: DirectoryUser | null; permissions: string[]; actorUserId: string | null;
+  onChanged: (user: DirectoryUser | null, expectedId: string) => void; onReload: () => void; onDenied: () => void;
+}) {
+  const [editing, setEditing] = useState(false); const [action, setAction] = useState<'status' | 'reset' | 'delete' | null>(null);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const can = (permission: string) => permissions.includes(permission);
+  if (!user) return <p className="p-8" role="status">Wähle einen Verzeichniseintrag.</p>;
+  const title = action === 'delete' ? 'Verzeichniseintrag löschen' : action === 'reset' ? 'Sicherheitsreset' : user.enabled ? 'Konto sperren' : 'Konto freigeben';
+  const allowed = action === 'delete' ? can('users.delete') : action === 'reset' ? can('users.sessions.invalidate') : can('users.update') && can('users.status.manage');
+  const begin = (next: typeof action) => { setAction(next); setError(''); };
+  const checkSelf = () => { if (user.id === actorUserId) void ensureSession(true).catch(() => {}); };
+  return <article className="flex-1 overflow-y-auto p-8 space-y-6" aria-label="Benutzerdetails" style={{ background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)' }}>
+    <div><h1 className="text-2xl font-semibold">{userName(user)}</h1><p>{user.email}</p><p className="mt-2 font-semibold">{user.enabled ? 'Freigegeben' : 'Gesperrt'}</p></div>
+    <div className="flex flex-wrap gap-3 [&>button]:rounded [&>button]:border [&>button]:border-white/20 [&>button]:px-3 [&>button]:py-2 [&>button]:text-sm">
+      {can('users.update') && <button onClick={() => setEditing(true)}>Profil bearbeiten</button>}
+      {can('users.update') && can('users.status.manage') && <button onClick={() => begin('status')}>{user.enabled ? 'Konto sperren' : 'Konto freigeben'}</button>}
+      {can('users.update') && can('users.status.manage') && user.id !== actorUserId && <a className="rounded border border-white/20 px-3 py-2 text-sm" href={`/applications?offboard=${user.id}#company-offboarding`}>Mitarbeiter-Offboarding</a>}
+      {can('users.sessions.invalidate') && <button onClick={() => begin('reset')}>Sicherheitsreset</button>}
+      {can('users.delete') && <button className="text-red-500" onClick={() => begin('delete')}>Eintrag löschen</button>}
+      <button onClick={onReload}>Details neu laden</button>
     </div>
-  );
+    <dl className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {Object.entries({ 'Verzeichnis-ID': user.id, Benutzername: user.username, Anzeigename: user.displayName || '—', Abteilung: user.department || '—', Position: user.title || '—', Datensatzversion: user.revision }).map(([label, value]) =>
+        <div key={label}><dt className="text-xs opacity-70">{label}</dt><dd className="break-all">{value}</dd></div>)}
+    </dl>
+    <p className="text-sm">Diese Ansicht verwaltet den kanonischen Verzeichniseintrag. Zugangsdaten, Rollen, MFA, Geräte und Anmelde-Verknüpfungen werden hier nicht erfunden oder automatisch eingerichtet.</p>
+    <p className="text-sm">Der Benutzername ist ein Verzeichnisattribut; die separate Anmeldekennung wird durch eine Profiländerung nicht geändert.</p>
+    <p className="text-sm">Sperren blockieren neue Zugriffe an den angebundenen APIs. Reaktivierung stellt alte Sitzungen oder Lizenzen nicht automatisch wieder her.</p>
+    {editing && can('users.update') && <DirectoryUserEditor user={user} onClose={() => setEditing(false)} onSaved={updated => { setEditing(false); onChanged(updated, user.id); toast.success('Profil gespeichert.'); }} />}
+    {action && allowed && <DirectoryConfirmation title={title} busy={busy} error={error} onClose={() => { setAction(null); if (error) onReload(); }} onConfirm={async () => {
+      if (busy || error || !allowed) return; setBusy(true);
+      try {
+        if (action === 'delete') { await directoryUsers.remove(user); onChanged(null, user.id); }
+        else if (action === 'reset') { await directoryUsers.invalidate(user.id); onReload(); }
+        else { onChanged(await directoryUsers.update(user, { enabled: !user.enabled }), user.id); }
+        toast.success(action === 'reset' ? 'Sicherheitsreset bestätigt. Alte Zugriffe bleiben ungültig.' : 'Verzeichnisänderung bestätigt.');
+        if (action !== 'status' || user.enabled) checkSelf();
+        setAction(null);
+      } catch (failure: any) { setError(directoryError(failure)); if ([401, 403].includes(failure?.response?.status)) onDenied(); }
+      finally { setBusy(false); }
+    }}>
+      <p>{userName(user)} · <span className="break-all">{user.id}</span></p>
+      {user.id === actorUserId && <p className="mt-3 text-amber-400">Dies ist dein eigener Eintrag. Sperre, Löschung oder Sicherheitsreset machen deine Sitzung ungültig. Stelle einen unabhängigen Wiederherstellungsweg sicher.</p>}
+      <p className="mt-3">{action === 'delete' ? 'Der kanonische Eintrag wird gelöscht. Der Bezeichner kann nicht wiederverwendet werden; externe Konten werden dadurch nicht gelöscht.' :
+        action === 'reset' ? 'Bestehende Anmelde- und Refresh-Berechtigungen dieses Benutzers werden ungültig. Dies ändert kein Passwort und keine Rolle.' :
+          user.enabled ? 'Der kanonische Zugang wird gesperrt. Andere Credential-Stores und Lizenzanbieter werden nicht automatisch geändert.' : 'Nur der kanonische Eintrag wird freigegeben. Bestehende ungültige Sitzungen und entfernte Lizenzen bleiben unverändert.'}</p>
+    </DirectoryConfirmation>}
+  </article>;
 }

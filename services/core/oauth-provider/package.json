@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "jest --forceExit"
+    "test": "jest --forceExit",
+    "test:revocations:integration": "node scripts/test-postgres.js",
+    "test:browser:integration": "node scripts/test-browser.js",
+    "test:gateway:production": "node scripts/test-production-gateway.js"
   },
   "dependencies": {
     "amqplib": "^0.10.3",

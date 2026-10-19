@@ -16,8 +16,6 @@
  *   1. Generates two RSA-2048 keypairs (RS256 signing + SAML signing).
  *   2. Seeds in-memory OAuth clients / SCIM users / enrollment tokens /
  *      device registry.
- *   3. Kicks off `db.initDb().then(() => { ... app.listen(PORT) })` — i.e.
- *      it calls app.listen() unconditionally, with no test/dev guard.
  *   4. Starts two `setInterval` timers (metrics gauge refresh, device
  *      auto-quarantine sweep), each every 30s.
  *
@@ -31,13 +29,8 @@
  *     back to a relative require, but registering the virtual mock short-
  *     circuits that fallback exactly like api-gateway's gateway.e2e.test.js
  *     already does).
- *   - `OAUTH_PROVIDER_PORT=0` is set before require so the god file's
- *     internal `app.listen(PORT)` binds an ephemeral port instead of
- *     colliding with a real 3010 listener. supertest never talks to that
- *     internal listener anyway — it wraps the exported `app` with its own
- *     ephemeral server per request.
  *   - package.json's test script uses `jest --forceExit` because of the two
- *     setInterval timers and the internal app.listen(), same as
+ *     setInterval timers, same as
  *     device-service/policy-service/api-gateway already do.
  *
  * ─── Scope ──────────────────────────────────────────────────────────────
@@ -63,6 +56,10 @@
 
 process.env.OAUTH_PROVIDER_PORT = '0'; // avoid binding the real port (3010) during tests
 process.env.OAUTH_ISSUER = 'https://opendirectory.test';
+process.env.OAUTH_EPHEMERAL_SIGNING_KEYS = 'true';
+process.env.OAUTH_SIGNING_KEY_FILE = '';
+process.env.OAUTH_VERIFICATION_JWKS_FILE = '';
+process.env.OAUTH_REVOCATION_DEMO_MODE = 'true';
 process.env.GRAFANA_CLIENT_SECRET = 'test-grafana-secret';
 process.env.DEVPORTAL_CLIENT_SECRET = 'test-devportal-secret';
 
@@ -98,7 +95,34 @@ jest.mock('@opendirectory/grpc-event-bus', () => ({
 
 const crypto = require('crypto');
 const request = require('supertest');
-const app = require('../index');
+const app = require('../index').listen(0);
+const deviceDatabase = require('../db');
+async function registerWithStorage(body) {
+  const available = jest.spyOn(deviceDatabase, 'isAvailable').mockReturnValue(true);
+  const persist = jest.spyOn(deviceDatabase, 'upsertDevice').mockImplementation(async device => ({ id: device.id, platform: device.platform, policy_generation: '1' }));
+  try { return await request(app).post('/api/enrollment/register').send(body); }
+  finally { available.mockRestore(); persist.mockRestore(); }
+}
+const originalFetch = global.fetch;
+
+beforeAll(async () => {
+  await new Promise(resolve => app.listening ? resolve() : app.once('listening', resolve));
+});
+
+beforeEach(() => {
+  global.fetch = jest.fn(async (url, options) => {
+    if (!url.endsWith('/api/auth/login')) throw new Error('Unexpected upstream request');
+    const credentials = JSON.parse(options.body);
+    return { ok: true, status: 200, json: async () => ({ success: true,
+      user: { id: credentials.username, username: credentials.username,
+        roles: credentials.username === 'test-admin' ? ['admin'] : ['user'], permissions: [] } }) };
+  });
+});
+
+afterAll(async () => {
+  global.fetch = originalFetch;
+  await new Promise(resolve => app.close(resolve));
+});
 
 /** Pull the `code` query param off a Location header from a 302 redirect. */
 function codeFromRedirect(location) {
@@ -108,21 +132,15 @@ function codeFromRedirect(location) {
 
 // ─── Auth helpers for the admin-surface tests ──────────────────────────────
 //
-// grafana-od-client is seeded with client_credentials in its grantTypes
-// allowlist (see src/index.js's seed data) specifically so tests can mint
-// real, JWKS-verifiable tokens through the actual /oauth/token endpoint
-// rather than hand-rolling JWTs — scope is client-requested and flows
-// straight into the token payload's `scope` claim, so requesting
-// `oauth.admin` here exercises exactly the same code path
-// src/middleware/oidcAuth.js's hasAdminAccess() checks in production.
-
-/** Mints a real access token carrying the oauth.admin scope. */
 async function getAdminToken() {
+  const login = await request(app).post('/oauth/authorize/login').send({
+    client_id: 'devportal-od-client', redirect_uri: 'http://localhost:4000/callback',
+    username: 'test-admin', password: 'test-password', scope: 'openid roles',
+  });
+  if (login.status !== 302) throw new Error(`Admin login failed: ${login.status}`);
   const res = await request(app).post('/oauth/token').send({
-    grant_type: 'client_credentials',
-    client_id: 'grafana-od-client',
-    client_secret: 'test-grafana-secret',
-    scope: 'oauth.admin',
+    grant_type: 'authorization_code', code: codeFromRedirect(login.headers.location),
+    redirect_uri: 'http://localhost:4000/callback', client_id: 'devportal-od-client', client_secret: 'test-devportal-secret',
   });
   if (res.status !== 200) throw new Error(`getAdminToken: /oauth/token returned ${res.status}: ${JSON.stringify(res.body)}`);
   return res.body.access_token;
@@ -145,7 +163,7 @@ async function enrollDevice(hostname = `test-device-${Math.random().toString(36)
   const adminToken = await getAdminToken();
   const tokensRes = await request(app).get('/api/enrollment/tokens').set('Authorization', `Bearer ${adminToken}`);
   const linuxToken = tokensRes.body.find((t) => t.platform === 'linux').token;
-  const res = await request(app).post('/api/enrollment/register').send({
+  const res = await registerWithStorage({
     token: linuxToken, platform: 'linux', hostname, os: '6.8.0',
   });
   return { deviceId: res.body.deviceId, deviceToken: res.body.deviceToken };
@@ -215,7 +233,7 @@ describe('oauth-provider E2E', () => {
         grant_type: 'client_credentials',
         client_id: 'grafana-od-client',
         client_secret: 'test-grafana-secret',
-        scope: 'read',
+        scope: 'openid',
       });
       expect(res.status).toBe(200);
       expect(res.body.token_type).toBe('Bearer');
@@ -380,7 +398,7 @@ describe('oauth-provider E2E', () => {
   // ── Device authorization flow (RFC 8628) ─────────────────────────────────
   describe('Device authorization flow', () => {
     it('POST /oauth/device/code issues a device_code + user_code', async () => {
-      const res = await request(app).post('/oauth/device/code').send({ client_id: 'devportal-od-client', scope: 'openid profile' });
+      const res = await request(app).post('/oauth/device/code').send({ client_id: 'devportal-od-client', client_secret: 'test-devportal-secret', scope: 'openid profile' });
       expect(res.status).toBe(200);
       expect(res.body.device_code).toBeTruthy();
       // 3 random bytes hex-encoded (6 chars) with a dash inserted after the
@@ -390,11 +408,12 @@ describe('oauth-provider E2E', () => {
     });
 
     it('polling before approval returns 400 authorization_pending', async () => {
-      const codeRes = await request(app).post('/oauth/device/code').send({ client_id: 'devportal-od-client' });
+      const codeRes = await request(app).post('/oauth/device/code').send({ client_id: 'devportal-od-client', client_secret: 'test-devportal-secret' });
       const res = await request(app).post('/oauth/token').send({
         grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
         device_code: codeRes.body.device_code,
         client_id: 'devportal-od-client',
+        client_secret: 'test-devportal-secret',
       });
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('authorization_pending');
@@ -405,13 +424,14 @@ describe('oauth-provider E2E', () => {
         grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
         device_code: 'no-such-device-code',
         client_id: 'devportal-od-client',
+        client_secret: 'test-devportal-secret',
       });
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('expired_token');
     });
 
     it('approving the user_code then polling issues an access token', async () => {
-      const codeRes = await request(app).post('/oauth/device/code').send({ client_id: 'devportal-od-client', scope: 'openid' });
+      const codeRes = await request(app).post('/oauth/device/code').send({ client_id: 'devportal-od-client', client_secret: 'test-devportal-secret', scope: 'openid' });
       const approveRes = await request(app).post('/oauth/device/approve').send({
         user_code: codeRes.body.user_code,
         username: 'bob',
@@ -424,6 +444,7 @@ describe('oauth-provider E2E', () => {
         grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
         device_code: codeRes.body.device_code,
         client_id: 'devportal-od-client',
+        client_secret: 'test-devportal-secret',
       });
       expect(tokenRes.status).toBe(200);
       expect(typeof tokenRes.body.access_token).toBe('string');
@@ -456,19 +477,9 @@ describe('oauth-provider E2E', () => {
 
   // ── Introspection + revocation ───────────────────────────────────────────
   describe('POST /oauth/introspect + /oauth/revoke', () => {
-    // `scope` is optional and otherwise unused by the assertions below — its
-    // only purpose is to let a caller force a distinct token when issuing
-    // more than one client_credentials token for the same client within the
-    // same wall-clock second. RS256/PKCS#1v1.5 signing is deterministic, and
-    // the token payload here (sub/iss/aud/iat/scope) has no per-call nonce,
-    // so two same-second, same-scope calls for the same client produce
-    // byte-identical JWTs (and therefore identical revocation hashes) —
-    // without this, tests that revoke/introspect distinct "tokens" in quick
-    // succession could accidentally collide with each other's tokens.
-    async function issueClientCredsToken(scope) {
+    async function issueClientCredsToken() {
       const res = await request(app).post('/oauth/token').send({
         grant_type: 'client_credentials', client_id: 'grafana-od-client', client_secret: 'test-grafana-secret',
-        ...(scope ? { scope } : {}),
       });
       return res.body.access_token;
     }
@@ -626,13 +637,31 @@ describe('oauth-provider E2E', () => {
       const tokensRes = await request(app).get('/api/enrollment/tokens').set('Authorization', `Bearer ${adminToken}`);
       const linuxToken = tokensRes.body.find((t) => t.platform === 'linux').token;
 
-      const res = await request(app).post('/api/enrollment/register').send({
+      const res = await registerWithStorage({
         token: linuxToken, platform: 'linux', hostname: 'ci-runner-01', os: '6.8.0',
       });
       expect(res.status).toBe(201);
       expect(res.body.deviceId).toBeTruthy();
       expect(typeof res.body.deviceToken).toBe('string');
       expect(res.body.deviceToken.split('.')).toHaveLength(3);
+    });
+    it('valid bootstrap credentials do not mint a device or consume their quota when persistent enrollment is unavailable',async()=>{
+      const adminToken=await getAdminToken();const before=await request(app).get('/api/enrollment/tokens').set('Authorization',`Bearer ${adminToken}`);const token=before.body.find(row=>row.platform==='linux');
+      const denied=await request(app).post('/api/enrollment/register').send({token:token.token,platform:'linux',hostname:'must-not-be-memory-enrolled'});expect(denied.status).toBe(503);expect(denied.body.deviceToken).toBeUndefined();
+      const after=await request(app).get('/api/enrollment/tokens').set('Authorization',`Bearer ${adminToken}`);expect(after.body.find(row=>row.platform==='linux').uses).toBe(token.uses);
+    });
+    it('waits for actual device persistence and does not disclose a signed device credential after a delayed SQL write failure',async()=>{
+      const adminToken=await getAdminToken();const before=await request(app).get('/api/enrollment/tokens').set('Authorization',`Bearer ${adminToken}`);const token=before.body.find(row=>row.platform==='linux');
+      let rejectWrite;let entered=false;let answered=false;const available=jest.spyOn(deviceDatabase,'isAvailable').mockReturnValue(true);const persist=jest.spyOn(deviceDatabase,'upsertDevice').mockImplementation(()=>new Promise((resolve,reject)=>{entered=true;rejectWrite=reject;}));
+      try{const pending=request(app).post('/api/enrollment/register').send({token:token.token,platform:'linux',hostname:'must-wait-for-sql'}).then(response=>{answered=true;return response;});while(!entered)await new Promise(resolve=>setImmediate(resolve));expect(answered).toBe(false);rejectWrite(new Error('Owned failed device write'));const denied=await pending;expect(denied.status).toBe(503);expect(denied.body.deviceToken).toBeUndefined();}
+      finally{available.mockRestore();persist.mockRestore();}
+      const after=await request(app).get('/api/enrollment/tokens').set('Authorization',`Bearer ${adminToken}`);expect(after.body.find(row=>row.platform==='linux').uses).toBe(token.uses);
+    });
+    it('cannot mint an old bootstrap credential after rotation while its device SQL receipt was in flight',async()=>{
+      const adminToken=await getAdminToken();const before=await request(app).get('/api/enrollment/tokens').set('Authorization',`Bearer ${adminToken}`);const token=before.body.find(row=>row.platform==='linux');let release;let entered=false;
+      const available=jest.spyOn(deviceDatabase,'isAvailable').mockReturnValue(true);const persist=jest.spyOn(deviceDatabase,'upsertDevice').mockImplementation(device=>new Promise(resolve=>{entered=true;release=()=>resolve({id:device.id,platform:device.platform,policy_generation:'1'});}));
+      try{const pending=request(app).post('/api/enrollment/register').send({token:token.token,platform:'linux',hostname:'rotated-during-sql'}).then(response=>response);while(!entered)await new Promise(resolve=>setImmediate(resolve));available.mockReturnValue(false);const rotated=await request(app).post('/api/enrollment/tokens/linux/rotate').set('Authorization',`Bearer ${adminToken}`);expect(rotated.status).toBe(200);release();const denied=await pending;expect(denied.status).toBe(503);expect(denied.body.deviceToken).toBeUndefined();}
+      finally{available.mockRestore();persist.mockRestore();}
     });
 
     it('a token issued for one platform is rejected when submitted with a different platform', async () => {
@@ -662,7 +691,7 @@ describe('oauth-provider E2E', () => {
       });
       expect(registerWithOld.status).toBe(401);
 
-      const registerWithNew = await request(app).post('/api/enrollment/register').send({
+      const registerWithNew = await registerWithStorage({
         token: rotateRes.body.token, platform: 'macos', hostname: 'should-work',
       });
       expect(registerWithNew.status).toBe(201);
@@ -685,7 +714,7 @@ describe('oauth-provider E2E', () => {
       const android = tokensRes.body.find((t) => t.platform === 'android'); // maxUses: 25
 
       for (let i = 0; i < android.maxUses; i++) {
-        const res = await request(app).post('/api/enrollment/register').send({
+        const res = await registerWithStorage({
           token: android.token, platform: 'android', hostname: `android-device-${i}`,
         });
         expect(res.status).toBe(201);
@@ -814,14 +843,14 @@ describe('oauth-provider E2E', () => {
           else process.env.OAUTH_PROVIDER_INTERNAL_TOKEN = prevToken;
         });
 
-        it('a correct internal token issues the command with no Authorization header at all', async () => {
+        it('even a correct internal token cannot bypass approved policy publication with a raw payload', async () => {
           // update_policy is the command policy-service's GPO/blueprint push
           // actually sends.
           const res = await request(app)
             .post('/api/devices/dev-001/commands')
             .set('x-oauth-internal-token', 'e2e-internal-secret')
             .send({ command: 'update_policy', payload: {} });
-          expect(res.status).toBe(201);
+          expect(res.status).toBe(403);
         });
 
         it('run_av_scan (antivirus-protection\'s real MDM command name) is accepted via the internal-token bypass', async () => {
@@ -1065,11 +1094,14 @@ describe('oauth-provider E2E', () => {
 
       it('a client without the device-code grant in its allowlist cannot use the device flow', async () => {
         // grafana-od-client's grantTypes are authorization_code/refresh_token/client_credentials only.
-        const codeRes = await request(app).post('/oauth/device/code').send({ client_id: 'grafana-od-client' });
+        const codeRes = await request(app).post('/oauth/device/code').send({ client_id: 'grafana-od-client', client_secret: 'test-grafana-secret' });
+        expect(codeRes.status).toBe(400);
+        expect(codeRes.body.error).toBe('unauthorized_client');
         const res = await request(app).post('/oauth/token').send({
           grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
           device_code: codeRes.body.device_code,
           client_id: 'grafana-od-client',
+          client_secret: 'test-grafana-secret',
         });
         expect(res.status).toBe(400);
         expect(res.body.error).toBe('unauthorized_client');
@@ -1146,19 +1178,19 @@ describe('oauth-provider E2E', () => {
   // executor.go and agent/internal/compliance/checker.go — both already send
   // `Authorization: Bearer <DeviceToken>`), not an admin token. They require
   // SOME valid, non-revoked bearer JWT but not the oauth.admin scope/role.
-  describe('Device-self routes require a bearer token (any valid JWT, not admin)', () => {
+  describe('Device-self routes require a subject-bound device credential or verified administrator', () => {
     it('GET /api/devices/:id/commands/pending -> 401 with no token', async () => {
       const res = await request(app).get('/api/devices/dev-001/commands/pending');
       expect(res.status).toBe(401);
     });
 
-    it('a freshly-enrolled device token can poll its own pending-commands queue', async () => {
+    it('a freshly-enrolled device credential still cannot obtain a fabricated pending queue during SQL failure', async () => {
       const { deviceId, deviceToken } = await enrollDevice();
       const res = await request(app)
         .get(`/api/devices/${deviceId}/commands/pending`)
         .set('Authorization', `Bearer ${deviceToken}`);
-      expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.status).toBe(503);
+      expect(res.body.error).toBe('policy_command_storage_unavailable');
     });
 
     it('PATCH /api/devices/:id/commands/:cmdId -> 401 with no token', async () => {

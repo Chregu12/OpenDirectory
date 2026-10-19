@@ -165,7 +165,7 @@ const METHOD_LABELS: Record<ResetMethod, string> = {
   mfa: 'MFA',
 };
 
-const METHOD_ICONS: Record<ResetMethod, React.ComponentType<{ className?: string }>> = {
+const METHOD_ICONS: Record<ResetMethod, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   email: EnvelopeIcon,
   sms: DevicePhoneMobileIcon,
   sicherheitsfragen: QuestionMarkCircleIcon,

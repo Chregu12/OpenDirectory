@@ -8,6 +8,7 @@ import {
   ClipboardDocumentIcon,
 } from '@heroicons/react/24/outline';
 import { qaPost } from '@/lib/quickActionsApi';
+import { useQuickActionAccess } from '@/hooks/useQuickActionAccess';
 import toast from 'react-hot-toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -40,7 +41,11 @@ interface CreatedUser {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEPARTMENTS = ['Engineering', 'Marketing', 'Sales', 'Finance', 'HR', 'Operations', 'Legal', 'IT', 'Design', 'Product'];
-const ROLES = ['Standard User', 'IT Admin', 'Developer', 'Manager', 'Read Only'];
+const ROLES = [
+  { value: 'standard', label: 'Standard User' },
+  { value: 'elevated', label: 'Elevated User' },
+  { value: 'admin', label: 'IT Admin' },
+];
 
 const STEPS = [
   { n: 1 as Step, label: 'Basic Info' },
@@ -119,10 +124,12 @@ const selectStyle: React.CSSProperties = {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardProps) {
+  const { access, can } = useQuickActionAccess();
+  const departments = can('users.groups.assign') ? Array.from(new Set(['General', ...DEPARTMENTS, ...(access?.onboardingDepartments || [])])) : access?.onboardingDepartments || [];
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState<FormData>({
     firstName: '', lastName: '', email: '', jobTitle: '', department: '',
-    role: 'Standard User', manager: '', assignedDevice: '', deviceChoice: 'later',
+    role: 'standard', manager: '', assignedDevice: '', deviceChoice: 'later',
   });
   const [loading, setLoading] = useState(false);
   const [created, setCreated] = useState<CreatedUser | null>(null);
@@ -131,7 +138,8 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
   const set = (key: keyof FormData, value: string) => setForm(prev => ({ ...prev, [key]: value }));
 
   const canNext = () => {
-    if (step === 1) return form.firstName.trim() && form.lastName.trim() && form.email.trim();
+    if (!can('users.onboard')) return false;
+    if (step === 1) return form.firstName.trim() && form.lastName.trim() && form.email.trim() && departments.includes(form.department || 'General');
     if (step === 2) return !!form.role;
     return true;
   };
@@ -146,6 +154,7 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
   };
 
   const handleCreate = async () => {
+    if (!can('users.onboard')) return;
     setLoading(true);
     try {
       const data = await qaPost<{
@@ -274,7 +283,7 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
                   <Field label="Department">
                     <select value={form.department} onChange={e => set('department', e.target.value)} style={selectStyle}>
                       <option value="">Select department...</option>
-                      {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      {departments.map(department => <option key={department} value={department}>{department}</option>)}
                     </select>
                   </Field>
                 </div>
@@ -285,7 +294,7 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
                 <div>
                   <Field label="Role" required>
                     <select value={form.role} onChange={e => set('role', e.target.value)} style={selectStyle}>
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      {ROLES.filter(role => role.value === 'standard' || can('users.roles.assign')).map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
                     </select>
                   </Field>
                   <Field label="Manager">
@@ -304,11 +313,9 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
                   >
                     <strong style={{ color: 'var(--text-primary, #e4e6ea)' }}>Role: {form.role}</strong>
                     <br />
-                    {form.role === 'IT Admin' && 'Full access to device management, policies, and user admin.'}
-                    {form.role === 'Developer' && 'Access to dev environments, API keys, and code repositories.'}
-                    {form.role === 'Manager' && 'Access to team reports, user management in their department.'}
-                    {form.role === 'Standard User' && 'Basic access to assigned devices and applications.'}
-                    {form.role === 'Read Only' && 'View-only access across the directory.'}
+                    {form.role === 'admin' && 'Administrative access. Requires separate role-assignment permission.'}
+                    {form.role === 'elevated' && 'Elevated access. Requires separate role-assignment permission.'}
+                    {form.role === 'standard' && 'Basic access to assigned devices and applications.'}
                   </div>
                 </div>
               )}
@@ -323,7 +330,7 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
                     {[
                       { value: 'existing', label: 'Assign existing device', icon: '💻', desc: 'Choose from enrolled devices' },
                       { value: 'later', label: 'Will enroll later', icon: '🕐', desc: 'User will set up their own device' },
-                    ].map(opt => (
+                    ].filter(option => option.value === 'later' || can('users.devices.assign')).map(opt => (
                       <button
                         key={opt.value}
                         onClick={() => set('deviceChoice', opt.value)}
@@ -374,7 +381,7 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
                       { label: 'Email', value: form.email || '—' },
                       { label: 'Job Title', value: form.jobTitle || '—' },
                       { label: 'Department', value: form.department || '—' },
-                      { label: 'Role', value: form.role },
+                      { label: 'Role', value: ROLES.find(role => role.value === form.role)?.label || form.role },
                       { label: 'Manager', value: form.manager || '—' },
                       { label: 'Device', value: form.deviceChoice === 'later' ? 'Enroll later' : form.assignedDevice || '—' },
                     ].map(row => (
@@ -427,7 +434,7 @@ export default function UserOnboardingWizard({ onClose }: UserOnboardingWizardPr
               ) : (
                 <button
                   onClick={handleCreate}
-                  disabled={loading}
+                  disabled={loading || !can('users.onboard')}
                   style={{
                     padding: '9px 20px',
                     background: '#34C759',

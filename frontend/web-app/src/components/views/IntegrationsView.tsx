@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import AppRegistrationsView from './AppRegistrationsView';
 import {
   PlusIcon,
   TrashIcon,
@@ -55,14 +56,6 @@ interface WebhookDelivery {
   deliveredAt?: string;
   delivered_at?: string;
   success: boolean;
-}
-
-interface OAuthClient {
-  id?: string;
-  clientId?: string;
-  name: string;
-  redirectUris?: string[];
-  scopes?: string[];
 }
 
 type Tab = 'apikeys' | 'webhooks' | 'oauth';
@@ -252,7 +245,7 @@ function AddWebhookModal({ onClose, onSaved }: AddWebhookModalProps) {
     if (!url.trim()) { toast.error('URL ist erforderlich'); return; }
     setSaving(true);
     try {
-      await api.post('/api/gateway/webhooks', { name, url, events, secret: secret || undefined });
+      await api.post('/api/gateway/webhooks', { name, url, events });
       toast.success('Webhook hinzugefügt');
       onSaved();
     } catch {
@@ -297,7 +290,7 @@ function AddWebhookModal({ onClose, onSaved }: AddWebhookModalProps) {
 
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>Secret (optional)</label>
-            <input type="password" value={secret} onChange={e => setSecret(e.target.value)} placeholder="Webhook Secret" style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-strong)', fontSize: 14, boxSizing: 'border-box', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }} />
+            <input type="password" disabled value={secret} onChange={e => setSecret(e.target.value)} placeholder="Signierung noch nicht implementiert" style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-strong)', fontSize: 14, boxSizing: 'border-box', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }} />
           </div>
         </div>
 
@@ -338,7 +331,7 @@ function DeliveryLogPanel({ webhookId, onClose }: { webhookId: string; onClose: 
           </button>
         </div>
 
-        {loading ? (
+      {loading ? (
           <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Laden...</p>
         ) : deliveries.length === 0 ? (
           <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 24 }}>Keine Zustellungen</p>
@@ -376,9 +369,12 @@ function DeliveryLogPanel({ webhookId, onClose }: { webhookId: string; onClose: 
 
 export default function IntegrationsView() {
   const [activeTab, setActiveTab] = useState<Tab>('apikeys');
+  const [gatewayPermissions, setGatewayPermissions] = useState<string[]>([]);
+  const [gatewayError, setGatewayError] = useState('');
+  const canManageKeys = gatewayPermissions.includes('gateway.keys.manage');
+  const canManageWebhooks = gatewayPermissions.includes('gateway.webhooks.manage');
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
-  const [oauthClients, setOauthClients] = useState<OAuthClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateKeyModal, setShowCreateKeyModal] = useState(false);
   const [newKeyData, setNewKeyData] = useState<{ name: string; key: string } | null>(null);
@@ -388,16 +384,23 @@ export default function IntegrationsView() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [keysRes, hooksRes, oauthRes] = await Promise.allSettled([
-      api.get('/api/gateway/api-keys'),
-      api.get('/api/gateway/webhooks'),
-      api.get('/api/clients'),
-    ]);
-
-    if (keysRes.status === 'fulfilled') setApiKeys(Array.isArray(keysRes.value.data) ? keysRes.value.data : []);
-    if (hooksRes.status === 'fulfilled') setWebhooks(Array.isArray(hooksRes.value.data) ? hooksRes.value.data : []);
-    if (oauthRes.status === 'fulfilled') setOauthClients(Array.isArray(oauthRes.value.data) ? oauthRes.value.data : []);
-    setLoading(false);
+    setGatewayError('');
+    try {
+      const access = await api.get('/api/gateway/access');
+      const permissions = Array.isArray(access.data?.permissions) ? access.data.permissions : [];
+      setGatewayPermissions(permissions);
+      const [keysRes, hooksRes] = await Promise.allSettled([
+        permissions.includes('gateway.keys.read') ? api.get('/api/gateway/api-keys') : Promise.resolve({ data: [] }),
+        permissions.includes('gateway.webhooks.read') ? api.get('/api/gateway/webhooks') : Promise.resolve({ data: [] }),
+      ]);
+      setApiKeys(keysRes.status === 'fulfilled' && Array.isArray(keysRes.value.data) ? keysRes.value.data : []);
+      setWebhooks(hooksRes.status === 'fulfilled' && Array.isArray(hooksRes.value.data) ? hooksRes.value.data : []);
+      if (keysRes.status === 'rejected' || hooksRes.status === 'rejected') setGatewayError('Integrationsdaten konnten nicht bestätigt werden; kein lokaler Ersatz wird angezeigt.');
+    } catch {
+      setGatewayPermissions([]); setApiKeys([]); setWebhooks([]);
+      setShowCreateKeyModal(false); setShowAddWebhookModal(false); setSelectedWebhookId(null);
+      setGatewayError('Gateway-Anmeldung oder Berechtigungen sind nicht verfügbar.');
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -455,7 +458,7 @@ export default function IntegrationsView() {
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Integrationen</h1>
           <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>API-Schlüssel, Webhooks und OAuth-Anwendungen verwalten</p>
         </div>
-        {activeTab === 'apikeys' && (
+        {false && activeTab === 'apikeys' && (
           <button
             onClick={() => setShowCreateKeyModal(true)}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
@@ -464,7 +467,7 @@ export default function IntegrationsView() {
             API-Schlüssel erstellen
           </button>
         )}
-        {activeTab === 'webhooks' && (
+        {canManageWebhooks && activeTab === 'webhooks' && (
           <button
             onClick={() => setShowAddWebhookModal(true)}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
@@ -475,6 +478,8 @@ export default function IntegrationsView() {
         )}
       </div>
 
+      {gatewayError && <p role="alert">{gatewayError}</p>}
+      <p role="status">Gateway-API-Schlüssel sind stillgelegt. Für neue Integrationen autorisierte OAuth-App-Zugangsdaten verwenden. Webhooks registrieren Metadaten; produktive signierte Ereigniszustellung ist noch nicht implementiert.</p>
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 24 }}>
         {tabs.map(tab => (
@@ -503,7 +508,7 @@ export default function IntegrationsView() {
               {apiKeys.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>
                   <p style={{ margin: 0, fontWeight: 500 }}>Keine API-Schlüssel</p>
-                  <p style={{ margin: '4px 0 0', fontSize: 13 }}>Erstellen Sie einen Schlüssel für externe Integrationen.</p>
+                  <p style={{ margin: '4px 0 0', fontSize: 13 }}>Für neue Integrationen die autorisierte App-Registrierung verwenden.</p>
                 </div>
               ) : (
                 <div style={{ background: 'var(--bg-surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
@@ -536,14 +541,13 @@ export default function IntegrationsView() {
                             ) : '—'}
                           </td>
                           <td style={{ padding: '12px 16px' }}>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: key.active !== false ? 'var(--success-light)' : 'var(--bg-overlay)', color: key.active !== false ? 'var(--success)' : 'var(--text-muted)', fontSize: 12, fontWeight: 500 }}>
-                              <CheckCircleIcon style={{ width: 12, height: 12 }} />
-                              {key.active !== false ? 'Aktiv' : 'Inaktiv'}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: 'var(--bg-overlay)', color: 'var(--text-muted)', fontSize: 12, fontWeight: 500 }}>
+                              Stillgelegt
                             </span>
                           </td>
                           <td style={{ padding: '12px 16px' }}>
                             <button
-                              onClick={() => handleRevokeKey(key.id)}
+                              disabled={!canManageKeys} onClick={() => handleRevokeKey(key.id)}
                               style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--danger-light)', background: 'var(--danger-light)', fontSize: 12, cursor: 'pointer', color: 'var(--danger)' }}
                             >
                               <TrashIcon style={{ width: 14, height: 14 }} />
@@ -605,14 +609,14 @@ export default function IntegrationsView() {
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button
                                 onClick={() => handleTestWebhook(wh.id)}
-                                disabled={testingIds.has(wh.id)}
+                                disabled={!canManageWebhooks || testingIds.has(wh.id)}
                                 style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', fontSize: 12, cursor: testingIds.has(wh.id) ? 'not-allowed' : 'pointer', opacity: testingIds.has(wh.id) ? 0.6 : 1 }}
                               >
                                 <BoltIcon style={{ width: 14, height: 14 }} />
                                 Test senden
                               </button>
                               <button
-                                onClick={() => handleDeleteWebhook(wh.id)}
+                                disabled={!canManageWebhooks} onClick={() => handleDeleteWebhook(wh.id)}
                                 style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--danger-light)', background: 'var(--danger-light)', cursor: 'pointer', color: 'var(--danger)' }}
                               >
                                 <TrashIcon style={{ width: 14, height: 14 }} />
@@ -629,49 +633,12 @@ export default function IntegrationsView() {
           )}
 
           {/* OAuth Apps Tab */}
-          {activeTab === 'oauth' && (
-            <div>
-              {oauthClients.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>
-                  <p style={{ margin: 0, fontWeight: 500 }}>Keine OAuth-Apps registriert</p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {oauthClients.map(client => (
-                    <div key={client.id || client.clientId} style={{ background: 'var(--bg-surface)', borderRadius: 12, border: '1px solid var(--border)', padding: 20 }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <div>
-                          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{client.name}</p>
-                          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Client ID: <code style={{ background: 'var(--bg-overlay)', padding: '1px 4px', borderRadius: 3 }}>{client.id || client.clientId}</code></p>
-                        </div>
-                        <GlobeAltIcon style={{ width: 20, height: 20, color: 'var(--text-muted)' }} />
-                      </div>
-                      {(client.redirectUris || []).length > 0 && (
-                        <div style={{ marginBottom: 8 }}>
-                          <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>Redirect URIs</p>
-                          {(client.redirectUris || []).map(uri => (
-                            <p key={uri} style={{ margin: '2px 0', fontSize: 12, color: 'var(--text-muted)' }}>{uri}</p>
-                          ))}
-                        </div>
-                      )}
-                      {(client.scopes || []).length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {(client.scopes || []).map(s => (
-                            <span key={s} style={{ padding: '2px 6px', borderRadius: 4, background: 'var(--bg-overlay)', color: 'var(--text-secondary)', fontSize: 12 }}>{s}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {activeTab === 'oauth' && <AppRegistrationsView />}
         </>
       )}
 
       {/* Modals */}
-      {showCreateKeyModal && (
+      {false && showCreateKeyModal && (
         <CreateApiKeyModal
           onClose={() => setShowCreateKeyModal(false)}
           onCreated={data => { setShowCreateKeyModal(false); setNewKeyData(data); loadData(); }}
@@ -686,7 +653,7 @@ export default function IntegrationsView() {
         />
       )}
 
-      {showAddWebhookModal && (
+      {canManageWebhooks && showAddWebhookModal && (
         <AddWebhookModal
           onClose={() => setShowAddWebhookModal(false)}
           onSaved={() => { setShowAddWebhookModal(false); loadData(); }}

@@ -26,7 +26,6 @@ import MonitoringAlertingWizard from '@/components/setup/MonitoringAlertingWizar
 import SecuritySetupWizard from '@/components/setup/SecuritySetupWizard';
 import NetworkConfigWizard from '@/components/setup/NetworkConfigWizard';
 import DeviceEnrollmentWizard from '@/components/setup/DeviceEnrollmentWizard';
-import UserManagementWizard from '@/components/setup/UserManagementWizard';
 import PrinterSetupWizard from '@/components/setup/PrinterSetupWizard';
 
 interface Service {
@@ -354,7 +353,6 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
   const [showSecurityWizard, setShowSecurityWizard]     = useState(false);
   const [showNetworkWizard, setShowNetworkWizard]       = useState(false);
   const [showDeviceWizard, setShowDeviceWizard]         = useState(false);
-  const [showUserWizard, setShowUserWizard]             = useState(false);
   const [showPrinterWizard, setShowPrinterWizard]       = useState(false);
 
   useEffect(() => {
@@ -681,14 +679,14 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>User Management</h4>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Benutzer und Gruppen anlegen, LDAP-Einstellungen konfigurieren.</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Kanonische Verzeichniseinträge, Profile und Kontosperren verwalten.</p>
                     </div>
                   </div>
                   <button
-                    onClick={() => setShowUserWizard(true)}
+                    onClick={() => window.location.assign('/users')}
                     className="mt-4 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200 rounded-lg transition-colors"
                   >
-                    <PlayIcon className="w-4 h-4" /> Wizard starten
+                    <PlayIcon className="w-4 h-4" /> Benutzerverwaltung öffnen
                   </button>
                 </div>
 
@@ -849,7 +847,6 @@ export default function SettingsView({ enabledModules, onModuleChange }: Props) 
       {showSecurityWizard   && <SecuritySetupWizard       onClose={() => setShowSecurityWizard(false)} />}
       {showNetworkWizard    && <NetworkConfigWizard        onClose={() => setShowNetworkWizard(false)} />}
       {showDeviceWizard     && <DeviceEnrollmentWizard    onClose={() => setShowDeviceWizard(false)} />}
-      {showUserWizard       && <UserManagementWizard      onClose={() => setShowUserWizard(false)} />}
       {showPrinterWizard    && <PrinterSetupWizard        onClose={() => setShowPrinterWizard(false)} />}
     </>
   );

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { qaGet, qaDelete, qaPost, RotateSecretResult } from '@/lib/quickActionsApi';
+import { useQuickActionAccess } from '@/hooks/useQuickActionAccess';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,8 @@ interface ServicePrincipalListColumnProps {
 }
 
 export default function ServicePrincipalListColumn({ selectedId, onSelect, onCreateNew }: ServicePrincipalListColumnProps) {
+  const { can } = useQuickActionAccess();
+  const canRead = can('applications.read');
   const [sps,          setSps]          = useState<ServicePrincipal[]>([]);
   const [search,       setSearch]       = useState('');
   const [sortOpen,     setSortOpen]     = useState(false);
@@ -33,9 +36,10 @@ export default function ServicePrincipalListColumn({ selectedId, onSelect, onCre
   const [rotatedSecret, setRotatedSecret] = useState<RotateSecretResult | null>(null);
 
   const loadSPs = useCallback(async () => {
+    if (!canRead) return;
     try {
-      const data = await qaGet<ServicePrincipal[] | { items?: ServicePrincipal[] }>('/api/quick/service-principals');
-      const list = Array.isArray(data) ? data : (data.items ?? []);
+      const data = await qaGet<ServicePrincipal[] | { data?: ServicePrincipal[]; items?: ServicePrincipal[] }>('/api/quick/service-principals');
+      const list = Array.isArray(data) ? data : (data.data ?? data.items ?? []);
       setSps(list.map((sp: any) => ({
         id:          sp.id          ?? sp.clientId ?? sp.client_id,
         name:        sp.name        ?? sp.appName  ?? sp.app_name  ?? sp.clientId,
@@ -46,7 +50,7 @@ export default function ServicePrincipalListColumn({ selectedId, onSelect, onCre
         status:      sp.status      ?? 'active',
       })));
     } catch {}
-  }, []);
+  }, [canRead]);
 
   useEffect(() => { loadSPs(); }, [loadSPs, refreshKey]);
 
@@ -103,7 +107,7 @@ export default function ServicePrincipalListColumn({ selectedId, onSelect, onCre
           <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)', margin: 0 }}>
             Service Principals
           </h2>
-          {onCreateNew && (
+          {onCreateNew && can('applications.create') && (
             <button
               onClick={onCreateNew}
               style={{
@@ -234,7 +238,7 @@ export default function ServicePrincipalListColumn({ selectedId, onSelect, onCre
                     background: sp.status === 'active' ? '#22c55e' : '#6e7681',
                   }} />
                 )}
-                <button
+                {can('applications.credentials.rotate') && <button
                   onClick={e => { e.stopPropagation(); handleRotateSecret(sp); }}
                   disabled={rotatingId === sp.id}
                   title="Rotate secret"
@@ -245,8 +249,8 @@ export default function ServicePrincipalListColumn({ selectedId, onSelect, onCre
                   }}
                 >
                   ↻
-                </button>
-                <button
+                </button>}
+                {can('applications.delete') && <button
                   onClick={e => { e.stopPropagation(); handleDelete(sp); }}
                   disabled={deletingId === sp.id}
                   title="Delete"
@@ -257,7 +261,7 @@ export default function ServicePrincipalListColumn({ selectedId, onSelect, onCre
                   }}
                 >
                   ✕
-                </button>
+                </button>}
               </div>
             </button>
           );

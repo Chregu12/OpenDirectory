@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  typescript: { ignoreBuildErrors: true },
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+  typescript: { tsconfigPath: process.env.NEXT_TSCONFIG_PATH || 'tsconfig.json' },
   eslint: { ignoreDuringBuilds: true },
   swcMinify: true,
   // All API calls are proxied server-side to the integration service.
@@ -23,9 +24,11 @@ const nextConfig = {
     const auditServiceUrl      = process.env.AUDIT_SERVICE_URL              || 'http://audit-service:3908';
     const networkInfraUrl      = process.env.NETWORK_INFRA_URL              || 'http://network-infrastructure:3007';
     const leastPrivilegeUrl    = process.env.LEAST_PRIVILEGE_URL            || 'http://least-privilege:3011';
+    const policyServiceUrl     = process.env.POLICY_SERVICE_URL             || 'http://policy-service:3004';
+    const licenseAdapterUrl    = process.env.LICENSE_ADAPTER_URL            || 'http://license-management:3018';
+    const coreGatewayUrl       = process.env.CORE_GATEWAY_URL               || 'http://api-gateway:8080';
+    const oauthProviderUrl     = process.env.OAUTH_PROVIDER_URL              || 'http://oauth-provider:3010';
     return [
-      // OIDC endpoints → auth-service (same-origin, avoids CORS)
-      { source: '/oidc/:path*', destination: `${authServiceUrl}/:path*` },
       // Health + integration-specific routes -> integration-service
       { source: '/health',                  destination: `${integrationUrl}/health` },
       { source: '/health/:path*',           destination: `${integrationUrl}/health/:path*` },
@@ -49,9 +52,39 @@ const nextConfig = {
       { source: '/api/devices/report-hardware/:id',            destination: `${deviceServiceUrl}/api/devices/report-hardware/:id` },
       { source: '/api/devices/:id/driver-recommendations',     destination: `${deviceServiceUrl}/api/devices/:id/driver-recommendations` },
       { source: '/api/devices/:id/detect-drivers',             destination: `${deviceServiceUrl}/api/devices/:id/detect-drivers` },
+      { source: '/api/devices/policy-commands',                destination: `${oauthProviderUrl}/api/devices/policy-commands` },
+      { source: '/api/devices/:deviceId/commands/:cmdId/cancel', destination: `${oauthProviderUrl}/api/devices/:deviceId/commands/:cmdId/cancel` },
+      { source: '/api/devices',                              destination: `${deviceServiceUrl}/api/devices` },
+      { source: '/api/devices/capabilities',                  destination: `${deviceServiceUrl}/api/devices/capabilities` },
+      { source: '/api/devices/returns/:path*',                destination: `${deviceServiceUrl}/api/devices/returns/:path*` },
+      { source: '/api/devices/users/:userId/offboarding-returns/:path*', destination: `${deviceServiceUrl}/api/devices/users/:userId/offboarding-returns/:path*` },
+      { source: '/api/devices/:id/assignment',                destination: `${deviceServiceUrl}/api/devices/:id/assignment` },
+      { source: '/api/devices/:id/history',                   destination: `${deviceServiceUrl}/api/devices/:id/history` },
+      { source: '/api/devices/:id',                          destination: `${deviceServiceUrl}/api/devices/:id` },
       // App Store routes -> app-store service
       { source: '/api/store/:path*',        destination: `${appStoreUrl}/api/store/:path*` },
       { source: '/api/appstore/:path*',     destination: `${appStoreUrl}/api/appstore/:path*` },
+      { source: '/api/licenses',            destination: `${policyServiceUrl}/api/licenses` },
+      { source: '/api/licenses/:path*',     destination: `${policyServiceUrl}/api/licenses/:path*` },
+      { source: '/api/policies',            destination: `${policyServiceUrl}/api/policies` },
+      { source: '/api/policies/:path*',     destination: `${policyServiceUrl}/api/policies/:path*` },
+      { source: '/api/blueprints',          destination: `${policyServiceUrl}/api/blueprints` },
+      { source: '/api/blueprints/:path*',    destination: `${policyServiceUrl}/api/blueprints/:path*` },
+      { source: '/api/company-blueprints',   destination: `${policyServiceUrl}/api/company-blueprints` },
+      { source: '/api/company-blueprints/:path*', destination: `${policyServiceUrl}/api/company-blueprints/:path*` },
+      { source: '/api/company-blueprint-assignments', destination: `${policyServiceUrl}/api/company-blueprint-assignments` },
+      { source: '/api/company-blueprint-assignments/:path*', destination: `${policyServiceUrl}/api/company-blueprint-assignments/:path*` },
+      { source: '/api/gpo',                 destination: `${policyServiceUrl}/api/gpo` },
+      { source: '/api/gpo/:path*',           destination: `${policyServiceUrl}/api/gpo/:path*` },
+      { source: '/api/update-rings',        destination: `${policyServiceUrl}/api/update-rings` },
+      { source: '/api/update-rings/:path*',  destination: `${policyServiceUrl}/api/update-rings/:path*` },
+      { source: '/api/license',             destination: `${licenseAdapterUrl}/api/license` },
+      { source: '/api/license/:path*',      destination: `${licenseAdapterUrl}/api/license/:path*` },
+      { source: '/api/gateway/:path*',      destination: `${coreGatewayUrl}/api/gateway/:path*` },
+      { source: '/api/clients',             destination: `${oauthProviderUrl}/api/clients` },
+      { source: '/api/clients/:path*',      destination: `${oauthProviderUrl}/api/clients/:path*` },
+      { source: '/api/mfa',                 destination: `${oauthProviderUrl}/api/mfa` },
+      { source: '/api/mfa/:path*',          destination: `${oauthProviderUrl}/api/mfa/:path*` },
       // Compliance dashboard/baselines/waivers/frameworks/reports ->
       // compliance-engine service (must come before the /api/:path*
       // catch-all; api-backend has none of these routes).
@@ -150,11 +183,17 @@ const nextConfig = {
       // /api/roles.) Without this rule /api/ous falls into the api-backend
       // catch-all below and 404s.
       { source: '/api/ous',                 destination: `${identityServiceUrl}/api/ous` },
+      { source: '/api/identity/:path*',      destination: `${identityServiceUrl}/api/identity/:path*` },
+      { source: '/api/users',               destination: `${identityServiceUrl}/api/users` },
+      { source: '/api/users/:path*',        destination: `${identityServiceUrl}/api/users/:path*` },
+      { source: '/api/groups',              destination: `${identityServiceUrl}/api/groups` },
+      { source: '/api/groups/:path*',       destination: `${identityServiceUrl}/api/groups/:path*` },
+      { source: '/api/license-groups/:path*', destination: `${identityServiceUrl}/api/license-groups/:path*` },
+      { source: '/api/license-users/:path*', destination: `${identityServiceUrl}/api/license-users/:path*` },
       { source: '/api/ous/:path*',          destination: `${identityServiceUrl}/api/ous/:path*` },
       // ── NOT routed (investigated, deliberately left as-is) ──────────────
       // /api/devices/:id/{software,hardware,network,logs,policies,compliance},
-      // /api/mdm/*, /api/policies/{ou-tree,templates,:id/compiled,
-      // :id/versions,:id/gpos}, /api/monitoring/status,
+      // /api/mdm/*, /api/monitoring/status,
       // /api/security/{pam/sessions,dlp/policies}, /api/gateway/stats:
       // these handlers exist ONLY in services/platform/integration-service/
       // index.js, a pre-DDD-rewrite file that is NOT part of what actually
@@ -172,10 +211,7 @@ const nextConfig = {
       // commands), quick-actions' own 'mdm' service alias (MDM_SERVICE_URL,
       // defaults to http://mobile-management — a host that doesn't appear in
       // docker-compose.yml at all), and the dead integration-service code
-      // above. /api/policies/{ou-tree,templates,:id/compiled,...} similarly
-      // has no real implementation: policy-service (real, deployed, port
-      // 3004) has policy CRUD/assign/deploy/compliance-scan but none of
-      // these sub-routes. Resolving any of this requires a service-level
+      // above. Resolving any of this requires a service-level
       // decision (which backend should own the route, and building/wiring
       // it there) — out of scope for a routing-layer change, and explicitly
       // out of scope for this task (no service files touched). Left as-is
@@ -190,9 +226,6 @@ const nextConfig = {
   },
   images: {
     domains: ['localhost'],
-  },
-  experimental: {
-    appDir: true,
   },
 };
 

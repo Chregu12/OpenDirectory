@@ -1,354 +1,126 @@
 'use strict';
 
-// serviceClient.js uses `await import('node-fetch')` (dynamic ESM import).
-// In Jest's CommonJS environment without --experimental-vm-modules, mocking
-// the default export of an ESM module via jest.mock() does not intercept the
-// dynamic import() call. Instead we monkey-patch the module's internal
-// behaviour by replacing the global fetch-like call through spying on the
-// module itself, and we test the observable public API (call + ping + SERVICES).
-//
-// For the call() tests we use nock — a real HTTP interceptor that works at the
-// Node http/https layer, meaning no mock-fetch gymnastics needed.
-//
-// getServiceToken() POSTs to the TOKEN_ENDPOINT (default http://localhost:3001/token).
-// In tests we set QA_CLIENT_SECRET and intercept that endpoint with nock so no
-// real network call is made. The token cache is reset before each test by
-// re-requiring the module via jest.resetModules().
-
-process.env.QA_CLIENT_SECRET  = 'test-client-secret';
-process.env.TOKEN_ENDPOINT    = 'http://localhost:3001/token';
-
+jest.mock('../../../../../packages/oidc-access-state', () => ({ createAccessStateClient: jest.fn(() => jest.fn(async () => {})) }));
 const nock = require('nock');
+const { runWithOperator, currentOperator, validate } = require('../utils/delegation');
+const { call, ping, SERVICES, getServiceToken, createServiceClient } = require('../utils/serviceClient');
+const { accessClaims } = require('./fixtures/claims');
+const authorization = 'Bearer header.payload.signature';
+const delegated = operation => runWithOperator(authorization, accessClaims(), operation);
+beforeEach(() => { jest.clearAllMocks(); validate.mockResolvedValue(undefined); });
+afterEach(() => nock.cleanAll());
 
-// Helper: set up a nock intercept for the token endpoint (called once per test
-// that exercises getServiceToken, which is every call() / ping() invocation).
-// We use allowUnmocked so other nock scopes are unaffected.
-function mockTokenEndpoint(times = 10) {
-  return nock('http://localhost:3001')
-    .post('/token')
-    .times(times)
-    .reply(200, { access_token: 'test-service-token', expires_in: 3600 }, { 'Content-Type': 'application/json' });
-}
-
-// Re-require serviceClient fresh before each test so the token cache is reset.
-let serviceClient, call, ping, SERVICES;
-beforeEach(() => {
-  jest.resetModules();
-  // Re-set env so the fresh module picks up the right values
-  process.env.QA_CLIENT_SECRET = 'test-client-secret';
-  process.env.TOKEN_ENDPOINT   = 'http://localhost:3001/token';
-  serviceClient = require('../utils/serviceClient');
-  ({ call, ping, SERVICES } = serviceClient);
-  // Pre-register a token endpoint intercept for this test
-  mockTokenEndpoint(10);
+test.each(['auth', 'directory', 'kerberos', 'samba', 'device', 'policy', 'pim', 'mdm', 'appStore'])('the fixed %s service has a configured root URL', key => {
+  expect(new URL(SERVICES[key]).pathname).toBe('/'); expect(Object.keys(SERVICES)).toHaveLength(9);
 });
-
-afterEach(() => {
-  nock.cleanAll();
+test('a protected call without a verified operation cannot fetch a service credential', async () => {
+  process.env.QA_CLIENT_SECRET = 'must-not-be-used';
+  await expect(call('auth', 'POST', '/api/service-accounts', {})).rejects.toMatchObject({ status: 401 });
+  await expect(getServiceToken()).rejects.toMatchObject({ status: 401 });
+  expect(validate).not.toHaveBeenCalled(); delete process.env.QA_CLIENT_SECRET;
 });
-
-// ── SERVICES base URL resolution ───────────────────────────────────────────────
-
-describe('SERVICES base URLs', () => {
-  test('auth maps to authentication-service by default', () => {
-    expect(SERVICES.auth).toBe('http://authentication-service');
+test.each(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])('%s forwards only the verified operator, a fixed operation ID and a bounded JSON receipt', async method => {
+  let operationId;
+  await delegated(async context => {
+    operationId = context.operationId;
+    const scope = nock(SERVICES.auth, { reqheaders: { authorization, 'x-od-operation-id': operationId } })
+      .intercept('/api/test', method).reply(200, { success: true }, { 'Content-Type': 'application/json' });
+    expect(await call('auth', method, '/api/test', { marker: true })).toEqual({ success: true }); expect(scope.isDone()).toBe(true);
   });
-
-  test('directory maps to enterprise-directory by default', () => {
-    expect(SERVICES.directory).toBe('http://enterprise-directory');
-  });
-
-  test('kerberos maps to kerberos-kdc by default', () => {
-    expect(SERVICES.kerberos).toBe('http://kerberos-kdc');
-  });
-
-  test('samba maps to samba-ad-dc by default', () => {
-    expect(SERVICES.samba).toBe('http://samba-ad-dc');
-  });
-
-  test('device maps to device-service by default', () => {
-    expect(SERVICES.device).toBe('http://device-service');
-  });
-
-  test('policy maps to policy-service by default', () => {
-    expect(SERVICES.policy).toBe('http://policy-service');
-  });
-
-  test('pim maps to conditional-access by default', () => {
-    expect(SERVICES.pim).toBe('http://conditional-access');
-  });
-
-  test('mdm maps to mobile-management by default', () => {
-    expect(SERVICES.mdm).toBe('http://mobile-management');
-  });
-
-  test('appStore maps to app-store by default', () => {
-    expect(SERVICES.appStore).toBe('http://app-store');
-  });
-
-  test('all 9 service keys are present', () => {
-    const keys = Object.keys(SERVICES);
-    expect(keys).toHaveLength(9);
-    expect(keys).toEqual(expect.arrayContaining([
-      'auth', 'directory', 'kerberos', 'samba', 'device', 'policy', 'pim', 'mdm', 'appStore'
-    ]));
+  expect(validate).toHaveBeenCalledWith(authorization, expect.objectContaining({ sub: 'operator' })); expect(operationId).toHaveLength(36);
+});
+test('a redundant explicit operator header is accepted but cannot replace the verified identity', async () => {
+  await delegated(async () => {
+    await expect(call('policy', 'POST', '/api/licenses/users/known/offboard', {}, { authorization: 'Bearer other.payload.signature' })).rejects.toMatchObject({ status: 403 });
+    const scope = nock(SERVICES.policy, { reqheaders: { authorization } }).post('/api/licenses/users/known/offboard', {}).reply(200, { assignmentsRevoked: 1 });
+    expect((await call('policy', 'POST', '/api/licenses/users/known/offboard', {}, { authorization })).assignmentsRevoked).toBe(1); expect(scope.isDone()).toBe(true);
   });
 });
-
-// ── call() via nock HTTP interceptors ─────────────────────────────────────────
-
-describe('call()', () => {
-  test('successful GET returns parsed JSON body', async () => {
-    const expectedData = { userId: 'u1', name: 'Alice' };
-    nock('http://authentication-service')
-      .get('/api/users/u1')
-      .reply(200, expectedData, { 'Content-Type': 'application/json' });
-
-    const result = await call('auth', 'GET', '/api/users/u1');
-    expect(result).toEqual(expectedData);
-  });
-
-  test('successful POST returns parsed JSON body', async () => {
-    const responseData = { id: 'sp-1', created: true };
-    nock('http://authentication-service')
-      .post('/api/service-accounts')
-      .reply(201, responseData, { 'Content-Type': 'application/json' });
-
-    const result = await call('auth', 'POST', '/api/service-accounts', { name: 'myApp' });
-    expect(result).toEqual(responseData);
-  });
-
-  test('successful PUT returns parsed JSON body', async () => {
-    nock('http://authentication-service')
-      .put('/api/users/u1')
-      .reply(200, { updated: true }, { 'Content-Type': 'application/json' });
-
-    const result = await call('auth', 'PUT', '/api/users/u1', { name: 'Bob' });
-    expect(result).toEqual({ updated: true });
-  });
-
-  test('successful DELETE returns parsed JSON body', async () => {
-    nock('http://authentication-service')
-      .delete('/api/users/u1')
-      .reply(200, { deleted: true }, { 'Content-Type': 'application/json' });
-
-    const result = await call('auth', 'DELETE', '/api/users/u1');
-    expect(result).toEqual({ deleted: true });
-  });
-
-  test('GET does NOT send body in request', async () => {
-    // Verify the GET intercept matches (proving no body was sent that would
-    // cause a request body mismatch). We confirm by checking nock matched.
-    const scope = nock('http://authentication-service')
-      .get('/api/users')
-      .reply(200, {}, { 'Content-Type': 'application/json' });
-
-    await call('auth', 'GET', '/api/users', { filter: 'active' });
-    // nock interceptor matched → the GET went through without body mismatch
-    expect(scope.isDone()).toBe(true);
-  });
-
-  test('POST serializes body as JSON with Content-Type header', async () => {
-    const body = { appName: 'myApp', permissions: ['read'] };
-
-    let capturedBody;
-    nock('http://authentication-service')
-      .post('/api/service-accounts', (b) => { capturedBody = b; return true; })
-      .reply(200, {}, { 'Content-Type': 'application/json' });
-
-    await call('auth', 'POST', '/api/service-accounts', body);
-    expect(capturedBody).toEqual(body);
-  });
-
-  test('PATCH sends body correctly', async () => {
-    const patchBody = { disabled: true };
-    let capturedBody;
-
-    nock('http://authentication-service')
-      .patch('/api/users/u1', (b) => { capturedBody = b; return true; })
-      .reply(200, { updated: true }, { 'Content-Type': 'application/json' });
-
-    await call('auth', 'PATCH', '/api/users/u1', patchBody);
-    expect(capturedBody).toEqual(patchBody);
-  });
-
-  test('non-2xx response throws with status code in message', async () => {
-    nock('http://authentication-service')
-      .get('/api/users/missing')
-      .reply(404, { error: 'Not found' }, { 'Content-Type': 'application/json' });
-
-    await expect(call('auth', 'GET', '/api/users/missing')).rejects.toThrow('404');
-  });
-
-  test('non-2xx error has .status property set to the HTTP status code', async () => {
-    nock('http://authentication-service')
-      .get('/api/health')
-      .reply(503, { error: 'Unavailable' }, { 'Content-Type': 'application/json' });
-
-    let caughtErr;
-    try {
-      await call('auth', 'GET', '/api/health');
-    } catch (err) {
-      caughtErr = err;
-    }
-    expect(caughtErr).toBeDefined();
-    expect(caughtErr.status).toBe(503);
-  });
-
-  test('non-2xx error has .body property with response body', async () => {
-    const errorBody = { error: 'Forbidden', code: 'ACCESS_DENIED' };
-    nock('http://authentication-service')
-      .get('/api/restricted')
-      .reply(403, errorBody, { 'Content-Type': 'application/json' });
-
-    let caughtErr;
-    try {
-      await call('auth', 'GET', '/api/restricted');
-    } catch (err) {
-      caughtErr = err;
-    }
-    expect(caughtErr.body).toEqual(errorBody);
-  });
-
-  test('non-JSON response returns { _raw: text }', async () => {
-    nock('http://authentication-service')
-      .get('/health')
-      .reply(200, 'OK', { 'Content-Type': 'text/plain' });
-
-    const result = await call('auth', 'GET', '/health');
-    expect(result).toHaveProperty('_raw');
-    expect(result._raw).toBe('OK');
-  });
-
-  test('unknown service throws immediately without making network call', async () => {
-    await expect(call('nonexistent', 'GET', '/api/test')).rejects.toThrow('Unknown service: "nonexistent"');
-  });
-
-  test('network error (connection refused) propagates the error', async () => {
-    nock('http://authentication-service')
-      .get('/api/users')
-      .replyWithError('ECONNREFUSED');
-
-    await expect(call('auth', 'GET', '/api/users')).rejects.toThrow();
-  });
-
-  test('calls the correct service base URL', async () => {
-    nock('http://samba-ad-dc')
-      .post('/api/computers/join')
-      .reply(200, { dn: 'CN=test,CN=Computers,DC=od,DC=local' }, { 'Content-Type': 'application/json' });
-
-    const result = await call('samba', 'POST', '/api/computers/join', { computerName: 'test$' });
-    expect(result.dn).toContain('CN=test');
+test('each step freshly checks authority and a source failure latches the operation without subsequent calls or fallback', async () => {
+  await delegated(async () => {
+    nock(SERVICES.auth).get('/api/first').reply(200, {}); await call('auth', 'GET', '/api/first');
+    validate.mockRejectedValueOnce(Object.assign(new Error('source offline'), { status: 503 }));
+    await expect(call('auth', 'POST', '/api/second', {})).rejects.toMatchObject({ status: 503 });
+    validate.mockResolvedValue(undefined);
+    await expect(call('samba', 'POST', '/api/third', {})).rejects.toMatchObject({ status: 503 });
+    expect(validate).toHaveBeenCalledTimes(2);
   });
 });
-
-// ── ping() ─────────────────────────────────────────────────────────────────────
-
-describe('ping()', () => {
-  test('healthy service returns { healthy: true, latencyMs: number }', async () => {
-    nock('http://authentication-service')
-      .get('/health')
-      .reply(200, { status: 'ok' }, { 'Content-Type': 'application/json' });
-
-    const result = await ping('auth');
-    expect(result.healthy).toBe(true);
-    expect(typeof result.latencyMs).toBe('number');
-    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
-  });
-
-  test('unhealthy service (non-2xx) returns { healthy: false, error: string }', async () => {
-    nock('http://authentication-service')
-      .get('/health')
-      .reply(503, { error: 'down' }, { 'Content-Type': 'application/json' });
-
-    const result = await ping('auth');
-    expect(result.healthy).toBe(false);
-    expect(typeof result.error).toBe('string');
-  });
-
-  test('unhealthy service (network error) returns { healthy: false, error: string }', async () => {
-    nock('http://authentication-service')
-      .get('/health')
-      .replyWithError('ECONNREFUSED');
-
-    const result = await ping('auth');
-    expect(result.healthy).toBe(false);
-    expect(result.error).toBeDefined();
-  });
-
-  test('unhealthy service still returns latencyMs', async () => {
-    nock('http://authentication-service')
-      .get('/health')
-      .replyWithError('connection reset');
-
-    const result = await ping('auth');
-    expect(typeof result.latencyMs).toBe('number');
-  });
-
-  test('ping calls the /health endpoint of the target service', async () => {
-    const scope = nock('http://kerberos-kdc')
-      .get('/health')
-      .reply(200, {}, { 'Content-Type': 'application/json' });
-
-    await ping('kerberos');
-    expect(scope.isDone()).toBe(true);
-  });
-
-  test('ping uses the auth service base URL for auth service', async () => {
-    const scope = nock('http://authentication-service')
-      .get('/health')
-      .reply(200, {}, { 'Content-Type': 'application/json' });
-
-    await ping('auth');
-    expect(scope.isDone()).toBe(true);
-  });
-
-  test('ping uses the samba base URL for samba service', async () => {
-    const scope = nock('http://samba-ad-dc')
-      .get('/health')
-      .reply(200, {}, { 'Content-Type': 'application/json' });
-
-    await ping('samba');
-    expect(scope.isDone()).toBe(true);
-  });
-
-  test('ping uses the device-service base URL', async () => {
-    const scope = nock('http://device-service')
-      .get('/health')
-      .reply(200, {}, { 'Content-Type': 'application/json' });
-
-    await ping('device');
-    expect(scope.isDone()).toBe(true);
-  });
-
-  test('ping uses the policy-service base URL', async () => {
-    const scope = nock('http://policy-service')
-      .get('/health')
-      .reply(200, {}, { 'Content-Type': 'application/json' });
-
-    await ping('policy');
-    expect(scope.isDone()).toBe(true);
+test.each([401, 403])('a downstream HTTP %s cannot trigger a retry as a privileged service actor', async status => {
+  await delegated(async () => {
+    nock(SERVICES.auth).post('/api/denied').once().reply(status, { privateError: 'must not escape' });
+    await expect(call('auth', 'POST', '/api/denied', {})).rejects.toMatchObject({ status });
+    await expect(call('samba', 'POST', '/api/not-attempted', {})).rejects.toMatchObject({ status }); expect(validate).toHaveBeenCalledTimes(1);
   });
 });
-
-// ── timeout behaviour ──────────────────────────────────────────────────────────
-// We can't use fake timers here because node-fetch uses real AbortController
-// and the dynamic import makes timer interception unreliable.
-// Instead we verify the timeout path by pointing to a nock interceptor that
-// delays past the threshold — but since nock can't do long delays without
-// network, we skip the internal timer test and instead assert on the
-// module-level TIMEOUT_MS constant indirectly by verifying an AbortController
-// signal is attached to requests.
-
-describe('call() timeout configuration', () => {
-  test('request includes signal property (AbortController attached)', async () => {
-    // Verify the request reaches nock with the correct method and path;
-    // if an AbortController is broken the call would never resolve.
-    nock('http://authentication-service')
-      .get('/api/slow')
-      .reply(200, { ok: true }, { 'Content-Type': 'application/json' });
-
-    const result = await call('auth', 'GET', '/api/slow');
-    expect(result.ok).toBe(true);
+test('client completion/cancellation ends the captured operation and prevents detached work', async () => {
+  let captured;
+  await delegated(async context => { captured = context; context.close(); await expect(call('auth', 'GET', '/api/private')).rejects.toMatchObject({ status: 401 }); });
+  expect(captured.signal.aborted).toBe(true); expect(() => currentOperator()).toThrow(); expect(validate).not.toHaveBeenCalled();
+});
+test('parallel asynchronous operations do not borrow another request identity', async () => {
+  const credentials = ['Bearer first.payload.signature', 'Bearer second.payload.signature'];
+  await Promise.all(credentials.map((credential, index) => runWithOperator(credential, accessClaims({ sub: 'operator-' + index, jti: 'token-' + index }), async () => {
+    await new Promise(resolve => setTimeout(resolve, index ? 5 : 15));
+    const scope = nock(SERVICES.auth, { reqheaders: { authorization: credential } }).get('/api/parallel/' + index).reply(200, { index });
+    expect(await call('auth', 'GET', '/api/parallel/' + index)).toEqual({ index }); expect(scope.isDone()).toBe(true);
+  })));
+});
+test('principal metadata is immutable and nested credential substitution is rejected', async () => {
+  await delegated(async context => {
+    expect(() => { context.claims.sub = 'forged'; }).toThrow(); expect(() => { context.claims.identity_authorization.revision = '9'; }).toThrow();
+    expect(() => runWithOperator('Bearer other.payload.signature', accessClaims(), () => {})).toThrow();
   });
+});
+test.each(['//evil.test/path', 'https://evil.test', '/api/with space', '/api/with\\escape', '/api/path#fragment'])('a downstream target cannot redirect credentials through %s', async path => {
+  await delegated(async () => expect(call('auth', 'GET', path)).rejects.toMatchObject({ status: 400 })); expect(validate).not.toHaveBeenCalled();
+});
+test.each(['https://user:secret@host/', 'file:///tmp/socket', 'https://host/base', 'https://host/?token=x'])('unsafe configured destination %s is rejected', url => {
+  expect(() => createServiceClient({ services: { auth: url } })).toThrow();
+});
+test('redirects are never followed with a delegated bearer', async () => {
+  await delegated(async () => {
+    const redirected = nock('http://should-not-receive.test').post('/private').reply(200, {});
+    nock(SERVICES.auth).post('/api/redirect').reply(302, '', { Location: 'http://should-not-receive.test/private' });
+    await expect(call('auth', 'POST', '/api/redirect', {})).rejects.toMatchObject({ status: 502 }); expect(redirected.isDone()).toBe(false);
+  });
+});
+test('body bounds, malformed JSON and explicit business failures cannot confirm an operation', async () => {
+  const bounded = createServiceClient({ maxResponseBytes: 1024 });
+  await delegated(async () => {
+    nock(SERVICES.auth).get('/large').reply(200, { data: 'x'.repeat(2048) }); await expect(bounded.call('auth', 'GET', '/large')).rejects.toMatchObject({ status: 502 });
+    nock(SERVICES.auth).get('/malformed').reply(200, '{not-json', { 'Content-Type': 'application/json' }); await expect(call('auth', 'GET', '/malformed')).rejects.toMatchObject({ status: 502 });
+    nock(SERVICES.auth).post('/failed').reply(200, { success: false }); await expect(call('auth', 'POST', '/failed', {})).rejects.toMatchObject({ status: 502 });
+  });
+});
+test('the deadline includes waiting for a response body, not just headers', async () => {
+  const bounded = createServiceClient({ timeoutMs: 100 });
+  await delegated(async () => {
+    nock(SERVICES.auth).get('/slow').delayBody(300).reply(200, { success: true });
+    await expect(bounded.call('auth', 'GET', '/slow')).rejects.toMatchObject({ status: 504, code: 'ETIMEOUT' });
+  });
+});
+test('a confirmed no-content delete is handled without inventing a JSON object from an error', async () => {
+  await delegated(async () => { nock(SERVICES.auth).delete('/api/record').reply(204); expect(await call('auth', 'DELETE', '/api/record')).toEqual({}); });
+});
+test('public health probes never obtain or send a privileged credential', async () => {
+  const scope = nock(SERVICES.auth, { badheaders: ['authorization'] }).get('/health').reply(200, { status: 'healthy' });
+  expect((await ping('auth')).healthy).toBe(true); expect(scope.isDone()).toBe(true); expect(validate).not.toHaveBeenCalled();
+});
+test('public health failures are explicit and do not leak internal responses', async () => {
+  nock(SERVICES.auth).get('/health').reply(500, { secret: 'private' }); const result = await ping('auth'); expect(result.healthy).toBe(false); expect(JSON.stringify(result)).not.toContain('private');
+});
+test('a denied receiver latches authorization failure at the headers, without waiting for an untrusted body', async () => {
+  const server = require('node:http').createServer((_request, response) => {
+    response.writeHead(403, { 'Content-Type': 'application/json' }); response.flushHeaders();
+    const timer = setTimeout(() => response.end('{"secret":"private"}'), 2000); response.once('close', () => clearTimeout(timer));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    await delegated(async () => {
+      const bounded = createServiceClient({ services: { auth: 'http://127.0.0.1:' + server.address().port }, timeoutMs: 500 });
+      await expect(bounded.call('auth', 'GET', '/denied-slow-body')).rejects.toMatchObject({ status: 403 });
+      await expect(call('auth', 'POST', '/not-dispatched', {})).rejects.toMatchObject({ status: 403 }); expect(validate).toHaveBeenCalledTimes(1);
+    });
+  } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });

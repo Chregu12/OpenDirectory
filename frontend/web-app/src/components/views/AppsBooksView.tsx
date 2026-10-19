@@ -19,45 +19,51 @@ interface AppLicense {
   expires: string;
 }
 
-const MOCK_APPS: AppLicense[] = [
-  { id: '1', name: 'Microsoft 365', platform: 'All', licenses: 100, assigned: 87, available: 13, price: '$12/mo', expires: '2025-12-31' },
-  { id: '2', name: 'Adobe Creative Cloud', platform: 'macOS/Win', licenses: 25, assigned: 22, available: 3, price: '$55/mo', expires: '2025-06-30' },
-  { id: '3', name: 'Final Cut Pro', platform: 'macOS', licenses: 10, assigned: 8, available: 2, price: '$299', expires: 'N/A' },
-  { id: '4', name: 'Slack', platform: 'All', licenses: 150, assigned: 143, available: 7, price: '$7.25/mo', expires: '2025-09-30' },
-  { id: '5', name: 'Xcode', platform: 'macOS', licenses: 20, assigned: 18, available: 2, price: 'Free', expires: 'N/A' },
-  { id: '6', name: 'Visual Studio 2022', platform: 'Windows', licenses: 15, assigned: 12, available: 3, price: '$45/mo', expires: '2025-11-30' },
-];
-
 export default function AppsBooksView() {
   const [items, setItems] = useState<AppLicense[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     setLoading(true);
+    setError('');
     try {
       const r = await fetch('/api/apps?type=vpp');
-      if (r.ok) {
-        const data = await r.json();
-        const raw: any[] = Array.isArray(data) ? data : (data.apps ?? data.items ?? []);
-        const mapped: AppLicense[] = raw.map((a: any) => ({
-          id:        a.id ?? String(Math.random()),
-          name:      a.name ?? a.title ?? 'Unknown App',
-          platform:  a.platform ?? 'All',
-          licenses:  a.licenses ?? a.totalLicenses ?? 0,
-          assigned:  a.assigned ?? a.usedLicenses ?? 0,
-          available: a.available ?? (a.totalLicenses - a.usedLicenses) ?? 0,
-          price:     a.price ?? '—',
-          expires:   a.expires ?? a.expiryDate ?? 'N/A',
-        }));
-        setItems(mapped.length > 0 ? mapped : MOCK_APPS);
-      } else {
-        setItems(MOCK_APPS);
+      if (!r.ok) throw new Error('License request failed');
+      const data = await r.json();
+      const raw = Array.isArray(data) ? data : (data?.apps ?? data?.items);
+      if (!Array.isArray(raw) || data?.success === false) throw new Error('Invalid license inventory');
+      const ids = new Set<string>();
+      const mapped: AppLicense[] = raw.map((app: any) => {
+        if (!app || typeof app !== 'object' || Array.isArray(app)) throw new Error('Invalid app');
+        const id = typeof app.id === 'number' && Number.isSafeInteger(app.id) && app.id >= 0 ? String(app.id) : app.id;
+        const name = app.name ?? app.title;
+        const licenses = app.licenses ?? app.totalLicenses;
+        const assigned = app.assigned ?? app.usedLicenses;
+        const available = app.available ?? (licenses - assigned);
+        const platform = app.platform ?? '—';
+        const price = app.price ?? '—';
+        const expires = app.expires ?? app.expiryDate ?? '—';
+        if (typeof id !== 'string' || !id.trim() || ids.has(id) || typeof name !== 'string' || !name.trim() ||
+          ![licenses, assigned, available].every(value => Number.isSafeInteger(value) && value >= 0) ||
+          assigned > licenses || available > licenses - assigned ||
+          ![platform, price, expires].every(value => typeof value === 'string')) {
+          throw new Error('Invalid license inventory');
+        }
+        ids.add(id);
+        return { id, name, platform, licenses, assigned, available, price, expires };
+      });
+      if (!['licenses', 'assigned', 'available'].every(field =>
+        Number.isSafeInteger(mapped.reduce((total, app) => total + app[field as 'licenses' | 'assigned' | 'available'], 0)))) {
+        throw new Error('Invalid license totals');
       }
+      setItems(mapped);
     } catch {
-      setItems(MOCK_APPS);
+      setItems([]);
+      setError('License inventory is unavailable. Refresh to try again.');
     } finally {
       setLoading(false);
     }
@@ -118,22 +124,22 @@ export default function AppsBooksView() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
         <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>TOTAL LICENSES</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{totalLicenses}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{loading || error ? '—' : totalLicenses}</div>
           <div style={{ fontSize: 12, color: '#8b949e', marginTop: 4 }}>Across all apps</div>
         </div>
         <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>ASSIGNED</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{totalAssigned}</div>
-          <div style={{ fontSize: 12, color: '#006FFF', marginTop: 4 }}>{totalLicenses > 0 ? Math.round((totalAssigned / totalLicenses) * 100) : 0}% utilization</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{loading || error ? '—' : totalAssigned}</div>
+          <div style={{ fontSize: 12, color: '#006FFF', marginTop: 4 }}>{loading || error ? '—' : `${totalLicenses > 0 ? Math.round((totalAssigned / totalLicenses) * 100) : 0}%`} utilization</div>
         </div>
         <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>AVAILABLE</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{totalAvailable}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{loading || error ? '—' : totalAvailable}</div>
           <div style={{ fontSize: 12, color: '#3fb950', marginTop: 4 }}>Unassigned seats</div>
         </div>
         <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>EXPIRING SOON</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: expiringSoon > 0 ? '#d29922' : 'var(--text-primary, #e4e6ea)' }}>{expiringSoon}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: expiringSoon > 0 ? '#d29922' : 'var(--text-primary, #e4e6ea)' }}>{loading || error ? '—' : expiringSoon}</div>
           <div style={{ fontSize: 12, color: expiringSoon > 0 ? '#d29922' : '#8b949e', marginTop: 4 }}>Within 90 days</div>
         </div>
       </div>
@@ -180,6 +186,8 @@ export default function AppsBooksView() {
           <tbody>
             {loading ? (
               <tr><td colSpan={7} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary, #8b949e)' }}>Loading...</td></tr>
+            ) : error ? (
+              <tr><td colSpan={7} role="alert" style={{ padding: '32px 16px', textAlign: 'center' }}>{error}</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={7} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary, #8b949e)' }}>No apps found</td></tr>
             ) : filtered.map(item => {

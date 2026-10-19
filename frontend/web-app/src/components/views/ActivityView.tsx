@@ -17,49 +17,47 @@ interface AuditEvent {
   event: string;
   user: string;
   source: string;
-  severity: 'error' | 'warning' | 'info' | 'success';
+  severity: string;
 }
-
-const MOCK_EVENTS: AuditEvent[] = [
-  { id: '1', timestamp: new Date(Date.now() - 30000).toISOString(), event: 'User login successful', user: 'admin@corp.local', source: 'Auth Service', severity: 'success' },
-  { id: '2', timestamp: new Date(Date.now() - 90000).toISOString(), event: 'MFA challenge failed', user: 'jsmith@corp.local', source: 'MFA Provider', severity: 'warning' },
-  { id: '3', timestamp: new Date(Date.now() - 150000).toISOString(), event: 'Device compliance check failed', user: 'system', source: 'MDM Agent', severity: 'error' },
-  { id: '4', timestamp: new Date(Date.now() - 240000).toISOString(), event: 'Policy deployed successfully', user: 'admin@corp.local', source: 'Policy Engine', severity: 'success' },
-  { id: '5', timestamp: new Date(Date.now() - 360000).toISOString(), event: 'User account locked', user: 'jdoe@corp.local', source: 'Directory', severity: 'error' },
-  { id: '6', timestamp: new Date(Date.now() - 480000).toISOString(), event: 'Certificate renewed', user: 'system', source: 'PKI Service', severity: 'info' },
-  { id: '7', timestamp: new Date(Date.now() - 600000).toISOString(), event: 'LDAP bind succeeded', user: 'svc-ldap@corp.local', source: 'LDAP', severity: 'info' },
-  { id: '8', timestamp: new Date(Date.now() - 720000).toISOString(), event: 'Backup completed', user: 'system', source: 'Backup Service', severity: 'success' },
-  { id: '9', timestamp: new Date(Date.now() - 900000).toISOString(), event: 'Suspicious login attempt detected', user: 'unknown', source: 'Auth Service', severity: 'error' },
-  { id: '10', timestamp: new Date(Date.now() - 1080000).toISOString(), event: 'Group membership changed', user: 'admin@corp.local', source: 'Directory', severity: 'info' },
-];
 
 export default function ActivityView() {
   const [items, setItems] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
       const r = await fetch('/api/audit/events?limit=100');
-      if (r.ok) {
-        const data = await r.json();
-        const raw: any[] = data.events ?? (Array.isArray(data) ? data : []);
-        const mapped: AuditEvent[] = raw.map((e: any) => ({
-          id:        e.id ?? String(Math.random()),
-          timestamp: e.event_time ?? e.timestamp ?? new Date().toISOString(),
-          event:     e.operation ?? e.action ?? e.event ?? 'Unknown event',
-          user:      e.actor_dn ?? e.actor ?? e.user ?? 'system',
-          source:    e.source ?? e.category ?? 'System',
-          severity:  e.severity ?? 'info',
-        }));
-        setItems(mapped.length > 0 ? mapped : MOCK_EVENTS);
-      } else {
-        setItems(MOCK_EVENTS);
-      }
+      if (!r.ok) throw new Error('Audit request failed');
+      const data = await r.json();
+      const raw = Array.isArray(data) ? data : (data?.events ?? data?.data);
+      if (!Array.isArray(raw) || data?.success === false) throw new Error('Invalid audit events');
+      const ids = new Set<string>();
+      const mapped: AuditEvent[] = raw.map((entry: any) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('Invalid audit event');
+        const id = typeof entry.id === 'number' && Number.isSafeInteger(entry.id) && entry.id >= 0 ? String(entry.id) : entry.id;
+        const timestamp = entry.event_time ?? entry.timestamp;
+        const event = entry.operation ?? entry.action ?? entry.event;
+        const user = entry.actor_dn ?? entry.actor ?? entry.user ?? '—';
+        const source = entry.source ?? entry.category ?? '—';
+        const severity = entry.severity ?? 'unknown';
+        if (typeof id !== 'string' || !id.trim() || ids.has(id) ||
+          typeof timestamp !== 'string' || !Number.isFinite(Date.parse(timestamp)) ||
+          typeof event !== 'string' || !event.trim() ||
+          ![user, source, severity].every(value => typeof value === 'string' && value.trim())) {
+          throw new Error('Invalid audit event');
+        }
+        ids.add(id);
+        return { id, timestamp, event, user, source, severity };
+      });
+      setItems(mapped);
     } catch {
-      setItems(MOCK_EVENTS);
+      setItems([]);
+      setError('Activity is unavailable. Refresh to try again.');
     } finally {
       setLoading(false);
     }
@@ -83,7 +81,7 @@ export default function ActivityView() {
 
   const errorsCount = items.filter(i => i.severity === 'error').length;
   const warningsCount = items.filter(i => i.severity === 'warning').length;
-  const activeUsers = [...new Set(items.map(i => i.user))].length;
+  const activeUsers = new Set(items.filter(item => item.user !== '—').map(item => item.user)).size;
 
   const severityBadge = (severity: string) => {
     const map: Record<string, { bg: string; color: string; label: string; icon: React.ReactNode }> = {
@@ -92,7 +90,7 @@ export default function ActivityView() {
       info:    { bg: 'rgba(0,111,255,0.15)',    color: '#006FFF', label: 'Info',    icon: <InformationCircleIcon style={{ width: 12, height: 12 }} /> },
       success: { bg: 'rgba(63,185,80,0.15)',    color: '#3fb950', label: 'Success', icon: <CheckCircleIcon style={{ width: 12, height: 12 }} /> },
     };
-    const s = map[severity] ?? map['info'];
+    const s = map[severity] ?? { ...map.info, label: severity };
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color }}>
         {s.icon}{s.label}
@@ -120,29 +118,29 @@ export default function ActivityView() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
         <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>EVENTS TODAY</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{items.length}</div>
-          <div style={{ fontSize: 12, color: '#006FFF', marginTop: 4 }}>↑ 12% from yesterday</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>LOADED EVENTS</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{loading || error ? '—' : items.length}</div>
+          <div style={{ fontSize: 12, color: '#8b949e', marginTop: 4 }}>Returned by the audit service</div>
         </div>
         <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>ERRORS</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: errorsCount > 0 ? '#f85149' : 'var(--text-primary, #e4e6ea)' }}>{errorsCount}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: errorsCount > 0 ? '#f85149' : 'var(--text-primary, #e4e6ea)' }}>{loading || error ? '—' : errorsCount}</div>
           <div style={{ fontSize: 12, color: '#8b949e', marginTop: 4 }}>Requires attention</div>
         </div>
         <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>WARNINGS</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: warningsCount > 0 ? '#d29922' : 'var(--text-primary, #e4e6ea)' }}>{warningsCount}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: warningsCount > 0 ? '#d29922' : 'var(--text-primary, #e4e6ea)' }}>{loading || error ? '—' : warningsCount}</div>
           <div style={{ fontSize: 12, color: '#8b949e', marginTop: 4 }}>Non-critical alerts</div>
         </div>
         <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>ACTIVE USERS</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{activeUsers}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{loading || error ? '—' : activeUsers}</div>
           <div style={{ fontSize: 12, color: '#3fb950', marginTop: 4 }}>Distinct actors</div>
         </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-        <button className="fluent-btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={exportCSV}>
+        <button className="fluent-btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={exportCSV} disabled={loading || !!error}>
           <DocumentArrowDownIcon style={{ width: 14, height: 14 }} />
           Export
         </button>
@@ -193,6 +191,8 @@ export default function ActivityView() {
           <tbody>
             {loading ? (
               <tr><td colSpan={5} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary, #8b949e)' }}>Loading...</td></tr>
+            ) : error ? (
+              <tr><td colSpan={5} role="alert" style={{ padding: '32px 16px', textAlign: 'center' }}>{error}</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={5} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary, #8b949e)' }}>No events found</td></tr>
             ) : filtered.map(item => (

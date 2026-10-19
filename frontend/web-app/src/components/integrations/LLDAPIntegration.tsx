@@ -801,6 +801,7 @@ export default function LLDAPIntegration() {
             <div className="flex items-center space-x-2">
               <UserGroupIcon className="h-6 w-6 text-blue-600" />
               <h2 className="text-lg font-medium text-gray-900">User Directory (LLDAP)</h2>
+              <p className="mt-2 text-sm text-amber-800">Anbieterspezifische LLDAP-Verwaltung: Änderungen hier sind keine zentrale Kontosperre oder automatische Identitätsverknüpfung. <a className="underline" href="/users">Kanonische Benutzerverwaltung öffnen</a>.</p>
             </div>
             <div className="flex items-center gap-2">
               {stats && (

@@ -1,5 +1,7 @@
 'use strict';
 
+const { accessClaims } = require('./fixtures/claims');
+jest.mock('../../../../../packages/oidc-access-state', () => ({ createAccessStateClient: jest.fn(() => jest.fn(async () => {})) }));
 /**
  * E2E integration tests for quick-actions service.
  *
@@ -12,8 +14,8 @@
  */
 
 // ── Mock oidcAuth before loading the app so authMiddleware uses a no-op verifier ─
-jest.mock('../../../../shared/oidcAuth', () => ({
-  verifyToken: jest.fn().mockResolvedValue({ sub: 'test-e2e-user', role: 'admin', scope: 'openid roles' }),
+jest.mock('../middleware/verifyApiToken', () => ({
+  verifyToken: jest.fn().mockResolvedValue(require('./fixtures/claims').accessClaims({ sub: 'test-e2e-user', roles: ['admin'], scope: 'openid roles' })),
 }));
 
 // ── Set service URLs before any require ──────────────────────────────────────
@@ -57,7 +59,7 @@ const app = require('../index');
 
 /** Return a Bearer token string (value doesn't matter — verifyToken is mocked) */
 function authHeader() {
-  return 'Bearer test-e2e-token';
+  return 'Bearer header.payload.signature';
 }
 
 const isUuid  = (s) => typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
@@ -122,12 +124,13 @@ describe('Service Principal Lifecycle', () => {
     const res = await request(app)
       .post('/api/quick/service-principals')
       .set('Authorization', authHeader())
-      .send({ appName: 'test-app', permissions: ['read-users'] });
+      .send({ appName: 'test-app', permissions: ['read-users'], createdBy: 'forged-admin' });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(isUuid(res.body.clientId)).toBe(true);
     expect(is64Hex(res.body.clientSecret)).toBe(true);
+    expect(call).toHaveBeenCalledWith('auth', 'POST', '/api/service-accounts', expect.objectContaining({ createdBy: 'test-e2e-user' }));
   });
 
   test('creates SP even when Kerberos is down (partial success)', async () => {
@@ -510,6 +513,7 @@ describe('User Lifecycle', () => {
       { service: 'directory', method: 'POST',  pathPattern: `/api/users/${userId}/disable`,                 response: { disabled: true } },
       { service: 'pim',       method: 'POST',  pathPattern: /\/api\/v1\/permissions\/users\/.*\/revoke-all/, response: { revoked: true } },
       { service: 'auth',      method: 'PATCH', pathPattern: `/api/users/${userId}`,                         response: { disabled: true } },
+      { service: 'policy',    method: 'POST', pathPattern: `/api/licenses/users/${userId}/offboard`, response: { userId, assignmentsRevoked: 2, requestsCancelled: 1, localOnly: true } },
       { service: 'device',    method: 'GET',   pathPattern: /\/api\/devices\?assignedUser=.+/,              response: { devices: [{ id: 'dev-a' }, { id: 'dev-b' }] } },
       { service: 'device',    method: 'PATCH', pathPattern: '/api/devices/dev-a',                           response: { updated: true } },
       { service: 'device',    method: 'PATCH', pathPattern: '/api/devices/dev-b',                           response: { updated: true } },
@@ -537,6 +541,7 @@ describe('User Lifecycle', () => {
       if (service === 'directory' && method === 'POST'   && path.includes('archive')) return { archived: true };
       if (service === 'pim'       && method === 'POST'   && path.includes('revoke-all')) return { revoked: true };
       if (service === 'auth'      && method === 'PATCH')                                 return { disabled: true };
+      if (service === 'policy' && method === 'POST' && path === `/api/licenses/users/${userId}/offboard`) return { userId, assignmentsRevoked: 0, requestsCancelled: 0, localOnly: true };
       if (service === 'device'    && method === 'GET')                                   return { devices: [] };
       if (service === 'samba'     && method === 'GET')                                   return { groups: [] };
       throw new Error(`[mock] Unmatched: ${service} ${method} ${path}`);
@@ -801,7 +806,7 @@ describe('Health and Status', () => {
   test('GET /api/quick/status — all services up', async () => {
     ping.mockResolvedValue({ healthy: true, latencyMs: 5 });
 
-    const res = await request(app).get('/api/quick/status');
+    const res = await request(app).get('/api/quick/status').set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.overall).toBe('healthy');
@@ -817,7 +822,7 @@ describe('Health and Status', () => {
         : { healthy: true, latencyMs: 5 };
     });
 
-    const res = await request(app).get('/api/quick/status');
+    const res = await request(app).get('/api/quick/status').set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.overall).toBe('degraded');
@@ -827,7 +832,7 @@ describe('Health and Status', () => {
   test('GET /api/quick/status — all services down returns unhealthy', async () => {
     ping.mockResolvedValue({ healthy: false, latencyMs: 100, error: 'ECONNREFUSED' });
 
-    const res = await request(app).get('/api/quick/status');
+    const res = await request(app).get('/api/quick/status').set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.overall).toBe('unhealthy');
@@ -953,7 +958,7 @@ describe('Rate Limiting', () => {
 
     const promises = [];
     for (let i = 0; i < 201; i++) {
-      promises.push(request(app).get('/api/quick/status'));
+      promises.push(request(app).get('/api/quick/status').set('Authorization', authHeader()));
     }
     const results  = await Promise.all(promises);
     const statuses = results.map(r => r.status);

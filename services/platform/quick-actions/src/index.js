@@ -1,4 +1,5 @@
 'use strict';
+const { requireQuickActionAccess, onboardingDepartments, delegablePermissions } = require('./middleware/quickActionsAccess');
 
 const express      = require('express');
 const cors         = require('cors');
@@ -8,6 +9,7 @@ const rateLimit    = require('express-rate-limit');
 
 const { ping, SERVICES } = require('./utils/serviceClient');
 const authMiddleware                = require('./middleware/auth');
+const { currentOperator } = require('./utils/delegation');
 
 const servicePrincipalOrchestrator  = require('./orchestrators/servicePrincipalOrchestrator');
 const deviceEnrollmentOrchestrator  = require('./orchestrators/deviceEnrollmentOrchestrator');
@@ -42,10 +44,15 @@ app.use((req, _res, next) => {
 });
 
 // ── Authentication ─────────────────────────────────────────────────────────────
-// Enforces Bearer token auth on all routes except /health, /api/quick/health,
-// and /api/quick/status.  See src/middleware/auth.js for details.
+// Enforces Bearer token auth except on health probes.
 
 app.use(authMiddleware);
+app.use('/api/quick', requireQuickActionAccess);
+
+app.get('/api/quick/access', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ subject: req.user.sub, permissions: req.quickActionPermissions, onboardingDepartments: onboardingDepartments(), delegablePermissions: delegablePermissions(req.user) });
+});
 
 // ── Error wrapper ──────────────────────────────────────────────────────────────
 
@@ -58,9 +65,15 @@ function wrap(fn) {
       await fn(req, res);
     } catch (err) {
       console.error('[quick-actions] Unhandled error:', err);
-      res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+      res.status(err.status || 500).json({ success: false, error: err.message || 'Internal server error' });
     }
   };
+}
+
+async function credentialResult(result, fields) {
+  if (result.success !== true) return { ...result, ...Object.fromEntries(fields.map(field => [field, null])) };
+  await currentOperator().check();
+  return result;
 }
 
 // ── Health ─────────────────────────────────────────────────────────────────────
@@ -104,7 +117,7 @@ app.get('/api/quick/status', wrap(async (_req, res) => {
  * Body: { appName, description, permissions[], createdBy }
  */
 app.post('/api/quick/service-principals', wrap(async (req, res) => {
-  const result = await servicePrincipalOrchestrator.createServicePrincipal(req.body);
+  const result = await credentialResult(await servicePrincipalOrchestrator.createServicePrincipal({ ...req.body, createdBy: req.user.sub }), ['clientSecret']);
   res.status(result.success ? 201 : 207).json(result);
 }));
 
@@ -140,8 +153,8 @@ app.delete('/api/quick/service-principals/:id', wrap(async (req, res) => {
  * Generate a new client secret and propagate it everywhere.
  */
 app.post('/api/quick/service-principals/:id/rotate-secret', wrap(async (req, res) => {
-  const result = await servicePrincipalOrchestrator.rotateServicePrincipalSecret(req.params.id);
-  res.json(result);
+  const result = await credentialResult(await servicePrincipalOrchestrator.rotateServicePrincipalSecret(req.params.id), ['newClientSecret']);
+  res.status(result.success === false ? 207 : 200).json(result);
 }));
 
 // ── Device Enrollment ──────────────────────────────────────────────────────────
@@ -198,7 +211,7 @@ app.post('/api/quick/devices/:id/unenroll', wrap(async (req, res) => {
  * Body: { firstName, lastName, email, department?, jobTitle?, role?, manager?, assignDeviceId? }
  */
 app.post('/api/quick/users/onboard', wrap(async (req, res) => {
-  const result = await userOnboardingOrchestrator.onboardUser(req.body);
+  const result = await credentialResult(await userOnboardingOrchestrator.onboardUser(req.body), ['temporaryPassword']);
   res.status(result.success ? 201 : 207).json(result);
 }));
 
@@ -208,8 +221,8 @@ app.post('/api/quick/users/onboard', wrap(async (req, res) => {
  * Body: { revokeDevices?, transferFilesTo?, disableAccount? }
  */
 app.post('/api/quick/users/:id/offboard', wrap(async (req, res) => {
-  const result = await userOnboardingOrchestrator.offboardUser(req.params.id, req.body);
-  res.json(result);
+  const result = await userOnboardingOrchestrator.offboardUser(req.params.id, { ...req.body, authorization: req.headers.authorization });
+  res.status(result.success === false ? 207 : 200).json(result);
 }));
 
 // ── Policy ─────────────────────────────────────────────────────────────────────
@@ -270,7 +283,7 @@ app.use((err, _req, res, _next) => {
 
 const { connect: connectEventBus } = require('./utils/eventPublisher');
 
-app.listen(PORT, () => {
+if (require.main === module) app.listen(PORT, () => {
   console.log(`[quick-actions] Service started on port ${PORT}`);
   console.log(`[quick-actions] Routes available:`);
   console.log('  POST   /api/quick/service-principals');

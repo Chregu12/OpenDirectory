@@ -41,6 +41,7 @@ async function runMigrations() {
       await pool.query(sql);
     } catch (err) {
       console.error(`[identity-db] Migration ${file} error:`, err.message);
+      throw err;
     }
   }
   console.log(`[identity-db] ${files.length} migration(s) applied`);
@@ -49,12 +50,14 @@ async function runMigrations() {
 async function initDb() {
   try {
     await pool.query('SELECT 1');
-    dbAvailable = true;
     await runMigrations();
+    dbAvailable = true;
     console.log('[identity-db] PostgreSQL connected');
+    return true;
   } catch (err) {
     console.warn('[identity-db] PostgreSQL not available, using in-memory fallback:', err.message);
     dbAvailable = false;
+    return false;
   }
 }
 
@@ -67,4 +70,24 @@ async function query(sql, params) {
   return pool.query(sql, params);
 }
 
-module.exports = { initDb, isAvailable, query, pool };
+async function transaction(operation, { actor, readOnly = false, beforeCommit } = {}) {
+  if (!dbAvailable) throw Object.assign(new Error('Identity storage unavailable'), { status: 503 });
+  const client = await pool.connect();
+  try {
+    await client.query(readOnly ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN');
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query("SET LOCAL statement_timeout = '15s'");
+    if (actor) await client.query("SELECT set_config('opendirectory.actor', $1, true)", [actor]);
+    const result = await operation(client);
+    if (beforeCommit) await beforeCommit(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw error;
+  } finally { client.release(); }
+}
+
+function write(sql, params, actor) { return transaction(client => client.query(sql, params), { actor }); }
+
+module.exports = { initDb, isAvailable, query, write, transaction, pool };

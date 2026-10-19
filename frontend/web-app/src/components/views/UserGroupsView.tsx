@@ -1,226 +1,82 @@
 'use client';
-import React, { useState, useEffect } from 'react';
-import {
-  PlusIcon,
-  ArrowPathIcon,
-  TrashIcon,
-  UserGroupIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-} from '@heroicons/react/24/outline';
 
-interface Group {
-  id: string;
-  name: string;
-  type: 'security' | 'distribution' | 'dynamic';
-  members: number;
-  description: string;
-  created: string;
-  memberList?: string[];
-}
+import React,{useEffect,useRef,useState} from 'react';
+import toast from 'react-hot-toast';
+import {directoryGroups,DirectoryGroup,GroupProfile} from '@/lib/directoryGroups';
+import {directoryError,DirectoryAccess} from '@/lib/directoryUsers';
+import {ensureSession} from '@/lib/auth';
+import {DirectoryConfirmation} from './UserDetailPanel';
 
-const MOCK_GROUPS: Group[] = [
-  { id: '1', name: 'Domain Admins', type: 'security', members: 3, description: 'Full administrative access to the domain', created: '2024-01-01', memberList: ['admin@corp.local', 'superuser@corp.local', 'root@corp.local'] },
-  { id: '2', name: 'IT Support', type: 'security', members: 8, description: 'Helpdesk and IT support team', created: '2024-01-15', memberList: ['helpdesk1@corp.local', 'helpdesk2@corp.local', 'it-lead@corp.local'] },
-  { id: '3', name: 'All Employees', type: 'distribution', members: 87, description: 'Company-wide distribution list', created: '2024-01-01', memberList: [] },
-  { id: '4', name: 'Engineering', type: 'security', members: 24, description: 'Engineering department access group', created: '2024-02-10', memberList: ['eng1@corp.local', 'eng2@corp.local', 'eng3@corp.local'] },
-  { id: '5', name: 'Remote Workers', type: 'dynamic', members: 31, description: 'Auto-populated from device compliance status', created: '2024-03-01', memberList: [] },
-  { id: '6', name: 'Executive Team', type: 'distribution', members: 6, description: 'Leadership distribution list', created: '2024-01-01', memberList: ['ceo@corp.local', 'cto@corp.local', 'cfo@corp.local'] },
-];
+type Editor='create'|'edit'|'member'|null;
+type Confirmation={kind:'delete'|'remove';group:DirectoryGroup;userId?:string}|null;
+const panel={background:'var(--bg-surface, #161b22)',color:'var(--text-primary, #e4e6ea)'};
+const control='rounded border border-white/20 px-3 py-2 disabled:opacity-40';
 
-export default function UserGroupsView() {
-  const [items, setItems] = useState<Group[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-
-  useEffect(() => { load(); }, []);
-
-  async function load() {
-    setLoading(true);
-    try {
-      const r = await fetch('/api/auth/groups');
-      if (r.ok) {
-        const data = await r.json();
-        const raw: any[] = Array.isArray(data) ? data : (data.groups ?? []);
-        const mapped: Group[] = raw.map((g: any) => ({
-          id:          g.id ?? g.dn ?? String(Math.random()),
-          name:        g.name ?? g.cn ?? g.displayName ?? 'Unknown',
-          type:        g.groupType === 'dist' ? 'distribution' : g.dynamic ? 'dynamic' : 'security',
-          members:     g.memberCount ?? g.members?.length ?? 0,
-          description: g.description ?? '',
-          created:     g.created ?? g.whenCreated ?? '—',
-          memberList:  g.members ?? [],
-        }));
-        setItems(mapped.length > 0 ? mapped : MOCK_GROUPS);
-      } else {
-        setItems(MOCK_GROUPS);
-      }
-    } catch {
-      setItems(MOCK_GROUPS);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const filtered = items.filter(i =>
-    i.name.toLowerCase().includes(search.toLowerCase()) ||
-    i.description.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const securityCount = items.filter(i => i.type === 'security').length;
-  const distributionCount = items.filter(i => i.type === 'distribution').length;
-  const withMembers = items.filter(i => i.members > 0).length;
-
-  const typeBadge = (type: string) => {
-    const map: Record<string, { bg: string; color: string; label: string }> = {
-      security:     { bg: 'rgba(0,111,255,0.15)',   color: '#006FFF', label: 'Security' },
-      distribution: { bg: 'rgba(139,73,229,0.15)',  color: '#a371f7', label: 'Distribution' },
-      dynamic:      { bg: 'rgba(210,153,34,0.15)',  color: '#d29922', label: 'Dynamic' },
-    };
-    const s = map[type] ?? map['security'];
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.color, display: 'inline-block' }} />
-        {s.label}
-      </span>
-    );
-  };
-
-  const toggleExpanded = (id: string) => setExpanded(prev => prev === id ? null : id);
-
-  const toggleSelected = (id: string) => {
-    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
-
-  return (
-    <div style={{ padding: '24px 28px', minHeight: '100vh', background: 'var(--bg-base, #0e1115)' }}>
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)', margin: 0 }}>User Groups</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)', marginTop: 4, marginBottom: 0 }}>Manage directory groups and memberships</p>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-        <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>TOTAL GROUPS</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{items.length}</div>
-          <div style={{ fontSize: 12, color: '#8b949e', marginTop: 4 }}>All group types</div>
-        </div>
-        <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>SECURITY GROUPS</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{securityCount}</div>
-          <div style={{ fontSize: 12, color: '#006FFF', marginTop: 4 }}>Access control</div>
-        </div>
-        <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>DISTRIBUTION LISTS</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{distributionCount}</div>
-          <div style={{ fontSize: 12, color: '#a371f7', marginTop: 4 }}>Mail-enabled</div>
-        </div>
-        <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, padding: '16px 20px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>WITH MEMBERS</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary, #e4e6ea)' }}>{withMembers}</div>
-          <div style={{ fontSize: 12, color: '#3fb950', marginTop: 4 }}>Non-empty groups</div>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-        <button className="fluent-btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <PlusIcon style={{ width: 14, height: 14 }} />
-          New Group
-        </button>
-        {selected.length > 0 && (
-          <button className="fluent-btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f85149' }} onClick={() => setSelected([])}>
-            <TrashIcon style={{ width: 14, height: 14 }} />
-            Delete ({selected.length})
-          </button>
-        )}
-        <button className="fluent-btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={load} disabled={loading}>
-          <ArrowPathIcon style={{ width: 14, height: 14 }} />
-          Refresh
-        </button>
-        <div style={{ marginLeft: 'auto' }}>
-          <input
-            type="search"
-            placeholder="Search groups..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ padding: '6px 12px', background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 8, color: 'var(--text-primary, #e4e6ea)', fontSize: 13, width: 200, outline: 'none' }}
-          />
-        </div>
-      </div>
-
-      <div style={{ background: 'var(--bg-surface, #161b22)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 12, overflow: 'hidden' }}>
-        <table className="fluent-table" style={{ color: 'var(--text-primary, #e4e6ea)' }}>
-          <thead>
-            <tr>
-              <th style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-muted, #6e7681)', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))', padding: '10px 16px', width: 36 }}></th>
-              {['Name', 'Type', 'Members', 'Description', 'Created'].map(col => (
-                <th key={col} style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-muted, #6e7681)', borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  {col}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary, #8b949e)' }}>Loading...</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary, #8b949e)' }}>No groups found</td></tr>
-            ) : filtered.map(item => (
-              <React.Fragment key={item.id}>
-                <tr
-                  style={{ borderBottom: expanded === item.id ? 'none' : '1px solid var(--border, rgba(255,255,255,0.07))', cursor: 'pointer', background: selected.includes(item.id) ? 'rgba(0,111,255,0.06)' : undefined }}
-                  onClick={() => toggleExpanded(item.id)}
-                >
-                  <td style={{ padding: '11px 16px' }} onClick={e => { e.stopPropagation(); toggleSelected(item.id); }}>
-                    <input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggleSelected(item.id)} style={{ cursor: 'pointer', accentColor: '#006FFF' }} />
-                  </td>
-                  <td style={{ padding: '11px 16px', fontWeight: 600, color: 'var(--text-primary, #e4e6ea)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <UserGroupIcon style={{ width: 15, height: 15, color: '#006FFF', flexShrink: 0 }} />
-                      {item.name}
-                      {expanded === item.id
-                        ? <ChevronDownIcon style={{ width: 13, height: 13, color: '#8b949e', marginLeft: 2 }} />
-                        : <ChevronRightIcon style={{ width: 13, height: 13, color: '#8b949e', marginLeft: 2 }} />}
-                    </div>
-                  </td>
-                  <td style={{ padding: '11px 16px' }}>{typeBadge(item.type)}</td>
-                  <td style={{ padding: '11px 16px' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: 'rgba(0,111,255,0.1)', color: '#006FFF' }}>
-                      {item.members}
-                    </span>
-                  </td>
-                  <td style={{ padding: '11px 16px', color: 'var(--text-secondary, #8b949e)', fontSize: 13 }}>{item.description}</td>
-                  <td style={{ padding: '11px 16px', color: 'var(--text-muted, #6e7681)', fontSize: 12 }}>{item.created}</td>
-                </tr>
-                {expanded === item.id && (
-                  <tr style={{ borderBottom: '1px solid var(--border, rgba(255,255,255,0.07))' }}>
-                    <td colSpan={6} style={{ padding: '0 16px 14px 52px', background: 'var(--bg-overlay, #252c37)' }}>
-                      <div style={{ paddingTop: 12 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #6e7681)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Group Members</div>
-                        {item.memberList && item.memberList.length > 0 ? (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                            {item.memberList.map(m => (
-                              <span key={m} style={{ padding: '3px 10px', background: 'var(--bg-surface-raised, #1c2128)', border: '1px solid var(--border, rgba(255,255,255,0.07))', borderRadius: 20, fontSize: 12, color: 'var(--text-secondary, #8b949e)' }}>
-                                {m}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: 13, color: 'var(--text-muted, #6e7681)' }}>
-                            {item.members > 0 ? `${item.members} members (list not loaded)` : 'No members'}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+export default function UserGroupsView(){
+ const [access,setAccess]=useState<DirectoryAccess|null>(null);const [groups,setGroups]=useState<DirectoryGroup[]>([]);const [selected,setSelected]=useState<DirectoryGroup|null>(null);
+ const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [search,setSearch]=useState('');const [busy,setBusy]=useState(false);
+ const [editor,setEditor]=useState<Editor>(null);const [confirmation,setConfirmation]=useState<Confirmation>(null);const [operationError,setOperationError]=useState('');
+ const [name,setName]=useState('');const [description,setDescription]=useState('');const [member,setMember]=useState('');const [notice,setNotice]=useState('');const sequence=useRef(0);
+ const can=(permission:string)=>!!access?.permissions.includes(permission);
+ const bound=!!access&&access.userId!==null&&!access.demoMode;
+ const canCreate=bound&&access.directoryCreationProtocol===1&&can('groups.create');
+ const canMutate=bound&&access.directoryGroupMutationProtocol===1;
+ async function load(){
+  const current=++sequence.current;setLoading(true);setError('');setGroups([]);setSelected(null);setAccess(null);setNotice('');
+  try{const verified=await directoryGroups.access();if(current!==sequence.current)return;setAccess(verified);
+   if(verified.permissions.includes('groups.read')){const result=await directoryGroups.list();if(current===sequence.current)setGroups(result.groups);}
+  }catch(failure){if(current===sequence.current)setError(directoryError(failure));}finally{if(current===sequence.current)setLoading(false);}
+ }
+ useEffect(()=>{void load();return()=>{sequence.current++;};},[]);
+ function update(group:DirectoryGroup){setSelected(group);setGroups(previous=>previous.some(row=>row.id===group.id)?previous.map(row=>row.id===group.id?group:row):[...previous,group]);}
+ function open(next:Editor){setOperationError('');setNotice('');setName(next==='edit'?selected?.name||'':'');setDescription(next==='edit'?selected?.description||'':'');setMember('');setEditor(next);}
+ function close(){if(busy)return;const uncertain=!!operationError;setEditor(null);setConfirmation(null);setOperationError('');if(uncertain)void load();}
+ function selfCheck(group:DirectoryGroup,userId?:string){if(userId===access?.userId||!userId&&!!access?.userId&&group.members.includes(access.userId))void ensureSession(true).catch(()=>{});}
+ async function save(event:React.FormEvent){
+  event.preventDefault();if(busy||operationError||!editor)return;const action=editor;const original=selected;
+  if(action==='create'?!canCreate:!canMutate||!original||!can(action==='edit'?'groups.update':'groups.members.manage'))return;
+  setBusy(true);try{
+   if(action==='member'&&original){const result=await directoryGroups.add(original,member.trim().toLowerCase());update(result);setNotice(result.membershipReview?.required&&!result.membershipReview.effective?'Verknüpfung bestätigt. Die unabhängige Gruppenfreigabe ist noch ausstehend.':'Verknüpfung bestätigt. Effektive App- und Lizenzfreigaben werden separat bewertet.');}
+   else{const profile:GroupProfile={name:name.trim(),description:description.trim()||null};update(action==='create'?await directoryGroups.create(profile):await directoryGroups.update(original!,profile));setNotice(action==='create'?'Neue leere Verzeichnisgruppe bestätigt.':'Gruppenprofil bestätigt.');}
+   setEditor(null);toast.success('Verzeichnisaktion bestätigt.');
+  }catch(failure){setOperationError(directoryError(failure));}finally{setBusy(false);}
+ }
+ async function confirm(){
+  if(!confirmation||busy||operationError||!canMutate||!can(confirmation.kind==='delete'?'groups.delete':'groups.members.manage'))return;const action=confirmation;setBusy(true);
+  try{if(action.kind==='delete'){await directoryGroups.remove(action.group);setGroups(previous=>previous.filter(group=>group.id!==action.group.id));setSelected(null);setNotice('Kanonische Gruppe gelöscht. Externe Wirkungen sind separat zu prüfen.');}
+   else{update(await directoryGroups.removeMember(action.group,action.userId!));setNotice('Entfernung der aktuellen Verknüpfung bestätigt. Externe Lizenzentfernung ist damit nicht bestätigt.');}
+   selfCheck(action.group,action.userId);setConfirmation(null);toast.success('Verzeichnisaktion bestätigt.');
+  }catch(failure){setOperationError(directoryError(failure));}finally{setBusy(false);}
+ }
+ const filtered=groups.filter(group=>[group.name,group.description||'',group.id].join(' ').toLowerCase().includes(search.toLowerCase()));
+ return <section className="h-full overflow-auto p-6 space-y-5" style={{background:'var(--bg-base, #0e1115)',color:'var(--text-primary, #e4e6ea)'}} aria-label="Kanonische Gruppenverwaltung">
+  <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-semibold">Verzeichnisgruppen</h1><p className="text-sm opacity-75">Echte Gruppen des angemeldeten Mandanten. Keine Beispieldaten.</p></div><div className="flex gap-3">
+   <button className={control} disabled={loading||busy||!!editor||!!confirmation} onClick={()=>void load()}>Gruppen neu laden</button>
+   {can('groups.create')&&<button className={control} disabled={!canCreate||loading||busy} onClick={()=>open('create')}>Gruppe erstellen</button>}
+  </div></header>
+  <p className="text-sm">Unterstützt werden flache kanonische Verzeichnisgruppen. Verschachtelte oder dynamische Gruppen und AD-Verteiler werden hier nicht vorgetäuscht. Verknüpfung bedeutet nicht automatisch wirksamen App- oder Lizenzzugriff.</p>
+  {!loading&&bound&&!canMutate&&(can('groups.update')||can('groups.delete')||can('groups.members.manage'))&&<p role="status" className="rounded border border-amber-500/40 p-3">Mandantengebundene Änderungen an bestehenden Gruppen sind auf diesem Server noch nicht bestätigt. Die Schreibaktionen bleiben gesperrt.</p>}
+  {loading&&<p role="status">Gruppen werden geprüft …</p>}{error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
+  {!loading&&access&&!can('groups.read')&&<p>Keine Berechtigung zum Lesen der Gruppenliste.</p>}
+  {!loading&&!error&&can('groups.read')&&<div className="grid gap-5 lg:grid-cols-[minmax(240px,1fr)_2fr]">
+   <section aria-label="Kanonische Gruppenliste" className="rounded-xl border border-white/10 p-4 space-y-3"><label className="block">Gruppen suchen<input className={'mt-2 block w-full bg-transparent '+control} value={search} onChange={event=>setSearch(event.target.value)}/></label>
+    <p>{groups.length} bestätigte Gruppen</p>{!groups.length?<p>Keine kanonischen Gruppen vorhanden.</p>:!filtered.length?<p>Keine passenden Gruppen.</p>:<ul className="space-y-2">{filtered.map(group=><li key={group.id}><button className={'w-full text-left '+control} disabled={busy} onClick={()=>{setSelected(group);setNotice('');}} aria-label={'Gruppe '+group.name} aria-pressed={selected?.id===group.id}><span className="block font-semibold">{group.name}</span><span className="text-xs break-all">{group.id}</span></button></li>)}</ul>}
+   </section>
+   {selected?<article aria-label="Gruppendetails" className="rounded-xl border border-white/10 p-5 space-y-4"><h2 className="text-xl font-semibold">{selected.name}</h2><p>{selected.description||'Keine Beschreibung hinterlegt.'}</p><dl className="space-y-2"><div><dt>Gruppen-ID</dt><dd className="break-all">{selected.id}</dd></div><div><dt>Datensatzversion</dt><dd>{selected.revision}</dd></div></dl>
+    <div className="flex flex-wrap gap-3">{can('groups.update')&&<button className={control} disabled={!canMutate||busy} onClick={()=>open('edit')}>Gruppenprofil bearbeiten</button>}{can('groups.members.manage')&&<button className={control} disabled={!canMutate||busy} onClick={()=>open('member')}>Mitglied verknüpfen</button>}{can('groups.delete')&&<button className={control} disabled={!canMutate||busy} onClick={()=>{setOperationError('');setConfirmation({kind:'delete',group:selected});}}>Gruppe löschen</button>}</div>
+    <h3 className="font-semibold">Verknüpfte Benutzer-IDs</h3>{!selected.members.length?<p>Keine Benutzer verknüpft.</p>:<ul className="space-y-2">{selected.members.map(userId=><li key={userId} className="flex flex-wrap items-center justify-between gap-2"><span className="break-all">{userId}</span>{can('groups.members.manage')&&<button className={control} disabled={!canMutate||busy} aria-label={'Verknüpfung '+userId+' entfernen'} onClick={()=>{setOperationError('');setConfirmation({kind:'remove',group:selected,userId});}}>Verknüpfung entfernen</button>}</li>)}</ul>}
+    <p className="text-sm">Angezeigt werden kanonische Verknüpfungen, keine behaupteten effektiven Berechtigungen. Unabhängige Freigaben und Fristen findest du unter <a className="underline" href="/roles">Rollen &amp; Rechte</a>. Benutzerprofile werden für diese Ansicht nicht abgerufen.</p>
+   </article>:<p>Wähle eine kanonische Gruppe.</p>}
+  </div>}
+  {!loading&&!can('groups.read')&&selected&&<p role="status">Bestätigte Gruppe: {selected.name} · {selected.id}</p>}
+  {editor&&<div role="dialog" aria-modal="true" aria-label={editor==='create'?'Gruppe erstellen':editor==='edit'?'Gruppenprofil bearbeiten':'Mitglied verknüpfen'} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5"><form onSubmit={save} className="w-full max-w-lg rounded-xl p-6 space-y-4" style={panel}>
+   <h2 className="text-xl font-semibold">{editor==='create'?'Neue leere Gruppe':editor==='edit'?'Kanonisches Gruppenprofil':'Benutzer-ID verknüpfen'}</h2>
+   {editor==='member'?<><label className="block">Kanonische Benutzer-ID<input className={'mt-2 w-full bg-transparent '+control} required maxLength={36} value={member} disabled={busy||!!operationError} onChange={event=>setMember(event.target.value)}/></label><p className="text-sm">Nur eine bekannte ID desselben Mandanten. Dies richtet weder ein Konto noch eine sofortige Lizenz- oder App-Freigabe ein.</p></>:<><label className="block">Gruppenname<input className={'mt-2 w-full bg-transparent '+control} required maxLength={255} value={name} disabled={busy||!!operationError} onChange={event=>setName(event.target.value)}/></label><label className="block">Gruppenbeschreibung<textarea className={'mt-2 w-full bg-transparent '+control} maxLength={2000} value={description} disabled={busy||!!operationError} onChange={event=>setDescription(event.target.value)}/></label></>}
+   {operationError&&<p role="alert">{operationError}</p>}<div className="flex justify-end gap-3"><button type="button" className={control} disabled={busy} onClick={close}>Abbrechen</button><button type="submit" className={control} disabled={busy||!!operationError}>{busy?'Wird bestätigt …':'Verbindlich speichern'}</button></div>
+  </form></div>}
+  {confirmation&&<DirectoryConfirmation title={confirmation.kind==='delete'?'Kanonische Gruppe löschen':'Aktuelle Verknüpfung entfernen'} busy={busy} error={operationError} onClose={close} onConfirm={()=>void confirm()}><p>{confirmation.group.name} · <span className="break-all">{confirmation.group.id}</span></p>{confirmation.userId&&<p className="break-all">Benutzer-ID: {confirmation.userId}</p>}
+   <p className="mt-3">Die Aktion bindet die angezeigte Gruppenversion. Entfernte App-/Lizenzquellen und externe Konten müssen separat bewertet werden; ein lokaler Beleg bestätigt keine Microsoft-Provisionierung.</p>
+   {(confirmation.userId===access?.userId||confirmation.kind==='delete'&&!!access?.userId&&confirmation.group.members.includes(access.userId))&&<p className="mt-3 text-amber-400">Dein eigener Zugriff kann damit enden. Stelle einen unabhängigen Wiederherstellungsweg sicher.</p>}
+  </DirectoryConfirmation>}
+ </section>;
 }

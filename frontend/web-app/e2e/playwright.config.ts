@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { chromium, defineConfig } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -14,6 +14,9 @@ function findChromiumExecutable(): string {
   const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
 
   const candidates = [
+    process.env.PLAYWRIGHT_EXECUTABLE_PATH,
+    chromium.executablePath(),
+    ...(process.platform === 'darwin' ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'] : []),
     // e.g. /opt/pw-browsers/chromium-1194/chrome-linux/chrome
     ...globDirs(browsersPath, /^chromium-\d+$/).map(dir =>
       path.join(browsersPath, dir, 'chrome-linux', 'chrome')

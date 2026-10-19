@@ -1,0 +1,117 @@
+'use strict';
+
+const CIS_BASELINES = [
+  {
+    id: 'cis-ubuntu-22-l1',
+    name: 'CIS Ubuntu 22.04 LTS — Level 1',
+    platform: 'linux',
+    level: 1,
+    controls: 89,
+    description: 'Server hardening baseline for Ubuntu 22.04 — suitable for most environments',
+    settings: {
+      'fs.suid_dumpable': '0',
+      'kernel.randomize_va_space': '2',
+      'net.ipv4.ip_forward': '0',
+      'net.ipv4.conf.all.send_redirects': '0',
+      'ssh_PermitRootLogin': 'no',
+      'ssh_PasswordAuthentication': 'no',
+      'ssh_MaxAuthTries': '4',
+      'ufw_enabled': 'true',
+      'auditd_enabled': 'true',
+      'apparmor_enabled': 'true',
+    }
+  },
+  {
+    id: 'cis-ubuntu-22-l2',
+    name: 'CIS Ubuntu 22.04 LTS — Level 2',
+    platform: 'linux',
+    level: 2,
+    controls: 147,
+    description: 'Enhanced hardening for high-security Ubuntu environments',
+    settings: {
+      'fs.suid_dumpable': '0',
+      'kernel.randomize_va_space': '2',
+      'net.ipv4.ip_forward': '0',
+      'ssh_PermitRootLogin': 'no',
+      'ssh_PasswordAuthentication': 'no',
+      'ssh_MaxAuthTries': '3',
+      'ufw_enabled': 'true',
+      'auditd_enabled': 'true',
+      'apparmor_enabled': 'true',
+      'aide_enabled': 'true',
+      'rsyslog_remote': 'true',
+      'cron_restricted': 'true',
+      'at_restricted': 'true',
+    }
+  },
+  {
+    id: 'cis-macos-14-l1',
+    name: 'CIS macOS 14 Sonoma — Level 1',
+    platform: 'macos',
+    level: 1,
+    controls: 76,
+    description: 'Standard hardening for managed macOS Sonoma devices',
+    settings: {
+      'SoftwareUpdateDelay': '0',
+      'GatekeeperEnabled': 'true',
+      'FirewallEnabled': 'true',
+      'FileVaultEnabled': 'true',
+      'ScreenLockEnabled': 'true',
+      'ScreenLockDelay': '300',
+      'GuestAccountDisabled': 'true',
+      'RemoteLoginDisabled': 'true',
+      'BluetoothSharing': 'disabled',
+      'AirDropEnabled': 'contacts-only',
+    }
+  },
+  {
+    id: 'cis-windows-11-l1',
+    name: 'CIS Windows 11 — Level 1',
+    platform: 'windows',
+    level: 1,
+    controls: 193,
+    description: 'Standard security baseline for Windows 11 enterprise workstations',
+    settings: {
+      'PasswordMinLength': '14',
+      'PasswordComplexity': 'enabled',
+      'LockoutThreshold': '5',
+      'LockoutDuration': '15',
+      'AuditLogonEvents': 'success,failure',
+      'WindowsDefender': 'enabled',
+      'SmartScreen': 'enabled',
+      'UAC': 'enabled',
+      'BitLocker': 'required',
+      'WindowsFirewall': 'enabled',
+      'RemoteDesktop': 'disabled',
+      'GuestAccount': 'disabled',
+    }
+  },
+  {
+    id: 'cis-windows-11-l2',
+    name: 'CIS Windows 11 — Level 2',
+    platform: 'windows',
+    level: 2,
+    controls: 284,
+    description: 'Enhanced security for high-security Windows 11 environments',
+    settings: {
+      'PasswordMinLength': '15',
+      'PasswordComplexity': 'enabled',
+      'LockoutThreshold': '3',
+      'LockoutDuration': '30',
+      'AuditLogonEvents': 'success,failure',
+      'WindowsDefender': 'enabled',
+      'SmartScreen': 'block',
+      'UAC': 'enabled',
+      'BitLocker': 'required',
+      'WindowsFirewall': 'enabled',
+      'RemoteDesktop': 'disabled',
+      'GuestAccount': 'disabled',
+      'PowerShellScriptBlockLogging': 'enabled',
+      'CredentialGuard': 'enabled',
+      'DeviceGuard': 'enabled',
+      'LAPS': 'enabled',
+    }
+  }
+];
+
+module.exports = { baselines: CIS_BASELINES };

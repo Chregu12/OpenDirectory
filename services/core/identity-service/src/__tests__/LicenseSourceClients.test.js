@@ -1,0 +1,10 @@
+'use strict';
+const{LicenseSourceClients}=require('../LicenseSourceClients');
+const metadata={schemaVersion:1,clientId:'known-source',revision:'7',enabled:true,canReadGroupSources:true};
+const source=fetchImpl=>new LicenseSourceClients({url:'https://issuer.test/oauth/access-state',issuer:'https://issuer.test',fetchImpl});
+test('minimal client evidence uses a fixed endpoint and only the original verified operator bearer',async()=>{
+ const fetchImpl=jest.fn(async()=>new Response(JSON.stringify(metadata),{headers:{'Content-Type':'application/json'}}));expect(await source(fetchImpl).get('known-source','Bearer original')).toEqual(metadata);expect(String(fetchImpl.mock.calls[0][0])).toBe('https://issuer.test/api/license-source-clients/known-source');expect(fetchImpl.mock.calls[0][1]).toMatchObject({headers:{Authorization:'Bearer original'},redirect:'error',cache:'no-store'});
+});
+test.each(['.','..','bad/client','bad?scope=all','',null])('path-changing client ID %j never receives the operator credential',async id=>{const fetchImpl=jest.fn();await expect(source(fetchImpl).get(id,'Bearer original')).rejects.toMatchObject({status:400});expect(fetchImpl).not.toHaveBeenCalled();});
+test.each([{},null,{...metadata,clientId:'different'},{...metadata,revision:'0'},{...metadata,enabled:false},{...metadata,canReadGroupSources:'yes'},{...metadata,secret:'never-expose'}])('incomplete or secret-bearing client evidence cannot authorize a source grant: %j',async value=>{await expect(source(async()=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}})).get('known-source','Bearer original')).rejects.toMatchObject({status:503});});
+test('source-client authority failure cannot reuse a cached eligible registration',async()=>{const fetchImpl=jest.fn().mockResolvedValueOnce(new Response(JSON.stringify(metadata),{headers:{'Content-Type':'application/json'}})).mockResolvedValueOnce(new Response('{}',{status:503}));const client=source(fetchImpl);await client.get('known-source','Bearer original');await expect(client.get('known-source','Bearer original')).rejects.toMatchObject({status:503});});

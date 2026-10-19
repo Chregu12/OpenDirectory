@@ -12,6 +12,7 @@
     "type-check": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:browser-auth": "node --test test/browserAuth.test.cjs",
     "test:e2e": "playwright test --config=e2e/playwright.config.ts"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "axios": "^1.4.0",
     "clsx": "^2.0.0",
     "date-fns": "^2.30.0",
+    "jose": "^6.2.3",
     "next": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

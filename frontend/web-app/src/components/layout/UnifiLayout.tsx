@@ -2,10 +2,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, authApi } from '@/lib/api';
-import { Toaster } from 'react-hot-toast';
+import { api } from '@/lib/api';
+import { logout } from '@/lib/auth';
+import { directoryUsers } from '@/lib/directoryUsers';
+import toast, { Toaster } from 'react-hot-toast';
 import {
   HomeIcon,
+  BuildingOfficeIcon,
   ComputerDesktopIcon,
   Cog6ToothIcon,
   ChartBarIcon,
@@ -62,6 +65,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'printers',     name: 'Drucker',             view: 'printers',     type: 'Seite' },
   { id: 'permissions',  name: 'Berechtigungen',      view: 'permissions',  type: 'Seite' },
   { id: 'blueprints',   name: 'Blueprints',          view: 'blueprints',   type: 'Seite' },
+  { id: 'company-blueprints', name: 'Firmen-Blueprints', view: 'company-blueprints', type: 'Seite' },
   { id: 'antivirus',    name: 'Antivirus',           view: 'antivirus',    type: 'Seite' },
   { id: 'audit',        name: 'Audit Log',           view: 'audit',        type: 'Seite' },
   { id: 'backup',       name: 'Backup & DR',         view: 'backup',       type: 'Seite' },
@@ -110,7 +114,7 @@ interface LayoutProps {
 }
 
 type NavItem =
-  | { type: 'item'; id: string; name: string; icon: React.ComponentType<{ className?: string }> }
+  | { type: 'item'; id: string; name: string; icon: React.ComponentType<React.SVGProps<SVGSVGElement>> }
   | { type: 'section'; label: string };
 
 // Nav items that require a specific module to be enabled
@@ -133,6 +137,14 @@ function getInitials(name: string): string {
 export default function UnifiLayout({ children, activeView, onViewChange, enabledModules, currentUser }: LayoutProps) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [canReviewCompanies, setCanReviewCompanies] = useState(false);
+  useEffect(() => {
+    let active = true; setCanReviewCompanies(false);
+    const invalid = () => { active = false; setCanReviewCompanies(false); };
+    window.addEventListener('od:session-error', invalid);
+    directoryUsers.access().then(access => { if (active) setCanReviewCompanies(!access.demoMode && access.companyRegistrationReviewProtocol === 1 && access.permissions.includes('company.registrations.review')); }).catch(() => { if (active) setCanReviewCompanies(false); });
+    return () => { active = false; window.removeEventListener('od:session-error', invalid); };
+  }, [currentUser]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
@@ -255,15 +267,14 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
 
     // Fetch real users and devices in parallel
     const [usersRes, devicesRes] = await Promise.allSettled([
-      api.get('/api/users').catch(() => api.get('/api/lldap/users')),
+      directoryUsers.access().then(access => access.permissions.includes('users.read') ? directoryUsers.list(1, query.trim()) : { users: [] }),
       api.get('/api/devices').catch(() => api.get('/api/devices/registry')),
     ]);
 
     const dynamicResults: SearchItem[] = [...pageMatches];
 
     if (usersRes.status === 'fulfilled') {
-      const users = Array.isArray(usersRes.value?.data) ? usersRes.value.data
-        : usersRes.value?.data?.users ?? usersRes.value?.data?.data ?? [];
+      const users = usersRes.value.users;
       for (const u of users) {
         const name = u.displayName ?? u.name ?? u.username ?? u.id ?? '';
         if (name.toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q)) {
@@ -298,21 +309,26 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
 
   const handleLogout = async () => {
     try {
-      await authApi.logout();
-    } catch (_) {}
-    localStorage.removeItem('auth_user');
-    router.push('/login');
+      await logout();
+      router.replace('/login');
+    } catch {
+      toast.error('Abmeldung nicht bestätigt. Bitte erneut versuchen.');
+    }
   };
 
   // Navigation structure — ABM-style sections
   const ALL_NAV_ITEMS: NavItem[] = [
     { type: 'section', label: 'Übersicht' },
     { type: 'item', id: 'dashboard',      name: 'Dashboard',         icon: HomeIcon },
+    { type: 'item', id: 'organization',   name: 'Organisation',      icon: BuildingOfficeIcon },
+    { type: 'item', id: 'registration-reviews', name: 'Firmenprüfung', icon: DocumentCheckIcon },
 
     { type: 'section', label: 'Verzeichnis' },
     { type: 'item', id: 'users',          name: 'Benutzer',          icon: UserGroupIcon },
+    { type: 'item', id: 'usergroups',     name: 'Gruppen',           icon: UserGroupIcon },
     { type: 'item', id: 'permissions',    name: 'Rollen & Rechte',   icon: KeyIcon },
     { type: 'item', id: 'pim',            name: 'PIM',               icon: ShieldCheckIcon },
+    { type: 'item', id: 'offboarding-access', name: 'Austritt: Rollen & PIM', icon: KeyIcon },
     { type: 'item', id: 'mfa',            name: 'MFA / 2FA',         icon: DevicePhoneMobileIcon },
     { type: 'item', id: 'sspr',           name: 'Passwort-Reset',    icon: ArrowUturnLeftIcon },
     { type: 'item', id: 'identity',       name: 'Identity Provider', icon: FingerPrintIcon },
@@ -321,7 +337,9 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
 
     { type: 'section', label: 'Geräte' },
     { type: 'item', id: 'devices',        name: 'Geräte',            icon: ComputerDesktopIcon },
+    { type: 'item', id: 'device-returns', name: 'Geräterückgaben',    icon: ArrowUturnLeftIcon },
     { type: 'item', id: 'blueprints',     name: 'Blueprints',        icon: RectangleStackIcon },
+    { type: 'item', id: 'company-blueprints', name: 'Firmen-Blueprints', icon: RectangleStackIcon },
     { type: 'item', id: 'antivirus',      name: 'Antivirus',         icon: BugAntIcon },
     { type: 'item', id: 'appstore',       name: 'App Store',         icon: ShoppingBagIcon },
     { type: 'item', id: 'licenses',       name: 'Lizenz-Kiosk',      icon: TagIcon },
@@ -355,6 +373,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
   // Hide nav items whose controlling module is disabled
   const navigationItems = ALL_NAV_ITEMS.filter(item => {
     if (item.type === 'section') return true;
+    if (item.id === 'registration-reviews') return canReviewCompanies;
     const required = NAV_REQUIRED_MODULE[item.id];
     if (!required) return true;
     if (!enabledModules || enabledModules.length === 0) return true;
@@ -741,6 +760,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
             <div ref={userMenuRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => { setUserMenuOpen(o => !o); setNotifOpen(false); }}
+                aria-label="Benutzermenü"
                 style={{
                   width: 32,
                   height: 32,

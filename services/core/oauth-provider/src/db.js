@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || undefined,
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || process.env.POSTGRES_DB || 'oauth',
@@ -19,11 +20,7 @@ async function runMigrations() {
   const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
   for (const file of files) {
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-    try {
-      await pool.query(sql);
-    } catch (err) {
-      console.error(`[DB] Migration ${file} error:`, err.message);
-    }
+    await pool.query(sql);
   }
   console.log(`[DB] ${files.length} migration(s) applied`);
 }
@@ -33,11 +30,11 @@ let dbAvailable = false;
 async function initDb() {
   try {
     await pool.query('SELECT 1');
-    dbAvailable = true;
     await runMigrations();
+    dbAvailable = true;
     console.log('[DB] PostgreSQL connected');
   } catch (err) {
-    console.warn('[DB] PostgreSQL not available, using in-memory fallback:', err.message);
+    console.warn('[DB] PostgreSQL or migrations unavailable:', err.message);
     dbAvailable = false;
   }
 }
@@ -47,31 +44,6 @@ function isAvailable() { return dbAvailable; }
 async function query(sql, params) {
   if (!dbAvailable) throw new Error('DB not available');
   return pool.query(sql, params);
-}
-
-// OAuth Clients
-async function getClient(id) {
-  const r = await query('SELECT * FROM oauth_clients WHERE id=$1', [id]);
-  if (!r.rows.length) return null;
-  const row = r.rows[0];
-  return { id: row.id, name: row.name, clientSecret: row.secret, redirectUris: row.redirect_uris, grants: row.grants, scopes: row.scopes };
-}
-
-async function upsertClient(client) {
-  await query(`
-    INSERT INTO oauth_clients(id, name, secret, redirect_uris, grants, scopes)
-    VALUES($1, $2, $3, $4, $5, $6)
-    ON CONFLICT(id) DO UPDATE SET name=$2, secret=$3, redirect_uris=$4, grants=$5, scopes=$6, updated_at=NOW()
-  `, [client.id, client.name, client.clientSecret || null, JSON.stringify(client.redirectUris || []), JSON.stringify(client.grants || []), JSON.stringify(client.scopes || [])]);
-}
-
-async function getAllClients() {
-  const r = await query('SELECT * FROM oauth_clients ORDER BY created_at');
-  return r.rows.map(row => ({ id: row.id, name: row.name, clientSecret: row.secret, redirectUris: row.redirect_uris, grants: row.grants, scopes: row.scopes }));
-}
-
-async function deleteClient(id) {
-  await query('DELETE FROM oauth_clients WHERE id=$1', [id]);
 }
 
 // Auth Codes
@@ -97,7 +69,7 @@ async function saveToken(hash, payload) {
     INSERT INTO oauth_tokens(token, client_id, user_id, scope, expires_at)
     VALUES($1, $2, $3, $4, $5)
     ON CONFLICT(token) DO NOTHING
-  `, [hash, payload.aud || null, payload.sub || null, payload.scope || null, expiresAt]);
+  `, [hash, payload.client_id || payload.aud || null, payload.sub || null, payload.scope || null, expiresAt]);
 }
 
 async function getToken(hash) {
@@ -112,11 +84,13 @@ async function revokeToken(hash) {
 
 // Enrolled Devices
 async function upsertDevice(device) {
-  await query(`
+  const result = await query(`
     INSERT INTO enrolled_devices(id, token, hostname, platform, os_version, ip_address, status, data)
     VALUES($1, $2, $3, $4, $5, $6, $7, $8)
     ON CONFLICT(id) DO UPDATE SET last_seen=NOW(), status=$7, data=$8
+    RETURNING id,platform,policy_generation
   `, [device.id, device.enrollmentToken || null, device.hostname || null, device.platform || null, device.os || null, device.ip || null, device.status || 'active', JSON.stringify(device)]);
+  return result.rows[0];
 }
 
 async function getDevice(id) {
@@ -170,4 +144,4 @@ async function deleteScimUser(appId, userId) {
   await query('DELETE FROM scim_catalog WHERE app_id=$1 AND user_id=$2', [appId, userId]);
 }
 
-module.exports = { initDb, query, isAvailable, pool, getClient, upsertClient, getAllClients, deleteClient, saveAuthCode, getAndDeleteAuthCode, saveToken, getToken, revokeToken, upsertDevice, getDevice, getAllDevices, updateDeviceStatus, saveScimUser, getScimUser, getScimUsers, deleteScimUser };
+module.exports = { initDb, query, isAvailable, pool, saveAuthCode, getAndDeleteAuthCode, saveToken, getToken, revokeToken, upsertDevice, getDevice, getAllDevices, updateDeviceStatus, saveScimUser, getScimUser, getScimUsers, deleteScimUser };
