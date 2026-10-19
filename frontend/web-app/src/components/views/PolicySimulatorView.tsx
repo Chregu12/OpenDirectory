@@ -112,31 +112,42 @@ const sevBadge = (s: string) =>
   s === 'medium' ? 'od-badge-medium' :
   'od-badge-low';
 
-const severityBorder = (s: string) =>
-  s === 'critical' ? 'border-red-200' :
-  s === 'high' ? 'border-orange-200' :
-  s === 'medium' ? 'border-yellow-200' :
-  'border-blue-200';
+const severityBorderStyle = (s: string): React.CSSProperties => ({
+  borderColor: s === 'critical' ? 'var(--danger)' :
+               s === 'high' ? '#f97316' :
+               s === 'medium' ? 'var(--warning)' :
+               'var(--accent)',
+});
 
-const riskBadge = (s: string) =>
-  s === 'critical' ? 'bg-red-100 text-red-700' :
-  s === 'high' ? 'bg-orange-100 text-orange-700' :
-  s === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-  'bg-blue-100 text-blue-700';
+const riskBadgeStyle = (s: string): React.CSSProperties => ({
+  color: s === 'critical' ? 'var(--danger)' :
+         s === 'high' ? '#f97316' :
+         s === 'medium' ? 'var(--warning)' :
+         'var(--accent)',
+  background: s === 'critical' ? 'var(--danger-light)' :
+              s === 'high' ? 'rgba(249,115,22,0.15)' :
+              s === 'medium' ? 'var(--warning-light)' :
+              'var(--accent-light)',
+});
 
-const timelineColor = (type: string) =>
-  type === 'enrolled' ? 'bg-blue-500' :
-  type === 'policy_applied' ? 'bg-purple-500' :
-  type === 'update_installed' ? 'bg-cyan-500' :
-  type === 'compliance_gained' ? 'bg-green-500' :
-  type === 'compliance_lost' ? 'bg-red-500' :
-  'bg-amber-500';
+const timelineDotColor = (type: string): string =>
+  type === 'enrolled' ? '#006FFF' :
+  type === 'policy_applied' ? '#a855f7' :
+  type === 'update_installed' ? '#06b6d4' :
+  type === 'compliance_gained' ? '#3fb950' :
+  type === 'compliance_lost' ? '#f85149' :
+  '#d29922';
 
-const timelineBadge = (type: string) =>
-  type === 'compliance_lost' ? 'bg-red-100 text-red-700' :
-  type === 'compliance_gained' ? 'bg-green-100 text-green-700' :
-  type === 'remediated' ? 'bg-amber-100 text-amber-700' :
-  'bg-gray-100 text-gray-600';
+const timelineBadgeStyle = (type: string): React.CSSProperties => ({
+  color: type === 'compliance_lost' ? 'var(--danger)' :
+         type === 'compliance_gained' ? 'var(--success)' :
+         type === 'remediated' ? 'var(--warning)' :
+         'var(--text-secondary)',
+  background: type === 'compliance_lost' ? 'var(--danger-light)' :
+              type === 'compliance_gained' ? 'var(--success-light)' :
+              type === 'remediated' ? 'var(--warning-light)' :
+              'var(--bg-overlay)',
+});
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -186,6 +197,19 @@ export default function PolicySimulatorView() {
       setSimulating(false);
     }
   }, []);
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    marginTop: 4,
+    background: 'var(--bg-overlay)',
+    border: '1px solid var(--border-strong)',
+    borderRadius: 8,
+    padding: '8px 12px',
+    fontSize: 14,
+    color: 'var(--text-primary)',
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
 
   // ── Simple Mode ──
   if (isSimple) {
@@ -237,15 +261,17 @@ export default function PolicySimulatorView() {
 
   // ── Expert Mode ──
   return (
-    <div className="flex flex-col h-full">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200">
-        <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2"><BeakerIcon className="w-6 h-6 text-purple-600" /> Policy Simulator</h1>
-        <p className="text-sm text-gray-500">What-if analysis, drift detection, compliance timeline</p>
+      <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', flexShrink: 0 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+          <BeakerIcon style={{ width: 24, height: 24, color: '#a855f7' }} /> Policy Simulator
+        </h1>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>What-if analysis, drift detection, compliance timeline</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 bg-gray-50">
+      <div style={{ display: 'flex', gap: 4, padding: '12px 24px 0', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface-raised)', flexShrink: 0 }}>
         {([
           ['simulate', 'What-If Simulator'],
           ['drift', `Drift Detection (${drift.length})`],
@@ -260,18 +286,17 @@ export default function PolicySimulatorView() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
         {/* ── Simulator ──────────────────────────────────────────────────── */}
         {activeTab === 'simulate' && (
-          <div className="space-y-6">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {/* Input form */}
-            <div className="od-card p-4">
-              <h3 className="text-sm font-semibold text-gray-600 mb-3">Run Simulation</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="od-card" style={{ padding: 16 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 12 }}>Run Simulation</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
                 <div>
-                  <label className="text-xs text-gray-500">Policy</label>
-                  <select value={selectedPolicy} onChange={e => setSelectedPolicy(e.target.value)}
-                    className="w-full mt-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Policy</label>
+                  <select value={selectedPolicy} onChange={e => setSelectedPolicy(e.target.value)} style={inputStyle}>
                     <option>Update Ring A</option>
                     <option>Update Ring B</option>
                     <option>Security Baseline</option>
@@ -281,14 +306,17 @@ export default function PolicySimulatorView() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500">Change Description</label>
-                  <input value={changeDescription} onChange={e => setChangeDescription(e.target.value)}
-                    className="w-full mt-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Change Description</label>
+                  <input value={changeDescription} onChange={e => setChangeDescription(e.target.value)} style={inputStyle} />
                 </div>
-                <div className="flex items-end">
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                   <button onClick={runSimulation} disabled={simulating}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-lg text-sm text-white flex items-center gap-2 shadow-sm">
-                    {simulating ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PlayIcon className="w-4 h-4" />}
+                    style={{
+                      padding: '8px 16px', background: '#a855f7', color: '#fff', border: 'none', borderRadius: 8,
+                      fontSize: 14, display: 'flex', alignItems: 'center', gap: 8, cursor: simulating ? 'not-allowed' : 'pointer',
+                      opacity: simulating ? 0.5 : 1, boxShadow: 'var(--card-shadow)',
+                    }}>
+                    {simulating ? <ArrowPathIcon style={{ width: 16, height: 16 }} /> : <PlayIcon style={{ width: 16, height: 16 }} />}
                     {simulating ? 'Simulating...' : 'Run Simulation'}
                   </button>
                 </div>
@@ -297,62 +325,62 @@ export default function PolicySimulatorView() {
 
             {/* Results */}
             {results.map(sim => (
-              <div key={sim.id} className={`od-card p-4 ${severityBorder(sim.impact.riskLevel)}`}>
-                <div className="flex justify-between items-start mb-3">
+              <div key={sim.id} className="od-card" style={{ padding: 16, ...severityBorderStyle(sim.impact.riskLevel) }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div>
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <DocumentTextIcon className="w-5 h-5 text-gray-400" />
+                    <h3 style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <DocumentTextIcon style={{ width: 20, height: 20, color: 'var(--text-muted)' }} />
                       {sim.policyName}: {sim.change}
                     </h3>
-                    <span className="text-xs text-gray-500">{new Date(sim.timestamp).toLocaleString()}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{new Date(sim.timestamp).toLocaleString()}</span>
                   </div>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${riskBadge(sim.impact.riskLevel)}`}>
+                  <span style={{ padding: '4px 8px', borderRadius: 4, fontSize: 12, fontWeight: 500, ...riskBadgeStyle(sim.impact.riskLevel) }}>
                     {sim.impact.riskLevel.toUpperCase()} RISK
                   </span>
                 </div>
 
                 {/* Impact metrics */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600">{sim.impact.devicesAffected}</div>
-                    <div className="text-xs text-gray-500">Devices Affected</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+                  <div style={{ padding: 12, background: 'var(--bg-surface-raised)', borderRadius: 8 }}>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent)' }}>{sim.impact.devicesAffected}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Devices Affected</div>
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-2xl font-bold text-purple-600">{sim.impact.usersAffected}</div>
-                    <div className="text-xs text-gray-500">Users Impacted</div>
+                  <div style={{ padding: 12, background: 'var(--bg-surface-raised)', borderRadius: 8 }}>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: '#a855f7' }}>{sim.impact.usersAffected}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Users Impacted</div>
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold text-green-600">{sim.impact.complianceChange.before}%</span>
-                      <ChevronRightIcon className="w-3 h-3 text-gray-400" />
-                      <span className={`text-2xl font-bold ${sim.impact.complianceChange.after < sim.impact.complianceChange.before ? 'text-red-600' : 'text-green-600'}`}>
+                  <div style={{ padding: 12, background: 'var(--bg-surface-raised)', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                      <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--success)' }}>{sim.impact.complianceChange.before}%</span>
+                      <ChevronRightIcon style={{ width: 12, height: 12, color: 'var(--text-muted)' }} />
+                      <span style={{ fontSize: 24, fontWeight: 700, color: sim.impact.complianceChange.after < sim.impact.complianceChange.before ? 'var(--danger)' : 'var(--success)' }}>
                         {sim.impact.complianceChange.after}%
                       </span>
                     </div>
-                    <div className="text-xs text-gray-500">Compliance Change</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Compliance Change</div>
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-2xl font-bold text-cyan-600">{sim.impact.osUpgradeTriggered}</div>
-                    <div className="text-xs text-gray-500">OS Upgrades Triggered</div>
+                  <div style={{ padding: 12, background: 'var(--bg-surface-raised)', borderRadius: 8 }}>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: '#06b6d4' }}>{sim.impact.osUpgradeTriggered}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>OS Upgrades Triggered</div>
                   </div>
                 </div>
 
                 {/* Warnings */}
                 {sim.warnings.length > 0 && (
-                  <div className="space-y-1">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {sim.warnings.map((w, i) => (
-                      <div key={i} className="flex items-start gap-2 text-sm text-yellow-700">
-                        <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 shrink-0" />
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 14, color: 'var(--warning)' }}>
+                        <ExclamationTriangleIcon style={{ width: 16, height: 16, marginTop: 2, flexShrink: 0 }} />
                         {w}
                       </div>
                     ))}
                   </div>
                 )}
 
-                <div className="flex gap-2 mt-3">
-                  <span className="text-xs text-gray-500">Affected groups:</span>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Affected groups:</span>
                   {sim.affectedGroups.map(g => (
-                    <span key={g} className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded">{g}</span>
+                    <span key={g} style={{ fontSize: 12, padding: '2px 8px', background: 'rgba(168,85,247,0.15)', color: '#a855f7', borderRadius: 4 }}>{g}</span>
                   ))}
                 </div>
               </div>
@@ -362,36 +390,38 @@ export default function PolicySimulatorView() {
 
         {/* ── Drift Detection ────────────────────────────────────────────── */}
         {activeTab === 'drift' && (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-500 mb-4">Devices where actual configuration differs from expected policy state.</p>
-            <div className="od-card overflow-hidden">
-              <table className="w-full text-sm">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 16 }}>Devices where actual configuration differs from expected policy state.</p>
+            <div className="od-card" style={{ overflow: 'hidden' }}>
+              <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr className="text-left text-gray-500 border-b border-gray-200 bg-gray-50">
-                    <th className="px-4 py-3">Device</th>
-                    <th className="px-4 py-3">Policy</th>
-                    <th className="px-4 py-3">Expected</th>
-                    <th className="px-4 py-3">Actual</th>
-                    <th className="px-4 py-3">Severity</th>
-                    <th className="px-4 py-3">Detected</th>
+                  <tr style={{ textAlign: 'left', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface-raised)' }}>
+                    <th style={{ padding: '12px 16px' }}>Device</th>
+                    <th style={{ padding: '12px 16px' }}>Policy</th>
+                    <th style={{ padding: '12px 16px' }}>Expected</th>
+                    <th style={{ padding: '12px 16px' }}>Actual</th>
+                    <th style={{ padding: '12px 16px' }}>Severity</th>
+                    <th style={{ padding: '12px 16px' }}>Detected</th>
                   </tr>
                 </thead>
                 <tbody>
                   {drift.map(d => (
-                    <tr key={`${d.deviceId}-${d.policyName}`} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-900 flex items-center gap-2">
-                        <ComputerDesktopIcon className="w-4 h-4 text-gray-400" />
+                    <tr key={`${d.deviceId}-${d.policyName}`} style={{ borderBottom: '1px solid var(--border)' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                      <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <ComputerDesktopIcon style={{ width: 16, height: 16, color: 'var(--text-muted)' }} />
                         {d.deviceName}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{d.policyName}</td>
-                      <td className="px-4 py-3 text-green-700">{d.expectedState}</td>
-                      <td className="px-4 py-3 text-red-600">{d.actualState}</td>
-                      <td className="px-4 py-3">
+                      <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{d.policyName}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--success)' }}>{d.expectedState}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--danger)' }}>{d.actualState}</td>
+                      <td style={{ padding: '12px 16px' }}>
                         <span className={`px-2 py-0.5 rounded text-xs ${sevBadge(d.severity)}`}>
                           {d.severity}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-500">{new Date(d.detectedAt).toLocaleDateString()}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>{new Date(d.detectedAt).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -402,34 +432,31 @@ export default function PolicySimulatorView() {
 
         {/* ── Compliance Timeline ─────────────────────────────────────────── */}
         {activeTab === 'timeline' && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <label className="text-sm text-gray-500">Device:</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <label style={{ fontSize: 14, color: 'var(--text-muted)' }}>Device:</label>
               <select value={timelineDevice} onChange={e => setTimelineDevice(e.target.value)}
-                className="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-strong)', borderRadius: 8, padding: '6px 12px', fontSize: 14, color: 'var(--text-primary)', outline: 'none' }}>
                 <option>LAPTOP-23</option>
                 <option>WS-001</option>
                 <option>SRV-DC01</option>
                 <option>MAC-DEV-01</option>
               </select>
             </div>
-            <div className="relative pl-8">
+            <div style={{ position: 'relative', paddingLeft: 32 }}>
               {timeline.map((evt, i) => (
-                <div key={i} className="relative mb-6 last:mb-0">
-                  {/* Vertical line */}
+                <div key={i} style={{ position: 'relative', marginBottom: i < timeline.length - 1 ? 24 : 0 }}>
                   {i < timeline.length - 1 && (
-                    <div className="absolute left-[-20px] top-6 w-0.5 h-full bg-gray-200" />
+                    <div style={{ position: 'absolute', left: -20, top: 24, width: 2, height: '100%', background: 'var(--border)' }} />
                   )}
-                  {/* Dot */}
-                  <div className={`absolute left-[-24px] top-1.5 w-3 h-3 rounded-full ${timelineColor(evt.type)} ring-2 ring-white`} />
-                  {/* Content */}
-                  <div className="od-card p-3">
-                    <div className="flex justify-between items-start">
-                      <h4 className="font-medium text-sm text-gray-900">{evt.event}</h4>
-                      <span className="text-xs text-gray-500">{evt.timestamp}</span>
+                  <div style={{ position: 'absolute', left: -24, top: 6, width: 12, height: 12, borderRadius: '50%', background: timelineDotColor(evt.type), boxShadow: '0 0 0 2px var(--bg-surface)' }} />
+                  <div className="od-card" style={{ padding: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <h4 style={{ fontWeight: 500, fontSize: 14, color: 'var(--text-primary)' }}>{evt.event}</h4>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{evt.timestamp}</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">{evt.details}</p>
-                    <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded ${timelineBadge(evt.type)}`}>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{evt.details}</p>
+                    <span style={{ display: 'inline-block', marginTop: 4, fontSize: 12, padding: '2px 8px', borderRadius: 4, ...timelineBadgeStyle(evt.type) }}>
                       {evt.type.replace('_', ' ')}
                     </span>
                   </div>
@@ -441,24 +468,24 @@ export default function PolicySimulatorView() {
 
         {/* ── Policy Conflicts ───────────────────────────────────────────── */}
         {activeTab === 'conflicts' && (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-500">Conflicting or overlapping policy assignments.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Conflicting or overlapping policy assignments.</p>
             {conflicts.map((c, i) => (
-              <div key={i} className="od-card p-4 border-yellow-200">
-                <div className="flex items-start gap-2 mb-2">
-                  <ExclamationTriangleIcon className="w-5 h-5 text-yellow-500 shrink-0" />
+              <div key={i} className="od-card" style={{ padding: 16, borderColor: 'var(--warning)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+                  <ExclamationTriangleIcon style={{ width: 20, height: 20, color: 'var(--warning)', flexShrink: 0 }} />
                   <div>
-                    <h3 className="font-semibold text-sm text-gray-900">{c.conflictType}</h3>
-                    <div className="flex gap-2 mt-1">
+                    <h3 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{c.conflictType}</h3>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                       {c.policies.map(p => (
-                        <span key={p} className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-700">{p}</span>
+                        <span key={p} style={{ fontSize: 12, padding: '2px 8px', background: 'var(--bg-overlay)', borderRadius: 4, color: 'var(--text-secondary)' }}>{p}</span>
                       ))}
                     </div>
                   </div>
                 </div>
-                <p className="text-sm text-gray-600 mb-2">{c.description}</p>
-                <div className="flex items-start gap-2 text-sm text-green-700">
-                  <CheckCircleIcon className="w-4 h-4 mt-0.5 shrink-0" />
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>{c.description}</p>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 14, color: 'var(--success)' }}>
+                  <CheckCircleIcon style={{ width: 16, height: 16, marginTop: 2, flexShrink: 0 }} />
                   <span>{c.resolution}</span>
                 </div>
               </div>

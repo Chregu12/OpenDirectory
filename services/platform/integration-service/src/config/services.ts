@@ -3,8 +3,8 @@ import { ServiceConfig } from '../types';
 export const SERVICES: Record<string, ServiceConfig> = {
   lldap: {
     name: 'LLDAP',
-    baseUrl: process.env.LLDAP_URL || 'http://localhost:30170',
-    port: 30170,
+    baseUrl: process.env.LLDAP_URL || 'http://lldap:17170',
+    port: 17170,
     healthEndpoint: '/health',
     authentication: {
       type: 'basic',

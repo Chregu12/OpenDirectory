@@ -5,6 +5,11 @@
  *
  * Using shared constants prevents typos and gives every service a common
  * vocabulary without sharing implementation code.
+ *
+ * Two formats are exported for backwards compatibility:
+ *   1. Legacy PascalCase string constants  (e.g. DEVICE_ENROLLED = 'DeviceEnrolled')
+ *   2. Events object with dot-notation routing keys for RabbitMQ
+ *      (e.g. Events.DEVICE_ENROLLED = 'device.enrolled')
  */
 
 // ── Device service ────────────────────────────────────────────────────────────
@@ -49,8 +54,74 @@ const LICENSE_ASSIGNED   = 'LicenseAssigned';
 const LICENSE_REVOKED    = 'LicenseRevoked';
 const LICENSE_EXPIRED    = 'LicenseExpired';
 
+/**
+ * RabbitMQ routing-key constants for the opendirectory.events exchange.
+ *
+ * Pattern: <domain>.<entity>.<action>   (topic exchange, use # and * for wildcards)
+ *
+ * @example
+ *   bus.publish(Events.DEVICE_ENROLLED, { deviceId, hostname, platform });
+ *   bus.subscribe('my-queue', [Events.DEVICE_ENROLLED, 'device.#'], handler);
+ */
+const Events = {
+  // ── Device ───────────────────────────────────────────────────────────────
+  DEVICE_ENROLLED:      'device.enrolled',
+  DEVICE_SEEN:          'device.seen',
+  DEVICE_COMPLIANT:     'device.compliant',
+  DEVICE_NON_COMPLIANT: 'device.non_compliant',
+  DEVICE_LOST:          'device.lost',
+  DEVICE_WIPED:         'device.wiped',
+
+  // ── App / Install ────────────────────────────────────────────────────────
+  APP_PACKAGE_UPLOADED:    'app.package.uploaded',
+  APP_INSTALL_REQUESTED:   'app.install.requested',
+  APP_INSTALL_COMPLETED:   'app.install.completed',
+  APP_INSTALL_FAILED:      'app.install.failed',
+  APP_UNINSTALL_COMPLETED: 'app.uninstall.completed',
+
+  // ── Identity / Auth ──────────────────────────────────────────────────────
+  IDENTITY_LOGIN_SUCCESS:  'identity.login.success',
+  IDENTITY_LOGIN_FAILED:   'identity.login.failed',
+  IDENTITY_USER_CREATED:   'identity.user.created',
+  IDENTITY_USER_DELETED:   'identity.user.deleted',
+  IDENTITY_MFA_ENABLED:    'identity.mfa.enabled',
+  IDENTITY_MFA_DISABLED:   'identity.mfa.disabled',
+  IDENTITY_PASSWORD_RESET: 'identity.password.reset',
+  IDENTITY_ACCOUNT_LOCKED: 'identity.account.locked',
+
+  // ── Policy ───────────────────────────────────────────────────────────────
+  POLICY_CREATED:  'policy.created',
+  POLICY_UPDATED:  'policy.updated',
+  POLICY_APPLIED:  'policy.applied',
+  POLICY_VIOLATED: 'policy.violated',
+
+  // ── PIM ──────────────────────────────────────────────────────────────────
+  PIM_ACCESS_GRANTED:   'security.pim.granted',
+  PIM_ACCESS_REVOKED:   'security.pim.revoked',
+  PIM_ACCESS_EXPIRED:   'security.pim.expired',
+  PIM_ACCESS_REQUESTED: 'security.pim.requested',
+
+  // ── Backup ───────────────────────────────────────────────────────────────
+  BACKUP_STARTED:   'system.backup.started',
+  BACKUP_COMPLETED: 'system.backup.completed',
+  BACKUP_FAILED:    'system.backup.failed',
+
+  // ── Certificate ──────────────────────────────────────────────────────────
+  CERT_ISSUED:   'security.cert.issued',
+  CERT_EXPIRING: 'security.cert.expiring',
+  CERT_REVOKED:  'security.cert.revoked',
+
+  // ── Compliance ───────────────────────────────────────────────────────────
+  COMPLIANCE_PASSED: 'compliance.passed',
+  COMPLIANCE_FAILED: 'compliance.failed',
+
+  // ── Admin ────────────────────────────────────────────────────────────────
+  ADMIN_CONFIG_CHANGED:    'admin.config.changed',
+  ADMIN_SERVICE_RESTARTED: 'admin.service.restarted',
+};
+
 module.exports = {
-  // Device
+  // Legacy PascalCase constants (backwards-compatible)
   DEVICE_ENROLLED,
   DEVICE_UPDATED,
   DEVICE_DELETED,
@@ -85,5 +156,8 @@ module.exports = {
   // License
   LICENSE_ASSIGNED,
   LICENSE_REVOKED,
-  LICENSE_EXPIRED
+  LICENSE_EXPIRED,
+
+  // RabbitMQ routing-key object
+  Events,
 };

@@ -8,13 +8,16 @@ ARG INTEGRATION_SERVICE_URL=http://integration-service:4000
 ENV INTEGRATION_SERVICE_URL=$INTEGRATION_SERVICE_URL
 
 # Copy package files
-COPY package*.json ./
+COPY frontend/web-app/package*.json ./
 
 # Install dependencies
 RUN npm install
 
 # Copy source code
-COPY . .
+COPY frontend/web-app/ .
+COPY packages/organization-profile-contract/ /packages/organization-profile-contract/
+COPY packages/company-registration-contract/ /packages/company-registration-contract/
+COPY packages/directory-role-contract.js /packages/directory-role-contract.js
 
 # Build the application
 RUN npm run build

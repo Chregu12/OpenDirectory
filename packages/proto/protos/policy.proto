@@ -1,0 +1,13 @@
+syntax = "proto3";
+package opendirectory;
+
+service PolicyService {
+  rpc EvaluatePolicies (EvaluateRequest) returns (EvaluateResponse);
+  rpc GetApplicablePolicies (GetPoliciesRequest) returns (PoliciesResponse);
+}
+
+message EvaluateRequest { string device_id = 1; string user_id = 2; string context_json = 3; }
+message EvaluateResponse { bool compliant = 1; repeated PolicyResult results = 2; string evaluated_at = 3; }
+message PolicyResult { string policy_id = 1; string policy_name = 2; bool passed = 3; string reason = 4; }
+message GetPoliciesRequest { string platform = 1; string device_id = 2; }
+message PoliciesResponse { repeated PolicyResult policies = 1; }

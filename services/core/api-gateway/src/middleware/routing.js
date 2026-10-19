@@ -4,6 +4,11 @@ class RoutingMiddleware {
   constructor() {
     // Define route mappings for all services
     this.routeMappings = {
+      '/api/quick': {
+        service: 'quick-actions',
+        port: 3950,
+        description: 'Live-authorized delegated orchestration'
+      },
       // Core Services
       '/api/auth': {
         service: 'authentication-service',
@@ -33,6 +38,21 @@ class RoutingMiddleware {
         service: 'policy-service',
         port: 3004,
         description: 'Policy Engine'
+      },
+      '/api/blueprints': { service: 'policy-service', port: 3004, description: 'Policy Blueprints' },
+      '/api/company-blueprints': { service: 'policy-service', port: 3004, description: 'Own Company Blueprint Drafts and Versions' },
+      '/api/company-blueprint-assignments': { service: 'policy-service', port: 3004, description: 'Own Company Blueprint Assignments' },
+      '/api/gpo': { service: 'policy-service', port: 3004, description: 'Group Policy Objects' },
+      '/api/update-rings': { service: 'policy-service', port: 3004, description: 'Policy Update Rings' },
+      '/api/licenses': {
+        service: 'policy-service',
+        port: 3004,
+        description: 'Canonical License Governance'
+      },
+      '/api/license': {
+        service: 'license-management',
+        port: 3018,
+        description: 'Canonical License Compatibility Adapter'
       },
       '/api/policy': {
         service: 'policy-compliance',
@@ -251,17 +271,22 @@ class RoutingMiddleware {
       },
       
       // Notifications
-      '/api/notifications': {
-        service: 'notification-service',
-        port: 3016,
-        description: 'Notification Service'
-      },
-      '/api/alerts': {
-        service: 'notification-service',
-        port: 3016,
-        description: 'Alert Management'
-      },
-      
+      // NOTE: 'notification-service' has no corresponding container in any
+      // docker-compose*.yml (verified via grep — 0 matches). Routing to it
+      // results in ECONNREFUSED/timeout since nothing is listening on
+      // port 3016. Disabled until the service is actually deployed;
+      // re-enable this block once it exists in docker-compose.yml.
+      // '/api/notifications': {
+      //   service: 'notification-service',
+      //   port: 3016,
+      //   description: 'Notification Service'
+      // },
+      // '/api/alerts': {
+      //   service: 'notification-service',
+      //   port: 3016,
+      //   description: 'Alert Management'
+      // },
+
       // Deployment
       '/api/deployment': {
         service: 'deployment-service',
@@ -274,11 +299,55 @@ class RoutingMiddleware {
         description: 'App Deployment'
       },
       
+      // Samba AD Domain Controller
+      '/api/samba': {
+        service: 'samba-ad-dc',
+        port: 3010,
+        description: 'Samba Active Directory Domain Controller'
+      },
+      '/api/domain': {
+        service: 'samba-ad-dc',
+        port: 3010,
+        description: 'AD Domain Management'
+      },
+      '/api/computers': {
+        service: 'samba-ad-dc',
+        port: 3010,
+        description: 'Computer Account Management'
+      },
+
       // Identity Management
       '/api/identity': {
         service: 'identity-service',
         port: 3001,
         description: 'Identity Management'
+      },
+      '/api/identity/membership-reviews':{service:'identity-service',port:3001,description:'Independent Canonical Group Membership Reviews'},
+      '/api/identity/license-sources':{service:'identity-service',port:3001,description:'Canonical Scoped License Source Consents'},
+      '/api/license-groups': {
+        service: 'identity-service',
+        port: 3001,
+        description: 'Authoritative License Group Snapshots'
+      },
+      '/api/license-users': {
+        service: 'identity-service',
+        port: 3001,
+        description: 'Authoritative License User Eligibility'
+      },
+      '/api/license-reviewers': {
+        service: 'identity-service',
+        port: 3001,
+        description: 'Purpose-Limited License Reviewer Availability'
+      },
+      '/api/license-scope-reviewers': { service: 'identity-service', port: 3001, description: 'Purpose-Limited Scope Reviewer Availability' },
+      '/api/license-activation-reviewers': {
+        service: 'identity-service',
+        port: 3001,
+      },
+      '/api/license-delegates': {
+        service: 'identity-service',
+        port: 3001,
+        description: 'Purpose-Limited License Delegation Evidence'
       },
       '/api/users': {
         service: 'identity-service',
@@ -294,6 +363,13 @@ class RoutingMiddleware {
         service: 'identity-service',
         port: 3001,
         description: 'Role Management'
+      },
+      // identity-service is the canonical OU owner (authentication-service's
+      // competing /api/ous implementation was consolidated away).
+      '/api/ous': {
+        service: 'identity-service',
+        port: 3001,
+        description: 'Organizational Unit Management'
       }
     };
     

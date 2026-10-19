@@ -9,6 +9,31 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { APP_CATALOG } = require('./appCatalog');
 const db = require('./db');
+const { resolveScopes, userCanDelegateScopes, userAuthorizationClaims, workloadAuthorizationClaims, escapeHtml, validPkceRequest } = require('./oauthScopes');
+const { authenticateUser } = require('./authenticateUser');
+const { TokenRevocationStore } = require('./TokenRevocationStore');
+const { SessionStore, viewer } = require('./SessionStore');
+const { SigningKeys } = require('./SigningKeys');
+const { IdentityAuthority, IdentityAuthorityError } = require('./IdentityAuthority');
+const { ClientRegistry, permissionsOf, publicClient, etag } = require('./ClientRegistry');
+const { hashSecret } = require('./clientSecrets');
+const { ApplicationAccess } = require('./ApplicationAccess');
+const { MfaAuthority, MfaError } = require('./MfaAuthority');
+const { MfaRecovery } = require('./MfaRecovery');
+const { MfaEnrollment } = require('./MfaEnrollment');
+const { acceptsAuthentication } = require('./applicationAuthentication');
+const { sameContext } = require('../../../../packages/identity-authorization-contract');
+const { oidcAuth, configureJwks, requireAdmin } = require('./middleware/oidcAuth');
+const { requirePolicyDeviceAccess, policyDeviceView } = require('./middleware/policyDeviceAccess');
+
+// ─── Event Bus ───────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'oauth-provider' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
 
 const promClient = require('prom-client');
 const register = new promClient.Registry();
@@ -31,50 +56,26 @@ const httpRequestDuration = new promClient.Histogram({
   registers: [register],
 });
 
-const activeTokensGauge = new promClient.Gauge({ name: 'oauth_active_tokens', help: 'Active OAuth tokens in memory', registers: [register] });
+const signedTokensCounter = new promClient.Counter({ name: 'oauth_tokens_signed_total', help: 'OAuth tokens signed, including attempts not committed to a session', registers: [register] });
 const scimPushErrorsCounter = new promClient.Counter({ name: 'scim_push_errors_total', help: 'SCIM push failures', labelNames: ['app'], registers: [register] });
 const enrolledDevicesGauge = new promClient.Gauge({ name: 'enrolled_devices_total', help: 'Total enrolled devices', labelNames: ['platform', 'status'], registers: [register] });
 
-// Update gauges periodically
-setInterval(() => {
-  activeTokensGauge.set(tokens.size);
-}, 30000);
+const revocations = new TokenRevocationStore(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
+const sessions = new SessionStore(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
 
-// ─── Redis-backed token blacklist with in-memory fallback ────────────────────
-
-let redisClient = null;
-const revokedTokens = new Set(); // in-memory fallback
-
-async function initRedis() {
-  try {
-    const redis = require('redis');
-    redisClient = redis.createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379', password: process.env.REDIS_PASSWORD || undefined });
-    redisClient.on('error', err => { console.warn('[redis]', err.message); redisClient = null; });
-    await redisClient.connect();
-    console.log('[redis] connected for token blacklist');
-  } catch (err) {
-    console.warn('[redis] not available, using in-memory blacklist:', err.message);
-    redisClient = null;
-  }
+async function isTokenRevoked(tokenHash, payload) {
+  return !await verifiedAccessState(tokenHash, payload);
 }
 
-async function blacklistToken(tokenHash, ttlSeconds = 3600) {
-  revokedTokens.add(tokenHash);
-  if (revokedTokens.size > 10000) revokedTokens.clear(); // prevent unbounded growth
-  if (redisClient) {
-    try { await redisClient.setEx(`revoked:${tokenHash}`, ttlSeconds, '1'); } catch {}
-  }
-}
-
-async function isTokenRevoked(tokenHash) {
-  if (revokedTokens.has(tokenHash)) return true;
-  if (redisClient) {
-    try {
-      const val = await redisClient.get(`revoked:${tokenHash}`);
-      return val === '1';
-    } catch {}
-  }
-  return false;
+async function verifiedAccessState(tokenHash, payload) {
+  if (await revocations.revoked(tokenHash)) return false;
+  const audience = process.env.OAUTH_API_AUDIENCE || 'opendirectory-api';
+  const apiToken = payload?.aud === audience || (Array.isArray(payload?.aud) && payload.aud.includes(audience));
+  if (!apiToken || !await clientRegistry.active(payload) || !await sessions.active(payload)) return false;
+  const state = await identityAuthority.verifiedState(payload);
+  if (!state || (payload.actor_type === 'user' && (!await mfaAuthority.matches(payload)
+    || !await applicationAccess.matches(payload.client_id,state,payload.application_authorization)))) return false;
+  return state;
 }
 
 // ─── Config ──────────────────────────────────────────────────────────────────────
@@ -85,11 +86,11 @@ const TOKEN_TTL = parseInt(process.env.TOKEN_TTL_SECONDS ?? '3600', 10);
 
 // ─── RSA Key Pair (RS256) ─────────────────────────────────────────────────────
 
-const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
-  modulusLength: 2048,
-  publicKeyEncoding: { type: 'spki', format: 'pem' },
-  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-});
+const signingKeys = new SigningKeys();
+const privateKey = signingKeys.privateKey;
+const signingKeyId = signingKeys.kid;
+const identityAuthority = new IdentityAuthority({ signingKeys, issuer: ISSUER, demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
+const companyRegistration = new (require('./CompanyRegistrationGateway').CompanyRegistrationGateway)({ signingKeys, issuer: ISSUER, client: id => clientRegistry.get(id) });
 
 // ─── SAML Signing Key Pair ────────────────────────────────────────────────────
 
@@ -106,24 +107,24 @@ const samlCertBody = samlPubKey
   .replace(/\n/g, '');
 
 // Build JWK representation of the public key
-function buildJwk() {
-  const keyObj = crypto.createPublicKey(publicKey);
-  const jwk = keyObj.export({ format: 'jwk' });
-  return {
-    kty: 'RSA',
-    use: 'sig',
-    alg: 'RS256',
-    kid: 'od-rsa-key-1',
-    n: jwk.n,
-    e: jwk.e,
-  };
-}
+configureJwks(signingKeys.jwks());
+
+// adminAuth            - requires a valid, non-revoked bearer JWT.
+// adminAuthOrInternal  - same, but a request with NO Authorization header
+//                        may instead present OAUTH_PROVIDER_INTERNAL_TOKEN
+//                        via x-oauth-internal-token. Mounted ONLY on the
+//                        two routes server-to-server callers
+//                        (antivirus-protection, policy-service) hit without
+//                        an admin JWT today: GET /api/devices/registry and
+//                        POST /api/devices/:deviceId/commands.
+const adminAuth = oidcAuth({ isTokenRevoked });
+const adminAuthOrInternal = oidcAuth({ isTokenRevoked, allowInternalToken: true });
+const deviceSelfAuth = oidcAuth({ isTokenRevoked, deviceSelf: true, isDeviceTokenRevoked: hash => revocations.revoked(hash) });
 
 // ─── In-memory stores ─────────────────────────────────────────────────────────
 
-const clients         = new Map(); // clientId → ClientRecord
+const clientSeeds     = [];
 const authCodes       = new Map(); // code → CodeRecord
-const tokens          = new Map(); // tokenHash → TokenRecord
 const deviceCodes     = new Map(); // device_code → DeviceCodeRecord
 const enrollmentTokens = new Map();
 const scimUsers       = new Map();
@@ -228,26 +229,48 @@ const updateRings = new Map([
 [
   {
     clientId:     'grafana-od-client',
-    clientSecret: 'grafana-secret-changeme',
+    clientSecretHash: process.env.GRAFANA_CLIENT_SECRET ? hashSecret(process.env.GRAFANA_CLIENT_SECRET) : null,
     name:         'Grafana Dashboard',
     redirectUris: ['https://grafana.example.com/login/generic_oauth'],
     scopes:       ['openid', 'profile', 'email', 'groups'],
-    grantTypes:   ['authorization_code', 'refresh_token'],
+    grantTypes:   ['authorization_code', 'refresh_token', 'client_credentials'],
   },
   {
     clientId:     'devportal-od-client',
-    clientSecret: 'devportal-secret-changeme',
+    clientSecretHash: process.env.DEVPORTAL_CLIENT_SECRET ? hashSecret(process.env.DEVPORTAL_CLIENT_SECRET) : null,
     name:         'Internal Dev Portal',
     redirectUris: ['https://dev.example.com/auth/callback', 'http://localhost:4000/callback'],
-    scopes:       ['openid', 'profile', 'email'],
-    grantTypes:   ['authorization_code'],
+    scopes:       ['openid', 'profile', 'email', 'roles', 'sessions.self.read', 'sessions.self.revoke'],
+    // Deliberately NOT client_credentials — this client is used to
+    // regression-test grantTypes enforcement (an authorization_code/
+    // refresh_token/device-flow client must not also be able to mint
+    // tokens via client_credentials just by asserting a different
+    // grant_type). See "grantTypes enforcement" describe block in
+    // src/__tests__/api.e2e.test.js.
+    grantTypes:   ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],
   },
 ].forEach(c => {
-  clients.set(c.clientId, c);
-  if (db.isAvailable()) {
-    db.upsertClient({ id: c.clientId, name: c.name, clientSecret: c.clientSecret, redirectUris: c.redirectUris, grants: c.grantTypes, scopes: c.scopes }).catch(err => console.error('[clients-db]', err.message));
-  }
+  if (c.clientSecretHash) clientSeeds.push({ ...c, publicClient: false });
 });
+
+const { configuredWebClient, assertWebClient } = require('./webClient');
+const webClient = configuredWebClient();
+if (webClient) clientSeeds.push(webClient);
+const clientRegistry = new ClientRegistry(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true', seeds: clientSeeds });
+const applicationAccess = new ApplicationAccess(db, { identity: identityAuthority, demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
+const mfaAuthority = new MfaAuthority(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
+const mfaRecovery = new MfaRecovery({ mfa: mfaAuthority, identity: identityAuthority, issuer: ISSUER });
+const mfaEnrollment = new MfaEnrollment({ mfa: mfaAuthority, clients: clientRegistry, identity: identityAuthority, applications: applicationAccess, issuer: ISSUER });
+
+function protocol(handler, load = true) {
+  return async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      if (load) req.oauthClient = await clientRegistry.get(req.method === 'GET' ? req.query.client_id : req.body.client_id);
+      return await handler(req, res);
+    } catch (error) { return res.status(error.status || 503).json({ error: error.code || 'client_authority_unavailable' }); }
+  };
+}
 
 // ─── Seed SCIM Users ──────────────────────────────────────────────────────────
 
@@ -271,7 +294,24 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(rateLimit({ windowMs: 60_000, max: 500 }));
+app.use('/oauth/access-state', rateLimit({ windowMs: 60_000, max: 5000 }));
+app.use('/oauth/tenant-state', rateLimit({ windowMs: 60_000, max: 5000 }));
+app.use(rateLimit({ windowMs: 60_000, max: 500, skip: req => req.method === 'GET' && ['/oauth/access-state','/oauth/tenant-state'].includes(req.path) }));
+app.use('/oauth/company-registration', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+app.get('/oauth/company-registration', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (Object.keys(req.query).length) return res.status(400).json({ error: 'invalid_company_registration' });
+  const activation = process.env.COMPANY_ACTIVATION_ENABLED === 'true' && !!process.env.COMPANY_CONSOLE_CLIENT_ID && process.env.OAUTH_REVOCATION_DEMO_MODE !== 'true';
+  res.json({ schemaVersion: activation ? 2 : 1, enabled: process.env.COMPANY_REGISTRATION_ENABLED === 'true' && process.env.OAUTH_REVOCATION_DEMO_MODE !== 'true', requiresExistingAccount: true, activationSupported: activation, status: 'pending-verification' });
+});
+app.post('/oauth/company-registration/:operation', rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false, message: { error: 'company_registration_rate_limited' } }), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (process.env.COMPANY_REGISTRATION_ENABLED !== 'true' || process.env.OAUTH_REVOCATION_DEMO_MODE === 'true') return res.status(503).json({ error: 'company_registration_disabled' });
+  if (!['submit', 'status', 'activate'].includes(req.params.operation) || Object.keys(req.query).length) return res.status(400).json({ error: 'invalid_company_registration' });
+  if (req.params.operation === 'activate' && process.env.COMPANY_ACTIVATION_ENABLED !== 'true') return res.status(503).json({ error: 'company_activation_disabled' });
+  try { const receipt = await companyRegistration.execute(req.params.operation, req.body); res.status(req.params.operation === 'submit' && !receipt.replayed ? 201 : 200).json(receipt); }
+  catch (error) { res.status(error.status || 503).json({ error: error.code || (error.status === 400 ? 'invalid_company_registration' : 'company_registration_unavailable') }); }
+});
 
 // ─── Prometheus metrics middleware ────────────────────────────────────────────
 app.use((req, res, next) => {
@@ -301,15 +341,14 @@ app.get('/.well-known/openid-configuration', (req, res) => {
     jwks_uri:                              `${ISSUER}/.well-known/jwks.json`,
     introspection_endpoint:                `${ISSUER}/oauth/introspect`,
     revocation_endpoint:                   `${ISSUER}/oauth/revoke`,
-    end_session_endpoint:                  `${ISSUER}/oauth/logout`,
     device_authorization_endpoint:         `${ISSUER}/oauth/device/code`,
-    scopes_supported:                      ['openid', 'profile', 'email', 'groups', 'offline_access'],
-    response_types_supported:              ['code', 'token', 'id_token'],
+    scopes_supported:                      ['openid', 'profile', 'email', 'groups', 'roles', 'offline_access'],
+    response_types_supported:              ['code'],
     grant_types_supported:                 ['authorization_code', 'refresh_token', 'client_credentials', 'urn:ietf:params:oauth:grant-type:device_code'],
     subject_types_supported:               ['public'],
     id_token_signing_alg_values_supported: ['RS256'],
-    token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
-    claims_supported:                      ['sub', 'iss', 'aud', 'exp', 'iat', 'name', 'email', 'groups', 'preferred_username'],
+    token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
+    claims_supported:                      ['sub', 'iss', 'aud', 'exp', 'iat', 'auth_time', 'amr', 'name', 'email', 'groups', 'roles', 'permissions', 'preferred_username'],
     code_challenge_methods_supported:      ['S256', 'plain'],
   });
 });
@@ -317,30 +356,60 @@ app.get('/.well-known/openid-configuration', (req, res) => {
 // ─── JWKS Endpoint (RS256) ────────────────────────────────────────────────────
 
 app.get('/.well-known/jwks.json', (req, res) => {
-  res.json({ keys: [buildJwk()] });
+  res.json(signingKeys.jwks());
 });
 
 // ─── Helper: sign token with RS256 ───────────────────────────────────────────
 
 function signToken(payload, expiresIn) {
-  return jwt.sign(payload, privateKey, { algorithm: 'RS256', keyid: 'od-rsa-key-1', expiresIn: expiresIn ?? TOKEN_TTL });
+  const tokenUse = payload.token_use || 'access';
+  const audience = tokenUse === 'access' && typeof payload.aud === 'string' ? process.env.OAUTH_API_AUDIENCE || 'opendirectory-api' : payload.aud;
+  const token = jwt.sign({ ...payload, token_use: tokenUse, aud: audience, ...(tokenUse === 'access' ? { client_id: payload.aud } : {}), jti: uuidv4() }, privateKey, { algorithm: 'RS256', keyid: signingKeyId, expiresIn: expiresIn ?? TOKEN_TTL });
+  signedTokensCounter.inc();
+  return token;
+}
+
+async function issueSession(payload, principalType, withRefresh = false, client) {
+  const bound = { ...payload, client_revision: client.version, sid: uuidv4(), actor_type: principalType, auth_time: Number.isInteger(payload.auth_time) ? payload.auth_time : Math.floor(Date.now() / 1000) };
+  const state = await identityAuthority.verifiedState(bound);
+  if (!state) throw new IdentityAuthorityError(403, 'identity_not_eligible');
+  if (principalType === 'user' && !await mfaAuthority.matches(bound)) throw new MfaError(400, 'invalid_grant');
+  if (!acceptsAuthentication(client, bound)) throw new MfaError(400, 'invalid_grant');
+  if (principalType === 'user' && !await applicationAccess.matches(client.clientId,state,bound.application_authorization)) throw new IdentityAuthorityError(400,'invalid_grant');
+  if (!await clientRegistry.current(client)) throw new IdentityAuthorityError(400, 'invalid_grant');
+  const accessToken = signToken(bound);
+  const decoded = jwt.decode(accessToken);
+  const expiry = withRefresh ? bound.auth_time * 1000 + 30 * 86400_000 : decoded.exp * 1000;
+  const refreshToken = withRefresh ? crypto.randomBytes(32).toString('base64url') : undefined;
+  await sessions.create({ id: bound.sid, issuer: ISSUER, subject: bound.sub, principalType, clientId: bound.aud, authTime: bound.auth_time, expiresAt: expiry },
+    refreshToken ? { hash: crypto.createHash('sha256').update(refreshToken).digest('hex'), scope: bound.scope, authorization: bound, expiresAt: expiry } : undefined);
+  if (db.isAvailable()) db.saveToken(crypto.createHash('sha256').update(accessToken).digest('hex'), decoded).catch(() => {});
+  return { accessToken, refreshToken, payload: bound };
 }
 
 function verifyToken(token) {
-  return jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+  const payload = signingKeys.verify(token, { issuer: ISSUER, audience: process.env.OAUTH_API_AUDIENCE || 'opendirectory-api' });
+  if (payload.token_use !== 'access') throw new Error('Only access tokens can authorize API calls');
+  return payload;
 }
 
 // ─── Authorization Endpoint ──────────────────────────────────────────────────────
 
-app.get('/oauth/authorize', (req, res) => {
-  const { client_id, redirect_uri, response_type, scope, state, code_challenge, code_challenge_method, device_id } = req.query;
+app.get('/oauth/authorize', protocol((req, res) => {
+  const { client_id, redirect_uri, response_type, scope, state, code_challenge, code_challenge_method, device_id, nonce } = req.query;
 
-  const client = clients.get(client_id);
-  if (!client) return res.status(400).send('<h2>Error: invalid_client</h2>');
-  if (redirect_uri && !client.redirectUris.includes(redirect_uri)) return res.status(400).send('<h2>Error: invalid_redirect_uri</h2>');
+  const client = req.oauthClient;
+  if (!client?.enabled) return res.status(400).send('<h2>Error: invalid_client</h2>');
+  if (!client.grantTypes?.includes('authorization_code')) return res.status(400).json({ error: 'unauthorized_client' });
+  if (response_type !== 'code') return res.status(400).json({ error: 'unsupported_response_type' });
+  if (typeof redirect_uri !== 'string' || !client.redirectUris.includes(redirect_uri)) return res.status(400).send('<h2>Error: invalid_redirect_uri</h2>');
+  const approvedScope = resolveScopes(client, scope, ['openid', 'profile', 'email']);
+  if (approvedScope === null) return res.status(400).json({ error: 'invalid_scope' });
+  if (!validPkceRequest(client, code_challenge, code_challenge_method) || (nonce !== undefined && (typeof nonce !== 'string' || nonce.length > 255))) {
+    return res.status(400).json({ error: 'invalid_request' });
+  }
 
   // Show login form
-  const params = new URLSearchParams({ client_id, redirect_uri: redirect_uri || '', scope: scope || 'openid profile email', state: state || '', code_challenge: code_challenge || '', code_challenge_method: code_challenge_method || '', device_id: device_id || '' });
   res.send(`<!DOCTYPE html>
 <html lang="de">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -373,20 +442,25 @@ app.get('/oauth/authorize', (req, res) => {
   </div>
   <div class="app-badge">
     <span>App:</span>
-    <strong>${client.name || client_id}</strong>
+    <strong>${escapeHtml(client.name || client_id)}</strong>
   </div>
   <form id="loginForm" method="POST" action="/oauth/authorize/login">
-    <input type="hidden" name="client_id" value="${client_id}">
-    <input type="hidden" name="redirect_uri" value="${redirect_uri || ''}">
-    <input type="hidden" name="scope" value="${scope || 'openid profile email'}">
-    <input type="hidden" name="state" value="${state || ''}">
-    <input type="hidden" name="code_challenge" value="${code_challenge || ''}">
-    <input type="hidden" name="code_challenge_method" value="${code_challenge_method || ''}">
-    <input type="hidden" name="device_id" value="${device_id || ''}">
+    <input type="hidden" name="client_id" value="${escapeHtml(client_id)}">
+    <input type="hidden" name="redirect_uri" value="${escapeHtml(redirect_uri)}">
+    <input type="hidden" name="scope" value="${escapeHtml(approvedScope)}">
+    <input type="hidden" name="state" value="${escapeHtml(state)}">
+    <input type="hidden" name="nonce" value="${escapeHtml(nonce)}">
+    <input type="hidden" name="code_challenge" value="${escapeHtml(code_challenge)}">
+    <input type="hidden" name="code_challenge_method" value="${escapeHtml(code_challenge_method)}">
+    <input type="hidden" name="device_id" value="${escapeHtml(device_id)}">
     <label>Benutzername</label>
     <input type="text" name="username" autocomplete="username" required autofocus>
     <label>Passwort</label>
     <input type="password" name="password" autocomplete="current-password" required>
+    <label>Einmalcode des Passwortanbieters (falls dort aktiviert)</label>
+    <input type="text" name="mfaCode" autocomplete="one-time-code" inputmode="numeric">
+    <label>OpenDirectory-Einmalcode (falls eingerichtet)</label>
+    <input type="text" name="otpCode" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6">
     <div class="error" id="errBox"></div>
     <button type="submit" id="submitBtn">Anmelden</button>
   </form>
@@ -401,50 +475,50 @@ app.get('/oauth/authorize', (req, res) => {
 </script>
 </body>
 </html>`);
-});
+}));
 
-app.post('/oauth/authorize/login', async (req, res) => {
-  const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, device_id, username, password } = req.body;
-
-  if (!username || !password) {
-    const params = new URLSearchParams({ client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, device_id, error: 'Benutzername und Passwort erforderlich' });
-    return res.redirect(`/oauth/authorize?${params}`);
+app.post('/oauth/authorize/login', protocol(async (req, res) => {
+  const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, device_id, username, password, mfaCode, otpCode, nonce } = req.body;
+  const client = req.oauthClient;
+  if (!client?.enabled) return res.status(400).send('<h2>Error: invalid_client</h2>');
+  if (!client.grantTypes?.includes('authorization_code')) return res.status(400).json({ error: 'unauthorized_client' });
+  if (typeof redirect_uri !== 'string' || !client.redirectUris.includes(redirect_uri)) return res.status(400).json({ error: 'invalid_redirect_uri' });
+  const approvedScope = resolveScopes(client, scope, ['openid', 'profile', 'email']);
+  if (approvedScope === null) return res.status(400).json({ error: 'invalid_scope' });
+  if (!validPkceRequest(client, code_challenge, code_challenge_method) || (nonce !== undefined && (typeof nonce !== 'string' || nonce.length > 255))) {
+    return res.status(400).json({ error: 'invalid_request' });
   }
+  const authentication = await authenticateUser({ username, password, mfaCode });
+  if (authentication.error) return res.status(authentication.status).json({ error: authentication.error });
+  let userInfo = authentication.user;
+  const userId = userInfo.id;
+  if (!await clientRegistry.current(client)) return res.status(400).json({ error: 'unauthorized_client' });
 
-  // Validate credentials against auth service
-  const AUTH_SERVICE = process.env.AUTH_SERVICE_URL || 'http://localhost:3002';
-  let userId = null;
-  let userInfo = null;
+  let identityContext; let applicationContext; let mfaContext;
   try {
-    const loginRes = await fetch(`${AUTH_SERVICE}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    if (!loginRes.ok) {
-      const params = new URLSearchParams({ client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, device_id, error: 'Ungültige Anmeldedaten' });
-      return res.redirect(`/oauth/authorize?${params}`);
-    }
-    const data = await loginRes.json();
-    userId = data.user?.id ?? data.userId ?? data.id ?? username;
-    userInfo = data.user ?? data;
-  } catch (err) {
-    // Auth service unreachable — fall back to username as ID (dev mode)
-    console.warn('[oauth/authorize] auth service unreachable, using username as userId:', err.message);
-    userId = username;
-    userInfo = { id: username, username, name: username };
+    const state = await identityAuthority.state(userId);
+    identityContext = state.context;
+    applicationContext = await applicationAccess.context(client_id,state);
+    mfaContext = await mfaAuthority.login(state.context?.userId, otpCode);
+    if ((client.mfaRequired || state.authentication?.required) && mfaContext.methods.length !== 2) throw new MfaError(401, 'mfa_enrollment_required');
+    if (state.authorization) userInfo = { ...userInfo, ...state.authorization };
   }
-
-  const client = clients.get(client_id);
-  if (!client) return res.status(400).send('<h2>Error: invalid_client</h2>');
-
+  catch (error) { return res.status(error.status || 503).json({ error: error.code || 'identity_authority_unavailable' }); }
+  if (!userCanDelegateScopes(userInfo, approvedScope)) return res.status(403).json({ error: 'invalid_scope' });
+  if (!await clientRegistry.current(client)) return res.status(400).json({ error: 'unauthorized_client' });
   const code = uuidv4();
   authCodes.set(code, {
     clientId: client_id,
+    clientRevision: client.version,
     redirectUri: redirect_uri,
-    scope: scope ?? 'openid profile email',
+    scope: approvedScope,
     userId,
     userInfo,
+    identityContext,
+    applicationContext,
+    mfaContext,
+    authTime: mfaContext.authTime,
+    nonce: nonce || undefined,
     deviceId: device_id || undefined,
     codeChallenge: code_challenge || undefined,
     codeChallengeMethod: code_challenge_method || undefined,
@@ -455,29 +529,95 @@ app.post('/oauth/authorize/login', async (req, res) => {
   redirectUrl.searchParams.set('code', code);
   if (state) redirectUrl.searchParams.set('state', state);
   res.redirect(redirectUrl.toString());
-});
+}));
 
 // ─── Token Endpoint ───────────────────────────────────────────────────────────────
 
-app.post('/oauth/token', async (req, res) => {
+// RFC 7636 §4.6 — verify code_verifier against the code_challenge stored at
+// /oauth/authorize time. 'plain' is RFC 7636's default when
+// code_challenge_method is omitted but a code_challenge was supplied.
+// Constant-time comparison (both branches) since this is effectively a
+// credential check — a timing side-channel on the challenge comparison
+// would erode the whole point of PKCE.
+function safeEqual(a, b) {
+  const aBuf = Buffer.from(String(a ?? ''));
+  const bBuf = Buffer.from(String(b ?? ''));
+  if (aBuf.length !== bBuf.length) return false;
+  try { return crypto.timingSafeEqual(aBuf, bBuf); } catch { return false; }
+}
+
+function verifyPkce(codeChallenge, codeChallengeMethod, verifier) {
+  if (typeof codeChallenge !== 'string' || typeof verifier !== 'string' || !verifier
+    || (codeChallengeMethod !== undefined && typeof codeChallengeMethod !== 'string')) return false;
+  const method = (codeChallengeMethod || 'plain').toLowerCase();
+  if (method === 's256') {
+    const computed = crypto.createHash('sha256').update(verifier).digest('base64url');
+    return safeEqual(computed, codeChallenge);
+  }
+  if (method === 'plain') {
+    return safeEqual(verifier, codeChallenge);
+  }
+  return false; // unrecognized method -> fail closed
+}
+
+// Grant types this token endpoint actually implements. The client.grantTypes
+// allowlist (set via POST /api/clients, or the seed data below) is only
+// enforced for these — an entirely-unimplemented grant_type (e.g. the
+// never-supported 'password'/ROPC) must keep falling through to the generic
+// unsupported_grant_type response at the bottom of this handler rather than
+// being reported as unauthorized_client.
+const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
+const IMPLEMENTED_GRANT_TYPES = ['authorization_code', 'refresh_token', 'client_credentials', DEVICE_GRANT];
+
+app.post('/oauth/token', protocol(async (req, res) => {
   const { grant_type, code, redirect_uri, client_id, client_secret, code_verifier, refresh_token, device_code } = req.body;
 
-  // Device code grant does not require client secret for public clients
-  const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
-
-  if (grant_type !== DEVICE_GRANT) {
-    const client = clients.get(client_id);
-    if (!client || (client.clientSecret && client.clientSecret !== client_secret)) {
-      return res.status(401).json({ error: 'invalid_client' });
-    }
+  const client = req.oauthClient;
+  if (!clientRegistry.authenticated(client, client_secret, grant_type === 'client_credentials')) {
+    return res.status(401).json({ error: 'invalid_client' });
   }
+    // Per-client grant-type allowlist (RFC 6749 §3.2.1 / §5.2 unauthorized_client):
+    // a client registered only for e.g. authorization_code must not be able
+    // to mint tokens via client_credentials (or any other implemented grant
+    // it wasn't configured for) just by asserting a different grant_type.
+  if (IMPLEMENTED_GRANT_TYPES.includes(grant_type) &&
+      !(Array.isArray(client.grantTypes) && client.grantTypes.includes(grant_type))) {
+    return res.status(400).json({ error: 'unauthorized_client' });
+  }
+  try { await revocations.ready(); await sessions.ready(); await mfaAuthority.ready(); }
+  catch { return res.status(503).json({ error: 'token_state_unavailable' }); }
+  if (!await clientRegistry.current(client)) return res.status(401).json({ error: 'invalid_client' });
 
   if (grant_type === 'authorization_code') {
     const record = authCodes.get(code);
-    if (!record || record.expiresAt < Date.now() || record.clientId !== client_id) {
+    if (!record || record.expiresAt < Date.now() || record.clientId !== client_id || record.clientRevision !== client.version) {
       return res.status(400).json({ error: 'invalid_grant' });
     }
     authCodes.delete(code);
+
+    // RFC 6749 §4.1.3 — redirect_uri, if present at /oauth/authorize time,
+    // must match byte-for-byte at redemption time. Without this a code
+    // obtained via one registered redirect_uri (e.g. leaked through a
+    // referrer header or an open redirect on that endpoint) could be
+    // redeemed by an attacker in control of a *different* registered
+    // redirect_uri for the same client.
+    if (record.redirectUri && record.redirectUri !== redirect_uri) {
+      return res.status(400).json({ error: 'invalid_grant' });
+    }
+
+    // RFC 7636 — if the authorize request included a code_challenge, the
+    // token request MUST supply a matching code_verifier. Previously
+    // code_verifier was read off req.body but never compared against
+    // anything, making PKCE a complete no-op despite discovery advertising
+    // S256/plain support.
+    if (record.codeChallenge && !verifyPkce(record.codeChallenge, record.codeChallengeMethod, code_verifier)) {
+      return res.status(400).json({ error: 'invalid_grant' });
+    }
+    if (client.publicClient && (!record.codeChallenge || record.codeChallengeMethod !== 'S256')) {
+      return res.status(400).json({ error: 'invalid_grant' });
+    }
+    const approvedScope = resolveScopes(client, record.scope);
+    if (approvedScope === null) return res.status(400).json({ error: 'invalid_scope' });
 
     // Device compliance check — try DB first, then in-memory registry, then external device service
     const deviceId = record.deviceId; // may be undefined for browser flows
@@ -500,7 +640,7 @@ app.post('/oauth/token', async (req, res) => {
 
       // 3. If still not found, try external device service
       if (!deviceStatus) {
-        const DEVICE_SERVICE = process.env.DEVICE_SERVICE_URL || 'http://localhost:3003';
+        const DEVICE_SERVICE = process.env.DEVICE_SERVICE_URL || 'http://device-service';
         try {
           const devRes = await fetch(`${DEVICE_SERVICE}/api/devices/${deviceId}`, {
             headers: { 'Authorization': `Bearer ${process.env.SERVICE_TOKEN || ''}` }
@@ -524,69 +664,93 @@ app.post('/oauth/token', async (req, res) => {
     const ui = record.userInfo || {};
     const payload = {
       sub:   record.userId,
+      ...(record.identityContext ? { identity_authorization: record.identityContext } : {}),
+      ...(record.applicationContext ? { application_authorization: record.applicationContext } : {}),
+      auth_time: record.authTime,
+      amr: record.mfaContext?.methods || ['pwd'],
+      ...(record.mfaContext?.schemaVersion ? { mfa_authorization: record.mfaContext } : {}),
       iss:   ISSUER,
       aud:   client_id,
       iat:   Math.floor(Date.now() / 1000),
       name:  scimUser?.name?.formatted ?? scimUser?.displayName ?? ui.name ?? ui.displayName ?? record.userId,
       email: scimUser?.emails?.[0]?.value ?? ui.email ?? `${record.userId}@opendirectory.local`,
       preferred_username: scimUser?.userName ?? ui.username ?? record.userId,
-      groups: (scimUser?.groups ?? ui.groups ?? []).map((g) => g.value ?? g.display ?? g).filter(Boolean),
-      scope: record.scope,
+      groups: (Array.isArray(scimUser?.groups) ? scimUser.groups : Array.isArray(ui.groups) ? ui.groups : []).map((group) => group?.value ?? group?.display ?? group).filter(group => typeof group === 'string'),
+      scope: approvedScope,
+      ...userAuthorizationClaims(ui, approvedScope),
     };
 
-    const access_token = signToken(payload);
-    const id_token     = signToken({ ...payload, nonce: uuidv4() });
-    const rt           = uuidv4();
+    if (!await clientRegistry.current(client) || record.expiresAt <= Date.now()) return res.status(400).json({ error: 'invalid_grant' });
+    let issued;
+    try { issued = await issueSession(payload, 'user', client.grantTypes.includes('refresh_token'), client); }
+    catch (error) { return res.status(error.status || 503).json({ error: error.code || 'session_authority_unavailable' }); }
+    const access_token = issued.accessToken;
+    const identityPayload = Object.fromEntries(Object.entries(issued.payload).filter(([claim]) => !['roles', 'permissions', 'scope'].includes(claim)));
+    const id_token = approvedScope.split(' ').includes('openid')
+      ? signToken({ ...identityPayload, token_use: 'id', ...(record.nonce ? { nonce: record.nonce } : {}) }) : undefined;
 
-    const atHash = crypto.createHash('sha256').update(access_token).digest('hex');
-    const rtHash = crypto.createHash('sha256').update(rt).digest('hex');
-    tokens.set(atHash, { ...payload, type: 'access' });
-    tokens.set(rtHash, { ...payload, type: 'refresh' });
-    if (db.isAvailable()) {
-      db.saveToken(atHash, payload).catch(err => console.error('[token-db]', err.message));
-    }
-
-    return res.json({ access_token, id_token, refresh_token: rt, token_type: 'Bearer', expires_in: TOKEN_TTL, scope: record.scope });
+    publish('identity.token.issued', { clientId: client_id, userId: record.userId, scope: record.scope, issuedAt: new Date().toISOString() });
+    return res.json({ access_token, id_token, refresh_token: issued.refreshToken, token_type: 'Bearer', expires_in: TOKEN_TTL, scope: record.scope });
   }
 
   if (grant_type === 'refresh_token') {
-    const hash = crypto.createHash('sha256').update(refresh_token ?? '').digest('hex');
-    const record = tokens.get(hash);
-    if (!record || record.type !== 'refresh') return res.status(400).json({ error: 'invalid_grant' });
-
-    const payload = { sub: record.sub, iss: ISSUER, aud: client_id, iat: Math.floor(Date.now() / 1000), name: record.name, email: record.email, preferred_username: record.preferred_username, groups: record.groups, scope: record.scope };
-    const access_token = signToken(payload);
-    const new_rt = uuidv4();
-    tokens.delete(hash);
-    const newAtHash = crypto.createHash('sha256').update(access_token).digest('hex');
-    tokens.set(newAtHash, { ...payload, type: 'access' });
-    tokens.set(crypto.createHash('sha256').update(new_rt).digest('hex'), { ...payload, type: 'refresh' });
-    if (db.isAvailable()) {
-      db.saveToken(newAtHash, payload).catch(err => console.error('[token-db]', err.message));
-    }
-    return res.json({ access_token, refresh_token: new_rt, token_type: 'Bearer', expires_in: TOKEN_TTL });
+    if (typeof refresh_token !== 'string' || !refresh_token) return res.status(400).json({ error: 'invalid_grant' });
+    const hash = crypto.createHash('sha256').update(refresh_token).digest('hex');
+    try {
+      const result = await sessions.rotate(hash, client_id, async (record, session) => {
+        if (record.authorization.client_revision !== client.version || !await clientRegistry.current(client)) return { error: 'invalid_grant' };
+        const state = await identityAuthority.verifiedState(record.authorization);
+        if (!state || !acceptsAuthentication(client, record.authorization) || !await mfaAuthority.matches(record.authorization)
+          || !await applicationAccess.matches(client_id,state,record.authorization.application_authorization)) return { error: 'invalid_grant' };
+        const approvedScope = resolveScopes(client, req.body.scope === undefined ? record.scope : req.body.scope, [], record.scope);
+        if (approvedScope === null) return { error: 'invalid_scope' };
+        const { roles, permissions, iat, ...original } = record.authorization;
+        const payload = { ...original, iss: ISSUER, aud: client_id, scope: approvedScope, iat: Math.floor(Date.now() / 1000), ...userAuthorizationClaims(record.authorization, approvedScope) };
+        const accessToken = signToken(payload, Math.max(1, Math.min(TOKEN_TTL, Math.floor((session.expiresAt - Date.now()) / 1000))));
+        const refreshToken = crypto.randomBytes(32).toString('base64url');
+        return { refresh: { hash: crypto.createHash('sha256').update(refreshToken).digest('hex'), scope: approvedScope, authorization: payload, expiresAt: record.expiresAt },
+          response: { access_token: accessToken, refresh_token: refreshToken, token_type: 'Bearer', expires_in: jwt.decode(accessToken).exp - payload.iat, scope: approvedScope } };
+      });
+      if (result.error) return res.status(400).json(result);
+      return res.json(result);
+    } catch (error) { return res.status(error.status || 503).json({ error: error.code || 'session_authority_unavailable' }); }
   }
 
   if (grant_type === 'client_credentials') {
-    const payload = { sub: client_id, iss: ISSUER, aud: client_id, iat: Math.floor(Date.now() / 1000), scope: req.body.scope ?? '' };
-    const access_token = signToken(payload);
-    return res.json({ access_token, token_type: 'Bearer', expires_in: TOKEN_TTL });
+    const approvedScope = resolveScopes(client, req.body.scope);
+    if (approvedScope === null) return res.status(400).json({ error: 'invalid_scope' });
+    const payload = { sub: client_id, iss: ISSUER, aud: client_id, iat: Math.floor(Date.now() / 1000), scope: approvedScope, ...workloadAuthorizationClaims(approvedScope) };
+    let access_token;
+    try { access_token = (await issueSession(payload, 'application', false, client)).accessToken; }
+    catch (error) { return res.status(error.status || 503).json({ error: error.code || 'session_authority_unavailable' }); }
+    publish('identity.token.issued', { clientId: client_id, userId: client_id, scope: payload.scope, issuedAt: new Date().toISOString() });
+    return res.json({ access_token, token_type: 'Bearer', expires_in: TOKEN_TTL, scope: approvedScope });
   }
 
   if (grant_type === DEVICE_GRANT) {
     const record = deviceCodes.get(device_code);
     if (!record) return res.status(400).json({ error: 'expired_token' });
+    if (record.client_id !== client_id || record.clientRevision !== client.version) return res.status(400).json({ error: 'invalid_grant' });
     if (record.expiresAt < Date.now()) { deviceCodes.delete(device_code); return res.status(400).json({ error: 'expired_token' }); }
     if (!record.approved) return res.status(400).json({ error: 'authorization_pending' });
+    const approvedScope = resolveScopes(client, record.scope);
+    if (approvedScope === null) return res.status(400).json({ error: 'invalid_scope' });
 
     deviceCodes.delete(device_code);
-    const payload = { sub: record.userId ?? 'device-user', iss: ISSUER, aud: client_id ?? 'device-client', iat: Math.floor(Date.now() / 1000), scope: record.scope ?? 'openid profile' };
-    const access_token = signToken(payload);
-    return res.json({ access_token, token_type: 'Bearer', expires_in: TOKEN_TTL });
+    const payload = { sub: record.userId, iss: ISSUER, aud: client_id, auth_time: record.authTime, iat: Math.floor(Date.now() / 1000), scope: approvedScope,
+      amr: record.mfaContext?.methods || ['pwd'],
+      ...(record.mfaContext?.schemaVersion ? { mfa_authorization: record.mfaContext } : {}),
+      ...(record.identityContext ? { identity_authorization: record.identityContext } : {}),
+      ...(record.applicationContext ? { application_authorization: record.applicationContext } : {}), ...userAuthorizationClaims(record.userInfo, approvedScope) };
+    let access_token;
+    try { access_token = (await issueSession(payload, 'user', false, client)).accessToken; }
+    catch (error) { return res.status(error.status || 503).json({ error: error.code || 'session_authority_unavailable' }); }
+    publish('identity.token.issued', { clientId: client_id ?? 'device-client', userId: payload.sub, scope: payload.scope, issuedAt: new Date().toISOString() });
+    return res.json({ access_token, token_type: 'Bearer', expires_in: TOKEN_TTL, scope: approvedScope });
   }
 
   res.status(400).json({ error: 'unsupported_grant_type' });
-});
+}));
 
 // ─── UserInfo Endpoint ────────────────────────────────────────────────────────────
 
@@ -594,60 +758,161 @@ app.get('/oauth/userinfo', async (req, res) => {
   const authHeader = req.headers.authorization ?? '';
   const token = authHeader.replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ error: 'invalid_token' });
-  const bearerToken = req.headers.authorization?.replace('Bearer ', '');
-  if (bearerToken) {
-    const hash = crypto.createHash('sha256').update(bearerToken).digest('hex');
-    if (await isTokenRevoked(hash)) return res.status(401).json({ error: 'token_revoked' });
-  }
   try {
     const payload = verifyToken(token);
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    if (await isTokenRevoked(hash, payload)) return res.status(401).json({ error: 'token_revoked' });
     return res.json({ sub: payload.sub, name: payload.name, email: payload.email, preferred_username: payload.preferred_username, groups: payload.groups ?? [] });
-  } catch {
+  } catch (error) {
+    if (error.status === 503) return res.status(503).json({ error: 'token_state_unavailable' });
     return res.status(401).json({ error: 'invalid_token' });
   }
 });
 
 // ─── Token Introspection ─────────────────────────────────────────────────────────
 
-app.post('/oauth/introspect', async (req, res) => {
+app.post('/oauth/introspect', protocol(async (req, res) => {
   const { token, client_id, client_secret } = req.body;
-  const client = clients.get(client_id);
-  if (!client || client.clientSecret !== client_secret) return res.status(401).json({ error: 'invalid_client' });
-  const hash = crypto.createHash('sha256').update(token ?? '').digest('hex');
-  if (await isTokenRevoked(hash)) {
-    return res.json({ active: false });
-  }
+  const client = req.oauthClient;
+  if (!clientRegistry.authenticated(client, client_secret, true)) return res.status(401).json({ error: 'invalid_client' });
+  if (typeof token !== 'string' || !token) return res.json({ active: false });
+  const hash = crypto.createHash('sha256').update(token).digest('hex');
   try {
     const payload = verifyToken(token);
+    if (payload.client_id !== client_id) return res.json({ active: false });
+    if (await isTokenRevoked(hash, payload)) return res.json({ active: false });
     return res.json({ active: true, ...payload });
-  } catch {
+  } catch (error) {
+    if (error.status === 503) return res.status(503).json({ error: 'token_state_unavailable' });
     return res.json({ active: false });
+  }
+}));
+
+app.get('/oauth/access-state', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const authorization = req.headers.authorization;
+  if (Object.keys(req.query).length || req.headers['x-api-key'] || typeof authorization !== 'string' || !/^Bearer [A-Za-z0-9._~-]+$/.test(authorization)) return res.status(401).json({ error: 'invalid_token' });
+  try {
+    const token = authorization.slice(7);
+    const payload = signingKeys.verify(token, { issuer: ISSUER, audience: process.env.OAUTH_API_AUDIENCE || 'opendirectory-api' });
+    if (payload.token_use !== 'access' || typeof payload.sub !== 'string' || !payload.sub.trim() || typeof payload.jti !== 'string' || !payload.jti
+      || payload.sub.length > 255 || payload.jti.length > 255 || !Number.isFinite(payload.exp) || !Number.isFinite(payload.iat)
+      || payload.exp <= payload.iat || payload.iat > Date.now() / 1000 + 30) return res.status(401).json({ error: 'invalid_token' });
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    const active = !await isTokenRevoked(hash, payload);
+    return res.json(active ? { schemaVersion: 1, active, issuer: payload.iss, subject: payload.sub, tokenId: payload.jti, expiresAt: payload.exp } : { schemaVersion: 1, active: false });
+  } catch (error) {
+    return res.status(error.status === 503 ? 503 : 401).json({ error: error.status === 503 ? 'token_state_unavailable' : 'invalid_token' });
   }
 });
 
 // ─── Token Revocation ────────────────────────────────────────────────────────────
 
-app.post('/oauth/revoke', async (req, res) => {
-  const { token } = req.body;
-  const hash = crypto.createHash('sha256').update(token ?? '').digest('hex');
-  tokens.delete(hash);
-  await blacklistToken(hash, TOKEN_TTL);
-  if (db.isAvailable()) { db.revokeToken(hash).catch(() => {}); }
-  res.status(200).json({ ok: true });
+app.get('/oauth/tenant-state', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const authorization = req.headers.authorization;
+  if (req.originalUrl !== '/oauth/tenant-state' || req.headers['x-api-key'] || Object.keys(req.body || {}).length
+    || typeof authorization !== 'string' || authorization.length > 16384 || !/^Bearer [A-Za-z0-9._~-]+$/.test(authorization)) return res.status(401).json({ error: 'invalid_token' });
+  try {
+    const token = authorization.slice(7);
+    const payload = signingKeys.verify(token, { issuer: ISSUER, audience: process.env.OAUTH_API_AUDIENCE || 'opendirectory-api' });
+    if (payload.actor_type !== 'user' || payload.token_use !== 'access' || typeof payload.sub !== 'string' || !payload.sub.trim() || payload.sub.length > 255
+      || typeof payload.jti !== 'string' || !payload.jti || payload.jti.length > 255 || !Number.isFinite(payload.exp) || !Number.isFinite(payload.iat)
+      || payload.exp <= payload.iat || payload.iat > Date.now() / 1000 + 30) return res.status(401).json({ error: 'invalid_token' });
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    if (identityAuthority.demo) return res.json({ schemaVersion: 1, active: false });
+    const state = await verifiedAccessState(hash, payload);
+    if (!state || !require('../../../../packages/tenant-authorization-contract').validTenantContext(state.tenant)) return res.json({ schemaVersion: 1, active: false });
+    return res.json({ schemaVersion: 1, active: true, issuer: payload.iss, subject: payload.sub, tokenId: payload.jti,
+      expiresAt: payload.exp, context: state.context, tenant: state.tenant });
+  } catch (error) {
+    return res.status(error.status === 503 ? 503 : 401).json({ error: error.status === 503 ? 'tenant_state_unavailable' : 'invalid_token' });
+  }
 });
+
+// RFC 7009 §2.1 requires the revocation endpoint to authenticate the client
+// the same way /oauth/token does; previously this endpoint had NO client
+// auth at all, so any caller who merely obtained (or guessed the hash of) a
+// token could revoke it for someone else — a trivial DoS/sabotage primitive
+// against any client's users. Client auth here mirrors /oauth/introspect
+// immediately above (client_id + client_secret in the body, not a Basic-Auth
+// header — this service has never used Basic Auth for client auth anywhere,
+// including /oauth/token, so body-based auth is the established convention
+// to stay consistent with, not a gap of its own).
+app.post('/oauth/revoke', protocol(async (req, res) => {
+  const { token, client_id, client_secret } = req.body;
+  const client = req.oauthClient;
+  if (!clientRegistry.authenticated(client, client_secret)) return res.status(401).json({ error: 'invalid_client' });
+  if (typeof token !== 'string' || !token) return res.status(400).json({ error: 'invalid_request' });
+
+  const hash = crypto.createHash('sha256').update(token ?? '').digest('hex');
+
+  let decoded;
+  try { decoded = signingKeys.verify(token, { issuer: ISSUER, ignoreExpiration: true }); } catch {}
+  let changed = false;
+  try {
+    if (decoded) {
+      if (decoded.token_use !== 'access' || decoded.client_id !== client_id || !Number.isFinite(decoded.exp)) return res.json({ ok: true });
+      await revocations.revoke(hash, client_id, decoded.exp * 1000);
+      changed = true;
+    } else {
+      changed = await sessions.revokeRefresh(hash, client_id);
+    }
+  } catch { return res.status(503).json({ error: 'token_state_unavailable' }); }
+  if (changed) publish('identity.token.revoked', { tokenId: hash, revokedAt: new Date().toISOString() });
+  res.status(200).json({ ok: true });
+}));
 
 // ─── Logout ───────────────────────────────────────────────────────────────────────
 
 app.get('/oauth/logout', (req, res) => {
-  const { post_logout_redirect_uri } = req.query;
-  if (post_logout_redirect_uri) return res.redirect(post_logout_redirect_uri);
-  res.json({ ok: true });
+  res.status(410).set('Cache-Control', 'no-store').json({ error: 'oidc_logout_not_implemented',
+    message: 'Browser OIDC end-session redirects are not implemented. Use scoped header-authenticated session revocation to terminate a session family.' });
 });
+
+function canAdministerSessions(payload) {
+  return payload.actor_type === 'user' && ((Array.isArray(payload.roles) && payload.roles.some(role => ['admin', 'session-administrator'].includes(role)))
+    || (Array.isArray(payload.permissions) && payload.permissions.includes('sessions.revoke')));
+}
+
+function sessionRoute(scope, operation, administrative = false) {
+  return async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const authorization = req.headers.authorization;
+    if (Object.keys(req.query).length || req.headers['x-api-key'] || typeof authorization !== 'string' || !/^Bearer [A-Za-z0-9._~-]+$/.test(authorization)) return res.status(401).json({ error: 'invalid_token' });
+    try {
+      const token = authorization.slice(7);
+      const payload = signingKeys.verify(token, { issuer: ISSUER, audience: process.env.OAUTH_API_AUDIENCE || 'opendirectory-api' });
+      if (payload.token_use !== 'access' || await isTokenRevoked(crypto.createHash('sha256').update(token).digest('hex'), payload)) return res.status(401).json({ error: 'invalid_token' });
+      const administrator = canAdministerSessions(payload);
+      if ((administrative || !payload.scope?.split(' ').includes(scope)) && !administrator) return res.status(403).json({ error: 'forbidden' });
+      return res.json(await operation(req, payload, administrator));
+    } catch (error) {
+      return res.status(error.status || 401).json({ error: error.code && error.status ? error.code : 'invalid_token' });
+    }
+  };
+}
+
+app.get('/oauth/sessions', sessionRoute('sessions.self.read', async (_req, payload) => ({ sessions: (await sessions.list(viewer(payload))).map(session => ({ ...session, current: session.id === payload.sid })) })));
+app.delete('/oauth/sessions/:id', sessionRoute('sessions.self.revoke', (req, payload, administrator) => sessions.revokeSession(req.params.id, viewer(payload), administrator)));
+app.post('/oauth/sessions/current/revoke', sessionRoute('sessions.self.revoke', (_req, payload) => sessions.revokeSession(payload.sid, viewer(payload))));
+app.post('/oauth/sessions/revoke-all', sessionRoute('sessions.self.revoke', (_req, payload) => sessions.revokeAll(viewer(payload), viewer(payload))));
+app.post('/oauth/users/:subject/sessions/revoke', sessionRoute(null, (req, payload) => {
+  if (!req.params.subject.trim() || req.params.subject.length > 255) throw Object.assign(new Error('Invalid subject'), { status: 400, code: 'invalid_subject' });
+  return sessions.revokeAll({ issuer: ISSUER, subject: req.params.subject, principalType: 'user' }, viewer(payload));
+}, true));
 
 // ─── Device Authorization Flow (RFC 8628) ────────────────────────────────────────
 
-app.post('/oauth/device/code', (req, res) => {
-  const { client_id, scope } = req.body;
+app.post('/oauth/device/code', protocol((req, res) => {
+  const { client_id, client_secret, scope } = req.body;
+  const client = req.oauthClient;
+  if (!clientRegistry.authenticated(client, client_secret)) {
+    return res.status(401).json({ error: 'invalid_client' });
+  }
+  if (!Array.isArray(client.grantTypes) || !client.grantTypes.includes(DEVICE_GRANT)) return res.status(400).json({ error: 'unauthorized_client' });
+  const approvedScope = resolveScopes(client, scope, ['openid', 'profile']);
+  if (approvedScope === null) return res.status(400).json({ error: 'invalid_scope' });
   const device_code = uuidv4();
   const user_code = crypto.randomBytes(3).toString('hex').toUpperCase().replace(/(.{4})/, '$1-');
   const expiresAt = Date.now() + 15 * 60_000; // 15 min
@@ -655,7 +920,8 @@ app.post('/oauth/device/code', (req, res) => {
   deviceCodes.set(device_code, {
     user_code,
     client_id,
-    scope: scope ?? 'openid profile',
+    clientRevision: client.version,
+    scope: approvedScope,
     approved: false,
     userId: null,
     expiresAt,
@@ -669,12 +935,12 @@ app.post('/oauth/device/code', (req, res) => {
     expires_in: 900,
     interval: 5,
   });
-});
+}));
 
 app.get('/oauth/device/verify', (req, res) => {
   const { user_code, error } = req.query;
   res.set('Content-Type', 'text/html');
-  const errorHtml = error ? `<p style="color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px;margin-top:12px;">${error}</p>` : '';
+  const errorHtml = error ? `<p style="color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px;margin-top:12px;">${escapeHtml(error)}</p>` : '';
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>Device Authorization — OpenDirectory</title>
@@ -692,48 +958,56 @@ button:hover{background:#1d4ed8;}.msg{margin-top:16px;padding:12px;border-radius
 ${errorHtml}
 <form method="POST" action="/oauth/device/approve">
   <label>Device Code</label>
-  <input name="user_code" type="text" placeholder="XXXX-XXXX" value="${user_code ?? ''}" maxlength="9"/>
+  <input name="user_code" type="text" placeholder="XXXX-XXXX" value="${escapeHtml(user_code)}" maxlength="9"/>
   <label>Username</label>
   <input name="username" type="text" autocomplete="username" required/>
   <label>Password</label>
   <input name="password" type="password" autocomplete="current-password" required/>
+  <label>Code of the password provider (if required there)</label>
+  <input name="mfaCode" type="text" autocomplete="one-time-code" inputmode="numeric"/>
+  <label>OpenDirectory-Einmalcode (falls eingerichtet)</label>
+  <input name="otpCode" type="text" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"/>
   <button type="submit">Authorize Device</button>
 </form>
 </body></html>`);
 });
 
-app.post('/oauth/device/approve', express.urlencoded({ extended: true }), async (req, res) => {
-  const { user_code, username, password } = req.body;
+app.post('/oauth/device/approve', express.urlencoded({ extended: true }), protocol(async (req, res) => {
+  const { user_code, username, password, mfaCode, otpCode } = req.body;
   let found = null;
   for (const [dc, rec] of deviceCodes.entries()) {
     if (rec.user_code === user_code && rec.expiresAt > Date.now()) { found = [dc, rec]; break; }
   }
   if (!found) return res.send('<html><body><p>Invalid or expired code.</p></body></html>');
 
-  // Validate credentials against auth service
-  const AUTH_SERVICE = process.env.AUTH_SERVICE_URL || 'http://localhost:3002';
-  let userId = username; // fallback: use submitted username
+  const authentication = await authenticateUser({ username, password, mfaCode });
+  if (authentication.error) return res.status(authentication.status).json({ error: authentication.error });
+  const client = await clientRegistry.get(found[1].client_id);
+  if (!client?.enabled || found[1].clientRevision !== client.version || !Array.isArray(client.grantTypes) || !client.grantTypes.includes(DEVICE_GRANT)) return res.status(400).json({ error: 'unauthorized_client' });
+  if (resolveScopes(client, found[1].scope) === null) return res.status(403).json({ error: 'invalid_scope' });
+  if (found[1].expiresAt <= Date.now() || found[1].approved) return res.status(400).json({ error: 'invalid_grant' });
+  let identityContext; let applicationContext; let mfaContext;
+  let userInfo = authentication.user;
   try {
-    const loginRes = await fetch(`${AUTH_SERVICE}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    if (!loginRes.ok) {
-      return res.redirect(`/oauth/device/verify?user_code=${encodeURIComponent(user_code)}&error=${encodeURIComponent('Invalid credentials')}`);
-    }
-    const data = await loginRes.json();
-    userId = data.user?.id ?? data.userId ?? data.id ?? username;
-  } catch (err) {
-    // Auth service unreachable — fall back to username (dev mode)
-    console.warn('[device/approve] auth service unreachable, using username as userId:', err.message);
-    userId = username;
+    const state = await identityAuthority.state(userInfo.id);
+    identityContext = state.context;
+    applicationContext = await applicationAccess.context(found[1].client_id,state);
+    mfaContext = await mfaAuthority.login(state.context?.userId, otpCode);
+    if ((client.mfaRequired || state.authentication?.required) && mfaContext.methods.length !== 2) throw new MfaError(401, 'mfa_enrollment_required');
+    if (state.authorization) userInfo = { ...userInfo, ...state.authorization };
   }
-
+  catch (error) { return res.status(error.status || 503).json({ error: error.code || 'identity_authority_unavailable' }); }
+  if (!userCanDelegateScopes(userInfo, found[1].scope)) return res.status(403).json({ error: 'invalid_scope' });
+  if (deviceCodes.get(found[0]) !== found[1] || !await clientRegistry.current(client) || found[1].expiresAt <= Date.now() || found[1].approved) return res.status(400).json({ error: 'invalid_grant' });
   found[1].approved = true;
-  found[1].userId = userId;
+  found[1].userId = authentication.user.id;
+  found[1].userInfo = userInfo;
+  found[1].identityContext = identityContext;
+  found[1].applicationContext = applicationContext;
+  found[1].mfaContext = mfaContext;
+  found[1].authTime = mfaContext.authTime;
   res.send('<html><body><h2 style="font-family:system-ui;color:#16a34a;">Device authorized! You may close this window.</h2></body></html>');
-});
+}, false));
 
 // ─── SAML Helper: build signed assertion XML ─────────────────────────────────
 
@@ -867,44 +1141,106 @@ app.get('/saml/metadata', (req, res) => {
 
 // ─── OAuth2 Client Management API (full CRUD) ─────────────────────────────────────
 
-app.get('/api/clients', async (req, res) => {
-  if (db.isAvailable()) {
-    try {
-      const dbClients = await db.getAllClients();
-      // Merge with in-memory (in-memory may have more recent data)
-      return res.json(dbClients);
-    } catch (err) { console.error('[clients-db]', err.message); }
-  }
-  res.json([...clients.values()]);
-});
-
-app.post('/api/clients', (req, res) => {
-  const { name, redirectUris, scopes, grantTypes } = req.body;
-  if (!name || !redirectUris?.length) return res.status(400).json({ error: 'name and redirectUris required' });
-  const clientId     = `${name.toLowerCase().replace(/\s+/g, '-')}-${uuidv4().slice(0, 8)}`;
-  const clientSecret = crypto.randomBytes(32).toString('hex');
-  const record = { clientId, clientSecret, name, redirectUris, scopes: scopes ?? ['openid', 'profile', 'email'], grantTypes: grantTypes ?? ['authorization_code'] };
-  clients.set(clientId, record);
-  db.upsertClient({ id: clientId, name, clientSecret, redirectUris, grants: record.grantTypes, scopes: record.scopes }).catch(err => console.error('[clients-db]', err.message));
-  res.status(201).json({ clientId, clientSecret, name });
-});
-
-app.put('/api/clients/:id', (req, res) => {
-  const client = clients.get(req.params.id);
-  if (!client) return res.status(404).json({ error: 'Client not found' });
-  const { name, redirectUris, scopes, grantTypes } = req.body;
-  const updated = { ...client, ...(name && { name }), ...(redirectUris && { redirectUris }), ...(scopes && { scopes }), ...(grantTypes && { grantTypes }) };
-  clients.set(req.params.id, updated);
-  const { clientSecret: _, ...safe } = updated;
-  res.json(safe);
-});
-
-app.delete('/api/clients/:id', (req, res) => {
-  if (!clients.has(req.params.id)) return res.status(404).json({ error: 'Client not found' });
-  clients.delete(req.params.id);
-  db.deleteClient(req.params.id).catch(err => console.error('[clients-db]', err.message));
-  res.status(204).send();
-});
+app.use('/api/clients', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+app.get('/api/license-source-clients/:id',adminAuth,protocol(async(req,res)=>{
+ if(Object.keys(req.query).length)return res.status(400).json({error:'exact_source_client_required'});return res.json(await clientRegistry.licenseSource(req.params.id,req.user));
+},false));
+function clientRoute(permission, handler) {
+  return [adminAuth, protocol(async (req, res) => {
+    if (!permissionsOf(req.user).includes(permission)) return res.status(403).json({ error: 'forbidden' });
+    const result = await handler(req, res);
+    if (result === undefined) return;
+    if (result.clientSecret) {
+      const hash = crypto.createHash('sha256').update(req.headers.authorization.slice(7)).digest('hex');
+      if (await isTokenRevoked(hash, req.user)) return res.status(401).json({ error: 'authorization_changed_outcome_unknown' });
+    }
+    if (result.clientId && result.version) res.set('ETag', etag(result));
+    return res.json(result);
+  }, false)];
+}
+app.use('/api/mfa', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+function mfaRoute(fields, handler) {
+  return [adminAuth, protocol(async (req, res) => {
+    mfaAuthority.actor(req.user);
+    if (Object.keys(req.query).length || !req.body || Object.keys(req.body).some(field => !fields.includes(field))) throw new MfaError(400, 'invalid_request');
+    return res.json(await handler(req));
+  }, false)];
+}
+async function reauthenticateMfa(req) {
+  const { username, password, mfaCode } = req.body;
+  const result = await authenticateUser({ username, password, mfaCode });
+  if (result.error) throw new MfaError(result.status, result.error);
+  if (result.user.id !== req.user.sub) throw new MfaError(403, 'same_user_required');
+  const state = await identityAuthority.state(result.user.id);
+  if (!sameContext(state.context, req.user.identity_authorization)) throw new MfaError(401, 'authorization_changed');
+}
+app.get('/api/mfa', ...mfaRoute([], req => mfaAuthority.status(req.user)));
+app.post('/api/mfa/enroll', ...mfaRoute(['username', 'password', 'mfaCode'], async req => {
+  await reauthenticateMfa(req);
+  const setup = await mfaAuthority.enroll(req.user);
+  if (await isTokenRevoked(crypto.createHash('sha256').update(req.headers.authorization.slice(7)).digest('hex'), req.user)) throw new MfaError(401, 'authorization_changed_outcome_unknown');
+  return setup;
+}));
+app.post('/api/mfa/confirm', ...mfaRoute(['code'], req => mfaAuthority.confirm(req.user, req.body.code)));
+app.post('/api/mfa/disable', ...mfaRoute(['username', 'password', 'mfaCode', 'code'], async req => {
+  await reauthenticateMfa(req); return mfaAuthority.disable(req.user, req.body.code);
+}));
+app.get('/api/mfa/recovery-codes', ...mfaRoute([], req => mfaRecovery.status(req.user)));
+app.post('/api/mfa/recovery-codes', ...mfaRoute(['username', 'password', 'mfaCode', 'code'], async req => {
+  await reauthenticateMfa(req); const result = await mfaRecovery.rotate(req.user, req.body.code);
+  if (await isTokenRevoked(crypto.createHash('sha256').update(req.headers.authorization.slice(7)).digest('hex'), req.user)) throw new MfaError(401, 'authorization_changed_outcome_unknown');
+  return result;
+}));
+function recoveryRequest(req, fields) {
+  if (Object.keys(req.query).length || !req.body || Array.isArray(req.body) || Object.keys(req.body).some(field => !fields.includes(field))) throw new MfaError(400, 'invalid_request');
+}
+app.post('/oauth/mfa/recovery/start', protocol(async (req, res) => {
+  recoveryRequest(req, ['username', 'password', 'mfaCode', 'recoveryCode']);
+  const authentication = await authenticateUser(req.body);
+  if (authentication.error) return res.status(authentication.status).json({ error: authentication.error });
+  const state = await identityAuthority.state(authentication.user.id);
+  return res.json(await mfaRecovery.start(authentication.user.id, state.context, req.body.recoveryCode));
+}, false));
+app.post('/oauth/mfa/recovery/confirm', protocol(async (req, res) => {
+  recoveryRequest(req, ['challenge', 'code']); return res.json(await mfaRecovery.confirm(req.body.challenge, req.body.code));
+}, false));
+app.post('/oauth/mfa/enrollment/start', protocol(async (req, res) => {
+  recoveryRequest(req, ['clientId', 'username', 'password', 'mfaCode']);
+  const authentication = await authenticateUser(req.body);
+  if (authentication.error) return res.status(authentication.status).json({ error: authentication.error });
+  return res.json(await mfaEnrollment.start(req.body.clientId, authentication.user.id));
+}, false));
+app.post('/oauth/mfa/enrollment/confirm', protocol(async (req, res) => {
+  recoveryRequest(req, ['challenge', 'code']); return res.json(await mfaEnrollment.confirm(req.body.challenge, req.body.code));
+}, false));
+app.get('/api/clients/:id/authentication', ...clientRoute('applications.authentication.read', async (req, res) => {
+  recoveryRequest(req, []); const result = await clientRegistry.authentication(req.params.id, req.user);
+  res.set('ETag', `"od-client:${result.clientId}:${result.version}"`); return result;
+}));
+app.put('/api/clients/:id/authentication', ...clientRoute('applications.authentication.manage', req => {
+  recoveryRequest(req, ['required', 'maxAgeSeconds', 'reason']); return clientRegistry.setAuthentication(req.params.id, req.headers['if-match'], req.body, req.user);
+}));
+app.get('/api/clients/access', adminAuth, (req, res) => res.set('Cache-Control', 'no-store').json({ permissions: permissionsOf(req.user), subject: req.user.sub, userId: req.user.identity_authorization?.userId || null, clientId: req.user.client_id, demoMode: clientRegistry.demo }));
+app.get('/api/clients', ...clientRoute('applications.read', req => clientRegistry.list(req.user)));
+app.get('/api/clients/:id', ...clientRoute('applications.read', async req => {
+  clientRegistry.actor(req.user, 'applications.read'); const client = await clientRegistry.get(req.params.id);
+  if (!client) throw Object.assign(new Error('client_not_found'), { status: 404, code: 'client_not_found' });
+  return publicClient(client);
+}));
+app.post('/api/clients', ...clientRoute('applications.create', async (req, res) => { const result = await clientRegistry.create(req.body, req.user); res.status(201); return result; }));
+app.put('/api/clients/:id', ...clientRoute('applications.update', req => clientRegistry.mutate(req.params.id, req.headers['if-match'], req.body, req.user)));
+app.post('/api/clients/:id/rotate-secret', ...clientRoute('applications.credentials.rotate', req => clientRegistry.mutate(req.params.id, req.headers['if-match'], null, req.user, 'rotated')));
+app.delete('/api/clients/:id', ...clientRoute('applications.delete', async (req, res) => { await clientRegistry.mutate(req.params.id, req.headers['if-match'], null, req.user, 'deleted'); res.status(204).send(); }));
+function assignmentRequest(req) {
+  if (Object.keys(req.query).length || (req.method === 'DELETE' && Object.keys(req.body || {}).length)) throw Object.assign(new Error('invalid_assignment_request'), { status: 400, code: 'invalid_assignment_request' });
+}
+app.get('/api/clients/:id/assignments', ...clientRoute('applications.assignments.read', req => { assignmentRequest(req); return applicationAccess.list(req.params.id,req.user); }));
+app.post('/api/clients/:id/assignments', ...clientRoute('applications.assignments.manage', async (req,res) => {
+  assignmentRequest(req); const result = await applicationAccess.grant(req.params.id,req.body,req.user); res.status(result.reused ? 200 : 201); return result;
+}));
+app.delete('/api/clients/:id/assignments/:assignmentId', ...clientRoute('applications.assignments.manage', req => {
+  assignmentRequest(req); return applicationAccess.revoke(req.params.id,req.params.assignmentId,req.user);
+}));
 
 // ─── SCIM 2.0 ─────────────────────────────────────────────────────────────────────
 
@@ -932,12 +1268,12 @@ function scimGroupResource(g) {
 }
 
 // SCIM Users
-app.get('/scim/v2/Users', (req, res) => {
+app.get('/scim/v2/Users', adminAuth, requireAdmin, (req, res) => {
   const list = [...scimUsers.values()].map(scimUserResource);
   res.json({ schemas: ['urn:ietf:params:scim:api:messages:2.0:ListResponse'], totalResults: list.length, Resources: list });
 });
 
-app.post('/scim/v2/Users', (req, res) => {
+app.post('/scim/v2/Users', adminAuth, requireAdmin, (req, res) => {
   const id = uuidv4();
   const user = { id, userName: req.body.userName, displayName: req.body.displayName ?? req.body.userName, emails: req.body.emails ?? [], active: req.body.active !== false, groups: [] };
   scimUsers.set(id, user);
@@ -947,13 +1283,13 @@ app.post('/scim/v2/Users', (req, res) => {
   res.status(201).json(scimUserResource(user));
 });
 
-app.get('/scim/v2/Users/:id', (req, res) => {
+app.get('/scim/v2/Users/:id', adminAuth, requireAdmin, (req, res) => {
   const u = scimUsers.get(req.params.id);
   if (!u) return res.status(404).json({ schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'], status: 404, detail: 'User not found' });
   res.json(scimUserResource(u));
 });
 
-app.put('/scim/v2/Users/:id', (req, res) => {
+app.put('/scim/v2/Users/:id', adminAuth, requireAdmin, (req, res) => {
   const existing = scimUsers.get(req.params.id);
   if (!existing) return res.status(404).json({ status: 404, detail: 'User not found' });
   const user = { id: req.params.id, userName: req.body.userName, displayName: req.body.displayName, emails: req.body.emails ?? [], active: req.body.active !== false, groups: req.body.groups ?? [] };
@@ -968,7 +1304,7 @@ app.put('/scim/v2/Users/:id', (req, res) => {
   res.json(scimUserResource(user));
 });
 
-app.delete('/scim/v2/Users/:id', (req, res) => {
+app.delete('/scim/v2/Users/:id', adminAuth, requireAdmin, (req, res) => {
   if (!scimUsers.has(req.params.id)) return res.status(404).json({ status: 404, detail: 'User not found' });
   scimUsers.delete(req.params.id);
   if (db.isAvailable()) {
@@ -978,25 +1314,25 @@ app.delete('/scim/v2/Users/:id', (req, res) => {
 });
 
 // SCIM Groups
-app.get('/scim/v2/Groups', (req, res) => {
+app.get('/scim/v2/Groups', adminAuth, requireAdmin, (req, res) => {
   const list = [...scimGroups.values()].map(scimGroupResource);
   res.json({ schemas: ['urn:ietf:params:scim:api:messages:2.0:ListResponse'], totalResults: list.length, Resources: list });
 });
 
-app.post('/scim/v2/Groups', (req, res) => {
+app.post('/scim/v2/Groups', adminAuth, requireAdmin, (req, res) => {
   const id = uuidv4();
   const group = { id, displayName: req.body.displayName, members: req.body.members ?? [] };
   scimGroups.set(id, group);
   res.status(201).json(scimGroupResource(group));
 });
 
-app.get('/scim/v2/Groups/:id', (req, res) => {
+app.get('/scim/v2/Groups/:id', adminAuth, requireAdmin, (req, res) => {
   const g = scimGroups.get(req.params.id);
   if (!g) return res.status(404).json({ status: 404, detail: 'Group not found' });
   res.json(scimGroupResource(g));
 });
 
-app.put('/scim/v2/Groups/:id', (req, res) => {
+app.put('/scim/v2/Groups/:id', adminAuth, requireAdmin, (req, res) => {
   const existing = scimGroups.get(req.params.id);
   if (!existing) return res.status(404).json({ status: 404, detail: 'Group not found' });
   const group = { id: req.params.id, displayName: req.body.displayName, members: req.body.members ?? [] };
@@ -1012,7 +1348,7 @@ app.put('/scim/v2/Groups/:id', (req, res) => {
   res.json(scimGroupResource(group));
 });
 
-app.delete('/scim/v2/Groups/:id', (req, res) => {
+app.delete('/scim/v2/Groups/:id', adminAuth, requireAdmin, (req, res) => {
   if (!scimGroups.has(req.params.id)) return res.status(404).json({ status: 404, detail: 'Group not found' });
   scimGroups.delete(req.params.id);
   res.status(204).send();
@@ -1030,7 +1366,7 @@ const deviceRegistry = new Map();
 ].forEach(d => deviceRegistry.set(d.id, d));
 
 // Auto-quarantine cron: runs every 30s (represents a daily check)
-setInterval(() => {
+const quarantineTimer = setInterval(() => {
   const now = Date.now();
   const DAY_MS = 86400_000;
   let flagged = 0;
@@ -1041,26 +1377,6 @@ setInterval(() => {
     if (daysSinceLastSeen > 60) {
       device.status = 'quarantined';
       quarantined++;
-      // Queue update_policy command for quarantined device
-      if (!mdmCommands.has(device.id)) mdmCommands.set(device.id, []);
-      const queue = mdmCommands.get(device.id);
-      // Only queue if not already pending
-      if (!queue.find(c => c.command === 'update_policy' && c.status === 'pending')) {
-        queue.push({
-          id: uuidv4(),
-          command: 'update_policy',
-          payload: { reason: 'auto_quarantine', policy: 'compliance_remediation' },
-          issuedAt: new Date().toISOString(),
-          status: 'pending'
-        });
-        // Persist to DB
-        if (db.isAvailable()) {
-          db.query(
-            `INSERT INTO mdm_commands(id, device_id, command, payload, status) VALUES($1,$2,'update_policy',$3,'pending') ON CONFLICT(id) DO NOTHING`,
-            [queue[queue.length-1].id, device.id, JSON.stringify({ reason: 'auto_quarantine' })]
-          ).catch(() => {});
-        }
-      }
     } else if (daysSinceLastSeen > 30) {
       device.status = 'flagged';
       flagged++;
@@ -1074,18 +1390,23 @@ setInterval(() => {
   }
   console.log(`[device-quarantine] flagged=${flagged} quarantined=${quarantined}`);
 }, 30_000);
+quarantineTimer.unref();
 
-app.get('/api/devices/registry', async (req, res) => {
+app.get('/api/devices/registry', adminAuthOrInternal, requirePolicyDeviceAccess('inventory'), async (req, res) => {
+  if (req.policyDeviceOperator && !db.isAvailable()) return res.status(503).json({ error: 'device_authority_unavailable' });
   if (db.isAvailable()) {
     try {
       const rows = await db.getAllDevices();
-      if (rows.length > 0) return res.json(rows.map(r => ({ ...r, ...r.data })));
-    } catch (err) { console.error('[registry-db]', err.message); }
+      if (rows.length > 0 || req.policyDeviceOperator) return res.json(rows.map(row => policyDeviceView(req, req.policyDeviceOperator ? row : { ...row, ...row.data })));
+    } catch (err) {
+      if (req.policyDeviceOperator) return res.status(503).json({ error: 'device_authority_unavailable' });
+      console.error('[registry-db]', err.message);
+    }
   }
-  res.json([...deviceRegistry.values()]);
+  res.json([...deviceRegistry.values()].map(device => policyDeviceView(req, device)));
 });
 
-app.put('/api/devices/:id/status', (req, res) => {
+app.put('/api/devices/:id/status', adminAuth, requireAdmin, (req, res) => {
   const device = deviceRegistry.get(req.params.id);
   if (!device) return res.status(404).json({ error: 'Device not found' });
   const { status } = req.body;
@@ -1099,13 +1420,47 @@ app.put('/api/devices/:id/status', (req, res) => {
 // ─── MDM Command Queue ────────────────────────────────────────────────────────
 
 const mdmCommands = new Map(); // deviceId → [command]
+const policyDeviceQueue = new (require('./PolicyDeviceQueue').PolicyDeviceQueue)(db, {
+  isUserRevoked: isTokenRevoked, isDeviceRevoked: hash => revocations.revoked(hash),
+});
+const policyDeviceRoute = operation => async (req, res) => {
+  const controller = new AbortController(); const close = () => controller.abort(); req.once('aborted', close); res.once('close', close); res.set('Cache-Control', 'no-store');
+  try { await operation(req, res, controller.signal); }
+  catch (error) { if (!res.headersSent && !res.destroyed) res.status(error.status || 503).json({ error: error.code || 'policy_command_unavailable', enforcementConfirmed: false }); }
+  finally { req.removeListener('aborted', close); res.removeListener('close', close); }
+};
 
-app.post('/api/devices/:deviceId/commands', (req, res) => {
+app.get('/api/devices/policy-command-access', adminAuth, requirePolicyDeviceAccess('protocol'), policyDeviceRoute(async (req, res, signal) => {
+  res.json(await policyDeviceQueue.access(req.user, req.headers.authorization, signal));
+}));
+app.get('/api/devices/policy-registry', adminAuth, requirePolicyDeviceAccess('protocol'), policyDeviceRoute(async (req, res, signal) => {
+  res.json(await policyDeviceQueue.inventory(req.user, req.headers.authorization, signal));
+}));
+app.get('/api/devices/policy-commands', adminAuth, requirePolicyDeviceAccess('protocol'), policyDeviceRoute(async (req, res, signal) => {
+  if (Object.keys(req.query).some(key => !['resourceKind','resourceId','limit','offset'].includes(key))) return res.status(400).json({ error: 'bounded_owned_policy_commands_required' });
+  res.json(await policyDeviceQueue.ownedHistory({ resourceKind: req.query.resourceKind, resourceId: req.query.resourceId, limit: Number(req.query.limit ?? 200), offset: Number(req.query.offset ?? 0) }, req.user, req.headers.authorization, signal));
+}));
+app.post('/api/devices/:deviceId/commands/:cmdId/cancel', adminAuth, requirePolicyDeviceAccess('protocol'), policyDeviceRoute(async (req, res, signal) => {
+  res.json(await policyDeviceQueue.cancel(req.params.deviceId, req.params.cmdId, req.body, req.headers['x-od-operation-id'], req.user, req.headers.authorization, signal));
+}));
+
+app.post('/api/devices/:deviceId/commands', adminAuthOrInternal, requirePolicyDeviceAccess('command'), policyDeviceRoute(async (req, res, signal) => {
   const { command, payload } = req.body;
-  const VALID_COMMANDS = ['wipe', 'lock', 'unlock', 'update_policy', 'restart', 'collect_logs', 'install_app', 'uninstall_app'];
+  if (command === 'update_policy') return res.status(201).json(await policyDeviceQueue.queue(req.params.deviceId, req.body, req.headers['x-od-operation-id'], req.user, req.headers.authorization, signal));
+  // 'run_av_scan' is antivirus-protection's real MDM command name (see
+  // POST /api/antivirus/scan in services/enterprise/antivirus-protection/
+  // src/index.js, which dispatches exactly this command via the
+  // internal-service-token bypass below) — it was missing from this
+  // allowlist, so every AV-scan dispatch 400'd here and the fleet-wide scan
+  // feature was silently broken end-to-end.
+  const VALID_COMMANDS = ['wipe', 'lock', 'unlock', 'update_policy', 'restart', 'collect_logs', 'install_app', 'uninstall_app', 'run_av_scan'];
   if (!VALID_COMMANDS.includes(command)) return res.status(400).json({ error: `Unknown command. Valid: ${VALID_COMMANDS.join(', ')}` });
 
   const deviceId = req.params.deviceId;
+  if (req.policyDeviceOperator && !deviceRegistry.has(deviceId)) {
+    try { if (!db.isAvailable() || !await db.getDevice(deviceId)) return res.status(404).json({ error: 'Device not found' }); }
+    catch { return res.status(503).json({ error: 'device_authority_unavailable' }); }
+  }
   const queue = mdmCommands.get(deviceId) || [];
   const cmdRecord = { id: uuidv4(), command, payload: payload || {}, issuedAt: new Date().toISOString(), status: 'pending' };
   queue.push(cmdRecord);
@@ -1121,37 +1476,46 @@ app.post('/api/devices/:deviceId/commands', (req, res) => {
 
   console.log(`[MDM] Command ${command} queued for device ${deviceId}`);
   res.status(201).json(cmdRecord);
-});
+}));
 
-// Agent polls this endpoint to get pending commands
-app.get('/api/devices/:deviceId/commands/pending', (req, res) => {
+app.get('/api/devices/:deviceId/commands/pending', deviceSelfAuth, policyDeviceRoute(async (req, res, signal) => {
   const deviceId = req.params.deviceId;
-  const queue = (mdmCommands.get(deviceId) || []).filter(c => c.status === 'pending');
-  res.json(queue);
-});
+  const verified = await policyDeviceQueue.pending(deviceId, req.user, req.headers.authorization, signal);
+  const queue = (mdmCommands.get(deviceId) || []).filter(c => c.status === 'pending' && c.command !== 'update_policy');
+  res.json([...queue, ...verified]);
+}));
 
-// Agent reports command result
-app.patch('/api/devices/:deviceId/commands/:cmdId', (req, res) => {
+// Agent reports command result — device-authenticated (see comment above).
+app.patch('/api/devices/:deviceId/commands/:cmdId', deviceSelfAuth, policyDeviceRoute(async (req, res, signal) => {
   const { deviceId, cmdId } = req.params;
+  await policyDeviceQueue.check(req.user, req.headers.authorization, signal, true);
+  if (!db.isAvailable()) return res.status(503).json({ error: 'policy_command_storage_unavailable' });
+  const persisted = (await db.query('SELECT command FROM mdm_commands WHERE device_id=$1 AND id=$2', [deviceId, cmdId])).rows[0];
+  if (persisted?.command === 'update_policy') return res.json(await policyDeviceQueue.report(deviceId, cmdId, req.body, req.user, req.headers.authorization, signal));
   const { status, result } = req.body;
   const queue = mdmCommands.get(deviceId) || [];
-  const cmd = queue.find(c => c.id === cmdId);
+  const cmd = queue.find(c => c.id === cmdId && c.command !== 'update_policy');
   if (!cmd) return res.status(404).json({ error: 'Command not found' });
   cmd.status = status || 'completed';
   cmd.result = result;
   cmd.completedAt = new Date().toISOString();
   res.json(cmd);
-});
+}));
 
-// List all commands for a device
-app.get('/api/devices/:deviceId/commands', (req, res) => {
-  const queue = mdmCommands.get(req.params.deviceId) || [];
-  res.json(queue);
-});
+// List all commands for a device (admin UI use — distinct from the agent's
+// own /commands/pending poll above).
+app.get('/api/devices/:deviceId/commands', adminAuth, requireAdmin, policyDeviceRoute(async (req, res) => {
+  if (Object.keys(req.query).some(key => !['limit','offset'].includes(key))) return res.status(400).json({ error: 'bounded_policy_command_history_required' });
+  const verified = await policyDeviceQueue.list(req.params.deviceId, Number(req.query.limit ?? 200), Number(req.query.offset ?? 0));
+  const queue = (mdmCommands.get(req.params.deviceId) || []).filter(command => command.command !== 'update_policy');
+  res.set('X-Policy-Command-Truncated', String(verified.truncated)).json([...queue, ...verified.commands]);
+}));
 
 // ─── Compliance Check Endpoint ────────────────────────────────────────────────────
 
-app.post('/api/devices/:deviceId/compliance-check', async (req, res) => {
+// Device-authenticated (see comment on /commands/pending above) — the agent
+// reports its own compliance settings using its deviceToken.
+app.post('/api/devices/:deviceId/compliance-check', deviceSelfAuth, async (req, res) => {
   const { deviceId } = req.params;
   const { settings } = req.body; // device reports its current settings
 
@@ -1207,16 +1571,7 @@ app.post('/api/devices/:deviceId/compliance-check', async (req, res) => {
     ).catch(() => {});
   }
 
-  // Auto-queue remediation if non-compliant
-  if (!compliant) {
-    if (!mdmCommands.has(deviceId)) mdmCommands.set(deviceId, []);
-    const queue = mdmCommands.get(deviceId);
-    if (!queue.find(c => c.command === 'update_policy' && c.status === 'pending')) {
-      queue.push({ id: uuidv4(), command: 'update_policy', payload: { failingRules: failing, score }, issuedAt: new Date().toISOString(), status: 'pending' });
-    }
-  }
-
-  res.json({ deviceId, platform, score, compliant, passing: passing.length, failing, total: rules.length });
+  res.json({ deviceId, platform, score, compliant, passing: passing.length, failing, total: rules.length, remediationQueued: false, approvedPublicationRequired: !compliant });
 });
 
 // ─── Enrollment Token API ─────────────────────────────────────────────────────────
@@ -1228,11 +1583,11 @@ PLATFORMS.forEach(p => {
   enrollmentTokens.set(p, { platform: p, token, created: new Date().toISOString().split('T')[0], expires: new Date(Date.now() + 30 * 86400_000).toISOString().split('T')[0], uses: 0, maxUses: p === 'linux' ? 100 : p === 'windows' || p === 'macos' ? 50 : 25, devices: new Map() });
 });
 
-app.get('/api/enrollment/tokens', (req, res) => {
+app.get('/api/enrollment/tokens', adminAuth, requireAdmin, (req, res) => {
   res.json([...enrollmentTokens.values()].map(({ devices: _, ...t }) => t));
 });
 
-app.post('/api/enrollment/tokens/:platform/rotate', (req, res) => {
+app.post('/api/enrollment/tokens/:platform/rotate', adminAuth, requireAdmin, (req, res) => {
   const { platform } = req.params;
   if (!PLATFORMS.includes(platform)) return res.status(400).json({ error: 'unknown platform' });
   const existing = enrollmentTokens.get(platform);
@@ -1242,18 +1597,27 @@ app.post('/api/enrollment/tokens/:platform/rotate', (req, res) => {
   res.json(t);
 });
 
-app.post('/api/enrollment/register', (req, res) => {
+app.post('/api/enrollment/register', async (req, res) => {
   const { token, platform, hostname, os, serial } = req.body;
   const record = [...enrollmentTokens.values()].find(t => t.token === token && t.platform === platform);
-  if (!record) return res.status(401).json({ error: 'invalid token' });
+  if (!record || Date.parse(record.expires) <= Date.now()) return res.status(401).json({ error: 'invalid token' });
   if (record.uses >= record.maxUses) return res.status(429).json({ error: 'token exhausted' });
+  if (Object.keys(req.body).some(key => !['token','platform','hostname','os','serial'].includes(key)) || typeof hostname !== 'string' || !hostname.trim() || hostname.length > 255
+    || [os,serial].some(value => value !== undefined && (typeof value !== 'string' || value.length > 255))) return res.status(400).json({ error: 'bounded_device_enrollment_required' });
+  if (!db.isAvailable()) return res.status(503).json({ error: 'persistent_device_enrollment_required' });
   record.uses += 1;
   const deviceId = uuidv4();
-  const deviceToken = signToken({ sub: deviceId, platform, hostname, serial, iss: ISSUER }, '365d');
-  if (db.isAvailable()) {
-    db.upsertDevice({ id: deviceId, enrollmentToken: token, hostname, platform, os: req.body.os, ip: req.ip, status: 'active' }).catch(err => console.error('[device-db]', err.message));
+  let persisted = false;
+  try {
+    const stored = await db.upsertDevice({ id: deviceId, enrollmentToken: token, hostname, platform, os, ip: req.ip, status: 'active' }); persisted = true;
+    if (stored?.id !== deviceId || stored.platform !== platform || !require('../../../../packages/identity-authorization-contract').validRevision(String(stored.policy_generation))) throw new Error('Device persistence receipt unavailable');
+    if (enrollmentTokens.get(platform) !== record || Date.parse(record.expires) <= Date.now() || req.aborted || res.destroyed) throw new Error('Original enrollment authority no longer current');
+    const deviceToken = signToken({ sub: deviceId, platform, hostname, serial, device_generation: String(stored.policy_generation), iss: ISSUER, token_use: 'device', aud: 'opendirectory-device-agent' }, '365d');
+    res.status(201).json({ deviceId, deviceToken, serverUrl: ISSUER, message: `Device enrolled successfully as ${hostname} (${platform})` });
+  } catch {
+    if (!persisted) record.uses -= 1;
+    res.status(503).json({ error: 'persistent_device_enrollment_required' });
   }
-  res.status(201).json({ deviceId, deviceToken, serverUrl: ISSUER, message: `Device enrolled successfully as ${hostname} (${platform})` });
 });
 
 // ─── Phase 2: Enrollment Script Generation ────────────────────────────────────────
@@ -1497,7 +1861,8 @@ app.get('/api/enroll/ios/profile.mobileconfig', (req, res) => {
 
 // ─── Device Heartbeat ─────────────────────────────────────────────────────────────
 
-app.post('/api/devices/:id/heartbeat', (req, res) => {
+// Device-authenticated (see comment on /commands/pending above).
+app.post('/api/devices/:id/heartbeat', deviceSelfAuth, (req, res) => {
   const { id } = req.params;
   // Update last_seen across enrollment token records
   for (const rec of enrollmentTokens.values()) {
@@ -1510,7 +1875,7 @@ app.post('/api/devices/:id/heartbeat', (req, res) => {
 
 // ─── SCIM Push Log ────────────────────────────────────────────────────────────────
 
-app.get('/api/scim-push/log', (req, res) => {
+app.get('/api/scim-push/log', adminAuth, requireAdmin, (req, res) => {
   res.json(scimPushLog.slice(-50));
 });
 
@@ -1533,11 +1898,11 @@ const scimConflicts = new Map();
   ]);
 });
 
-app.get('/api/scim/connections', (req, res) => {
+app.get('/api/scim/connections', adminAuth, requireAdmin, (req, res) => {
   res.json([...scimConnections.values()]);
 });
 
-app.post('/api/scim/connections', (req, res) => {
+app.post('/api/scim/connections', adminAuth, requireAdmin, (req, res) => {
   const { name, provider, endpoint, bearerToken, syncInterval } = req.body;
   if (!name || !provider) return res.status(400).json({ error: 'name and provider are required' });
   if (!['google', 'entra', 'custom'].includes(provider)) return res.status(400).json({ error: 'provider must be google, entra, or custom' });
@@ -1561,7 +1926,7 @@ app.post('/api/scim/connections', (req, res) => {
   res.status(201).json(safe);
 });
 
-app.put('/api/scim/connections/:id', (req, res) => {
+app.put('/api/scim/connections/:id', adminAuth, requireAdmin, (req, res) => {
   const connection = scimConnections.get(req.params.id);
   if (!connection) return res.status(404).json({ error: 'Connection not found' });
   const { name, provider, endpoint, bearerToken, syncInterval } = req.body;
@@ -1579,14 +1944,14 @@ app.put('/api/scim/connections/:id', (req, res) => {
   res.json(safe);
 });
 
-app.delete('/api/scim/connections/:id', (req, res) => {
+app.delete('/api/scim/connections/:id', adminAuth, requireAdmin, (req, res) => {
   if (!scimConnections.has(req.params.id)) return res.status(404).json({ error: 'Connection not found' });
   scimConnections.delete(req.params.id);
   scimSyncLog.delete(req.params.id);
   res.status(204).send();
 });
 
-app.post('/api/scim/connections/:id/sync', (req, res) => {
+app.post('/api/scim/connections/:id/sync', adminAuth, requireAdmin, (req, res) => {
   const connection = scimConnections.get(req.params.id);
   if (!connection) return res.status(404).json({ error: 'Connection not found' });
   // Simulate a sync
@@ -1615,18 +1980,18 @@ app.post('/api/scim/connections/:id/sync', (req, res) => {
   res.json({ message: 'Sync started', logId, startedAt });
 });
 
-app.get('/api/scim/connections/:id/log', (req, res) => {
+app.get('/api/scim/connections/:id/log', adminAuth, requireAdmin, (req, res) => {
   if (!scimConnections.has(req.params.id)) return res.status(404).json({ error: 'Connection not found' });
   const log = scimSyncLog.get(req.params.id) || [];
   res.json(log.slice(0, 50));
 });
 
-app.get('/api/scim/conflicts', (req, res) => {
+app.get('/api/scim/conflicts', adminAuth, requireAdmin, (req, res) => {
   const all = [...scimConflicts.values()].filter(c => !c.resolved);
   res.json(all);
 });
 
-app.post('/api/scim/conflicts/:id/resolve', (req, res) => {
+app.post('/api/scim/conflicts/:id/resolve', adminAuth, requireAdmin, (req, res) => {
   const conflict = scimConflicts.get(req.params.id);
   if (!conflict) return res.status(404).json({ error: 'Conflict not found' });
   const { action } = req.body;
@@ -1640,11 +2005,11 @@ app.post('/api/scim/conflicts/:id/resolve', (req, res) => {
 
 // ─── Update Rings ─────────────────────────────────────────────────────────────────
 
-app.get('/api/update-rings', (req, res) => {
+app.get('/api/update-rings', adminAuth, requireAdmin, (req, res) => {
   res.json([...updateRings.values()]);
 });
 
-app.put('/api/update-rings/:id', (req, res) => {
+app.put('/api/update-rings/:id', adminAuth, requireAdmin, (req, res) => {
   const ring = updateRings.get(req.params.id);
   if (!ring) return res.status(404).json({ error: 'Ring not found' });
   const { deferralDays, description } = req.body;
@@ -1658,7 +2023,7 @@ app.put('/api/update-rings/:id', (req, res) => {
   res.json(ring);
 });
 
-app.post('/api/update-rings/:id/assign', (req, res) => {
+app.post('/api/update-rings/:id/assign', adminAuth, requireAdmin, (req, res) => {
   const ring = updateRings.get(req.params.id);
   if (!ring) return res.status(404).json({ error: 'Ring not found' });
   const { deviceId } = req.body;
@@ -1677,7 +2042,7 @@ app.get('/api/app-catalog', (req, res) => {
   res.json(APP_CATALOG);
 });
 
-app.post('/api/scim-push/:appId/provision', (req, res) => {
+app.post('/api/scim-push/:appId/provision', adminAuth, requireAdmin, (req, res) => {
   const { appId } = req.params;
   const { userId, action } = req.body;
   if (!['create', 'update', 'deactivate'].includes(action)) return res.status(400).json({ error: 'invalid action' });
@@ -1706,7 +2071,7 @@ app.get('/api/packages/:id', (req, res) => {
   res.json(pkg);
 });
 
-app.post('/api/packages', (req, res) => {
+app.post('/api/packages', adminAuth, requireAdmin, (req, res) => {
   const { name, version, platform, type, downloadUrl, silent, installScript } = req.body;
   if (!name || !platform) return res.status(400).json({ error: 'name and platform required' });
   const id = `pkg-${uuidv4().slice(0, 8)}`;
@@ -1716,7 +2081,7 @@ app.post('/api/packages', (req, res) => {
 });
 
 // Deploy package to a device
-app.post('/api/packages/:pkgId/deploy/:deviceId', (req, res) => {
+app.post('/api/packages/:pkgId/deploy/:deviceId', adminAuth, requireAdmin, (req, res) => {
   const pkg = appPackages.get(req.params.pkgId);
   if (!pkg) return res.status(404).json({ error: 'Package not found' });
 
@@ -1734,7 +2099,7 @@ app.post('/api/packages/:pkgId/deploy/:deviceId', (req, res) => {
 });
 
 // Bulk deploy to all devices by platform
-app.post('/api/packages/:pkgId/deploy-all', (req, res) => {
+app.post('/api/packages/:pkgId/deploy-all', adminAuth, requireAdmin, (req, res) => {
   const pkg = appPackages.get(req.params.pkgId);
   if (!pkg) return res.status(404).json({ error: 'Package not found' });
 
@@ -1755,7 +2120,7 @@ app.post('/api/packages/:pkgId/deploy-all', (req, res) => {
 // ─── Health ───────────────────────────────────────────────────────────────────────
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'oauth-provider', issuer: ISSUER, clients: clients.size, algorithm: 'RS256' });
+  res.json({ status: 'ok', service: 'oauth-provider', issuer: ISSUER, algorithm: 'RS256' });
 });
 
 // ─── Seed Default Update Rings (DB) ──────────────────────────────────────────────
@@ -1817,33 +2182,15 @@ app.get('/downloads/:filename', (req, res) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────────
 
-db.initDb().then(async () => {
-  initRedis().catch(err => console.warn('[redis] init error:', err.message));
+async function start() {
+  await db.initDb();
+  if (process.env.NODE_ENV === 'production' && !db.isAvailable()) throw new Error('Client storage unavailable');
+  await initializeClients();
+  await mfaAuthority.ready();
+  if (!mfaAuthority.demo) await mfaRecovery.ready();
+  if (!mfaAuthority.demo) await mfaEnrollment.ready();
+  connectBus();
   if (db.isAvailable()) {
-    try {
-      const existing = await db.query('SELECT COUNT(*) FROM oauth_clients');
-      if (existing.rows[0].count === '0') {
-        for (const [, client] of clients.entries()) {
-          await db.upsertClient({ id: client.clientId, name: client.name, clientSecret: client.clientSecret, redirectUris: client.redirectUris, grants: client.grantTypes, scopes: client.scopes });
-        }
-        console.log('[db] Seeded initial OAuth clients');
-      }
-    } catch (err) {
-      console.warn('[db] Could not seed clients:', err.message);
-    }
-
-    try {
-      const devCount = await db.query('SELECT COUNT(*) FROM enrolled_devices');
-      if (devCount.rows[0].count === '0') {
-        for (const [, device] of deviceRegistry.entries()) {
-          await db.upsertDevice(device).catch(() => {});
-        }
-        console.log('[db] Seeded demo devices to enrolled_devices');
-      }
-    } catch (err) {
-      console.warn('[db] Could not seed devices:', err.message);
-    }
-
     // Load existing SCIM catalog from DB into the in-memory Map (write-through cache)
     try {
       const scimRows = await db.getScimUsers('__catalog__');
@@ -1866,16 +2213,23 @@ db.initDb().then(async () => {
       console.warn('[db] Could not load SCIM catalog:', err.message);
     }
   }
-  app.listen(PORT, () => {
+  return app.listen(PORT, () => {
     console.log(`[oauth-provider] listening on :${PORT}`);
     // Seed default update rings if DB available
     if (db.isAvailable()) {
       seedDefaultUpdateRings();
     }
   });
-}).catch(err => {
-  console.error('[oauth-provider] startup error:', err.message);
-  process.exit(1);
-});
+}
+
+if (require.main === module) {
+  start().catch(err => {
+    console.error('[oauth-provider] startup error:', err.message);
+    process.exit(1);
+  });
+}
 
 module.exports = app;
+module.exports.start = start;
+async function initializeClients() { return clientRegistry.initialize(clientSeeds, webClient, assertWebClient); }
+module.exports.initializeClients = initializeClients;

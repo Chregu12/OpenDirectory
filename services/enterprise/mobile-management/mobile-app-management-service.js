@@ -10,6 +10,16 @@ const crypto = require('crypto');
 const multer = require('multer');
 const path = require('path');
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'mobile-management' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Enterprise Mobile App Management (MAM) Service
  * Provides comprehensive mobile application management with app-specific policies
@@ -601,6 +611,7 @@ class MobileAppManagementService {
       };
 
       this.appPolicies.set(policyId, policy);
+      publish('mdm.policy.applied', { policyId, targetApps: policy.targetApps, targetGroups: policy.targetGroups });
 
       res.status(201).json({
         success: true,
@@ -875,6 +886,11 @@ class MobileAppManagementService {
             appId: installation.appId,
             deviceId: installation.deviceId,
             status: installation.status
+          });
+          publish('mdm.app.installed', {
+            installationId,
+            appId: installation.appId,
+            deviceId: installation.deviceId,
           });
         } else {
           this.broadcastToSubscribers('installation_progress', {
@@ -1363,6 +1379,11 @@ class MobileAppManagementService {
   }
 
   start(port = process.env.MAM_SERVICE_PORT || 3013) {
+    // Connect to event bus (fire and forget)
+    connectBus().catch((err) => {
+      console.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+    });
+
     this.server.listen(port, () => {
       console.log(`📱 Mobile App Management Service started on port ${port}`);
       console.log(`🛡️  App wrapping: ${this.config.wrappingService.enabled ? 'Enabled' : 'Disabled'}`);

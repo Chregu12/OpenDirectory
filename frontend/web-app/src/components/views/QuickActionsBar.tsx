@@ -1,0 +1,117 @@
+'use client';
+
+import React from 'react';
+import { useQuickActionAccess } from '@/hooks/useQuickActionAccess';
+import { useIdentityAccess } from '@/hooks/useIdentityAccess';
+import {
+  PlusIcon,
+  UserPlusIcon,
+  KeyIcon,
+  DocumentCheckIcon,
+  ClipboardDocumentListIcon,
+} from '@heroicons/react/24/outline';
+
+interface QuickActionsBarProps {
+  onEnrollDevice: () => void;
+  onNewUser: () => void;
+  onServicePrincipal: () => void;
+  onDeployPolicy: () => void;
+  onComplianceSnapshot: () => void;
+}
+
+interface ActionButtonProps {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  accent?: boolean;
+}
+
+function ActionButton({ icon, label, onClick, accent }: ActionButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        padding: '7px 14px',
+        borderRadius: 8,
+        border: accent ? 'none' : '1px solid var(--border, rgba(255,255,255,0.07))',
+        background: accent ? '#006FFF' : 'var(--bg-surface-raised, #1c2128)',
+        color: accent ? '#FFFFFF' : 'var(--text-primary, #e4e6ea)',
+        fontSize: 13,
+        fontWeight: 500,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        transition: 'background 0.15s, box-shadow 0.15s',
+        boxShadow: accent ? '0 1px 4px rgba(0,111,255,0.25)' : '0 1px 2px rgba(0,0,0,0.2)',
+      }}
+      onMouseEnter={e => {
+        const btn = e.currentTarget as HTMLButtonElement;
+        btn.style.background = accent ? '#0060e0' : 'rgba(255,255,255,0.08)';
+      }}
+      onMouseLeave={e => {
+        const btn = e.currentTarget as HTMLButtonElement;
+        btn.style.background = accent ? '#006FFF' : 'var(--bg-surface-raised, #1c2128)';
+      }}
+    >
+      <span style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        {icon}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+export default function QuickActionsBar({
+  onEnrollDevice,
+  onNewUser,
+  onServicePrincipal,
+  onDeployPolicy,
+  onComplianceSnapshot,
+}: QuickActionsBarProps) {
+  const { access, unavailable, can } = useQuickActionAccess();
+  const identity = useIdentityAccess();
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '10px 0 14px 0',
+        flexWrap: 'wrap',
+      }}
+    >
+      {unavailable && <p role="alert">Quick actions are unavailable. Refresh to check your permissions again.</p>}
+      {!unavailable && access === null && <p role="status">Checking action permissions…</p>}
+      {identity.unavailable && <p role="alert">Verzeichnisberechtigungen sind nicht verfügbar.</p>}
+      {can('devices.enroll') && <ActionButton
+        accent
+        icon={<PlusIcon style={{ width: 15, height: 15 }} />}
+        label="Enroll Device"
+        onClick={onEnrollDevice}
+      />}
+      {(identity.can('users.read') || identity.can('users.create') || identity.can('users.sessions.invalidate')) && <ActionButton
+        icon={<UserPlusIcon style={{ width: 15, height: 15 }} />}
+        label="Benutzerverwaltung"
+        onClick={onNewUser}
+      />}
+      {can('applications.create') && <ActionButton
+        icon={<KeyIcon style={{ width: 15, height: 15 }} />}
+        label="Service Principal"
+        onClick={onServicePrincipal}
+      />}
+      {can('policies.deploy') && <ActionButton
+        icon={<DocumentCheckIcon style={{ width: 15, height: 15 }} />}
+        label="Deploy Policy"
+        onClick={onDeployPolicy}
+      />}
+      {can('compliance.read') && <ActionButton
+        icon={<ClipboardDocumentListIcon style={{ width: 15, height: 15 }} />}
+        label="Compliance Snapshot"
+        onClick={onComplianceSnapshot}
+      />}
+    </div>
+  );
+}

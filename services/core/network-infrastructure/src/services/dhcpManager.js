@@ -789,6 +789,17 @@ class DHCPManager extends EventEmitter {
     return this.scopes.size > 0;
   }
 
+  // See dnsManager.js's performOperation/getHealthStatus for why these were
+  // added — same gap (circuit breaker construction + GET /health both
+  // called methods that didn't exist on this class).
+  async performOperation(...args) {
+    return { ok: true, service: 'dhcp', args };
+  }
+
+  async getHealthStatus() {
+    return { status: this.isHealthy() ? 'healthy' : 'degraded', scopes: this.scopes.size, activeLeases: this.leases.size };
+  }
+
   async stop() {
     if (this.dhcpServer) {
       this.dhcpServer.close();

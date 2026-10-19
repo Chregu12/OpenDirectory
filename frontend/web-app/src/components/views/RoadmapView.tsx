@@ -149,10 +149,10 @@ const ROADMAP: RoadmapCategory[] = [
   },
 ];
 
-const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string; icon: React.ComponentType<{ className?: string }> }> = {
-  done:        { label: 'Fertig',     color: 'text-[#34C759]', bg: 'bg-[#F0FFF4]', icon: CheckCircleSolid },
-  'in-progress': { label: 'In Arbeit', color: 'text-[#FF9500]', bg: 'bg-[#FFFBEB]', icon: ClockIcon },
-  todo:        { label: 'Offen',      color: 'text-[#8E8E93]', bg: 'bg-[#F2F2F7]', icon: ExclamationCircleIcon },
+const STATUS_CONFIG: Record<Status, { label: string; color: string; bgStyle: React.CSSProperties; icon: React.ComponentType<{ className?: string }> }> = {
+  done:          { label: 'Fertig',     color: 'text-[#34C759]', bgStyle: { background: 'var(--success-light)', color: 'var(--success)' },  icon: CheckCircleSolid },
+  'in-progress': { label: 'In Arbeit', color: 'text-[#FF9500]', bgStyle: { background: 'var(--warning-light)', color: 'var(--warning)' },  icon: ClockIcon },
+  todo:          { label: 'Offen',      color: 'text-[#8b949e]', bgStyle: { background: 'var(--bg-overlay)',    color: 'var(--text-muted)' }, icon: ExclamationCircleIcon },
 };
 
 const ALL_TAGS = Array.from(
@@ -202,35 +202,35 @@ export default function RoadmapView({ onViewChange }: Props) {
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-[#1D1D1F] tracking-tight">Roadmap & TODO</h1>
-        <p className="text-sm text-[#8E8E93] mt-1">Alle Features auf einen Blick — was fertig ist, was gerade gebaut wird und was noch aussteht.</p>
+        <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>Roadmap & TODO</h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Alle Features auf einen Blick — was fertig ist, was gerade gebaut wird und was noch aussteht.</p>
       </div>
 
       {/* Progress Overview */}
-      <div className="bg-white rounded-xl border border-[#E5E5EA] p-5">
+      <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium text-[#1D1D1F]">Gesamtfortschritt</span>
-          <span className="text-sm font-semibold text-[#0071E3]">{donePercent}%</span>
+          <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Gesamtfortschritt</span>
+          <span className="text-sm font-semibold" style={{ color: 'var(--accent)' }}>{donePercent}%</span>
         </div>
-        <div className="h-2 bg-[#F2F2F7] rounded-full overflow-hidden">
+        <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-overlay)' }}>
           <div
-            className="h-full bg-[#0071E3] rounded-full transition-all duration-500"
-            style={{ width: `${donePercent}%` }}
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${donePercent}%`, background: 'var(--accent)' }}
           />
         </div>
         <div className="flex gap-6 mt-4">
           {([ ['done', totals.done], ['in-progress', totals.inProgress], ['todo', totals.todo] ] as [Status, number][]).map(([s, count]) => {
             const cfg = STATUS_CONFIG[s];
             const Icon = cfg.icon;
+            const isActive = filterStatus === s;
             return (
               <button
                 key={s}
                 onClick={() => setFilterStatus(filterStatus === s ? 'all' : s)}
-                className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full border transition-all ${
-                  filterStatus === s
-                    ? `${cfg.bg} border-transparent ${cfg.color} font-medium`
-                    : 'border-[#E5E5EA] text-[#3C3C43] hover:bg-[#F2F2F7]'
-                }`}
+                className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-full border transition-all"
+                style={isActive
+                  ? { ...cfg.bgStyle, borderColor: 'transparent' }
+                  : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
               >
                 <Icon className={`w-4 h-4 ${cfg.color}`} />
                 <span>{cfg.label}</span>
@@ -238,7 +238,7 @@ export default function RoadmapView({ onViewChange }: Props) {
               </button>
             );
           })}
-          <div className="ml-auto text-sm text-[#8E8E93]">{totals.total} Features gesamt</div>
+          <div className="ml-auto text-sm" style={{ color: 'var(--text-muted)' }}>{totals.total} Features gesamt</div>
         </div>
       </div>
 
@@ -249,15 +249,25 @@ export default function RoadmapView({ onViewChange }: Props) {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Feature suchen…"
-            className="w-full pl-3 pr-3 py-2 text-sm bg-white border border-[#E5E5EA] rounded-lg focus:outline-none focus:border-[#0071E3] focus:ring-1 focus:ring-[#0071E3]"
+            className="w-full pl-3 pr-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1"
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-primary)',
+            }}
           />
         </div>
         <div className="flex items-center gap-2">
-          <FunnelIcon className="w-4 h-4 text-[#8E8E93]" />
+          <FunnelIcon className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
           <select
             value={filterTag}
             onChange={e => setFilterTag(e.target.value)}
-            className="text-sm bg-white border border-[#E5E5EA] rounded-lg px-3 py-2 focus:outline-none focus:border-[#0071E3]"
+            className="text-sm border rounded-lg px-3 py-2 focus:outline-none"
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-primary)',
+            }}
           >
             <option value="">Alle Tags</option>
             {ALL_TAGS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -266,7 +276,8 @@ export default function RoadmapView({ onViewChange }: Props) {
         {(filterStatus !== 'all' || filterTag || search) && (
           <button
             onClick={() => { setFilterStatus('all'); setFilterTag(''); setSearch(''); }}
-            className="text-sm text-[#0071E3] hover:underline"
+            className="text-sm hover:underline"
+            style={{ color: 'var(--accent)' }}
           >
             Filter zurücksetzen
           </button>
@@ -278,69 +289,78 @@ export default function RoadmapView({ onViewChange }: Props) {
         const catDone = cat.items.filter(i => i.status === 'done').length;
         const isCollapsed = collapsed[cat.id];
         return (
-          <div key={cat.id} className="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden">
+          <div key={cat.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
             {/* Category Header */}
             <button
               onClick={() => toggleCategory(cat.id)}
-              className="w-full flex items-center justify-between px-5 py-4 hover:bg-[#F9F9F9] transition-colors"
+              className="w-full flex items-center justify-between px-5 py-4 transition-colors"
+              style={{ background: 'transparent' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
               <div className="flex items-center gap-3">
                 <span className="text-xl">{cat.emoji}</span>
-                <span className="font-semibold text-[#1D1D1F]">{cat.title}</span>
-                <span className="text-xs text-[#8E8E93] bg-[#F2F2F7] px-2 py-0.5 rounded-full">
+                <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{cat.title}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--bg-overlay)', color: 'var(--text-muted)' }}>
                   {catDone}/{cat.items.length}
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-24 h-1.5 bg-[#F2F2F7] rounded-full overflow-hidden">
+                <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-overlay)' }}>
                   <div
-                    className="h-full bg-[#34C759] rounded-full"
-                    style={{ width: `${cat.items.length ? (catDone / cat.items.length) * 100 : 0}%` }}
+                    className="h-full rounded-full"
+                    style={{ width: `${cat.items.length ? (catDone / cat.items.length) * 100 : 0}%`, background: 'var(--success)' }}
                   />
                 </div>
                 {isCollapsed
-                  ? <ChevronRightIcon className="w-4 h-4 text-[#8E8E93]" />
-                  : <ChevronDownIcon  className="w-4 h-4 text-[#8E8E93]" />}
+                  ? <ChevronRightIcon className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                  : <ChevronDownIcon  className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />}
               </div>
             </button>
 
             {/* Items */}
             {!isCollapsed && (
-              <div className="divide-y divide-[#F2F2F7]">
+              <div style={{ borderTop: '1px solid var(--border)' }}>
                 {cat.items.map(item => {
                   const cfg = STATUS_CONFIG[item.status];
                   const Icon = cfg.icon;
                   return (
-                    <div key={item.id} className="px-5 py-3.5 flex items-start gap-4 hover:bg-[#F9F9F9] group transition-colors">
+                    <div
+                      key={item.id}
+                      className="px-5 py-3.5 flex items-start gap-4 group transition-colors"
+                      style={{ borderTop: '1px solid var(--border)' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
                       <Icon className={`w-5 h-5 mt-0.5 flex-shrink-0 ${cfg.color}`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-sm font-medium ${item.status === 'done' ? 'text-[#1D1D1F]' : item.status === 'in-progress' ? 'text-[#1D1D1F]' : 'text-[#3C3C43]'}`}>
+                          <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                             {item.title}
                           </span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.bg} ${cfg.color}`}>
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={cfg.bgStyle}>
                             {cfg.label}
                           </span>
                           {item.tags?.map(tag => (
                             <button
                               key={tag}
                               onClick={() => setFilterTag(filterTag === tag ? '' : tag)}
-                              className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
-                                filterTag === tag
-                                  ? 'border-[#0071E3] text-[#0071E3] bg-[#EAF4FF]'
-                                  : 'border-[#E5E5EA] text-[#8E8E93] hover:border-[#0071E3] hover:text-[#0071E3]'
-                              }`}
+                              className="text-xs px-1.5 py-0.5 rounded border transition-colors"
+                              style={filterTag === tag
+                                ? { borderColor: 'var(--accent)', color: 'var(--accent)', background: 'var(--accent-light)' }
+                                : { borderColor: 'var(--border)', color: 'var(--text-muted)' }}
                             >
                               {tag}
                             </button>
                           ))}
                         </div>
-                        <p className="text-xs text-[#8E8E93] mt-0.5 leading-relaxed">{item.description}</p>
+                        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--text-muted)' }}>{item.description}</p>
                       </div>
                       {item.view && onViewChange && (
                         <button
                           onClick={() => onViewChange(item.view!)}
-                          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-[#0071E3] hover:underline"
+                          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs hover:underline"
+                          style={{ color: 'var(--accent)' }}
                         >
                           Öffnen
                           <ArrowTopRightOnSquareIcon className="w-3 h-3" />
@@ -356,7 +376,7 @@ export default function RoadmapView({ onViewChange }: Props) {
       })}
 
       {filtered.length === 0 && (
-        <div className="text-center py-16 text-[#8E8E93]">
+        <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
           <ExclamationCircleIcon className="w-10 h-10 mx-auto mb-3 opacity-40" />
           <p className="text-sm">Keine Features für diesen Filter gefunden.</p>
         </div>

@@ -30,6 +30,14 @@ modules:
       validation_strict: false
 
   # Optional modules (user selectable)
+  quick-actions:
+    enabled: false
+    port: 3950
+    required: false
+    features:
+      delegated-orchestration: true
+      live-authorization: true
+
   network-infrastructure:
     enabled: false
     port: 3007
@@ -204,37 +212,18 @@ modules:
     enabled: false
     port: 3018
     features:
-      software-license-tracking: true
-      compliance-monitoring: true
-      license-optimization: true
-      asset-management: true
-      real-time-usage-tracking: true
-      mobile-integration: true
-      audit-reporting: true
-      cost-analysis: true
-      renewal-management: true
+      canonical-license-adapter: true
+      software-license-tracking: false
+      compliance-monitoring: false
+      license-optimization: false
+      asset-management: false
+      real-time-usage-tracking: false
+      mobile-integration: false
+      audit-reporting: false
+      cost-analysis: false
+      renewal-management: false
     config:
-      database:
-        url: postgresql://localhost/opendirectory_licenses
-        pool_size: 10
-      mobile_integration:
-        service_url: http://mobile-management:3013
-        sync_interval: 300000
-        enabled: true
-      alerting:
-        enabled: true
-        email_notifications: true
-        utilization_threshold: 85
-        expiry_warning_days: 30
-        overusage_threshold: 5
-      compliance:
-        auto_remediation: false
-        scan_interval: 86400
-        retention_days: 365
-      reporting:
-        retention_days: 90
-        scheduled_reports: true
-        formats: [pdf, excel, json]
+      policy_service_url: http://policy-service:3004
 
 # Gateway configuration
 gateway:

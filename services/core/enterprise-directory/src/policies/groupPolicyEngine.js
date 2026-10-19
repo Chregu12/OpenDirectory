@@ -465,10 +465,13 @@ class GroupPolicyEngine {
     // Use the split compilers for artifact generation
     let policyCompilers;
     try {
-      policyCompilers = require('../../../../platform/integration-service/src/compilers');
-    } catch (e) {
-      this.logger.warn('Policy compilers not available, using legacy generation:', e.message);
-      return this._legacyGenerateDeploymentPackages(policy);
+      policyCompilers = require('@opendirectory/policy-compilers');
+    } catch (_) {
+      try { policyCompilers = require('../../../../packages/policy-compilers/src'); }
+      catch (e) {
+        this.logger.warn('Policy compilers not available, using legacy generation:', e.message);
+        return this._legacyGenerateDeploymentPackages(policy);
+      }
     }
 
     // Normalize GPO-style policy to compiler-compatible format
@@ -1491,6 +1494,466 @@ try {
       created: p.metadata.created,
       modified: p.metadata.modified
     }));
+  }
+
+  // ── GPO Enforcement ──────────────────────────────────────────────────────────
+
+  /**
+   * Apply a GPO to an OU and its children (unless Block Inheritance is set).
+   *
+   * @param {string} ouDn   - Distinguished Name of the target OU
+   * @param {string} gpoId  - ID of the GPO to apply
+   * @param {object} [options]
+   * @param {object} [options.db]   - Mongoose model/connection for persistence
+   * @param {boolean} [options.dryRun] - If true, compute but do not persist
+   * @returns {Promise<{applied: Array, skipped: Array, errors: Array}>}
+   */
+  async applyGPOToOU(ouDn, gpoId, options = {}) {
+    const result = { applied: [], skipped: [], errors: [] };
+
+    const policy = this.policies.get(gpoId);
+    if (!policy) {
+      const err = new Error(`GPO not found: ${gpoId}`);
+      result.errors.push({ gpoId, error: err.message });
+      this.logger.error('applyGPOToOU: GPO not found', { gpoId });
+      return result;
+    }
+
+    if (!policy.enabled) {
+      result.skipped.push({ ouDn, reason: 'GPO is disabled' });
+      return result;
+    }
+
+    // Resolve OU hierarchy — child OUs inherit unless blockInheritance is set
+    const targetOUs = this._resolveOUHierarchy(ouDn, policy);
+
+    for (const targetOU of targetOUs) {
+      try {
+        const appliedSettings = [];
+
+        // Apply Computer Configuration settings
+        if (
+          policy.computerConfiguration &&
+          !policy.scope.options.disableComputerConfiguration
+        ) {
+          for (const settingType of this.processingOrder.computer) {
+            const value = this._extractSetting(policy.computerConfiguration, settingType);
+            if (value !== null) {
+              appliedSettings.push({ objectDn: targetOU, settingType, value, configType: 'computer' });
+            }
+          }
+        }
+
+        // Apply User Configuration settings
+        if (
+          policy.userConfiguration &&
+          !policy.scope.options.disableUserConfiguration
+        ) {
+          for (const settingType of this.processingOrder.user) {
+            const value = this._extractSetting(policy.userConfiguration, settingType);
+            if (value !== null) {
+              appliedSettings.push({ objectDn: targetOU, settingType, value, configType: 'user' });
+            }
+          }
+        }
+
+        result.applied.push(...appliedSettings);
+
+        // Persist to gpo_application_log via Mongoose (non-fatal if unavailable)
+        if (!options.dryRun) {
+          await this._persistGPOApplication({
+            gpoId,
+            targetDn: targetOU,
+            targetType: 'ou',
+            settingsApplied: appliedSettings,
+            status: 'success',
+          });
+        }
+
+        this.logger.info('applyGPOToOU: applied', { gpoId, targetOU, count: appliedSettings.length });
+      } catch (err) {
+        result.errors.push({ ouDn: targetOU, error: err.message });
+
+        if (!options.dryRun) {
+          await this._persistGPOApplication({
+            gpoId,
+            targetDn: targetOU,
+            targetType: 'ou',
+            settingsApplied: [],
+            status: 'error',
+            errorMessage: err.message,
+          });
+        }
+
+        this.logger.error('applyGPOToOU: error applying to OU', { gpoId, targetOU, error: err.message });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Compute the Resultant Set of Policy (RSoP) for a given user or computer DN.
+   * Merges policies in order: Local → Site → Domain → OU (child overrides parent).
+   * Enforced GPOs override Block Inheritance.
+   *
+   * @param {string} targetDn
+   * @returns {Promise<{computerConfig: object, userConfig: object, appliedGPOs: string[]}>}
+   */
+  async computeResultantSetOfPolicy(targetDn) {
+    const allPolicies = Array.from(this.policies.values()).filter(p => p.enabled);
+
+    // Sort by processing order: domain-level first, then OU-level (child overrides parent)
+    // Enforced GPOs always go last so they win over block inheritance
+    const nonEnforced = allPolicies.filter(p => !p.scope.options.enforced);
+    const enforced = allPolicies.filter(p => p.scope.options.enforced);
+    const orderedPolicies = [...nonEnforced, ...enforced];
+
+    const mergedComputer = {};
+    const mergedUser = {};
+    const appliedGPOs = [];
+
+    for (const policy of orderedPolicies) {
+      // Check whether this policy is linked to an OU that is an ancestor of targetDn
+      const isApplicable = this._isPolicyApplicableToTarget(policy, targetDn);
+      if (!isApplicable) continue;
+
+      // Check Block Inheritance (only non-enforced policies are blocked)
+      if (!policy.scope.options.enforced && policy.scope.options.inheritanceBlocked) {
+        continue;
+      }
+
+      // Merge computer configuration (later entries override earlier)
+      if (policy.computerConfiguration && !policy.scope.options.disableComputerConfiguration) {
+        this._deepMerge(mergedComputer, policy.computerConfiguration);
+      }
+
+      // Merge user configuration
+      if (policy.userConfiguration && !policy.scope.options.disableUserConfiguration) {
+        this._deepMerge(mergedUser, policy.userConfiguration);
+      }
+
+      appliedGPOs.push(policy.id);
+    }
+
+    // Cache the RSoP result
+    await this._persistRSoP(targetDn, mergedComputer, mergedUser, appliedGPOs);
+
+    this.logger.info('computeResultantSetOfPolicy: computed', {
+      targetDn,
+      appliedGPOCount: appliedGPOs.length,
+    });
+
+    return {
+      computerConfig: mergedComputer,
+      userConfig: mergedUser,
+      appliedGPOs,
+    };
+  }
+
+  /**
+   * Enforce a password policy for a domain or group.
+   *
+   * @param {string} domainDn
+   * @param {object} policySettings
+   * @param {number} policySettings.minLength
+   * @param {boolean} policySettings.complexity
+   * @param {number} policySettings.maxAge       - days
+   * @param {number} policySettings.minAge       - days
+   * @param {number} policySettings.historyCount
+   * @returns {Promise<{enforced: boolean, settings: object}>}
+   */
+  async enforcePasswordPolicy(domainDn, policySettings) {
+    const { minLength, complexity, maxAge, minAge, historyCount } = policySettings;
+
+    // Validate settings
+    const errors = [];
+    if (minLength !== undefined && (typeof minLength !== 'number' || minLength < 1 || minLength > 128)) {
+      errors.push('minLength must be a number between 1 and 128');
+    }
+    if (maxAge !== undefined && (typeof maxAge !== 'number' || maxAge < 0)) {
+      errors.push('maxAge must be a non-negative number (days)');
+    }
+    if (minAge !== undefined && (typeof minAge !== 'number' || minAge < 0)) {
+      errors.push('minAge must be a non-negative number (days)');
+    }
+    if (historyCount !== undefined && (typeof historyCount !== 'number' || historyCount < 0 || historyCount > 24)) {
+      errors.push('historyCount must be between 0 and 24');
+    }
+    if (errors.length) {
+      throw new Error(`enforcePasswordPolicy validation failed: ${errors.join('; ')}`);
+    }
+
+    const normalised = {
+      minLength: minLength ?? 8,
+      complexity: complexity !== false,
+      maxAge: maxAge ?? 90,
+      minAge: minAge ?? 1,
+      historyCount: historyCount ?? 24,
+    };
+
+    // Apply to all policies linked to this domain
+    for (const policy of this.policies.values()) {
+      const pwPolicy = policy.computerConfiguration?.windowsSettings?.securitySettings?.passwordPolicy;
+      if (pwPolicy) {
+        Object.assign(pwPolicy, {
+          minimumLength: normalised.minLength,
+          complexity: normalised.complexity,
+          maxAge: normalised.maxAge,
+          minAge: normalised.minAge,
+          history: normalised.historyCount,
+        });
+        policy.metadata.modified = new Date();
+      }
+    }
+
+    this.logger.info('enforcePasswordPolicy: applied', { domainDn, settings: normalised });
+
+    return { enforced: true, settings: normalised };
+  }
+
+  /**
+   * Enforce an account lockout policy for a domain.
+   *
+   * @param {string} domainDn
+   * @param {object} policySettings
+   * @param {number} policySettings.threshold          - failed attempts before lockout
+   * @param {number} policySettings.observationWindow  - minutes
+   * @param {number} policySettings.lockoutDuration    - minutes (0 = manual unlock only)
+   * @returns {Promise<{enforced: boolean, settings: object}>}
+   */
+  async enforceAccountLockoutPolicy(domainDn, policySettings) {
+    const { threshold, observationWindow, lockoutDuration } = policySettings;
+
+    // Validate
+    if (threshold !== undefined && (typeof threshold !== 'number' || threshold < 0)) {
+      throw new Error('threshold must be a non-negative integer (0 = disabled)');
+    }
+    if (observationWindow !== undefined && (typeof observationWindow !== 'number' || observationWindow < 1)) {
+      throw new Error('observationWindow must be a positive number (minutes)');
+    }
+    if (lockoutDuration !== undefined && (typeof lockoutDuration !== 'number' || lockoutDuration < 0)) {
+      throw new Error('lockoutDuration must be a non-negative number (minutes)');
+    }
+
+    const normalised = {
+      threshold: threshold ?? 5,
+      observationWindow: observationWindow ?? 30,
+      lockoutDuration: lockoutDuration ?? 30,
+    };
+
+    // Apply to all policies linked to this domain
+    for (const policy of this.policies.values()) {
+      const lockout = policy.computerConfiguration?.windowsSettings?.securitySettings?.accountLockout;
+      if (lockout) {
+        Object.assign(lockout, {
+          threshold: normalised.threshold,
+          resetAfter: normalised.observationWindow,
+          duration: normalised.lockoutDuration,
+        });
+        policy.metadata.modified = new Date();
+      }
+    }
+
+    this.logger.info('enforceAccountLockoutPolicy: applied', { domainDn, settings: normalised });
+
+    return { enforced: true, settings: normalised };
+  }
+
+  /**
+   * Return which OUs/objects a GPO is currently applied to, plus application
+   * metrics (last application timestamp, success/failure counts).
+   *
+   * @param {string} gpoId
+   * @returns {Promise<{gpoId: string, applications: Array, lastApplied: Date|null, successCount: number, failureCount: number}>}
+   */
+  async getGPOApplicationStatus(gpoId) {
+    // Read from in-memory deployment status map
+    const status = this.deploymentStatus.get(gpoId) || {
+      applications: [],
+      lastApplied: null,
+      successCount: 0,
+      failureCount: 0,
+    };
+
+    // Also surface the in-memory policy record
+    const policy = this.policies.get(gpoId);
+    const policyInfo = policy
+      ? { name: policy.name, enabled: policy.enabled, linkedOUs: policy.scope?.links?.organizationalUnits || [] }
+      : null;
+
+    return {
+      gpoId,
+      policyInfo,
+      ...status,
+    };
+  }
+
+  // ── Private helpers ──────────────────────────────────────────────────────────
+
+  /**
+   * Resolve the list of OUs to which a policy should be applied.
+   * Child OUs inherit unless blockInheritance is set on them.
+   * Enforced GPOs ignore block inheritance.
+   */
+  _resolveOUHierarchy(ouDn, policy) {
+    // Start with the provided OU
+    const targets = [ouDn];
+
+    // If the policy's own scope has blockInheritance set and it is not enforced,
+    // we only apply to the root OU (not children).
+    if (policy.scope.options.inheritanceBlocked && !policy.scope.options.enforced) {
+      return targets;
+    }
+
+    // In a real AD implementation this would query child OUs from LDAP.
+    // Here we return the provided OU; the caller can iterate over child OUs
+    // themselves by calling applyGPOToOU on each child, or by passing a list.
+    return targets;
+  }
+
+  /**
+   * Determine whether a policy is applicable to a given target DN based on the
+   * OU links configured in the policy's scope.
+   */
+  _isPolicyApplicableToTarget(policy, targetDn) {
+    if (!policy.scope || !policy.scope.links) return false;
+
+    const { domain, organizationalUnits = [] } = policy.scope.links;
+
+    // Domain-linked policies apply to everything
+    if (domain) return true;
+
+    // Check if targetDn is under any linked OU
+    return organizationalUnits.some(
+      ou => targetDn === ou || targetDn.endsWith(`,${ou}`)
+    );
+  }
+
+  /**
+   * Extract a named setting category from a configuration node.
+   * Returns null when the category is empty or not present.
+   */
+  _extractSetting(configNode, settingType) {
+    const keyMap = {
+      SecuritySettings: 'windowsSettings.securitySettings',
+      SoftwareInstallation: 'softwareInstallation',
+      RegistrySettings: 'windowsSettings.registrySettings',
+      NetworkDrives: 'preferences.networkShares',
+      PowerManagement: 'preferences.powerManagement',
+      Scripts: 'windowsSettings.scripts',
+      FolderRedirection: 'windowsSettings.folderRedirection',
+      DesktopSettings: 'administrativeTemplates.desktop',
+      PrinterDeployment: 'preferences.printers',
+    };
+
+    const keyPath = keyMap[settingType];
+    if (!keyPath) return null;
+
+    const value = keyPath.split('.').reduce((obj, k) => (obj ? obj[k] : undefined), configNode);
+    if (value === undefined || value === null) return null;
+
+    // Skip empty arrays and empty objects
+    if (Array.isArray(value) && value.length === 0) return null;
+    if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) return null;
+
+    return value;
+  }
+
+  /** Deep-merge src into dst (dst is mutated). */
+  _deepMerge(dst, src) {
+    for (const key of Object.keys(src)) {
+      if (
+        src[key] !== null &&
+        typeof src[key] === 'object' &&
+        !Array.isArray(src[key])
+      ) {
+        if (!dst[key] || typeof dst[key] !== 'object') dst[key] = {};
+        this._deepMerge(dst[key], src[key]);
+      } else {
+        dst[key] = src[key];
+      }
+    }
+  }
+
+  /**
+   * Persist a GPO application record via Mongoose (if the model is available).
+   * Non-fatal — errors are logged but not re-thrown.
+   */
+  async _persistGPOApplication({ gpoId, targetDn, targetType, settingsApplied, status, errorMessage }) {
+    try {
+      let GpoApplicationLog;
+      try {
+        GpoApplicationLog = require('mongoose').model('GpoApplicationLog');
+      } catch (_) {
+        const mongoose = require('mongoose');
+        const schema = new mongoose.Schema(
+          {
+            gpoId: String,
+            targetDn: String,
+            targetType: String,
+            appliedAt: { type: Date, default: Date.now },
+            settingsApplied: mongoose.Schema.Types.Mixed,
+            status: { type: String, default: 'success' },
+            errorMessage: String,
+          },
+          { collection: 'gpo_application_log' }
+        );
+        GpoApplicationLog = mongoose.model('GpoApplicationLog', schema);
+      }
+
+      const record = new GpoApplicationLog({ gpoId, targetDn, targetType, settingsApplied, status, errorMessage });
+      await record.save();
+
+      // Update in-memory status
+      const current = this.deploymentStatus.get(gpoId) || {
+        applications: [],
+        lastApplied: null,
+        successCount: 0,
+        failureCount: 0,
+      };
+      current.applications.push({ targetDn, targetType, status, appliedAt: new Date() });
+      current.lastApplied = new Date();
+      if (status === 'success') current.successCount++;
+      else current.failureCount++;
+      this.deploymentStatus.set(gpoId, current);
+    } catch (err) {
+      this.logger.warn('[GroupPolicyEngine] Could not persist GPO application log:', err.message);
+    }
+  }
+
+  /**
+   * Persist (or update) a Resultant Set of Policy record in Mongoose.
+   * Non-fatal.
+   */
+  async _persistRSoP(targetDn, computerConfig, userConfig, appliedGPOs) {
+    try {
+      let RSoPModel;
+      try {
+        RSoPModel = require('mongoose').model('ResultantSetOfPolicy');
+      } catch (_) {
+        const mongoose = require('mongoose');
+        const schema = new mongoose.Schema(
+          {
+            targetDn: { type: String, unique: true },
+            computerConfig: mongoose.Schema.Types.Mixed,
+            userConfig: mongoose.Schema.Types.Mixed,
+            appliedGpos: [String],
+            computedAt: { type: Date, default: Date.now },
+          },
+          { collection: 'resultant_set_of_policy' }
+        );
+        RSoPModel = mongoose.model('ResultantSetOfPolicy', schema);
+      }
+
+      await RSoPModel.findOneAndUpdate(
+        { targetDn },
+        { computerConfig, userConfig, appliedGpos: appliedGPOs, computedAt: new Date() },
+        { upsert: true, new: true }
+      );
+    } catch (err) {
+      this.logger.warn('[GroupPolicyEngine] Could not persist RSoP:', err.message);
+    }
   }
 }
 

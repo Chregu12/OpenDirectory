@@ -112,7 +112,7 @@ export default function WizardLayout({
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className={`bg-gradient-to-r ${c.gradient} px-8 py-6 text-white relative`}>
           {/* Close */}
-          <button onClick={onClose} className="absolute top-4 right-4 text-white/70 hover:text-white">
+          <button onClick={onClose} aria-label="Assistent schliessen" className="absolute top-4 right-4 text-white/70 hover:text-white">
             <XMarkIcon className="h-6 w-6" />
           </button>
 

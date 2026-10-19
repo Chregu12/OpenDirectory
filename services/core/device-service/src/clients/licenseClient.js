@@ -7,7 +7,7 @@
  * All methods return null on network failure so callers can respond with 503.
  */
 
-const BASE = process.env.LICENSE_SERVICE_URL || 'http://license-management:3018';
+const BASE = process.env.LICENSE_SERVICE_URL || 'http://license-management';
 const TIMEOUT_MS = 5000;
 
 async function _request(method, path, body) {

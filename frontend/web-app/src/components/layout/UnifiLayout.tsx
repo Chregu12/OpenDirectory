@@ -2,10 +2,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, authApi } from '@/lib/api';
-import { Toaster } from 'react-hot-toast';
+import { api } from '@/lib/api';
+import { logout } from '@/lib/auth';
+import { directoryUsers } from '@/lib/directoryUsers';
+import toast, { Toaster } from 'react-hot-toast';
 import {
   HomeIcon,
+  BuildingOfficeIcon,
   ComputerDesktopIcon,
   Cog6ToothIcon,
   ChartBarIcon,
@@ -62,6 +65,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'printers',     name: 'Drucker',             view: 'printers',     type: 'Seite' },
   { id: 'permissions',  name: 'Berechtigungen',      view: 'permissions',  type: 'Seite' },
   { id: 'blueprints',   name: 'Blueprints',          view: 'blueprints',   type: 'Seite' },
+  { id: 'company-blueprints', name: 'Firmen-Blueprints', view: 'company-blueprints', type: 'Seite' },
   { id: 'antivirus',    name: 'Antivirus',           view: 'antivirus',    type: 'Seite' },
   { id: 'audit',        name: 'Audit Log',           view: 'audit',        type: 'Seite' },
   { id: 'backup',       name: 'Backup & DR',         view: 'backup',       type: 'Seite' },
@@ -110,7 +114,7 @@ interface LayoutProps {
 }
 
 type NavItem =
-  | { type: 'item'; id: string; name: string; icon: React.ComponentType<{ className?: string }> }
+  | { type: 'item'; id: string; name: string; icon: React.ComponentType<React.SVGProps<SVGSVGElement>> }
   | { type: 'section'; label: string };
 
 // Nav items that require a specific module to be enabled
@@ -133,6 +137,14 @@ function getInitials(name: string): string {
 export default function UnifiLayout({ children, activeView, onViewChange, enabledModules, currentUser }: LayoutProps) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [canReviewCompanies, setCanReviewCompanies] = useState(false);
+  useEffect(() => {
+    let active = true; setCanReviewCompanies(false);
+    const invalid = () => { active = false; setCanReviewCompanies(false); };
+    window.addEventListener('od:session-error', invalid);
+    directoryUsers.access().then(access => { if (active) setCanReviewCompanies(!access.demoMode && access.companyRegistrationReviewProtocol === 1 && access.permissions.includes('company.registrations.review')); }).catch(() => { if (active) setCanReviewCompanies(false); });
+    return () => { active = false; window.removeEventListener('od:session-error', invalid); };
+  }, [currentUser]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
@@ -255,15 +267,14 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
 
     // Fetch real users and devices in parallel
     const [usersRes, devicesRes] = await Promise.allSettled([
-      api.get('/api/users').catch(() => api.get('/api/lldap/users')),
+      directoryUsers.access().then(access => access.permissions.includes('users.read') ? directoryUsers.list(1, query.trim()) : { users: [] }),
       api.get('/api/devices').catch(() => api.get('/api/devices/registry')),
     ]);
 
     const dynamicResults: SearchItem[] = [...pageMatches];
 
     if (usersRes.status === 'fulfilled') {
-      const users = Array.isArray(usersRes.value?.data) ? usersRes.value.data
-        : usersRes.value?.data?.users ?? usersRes.value?.data?.data ?? [];
+      const users = usersRes.value.users;
       for (const u of users) {
         const name = u.displayName ?? u.name ?? u.username ?? u.id ?? '';
         if (name.toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q)) {
@@ -298,21 +309,26 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
 
   const handleLogout = async () => {
     try {
-      await authApi.logout();
-    } catch (_) {}
-    localStorage.removeItem('auth_user');
-    router.push('/login');
+      await logout();
+      router.replace('/login');
+    } catch {
+      toast.error('Abmeldung nicht bestätigt. Bitte erneut versuchen.');
+    }
   };
 
   // Navigation structure — ABM-style sections
   const ALL_NAV_ITEMS: NavItem[] = [
     { type: 'section', label: 'Übersicht' },
     { type: 'item', id: 'dashboard',      name: 'Dashboard',         icon: HomeIcon },
+    { type: 'item', id: 'organization',   name: 'Organisation',      icon: BuildingOfficeIcon },
+    { type: 'item', id: 'registration-reviews', name: 'Firmenprüfung', icon: DocumentCheckIcon },
 
     { type: 'section', label: 'Verzeichnis' },
     { type: 'item', id: 'users',          name: 'Benutzer',          icon: UserGroupIcon },
+    { type: 'item', id: 'usergroups',     name: 'Gruppen',           icon: UserGroupIcon },
     { type: 'item', id: 'permissions',    name: 'Rollen & Rechte',   icon: KeyIcon },
     { type: 'item', id: 'pim',            name: 'PIM',               icon: ShieldCheckIcon },
+    { type: 'item', id: 'offboarding-access', name: 'Austritt: Rollen & PIM', icon: KeyIcon },
     { type: 'item', id: 'mfa',            name: 'MFA / 2FA',         icon: DevicePhoneMobileIcon },
     { type: 'item', id: 'sspr',           name: 'Passwort-Reset',    icon: ArrowUturnLeftIcon },
     { type: 'item', id: 'identity',       name: 'Identity Provider', icon: FingerPrintIcon },
@@ -321,7 +337,9 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
 
     { type: 'section', label: 'Geräte' },
     { type: 'item', id: 'devices',        name: 'Geräte',            icon: ComputerDesktopIcon },
+    { type: 'item', id: 'device-returns', name: 'Geräterückgaben',    icon: ArrowUturnLeftIcon },
     { type: 'item', id: 'blueprints',     name: 'Blueprints',        icon: RectangleStackIcon },
+    { type: 'item', id: 'company-blueprints', name: 'Firmen-Blueprints', icon: RectangleStackIcon },
     { type: 'item', id: 'antivirus',      name: 'Antivirus',         icon: BugAntIcon },
     { type: 'item', id: 'appstore',       name: 'App Store',         icon: ShoppingBagIcon },
     { type: 'item', id: 'licenses',       name: 'Lizenz-Kiosk',      icon: TagIcon },
@@ -355,6 +373,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
   // Hide nav items whose controlling module is disabled
   const navigationItems = ALL_NAV_ITEMS.filter(item => {
     if (item.type === 'section') return true;
+    if (item.id === 'registration-reviews') return canReviewCompanies;
     const required = NAV_REQUIRED_MODULE[item.id];
     if (!required) return true;
     if (!enabledModules || enabledModules.length === 0) return true;
@@ -369,8 +388,8 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
       {/* Org header */}
       <div
         style={{
-          height: 'var(--apple-topbar-height)',
-          borderBottom: '1px solid var(--apple-gray-2)',
+          height: 'var(--topbar-height)',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
           padding: '0 16px',
           display: 'flex',
           alignItems: 'center',
@@ -382,7 +401,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
           style={{
             width: 32,
             height: 32,
-            background: 'var(--apple-blue)',
+            background: '#006FFF',
             borderRadius: 8,
             display: 'flex',
             alignItems: 'center',
@@ -390,20 +409,20 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
             flexShrink: 0,
           }}
         >
-          <span style={{ color: 'white', fontWeight: 700, fontSize: 12 }}>OD</span>
+          <span style={{ color: '#ffffff', fontWeight: 700, fontSize: 12 }}>OD</span>
         </div>
         <div style={{ minWidth: 0 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--apple-text-primary)', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#e4e6ea', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             OpenDirectory
           </p>
-          <p style={{ fontSize: 11, color: 'var(--apple-text-secondary)', lineHeight: 1.2 }}>
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.2 }}>
             opendirectory.local
           </p>
         </div>
         <button
           onClick={() => setSidebarOpen(false)}
           className="lg:hidden ml-auto"
-          style={{ color: 'var(--apple-gray-5)', padding: 4, flexShrink: 0 }}
+          style={{ color: 'rgba(255,255,255,0.5)', padding: 4, flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
         >
           <XMarkIcon className="w-5 h-5" />
         </button>
@@ -420,7 +439,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                   padding: '16px 16px 4px 16px',
                   fontSize: 11,
                   fontWeight: 600,
-                  color: 'var(--apple-gray-6)',
+                  color: 'rgba(255,255,255,0.35)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
                 }}
@@ -439,23 +458,25 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                width: '100%',
-                padding: '6px 16px',
-                fontSize: 14,
-                fontWeight: 400,
+                width: 'calc(100% - 16px)',
+                margin: '1px 8px',
+                padding: '6px 10px',
+                fontSize: 13,
+                fontWeight: isActive ? 600 : 400,
                 textAlign: 'left',
-                background: isActive ? 'var(--apple-blue-light)' : 'transparent',
-                color: isActive ? 'var(--apple-blue)' : 'var(--apple-text-primary)',
-                borderLeft: isActive ? '2px solid var(--apple-blue)' : '2px solid transparent',
-                borderRight: 'none',
-                borderTop: 'none',
-                borderBottom: 'none',
+                background: isActive ? '#006FFF' : 'transparent',
+                color: isActive ? '#ffffff' : 'rgba(255,255,255,0.6)',
+                border: 'none',
+                borderRadius: 8,
                 cursor: 'pointer',
                 transition: 'background 0.15s, color 0.15s',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
               onMouseEnter={e => {
                 if (!isActive) {
-                  (e.currentTarget as HTMLButtonElement).style.background = '#F5F5F7';
+                  (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)';
                 }
               }}
               onMouseLeave={e => {
@@ -469,7 +490,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                   width: 16,
                   height: 16,
                   flexShrink: 0,
-                  color: isActive ? 'var(--apple-blue)' : 'var(--apple-gray-6)',
+                  color: isActive ? '#ffffff' : 'rgba(255,255,255,0.5)',
                 }}
               />
               {item.name}
@@ -481,7 +502,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
   );
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--apple-gray-1)' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <Toaster
         position="top-right"
         toastOptions={{
@@ -512,9 +533,9 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
           top: 0,
           left: 0,
           bottom: 0,
-          width: 'var(--apple-sidebar-width)',
-          background: '#FFFFFF',
-          borderRight: '1px solid var(--apple-gray-2)',
+          width: 'var(--sidebar-width)',
+          background: '#0a0d10',
+          borderRight: '1px solid rgba(255,255,255,0.07)',
           zIndex: 50,
           transition: 'transform 0.3s ease',
           display: 'flex',
@@ -524,24 +545,29 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
         <SidebarContent />
       </aside>
 
-      {/* Main area — offset by sidebar width on desktop */}
+      {/* Main area — offset by sidebar width on desktop.
+          The offset MUST come from the `lg:ml-[...]` class, not an inline
+          style: an inline `marginLeft` always wins over the Tailwind class
+          (inline styles beat class selectors), which pinned the margin to 0
+          at every breakpoint and let the fixed 240px sidebar overlap the
+          content (e.g. the DevicesView tab bar) on lg+ screens. Keep the
+          left margin out of the inline style block entirely. */}
       <div
         style={{
-          marginLeft: 0,
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
           height: '100%',
         }}
-        className="lg:ml-[240px]"
+        className="ml-0 lg:ml-[var(--sidebar-width)]"
       >
         {/* Top bar */}
         <header
           style={{
-            height: 'var(--apple-topbar-height)',
-            background: '#FFFFFF',
-            borderBottom: '1px solid var(--apple-gray-2)',
+            height: 'var(--topbar-height)',
+            background: 'var(--bg-topbar)',
+            borderBottom: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             padding: '0 20px',
@@ -556,7 +582,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
           <button
             className="lg:hidden"
             onClick={() => setSidebarOpen(true)}
-            style={{ color: 'var(--apple-gray-6)', padding: 4, flexShrink: 0 }}
+            style={{ color: 'var(--text-secondary)', padding: 4, flexShrink: 0 }}
           >
             <Bars3Icon className="w-5 h-5" />
           </button>
@@ -564,7 +590,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
           {/* App name — mobile only, desktop has it in sidebar */}
           <span
             className="lg:hidden"
-            style={{ fontSize: 15, fontWeight: 600, color: 'var(--apple-text-primary)', flexShrink: 0 }}
+            style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', flexShrink: 0 }}
           >
             OpenDirectory
           </span>
@@ -579,23 +605,23 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                 gap: 6,
                 width: '100%',
                 maxWidth: 280,
-                background: 'var(--apple-gray-1)',
-                border: 'none',
+                background: 'var(--bg-input)',
+                border: '1px solid var(--border)',
                 borderRadius: 8,
                 padding: '7px 12px',
-                color: 'var(--apple-gray-5)',
+                color: 'var(--text-muted)',
                 fontSize: 14,
                 cursor: 'text',
                 textAlign: 'left',
               }}
             >
               <MagnifyingGlassIcon style={{ width: 15, height: 15, flexShrink: 0 }} />
-              <span style={{ flex: 1, color: 'var(--apple-gray-5)' }}>Search...</span>
+              <span style={{ flex: 1, color: 'var(--text-muted)' }}>Search...</span>
               <kbd
                 style={{
                   fontSize: 11,
-                  background: 'var(--apple-gray-2)',
-                  color: 'var(--apple-gray-6)',
+                  background: 'var(--bg-overlay)',
+                  color: 'var(--text-secondary)',
                   borderRadius: 4,
                   padding: '1px 5px',
                   fontFamily: 'inherit',
@@ -618,12 +644,12 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                   border: 'none',
                   cursor: 'pointer',
                   padding: 6,
-                  color: 'var(--apple-gray-6)',
+                  color: 'var(--text-secondary)',
                   borderRadius: 8,
                   display: 'flex',
                   alignItems: 'center',
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
               >
                 <BellIcon style={{ width: 20, height: 20 }} />
@@ -658,10 +684,10 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                     top: 'calc(100% + 8px)',
                     right: 0,
                     width: 320,
-                    background: 'white',
+                    background: 'var(--bg-surface)',
                     borderRadius: 12,
-                    border: '1px solid var(--apple-gray-2)',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                    border: '1px solid var(--border-strong)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
                     zIndex: 100,
                     overflow: 'hidden',
                   }}
@@ -672,15 +698,15 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '12px 16px',
-                      borderBottom: '1px solid var(--apple-gray-2)',
+                      borderBottom: '1px solid var(--border)',
                     }}
                   >
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--apple-text-primary)' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                       Benachrichtigungen
                     </span>
                     <button
                       onClick={markAllRead}
-                      style={{ fontSize: 12, color: 'var(--apple-blue)', background: 'none', border: 'none', cursor: 'pointer' }}
+                      style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}
                     >
                       Alle gelesen
                     </button>
@@ -703,13 +729,13 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                           style={{ flexShrink: 0, marginTop: 5 }}
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 12, color: 'var(--apple-text-primary)', lineHeight: 1.4 }}>{n.title}</p>
+                          <p style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.4 }}>{n.title}</p>
                           {n.message && (
-                            <p style={{ fontSize: 11, color: 'var(--apple-text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
+                            <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
                               {n.message}
                             </p>
                           )}
-                          <p style={{ fontSize: 11, color: 'var(--apple-text-tertiary)', marginTop: 2 }}>{n.time}</p>
+                          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{n.time}</p>
                         </div>
                         {!n.read && (
                           <span
@@ -717,7 +743,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                               width: 6,
                               height: 6,
                               borderRadius: '50%',
-                              background: 'var(--apple-blue)',
+                              background: 'var(--accent)',
                               flexShrink: 0,
                               marginTop: 5,
                             }}
@@ -734,12 +760,13 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
             <div ref={userMenuRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => { setUserMenuOpen(o => !o); setNotifOpen(false); }}
+                aria-label="Benutzermenü"
                 style={{
                   width: 32,
                   height: 32,
                   borderRadius: '50%',
-                  background: 'var(--apple-blue)',
-                  color: 'white',
+                  background: 'var(--accent)',
+                  color: '#ffffff',
                   fontSize: 12,
                   fontWeight: 600,
                   border: 'none',
@@ -761,19 +788,19 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                     top: 'calc(100% + 8px)',
                     right: 0,
                     width: 200,
-                    background: 'white',
+                    background: 'var(--bg-surface)',
                     borderRadius: 12,
-                    border: '1px solid var(--apple-gray-2)',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                    border: '1px solid var(--border-strong)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
                     zIndex: 100,
                     overflow: 'hidden',
                   }}
                 >
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--apple-gray-2)' }}>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--apple-text-primary)' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                       {currentUser?.name ?? '—'}
                     </p>
-                    <p style={{ fontSize: 12, color: 'var(--apple-text-secondary)', marginTop: 2 }}>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
                       {currentUser?.role ?? ''}
                     </p>
                   </div>
@@ -784,13 +811,13 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                       width: '100%',
                       padding: '10px 16px',
                       fontSize: 13,
-                      color: '#FF3B30',
+                      color: 'var(--danger)',
                       background: 'none',
                       border: 'none',
                       textAlign: 'left',
                       cursor: 'pointer',
                     }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
                   >
                     Abmelden
@@ -802,7 +829,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+        <main style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-base)' }}>
           {children}
         </main>
       </div>
@@ -816,9 +843,10 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
         >
           <div
             style={{
-              background: 'white',
+              background: 'var(--bg-surface)',
               borderRadius: 16,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              border: '1px solid var(--border-strong)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
               width: '100%',
               maxWidth: 520,
             }}
@@ -831,10 +859,10 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                 alignItems: 'center',
                 gap: 10,
                 padding: '12px 16px',
-                borderBottom: '1px solid var(--apple-gray-2)',
+                borderBottom: '1px solid var(--border)',
               }}
             >
-              <MagnifyingGlassIcon style={{ width: 18, height: 18, color: 'var(--apple-gray-5)', flexShrink: 0 }} />
+              <MagnifyingGlassIcon style={{ width: 18, height: 18, color: 'var(--text-muted)', flexShrink: 0 }} />
               <input
                 ref={searchInputRef}
                 type="text"
@@ -846,13 +874,13 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                   fontSize: 15,
                   border: 'none',
                   outline: 'none',
-                  color: 'var(--apple-text-primary)',
+                  color: 'var(--text-primary)',
                   background: 'transparent',
                 }}
               />
               <button
                 onClick={() => setSearchOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--apple-gray-5)', padding: 2 }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}
               >
                 <XMarkIcon style={{ width: 18, height: 18 }} />
               </button>
@@ -860,7 +888,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
 
             {/* Results */}
             {searching && (
-              <p style={{ fontSize: 13, color: 'var(--apple-text-secondary)', padding: '12px 16px' }}>Suche läuft...</p>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '12px 16px' }}>Suche läuft...</p>
             )}
             {!searching && searchResults.length > 0 && (
               <ul style={{ listStyle: 'none', margin: 0, padding: '6px 0', maxHeight: 320, overflowY: 'auto' }}>
@@ -878,15 +906,15 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                         cursor: 'pointer',
                         textAlign: 'left',
                       }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--apple-gray-1)'; }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
                       onClick={() => { onViewChange(item.view); setSearchOpen(false); setSearchQuery(''); }}
                     >
                       <span
                         style={{
                           fontSize: 11,
-                          background: 'var(--apple-gray-1)',
-                          color: 'var(--apple-gray-6)',
+                          background: 'var(--bg-overlay)',
+                          color: 'var(--text-secondary)',
                           borderRadius: 4,
                           padding: '2px 6px',
                           width: 56,
@@ -896,19 +924,19 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                       >
                         {item.type}
                       </span>
-                      <span style={{ fontSize: 14, color: 'var(--apple-text-primary)' }}>{item.name}</span>
+                      <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{item.name}</span>
                     </button>
                   </li>
                 ))}
               </ul>
             )}
             {!searching && searchQuery.trim().length > 0 && searchResults.length === 0 && (
-              <p style={{ fontSize: 13, color: 'var(--apple-text-secondary)', padding: '12px 16px' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '12px 16px' }}>
                 Keine Ergebnisse für &ldquo;{searchQuery}&rdquo;
               </p>
             )}
             {!searching && searchQuery.trim().length === 0 && (
-              <p style={{ fontSize: 12, color: 'var(--apple-text-tertiary)', padding: '10px 16px' }}>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 16px' }}>
                 Tippe, um zu suchen. Drücke Escape zum Schliessen.
               </p>
             )}

@@ -100,10 +100,10 @@ module.exports = {
 
   // Internal service URLs used by the health-checker
   services: {
-    authService: env('AUTH_SERVICE_URL', 'http://localhost:3001'),
-    userService: env('USER_SERVICE_URL', 'http://localhost:3002'),
-    deviceService: env('DEVICE_SERVICE_URL', 'http://localhost:3003'),
-    policyService: env('POLICY_SERVICE_URL', 'http://localhost:3004'),
-    apiGateway: env('API_GATEWAY_URL', 'http://localhost:3000'),
+    authService: env('AUTH_SERVICE_URL', 'http://authentication-service'),
+    userService: env('USER_SERVICE_URL', 'http://identity-service'),
+    deviceService: env('DEVICE_SERVICE_URL', 'http://device-service'),
+    policyService: env('POLICY_SERVICE_URL', 'http://policy-service'),
+    apiGateway: env('API_GATEWAY_URL', 'http://api-gateway'),
   },
 };

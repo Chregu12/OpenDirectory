@@ -71,6 +71,16 @@ if (process.env.NODE_ENV !== 'production') {
     }));
 }
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'antivirus-protection' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ====================================================================== //
 //  Import services
 // ====================================================================== //
@@ -80,6 +90,7 @@ const ScanOrchestrator = require('./services/scanOrchestrator');
 const SignatureManager = require('./services/signatureManager');
 const QuarantineManager = require('./services/quarantineManager');
 const ThreatIntelligence = require('./services/threatIntelligence');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 const OAUTH_PROVIDER_URL = process.env.OAUTH_PROVIDER_URL || 'http://oauth-provider:3010';
 
@@ -195,6 +206,22 @@ class AntivirusProtectionService extends EventEmitter {
         });
         this.app.use('/api', limiter);
 
+        // OIDC token verification (RS256 via JWKS). P0 fix: this service
+        // previously had no HTTP authentication at all — see
+        // middleware/oidcAuth.js for the full rationale.
+        //
+        // enrollmentPaths lets the ClamAV device agent report scan results
+        // and AV status (POST .../devices/:deviceId/report and
+        // .../devices/:deviceId/status) using the shared
+        // DEVICE_ENROLLMENT_TOKEN (x-enrollment-token header) instead of a
+        // user JWT, since the agent runs on the device with no end-user
+        // identity in hand. Every other route — including the generic
+        // GET .../devices and GET .../devices/:deviceId — stays JWT-only.
+        this.app.use(oidcAuth({
+            skipPaths: ['/health'],
+            enrollmentPaths: ['*/report', '*/status'],
+        }));
+
         // Request logging
         this.app.use((req, res, next) => {
             const start = Date.now();
@@ -273,7 +300,8 @@ class AntivirusProtectionService extends EventEmitter {
         // -- Scan endpoints --
 
         // POST /api/antivirus/scan - Initiate scan (dispatches run_av_scan MDM command)
-        router.post('/scan', async (req, res, next) => {
+        // Admin-gated: this is a fleet-wide MDM command dispatch.
+        router.post('/scan', requireAdmin, async (req, res, next) => {
             try {
                 const { error, value } = schemas.initiateScan.validate(req.body);
                 if (error) {
@@ -303,7 +331,18 @@ class AntivirusProtectionService extends EventEmitter {
                     try {
                         const resp = await fetch(`${OAUTH_PROVIDER_URL}/api/devices/${deviceId}/commands`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                                'Content-Type': 'application/json',
+                                // oauth-provider now requires auth on this route (P0 fix —
+                                // it previously accepted unauthenticated wipe/lock/etc MDM
+                                // commands); this server-to-server call has no end-user JWT
+                                // in hand, so it presents the shared internal-service token
+                                // instead (see services/core/oauth-provider/src/middleware/
+                                // oidcAuth.js's allowInternalToken option).
+                                ...(process.env.OAUTH_PROVIDER_INTERNAL_TOKEN
+                                    ? { 'x-oauth-internal-token': process.env.OAUTH_PROVIDER_INTERNAL_TOKEN }
+                                    : {}),
+                            },
                             body: JSON.stringify({ command: 'run_av_scan', payload: { scanType, paths } }),
                         });
                         dispatched.push({ deviceId, status: resp.ok ? 'queued' : 'error', httpStatus: resp.status });
@@ -423,7 +462,10 @@ class AntivirusProtectionService extends EventEmitter {
         });
 
         // POST /api/antivirus/quarantine/:fileId/restore - Restore quarantined file
-        router.post('/quarantine/:fileId/restore', (req, res, next) => {
+        // Admin-gated: un-quarantining releases a file flagged as malicious
+        // back onto the device — the exact capability an unauthenticated
+        // attacker must not have.
+        router.post('/quarantine/:fileId/restore', requireAdmin, (req, res, next) => {
             try {
                 const result = this.quarantineManager.restoreFile(req.params.fileId);
                 res.json(result);
@@ -433,7 +475,8 @@ class AntivirusProtectionService extends EventEmitter {
         });
 
         // DELETE /api/antivirus/quarantine/:fileId - Delete quarantined file
-        router.delete('/quarantine/:fileId', (req, res, next) => {
+        // Admin-gated: permanently destroys quarantine evidence.
+        router.delete('/quarantine/:fileId', requireAdmin, (req, res, next) => {
             try {
                 const result = this.quarantineManager.deleteFile(req.params.fileId);
                 res.json(result);
@@ -455,7 +498,8 @@ class AntivirusProtectionService extends EventEmitter {
         });
 
         // POST /api/antivirus/signatures/update - Trigger signature update
-        router.post('/signatures/update', (req, res, next) => {
+        // Admin-gated: fleet-wide signature/definition update dispatch.
+        router.post('/signatures/update', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.signatureUpdate.validate(req.body);
                 if (error) {
@@ -535,6 +579,12 @@ class AntivirusProtectionService extends EventEmitter {
                 }
 
                 logger.info('Received AV scan report', { deviceId, threatCount: threats ? threats.length : 0, clean });
+                publish('security.scan.completed', { deviceId, scanId, threatCount: threats ? threats.length : 0, clean: !!clean });
+                if (threats && threats.length > 0) {
+                    for (const threat of threats) {
+                        publish('security.threat.detected', { deviceId, scanId, threat });
+                    }
+                }
                 res.json({ received: true, scanId, timestamp: new Date().toISOString() });
             } catch (err) {
                 next(err);
@@ -563,7 +613,8 @@ class AntivirusProtectionService extends EventEmitter {
         // -- Schedule endpoints --
 
         // POST /api/antivirus/schedule - Schedule recurring scan
-        router.post('/schedule', (req, res, next) => {
+        // Admin-gated: creates a recurring fleet-wide scan command.
+        router.post('/schedule', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.schedule.validate(req.body);
                 if (error) {
@@ -889,6 +940,11 @@ class AntivirusProtectionService extends EventEmitter {
     async start() {
         const port = parseInt(process.env.PORT, 10) || 3905;
         const host = process.env.HOST || '0.0.0.0';
+
+        // Connect to event bus (fire and forget)
+        connectBus().catch((err) => {
+            logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+        });
 
         // Initialize database (run migrations); log but don't fatal on failure
         try {

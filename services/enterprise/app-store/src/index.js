@@ -19,6 +19,17 @@ const CatalogManager = require('./catalog/catalogManager');
 const ClientDetector = require('./detection/clientDetector');
 const DistributionEngine = require('./distribution/distributionEngine');
 const AssignmentEngine = require('./assignment/assignmentEngine');
+const { oidcAuth, requireAdmin, verifyToken } = require('./middleware/oidcAuth');
+
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'app-store' });
+async function connectBus() { await _bus.connect(); }
+function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
 
 // --- Logger ---
 const logger = winston.createLogger({
@@ -36,7 +47,7 @@ const PORT = parseInt(process.env.PORT, 10) || 3906;
 const DB_CONFIG = {
   host: process.env.DB_HOST || 'postgres',
   port: parseInt(process.env.DB_PORT, 10) || 5432,
-  database: process.env.DB_NAME || 'opendirectory',
+  database: process.env.DB_NAME || 'app_store',
   user: process.env.DB_USER || 'opendirectory',
   password: process.env.DB_PASSWORD || 'opendirectory',
   max: 20,
@@ -59,9 +70,61 @@ const app = express();
 const server = http.createServer(app);
 
 // WebSocket server for real-time install status updates
+//
+// P0 fix: this endpoint had NO authentication at all while every HTTP route
+// in this service is now gated behind oidcAuth() (see middleware/oidcAuth.js
+// header comment) — an unauthenticated caller could open /ws/store and
+// receive live install-status/distribution events for the entire fleet.
+// Auth happens here (in the 'connection' handler, after the WS handshake
+// completes) rather than in the `ws` library's `verifyClient` hook: this
+// service's own admin-scope check style aside, `verifyClient` would reject
+// with a raw HTTP status during the upgrade (no WS close code, harder for a
+// browser/native WS client to introspect); closing the just-opened socket
+// with an explicit code+reason is easier for callers to detect and log, and
+// mirrors how a rejected write on an already-open connection is handled
+// elsewhere in this codebase's WS surfaces.
+//
+// The token travels one of two ways, since a WebSocket handshake can't carry
+// a normal Authorization header from a browser client:
+//   - `?token=<jwt>` query parameter, or
+//   - the `Sec-WebSocket-Protocol` header (the first comma-separated value)
+// ...verified with the exact same verifyToken() (jose + JWKS) the HTTP
+// middleware uses — no duplicated verification logic.
+const WS_CLOSE_UNAUTHORIZED = 4401; // app-defined (RFC 6455 private-use range 4000-4999)
+
+function extractWsToken(req) {
+  try {
+    const { searchParams } = new URL(req.url, 'http://localhost');
+    const fromQuery = searchParams.get('token');
+    if (fromQuery) return fromQuery;
+  } catch { /* malformed URL — fall through to the protocol header */ }
+
+  const proto = req.headers['sec-websocket-protocol'];
+  if (proto) {
+    const first = proto.split(',')[0].trim();
+    if (first) return first;
+  }
+  return null;
+}
+
 const wss = new WebSocket.Server({ server, path: '/ws/store' });
-wss.on('connection', (ws) => {
-  logger.info('WebSocket client connected');
+wss.on('connection', async (ws, req) => {
+  const token = extractWsToken(req);
+  if (!token) {
+    logger.warn('WebSocket connection rejected: no token presented');
+    ws.close(WS_CLOSE_UNAUTHORIZED, 'unauthorized');
+    return;
+  }
+
+  try {
+    ws.user = await verifyToken(token);
+  } catch (err) {
+    logger.warn('WebSocket connection rejected: invalid token', { error: err.message });
+    ws.close(WS_CLOSE_UNAUTHORIZED, 'unauthorized');
+    return;
+  }
+
+  logger.info('WebSocket client connected', { sub: ws.user.sub });
   ws.on('close', () => logger.debug('WebSocket client disconnected'));
 });
 
@@ -74,7 +137,7 @@ pool.on('error', (err) => {
 // Service instances
 const catalogManager = new CatalogManager(pool);
 const clientDetector = new ClientDetector(pool);
-const distributionEngine = new DistributionEngine(pool, wss);
+const distributionEngine = new DistributionEngine(pool, wss, publishEvent);
 const assignmentEngine = new AssignmentEngine(pool, distributionEngine);
 
 // --- Middleware ---
@@ -106,6 +169,26 @@ app.use((req, res, next) => {
   logger.debug('Request', { method: req.method, path: req.path });
   next();
 });
+
+// --- Authentication ---
+// P0 fix: app-store had zero HTTP auth (see middleware/oidcAuth.js header
+// comment for the full rationale). skipPaths covers health/metrics probes.
+// agentTokenPaths covers the two genuine device/agent-facing endpoints that
+// cannot carry an end-user OIDC JWT — see middleware/oidcAuth.js for exactly
+// why each one is listed and what it does and does not grant:
+//   - PUT /api/store/install/:installId/status ('*/status' suffix — the GET
+//     variant of the same path is included too, which is intentional: a
+//     device checking its own install status is no more sensitive than it
+//     reporting one)
+//   - GET /api/appstore/packages/:packageId/download ('*/download' suffix —
+//     deliberately does NOT match DELETE /api/appstore/packages/:packageId,
+//     which stays admin-only)
+// Every other route is JWT-only; requireAdmin is layered on top of it for
+// the state-changing / deploy endpoints below.
+app.use(oidcAuth({
+  skipPaths: ['/health', '/metrics'],
+  agentTokenPaths: ['*/status', '*/download'],
+}));
 
 // --- Health & Metrics ---
 app.get('/health', (req, res) => {
@@ -146,7 +229,7 @@ app.get('/api/store/catalog', async (req, res) => {
 });
 
 // Add app to catalog
-app.post('/api/store/catalog', async (req, res) => {
+app.post('/api/store/catalog', requireAdmin, async (req, res) => {
   try {
     const app = await catalogManager.createApp(req.body);
     res.status(201).json(app);
@@ -157,7 +240,7 @@ app.post('/api/store/catalog', async (req, res) => {
 });
 
 // Update app
-app.put('/api/store/catalog/:id', async (req, res) => {
+app.put('/api/store/catalog/:id', requireAdmin, async (req, res) => {
   try {
     const app = await catalogManager.updateApp(req.params.id, req.body);
     if (!app) {
@@ -171,7 +254,7 @@ app.put('/api/store/catalog/:id', async (req, res) => {
 });
 
 // Remove app
-app.delete('/api/store/catalog/:id', async (req, res) => {
+app.delete('/api/store/catalog/:id', requireAdmin, async (req, res) => {
   try {
     const result = await catalogManager.deleteApp(req.params.id);
     if (!result) {
@@ -185,7 +268,7 @@ app.delete('/api/store/catalog/:id', async (req, res) => {
 });
 
 // Assign app to targets
-app.post('/api/store/catalog/:id/assign', async (req, res) => {
+app.post('/api/store/catalog/:id/assign', requireAdmin, async (req, res) => {
   try {
     const { targets, install_type, created_by } = req.body;
     if (!targets || !Array.isArray(targets) || targets.length === 0) {
@@ -205,7 +288,7 @@ app.post('/api/store/catalog/:id/assign', async (req, res) => {
 });
 
 // Remove assignment
-app.delete('/api/store/catalog/:id/assign/:assignId', async (req, res) => {
+app.delete('/api/store/catalog/:id/assign/:assignId', requireAdmin, async (req, res) => {
   try {
     const result = await assignmentEngine.removeAssignment(req.params.assignId);
     if (!result) {
@@ -241,7 +324,7 @@ app.get('/api/store/categories', async (req, res) => {
 });
 
 // Seed default apps
-app.post('/api/store/catalog/seed', async (req, res) => {
+app.post('/api/store/catalog/seed', requireAdmin, async (req, res) => {
   try {
     const result = await catalogManager.seedDefaultApps();
     res.json({ message: 'Default apps seeded', ...result });
@@ -296,8 +379,10 @@ app.get('/api/store/installed/:deviceId', async (req, res) => {
   }
 });
 
-// Request installation
-app.post('/api/store/install', async (req, res) => {
+// Request installation — flagged by the auth audit as "App-Deploy auf
+// Geräte": pushes an install command onto a target device, so it gets the
+// same admin gate as the /api/appstore deploy endpoint below.
+app.post('/api/store/install', requireAdmin, async (req, res) => {
   try {
     const { appId, deviceId } = req.body;
     if (!appId || !deviceId) {
@@ -305,6 +390,7 @@ app.post('/api/store/install', async (req, res) => {
     }
     const userId = req.headers['x-user-id'] || req.body.userId || null;
     const result = await distributionEngine.requestInstall(appId, deviceId, userId);
+    publishEvent('app.install.requested', { appId, deviceId, requestedBy: userId });
     res.status(202).json(result);
   } catch (error) {
     logger.error('Failed to request install', { error: error.message });
@@ -317,8 +403,9 @@ app.post('/api/store/install', async (req, res) => {
   }
 });
 
-// Request uninstall
-app.post('/api/store/uninstall', async (req, res) => {
+// Request uninstall — same admin gate as install (removes software from a
+// target device, i.e. also a fleet-wide state change).
+app.post('/api/store/uninstall', requireAdmin, async (req, res) => {
   try {
     const { appId, deviceId } = req.body;
     if (!appId || !deviceId) {
@@ -346,13 +433,24 @@ app.get('/api/store/install/:installId/status', async (req, res) => {
   }
 });
 
-// Update install status (called by device agents)
+// Update install status (called by device agents). Deliberately NOT
+// requireAdmin: this is a device→server status callback, reachable via the
+// global oidcAuth agentTokenPaths bypass ('*/status') with the shared
+// APPSTORE_AGENT_TOKEN when the caller has no end-user JWT — see
+// middleware/oidcAuth.js. A caller that does present a valid Bearer JWT is
+// let through too (any authenticated user), since reporting an install
+// result is not an admin-privileged action.
 app.put('/api/store/install/:installId/status', async (req, res) => {
   try {
     const { status, progress, error } = req.body;
     const result = await distributionEngine.updateInstallStatus(
       req.params.installId, status, progress, error
     );
+    if (status === 'completed' || status === 'installed') {
+      publishEvent('app.install.completed', { installId: req.params.installId, progress });
+    } else if (status === 'failed' || status === 'error') {
+      publishEvent('app.install.failed', { installId: req.params.installId, error });
+    }
     res.json(result);
   } catch (error) {
     logger.error('Failed to update install status', { error: error.message });
@@ -492,8 +590,11 @@ async function scanShareFiles(share) {
   return { files };
 }
 
-// POST /api/store/shares/:id/scan — scan an apps-purpose share for installer files
-app.post('/api/store/shares/:shareId/scan', async (req, res) => {
+// POST /api/store/shares/:id/scan — scan an apps-purpose share for installer
+// files. Admin-gated: this shells out to smbclient / walks a mounted NFS
+// path (see scanShareFiles above), which is infra-sensitive, not a benign
+// catalog read.
+app.post('/api/store/shares/:shareId/scan', requireAdmin, async (req, res) => {
   try {
     const { shareId } = req.params;
 
@@ -575,6 +676,40 @@ async function ensureAppstoreTables() {
   }
 }
 
+// Persistence audit finding (not part of the auth mandate, taken along
+// because it's risk-free and additive): /api/appstore/* writes every
+// create/update to the app_catalog table (see the POST/PUT handlers below)
+// but the GET handlers only ever read from the inMemoryCatalog Map — which
+// is (re)seeded from DEMO_APPS on every process start. So a custom-published
+// app, or an edit to a demo app, survives in Postgres but is invisible again
+// the moment the service restarts, until this function runs.
+//
+// This only rehydrates the catalog (app_catalog → inMemoryCatalog): that
+// table's `metadata` JSONB column already carries the full app object, so
+// overlaying it onto the DEMO_APPS seed is a pure additive read with no
+// schema change and no route-behavior change. inMemoryDeployments /
+// inMemoryDeploymentStatus are deliberately NOT rehydrated here — the
+// app_deployments / deployment_status tables don't have columns for
+// `app_name` or `version` (see ensureAppstoreTables above), so a faithful
+// round-trip would need a schema migration; that's out of scope for this
+// auth-focused change and is called out in the audit report instead.
+async function hydrateAppstoreCatalog() {
+  try {
+    const result = await pool.query('SELECT id, metadata FROM app_catalog');
+    for (const row of result.rows) {
+      const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata;
+      if (metadata && typeof metadata === 'object') {
+        inMemoryCatalog.set(row.id, metadata);
+      }
+    }
+    if (result.rows.length) {
+      logger.info('Rehydrated app_catalog from DB', { count: result.rows.length });
+    }
+  } catch (err) {
+    logger.warn('appstore catalog hydration warning', { error: err.message });
+  }
+}
+
 // GET /api/appstore/apps
 app.get('/api/appstore/apps', async (req, res) => {
   try {
@@ -605,7 +740,7 @@ app.get('/api/appstore/apps/:id', async (req, res) => {
 });
 
 // POST /api/appstore/apps — publish new app (admin only)
-app.post('/api/appstore/apps', async (req, res) => {
+app.post('/api/appstore/apps', requireAdmin, async (req, res) => {
   try {
     const { id, name, vendor, version, category, size, platforms, license_type, description, icon_url, supported_platforms } = req.body;
     if (!id || !name || !version) return res.status(400).json({ error: 'id, name and version are required' });
@@ -624,6 +759,7 @@ app.post('/api/appstore/apps', async (req, res) => {
         [id, JSON.stringify(entry)]
       );
     } catch (_) { /* DB optional */ }
+    publishEvent('app.published', { appId: id, name, version, category: category || 'Allgemein', vendor: vendor || '' });
     res.status(201).json(entry);
   } catch (err) {
     logger.error('POST /api/appstore/apps error', { error: err.message });
@@ -632,7 +768,7 @@ app.post('/api/appstore/apps', async (req, res) => {
 });
 
 // PUT /api/appstore/apps/:id — update app metadata
-app.put('/api/appstore/apps/:id', async (req, res) => {
+app.put('/api/appstore/apps/:id', requireAdmin, async (req, res) => {
   try {
     const existing = inMemoryCatalog.get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'App not found' });
@@ -655,8 +791,9 @@ app.put('/api/appstore/apps/:id', async (req, res) => {
   }
 });
 
-// POST /api/appstore/apps/:id/deploy
-app.post('/api/appstore/apps/:id/deploy', async (req, res) => {
+// POST /api/appstore/apps/:id/deploy — the other endpoint the auth audit
+// explicitly named as an unauth "App-Deploy auf Geräte" mutation.
+app.post('/api/appstore/apps/:id/deploy', requireAdmin, async (req, res) => {
   try {
     const appEntry = inMemoryCatalog.get(req.params.id);
     if (!appEntry) return res.status(404).json({ error: 'App not found' });
@@ -674,6 +811,7 @@ app.post('/api/appstore/apps/:id/deploy', async (req, res) => {
       created_by: req.headers['x-user-id'] || req.body.created_by || 'admin',
     };
     inMemoryDeployments.set(deploymentId, deployment);
+    publishEvent('app.install.requested', { appId: req.params.id, targets, mandatory: mandatory || false, deploymentId });
     // Initialize per-device status records
     const deviceStatuses = targets.map(t => ({
       id: uuidv4(), deployment_id: deploymentId,
@@ -738,7 +876,7 @@ app.get('/api/appstore/deployments/:id', async (req, res) => {
 });
 
 // PUT /api/appstore/deployments/:id/cancel
-app.put('/api/appstore/deployments/:id/cancel', async (req, res) => {
+app.put('/api/appstore/deployments/:id/cancel', requireAdmin, async (req, res) => {
   try {
     const deployment = inMemoryDeployments.get(req.params.id);
     if (!deployment) return res.status(404).json({ error: 'Deployment not found' });
@@ -875,8 +1013,11 @@ app.get('/api/appstore/apps/:id/packages', async (req, res) => {
   }
 });
 
-// POST /api/appstore/apps/:id/packages — upload a package file
-app.post('/api/appstore/apps/:id/packages', packageUpload.single('file'), async (req, res) => {
+// POST /api/appstore/apps/:id/packages — upload a package file. Installer
+// upload — the third mutation the auth audit explicitly named. requireAdmin
+// runs BEFORE packageUpload (multer) so an unauthenticated/non-admin caller
+// is rejected before any bytes are written to PACKAGES_DIR.
+app.post('/api/appstore/apps/:id/packages', requireAdmin, packageUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
     const { id } = req.params;
@@ -919,6 +1060,7 @@ app.post('/api/appstore/apps/:id/packages', packageUpload.single('file'), async 
     }
 
     logger.info('Package uploaded', { appId: id, platform, format, version, size: req.file.size });
+    publishEvent('app.package.uploaded', { appId: id, packageId: pkg.id, platform, format, version, size: req.file.size });
     res.status(201).json(pkg);
   } catch (err) {
     // Clean up uploaded file on error
@@ -927,7 +1069,15 @@ app.post('/api/appstore/apps/:id/packages', packageUpload.single('file'), async 
   }
 });
 
-// GET /api/appstore/packages/:packageId/download — stream file to client
+// GET /api/appstore/packages/:packageId/download — stream file to client.
+// Deliberately NOT requireAdmin: this exact URL is handed to device agents
+// by device-service (installApp() in services/core/device-service/src/
+// index.js) as the download source for a push-install, and the agent has no
+// end-user JWT. Reachable via the global oidcAuth agentTokenPaths bypass
+// ('*/download', shared APPSTORE_AGENT_TOKEN via header or ?agent_token=)
+// when no Bearer token is presented; any authenticated user (e.g. an admin
+// downloading a package from the console) can also use it directly with a
+// normal Bearer JWT — see middleware/oidcAuth.js.
 app.get('/api/appstore/packages/:packageId/download', async (req, res) => {
   try {
     const { packageId } = req.params;
@@ -982,7 +1132,7 @@ app.get('/api/appstore/packages/:packageId/download', async (req, res) => {
 });
 
 // DELETE /api/appstore/packages/:packageId — soft-delete a package
-app.delete('/api/appstore/packages/:packageId', async (req, res) => {
+app.delete('/api/appstore/packages/:packageId', requireAdmin, async (req, res) => {
   try {
     const { packageId } = req.params;
     let pkg = inMemoryPackages.get(packageId);
@@ -1065,8 +1215,12 @@ async function start() {
     await ensureAppstoreTables();
     await ensurePackagesTable();
 
-    // Initialize messaging
-    await distributionEngine.initializeMessaging();
+    // Restore custom-published/edited catalog apps that survived a restart
+    // in Postgres but not in the in-memory catalog (see hydrateAppstoreCatalog).
+    await hydrateAppstoreCatalog();
+
+    // Connect to event bus (fire and forget)
+    connectBus().catch(() => {});
 
     // Start HTTP server
     server.listen(PORT, '0.0.0.0', () => {
@@ -1099,4 +1253,10 @@ process.on('SIGINT', async () => {
 
 start();
 
+// The underlying http.Server (not just the Express `app`) is attached here
+// so tests can open a real WebSocket connection against /ws/store — the WS
+// upgrade handling lives on `server`/`wss`, not on `app` itself, and
+// supertest's own ephemeral per-request server never exercises it. See
+// src/__tests__/api.e2e.test.js's WebSocket auth suite.
+app.server = server;
 module.exports = app;

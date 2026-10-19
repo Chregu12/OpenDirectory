@@ -1,5 +1,5 @@
 # Use official Node.js runtime as base image
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Set working directory
 WORKDIR /app
@@ -19,7 +19,7 @@ RUN addgroup -g 1001 -S appuser && \
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install --only=production --legacy-peer-deps && \
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund && \
     npm cache clean --force
 
 # Copy application code

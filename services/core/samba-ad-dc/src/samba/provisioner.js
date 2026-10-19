@@ -40,9 +40,19 @@ function validateDomain(domain) {
  * Validates DNS backend type.
  */
 function validateDnsBackend(backend) {
-  const valid = ['SAMBA_INTERNAL', 'BIND9_DLZ'];
+  const valid = ['SAMBA_INTERNAL', 'BIND9_DLZ', 'BIND9_FLATFILE'];
   if (!valid.includes(backend)) {
     throw new Error(`DNS backend must be one of: ${valid.join(', ')}`);
+  }
+}
+
+/**
+ * Validates AD functional level.
+ */
+function validateFunctionLevel(level) {
+  const valid = ['2000', '2003', '2008', '2008_R2', '2012', '2012_R2', '2016'];
+  if (!valid.includes(level)) {
+    throw new Error(`Function level must be one of: ${valid.join(', ')}`);
   }
 }
 
@@ -61,17 +71,37 @@ function validatePassword(password) {
 /**
  * Provision a new Samba AD DC domain.
  *
- * @param {string} realm - Kerberos realm (e.g., OPENDIRECTORY.LOCAL)
- * @param {string} domain - NetBIOS domain name (e.g., OPENDIRECTORY)
- * @param {string} adminPassword - Administrator password
- * @param {string} dnsBackend - DNS backend (SAMBA_INTERNAL or BIND9_DLZ)
+ * @param {string} realm          - Kerberos realm (e.g., OPENDIRECTORY.LOCAL)
+ * @param {string} domain         - NetBIOS domain name (e.g., OPENDIRECTORY)
+ * @param {string} adminPassword  - Administrator password
+ * @param {string} dnsBackend     - DNS backend
+ * @param {object} opts           - Optional advanced parameters
+ * @param {string} opts.dcHostname     - DC hostname (defaults to system hostname)
+ * @param {string} opts.dcIp           - DC IP address
+ * @param {string} opts.functionLevel  - AD functional level (default: 2008_R2)
+ * @param {string} opts.dnsInterface   - Space-separated DNS interfaces (default: "lo eth0")
+ * @param {string} opts.dnsForwarders  - Space-separated DNS forwarders (default: "8.8.8.8 8.8.4.4")
+ * @param {boolean} opts.enableLdaps   - Enable LDAPS (default: true)
+ * @param {boolean} opts.enableRfc2307 - Enable RFC2307 Unix attributes (default: true)
+ * @param {string} opts.serverRole     - Server role: dc, rodc, standalone (default: dc)
  * @returns {Promise<object>} Provisioning result
  */
-async function provisionDomain(realm, domain, adminPassword, dnsBackend = 'SAMBA_INTERNAL') {
+async function provisionDomain(realm, domain, adminPassword, dnsBackend = 'SAMBA_INTERNAL', opts = {}) {
   validateRealm(realm);
   validateDomain(domain);
   validatePassword(adminPassword);
   validateDnsBackend(dnsBackend);
+
+  const functionLevel = opts.functionLevel || '2008_R2';
+  validateFunctionLevel(functionLevel);
+
+  const dcHostname    = opts.dcHostname    || '';
+  const dcIp          = opts.dcIp          || '';
+  const dnsInterface  = opts.dnsInterface  || 'lo eth0';
+  const dnsForwarders = opts.dnsForwarders || '8.8.8.8 8.8.4.4';
+  const enableLdaps   = opts.enableLdaps   !== false ? 'true' : 'false';
+  const enableRfc2307 = opts.enableRfc2307 !== false ? 'true' : 'false';
+  const serverRole    = opts.serverRole    || 'dc';
 
   // Check if already provisioned
   const status = await getDomainStatus();
@@ -79,16 +109,24 @@ async function provisionDomain(realm, domain, adminPassword, dnsBackend = 'SAMBA
     throw new Error(`Domain already provisioned: ${status.realm}. De-provision first to re-provision.`);
   }
 
-  logger.info('Starting domain provisioning', { realm, domain, dnsBackend });
+  logger.info('Starting domain provisioning', { realm, domain, dnsBackend, functionLevel });
 
   try {
     const { stdout, stderr } = await execFileAsync(PROVISION_SCRIPT, [
-      realm,
-      domain,
-      adminPassword,
-      dnsBackend
+      realm,        // $1
+      domain,       // $2
+      adminPassword,// $3
+      dnsBackend,   // $4
+      dcHostname,   // $5  (empty → script uses hostname -s)
+      dcIp,         // $6  (empty → samba-tool picks automatically)
+      functionLevel,// $7
+      dnsInterface, // $8
+      dnsForwarders,// $9
+      enableLdaps,  // $10
+      enableRfc2307,// $11
+      serverRole    // $12
     ], {
-      timeout: 300000, // 5 minutes
+      timeout: 300000,
       env: { ...process.env, DEBIAN_FRONTEND: 'noninteractive' }
     });
 
@@ -99,6 +137,12 @@ async function provisionDomain(realm, domain, adminPassword, dnsBackend = 'SAMBA
       realm,
       domain,
       dnsBackend,
+      functionLevel,
+      dcHostname: dcHostname || undefined,
+      dcIp: dcIp || undefined,
+      enableLdaps: enableLdaps === 'true',
+      enableRfc2307: enableRfc2307 === 'true',
+      serverRole,
       provisionedAt: new Date().toISOString(),
       output: stdout,
       warnings: stderr || null
@@ -227,5 +271,6 @@ module.exports = {
   validateRealm,
   validateDomain,
   validatePassword,
-  validateDnsBackend
+  validateDnsBackend,
+  validateFunctionLevel
 };

@@ -1,85 +1,69 @@
-/**
- * License Management Routes
- * Extracted from index.js to improve maintainability.
- * Call registerRoutes(app, service) to bind all routes.
- */
+'use strict';
 
-function registerRoutes(app, svc) {
-  // License Management
-  app.get('/api/license/licenses',                              svc.getLicenses.bind(svc));
-  app.post('/api/license/licenses',                             svc.createLicense.bind(svc));
-  app.get('/api/license/licenses/:licenseId',                   svc.getLicense.bind(svc));
-  app.put('/api/license/licenses/:licenseId',                   svc.updateLicense.bind(svc));
-  app.delete('/api/license/licenses/:licenseId',                svc.deleteLicense.bind(svc));
-  app.post('/api/license/licenses/:licenseId/assign',           svc.assignLicense.bind(svc));
-  app.post('/api/license/licenses/:licenseId/revoke',           svc.revokeLicense.bind(svc));
-  app.post('/api/license/licenses/:licenseId/renew',            svc.renewLicense.bind(svc));
+const { AdapterError } = require('../PolicyLicenseClient');
+const catalogFields = ['name', 'vendor', 'category', 'license_type', 'total_seats', 'cost_per_seat', 'currency', 'renewal_date', 'auto_approve', 'description'];
+const actorFields = new Set(['createdBy', 'updatedBy', 'deletedBy', 'assignedBy', 'revokedBy', 'renewedBy', 'assigned_by', 'decided_by', 'requester_id', 'requester_name',
+  'actor', 'authorization', 'roles', 'permissions', 'scope', 'scopes', 'directory_user_id']);
+const operations = [
+  ['GET', '/kiosk', '', '/kiosk'],
+  ['GET', '/licenses', 'licenses.catalog.read', ''],
+  ['POST', '/licenses', 'licenses.catalog.manage', '', catalogFields],
+  ['GET', '/licenses/:id', 'licenses.catalog.read', '/:id'],
+  ['PUT', '/licenses/:id', 'licenses.catalog.manage', '/:id', [...catalogFields, 'notes', 'icon_url']],
+  ['DELETE', '/licenses/:id', 'licenses.catalog.manage', '/:id', []],
+  ['GET', '/licenses/:id/assignments', 'licenses.assignments.read', '/:id/assignments'],
+  ['POST', '/licenses/:id/assign', 'licenses.assignments.manage', '/:id/assign', ['assignee_type', 'assignee_id', 'assignee_name', 'expires_at']],
+  ['DELETE', '/licenses/:id/assignments/:assigneeId', 'licenses.assignments.manage', '/:id/assignments/:assigneeId', [], ['assignee_type']],
+  ['POST', '/licenses/:id/request', '', '/:id/request', ['justification', 'assignee_type', 'assignee_id', 'assignee_name']],
+  ['GET', '/requests', '', '/requests', undefined, ['status']],
+  ['POST', '/requests/:id/approve', 'licenses.requests.review', '/requests/:id/approve', []],
+  ['POST', '/requests/:id/deny', 'licenses.requests.review', '/requests/:id/deny', []],
+  ['GET', '/groups', 'licenses.assignments.read', '/groups'],
+  ['POST', '/licenses/:id/groups/:groupId/reconcile', 'licenses.assignments.manage', '/:id/groups/:groupId/reconcile', []],
+  ['GET', '/users', 'licenses.assignments.read', '/users'],
+  ['POST', '/users/:id/reconcile', 'licenses.assignments.manage', '/users/:id/reconcile', []],
+  ['POST', '/users/:id/offboard', 'licenses.subjects.offboard', '/users/:id/offboard', []],
+  ['POST', '/users/:id/activate', 'licenses.subjects.manage', '/users/:id/activate', []],
+  ['GET', '/licenses/:id/audit', 'licenses.assignments.read', '/:id/audit'],
+];
 
-  // License Types
-  app.get('/api/license/types',                                 svc.getLicenseTypes.bind(svc));
-  app.post('/api/license/types',                                svc.createLicenseType.bind(svc));
-  app.put('/api/license/types/:typeId',                         svc.updateLicenseType.bind(svc));
-  app.delete('/api/license/types/:typeId',                      svc.deleteLicenseType.bind(svc));
-
-  // Software Management
-  app.get('/api/license/software',                              svc.getSoftware.bind(svc));
-  app.post('/api/license/software',                             svc.createSoftware.bind(svc));
-  app.get('/api/license/software/:softwareId',                  svc.getSoftwareDetails.bind(svc));
-  app.put('/api/license/software/:softwareId',                  svc.updateSoftware.bind(svc));
-  app.delete('/api/license/software/:softwareId',               svc.deleteSoftware.bind(svc));
-
-  // Vendor Management
-  app.get('/api/license/vendors',                               svc.getVendors.bind(svc));
-  app.post('/api/license/vendors',                              svc.createVendor.bind(svc));
-  app.put('/api/license/vendors/:vendorId',                     svc.updateVendor.bind(svc));
-  app.delete('/api/license/vendors/:vendorId',                  svc.deleteVendor.bind(svc));
-
-  // Usage Tracking
-  app.get('/api/license/usage',                                 svc.getUsage.bind(svc));
-  app.post('/api/license/usage/track',                          svc.trackUsage.bind(svc));
-  app.get('/api/license/usage/:licenseId',                      svc.getLicenseUsage.bind(svc));
-  app.get('/api/license/usage/software/:softwareId',            svc.getSoftwareUsage.bind(svc));
-
-  // Compliance
-  app.get('/api/license/compliance/overview',                   svc.getComplianceOverview.bind(svc));
-  app.post('/api/license/compliance/scan',                      svc.startComplianceScan.bind(svc));
-  app.get('/api/license/compliance/scans',                      svc.getComplianceScans.bind(svc));
-  app.get('/api/license/compliance/violations',                 svc.getViolations.bind(svc));
-  app.post('/api/license/compliance/violations/:id/resolve',    svc.resolveViolation.bind(svc));
-  app.get('/api/license/compliance/reports',                    svc.getComplianceReports.bind(svc));
-
-  // Optimization
-  app.get('/api/license/optimization/recommendations',          svc.getOptimizationRecommendations.bind(svc));
-  app.post('/api/license/optimization/analyze',                 svc.analyzeOptimization.bind(svc));
-  app.get('/api/license/optimization/cost-analysis',            svc.getCostAnalysis.bind(svc));
-  app.get('/api/license/optimization/utilization',              svc.getUtilizationAnalysis.bind(svc));
-
-  // Asset Management
-  app.get('/api/license/assets',                                svc.getAssets.bind(svc));
-  app.post('/api/license/assets/discovery',                     svc.startAssetDiscovery.bind(svc));
-  app.get('/api/license/assets/:assetId',                       svc.getAsset.bind(svc));
-  app.put('/api/license/assets/:assetId',                       svc.updateAsset.bind(svc));
-  app.post('/api/license/assets/:assetId/retire',               svc.retireAsset.bind(svc));
-
-  // Mobile Integration
-  app.get('/api/license/mobile/sync',                           svc.syncMobileLicenses.bind(svc));
-  app.post('/api/license/mobile/track',                         svc.trackMobileUsage.bind(svc));
-  app.get('/api/license/mobile/compliance',                     svc.getMobileCompliance.bind(svc));
-
-  // Reporting
-  app.get('/api/license/reports',                               svc.getReports.bind(svc));
-  app.post('/api/license/reports/generate',                     svc.generateReport.bind(svc));
-  app.get('/api/license/reports/:reportId',                     svc.getReport.bind(svc));
-  app.get('/api/license/reports/:reportId/download',            svc.downloadReport.bind(svc));
-
-  // Dashboard
-  app.get('/api/license/dashboard',                             svc.getDashboard.bind(svc));
-  app.get('/api/license/dashboard/metrics',                     svc.getDashboardMetrics.bind(svc));
-  app.get('/api/license/dashboard/alerts',                      svc.getDashboardAlerts.bind(svc));
-
-  // Audit
-  app.get('/api/license/audit/logs',                            svc.getAuditLogs.bind(svc));
-  app.post('/api/license/audit/export',                         svc.exportAuditLogs.bind(svc));
+function select(value, fields) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AdapterError(400, 'A JSON object is required');
+  const unsupported = Object.keys(value).filter(key => !fields.includes(key) && !actorFields.has(key));
+  if (unsupported.length) throw new AdapterError(422, 'Unsupported legacy fields; use the canonical license schema');
+  const result = {};
+  for (const key of fields) if (Object.hasOwn(value, key)) result[key] = value[key];
+  return result;
 }
 
-module.exports = { registerRoutes };
+function registerRoutes(app, client) {
+  app.get('/api/license/access', (req, res) => res.json(req.licenseAccess));
+  for (const [method, path, permission, destination, fields, queryFields = []] of operations) {
+    if (typeof permission !== 'string' || typeof destination !== 'string') throw new Error('License operations require explicit authorization and destination');
+    app[method.toLowerCase()](`/api/license${path}`, async (req, res, next) => {
+      try {
+        if (req.method !== method) return next('route');
+        if (permission && !req.licenseAccess.permissions.includes(permission)) throw new AdapterError(403, 'The canonical license permission is required');
+        const target = destination.replace(/:([A-Za-z]+)/g, (_match, key) => {
+          const value = req.params[key];
+          if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$/.test(value)) throw new AdapterError(400, 'Invalid license identifier');
+          return encodeURIComponent(value);
+        });
+        const query = select(req.query, queryFields);
+        if (Object.values(query).some(value => typeof value !== 'string')) throw new AdapterError(400, 'Query values must be strings');
+        const body = fields === undefined ? undefined : select(req.body || {}, fields);
+        const result = await client.request(method, `/api/licenses${target}`, req.headers.authorization, { body, query });
+        if (result.retryAfter) res.set('Retry-After', result.retryAfter);
+        if (result.status === 204) return res.status(204).end();
+        res.status(result.status).json(result.body);
+      } catch (error) { next(error); }
+    });
+  }
+  app.use('/api/license', (req, res) => {
+    const retired = /^\/(?:types|software|vendors|usage|compliance|optimization|assets|mobile|reports|dashboard|audit)(?:\/|$)/.test(req.path)
+      || /^\/licenses\/[^/]+\/(?:renew|revoke)\/?$/.test(req.path);
+    res.status(retired ? 410 : 404).json({ error: retired ? 'Legacy prototype operation retired; migrate to canonical entitlements' : 'License operation not found', canonicalApi: '/api/licenses' });
+  });
+}
+
+module.exports = { registerRoutes, operations };

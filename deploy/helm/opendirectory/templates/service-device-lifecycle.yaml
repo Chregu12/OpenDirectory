@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: device-lifecycle
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: device-lifecycle
+spec:
+  type: {{ .Values.deviceLifecycle.service.type }}
+  ports:
+    - port: {{ .Values.deviceLifecycle.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "opendirectory.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: device-lifecycle

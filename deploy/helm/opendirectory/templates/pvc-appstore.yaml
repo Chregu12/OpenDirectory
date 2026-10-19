@@ -1,0 +1,19 @@
+{{- if .Values.appStore.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-appstore-packages
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: appstore
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.appStore.persistence.size }}
+  {{- if .Values.appStore.persistence.storageClass }}
+  storageClassName: {{ .Values.appStore.persistence.storageClass }}
+  {{- end }}
+{{- end }}

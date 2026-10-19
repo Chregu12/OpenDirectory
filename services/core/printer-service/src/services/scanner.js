@@ -8,15 +8,20 @@ const EventEmitter = require('events');
 class ScannerService extends EventEmitter {
   constructor() {
     super();
-    
+
     this.logger = winston.createLogger({
       level: 'info',
       format: winston.format.simple(),
       transports: [new winston.transports.Console()]
     });
-    
+
     this.scanners = new Map();
     this.activeScans = new Map();
+    this._destManager = null;
+  }
+
+  setDestinationManager(mgr) {
+    this._destManager = mgr;
   }
 
   async listScanners() {
@@ -72,9 +77,16 @@ class ScannerService extends EventEmitter {
       color = true,
       duplex = false,
       pageSize = 'A4',
-      destination,
-      ocr = false
+      destination: rawDestination,
+      ocr = false,
+      userGroups = [],
     } = options;
+
+    // Resolve destination: explicit > manager lookup > null (default local)
+    let destination = rawDestination;
+    if (!destination && this._destManager && userId) {
+      destination = await this._destManager.resolveDestination(userId, userGroups);
+    }
     
     try {
       this.activeScans.set(scanId, {
@@ -208,7 +220,7 @@ class ScannerService extends EventEmitter {
 
   async saveScannedFile(file, destination, userId) {
     let finalPath;
-    
+
     if (destination) {
       if (destination.type === 'local') {
         finalPath = destination.path;
@@ -219,22 +231,43 @@ class ScannerService extends EventEmitter {
         // Send via email
         await this.sendViaEmail(file, destination.email, userId);
         finalPath = file;
+      } else if (destination.type === 'smb') {
+        // Write to SMB share via smbclient
+        await this.smbclientWrite(file, destination);
+        finalPath = file;
       }
     } else {
       // Default location
       const scanDir = `/var/scans/${userId}`;
       await fs.mkdir(scanDir, { recursive: true });
-      
+
       const filename = `scan_${Date.now()}${path.extname(file)}`;
       finalPath = path.join(scanDir, filename);
     }
-    
+
     if (finalPath !== file) {
       await fs.copyFile(file, finalPath);
       await fs.unlink(file).catch(() => {});
     }
-    
+
     return finalPath;
+  }
+
+  async smbclientWrite(localFile, dest) {
+    const filename = path.basename(localFile);
+    const remotePath = dest.smbPath ? `${dest.smbPath}/${filename}` : filename;
+    const share = `//${dest.smbServer}/${dest.smbShare}`;
+
+    const domain = dest.smbDomain ? `${dest.smbDomain}\\` : '';
+    const authStr = `${domain}${dest.smbUsername}%${dest.smbPassword}`;
+
+    try {
+      await this.execCommand(`smbclient '${share}' -U '${authStr}' -c "put '${localFile}' '${remotePath}'"`, []);
+      return;
+    } catch (smbErr) {
+      this.logger.warn(`smbclientWrite: smbclient failed (${smbErr.message}), file kept locally at ${localFile}`);
+      // File remains at localFile — do not throw so the scan result is returned
+    }
   }
 
   async discoverWSDScanners() {

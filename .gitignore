@@ -120,11 +120,28 @@ pnpm-lock.yaml
 *.sqlite3
 *.db
 data/
-db/
+# anchored to top-level: a bare `db/` also matched source dirs like
+# services/*/src/db/, hiding their migration runners + *.sql schema.
+/db/
 database/
 *.sql
 !migrations/*.sql
 !schema/*.sql
+# Migrations/schema live under each service (services/*/migrations, src/db/migrations);
+# the un-anchored patterns above only match top-level, so keep nested ones too.
+!**/migrations/*.sql
+!**/schema/*.sql
+# `db/` above ignores the whole dir; git can't re-include a file whose parent
+# dir is excluded, so re-include the migrations dir itself before its *.sql.
+!**/db/migrations/
+!**/db/migrations/*.sql
+!/services/core/policy-service/scripts/license-fulfillment-grants.sql
+!/services/core/policy-service/scripts/license-capacity-grants.sql
+!/services/core/policy-service/scripts/license-capacity-source.sql
+!/services/core/policy-service/scripts/license-capacity-budget.sql
+!/services/core/identity-service/scripts/tenant-provision.sql
+!/services/core/identity-service/scripts/tenant-adopt.sql
+!/services/core/identity-service/scripts/tenant-enablement.sql
 
 # Docker
 docker-compose.override.yml
@@ -260,6 +277,9 @@ samconfig.toml
 # OpenDirectory installation state
 .od-config
 
+# Claude Code agent worktrees (temporary parallel workspaces)
+.claude/worktrees/
+
 # Custom OpenDirectory specific
 /services/*/node_modules/
 /services/*/dist/
@@ -276,3 +296,4 @@ customer-data/
 audit-logs/
 *.audit
 *.compliance
+.claude/worktrees/

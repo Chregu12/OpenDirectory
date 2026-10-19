@@ -9,7 +9,7 @@
  * All methods return null on network failure so callers can respond with 503.
  */
 
-const BASE = process.env.BACKUP_SERVICE_URL || 'http://backup-service:3011';
+const BASE = process.env.BACKUP_SERVICE_URL || 'http://backup-service';
 const TIMEOUT_MS = 5000;
 
 async function _request(method, path, body) {

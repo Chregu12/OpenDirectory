@@ -10,10 +10,15 @@ class RateLimiter {
         this.requests = new Map();
         this.blacklist = new Set();
         
-        // Clean up old entries every minute
+        // Clean up old entries every minute.
+        // unref()'d so this module-scope singleton (created merely by
+        // require()-ing this file) never blocks a clean process exit —
+        // e.g. `node -e "require('./index.js')"` verification, `node --check`
+        // tooling, or Jest's own worker teardown. The real running service
+        // still has app.listen()'s own handle keeping it alive.
         setInterval(() => {
             this.cleanup();
-        }, 60000);
+        }, 60000).unref();
     }
     
     cleanup() {

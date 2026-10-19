@@ -1,0 +1,16 @@
+'use strict';
+jest.mock('../RoleState',()=>({readRoleState:jest.fn()}));
+const{readRoleState}=require('../RoleState');const{LicenseActivationReviewerSnapshotStore}=require('../LicenseActivationReviewerSnapshotStore');
+const{createHash}=require('crypto');
+const userId='11111111-1111-4111-8111-111111111111';const viewer={issuer:'https://issuer.test',subject:'reviewer'};let client;let database;let store;
+beforeEach(()=>{jest.clearAllMocks();client={query:jest.fn(async sql=>({rows:sql.includes('SELECT user_id')?[{user_id:userId}]:[{enabled:true,linked:true,eligibility_revision:'4',link_revision:'7'}]}))};database={transaction:jest.fn(async operation=>operation(client))};store=new LicenseActivationReviewerSnapshotStore(database);readRoleState.mockResolvedValue({scopeReviewerRevision:'a'.repeat(64)});});
+test('only minimal role-origin evidence is returned through a read-only canonical transaction',async()=>{
+ expect(await store.snapshot(userId,viewer,false)).toEqual({schemaVersion:1,userId,revision:'4',enabled:true,linked:true,reviewRevision:createHash('sha256').update(JSON.stringify(['license-scope-reviewer-link-v1',viewer.issuer,'7','a'.repeat(64)])).digest('hex')});
+ expect(database.transaction).toHaveBeenCalledWith(expect.any(Function),{readOnly:true});expect(readRoleState).toHaveBeenCalledWith(client,userId,{scopeReviewerEvidence:true});
+});
+test('a purpose-limited configurator or delegate can read a known reviewer without a profile inventory',async()=>{await store.snapshot(userId,viewer,true);expect(client.query).toHaveBeenCalledTimes(1);expect(client.query.mock.calls[0][1]).toEqual([userId,viewer.issuer]);});
+test('a reviewer cannot use its own-proof route to read another human',async()=>{client.query.mockResolvedValueOnce({rows:[]});await expect(store.snapshot(userId,viewer,false)).rejects.toMatchObject({status:403});expect(readRoleState).not.toHaveBeenCalled();});
+test.each([{enabled:false,linked:true},{enabled:true,linked:false}])('unavailable reviewer evidence is null: %j',async state=>{client.query.mockResolvedValue({rows:[{...state,eligibility_revision:'5',link_revision:'7'}]});expect((await store.snapshot(userId,viewer,true)).reviewRevision).toBeNull();});
+test('aliases, missing identities and failed role reads never substitute a positive reviewer',async()=>{await expect(store.snapshot('alias',viewer,true)).rejects.toMatchObject({status:400});client.query.mockResolvedValueOnce({rows:[]});await expect(store.snapshot(userId,viewer,true)).rejects.toMatchObject({status:404});readRoleState.mockRejectedValue(new Error('Owned source failure'));await expect(store.snapshot(userId,viewer,true)).rejects.toThrow('Owned source failure');});
+test('relinking the same reviewer under the same issuer produces a different approval authority',async()=>{const original=await store.snapshot(userId,viewer,true);client.query.mockResolvedValue({rows:[{enabled:true,linked:true,eligibility_revision:'4',link_revision:'8'}]});expect((await store.snapshot(userId,viewer,true)).reviewRevision).not.toBe(original.reviewRevision);});
+test('a missing link generation cannot fall back to the role-only proof',async()=>{client.query.mockResolvedValue({rows:[{enabled:true,linked:true,eligibility_revision:'4'}]});await expect(store.snapshot(userId,viewer,true)).rejects.toMatchObject({status:503});});

@@ -5,9 +5,15 @@
 
 const EventEmitter = require('events');
 const crypto = require('crypto');
+const BreakGlassAuditRepository = require('../db/BreakGlassAuditRepository');
 
 class EmergencyAccessService extends EventEmitter {
-    constructor() {
+    /**
+     * @param {object} [db] - Optional pg Pool/Client for WORM audit persistence.
+     *                        When omitted the service operates in-memory only
+     *                        (useful for tests).
+     */
+    constructor(db = null) {
         super();
         this.emergencyAccounts = new Map();
         this.breakGlassRequests = new Map();
@@ -15,6 +21,9 @@ class EmergencyAccessService extends EventEmitter {
         this.emergencyProcedures = new Map();
         this.auditLog = [];
         this.approvers = new Map();
+
+        // WORM-backed audit repository (Feature #4 – Break-Glass Audit WORM)
+        this._auditRepo = db ? new BreakGlassAuditRepository(db) : null;
         
         // Emergency access components
         this.accessValidator = new EmergencyAccessValidator();
@@ -240,7 +249,26 @@ class EmergencyAccessService extends EventEmitter {
         };
         
         this.activeEmergencyAccess.set(accessId, emergencyAccess);
-        
+
+        // Persist to WORM audit table (append-only; no update/delete possible).
+        // Best-effort: a transient DB outage must not block granting access
+        // (the in-memory audit trail below still records the event either way).
+        if (this._auditRepo) {
+            try {
+                await this._auditRepo.recordBreakGlassEvent({
+                    sessionId: accessId,
+                    userId: request.requesterId,
+                    reason: request.businessJustification,
+                    approverId: request.approvals.length > 0 ? request.approvals[0].approverId : null,
+                    startedAt: timestamp,
+                    endedAt: null,
+                    actions: []
+                });
+            } catch (err) {
+                console.warn(`[EmergencyAccessService] Failed to persist break-glass grant audit record for ${accessId}: ${err.message}`);
+            }
+        }
+
         // Update request status
         request.status = 'GRANTED';
         request.accessId = accessId;
@@ -364,7 +392,26 @@ class EmergencyAccessService extends EventEmitter {
         emergencyAccess.status = 'TERMINATED';
         emergencyAccess.actualEndTime = new Date();
         emergencyAccess.terminationReason = reason;
-        
+
+        // Persist session-end to WORM audit table (best-effort; see grant path above).
+        if (this._auditRepo) {
+            try {
+                await this._auditRepo.recordBreakGlassEvent({
+                    sessionId: accessId,
+                    userId: emergencyAccess.userId,
+                    reason: `SESSION_ENDED: ${reason}`,
+                    approverId: emergencyAccess.approvals && emergencyAccess.approvals.length > 0
+                        ? emergencyAccess.approvals[0].approverId
+                        : null,
+                    startedAt: emergencyAccess.startTime,
+                    endedAt: emergencyAccess.actualEndTime,
+                    actions: emergencyAccess.activities || []
+                });
+            } catch (err) {
+                console.warn(`[EmergencyAccessService] Failed to persist break-glass termination audit record for ${accessId}: ${err.message}`);
+            }
+        }
+
         // Stop monitoring
         await this.monitoringEngine.stopMonitoring(accessId);
         

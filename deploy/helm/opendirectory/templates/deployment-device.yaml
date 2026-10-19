@@ -41,7 +41,10 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           ports:
             - name: http
-              containerPort: {{ .Values.device.service.port }}
+              containerPort: {{ .Values.device.service.appPort }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.device.service.grpcPort }}
               protocol: TCP
             - name: metrics
               containerPort: 9090
@@ -53,7 +56,9 @@ spec:
                 name: {{ include "opendirectory.fullname" . }}-secret
           env:
             - name: PORT
-              value: {{ .Values.device.service.port | quote }}
+              value: {{ .Values.device.service.appPort | quote }}
+            - name: RABBITMQ_URL
+              value: "amqp://{{ .Values.rabbitmq.auth.username }}:{{ .Values.rabbitmq.auth.password }}@rabbitmq:5672/"
           livenessProbe:
             httpGet:
               path: /health

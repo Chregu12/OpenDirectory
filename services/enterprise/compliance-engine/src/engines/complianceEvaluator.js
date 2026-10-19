@@ -4,10 +4,11 @@ const logger = require('../utils/logger');
 const ScoreCalculator = require('./scoreCalculator');
 
 class ComplianceEvaluator {
-  constructor(db, redis, eventBus) {
+  constructor(db, redis, eventBus, publishFn) {
     this.db = db;
     this.redis = redis;
     this.eventBus = eventBus;
+    this.publishFn = publishFn || null;
     this.scoreCalculator = new ScoreCalculator(db);
   }
 
@@ -604,6 +605,20 @@ class ComplianceEvaluator {
     try {
       if (this.eventBus) {
         await this.eventBus.publish('compliance.events', Buffer.from(JSON.stringify(event)));
+      }
+      // Also publish to generic EventBus
+      if (this.publishFn) {
+        const routingKey = event.type === 'compliance.evaluation'
+          ? (event.score >= 80 ? 'compliance.check.passed' : 'compliance.check.failed')
+          : event.type === 'compliance.alert.regression'
+            ? 'compliance.violation.detected'
+            : event.type;
+        this.publishFn(routingKey, {
+          deviceId: event.deviceId,
+          baselineId: event.baselineId,
+          score: event.score,
+          timestamp: event.timestamp,
+        });
       }
       logger.debug(`Emitted compliance event: ${event.type}`, { event });
     } catch (error) {

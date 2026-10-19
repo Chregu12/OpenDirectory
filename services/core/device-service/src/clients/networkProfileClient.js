@@ -7,7 +7,7 @@
  * All methods return null on network failure so callers can respond with 503.
  */
 
-const BASE = process.env.CERTIFICATE_NETWORK_URL || 'http://certificate-network:3015';
+const BASE = process.env.CERTIFICATE_NETWORK_URL || 'http://certificate-network';
 const TIMEOUT_MS = 5000;
 
 async function _request(method, path, body) {

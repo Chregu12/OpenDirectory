@@ -18,7 +18,9 @@ import {
   FolderIcon,
   InformationCircleIcon,
   ClipboardDocumentIcon,
+  CircleStackIcon,
 } from '@heroicons/react/24/outline';
+import PrinterDriversTab from '@/components/views/tabs/PrinterDriversTab';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { printerApi } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -29,7 +31,7 @@ import PrinterSetupWizard from '@/components/setup/PrinterSetupWizard';
 type PrinterProtocol = 'IPP' | 'LPD' | 'SMB';
 type PrinterStatus   = 'online' | 'offline' | 'error';
 type JobStatus       = 'pending' | 'printing' | 'completed' | 'failed' | 'cancelled';
-type PrinterTab      = 'printers' | 'scanners' | 'jobs' | 'quotas';
+type PrinterTab      = 'printers' | 'scanners' | 'jobs' | 'quotas' | 'scan-destinations' | 'print-pools' | 'drivers';
 
 interface Printer {
   id: string;
@@ -120,11 +122,11 @@ function StatusDot({ status }: { status: PrinterStatus }) {
 
 function JobStatusBadge({ status }: { status: JobStatus }) {
   const styles: Record<JobStatus, string> = {
-    pending:   'bg-yellow-100 text-yellow-700',
-    printing:  'bg-blue-100 text-blue-700',
-    completed: 'bg-green-100 text-green-700',
-    failed:    'bg-red-100 text-red-700',
-    cancelled: 'bg-gray-100 text-gray-600',
+    pending:   'bg-[rgba(210,153,34,0.15)] text-[#d29922]',
+    printing:  'bg-[rgba(0,111,255,0.15)] text-[#006FFF]',
+    completed: 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]',
+    failed:    'bg-[rgba(248,81,73,0.15)] text-[#f85149]',
+    cancelled: 'bg-[rgba(139,148,158,0.15)] text-[#8b949e]',
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${styles[status]}`}>
@@ -135,9 +137,9 @@ function JobStatusBadge({ status }: { status: JobStatus }) {
 
 function ProtocolBadge({ protocol }: { protocol: PrinterProtocol }) {
   const styles: Record<PrinterProtocol, string> = {
-    IPP: 'bg-blue-100 text-blue-700',
-    LPD: 'bg-purple-100 text-purple-700',
-    SMB: 'bg-orange-100 text-orange-700',
+    IPP: 'bg-[rgba(0,111,255,0.15)] text-[#006FFF]',
+    LPD: 'bg-[rgba(163,113,247,0.15)] text-[#a371f7]',
+    SMB: 'bg-[rgba(210,153,34,0.15)] text-[#d29922]',
   };
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[protocol]}`}>
@@ -354,19 +356,19 @@ function AddPrinterWizard({ onClose, onAdded }: {
   const STEPS = ['Find Device', 'Select Driver', 'Confirm'];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col">
 
         {/* Title bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Add Network Printer</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.07)]">
+          <h2 className="text-base font-semibold text-[var(--text-primary,#e4e6ea)]">Add Network Printer</h2>
+          <button onClick={onClose} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]">
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
 
         {/* Step indicator */}
-        <div className="flex items-center gap-0 px-6 py-3 border-b border-gray-100 bg-gray-50">
+        <div className="flex items-center gap-0 px-6 py-3 border-b border-[rgba(255,255,255,0.07)] bg-[var(--bg-surface-raised,#1c2128)]">
           {STEPS.map((label, i) => {
             const n = i + 1;
             const done    = step > n;
@@ -375,18 +377,18 @@ function AddPrinterWizard({ onClose, onAdded }: {
               <React.Fragment key={n}>
                 <div className="flex items-center gap-1.5">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
-                    done   ? 'bg-blue-600 text-white' :
-                    active ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' :
-                             'bg-gray-200 text-gray-500'
+                    done   ? 'bg-[#006FFF] text-white' :
+                    active ? 'bg-[rgba(0,111,255,0.15)] text-[#006FFF] ring-2 ring-[#006FFF]' :
+                             'bg-[rgba(255,255,255,0.08)] text-[var(--text-muted,#6e7681)]'
                   }`}>
                     {done ? <CheckCircleIcon className="w-4 h-4" /> : n}
                   </div>
-                  <span className={`text-xs font-medium ${active ? 'text-blue-700' : done ? 'text-blue-600' : 'text-gray-400'}`}>
+                  <span className={`text-xs font-medium ${active ? 'text-[#006FFF]' : done ? 'text-[#006FFF]' : 'text-[var(--text-muted,#6e7681)]'}`}>
                     {label}
                   </span>
                 </div>
                 {i < STEPS.length - 1 && (
-                  <ChevronRightIcon className="w-3.5 h-3.5 text-gray-300 mx-2 flex-shrink-0" />
+                  <ChevronRightIcon className="w-3.5 h-3.5 text-[var(--text-muted,#6e7681)] mx-2 flex-shrink-0" />
                 )}
               </React.Fragment>
             );
@@ -399,11 +401,11 @@ function AddPrinterWizard({ onClose, onAdded }: {
           {/* ── Step 1: Find Device ── */}
           {step === 1 && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-[var(--text-secondary,#8b949e)]">
                 Enter the IP address or hostname of the printer. The service will probe the device to detect its make, model, and supported protocols.
               </p>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">
                   IP Address / Hostname
                 </label>
                 <div className="flex gap-2">
@@ -411,14 +413,15 @@ function AddPrinterWizard({ onClose, onAdded }: {
                     value={ip}
                     onChange={e => { setIp(e.target.value); setProbeError(null); setManualMode(false); }}
                     onKeyDown={e => e.key === 'Enter' && handleProbe()}
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="flex-1 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                    style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                     placeholder="192.168.1.50"
                     autoFocus
                   />
                   <button
                     onClick={handleProbe}
                     disabled={probing || !ip.trim()}
-                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50"
                   >
                     {probing
                       ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Probing…</>
@@ -429,7 +432,7 @@ function AddPrinterWizard({ onClose, onAdded }: {
               </div>
 
               {probeError && (
-                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                <div className="flex items-start gap-2 p-3 bg-[rgba(210,153,34,0.15)] border border-[rgba(210,153,34,0.3)] rounded-lg text-sm text-[#d29922]">
                   <ExclamationCircleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   {probeError}
                 </div>
@@ -437,37 +440,40 @@ function AddPrinterWizard({ onClose, onAdded }: {
 
               {/* Manual entry — shown after a failed probe */}
               {manualMode && (
-                <div className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
-                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Enter device details manually</p>
+                <div className="border border-[rgba(255,255,255,0.07)] rounded-lg p-4 space-y-3 bg-[var(--bg-surface-raised,#1c2128)]">
+                  <p className="text-xs font-semibold text-[var(--text-secondary,#8b949e)] uppercase tracking-wide">Enter device details manually</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Manufacturer</label>
+                      <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Manufacturer</label>
                       <select
                         value={manualVendor}
                         onChange={e => setManualVendor(e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                        style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                       >
                         {VENDOR_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Model (optional)</label>
+                      <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Model (optional)</label>
                       <input
                         value={manualModel}
                         onChange={e => setManualModel(e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                        style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                         placeholder="e.g. LaserJet Pro M404n"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Protocol</label>
+                    <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Protocol</label>
                     <div className="flex gap-2">
                       {(['IPP', 'LPD', 'SMB'] as PrinterProtocol[]).map(p => (
                         <button key={p} onClick={() => setSelectedProtocol(p)}
                           className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                            selectedProtocol === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                          }`}>
+                            selectedProtocol === p ? 'bg-[#006FFF] text-white border-[#006FFF]' : 'text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.04)]'
+                          }`}
+                          style={selectedProtocol !== p ? { background: 'var(--bg-surface-raised,#1c2128)' } : undefined}>
                           {p}
                         </button>
                       ))}
@@ -482,34 +488,34 @@ function AddPrinterWizard({ onClose, onAdded }: {
           {step === 2 && probeResult && (
             <div className="space-y-4">
               {/* Device info card */}
-              <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 space-y-2">
+              <div className="bg-[rgba(0,111,255,0.1)] border border-[rgba(0,111,255,0.2)] rounded-lg p-4 space-y-2">
                 <div className="flex items-center gap-2 mb-1">
-                  <CheckCircleIcon className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-800">Device found</span>
+                  <CheckCircleIcon className="w-4 h-4 text-[#006FFF]" />
+                  <span className="text-sm font-medium text-[#006FFF]">Device found</span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                  <span className="text-gray-500">Address</span>
-                  <span className="font-mono text-gray-800">{probeResult.ip}</span>
+                  <span className="text-[var(--text-muted,#6e7681)]">Address</span>
+                  <span className="font-mono text-[var(--text-primary,#e4e6ea)]">{probeResult.ip}</span>
                   {probeResult.hostname && <>
-                    <span className="text-gray-500">Hostname</span>
-                    <span className="text-gray-800">{probeResult.hostname}</span>
+                    <span className="text-[var(--text-muted,#6e7681)]">Hostname</span>
+                    <span className="text-[var(--text-primary,#e4e6ea)]">{probeResult.hostname}</span>
                   </>}
                   {probeResult.vendor && <>
-                    <span className="text-gray-500">Vendor</span>
-                    <span className="text-gray-800">{probeResult.vendor}</span>
+                    <span className="text-[var(--text-muted,#6e7681)]">Vendor</span>
+                    <span className="text-[var(--text-primary,#e4e6ea)]">{probeResult.vendor}</span>
                   </>}
                   {probeResult.model && <>
-                    <span className="text-gray-500">Model</span>
-                    <span className="text-gray-800 font-medium">{probeResult.model}</span>
+                    <span className="text-[var(--text-muted,#6e7681)]">Model</span>
+                    <span className="text-[var(--text-primary,#e4e6ea)] font-medium">{probeResult.model}</span>
                   </>}
-                  <span className="text-gray-500">Protocols</span>
-                  <span className="text-gray-800">{(probeResult.protocols ?? ['IPP']).join(', ')}</span>
+                  <span className="text-[var(--text-muted,#6e7681)]">Protocols</span>
+                  <span className="text-[var(--text-primary,#e4e6ea)]">{(probeResult.protocols ?? ['IPP']).join(', ')}</span>
                 </div>
               </div>
 
               {/* Protocol selector */}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">Connection Protocol</label>
+                <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">Connection Protocol</label>
                 <div className="flex gap-2">
                   {(['IPP', 'LPD', 'SMB'] as PrinterProtocol[]).map(p => {
                     const detected = probeResult.protocols?.includes(p);
@@ -519,13 +525,14 @@ function AddPrinterWizard({ onClose, onAdded }: {
                         onClick={() => setSelectedProtocol(p)}
                         className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
                           selectedProtocol === p
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                            ? 'bg-[#006FFF] text-white border-[#006FFF]'
+                            : 'text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.04)]'
                         }`}
+                        style={selectedProtocol !== p ? { background: 'var(--bg-surface-raised,#1c2128)' } : undefined}
                       >
                         {p}
                         {detected && (
-                          <span className={`ml-1 text-xs ${selectedProtocol === p ? 'text-blue-200' : 'text-green-600'}`}>
+                          <span className={`ml-1 text-xs ${selectedProtocol === p ? 'text-blue-200' : 'text-[#3fb950]'}`}>
                             ✓
                           </span>
                         )}
@@ -533,20 +540,20 @@ function AddPrinterWizard({ onClose, onAdded }: {
                     );
                   })}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">✓ = detected on this device</p>
+                <p className="text-xs text-[var(--text-muted,#6e7681)] mt-1">✓ = detected on this device</p>
               </div>
 
               {/* Driver list */}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">
                   Driver
-                  {loadingDrivers && <ArrowPathIcon className="w-3 h-3 inline ml-1 animate-spin text-gray-400" />}
+                  {loadingDrivers && <ArrowPathIcon className="w-3 h-3 inline ml-1 animate-spin text-[var(--text-muted,#6e7681)]" />}
                 </label>
-                <div className="space-y-1 max-h-44 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                <div className="space-y-1 max-h-44 overflow-y-auto border border-[rgba(255,255,255,0.07)] rounded-lg divide-y divide-[rgba(255,255,255,0.07)]">
                   {drivers.map(d => (
                     <label key={d.id}
                       className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
-                        selectedDriver?.id === d.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+                        selectedDriver?.id === d.id ? 'bg-[rgba(0,111,255,0.15)]' : 'hover:bg-[rgba(255,255,255,0.04)]'
                       }`}
                     >
                       <input
@@ -554,14 +561,14 @@ function AddPrinterWizard({ onClose, onAdded }: {
                         name="driver"
                         checked={selectedDriver?.id === d.id}
                         onChange={() => setSelectedDriver(d)}
-                        className="text-blue-600"
+                        className="text-[#006FFF]"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{d.name}</p>
-                        {d.version && <p className="text-xs text-gray-400">v{d.version}</p>}
+                        <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)] truncate">{d.name}</p>
+                        {d.version && <p className="text-xs text-[var(--text-muted,#6e7681)]">v{d.version}</p>}
                       </div>
                       {d.recommended && (
-                        <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium flex-shrink-0">
+                        <span className="text-xs px-1.5 py-0.5 bg-[rgba(0,111,255,0.15)] text-[#006FFF] rounded font-medium flex-shrink-0">
                           Recommended
                         </span>
                       )}
@@ -576,42 +583,44 @@ function AddPrinterWizard({ onClose, onAdded }: {
           {step === 3 && probeResult && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">Printer Name *</label>
+                <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">Printer Name *</label>
                 <input
                   value={printerName}
                   onChange={e => setPrinterName(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                  style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                   placeholder="e.g. Office-HP-LaserJet"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">Location (optional)</label>
+                <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1.5">Location (optional)</label>
                 <input
                   value={location}
                   onChange={e => setLocation(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                  style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                   placeholder="e.g. Open Office, 2nd Floor"
                 />
               </div>
 
               {/* Multifunction toggle */}
-              <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+              <div className="border border-[rgba(255,255,255,0.07)] rounded-lg p-3 space-y-2 bg-[rgba(0,111,255,0.1)]">
                 <label className="flex items-center gap-2.5 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={isMultifunction}
                     onChange={e => setIsMultifunction(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                    className="w-4 h-4 rounded text-[#006FFF] focus:ring-[#006FFF]"
                   />
-                  <span className="text-sm font-medium text-gray-700">This device also has a scanner</span>
+                  <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">This device also has a scanner</span>
                   {autoDetectedMF && (
-                    <span className="text-xs text-green-700 bg-green-100 px-1.5 py-0.5 rounded font-medium">Auto-detected</span>
+                    <span className="text-xs text-[#3fb950] bg-[rgba(63,185,80,0.15)] px-1.5 py-0.5 rounded font-medium">Auto-detected</span>
                   )}
                 </label>
                 {isMultifunction && (
                   <div className="pl-6 space-y-1.5">
-                    <p className="text-xs text-gray-500">Supported scan formats:</p>
+                    <p className="text-xs text-[var(--text-muted,#6e7681)]">Supported scan formats:</p>
                     <div className="flex gap-4">
                       {(['PDF', 'JPEG', 'TIFF', 'PNG'] as const).map(fmt => (
                         <label key={fmt} className="flex items-center gap-1.5 cursor-pointer">
@@ -621,9 +630,9 @@ function AddPrinterWizard({ onClose, onAdded }: {
                             onChange={e => setScanFormats(prev =>
                               e.target.checked ? [...prev, fmt] : prev.filter(f => f !== fmt)
                             )}
-                            className="w-3.5 h-3.5 rounded text-blue-600"
+                            className="w-3.5 h-3.5 rounded text-[#006FFF]"
                           />
-                          <span className="text-xs text-gray-700">{fmt}</span>
+                          <span className="text-xs text-[var(--text-secondary,#8b949e)]">{fmt}</span>
                         </label>
                       ))}
                     </div>
@@ -632,8 +641,8 @@ function AddPrinterWizard({ onClose, onAdded }: {
               </div>
 
               {/* Summary */}
-              <div className="bg-gray-50 rounded-lg p-4 space-y-1.5 text-xs">
-                <p className="font-medium text-gray-700 mb-2">Summary</p>
+              <div className="bg-[var(--bg-surface-raised,#1c2128)] rounded-lg p-4 space-y-1.5 text-xs">
+                <p className="font-medium text-[var(--text-secondary,#8b949e)] mb-2">Summary</p>
                 {[
                   ['Address',  probeResult.ip],
                   ['Model',    probeResult.model ?? '—'],
@@ -641,8 +650,8 @@ function AddPrinterWizard({ onClose, onAdded }: {
                   ['Driver',   selectedDriver?.name ?? '—'],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between">
-                    <span className="text-gray-500">{k}</span>
-                    <span className="text-gray-800 font-medium truncate max-w-[220px]">{v}</span>
+                    <span className="text-[var(--text-muted,#6e7681)]">{k}</span>
+                    <span className="text-[var(--text-primary,#e4e6ea)] font-medium truncate max-w-[220px]">{v}</span>
                   </div>
                 ))}
               </div>
@@ -651,10 +660,10 @@ function AddPrinterWizard({ onClose, onAdded }: {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[rgba(255,255,255,0.07)]">
           <button
             onClick={step === 1 ? onClose : () => setStep(s => (s - 1) as WizardStep)}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-[var(--text-secondary,#8b949e)] hover:text-[var(--text-primary,#e4e6ea)]"
           >
             {step === 1 ? 'Cancel' : <><ChevronLeftIcon className="w-4 h-4" /> Back</>}
           </button>
@@ -663,7 +672,7 @@ function AddPrinterWizard({ onClose, onAdded }: {
             <button
               onClick={handleProbe}
               disabled={probing || !ip.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50"
             >
               {probing ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Probing…</> : <>Next <ChevronRightIcon className="w-4 h-4" /></>}
             </button>
@@ -672,7 +681,7 @@ function AddPrinterWizard({ onClose, onAdded }: {
             <button
               onClick={handleManualNext}
               disabled={!ip.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50"
             >
               Next <ChevronRightIcon className="w-4 h-4" />
             </button>
@@ -682,7 +691,7 @@ function AddPrinterWizard({ onClose, onAdded }: {
             <button
               onClick={() => setStep(3)}
               disabled={!selectedDriver}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50"
             >
               Next <ChevronRightIcon className="w-4 h-4" />
             </button>
@@ -692,7 +701,7 @@ function AddPrinterWizard({ onClose, onAdded }: {
             <button
               onClick={handleAddPrinter}
               disabled={saving || !printerName.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50"
             >
               {saving ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Adding…</> : 'Add Printer'}
             </button>
@@ -750,14 +759,14 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
   const profiles = scanner.profiles ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl shadow-xl w-full max-w-md mx-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.07)]">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Scannen — {scanner.name}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{scanner.ip} · {scanner.model}</p>
+            <h2 className="text-base font-semibold text-[var(--text-primary,#e4e6ea)]">Scannen — {scanner.name}</h2>
+            <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">{scanner.ip} · {scanner.model}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]">
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
@@ -765,7 +774,7 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
         {/* Quick profile selector */}
         {profiles.length > 0 && (
           <div className="px-6 pt-4 pb-0">
-            <p className="text-xs font-medium text-gray-500 mb-2">Schnellauswahl</p>
+            <p className="text-xs font-medium text-[var(--text-muted,#6e7681)] mb-2">Schnellauswahl</p>
             <div className="flex gap-2 flex-wrap">
               {profiles.map(p => (
                 <button
@@ -773,9 +782,10 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
                   onClick={() => applyProfile(p)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                     activeProfileId === p.id
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:text-blue-600'
+                      ? 'bg-[#006FFF] text-white border-[#006FFF]'
+                      : 'text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)] hover:border-[#006FFF] hover:text-[#006FFF]'
                   }`}
+                  style={activeProfileId !== p.id ? { background: 'var(--bg-surface-raised,#1c2128)' } : undefined}
                 >
                   {p.isDefault && <StarIconSolid className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
                   <FolderIcon className="w-3 h-3 flex-shrink-0" />
@@ -789,44 +799,48 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
         <form onSubmit={handleScan} className="p-6 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Auflösung</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Auflösung</label>
               <select value={form.resolution}
                 onChange={e => { setForm(f => ({ ...f, resolution: e.target.value })); setActiveProfileId(null); }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}>
                 {['75', '150', '300', '600'].map(r => <option key={r} value={r}>{r} DPI</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Farbe</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Farbe</label>
               <select value={form.color}
                 onChange={e => { setForm(f => ({ ...f, color: e.target.value })); setActiveProfileId(null); }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}>
                 <option value="color">Farbe</option>
                 <option value="grayscale">Schwarz/Weiss</option>
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Format</label>
+            <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Format</label>
             <div className="flex gap-2">
               {scanner.formats.map(fmt => (
                 <button key={fmt} type="button"
                   onClick={() => { setForm(f => ({ ...f, format: fmt })); setActiveProfileId(null); }}
                   className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                    form.format === fmt ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}>
+                    form.format === fmt ? 'bg-[#006FFF] text-white border-[#006FFF]' : 'text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.04)]'
+                  }`}
+                  style={form.format !== fmt ? { background: 'var(--bg-surface-raised,#1c2128)' } : undefined}>
                   {fmt}
                 </button>
               ))}
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Zielordner oder E-Mail *</label>
+            <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Zielordner oder E-Mail *</label>
             {scanShares.length > 0 ? (
               <select
                 value={form.destination}
                 onChange={e => { setForm(f => ({ ...f, destination: e.target.value })); setActiveProfileId(null); }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+                style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
               >
                 <option value="">— Share auswählen oder Pfad eingeben —</option>
                 {scanShares.map(s => {
@@ -840,7 +854,8 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
               <input
                 value={form.destination === '__custom__' ? '' : form.destination}
                 onChange={e => { setForm(f => ({ ...f, destination: e.target.value })); setActiveProfileId(null); }}
-                className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${scanShares.length > 0 ? 'mt-2' : ''}`}
+                className={`w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF] ${scanShares.length > 0 ? 'mt-2' : ''}`}
+                style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
                 placeholder="/scans/dokumente  oder  user@example.com"
                 autoFocus={form.destination === '__custom__'}
               />
@@ -848,11 +863,11 @@ function ScanModal({ scanner, onClose }: { scanner: Scanner; onClose: () => void
           </div>
           <div className="flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
+              className="px-4 py-2 text-sm font-medium text-[var(--text-secondary,#8b949e)] bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.12)] rounded-lg">
               Abbrechen
             </button>
             <button type="submit" disabled={scanning}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
+              className="px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-50">
               {scanning ? 'Starte…' : 'Scan starten'}
             </button>
           </div>
@@ -918,31 +933,31 @@ function ScannerSettingsModal({ scanner, onClose, onSaved }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.07)] flex-shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Scanner-Einstellungen</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{scanner.name} · {scanner.ip}</p>
+            <h2 className="text-base font-semibold text-[var(--text-primary,#e4e6ea)]">Scanner-Einstellungen</h2>
+            <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">{scanner.name} · {scanner.ip}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]"><XMarkIcon className="w-5 h-5" /></button>
         </div>
 
         <div className="overflow-y-auto flex-1 p-6 space-y-4">
           {/* Profile list */}
           <div className="flex items-center justify-between mb-1">
-            <p className="text-sm font-medium text-gray-700">Scan-Profile ({profiles.length})</p>
+            <p className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Scan-Profile ({profiles.length})</p>
             <button
               onClick={() => setEditing({ ...BLANK_PROFILE(), id: '', _new: true })}
-              className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+              className="flex items-center gap-1.5 text-xs font-medium text-[#006FFF] hover:text-[#0056cc]"
             >
               <PlusIcon className="w-4 h-4" /> Profil hinzufügen
             </button>
           </div>
 
           {profiles.length === 0 && !editing && (
-            <div className="text-center py-8 text-gray-400">
+            <div className="text-center py-8 text-[var(--text-muted,#6e7681)]">
               <FolderIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
               <p className="text-sm">Noch keine Profile — erstelle das erste Profil</p>
             </div>
@@ -950,26 +965,26 @@ function ScannerSettingsModal({ scanner, onClose, onSaved }: {
 
           <div className="space-y-2">
             {profiles.map(p => (
-              <div key={p.id} className="border border-gray-200 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-50">
+              <div key={p.id} className="border border-[rgba(255,255,255,0.07)] rounded-lg p-3 flex items-center gap-3 hover:bg-[rgba(255,255,255,0.04)]">
                 <button onClick={() => handleSetDefault(p.id)} title="Als Standard setzen"
-                  className={`flex-shrink-0 ${p.isDefault ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}>
+                  className={`flex-shrink-0 ${p.isDefault ? 'text-yellow-500' : 'text-[var(--text-muted,#6e7681)] hover:text-yellow-400'}`}>
                   {p.isDefault ? <StarIconSolid className="w-4 h-4" /> : <StarIcon className="w-4 h-4" />}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
+                  <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)] truncate">
                     {p.name}
-                    {p.isDefault && <span className="ml-2 text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded">Standard</span>}
+                    {p.isDefault && <span className="ml-2 text-xs text-yellow-500 bg-[rgba(210,153,34,0.15)] px-1.5 py-0.5 rounded">Standard</span>}
                   </p>
-                  <p className="text-xs text-gray-400 truncate">
+                  <p className="text-xs text-[var(--text-muted,#6e7681)] truncate">
                     {p.resolution} DPI · {p.color === 'color' ? 'Farbe' : 'S/W'} · {p.format} → {p.destination || '—'}
                   </p>
                 </div>
                 <button onClick={() => setEditing(p)}
-                  className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors">
+                  className="text-[var(--text-muted,#6e7681)] hover:text-[#006FFF] p-1 rounded transition-colors">
                   <PencilIcon className="w-4 h-4" />
                 </button>
                 <button onClick={() => handleDelete(p.id)}
-                  className="text-gray-400 hover:text-red-600 p-1 rounded transition-colors">
+                  className="text-[var(--text-muted,#6e7681)] hover:text-[#f85149] p-1 rounded transition-colors">
                   <TrashIcon className="w-4 h-4" />
                 </button>
               </div>
@@ -987,9 +1002,9 @@ function ScannerSettingsModal({ scanner, onClose, onSaved }: {
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end flex-shrink-0">
+        <div className="px-6 py-4 border-t border-[rgba(255,255,255,0.07)] flex justify-end flex-shrink-0">
           <button onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
+            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary,#8b949e)] bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.12)] rounded-lg">
             Schliessen
           </button>
         </div>
@@ -1014,21 +1029,23 @@ function ProfileEditForm({ value, formats, onSave, onCancel }: {
 }) {
   const [form, setForm] = useState(value);
   return (
-    <div className="border-2 border-blue-200 rounded-xl p-4 space-y-3 bg-blue-50/30">
-      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+    <div className="border-2 border-[rgba(0,111,255,0.3)] rounded-xl p-4 space-y-3 bg-[rgba(0,111,255,0.08)]">
+      <p className="text-xs font-semibold text-[#006FFF] uppercase tracking-wide">
         {value._new ? 'Neues Profil' : 'Profil bearbeiten'}
       </p>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Profilname *</label>
+        <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Profilname *</label>
         <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+          style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
           placeholder="z.B. Dokumente, Archiv, Schnellscan" autoFocus />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Auflösung</label>
+          <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Auflösung</label>
           <select value={form.resolution} onChange={e => setForm(f => ({ ...f, resolution: e.target.value }))}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+            className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+            style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}>
             <option value="75">75 DPI (Web)</option>
             <option value="150">150 DPI (Normal)</option>
             <option value="300">300 DPI (Druck)</option>
@@ -1036,45 +1053,48 @@ function ProfileEditForm({ value, formats, onSave, onCancel }: {
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Farbe</label>
+          <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Farbe</label>
           <select value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+            className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+            style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}>
             <option value="color">Farbe</option>
             <option value="grayscale">Schwarz/Weiss</option>
           </select>
         </div>
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Format</label>
+        <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Format</label>
         <div className="flex gap-2">
           {(formats.length > 0 ? formats : ['PDF','JPEG','TIFF']).map(fmt => (
             <button key={fmt} type="button"
               onClick={() => setForm(f => ({ ...f, format: fmt }))}
               className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                form.format === fmt ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-              }`}>
+                form.format === fmt ? 'bg-[#006FFF] text-white border-[#006FFF]' : 'text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.04)]'
+              }`}
+              style={form.format !== fmt ? { background: 'var(--bg-surface-raised,#1c2128)' } : undefined}>
               {fmt}
             </button>
           ))}
         </div>
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Standardziel (Ordner oder E-Mail)</label>
+        <label className="block text-xs font-medium text-[var(--text-secondary,#8b949e)] mb-1">Standardziel (Ordner oder E-Mail)</label>
         <input value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]"
+          style={{ background: 'var(--bg-surface-raised,#1c2128)', color: 'var(--text-primary,#e4e6ea)' }}
           placeholder="/scans/dokumente  oder  archiv@example.com" />
       </div>
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={!!form.isDefault}
           onChange={e => setForm(f => ({ ...f, isDefault: e.target.checked }))}
-          className="rounded text-blue-600" />
-        <span className="text-sm text-gray-700">Als Standard-Profil setzen</span>
+          className="rounded text-[#006FFF]" />
+        <span className="text-sm text-[var(--text-secondary,#8b949e)]">Als Standard-Profil setzen</span>
       </label>
       <div className="flex justify-end gap-2 pt-1">
         <button type="button" onClick={onCancel}
-          className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg">Abbrechen</button>
+          className="px-3 py-1.5 text-sm text-[var(--text-secondary,#8b949e)] bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.12)] rounded-lg">Abbrechen</button>
         <button type="button" onClick={() => onSave(form)}
-          className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Speichern</button>
+          className="px-4 py-1.5 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg">Speichern</button>
       </div>
     </div>
   );
@@ -1094,7 +1114,8 @@ function PrintServerInfoModal({ printer, onClose }: { printer: { name: string };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4"
+        className="rounded-xl shadow-xl w-full max-w-lg mx-4"
+        style={{ background: 'var(--bg-surface, #161b22)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -1360,10 +1381,13 @@ export default function PrintersView() {
   // ── Tab bar ──────────────────────────────────────────────────────────────
 
   const TABS: { id: PrinterTab; label: string; count?: number }[] = [
-    { id: 'printers', label: 'Printers',   count: printers.length },
-    { id: 'scanners', label: 'Scanners',   count: scanners.length },
-    { id: 'jobs',     label: 'Print Jobs', count: jobs.length },
-    { id: 'quotas',   label: 'Quotas',     count: quotas.length },
+    { id: 'printers',          label: 'Printers',           count: printers.length },
+    { id: 'scanners',          label: 'Scanners',           count: scanners.length },
+    { id: 'jobs',              label: 'Print Jobs',         count: jobs.length },
+    { id: 'quotas',            label: 'Quotas',             count: quotas.length },
+    { id: 'scan-destinations', label: 'Scan Destinations' },
+    { id: 'print-pools',       label: 'Print Pools' },
+    { id: 'drivers',           label: 'Treiber' },
   ];
 
   if (loading) {
@@ -1419,7 +1443,7 @@ export default function PrintersView() {
             <button
               onClick={handleDiscover}
               disabled={discovering}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.05)] rounded-lg disabled:opacity-50" style={{ background: 'var(--bg-surface-raised, #1c2128)' }}
             >
               <MagnifyingGlassIcon className="w-4 h-4" />
               {discovering ? 'Discovering…' : 'Discover'}
@@ -1470,7 +1494,7 @@ export default function PrintersView() {
           : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {printers.map(printer => (
-                <div key={printer.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 hover:shadow-sm transition-shadow">
+                <div key={printer.id} className="border border-[rgba(255,255,255,0.07)] rounded-xl p-4 space-y-3 hover:shadow-sm transition-shadow" style={{ background: 'var(--bg-surface, #161b22)' }}>
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
                       <StatusDot status={printer.status} />
@@ -1557,7 +1581,7 @@ export default function PrintersView() {
               description="Scanner devices are auto-discovered from multifunction printers registered in the system."
             />
           : (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -1625,7 +1649,7 @@ export default function PrintersView() {
                 <button
                   key={p}
                   onClick={() => setJobPeriod(p)}
-                  className={`px-3 py-1.5 transition-colors ${jobPeriod === p ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  className={`px-3 py-1.5 transition-colors ${jobPeriod === p ? 'bg-[#006FFF] text-white' : 'text-gray-400 hover:bg-[rgba(255,255,255,0.05)]'}`}
                 >
                   {p === 'today' ? 'Heute' : p === 'week' ? 'Diese Woche' : 'Alle'}
                 </button>
@@ -1654,7 +1678,7 @@ export default function PrintersView() {
                   const maxPages = userStats[0][1].pages || 1;
                   const pct = Math.round((pages / maxPages) * 100);
                   return (
-                    <div key={user} className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 min-w-[160px]">
+                    <div key={user} className="flex items-center gap-2 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 min-w-[160px]" style={{ background: 'var(--bg-surface, #161b22)' }}>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-gray-800 truncate">{user}</p>
                         <div className="flex items-center gap-1.5 mt-1">
@@ -1679,7 +1703,7 @@ export default function PrintersView() {
                 description={filterPrinter ? `Keine Aufträge für ${filterPrinter} im gewählten Zeitraum.` : 'Noch keine Druckaufträge im Verlauf.'}
               />
             : (
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div className="border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
@@ -1731,7 +1755,7 @@ export default function PrintersView() {
               description="Print quotas will appear here once configured in the printer management service."
             />
           : (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -1790,6 +1814,15 @@ export default function PrintersView() {
           )
       )}
 
+      {/* ── SCAN DESTINATIONS TAB ─────────────────────────────────────────── */}
+      {activeTab === 'scan-destinations' && <ScanDestinationsTab />}
+
+      {/* ── PRINT POOLS TAB ──────────────────────────────────────────────── */}
+      {activeTab === 'print-pools' && <PrintPoolsTab />}
+
+      {/* ── DRIVERS TAB ──────────────────────────────────────────────────── */}
+      {activeTab === 'drivers' && <PrinterDriversTab />}
+
       {/* Modals */}
       {showAddPrinter && (
         <AddPrinterWizard
@@ -1813,6 +1846,858 @@ export default function PrintersView() {
         />
       )}
       {showSetupWizard && <PrinterSetupWizard onClose={() => setShowSetupWizard(false)} />}
+    </div>
+  );
+}
+
+// ─── Types for new features ──────────────────────────────────────────────────
+
+interface ScanDestination {
+  id: string;
+  entityType: 'user' | 'group';
+  entityId: string;
+  type: string;
+  smbServer?: string;
+  smbShare?: string;
+  smbPath?: string;
+  smbUsername?: string;
+  smbDomain?: string;
+  localPath?: string;
+  label?: string;
+}
+
+interface DestinationFormState {
+  entityType: 'user' | 'group';
+  entityId: string;
+  type: 'smb' | 'local';
+  smbServer: string;
+  smbShare: string;
+  smbPath: string;
+  smbUsername: string;
+  smbPassword: string;
+  smbDomain: string;
+  localPath: string;
+  label: string;
+}
+
+const BLANK_DEST_FORM: DestinationFormState = {
+  entityType: 'user',
+  entityId: '',
+  type: 'smb',
+  smbServer: '',
+  smbShare: '',
+  smbPath: '',
+  smbUsername: '',
+  smbPassword: '',
+  smbDomain: '',
+  localPath: '',
+  label: '',
+};
+
+interface PrintPool {
+  id: string;
+  name: string;
+  display_name?: string;
+  description?: string;
+  algorithm: string;
+  active: boolean;
+  member_count: number;
+}
+
+interface PoolMember {
+  id: string;
+  pool_id: string;
+  printer_id: string;
+  printer_name?: string;
+  printer_uri?: string;
+  weight: number;
+  priority: number;
+  active: boolean;
+  current_jobs: number;
+  total_jobs: number;
+  last_used_at?: string;
+}
+
+interface PoolWithMembers extends PrintPool {
+  members: PoolMember[];
+}
+
+// ─── Scan Destinations Tab ───────────────────────────────────────────────────
+
+export function ScanDestinationsTab() {
+  const [destinations, setDestinations] = useState<ScanDestination[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showDialog, setShowDialog] = useState(false);
+  const [editTarget, setEditTarget] = useState<ScanDestination | null>(null);
+  const [form, setForm] = useState<DestinationFormState>(BLANK_DEST_FORM);
+  const [saving, setSaving] = useState(false);
+
+  const BASE = '/api/printer/scan-destinations';
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(BASE);
+      const data = await res.json();
+      setDestinations(data.destinations ?? []);
+    } catch {
+      toast.error('Failed to load scan destinations');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openAdd = () => {
+    setEditTarget(null);
+    setForm(BLANK_DEST_FORM);
+    setShowDialog(true);
+  };
+
+  const openEdit = (dest: ScanDestination) => {
+    setEditTarget(dest);
+    setForm({
+      entityType: dest.entityType,
+      entityId:   dest.entityId,
+      type:       (dest.type as 'smb' | 'local') || 'smb',
+      smbServer:  dest.smbServer ?? '',
+      smbShare:   dest.smbShare ?? '',
+      smbPath:    dest.smbPath ?? '',
+      smbUsername: dest.smbUsername ?? '',
+      smbPassword: '',
+      smbDomain:  dest.smbDomain ?? '',
+      localPath:  dest.localPath ?? '',
+      label:      dest.label ?? '',
+    });
+    setShowDialog(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.entityId.trim()) { toast.error('Entity ID is required'); return; }
+    setSaving(true);
+    try {
+      const url = form.entityType === 'user'
+        ? `${BASE}/user/${encodeURIComponent(form.entityId)}`
+        : `${BASE}/group/${encodeURIComponent(form.entityId)}`;
+      const body: Record<string, string> = {
+        type: form.type,
+        smbServer: form.smbServer,
+        smbShare: form.smbShare,
+        smbPath: form.smbPath,
+        smbUsername: form.smbUsername,
+        smbDomain: form.smbDomain,
+        localPath: form.localPath,
+        label: form.label,
+      };
+      if (form.smbPassword) body.smbPassword = form.smbPassword;
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed');
+      toast.success('Destination saved');
+      setShowDialog(false);
+      load();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (dest: ScanDestination) => {
+    if (!confirm(`Delete destination for ${dest.entityType} "${dest.entityId}"?`)) return;
+    try {
+      const url = dest.entityType === 'user'
+        ? `${BASE}/user/${encodeURIComponent(dest.entityId)}`
+        : `${BASE}/group/${encodeURIComponent(dest.entityId)}`;
+      const res = await fetch(url, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Delete failed');
+      toast.success('Destination deleted');
+      load();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <ArrowPathIcon className="w-6 h-6 text-gray-400 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">Configure per-user and per-group scan destinations (SMB or local).</p>
+        <button
+          onClick={openAdd}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+        >
+          <PlusIcon className="w-4 h-4" />
+          Add Destination
+        </button>
+      </div>
+
+      {destinations.length === 0 ? (
+        <EmptyState
+          icon={FolderIcon}
+          title="No scan destinations configured"
+          description="Add per-user or per-group SMB / local destinations for scanned files."
+        />
+      ) : (
+        <div className="border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['Type', 'Entity ID', 'Destination', 'Server / Share', 'Path', 'Label', 'Actions'].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {destinations.map(dest => (
+                <tr key={dest.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${dest.entityType === 'user' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                      {dest.entityType}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{dest.entityId}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${dest.type === 'smb' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700'}`}>
+                      {dest.type?.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-gray-600 text-xs">
+                    {dest.smbServer ? `//${dest.smbServer}/${dest.smbShare}` : dest.localPath ?? '—'}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {dest.smbPath
+                      ? /(@\{username\}|@\{email\}|%U)/i.test(dest.smbPath)
+                        ? <span className="font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{dest.smbPath}</span>
+                        : <span className="font-mono text-gray-500">{dest.smbPath}</span>
+                      : <span className="text-gray-400">—</span>
+                    }
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">{dest.label || '—'}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEdit(dest)}
+                        className="text-xs px-2 py-1 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg"
+                      >Edit</button>
+                      <button
+                        onClick={() => handleDelete(dest)}
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        <TrashIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Add / Edit Dialog */}
+      {showDialog && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4" style={{ background: 'var(--bg-surface, #161b22)' }}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">{editTarget ? 'Edit' : 'Add'} Scan Destination</h2>
+              <button onClick={() => setShowDialog(false)} className="p-1 rounded hover:bg-gray-100">
+                <XMarkIcon className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* Entity Type */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Entity Type</label>
+                <select
+                  value={form.entityType}
+                  onChange={e => setForm(f => ({ ...f, entityType: e.target.value as 'user' | 'group' }))}
+                  disabled={!!editTarget}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                >
+                  <option value="user">User</option>
+                  <option value="group">Group</option>
+                </select>
+              </div>
+
+              {/* Entity ID */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Entity ID</label>
+                <input
+                  type="text"
+                  placeholder="user@domain.com or group-name"
+                  value={form.entityId}
+                  onChange={e => setForm(f => ({ ...f, entityId: e.target.value }))}
+                  disabled={!!editTarget}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                />
+              </div>
+
+              {/* Destination Type */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Destination Type</label>
+                <select
+                  value={form.type}
+                  onChange={e => setForm(f => ({ ...f, type: e.target.value as 'smb' | 'local' }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="smb">SMB</option>
+                  <option value="local">Local</option>
+                </select>
+              </div>
+
+              {/* Label */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Label</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Marketing Scans"
+                  value={form.label}
+                  onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {form.type === 'smb' && (
+                <>
+                  {/* SMB Server */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">SMB Server</label>
+                    <input
+                      type="text"
+                      placeholder="192.168.1.10"
+                      value={form.smbServer}
+                      onChange={e => setForm(f => ({ ...f, smbServer: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* SMB Share */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Share Name</label>
+                    <input
+                      type="text"
+                      placeholder="scans"
+                      value={form.smbShare}
+                      onChange={e => setForm(f => ({ ...f, smbShare: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* SMB Path */}
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-xs font-medium text-gray-600">Sub-path (optional)</label>
+                    <input
+                      type="text"
+                      placeholder="scanner/@{username}  oder  Marketing/Incoming"
+                      value={form.smbPath}
+                      onChange={e => setForm(f => ({ ...f, smbPath: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-blue-600">
+                      Variablen: <code className="bg-blue-50 px-1 rounded">@&#123;username&#125;</code> → Login-Name,{' '}
+                      <code className="bg-blue-50 px-1 rounded">@&#123;email&#125;</code> → E-Mail,{' '}
+                      <code className="bg-blue-50 px-1 rounded">%U</code> → Samba-Alias für Username.
+                      Nützlich für Gruppen-Regeln: z.B. <code className="bg-blue-50 px-1 rounded">scanner/@&#123;username&#125;</code> → <em>scanner/jdoe</em>.
+                    </p>
+                  </div>
+
+                  {/* SMB Username */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Username</label>
+                    <input
+                      type="text"
+                      placeholder="scanuser"
+                      value={form.smbUsername}
+                      onChange={e => setForm(f => ({ ...f, smbUsername: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* SMB Password */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Password{editTarget ? ' (leave blank to keep)' : ''}</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={form.smbPassword}
+                      onChange={e => setForm(f => ({ ...f, smbPassword: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* SMB Domain */}
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-xs font-medium text-gray-600">Domain (optional)</label>
+                    <input
+                      type="text"
+                      placeholder="CORP"
+                      value={form.smbDomain}
+                      onChange={e => setForm(f => ({ ...f, smbDomain: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </>
+              )}
+
+              {form.type === 'local' && (
+                <div className="space-y-1 col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Local Path</label>
+                  <input
+                    type="text"
+                    placeholder="/mnt/storage/scans/@{username}"
+                    value={form.localPath}
+                    onChange={e => setForm(f => ({ ...f, localPath: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-blue-600">
+                    Variablen: <code className="bg-blue-50 px-1 rounded">@&#123;username&#125;</code>,{' '}
+                    <code className="bg-blue-50 px-1 rounded">@&#123;email&#125;</code>,{' '}
+                    <code className="bg-blue-50 px-1 rounded">%U</code> werden beim Scan ersetzt.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowDialog(false)}
+                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+              >Cancel</button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              >{saving ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Print Pools Tab ─────────────────────────────────────────────────────────
+
+export function PrintPoolsTab() {
+  const [pools, setPools]               = useState<PrintPool[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [selectedPool, setSelectedPool] = useState<PoolWithMembers | null>(null);
+  const [loadingPool, setLoadingPool]   = useState(false);
+  const [showAddPool, setShowAddPool]   = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [poolForm, setPoolForm] = useState({ name: '', displayName: '', algorithm: 'round_robin', description: '' });
+  const [memberForm, setMemberForm] = useState({ printerId: '', printerName: '', printerUri: '', weight: '1', priority: '100' });
+  const [saving, setSaving] = useState(false);
+
+  const BASE = '/api/printer/print-pools';
+
+  const loadPools = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(BASE);
+      const data = await res.json();
+      setPools(data.pools ?? []);
+    } catch {
+      toast.error('Failed to load print pools');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadPools(); }, [loadPools]);
+
+  const loadPool = async (poolId: string) => {
+    setLoadingPool(true);
+    try {
+      const res = await fetch(`${BASE}/${poolId}`);
+      const data = await res.json();
+      setSelectedPool(data.pool ?? null);
+    } catch {
+      toast.error('Failed to load pool details');
+    } finally {
+      setLoadingPool(false);
+    }
+  };
+
+  const handleCreatePool = async () => {
+    if (!poolForm.name.trim()) { toast.error('Pool name is required'); return; }
+    setSaving(true);
+    try {
+      const res = await fetch(BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(poolForm),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed');
+      toast.success('Pool created');
+      setShowAddPool(false);
+      setPoolForm({ name: '', displayName: '', algorithm: 'round_robin', description: '' });
+      loadPools();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeletePool = async (pool: PrintPool) => {
+    if (!confirm(`Delete pool "${pool.display_name || pool.name}"?`)) return;
+    try {
+      const res = await fetch(`${BASE}/${pool.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Delete failed');
+      toast.success('Pool deleted');
+      if (selectedPool?.id === pool.id) setSelectedPool(null);
+      loadPools();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleAddMember = async () => {
+    if (!selectedPool || !memberForm.printerId.trim()) { toast.error('Printer ID is required'); return; }
+    setSaving(true);
+    try {
+      const body = {
+        printerId: memberForm.printerId,
+        printerName: memberForm.printerName,
+        printerUri: memberForm.printerUri,
+        weight: parseInt(memberForm.weight, 10) || 1,
+        priority: parseInt(memberForm.priority, 10) || 100,
+      };
+      const res = await fetch(`${BASE}/${selectedPool.id}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Add member failed');
+      toast.success('Member added');
+      setShowAddMember(false);
+      setMemberForm({ printerId: '', printerName: '', printerUri: '', weight: '1', priority: '100' });
+      loadPool(selectedPool.id);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveMember = async (member: PoolMember) => {
+    if (!selectedPool || !confirm(`Remove "${member.printer_name || member.printer_id}" from pool?`)) return;
+    try {
+      const res = await fetch(`${BASE}/${selectedPool.id}/members/${encodeURIComponent(member.printer_id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Remove failed');
+      toast.success('Member removed');
+      loadPool(selectedPool.id);
+      loadPools();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleTestRoute = async (poolId: string) => {
+    try {
+      const res = await fetch(`${BASE}/${poolId}/test-route`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Route test failed');
+      const m = data.selectedMember;
+      toast.success(`Would route to: ${m.printer_name || m.printer_id}`, { duration: 4000 });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const ALGO_LABELS: Record<string, string> = {
+    round_robin: 'Round Robin',
+    least_jobs:  'Least Jobs',
+    priority:    'Priority',
+    failover:    'Failover',
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <ArrowPathIcon className="w-6 h-6 text-gray-400 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">Group printers into pools with automatic job routing algorithms.</p>
+        <button
+          onClick={() => setShowAddPool(true)}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+        >
+          <PlusIcon className="w-4 h-4" />
+          Add Pool
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Pool list */}
+        <div className="lg:col-span-1 space-y-2">
+          {pools.length === 0 ? (
+            <EmptyState
+              icon={PrinterIcon}
+              title="No print pools"
+              description="Create a pool to group printers for load balancing or failover."
+            />
+          ) : (
+            pools.map(pool => (
+              <div
+                key={pool.id}
+                onClick={() => loadPool(pool.id)}
+                className={`p-4 rounded-xl border cursor-pointer transition-shadow hover:shadow-sm ${
+                  selectedPool?.id === pool.id ? 'border-blue-400' : 'border-[rgba(255,255,255,0.07)]'
+                }`}
+                style={{ background: selectedPool?.id === pool.id ? 'rgba(0,111,255,0.15)' : 'var(--bg-surface, #161b22)' }}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900 text-sm">{pool.display_name || pool.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{ALGO_LABELS[pool.algorithm] ?? pool.algorithm}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block w-2 h-2 rounded-full ${pool.active ? 'bg-green-500' : 'bg-gray-400'}`} />
+                    <button
+                      onClick={e => { e.stopPropagation(); handleTestRoute(pool.id); }}
+                      className="text-xs px-2 py-1 text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg"
+                      title="Test routing"
+                    >Test</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDeletePool(pool); }}
+                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <TrashIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">{pool.member_count} member{pool.member_count !== 1 ? 's' : ''}</p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Pool detail */}
+        <div className="lg:col-span-2">
+          {loadingPool ? (
+            <div className="flex items-center justify-center h-40">
+              <ArrowPathIcon className="w-6 h-6 text-gray-400 animate-spin" />
+            </div>
+          ) : selectedPool ? (
+            <div className="border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface, #161b22)' }}>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <h3 className="font-medium text-gray-900">{selectedPool.display_name || selectedPool.name}</h3>
+                <button
+                  onClick={() => setShowAddMember(true)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  Add Member
+                </button>
+              </div>
+              {selectedPool.members.length === 0 ? (
+                <div className="p-8 text-center text-sm text-gray-500">No members yet. Add a printer to this pool.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      {['Printer', 'Weight', 'Priority', 'Current Jobs', 'Total Jobs', ''].map(h => (
+                        <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {selectedPool.members.map(m => (
+                      <tr key={m.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{m.printer_name || m.printer_id}</p>
+                          {m.printer_uri && <p className="text-xs text-gray-500 font-mono">{m.printer_uri}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{m.weight}</td>
+                        <td className="px-4 py-3 text-gray-600">{m.priority}</td>
+                        <td className="px-4 py-3">
+                          <span className={`font-medium ${m.current_jobs > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
+                            {m.current_jobs}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{m.total_jobs}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => handleRemoveMember(m)}
+                            className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                          >
+                            <TrashIcon className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+              Select a pool to view its members.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add Pool Dialog */}
+      {showAddPool && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" style={{ background: 'var(--bg-surface, #161b22)' }}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Add Print Pool</h2>
+              <button onClick={() => setShowAddPool(false)} className="p-1 rounded hover:bg-gray-100">
+                <XMarkIcon className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Name (unique identifier)</label>
+                <input
+                  type="text"
+                  placeholder="floor2-pool"
+                  value={poolForm.name}
+                  onChange={e => setPoolForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Display Name</label>
+                <input
+                  type="text"
+                  placeholder="Floor 2 Printer Pool"
+                  value={poolForm.displayName}
+                  onChange={e => setPoolForm(f => ({ ...f, displayName: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Algorithm</label>
+                <select
+                  value={poolForm.algorithm}
+                  onChange={e => setPoolForm(f => ({ ...f, algorithm: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="round_robin">Round Robin</option>
+                  <option value="least_jobs">Least Jobs</option>
+                  <option value="priority">Priority</option>
+                  <option value="failover">Failover</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Description (optional)</label>
+                <input
+                  type="text"
+                  placeholder="Printers on floor 2"
+                  value={poolForm.description}
+                  onChange={e => setPoolForm(f => ({ ...f, description: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setShowAddPool(false)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">Cancel</button>
+              <button
+                onClick={handleCreatePool}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              >{saving ? 'Creating…' : 'Create Pool'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Member Dialog */}
+      {showAddMember && selectedPool && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" style={{ background: 'var(--bg-surface, #161b22)' }}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Add Pool Member</h2>
+              <button onClick={() => setShowAddMember(false)} className="p-1 rounded hover:bg-gray-100">
+                <XMarkIcon className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Printer ID</label>
+                <input
+                  type="text"
+                  placeholder="printer-uuid-or-cups-name"
+                  value={memberForm.printerId}
+                  onChange={e => setMemberForm(f => ({ ...f, printerId: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Printer Name (display)</label>
+                <input
+                  type="text"
+                  placeholder="HP LaserJet 4100"
+                  value={memberForm.printerName}
+                  onChange={e => setMemberForm(f => ({ ...f, printerName: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Printer URI (optional)</label>
+                <input
+                  type="text"
+                  placeholder="ipp://192.168.1.20/ipp/print"
+                  value={memberForm.printerUri}
+                  onChange={e => setMemberForm(f => ({ ...f, printerUri: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Weight</label>
+                  <input
+                    type="number" min="1"
+                    value={memberForm.weight}
+                    onChange={e => setMemberForm(f => ({ ...f, weight: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Priority</label>
+                  <input
+                    type="number" min="1"
+                    value={memberForm.priority}
+                    onChange={e => setMemberForm(f => ({ ...f, priority: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setShowAddMember(false)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">Cancel</button>
+              <button
+                onClick={handleAddMember}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              >{saving ? 'Adding…' : 'Add Member'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { register, collectDefaultMetrics } from 'prom-client';
 import logger from './lib/logger';
 import routes from './routes';
 import { API_CONFIG } from './config/services';
+import { oidcAuth } from './middleware/oidcAuth';
 
 // Initialize Prometheus metrics collection
 collectDefaultMetrics({ register });
@@ -45,6 +46,19 @@ app.use(pinoHttp({ logger }));
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// OIDC bearer-token auth (see middleware/oidcAuth.ts for the full P0
+// rationale). skipPaths is deliberately narrow — only the health-probe
+// surface bypasses auth entirely. The service-status/config-discovery routes
+// (/api/services, /api/config/*) were deliberately NOT added here even
+// though they look like harmless "discovery" endpoints: they disclose which
+// internal services exist, their live health, and which platform modules are
+// enabled — reconnaissance-grade information an unauthenticated caller must
+// not get for free (same reasoning as network-infrastructure's discovery
+// routes). Per-route admin gating (requireAdmin) is layered on top inside
+// the individual route files for Vault (all routes) and LLDAP (user/group
+// CRUD).
+app.use(oidcAuth({ skipPaths: ['/health'] }));
 
 // Routes
 app.use('/', routes);
@@ -114,4 +128,12 @@ const server = app.listen(port, () => {
   });
 });
 
+// Named export of the underlying http.Server alongside the default app
+// export, purely for tests (src/__tests__/*.test.ts): supertest can drive
+// `app` directly without needing this, but the test suite needs a handle to
+// close the listener the block above opens, so it doesn't leak an open port
+// across test files. Nothing else in the codebase imports this module (it's
+// only ever run directly via `node dist/index.js`), so this is a safe,
+// test-only addition.
+export { server };
 export default app;

@@ -1,6 +1,5 @@
 'use strict';
 
-const { EventEmitter } = require('events');
 const {
   BLUEPRINT_CREATED,
   BLUEPRINT_UPDATED,
@@ -13,13 +12,16 @@ const {
  *
  * A blueprint is a reusable collection of policies that can be deployed to
  * devices or device groups in a single operation.
+ *
+ * Domain events are collected in _domainEvents and dispatched externally by the
+ * application service after persistence.  This aggregate does NOT extend
+ * EventEmitter — it is a plain class.
  */
-class BlueprintAggregate extends EventEmitter {
+class BlueprintAggregate {
   /**
    * @param {object} data - raw blueprint data
    */
   constructor(data) {
-    super();
     this._validate(data);
     this.id          = data.id || null;
     this.name        = data.name;

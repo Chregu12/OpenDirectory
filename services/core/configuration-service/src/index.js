@@ -5,6 +5,15 @@ const WebSocket = require('ws');
 const http = require('http');
 const EventEmitter = require('eventemitter3');
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'configuration-service' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+
 const ConfigurationManager = require('./configurationManager');
 const ModuleRegistry = require('./moduleRegistry');
 const FeatureFlags = require('./featureFlags');
@@ -213,7 +222,10 @@ class ConfigurationService extends EventEmitter {
     try {
       const { moduleId } = req.params;
       await this.moduleRegistry.disableModule(moduleId);
-      
+
+      const deletedBy = req.headers['x-user-id'] || 'unknown';
+      publish('config.deleted', { key: moduleId, deletedBy });
+
       res.json({
         success: true,
         message: `Module ${moduleId} disabled`
@@ -306,7 +318,10 @@ class ConfigurationService extends EventEmitter {
       }
       
       const updated = await this.configManager.updateModuleSettings(moduleId, settings);
-      
+
+      const updatedBy = req.headers['x-user-id'] || 'unknown';
+      publish('config.updated', { key: moduleId, value: settings, updatedBy });
+
       res.json({
         success: true,
         settings: updated
@@ -436,6 +451,7 @@ class ConfigurationService extends EventEmitter {
       logger.info(`🔧 Configuration Service started on port ${port}`);
       logger.info(`📊 Health check: http://localhost:${port}/health`);
       logger.info(`🔌 WebSocket: ws://localhost:${port}/ws/config`);
+      connectBus();
     });
   }
 

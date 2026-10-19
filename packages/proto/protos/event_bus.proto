@@ -1,0 +1,49 @@
+syntax = "proto3";
+package opendirectory.eventbus;
+option java_package = "io.opendirectory.eventbus";
+
+// ─── Messages ───────────────────────────────────────────────────────────────
+
+message Event {
+  string id          = 1;  // UUIDv4, set by publisher
+  string routing_key = 2;  // dot-notation routing key, e.g. "device.enrolled"
+  bytes  payload     = 3;  // JSON-encoded domain payload
+  string source      = 4;  // publishing service name
+  int64  timestamp   = 5;  // Unix epoch ms
+  map<string, string> headers = 6;  // optional metadata (trace-id, tenant, etc.)
+}
+
+message PublishRequest  { Event event = 1; }
+message PublishResponse { bool ok = 1; string event_id = 2; string error = 3; }
+
+message SubscribeRequest {
+  string          consumer_group = 1;  // e.g. "notification-service"
+  repeated string patterns       = 2;  // routing-key patterns: "device.*", "security.#"
+  bool            durable        = 3;  // survive service restarts
+  int32           prefetch       = 4;  // max unacked messages (0 = unlimited)
+}
+
+message AckRequest  { string event_id = 1; string consumer_group = 2; bool requeue = 3; }
+message AckResponse { bool ok = 1; }
+
+message HealthRequest  {}
+message HealthResponse { bool ok = 1; string version = 2; string transport = 3; }
+
+// ─── Service ────────────────────────────────────────────────────────────────
+
+service EventBusService {
+  // Publish a single event (unary)
+  rpc Publish (PublishRequest) returns (PublishResponse);
+
+  // Subscribe to a stream of matching events (server-streaming)
+  rpc Subscribe (SubscribeRequest) returns (stream Event);
+
+  // Acknowledge or nack a delivered event
+  rpc Ack (AckRequest) returns (AckResponse);
+
+  // Bidirectional stream for high-throughput publishers
+  rpc PublishStream (stream PublishRequest) returns (stream PublishResponse);
+
+  // Health/status check
+  rpc Health (HealthRequest) returns (HealthResponse);
+}

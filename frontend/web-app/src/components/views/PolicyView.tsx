@@ -605,22 +605,22 @@ function TreeItem({ ou, gpos, selectedGPO, onSelectGPO, depth = 0 }: {
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 w-full text-left px-2 py-1 rounded hover:bg-gray-100 transition-colors group"
+        className="flex items-center gap-1.5 w-full text-left px-2 py-1 rounded hover:bg-[rgba(255,255,255,0.06)] transition-colors group"
         style={{ paddingLeft: 8 + depth * 16 }}
       >
         {hasChildren ? (
-          open ? <ChevronDownIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />
-               : <ChevronRightIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />
+          open ? <ChevronDownIcon className="w-3 h-3 text-[var(--text-muted,#6e7681)] flex-shrink-0" />
+               : <ChevronRightIcon className="w-3 h-3 text-[var(--text-muted,#6e7681)] flex-shrink-0" />
         ) : <span className="w-3" />}
         <OUIcon className={`w-4 h-4 flex-shrink-0 ${
-          ou.icon === 'domain' ? 'text-blue-600' :
-          ou.icon === 'group' ? 'text-purple-500' : 'text-yellow-500'
+          ou.icon === 'domain' ? 'text-[#006FFF]' :
+          ou.icon === 'group' ? 'text-[#a371f7]' : 'text-[#d29922]'
         }`} />
-        <span className="text-xs text-gray-700 truncate">{ou.name}</span>
+        <span className="text-xs text-[var(--text-secondary,#8b949e)] truncate">{ou.name}</span>
         {(() => {
           const existingCount = ou.linkedGPOs.filter(gid => gpos.some(g => g.id === gid)).length;
           return existingCount > 0 ? (
-            <span className="ml-auto flex-shrink-0 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+            <span className="ml-auto flex-shrink-0 text-xs bg-[rgba(0,111,255,0.15)] text-[#006FFF] px-1.5 py-0.5 rounded-full">
               {existingCount}
             </span>
           ) : null;
@@ -640,16 +640,16 @@ function TreeItem({ ou, gpos, selectedGPO, onSelectGPO, depth = 0 }: {
                 onClick={() => onSelectGPO(gpo)}
                 className={`flex items-center gap-1.5 w-full text-left px-2 py-1 rounded transition-colors ${
                   isSelected
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'hover:bg-gray-100 text-gray-600'
+                    ? 'bg-[rgba(0,111,255,0.15)] text-[#006FFF]'
+                    : 'hover:bg-[rgba(255,255,255,0.06)] text-[var(--text-secondary,#8b949e)]'
                 }`}
                 style={{ paddingLeft: 8 + (depth + 1) * 16 }}
               >
                 <span className="w-3" />
                 <DocumentTextIcon className={`w-4 h-4 flex-shrink-0 ${
-                  gpo.status === 'disabled' ? 'text-gray-300' : isSelected ? 'text-blue-500' : 'text-blue-400'
+                  gpo.status === 'disabled' ? 'text-[var(--text-muted,#6e7681)]' : isSelected ? 'text-[#006FFF]' : 'text-[#4d94ff]'
                 }`} />
-                <span className={`text-xs truncate ${gpo.status === 'disabled' ? 'text-gray-400 line-through' : ''}`}>
+                <span className={`text-xs truncate ${gpo.status === 'disabled' ? 'text-[var(--text-muted,#6e7681)] line-through' : ''}`}>
                   {gpo.name}
                 </span>
               </button>
@@ -684,21 +684,21 @@ function TreeSection({ title, icon: Icon, children, defaultOpen = true }: {
   return (
     <div>
       <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 w-full text-left py-2 hover:bg-gray-50 rounded px-2 transition-colors">
-        {open ? <ChevronDownIcon className="w-3.5 h-3.5 text-gray-400" /> : <ChevronRightIcon className="w-3.5 h-3.5 text-gray-400" />}
-        <Icon className="w-4 h-4 text-gray-500" />
-        <span className="text-sm font-medium text-gray-700">{title}</span>
+        className="flex items-center gap-2 w-full text-left py-2 hover:bg-[rgba(255,255,255,0.04)] rounded px-2 transition-colors">
+        {open ? <ChevronDownIcon className="w-3.5 h-3.5 text-[var(--text-muted,#6e7681)]" /> : <ChevronRightIcon className="w-3.5 h-3.5 text-[var(--text-muted,#6e7681)]" />}
+        <Icon className="w-4 h-4 text-[var(--text-muted,#6e7681)]" />
+        <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">{title}</span>
       </button>
-      {open && <div className="ml-6 border-l border-gray-100 pl-3 mb-2">{children}</div>}
+      {open && <div className="ml-6 border-l border-[rgba(255,255,255,0.07)] pl-3 mb-2">{children}</div>}
     </div>
   );
 }
 
 function SettingRow({ label, value, configured = true }: { label: string; value: React.ReactNode; configured?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-1.5 px-2 hover:bg-gray-50 rounded text-sm">
-      <span className="text-gray-600">{label}</span>
-      <span className={`font-medium ${configured ? 'text-gray-900' : 'text-gray-400 italic'}`}>
+    <div className="flex items-center justify-between py-1.5 px-2 hover:bg-[rgba(255,255,255,0.04)] rounded text-sm">
+      <span className="text-[var(--text-secondary,#8b949e)]">{label}</span>
+      <span className={`font-medium ${configured ? 'text-[var(--text-primary,#e4e6ea)]' : 'text-[var(--text-muted,#6e7681)] italic'}`}>
         {configured ? value : 'Not Configured'}
       </span>
     </div>
@@ -707,11 +707,11 @@ function SettingRow({ label, value, configured = true }: { label: string; value:
 
 function BoolRow({ label, value }: { label: string; value: boolean }) {
   return (
-    <div className="flex items-center justify-between py-1.5 px-2 hover:bg-gray-50 rounded text-sm">
-      <span className="text-gray-600">{label}</span>
+    <div className="flex items-center justify-between py-1.5 px-2 hover:bg-[rgba(255,255,255,0.04)] rounded text-sm">
+      <span className="text-[var(--text-secondary,#8b949e)]">{label}</span>
       {value
-        ? <span className="flex items-center gap-1 text-green-600 font-medium"><CheckCircleIcon className="w-4 h-4" />Enabled</span>
-        : <span className="flex items-center gap-1 text-gray-400 italic"><XCircleIcon className="w-4 h-4" />Disabled</span>
+        ? <span className="flex items-center gap-1 text-[#3fb950] font-medium"><CheckCircleIcon className="w-4 h-4" />Enabled</span>
+        : <span className="flex items-center gap-1 text-[var(--text-muted,#6e7681)] italic"><XCircleIcon className="w-4 h-4" />Disabled</span>
       }
     </div>
   );
@@ -878,16 +878,16 @@ function GPOEditModal({ gpo, onClose, onSave }: {
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
+      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col border border-[rgba(255,255,255,0.07)]" onClick={e => e.stopPropagation()}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.07)] flex-shrink-0">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Edit GPO Settings</h2>
-            <p className="text-sm text-gray-500">{gpo.name}</p>
+            <h2 className="text-lg font-semibold text-[var(--text-primary,#e4e6ea)]">Edit GPO Settings</h2>
+            <p className="text-sm text-[var(--text-muted,#6e7681)]">{gpo.name}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-primary,#e4e6ea)]">
             <XMarkIcon className="w-6 h-6" />
           </button>
         </div>
@@ -896,23 +896,23 @@ function GPOEditModal({ gpo, onClose, onSave }: {
         <div className="flex flex-1 overflow-hidden">
 
           {/* Left sidebar nav — AD-style grouped */}
-          <nav className="w-52 flex-shrink-0 border-r border-gray-100 overflow-y-auto py-2">
+          <nav className="w-52 flex-shrink-0 border-r border-[rgba(255,255,255,0.07)] overflow-y-auto py-2">
             {/* Computerkonfiguration — collapsible */}
             <button
               onClick={() => setCcOpen(o => !o)}
-              className="flex items-center gap-1.5 w-full px-3 pt-2 pb-1 text-left hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-1.5 w-full px-3 pt-2 pb-1 text-left hover:bg-[rgba(255,255,255,0.04)] transition-colors"
             >
               {ccOpen
-                ? <ChevronDownIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                : <ChevronRightIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />}
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Computerkonfiguration</span>
+                ? <ChevronDownIcon className="w-3 h-3 text-[var(--text-muted,#6e7681)] flex-shrink-0" />
+                : <ChevronRightIcon className="w-3 h-3 text-[var(--text-muted,#6e7681)] flex-shrink-0" />}
+              <span className="text-[10px] font-bold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Computerkonfiguration</span>
             </button>
             {ccOpen && CC_TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`w-full text-left px-4 py-1.5 text-sm font-medium transition-colors ${
                   tab === t.key
-                    ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-[rgba(0,111,255,0.15)] text-[#006FFF] border-r-2 border-[#006FFF]'
+                    : 'text-[var(--text-secondary,#8b949e)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text-primary,#e4e6ea)]'
                 }`}>
                 {t.label}
               </button>
@@ -920,19 +920,19 @@ function GPOEditModal({ gpo, onClose, onSave }: {
             {/* Benutzerkonfiguration — collapsible */}
             <button
               onClick={() => setUcOpen(o => !o)}
-              className="flex items-center gap-1.5 w-full px-3 pt-3 pb-1 text-left hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-1.5 w-full px-3 pt-3 pb-1 text-left hover:bg-[rgba(255,255,255,0.04)] transition-colors"
             >
               {ucOpen
-                ? <ChevronDownIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                : <ChevronRightIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />}
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Benutzerkonfiguration</span>
+                ? <ChevronDownIcon className="w-3 h-3 text-[var(--text-muted,#6e7681)] flex-shrink-0" />
+                : <ChevronRightIcon className="w-3 h-3 text-[var(--text-muted,#6e7681)] flex-shrink-0" />}
+              <span className="text-[10px] font-bold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Benutzerkonfiguration</span>
             </button>
             {ucOpen && UC_TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`w-full text-left px-4 py-1.5 text-sm font-medium transition-colors ${
                   tab === t.key
-                    ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-[rgba(0,111,255,0.15)] text-[#006FFF] border-r-2 border-[#006FFF]'
+                    : 'text-[var(--text-secondary,#8b949e)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text-primary,#e4e6ea)]'
                 }`}>
                 {t.label}
               </button>
@@ -947,66 +947,66 @@ function GPOEditModal({ gpo, onClose, onSave }: {
             <div className="space-y-5">
               {/* Kennwortrichtlinie */}
               <div>
-                <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer mb-3">
-                  <span className="text-sm font-medium text-gray-700">Kennwortrichtlinie aktiv</span>
+                <label className="flex items-center justify-between p-3 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg cursor-pointer mb-3">
+                  <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Kennwortrichtlinie aktiv</span>
                   <input type="checkbox" checked={draft.password.enabled}
                     onChange={e => setPassword({ enabled: e.target.checked })}
-                    className="w-4 h-4 rounded text-blue-600" />
+                    className="w-4 h-4 rounded accent-[#006FFF]" />
                 </label>
                 <div className={`space-y-3 ${!draft.password.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Kennwortrichtlinie</p>
+                  <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Kennwortrichtlinie</p>
                   {([
                     { label: 'Minimale Kennwortlänge',      key: 'minLength',  suffix: 'Zeichen', min: 1,  max: 128 },
                     { label: 'Kennwortchronik',              key: 'history',    suffix: 'gespeicherte', min: 0, max: 24 },
                     { label: 'Maximales Kennwortalter',      key: 'expiryDays', suffix: 'Tage (0 = nie)', min: 0, max: 365 },
                   ] as { label: string; key: keyof PasswordSettings; suffix: string; min: number; max: number }[]).map(({ label, key, suffix, min, max }) => (
                     <div key={String(key)} className="flex items-center justify-between py-1">
-                      <span className="text-sm text-gray-700">{label}</span>
+                      <span className="text-sm text-[var(--text-secondary,#8b949e)]">{label}</span>
                       <div className="flex items-center gap-2">
                         <input type="number" min={min} max={max}
                           value={draft.password[key] as number}
                           onChange={e => setPassword({ [key]: parseInt(e.target.value) || 0 })}
-                          className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <span className="text-xs text-gray-400 w-36">{suffix}</span>
+                          className="w-20 border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
+                        <span className="text-xs text-[var(--text-muted,#6e7681)] w-36">{suffix}</span>
                       </div>
                     </div>
                   ))}
                   <label className="flex items-center justify-between py-1 cursor-pointer">
-                    <span className="text-sm text-gray-700">Kennwortkomplexität erzwingen</span>
+                    <span className="text-sm text-[var(--text-secondary,#8b949e)]">Kennwortkomplexität erzwingen</span>
                     <input type="checkbox" checked={draft.password.complexity}
                       onChange={e => setPassword({ complexity: e.target.checked })}
-                      className="w-4 h-4 rounded text-blue-600" />
+                      className="w-4 h-4 rounded accent-[#006FFF]" />
                   </label>
                 </div>
               </div>
 
               {/* Kontosperrungsrichtlinie */}
-              <div className={`border-t border-gray-100 pt-4 space-y-3 ${!draft.password.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Kontosperrungsrichtlinie</p>
+              <div className={`border-t border-[rgba(255,255,255,0.07)] pt-4 space-y-3 ${!draft.password.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Kontosperrungsrichtlinie</p>
                 {([
                   { label: 'Kontosperrungsschwelle',  key: 'lockoutAttempts', suffix: 'Versuche (0 = nie)', min: 0, max: 20 },
                   { label: 'Sperrdauer',              key: 'lockoutDuration', suffix: 'Minuten', min: 0, max: 1440 },
                 ] as { label: string; key: keyof PasswordSettings; suffix: string; min: number; max: number }[]).map(({ label, key, suffix, min, max }) => (
                   <div key={String(key)} className="flex items-center justify-between py-1">
-                    <span className="text-sm text-gray-700">{label}</span>
+                    <span className="text-sm text-[var(--text-secondary,#8b949e)]">{label}</span>
                     <div className="flex items-center gap-2">
                       <input type="number" min={min} max={max}
                         value={draft.password[key] as number}
                         onChange={e => setPassword({ [key]: parseInt(e.target.value) || 0 })}
-                        className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                      <span className="text-xs text-gray-400 w-36">{suffix}</span>
+                        className="w-20 border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
+                      <span className="text-xs text-[var(--text-muted,#6e7681)] w-36">{suffix}</span>
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Kerberos-Richtlinie */}
-              <div className="border-t border-gray-100 pt-4">
+              <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
                 <label className="flex items-center justify-between mb-3 cursor-pointer">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Kerberos-Richtlinie</p>
+                  <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Kerberos-Richtlinie</p>
                   <input type="checkbox" checked={draft.kerberos.enabled}
                     onChange={e => setKerberos({ enabled: e.target.checked })}
-                    className="w-4 h-4 rounded text-blue-600" />
+                    className="w-4 h-4 rounded accent-[#006FFF]" />
                 </label>
                 <div className={`space-y-3 ${!draft.kerberos.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   {([
@@ -1014,21 +1014,21 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                     { label: 'Max. Ticketverlängerung',     key: 'renewalLifetime', suffix: 'Tage',    min: 1, max: 30 },
                   ] as { label: string; key: 'ticketLifetime' | 'renewalLifetime'; suffix: string; min: number; max: number }[]).map(({ label, key, suffix, min, max }) => (
                     <div key={key} className="flex items-center justify-between py-1">
-                      <span className="text-sm text-gray-700">{label}</span>
+                      <span className="text-sm text-[var(--text-secondary,#8b949e)]">{label}</span>
                       <div className="flex items-center gap-2">
                         <input type="number" min={min} max={max}
                           value={draft.kerberos[key]}
                           onChange={e => setKerberos({ [key]: parseInt(e.target.value) || min })}
-                          className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <span className="text-xs text-gray-400 w-20">{suffix}</span>
+                          className="w-20 border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
+                        <span className="text-xs text-[var(--text-muted,#6e7681)] w-20">{suffix}</span>
                       </div>
                     </div>
                   ))}
                   <label className="flex items-center justify-between py-1 cursor-pointer">
-                    <span className="text-sm text-gray-700">Nur Kerberos-Authentifizierung</span>
+                    <span className="text-sm text-[var(--text-secondary,#8b949e)]">Nur Kerberos-Authentifizierung</span>
                     <input type="checkbox" checked={draft.kerberos.enforce}
                       onChange={e => setKerberos({ enforce: e.target.checked })}
-                      className="w-4 h-4 rounded text-blue-600" />
+                      className="w-4 h-4 rounded accent-[#006FFF]" />
                   </label>
                 </div>
               </div>
@@ -1042,18 +1042,18 @@ function GPOEditModal({ gpo, onClose, onSave }: {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 {draft.software.packages.length === 0 && (
-                  <p className="text-sm text-gray-400 italic px-1">No packages configured</p>
+                  <p className="text-sm text-[var(--text-muted,#6e7681)] italic px-1">No packages configured</p>
                 )}
                 {draft.software.packages.map(pkg => (
-                  <div key={pkg.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg">
+                  <div key={pkg.id} className="flex items-center justify-between px-3 py-2 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
-                        pkg.action === 'install' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        pkg.action === 'install' ? 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]' : 'bg-[rgba(248,81,73,0.15)] text-[#f85149]'
                       }`}>{pkg.action}</span>
-                      <span className="text-sm font-medium text-gray-800 truncate">{pkg.name}</span>
+                      <span className="text-sm font-medium text-[var(--text-primary,#e4e6ea)] truncate">{pkg.name}</span>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                      <span className="text-xs text-gray-400">v{pkg.version}</span>
+                      <span className="text-xs text-[var(--text-muted,#6e7681)]">v{pkg.version}</span>
                       <select value={pkg.action}
                         onChange={e => setDraft(d => ({
                           ...d,
@@ -1061,47 +1061,47 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                             p.id === pkg.id ? { ...p, action: e.target.value as 'install' | 'uninstall' } : p
                           )},
                         }))}
-                        className="text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none">
+                        className="text-xs border border-[rgba(255,255,255,0.07)] rounded px-1.5 py-0.5 focus:outline-none" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                         <option value="install">install</option>
                         <option value="uninstall">uninstall</option>
                       </select>
-                      <button onClick={() => removePkg(pkg.id)} className="text-gray-400 hover:text-red-500">
+                      <button onClick={() => removePkg(pkg.id)} className="text-[var(--text-muted,#6e7681)] hover:text-[#f85149]">
                         <XMarkIcon className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="border-t border-gray-100 pt-3">
-                <p className="text-xs font-medium text-gray-500 mb-2">Add Package</p>
+              <div className="border-t border-[rgba(255,255,255,0.07)] pt-3">
+                <p className="text-xs font-medium text-[var(--text-muted,#6e7681)] mb-2">Add Package</p>
                 <div className="flex items-center gap-2">
                   <input value={newPkg.name} onChange={e => setNewPkg(p => ({ ...p, name: e.target.value }))}
                     onKeyDown={e => { if (e.key === 'Enter') addPackage(); }}
                     placeholder="Package name"
-                    className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    className="flex-1 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                   <input value={newPkg.version} onChange={e => setNewPkg(p => ({ ...p, version: e.target.value }))}
                     onKeyDown={e => { if (e.key === 'Enter') addPackage(); }}
                     placeholder="Version"
-                    className="w-24 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    className="w-24 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                   <select value={newPkg.action} onChange={e => setNewPkg(p => ({ ...p, action: e.target.value as 'install' | 'uninstall' }))}
-                    className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none">
+                    className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1.5 text-sm focus:outline-none" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                     <option value="install">install</option>
                     <option value="uninstall">uninstall</option>
                   </select>
                   <button onClick={addPackage}
-                    className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">
+                    className="px-3 py-1.5 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg">
                     Hinzufügen
                   </button>
                 </div>
               </div>
 
               {/* Gerätekonformität */}
-              <div className="border-t border-gray-100 pt-4">
+              <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
                 <label className="flex items-center justify-between mb-3 cursor-pointer">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Gerätekonformität</p>
+                  <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Gerätekonformität</p>
                   <input type="checkbox" checked={draft.device.enabled}
                     onChange={e => setDevice({ enabled: e.target.checked })}
-                    className="w-4 h-4 rounded text-blue-600" />
+                    className="w-4 h-4 rounded accent-[#006FFF]" />
                 </label>
                 <div className={`space-y-3 ${!draft.device.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   {([
@@ -1110,52 +1110,52 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                     { label: 'Antivirensoftware / EDR voraussetzen',  key: 'requireAV' },
                   ] as { label: string; key: keyof DeviceSettings }[]).map(({ label, key }) => (
                     <label key={String(key)} className="flex items-center justify-between py-1 cursor-pointer">
-                      <span className="text-sm text-gray-700">{label}</span>
+                      <span className="text-sm text-[var(--text-secondary,#8b949e)]">{label}</span>
                       <input type="checkbox" checked={draft.device[key] as boolean}
                         onChange={e => setDevice({ [key]: e.target.checked })}
-                        className="w-4 h-4 rounded text-blue-600" />
+                        className="w-4 h-4 rounded accent-[#006FFF]" />
                     </label>
                   ))}
                   <div>
-                    <label className="block text-sm text-gray-700 mb-1">Minimale Betriebssystemversion</label>
+                    <label className="block text-sm text-[var(--text-secondary,#8b949e)] mb-1">Minimale Betriebssystemversion</label>
                     <input value={draft.device.minOsVersion}
                       onChange={e => setDevice({ minOsVersion: e.target.value })}
                       placeholder="z.B. Windows 11 22H2 / Ubuntu 22.04"
-                      className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      className="w-full border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                   </div>
                 </div>
               </div>
 
               {/* Windows Update / WSUS */}
-              <div className="border-t border-gray-100 pt-4">
+              <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
                 <label className="flex items-center justify-between mb-3 cursor-pointer">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Windows Update / WSUS</p>
+                  <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Windows Update / WSUS</p>
                   <input type="checkbox" checked={draft.windowsUpdate.enabled}
                     onChange={e => setWindowsUpdate({ enabled: e.target.checked })}
-                    className="w-4 h-4 rounded text-blue-600" />
+                    className="w-4 h-4 rounded accent-[#006FFF]" />
                 </label>
                 <div className={`space-y-3 ${!draft.windowsUpdate.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   <label className="flex items-center justify-between py-1 cursor-pointer">
-                    <span className="text-sm text-gray-700">Automatische Updates aktivieren</span>
+                    <span className="text-sm text-[var(--text-secondary,#8b949e)]">Automatische Updates aktivieren</span>
                     <input type="checkbox" checked={draft.windowsUpdate.updateEnabled}
                       onChange={e => setWindowsUpdate({ updateEnabled: e.target.checked })}
-                      className="w-4 h-4 rounded text-blue-600" />
+                      className="w-4 h-4 rounded accent-[#006FFF]" />
                   </label>
                   <div className="flex items-center justify-between py-1">
-                    <span className="text-sm text-gray-700">Feature-Updates verzögern</span>
+                    <span className="text-sm text-[var(--text-secondary,#8b949e)]">Feature-Updates verzögern</span>
                     <div className="flex items-center gap-2">
                       <input type="number" min={0} max={365} value={draft.windowsUpdate.deferFeatureUpdatesDays}
                         onChange={e => setWindowsUpdate({ deferFeatureUpdatesDays: parseInt(e.target.value) || 0 })}
-                        className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                      <span className="text-xs text-gray-400 w-20">Tage (0–365)</span>
+                        className="w-20 border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
+                      <span className="text-xs text-[var(--text-muted,#6e7681)] w-20">Tage (0–365)</span>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-700 mb-1">WSUS-Server</label>
+                    <label className="block text-sm text-[var(--text-secondary,#8b949e)] mb-1">WSUS-Server</label>
                     <input value={draft.windowsUpdate.wsusServer}
                       onChange={e => setWindowsUpdate({ wsusServer: e.target.value })}
                       placeholder={AD_DOMAIN ? `http://wsus.${AD_DOMAIN}` : 'http://wsus.example.local'}
-                      className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      className="w-full border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                   </div>
                 </div>
               </div>
@@ -1173,13 +1173,13 @@ function GPOEditModal({ gpo, onClose, onSave }: {
               <div className="space-y-5">
                 {types.map(type => (
                   <div key={type}>
-                    <p className="text-sm font-medium text-gray-700 mb-2">{labels[type]}</p>
+                    <p className="text-sm font-medium text-[var(--text-secondary,#8b949e)] mb-2">{labels[type]}</p>
                     <div className="space-y-1 mb-2">
-                      {draft.scripts[type].length === 0 && <p className="text-xs text-gray-400 italic px-1">Keine Skripte konfiguriert</p>}
+                      {draft.scripts[type].length === 0 && <p className="text-xs text-[var(--text-muted,#6e7681)] italic px-1">Keine Skripte konfiguriert</p>}
                       {draft.scripts[type].map(s => (
-                        <div key={s} className="flex items-center justify-between px-3 py-1.5 bg-gray-50 rounded text-sm group">
-                          <span className="font-mono text-xs text-gray-700">{s}</span>
-                          <button onClick={() => removeScript(type, s)} className="text-gray-300 hover:text-red-500 group-hover:text-gray-400">
+                        <div key={s} className="flex items-center justify-between px-3 py-1.5 bg-[var(--bg-surface-raised,#1c2128)] rounded text-sm group">
+                          <span className="font-mono text-xs text-[var(--text-primary,#e4e6ea)]">{s}</span>
+                          <button onClick={() => removeScript(type, s)} className="text-[var(--text-muted,#6e7681)] hover:text-[#f85149] group-hover:text-[var(--text-secondary,#8b949e)]">
                             <XMarkIcon className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -1190,9 +1190,9 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                         onChange={e => setScriptInputs(s => ({ ...s, [type]: e.target.value }))}
                         onKeyDown={e => { if (e.key === 'Enter') addScript(type); }}
                         placeholder={type === 'startup' || type === 'shutdown' ? `${type}-script.sh` : `${type}-script.ps1`}
-                        className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        className="flex-1 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                       <button onClick={() => addScript(type)} disabled={!scriptInputs[type].trim()}
-                        className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40">
+                        className="px-3 py-1.5 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-40">
                         Hinzufügen
                       </button>
                     </div>
@@ -1205,37 +1205,37 @@ function GPOEditModal({ gpo, onClose, onSave }: {
           {/* ── uc_zugriffssteuerung ── */}
           {tab === 'uc_zugriffssteuerung' && (
             <div className="space-y-4">
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
+              <label className="flex items-center justify-between p-3 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg cursor-pointer">
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Multi-Faktor-Authentifizierung voraussetzen</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Benutzer müssen sich mit einem zweiten Faktor verifizieren</p>
+                  <p className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Multi-Faktor-Authentifizierung voraussetzen</p>
+                  <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Benutzer müssen sich mit einem zweiten Faktor verifizieren</p>
                 </div>
                 <input type="checkbox" checked={draft.access.mfaRequired}
                   onChange={e => setDraft(d => ({ ...d, access: { ...d.access, mfaRequired: e.target.checked } }))}
-                  className="w-4 h-4 rounded text-blue-600" />
+                  className="w-4 h-4 rounded accent-[#006FFF]" />
               </label>
 
               {/* Allowed groups */}
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Erlaubte Gruppen</p>
+                <p className="text-sm font-medium text-[var(--text-secondary,#8b949e)] mb-2">Erlaubte Gruppen</p>
                 <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
                   {draft.access.allowed.map(g => (
-                    <span key={g} className="flex items-center gap-1 bg-green-50 border border-green-200 text-green-700 text-xs px-2.5 py-1 rounded-full">
+                    <span key={g} className="flex items-center gap-1 bg-[rgba(63,185,80,0.12)] border border-[rgba(63,185,80,0.3)] text-[#3fb950] text-xs px-2.5 py-1 rounded-full">
                       {g === '*' ? 'Authenticated Users (All)' : g}
-                      <button onClick={() => removeGroup('allowed', g)} className="hover:text-red-500 ml-0.5">
+                      <button onClick={() => removeGroup('allowed', g)} className="hover:text-[#f85149] ml-0.5">
                         <XMarkIcon className="w-3 h-3" />
                       </button>
                     </span>
                   ))}
-                  {draft.access.allowed.length === 0 && <p className="text-xs text-gray-400 italic">None</p>}
+                  {draft.access.allowed.length === 0 && <p className="text-xs text-[var(--text-muted,#6e7681)] italic">None</p>}
                 </div>
                 <div className="flex items-center gap-2">
                   <input value={allowedInput} onChange={e => setAllowedInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addAllowed(); }}
                     placeholder="Gruppenname oder * für alle"
-                    className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    className="flex-1 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                   <button onClick={addAllowed} disabled={!allowedInput.trim()}
-                    className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-40">
+                    className="px-3 py-1.5 text-sm font-medium text-white bg-[#3fb950] hover:bg-[#2ea043] rounded-lg disabled:opacity-40">
                     Erlauben
                   </button>
                 </div>
@@ -1243,25 +1243,25 @@ function GPOEditModal({ gpo, onClose, onSave }: {
 
               {/* Denied groups */}
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Verweigerte Gruppen</p>
+                <p className="text-sm font-medium text-[var(--text-secondary,#8b949e)] mb-2">Verweigerte Gruppen</p>
                 <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
                   {draft.access.denied.map(g => (
-                    <span key={g} className="flex items-center gap-1 bg-red-50 border border-red-200 text-red-700 text-xs px-2.5 py-1 rounded-full">
+                    <span key={g} className="flex items-center gap-1 bg-[rgba(248,81,73,0.12)] border border-[rgba(248,81,73,0.3)] text-[#f85149] text-xs px-2.5 py-1 rounded-full">
                       {g}
-                      <button onClick={() => removeGroup('denied', g)} className="hover:text-red-700 ml-0.5">
+                      <button onClick={() => removeGroup('denied', g)} className="hover:text-[#ff4444] ml-0.5">
                         <XMarkIcon className="w-3 h-3" />
                       </button>
                     </span>
                   ))}
-                  {draft.access.denied.length === 0 && <p className="text-xs text-gray-400 italic">None</p>}
+                  {draft.access.denied.length === 0 && <p className="text-xs text-[var(--text-muted,#6e7681)] italic">None</p>}
                 </div>
                 <div className="flex items-center gap-2">
                   <input value={deniedInput} onChange={e => setDeniedInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addDenied(); }}
                     placeholder="Gruppenname zum Verweigern"
-                    className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    className="flex-1 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                   <button onClick={addDenied} disabled={!deniedInput.trim()}
-                    className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-40">
+                    className="px-3 py-1.5 text-sm font-medium text-white bg-[#f85149] hover:bg-[#da3633] rounded-lg disabled:opacity-40">
                     Verweigern
                   </button>
                 </div>
@@ -1272,14 +1272,14 @@ function GPOEditModal({ gpo, onClose, onSave }: {
           {/* ── cc_lokalerichtlinien: Überwachung + Benutzerrechte + Sicherheitsoptionen ── */}
           {tab === 'cc_lokalerichtlinien' && (
             <div className="space-y-4">
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                <span className="text-sm font-medium text-gray-700">Überwachungsrichtlinie aktiv</span>
+              <label className="flex items-center justify-between p-3 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg cursor-pointer">
+                <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Überwachungsrichtlinie aktiv</span>
                 <input type="checkbox" checked={draft.audit.enabled}
                   onChange={e => setAudit({ enabled: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-600" />
+                  className="w-4 h-4 rounded accent-[#006FFF]" />
               </label>
               <div className={`space-y-3 ${!draft.audit.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Überwachungsrichtlinie</p>
+                <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Überwachungsrichtlinie</p>
                 {([
                   { label: 'Anmelde-/Abmeldeereignisse',        key: 'logonEvents' },
                   { label: 'Kontoverwaltung',                   key: 'accountManagement' },
@@ -1291,41 +1291,41 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                   { label: 'Systemereignisse',                  key: 'systemEvents' },
                 ] as { label: string; key: keyof AuditSettings }[]).map(({ label, key }) => (
                   <label key={String(key)} className="flex items-center justify-between py-1 cursor-pointer">
-                    <span className="text-sm text-gray-700">{label}</span>
+                    <span className="text-sm text-[var(--text-secondary,#8b949e)]">{label}</span>
                     <input type="checkbox" checked={draft.audit[key] as boolean}
                       onChange={e => setAudit({ [key]: e.target.checked })}
-                      className="w-4 h-4 rounded text-blue-600" />
+                      className="w-4 h-4 rounded accent-[#006FFF]" />
                   </label>
                 ))}
-                <div className="border-t border-gray-100 pt-3 space-y-3">
+                <div className="border-t border-[rgba(255,255,255,0.07)] pt-3 space-y-3">
                   <div className="flex items-center justify-between py-1">
-                    <span className="text-sm text-gray-700">Protokollgrösse (MB)</span>
+                    <span className="text-sm text-[var(--text-secondary,#8b949e)]">Protokollgrösse (MB)</span>
                     <div className="flex items-center gap-2">
                       <input type="number" min={10} max={4096} value={draft.audit.logSize}
                         onChange={e => setAudit({ logSize: parseInt(e.target.value) || 100 })}
-                        className="w-24 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                      <span className="text-xs text-gray-400 w-20">MB (10–4096)</span>
+                        className="w-24 border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
+                      <span className="text-xs text-[var(--text-muted,#6e7681)] w-20">MB (10–4096)</span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between py-1">
-                    <span className="text-sm text-gray-700">Aufbewahrung (Tage)</span>
+                    <span className="text-sm text-[var(--text-secondary,#8b949e)]">Aufbewahrung (Tage)</span>
                     <div className="flex items-center gap-2">
                       <input type="number" min={0} max={365} value={draft.audit.retentionDays}
                         onChange={e => setAudit({ retentionDays: parseInt(e.target.value) || 0 })}
-                        className="w-24 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                      <span className="text-xs text-gray-400 w-20">Tage (0 = nie)</span>
+                        className="w-24 border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
+                      <span className="text-xs text-[var(--text-muted,#6e7681)] w-20">Tage (0 = nie)</span>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Zuweisen von Benutzerrechten */}
-              <div className="border-t border-gray-100 pt-4">
+              <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
                 <label className="flex items-center justify-between mb-3 cursor-pointer">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Zuweisen von Benutzerrechten</p>
+                  <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Zuweisen von Benutzerrechten</p>
                   <input type="checkbox" checked={draft.userRights.enabled}
                     onChange={e => setUserRights({ enabled: e.target.checked })}
-                    className="w-4 h-4 rounded text-blue-600" />
+                    className="w-4 h-4 rounded accent-[#006FFF]" />
                 </label>
                 <div className={`space-y-4 ${!draft.userRights.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   {([
@@ -1334,26 +1334,26 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                     { label: 'Anmeldung verweigern',        field: 'denyLogon' as const, input: denyLogonInput, setInput: setDenyLogonInput, color: 'red' },
                   ]).map(({ label, field, input, setInput, color }) => (
                     <div key={field}>
-                      <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
+                      <p className="text-sm font-medium text-[var(--text-secondary,#8b949e)] mb-2">{label}</p>
                       <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
                         {draft.userRights[field].map(g => (
-                          <span key={g} className={`flex items-center gap-1 bg-${color}-50 border border-${color}-200 text-${color}-700 text-xs px-2.5 py-1 rounded-full`}>
+                          <span key={g} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full ${color === 'green' ? 'bg-[rgba(63,185,80,0.12)] border border-[rgba(63,185,80,0.3)] text-[#3fb950]' : color === 'red' ? 'bg-[rgba(248,81,73,0.12)] border border-[rgba(248,81,73,0.3)] text-[#f85149]' : 'bg-[rgba(0,111,255,0.12)] border border-[rgba(0,111,255,0.3)] text-[#006FFF]'}`}>
                             {g}
-                            <button onClick={() => setUserRights({ [field]: draft.userRights[field].filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
+                            <button onClick={() => setUserRights({ [field]: draft.userRights[field].filter(x => x !== g) })} className="hover:text-[#f85149] ml-0.5">
                               <XMarkIcon className="w-3 h-3" />
                             </button>
                           </span>
                         ))}
-                        {draft.userRights[field].length === 0 && <p className="text-xs text-gray-400 italic">Keine</p>}
+                        {draft.userRights[field].length === 0 && <p className="text-xs text-[var(--text-muted,#6e7681)] italic">Keine</p>}
                       </div>
                       <div className="flex items-center gap-2">
                         <input value={input} onChange={e => setInput(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter' && input.trim()) { setUserRights({ [field]: [...draft.userRights[field], input.trim()] }); setInput(''); } }}
                           placeholder="Gruppenname"
-                          className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                          className="flex-1 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                         <button onClick={() => { if (!input.trim()) return; setUserRights({ [field]: [...draft.userRights[field], input.trim()] }); setInput(''); }}
                           disabled={!input.trim()}
-                          className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40">
+                          className="px-3 py-1.5 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-40">
                           Hinzufügen
                         </button>
                       </div>
@@ -1363,63 +1363,63 @@ function GPOEditModal({ gpo, onClose, onSave }: {
               </div>
 
               {/* Sicherheitsoptionen */}
-              <div className="border-t border-gray-100 pt-4">
+              <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
                 <label className="flex items-center justify-between mb-3 cursor-pointer">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Sicherheitsoptionen</p>
+                  <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Sicherheitsoptionen</p>
                   <input type="checkbox" checked={draft.securityOptions.enabled}
                     onChange={e => setSecOpts({ enabled: e.target.checked })}
-                    className="w-4 h-4 rounded text-blue-600" />
+                    className="w-4 h-4 rounded accent-[#006FFF]" />
                 </label>
                 <div className={`space-y-5 ${!draft.securityOptions.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   {/* SSH Hardening */}
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">SSH-Härtung (Linux)</p>
+                    <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">SSH-Härtung (Linux)</p>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between py-1">
-                        <span className="text-sm text-gray-700">Max. Authentifizierungsversuche</span>
+                        <span className="text-sm text-[var(--text-secondary,#8b949e)]">Max. Authentifizierungsversuche</span>
                         <div className="flex items-center gap-2">
                           <input type="number" min={1} max={10} value={draft.securityOptions.sshMaxAuthTries}
                             onChange={e => setSecOpts({ sshMaxAuthTries: parseInt(e.target.value) || 3 })}
-                            className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                          <span className="text-xs text-gray-400 w-16">Versuche</span>
+                            className="w-20 border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
+                          <span className="text-xs text-[var(--text-muted,#6e7681)] w-16">Versuche</span>
                         </div>
                       </div>
                       <label className="flex items-center justify-between py-1 cursor-pointer">
-                        <span className="text-sm text-gray-700">Root-Anmeldung erlauben</span>
+                        <span className="text-sm text-[var(--text-secondary,#8b949e)]">Root-Anmeldung erlauben</span>
                         <input type="checkbox" checked={draft.securityOptions.sshPermitRootLogin}
                           onChange={e => setSecOpts({ sshPermitRootLogin: e.target.checked })}
-                          className="w-4 h-4 rounded text-blue-600" />
+                          className="w-4 h-4 rounded accent-[#006FFF]" />
                       </label>
                       <label className="flex items-center justify-between py-1 cursor-pointer">
                         <div>
-                          <span className="text-sm text-gray-700">Passwort-Authentifizierung</span>
-                          <p className="text-xs text-gray-400">Deaktivieren erzwingt Schlüssel-Authentifizierung</p>
+                          <span className="text-sm text-[var(--text-secondary,#8b949e)]">Passwort-Authentifizierung</span>
+                          <p className="text-xs text-[var(--text-muted,#6e7681)]">Deaktivieren erzwingt Schlüssel-Authentifizierung</p>
                         </div>
                         <input type="checkbox" checked={draft.securityOptions.sshPasswordAuth}
                           onChange={e => setSecOpts({ sshPasswordAuth: e.target.checked })}
-                          className="w-4 h-4 rounded text-blue-600" />
+                          className="w-4 h-4 rounded accent-[#006FFF]" />
                       </label>
                       <div>
-                        <p className="text-sm text-gray-700 mb-2">SSH erlaubte Gruppen</p>
+                        <p className="text-sm text-[var(--text-secondary,#8b949e)] mb-2">SSH erlaubte Gruppen</p>
                         <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
                           {draft.securityOptions.sshAllowGroups.map(g => (
-                            <span key={g} className="flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs px-2.5 py-1 rounded-full">
+                            <span key={g} className="flex items-center gap-1 bg-[rgba(0,111,255,0.12)] border border-[rgba(0,111,255,0.3)] text-[#006FFF] text-xs px-2.5 py-1 rounded-full">
                               {g}
-                              <button onClick={() => setSecOpts({ sshAllowGroups: draft.securityOptions.sshAllowGroups.filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
+                              <button onClick={() => setSecOpts({ sshAllowGroups: draft.securityOptions.sshAllowGroups.filter(x => x !== g) })} className="hover:text-[#f85149] ml-0.5">
                                 <XMarkIcon className="w-3 h-3" />
                               </button>
                             </span>
                           ))}
-                          {draft.securityOptions.sshAllowGroups.length === 0 && <p className="text-xs text-gray-400 italic">Keine (alle Gruppen erlaubt)</p>}
+                          {draft.securityOptions.sshAllowGroups.length === 0 && <p className="text-xs text-[var(--text-muted,#6e7681)] italic">Keine (alle Gruppen erlaubt)</p>}
                         </div>
                         <div className="flex items-center gap-2">
                           <input value={sshGroupInput} onChange={e => setSshGroupInput(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter' && sshGroupInput.trim()) { setSecOpts({ sshAllowGroups: [...draft.securityOptions.sshAllowGroups, sshGroupInput.trim()] }); setSshGroupInput(''); } }}
                             placeholder="Gruppenname"
-                            className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                            className="flex-1 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                           <button onClick={() => { if (!sshGroupInput.trim()) return; setSecOpts({ sshAllowGroups: [...draft.securityOptions.sshAllowGroups, sshGroupInput.trim()] }); setSshGroupInput(''); }}
                             disabled={!sshGroupInput.trim()}
-                            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40">
+                            className="px-3 py-1.5 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-40">
                             Hinzufügen
                           </button>
                         </div>
@@ -1427,91 +1427,91 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                     </div>
                   </div>
                   {/* Interaktive Anmeldung */}
-                  <div className="border-t border-gray-100 pt-4">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Interaktive Anmeldung</p>
+                  <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
+                    <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">Interaktive Anmeldung</p>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between py-1">
-                        <span className="text-sm text-gray-700">Inaktivitäts-Timeout (Bildschirmsperre)</span>
+                        <span className="text-sm text-[var(--text-secondary,#8b949e)]">Inaktivitäts-Timeout (Bildschirmsperre)</span>
                         <div className="flex items-center gap-2">
                           <input type="number" min={0} max={480} value={draft.securityOptions.sessionTimeout}
                             onChange={e => setSecOpts({ sessionTimeout: parseInt(e.target.value) || 0 })}
-                            className="w-20 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                          <span className="text-xs text-gray-400 w-24">Min. (0 = nie)</span>
+                            className="w-20 border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
+                          <span className="text-xs text-[var(--text-muted,#6e7681)] w-24">Min. (0 = nie)</span>
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm text-gray-700 mb-1">Anmelde-Banner / MOTD</label>
+                        <label className="block text-sm text-[var(--text-secondary,#8b949e)] mb-1">Anmelde-Banner / MOTD</label>
                         <textarea value={draft.securityOptions.loginBannerText}
                           onChange={e => setSecOpts({ loginBannerText: e.target.value })}
                           rows={3}
                           placeholder="Authorized users only. All activity is monitored."
-                          className="w-full border border-gray-200 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none" />
+                          className="w-full border border-[rgba(255,255,255,0.07)] rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#006FFF] resize-none" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                       </div>
                     </div>
                   </div>
                   {/* Gerätekontrolle */}
-                  <div className="border-t border-gray-100 pt-4">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Gerätekontrolle</p>
+                  <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
+                    <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">Gerätekontrolle</p>
                     <label className="flex items-center justify-between py-1 cursor-pointer">
                       <div>
-                        <span className="text-sm text-gray-700">USB-Speichergeräte blockieren</span>
-                        <p className="text-xs text-gray-400">Verhindert das Einhängen von Wechseldatenträgern</p>
+                        <span className="text-sm text-[var(--text-secondary,#8b949e)]">USB-Speichergeräte blockieren</span>
+                        <p className="text-xs text-[var(--text-muted,#6e7681)]">Verhindert das Einhängen von Wechseldatenträgern</p>
                       </div>
                       <input type="checkbox" checked={draft.securityOptions.blockUsbStorage}
                         onChange={e => setSecOpts({ blockUsbStorage: e.target.checked })}
-                        className="w-4 h-4 rounded text-blue-600" />
+                        className="w-4 h-4 rounded accent-[#006FFF]" />
                     </label>
                   </div>
                   {/* Sudo-Richtlinie */}
-                  <div className="border-t border-gray-100 pt-4">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sudo-Richtlinie (Linux)</p>
+                  <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
+                    <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">Sudo-Richtlinie (Linux)</p>
                     <div className="space-y-3">
                       <div>
-                        <p className="text-sm text-gray-700 mb-2">NOPASSWD-Gruppen</p>
+                        <p className="text-sm text-[var(--text-secondary,#8b949e)] mb-2">NOPASSWD-Gruppen</p>
                         <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
                           {draft.securityOptions.sudoNoPassword.map(g => (
-                            <span key={g} className="flex items-center gap-1 bg-orange-50 border border-orange-200 text-orange-700 text-xs px-2.5 py-1 rounded-full">
+                            <span key={g} className="flex items-center gap-1 bg-[rgba(210,153,34,0.12)] border border-[rgba(210,153,34,0.3)] text-[#d29922] text-xs px-2.5 py-1 rounded-full">
                               {g}
-                              <button onClick={() => setSecOpts({ sudoNoPassword: draft.securityOptions.sudoNoPassword.filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
+                              <button onClick={() => setSecOpts({ sudoNoPassword: draft.securityOptions.sudoNoPassword.filter(x => x !== g) })} className="hover:text-[#f85149] ml-0.5">
                                 <XMarkIcon className="w-3 h-3" />
                               </button>
                             </span>
                           ))}
-                          {draft.securityOptions.sudoNoPassword.length === 0 && <p className="text-xs text-gray-400 italic">Keine</p>}
+                          {draft.securityOptions.sudoNoPassword.length === 0 && <p className="text-xs text-[var(--text-muted,#6e7681)] italic">Keine</p>}
                         </div>
                         <div className="flex items-center gap-2">
                           <input value={sudoNoPwdInput} onChange={e => setSudoNoPwdInput(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter' && sudoNoPwdInput.trim()) { setSecOpts({ sudoNoPassword: [...draft.securityOptions.sudoNoPassword, sudoNoPwdInput.trim()] }); setSudoNoPwdInput(''); } }}
                             placeholder="Gruppenname"
-                            className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                            className="flex-1 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                           <button onClick={() => { if (!sudoNoPwdInput.trim()) return; setSecOpts({ sudoNoPassword: [...draft.securityOptions.sudoNoPassword, sudoNoPwdInput.trim()] }); setSudoNoPwdInput(''); }}
                             disabled={!sudoNoPwdInput.trim()}
-                            className="px-3 py-1.5 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-40">
+                            className="px-3 py-1.5 text-sm font-medium text-white bg-[#d29922] hover:bg-[#b8861f] rounded-lg disabled:opacity-40">
                             Hinzufügen
                           </button>
                         </div>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-700 mb-2">Passwort-Gruppen (sudo mit PW)</p>
+                        <p className="text-sm text-[var(--text-secondary,#8b949e)] mb-2">Passwort-Gruppen (sudo mit PW)</p>
                         <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
                           {draft.securityOptions.sudoWithPassword.map(g => (
-                            <span key={g} className="flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-700 text-xs px-2.5 py-1 rounded-full">
+                            <span key={g} className="flex items-center gap-1 bg-[rgba(163,113,247,0.12)] border border-[rgba(163,113,247,0.3)] text-[#a371f7] text-xs px-2.5 py-1 rounded-full">
                               {g}
-                              <button onClick={() => setSecOpts({ sudoWithPassword: draft.securityOptions.sudoWithPassword.filter(x => x !== g) })} className="hover:text-red-500 ml-0.5">
+                              <button onClick={() => setSecOpts({ sudoWithPassword: draft.securityOptions.sudoWithPassword.filter(x => x !== g) })} className="hover:text-[#f85149] ml-0.5">
                                 <XMarkIcon className="w-3 h-3" />
                               </button>
                             </span>
                           ))}
-                          {draft.securityOptions.sudoWithPassword.length === 0 && <p className="text-xs text-gray-400 italic">Keine</p>}
+                          {draft.securityOptions.sudoWithPassword.length === 0 && <p className="text-xs text-[var(--text-muted,#6e7681)] italic">Keine</p>}
                         </div>
                         <div className="flex items-center gap-2">
                           <input value={sudoWithPwdInput} onChange={e => setSudoWithPwdInput(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter' && sudoWithPwdInput.trim()) { setSecOpts({ sudoWithPassword: [...draft.securityOptions.sudoWithPassword, sudoWithPwdInput.trim()] }); setSudoWithPwdInput(''); } }}
                             placeholder="Gruppenname"
-                            className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                            className="flex-1 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                           <button onClick={() => { if (!sudoWithPwdInput.trim()) return; setSecOpts({ sudoWithPassword: [...draft.securityOptions.sudoWithPassword, sudoWithPwdInput.trim()] }); setSudoWithPwdInput(''); }}
                             disabled={!sudoWithPwdInput.trim()}
-                            className="px-3 py-1.5 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-40">
+                            className="px-3 py-1.5 text-sm font-medium text-white bg-[#a371f7] hover:bg-[#8957e5] rounded-lg disabled:opacity-40">
                             Hinzufügen
                           </button>
                         </div>
@@ -1519,14 +1519,14 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                     </div>
                   </div>
                   {/* Zeitsynchronisation */}
-                  <div className="border-t border-gray-100 pt-4">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Zeitsynchronisation</p>
+                  <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
+                    <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">Zeitsynchronisation</p>
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1">NTP-Server</label>
+                      <label className="block text-sm text-[var(--text-secondary,#8b949e)] mb-1">NTP-Server</label>
                       <input value={draft.securityOptions.ntpServer}
                         onChange={e => setSecOpts({ ntpServer: e.target.value })}
                         placeholder={AD_DOMAIN ? `ntp.${AD_DOMAIN}` : 'e.g. ntp.example.local'}
-                        className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        className="w-full border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                     </div>
                   </div>
                 </div>
@@ -1538,31 +1538,31 @@ function GPOEditModal({ gpo, onClose, onSave }: {
           {/* ── cc_firewall ── */}
           {tab === 'cc_firewall' && (
             <div className="space-y-4">
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                <span className="text-sm font-medium text-gray-700">Windows-Firewall aktiv</span>
+              <label className="flex items-center justify-between p-3 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg cursor-pointer">
+                <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Windows-Firewall aktiv</span>
                 <input type="checkbox" checked={draft.firewall.enabled}
                   onChange={e => setFirewall({ enabled: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-600" />
+                  className="w-4 h-4 rounded accent-[#006FFF]" />
               </label>
               <div className={`space-y-4 ${!draft.firewall.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
 
                 {/* Default policy */}
-                <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium text-gray-700 flex-shrink-0">Default Policy:</span>
+                <div className="flex items-center gap-4 p-3 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg">
+                  <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)] flex-shrink-0">Default Policy:</span>
                   <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500">Inbound</label>
+                    <label className="text-xs text-[var(--text-muted,#6e7681)]">Inbound</label>
                     <select value={draft.firewall.defaultInbound}
                       onChange={e => setFirewall({ defaultInbound: e.target.value as 'allow' | 'deny' })}
-                      className="border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                      className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                       <option value="allow">Allow</option>
                       <option value="deny">Deny</option>
                     </select>
                   </div>
                   <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500">Outbound</label>
+                    <label className="text-xs text-[var(--text-muted,#6e7681)]">Outbound</label>
                     <select value={draft.firewall.defaultOutbound}
                       onChange={e => setFirewall({ defaultOutbound: e.target.value as 'allow' | 'deny' })}
-                      className="border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                      className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                       <option value="allow">Allow</option>
                       <option value="deny">Deny</option>
                     </select>
@@ -1572,24 +1572,24 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                 {/* Rules list */}
                 <div className="space-y-1.5">
                   {draft.firewall.rules.length === 0 && (
-                    <p className="text-sm text-gray-400 italic px-1">No rules configured</p>
+                    <p className="text-sm text-[var(--text-muted,#6e7681)] italic px-1">No rules configured</p>
                   )}
                   {draft.firewall.rules.map(rule => (
-                    <div key={rule.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${rule.enabled ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-100 opacity-60'}`}>
-                      <span className={`px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${rule.direction === 'inbound' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                    <div key={rule.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${rule.enabled ? 'bg-[var(--bg-surface-raised,#1c2128)] border-[rgba(255,255,255,0.07)]' : 'bg-[rgba(255,255,255,0.02)] border-[rgba(255,255,255,0.04)] opacity-60'}`}>
+                      <span className={`px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${rule.direction === 'inbound' ? 'bg-[rgba(0,111,255,0.15)] text-[#006FFF]' : 'bg-[rgba(163,113,247,0.15)] text-[#a371f7]'}`}>
                         {rule.direction}
                       </span>
-                      <span className={`px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${rule.action === 'allow' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      <span className={`px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${rule.action === 'allow' ? 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]' : 'bg-[rgba(248,81,73,0.15)] text-[#f85149]'}`}>
                         {rule.action}
                       </span>
-                      <span className="text-gray-500 flex-shrink-0">{rule.protocol}</span>
-                      <span className="font-mono text-gray-700 flex-shrink-0">:{rule.port}</span>
-                      <span className="text-gray-400 flex-shrink-0">from {rule.source}</span>
-                      <span className="text-gray-500 truncate flex-1">{rule.description}</span>
-                      <button onClick={() => toggleFirewallRule(rule.id)} className={`flex-shrink-0 ${rule.enabled ? 'text-green-500' : 'text-gray-300'} hover:text-blue-500`} title="Toggle rule">
+                      <span className="text-[var(--text-muted,#6e7681)] flex-shrink-0">{rule.protocol}</span>
+                      <span className="font-mono text-[var(--text-secondary,#8b949e)] flex-shrink-0">:{rule.port}</span>
+                      <span className="text-[var(--text-muted,#6e7681)] flex-shrink-0">from {rule.source}</span>
+                      <span className="text-[var(--text-muted,#6e7681)] truncate flex-1">{rule.description}</span>
+                      <button onClick={() => toggleFirewallRule(rule.id)} className={`flex-shrink-0 ${rule.enabled ? 'text-[#3fb950]' : 'text-[var(--text-muted,#6e7681)]'} hover:text-[#006FFF]`} title="Toggle rule">
                         <CheckCircleIcon className="w-4 h-4" />
                       </button>
-                      <button onClick={() => removeFirewallRule(rule.id)} className="flex-shrink-0 text-gray-300 hover:text-red-500">
+                      <button onClick={() => removeFirewallRule(rule.id)} className="flex-shrink-0 text-[var(--text-muted,#6e7681)] hover:text-[#f85149]">
                         <XMarkIcon className="w-4 h-4" />
                       </button>
                     </div>
@@ -1597,21 +1597,21 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                 </div>
 
                 {/* Add rule form */}
-                <div className="border-t border-gray-100 pt-3">
-                  <p className="text-xs font-medium text-gray-500 mb-2">Add Rule</p>
+                <div className="border-t border-[rgba(255,255,255,0.07)] pt-3">
+                  <p className="text-xs font-medium text-[var(--text-muted,#6e7681)] mb-2">Add Rule</p>
                   <div className="grid grid-cols-2 gap-2 mb-2">
                     <select value={newRule.direction} onChange={e => setNewRule(r => ({ ...r, direction: e.target.value as FirewallRule['direction'] }))}
-                      className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                      className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                       <option value="inbound">Inbound</option>
                       <option value="outbound">Outbound</option>
                     </select>
                     <select value={newRule.action} onChange={e => setNewRule(r => ({ ...r, action: e.target.value as FirewallRule['action'] }))}
-                      className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                      className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                       <option value="allow">Allow</option>
                       <option value="deny">Deny</option>
                     </select>
                     <select value={newRule.protocol} onChange={e => setNewRule(r => ({ ...r, protocol: e.target.value as FirewallRule['protocol'] }))}
-                      className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                      className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                       <option value="tcp">TCP</option>
                       <option value="udp">UDP</option>
                       <option value="icmp">ICMP</option>
@@ -1619,16 +1619,16 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                     </select>
                     <input value={newRule.port} onChange={e => setNewRule(r => ({ ...r, port: e.target.value }))}
                       placeholder='Port (e.g. "22" or "80,443")'
-                      className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                     <input value={newRule.source} onChange={e => setNewRule(r => ({ ...r, source: e.target.value }))}
                       placeholder='Source IP/CIDR or "*"'
-                      className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                     <input value={newRule.description} onChange={e => setNewRule(r => ({ ...r, description: e.target.value }))}
                       placeholder="Description"
-                      className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                   </div>
                   <button onClick={addFirewallRule} disabled={!newRule.port.trim()}
-                    className="w-full px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40">
+                    className="w-full px-3 py-1.5 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-40">
                     Add Rule
                   </button>
                 </div>
@@ -1639,23 +1639,23 @@ function GPOEditModal({ gpo, onClose, onSave }: {
           {/* ── cc_dienste ── */}
           {tab === 'cc_dienste' && (
             <div className="space-y-4">
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                <span className="text-sm font-medium text-gray-700">Systemdienste aktiv</span>
+              <label className="flex items-center justify-between p-3 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg cursor-pointer">
+                <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Systemdienste aktiv</span>
                 <input type="checkbox" checked={draft.systemServices.enabled}
                   onChange={e => setDraft(d => ({ ...d, systemServices: { ...d.systemServices, enabled: e.target.checked } }))}
-                  className="w-4 h-4 rounded text-blue-600" />
+                  className="w-4 h-4 rounded accent-[#006FFF]" />
               </label>
               <div className={`space-y-1.5 ${!draft.systemServices.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-1">Common Services</p>
+                <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider px-1">Common Services</p>
                 {DEFAULT_SERVICES.map(svc => (
-                  <div key={svc.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg">
+                  <div key={svc.id} className="flex items-center justify-between px-3 py-2 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800">{svc.displayName}</p>
-                      <p className="text-xs text-gray-400 font-mono">{svc.name}</p>
+                      <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{svc.displayName}</p>
+                      <p className="text-xs text-[var(--text-muted,#6e7681)] font-mono">{svc.name}</p>
                     </div>
                     <select value={getServiceStartup(svc.id)}
                       onChange={e => setServiceStartup(svc.id, svc.name, svc.displayName, e.target.value as ServiceEntry['startupType'])}
-                      className="ml-4 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 flex-shrink-0">
+                      className="ml-4 border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF] flex-shrink-0" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                       <option value="manual">Manual (no change)</option>
                       <option value="enabled">Enabled (start on boot)</option>
                       <option value="disabled">Disabled (stop + disable)</option>
@@ -1665,20 +1665,20 @@ function GPOEditModal({ gpo, onClose, onSave }: {
 
                 {/* Custom services */}
                 {draft.systemServices.services.filter(s => !DEFAULT_SERVICES.find(d => d.id === s.id)).map(svc => (
-                  <div key={svc.id} className="flex items-center justify-between px-3 py-2 bg-blue-50 rounded-lg">
+                  <div key={svc.id} className="flex items-center justify-between px-3 py-2 bg-[rgba(0,111,255,0.08)] border border-[rgba(0,111,255,0.15)] rounded-lg">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800">{svc.displayName}</p>
-                      <p className="text-xs text-gray-400 font-mono">{svc.name}</p>
+                      <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{svc.displayName}</p>
+                      <p className="text-xs text-[var(--text-muted,#6e7681)] font-mono">{svc.name}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-4">
                       <select value={svc.startupType}
                         onChange={e => setDraft(d => ({ ...d, systemServices: { ...d.systemServices, services: d.systemServices.services.map(x => x.id === svc.id ? { ...x, startupType: e.target.value as ServiceEntry['startupType'] } : x) } }))}
-                        className="border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                         <option value="manual">Manual</option>
                         <option value="enabled">Enabled</option>
                         <option value="disabled">Disabled</option>
                       </select>
-                      <button onClick={() => setDraft(d => ({ ...d, systemServices: { ...d.systemServices, services: d.systemServices.services.filter(x => x.id !== svc.id) } }))} className="text-gray-400 hover:text-red-500">
+                      <button onClick={() => setDraft(d => ({ ...d, systemServices: { ...d.systemServices, services: d.systemServices.services.filter(x => x.id !== svc.id) } }))} className="text-[var(--text-muted,#6e7681)] hover:text-[#f85149]">
                         <XMarkIcon className="w-4 h-4" />
                       </button>
                     </div>
@@ -1686,23 +1686,23 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                 ))}
 
                 {/* Add custom service */}
-                <div className="border-t border-gray-100 pt-3">
-                  <p className="text-xs font-medium text-gray-500 mb-2">Add Custom Service</p>
+                <div className="border-t border-[rgba(255,255,255,0.07)] pt-3">
+                  <p className="text-xs font-medium text-[var(--text-muted,#6e7681)] mb-2">Add Custom Service</p>
                   <div className="flex items-center gap-2">
                     <input value={newSvc.name} onChange={e => setNewSvc(s => ({ ...s, name: e.target.value }))}
                       placeholder="Service name (systemd)"
-                      className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      className="flex-1 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                     <input value={newSvc.displayName} onChange={e => setNewSvc(s => ({ ...s, displayName: e.target.value }))}
                       placeholder="Display name"
-                      className="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      className="flex-1 border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                     <select value={newSvc.startupType} onChange={e => setNewSvc(s => ({ ...s, startupType: e.target.value as ServiceEntry['startupType'] }))}
-                      className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none">
+                      className="border border-[rgba(255,255,255,0.07)] rounded px-2 py-1.5 text-sm focus:outline-none" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                       <option value="enabled">Enabled</option>
                       <option value="disabled">Disabled</option>
                       <option value="manual">Manual</option>
                     </select>
                     <button onClick={addCustomService} disabled={!newSvc.name.trim()}
-                      className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40">
+                      className="px-3 py-1.5 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-40">
                       Add
                     </button>
                   </div>
@@ -1714,17 +1714,17 @@ function GPOEditModal({ gpo, onClose, onSave }: {
           {/* ── cc_adm_vorlagen: Administrative Vorlagen (Computer) ── */}
           {tab === 'cc_adm_vorlagen' && (
             <div className="space-y-4">
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
+              <label className="flex items-center justify-between p-3 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg cursor-pointer">
                 <div>
-                  <span className="text-sm font-medium text-gray-700">Admin-Vorlagen (Computer) aktiv</span>
-                  <p className="text-xs text-gray-400 mt-0.5">Systemweite Einschränkungen und Härtung</p>
+                  <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Admin-Vorlagen (Computer) aktiv</span>
+                  <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Systemweite Einschränkungen und Härtung</p>
                 </div>
                 <input type="checkbox" checked={draft.adminTemplates.computer.enabled}
                   onChange={e => setAdmComputer({ enabled: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-600" />
+                  className="w-4 h-4 rounded accent-[#006FFF]" />
               </label>
               <div className={`space-y-3 ${!draft.adminTemplates.computer.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Systemeinschränkungen</p>
+                <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider">Systemeinschränkungen</p>
                 {([
                   { label: 'Gastkonto deaktivieren',                     key: 'disableGuestAccount' as const },
                   { label: 'Zugriff auf Eingabeaufforderung einschränken', key: 'restrictCmdAccess' as const },
@@ -1732,10 +1732,10 @@ function GPOEditModal({ gpo, onClose, onSave }: {
                   { label: 'Netzwerkfreigabe-Einschränkungen',            key: 'networkShareRestriction' as const },
                 ]).map(({ label, key }) => (
                   <label key={key} className="flex items-center justify-between py-1 cursor-pointer">
-                    <span className="text-sm text-gray-700">{label}</span>
+                    <span className="text-sm text-[var(--text-secondary,#8b949e)]">{label}</span>
                     <input type="checkbox" checked={draft.adminTemplates.computer[key]}
                       onChange={e => setAdmComputer({ [key]: e.target.checked })}
-                      className="w-4 h-4 rounded text-blue-600" />
+                      className="w-4 h-4 rounded accent-[#006FFF]" />
                   </label>
                 ))}
               </div>
@@ -1745,71 +1745,71 @@ function GPOEditModal({ gpo, onClose, onSave }: {
           {/* ── uc_adm_vorlagen: Administrative Vorlagen (Benutzer) ── */}
           {tab === 'uc_adm_vorlagen' && (
             <div className="space-y-4">
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
+              <label className="flex items-center justify-between p-3 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg cursor-pointer">
                 <div>
-                  <span className="text-sm font-medium text-gray-700">Admin-Vorlagen (Benutzer) aktiv</span>
-                  <p className="text-xs text-gray-400 mt-0.5">Browser, Desktop und Cloud-Einschränkungen</p>
+                  <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">Admin-Vorlagen (Benutzer) aktiv</span>
+                  <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Browser, Desktop und Cloud-Einschränkungen</p>
                 </div>
                 <input type="checkbox" checked={draft.adminTemplates.user.enabled}
                   onChange={e => setAdmUser({ enabled: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-600" />
+                  className="w-4 h-4 rounded accent-[#006FFF]" />
               </label>
               <div className={`space-y-5 ${!draft.adminTemplates.user.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 {/* Browser */}
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Browser-Einstellungen</p>
+                  <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">Browser-Einstellungen</p>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1">Startseite (erzwungen)</label>
+                      <label className="block text-sm text-[var(--text-secondary,#8b949e)] mb-1">Startseite (erzwungen)</label>
                       <input value={draft.adminTemplates.user.browserHomepage}
                         onChange={e => setAdmUser({ browserHomepage: e.target.value })}
                         placeholder={AD_DOMAIN ? `https://${AD_DOMAIN}` : 'https://intranet.example.local'}
-                        className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        className="w-full border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1">Standardsuchmaschine</label>
+                      <label className="block text-sm text-[var(--text-secondary,#8b949e)] mb-1">Standardsuchmaschine</label>
                       <input value={draft.adminTemplates.user.browserSearchEngine}
                         onChange={e => setAdmUser({ browserSearchEngine: e.target.value })}
                         placeholder="https://search.example.local"
-                        className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        className="w-full border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                     </div>
                   </div>
                 </div>
                 {/* Desktop */}
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Desktop-Richtlinien</p>
+                <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
+                  <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">Desktop-Richtlinien</p>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1">Hintergrundbilder-Pfad (UNC)</label>
+                      <label className="block text-sm text-[var(--text-secondary,#8b949e)] mb-1">Hintergrundbilder-Pfad (UNC)</label>
                       <input value={draft.adminTemplates.user.desktopWallpaperPath}
                         onChange={e => setAdmUser({ desktopWallpaperPath: e.target.value })}
                         placeholder="\\server\share\wallpaper.jpg"
-                        className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        className="w-full border border-[rgba(255,255,255,0.07)] rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }} />
                     </div>
                     {([
                       { label: 'Task-Manager deaktivieren',    key: 'disableTaskManager' as const },
                       { label: 'Systemsteuerung ausblenden',   key: 'hideControlPanel' as const },
                     ]).map(({ label, key }) => (
                       <label key={key} className="flex items-center justify-between py-1 cursor-pointer">
-                        <span className="text-sm text-gray-700">{label}</span>
+                        <span className="text-sm text-[var(--text-secondary,#8b949e)]">{label}</span>
                         <input type="checkbox" checked={draft.adminTemplates.user[key] as boolean}
                           onChange={e => setAdmUser({ [key]: e.target.checked })}
-                          className="w-4 h-4 rounded text-blue-600" />
+                          className="w-4 h-4 rounded accent-[#006FFF]" />
                       </label>
                     ))}
                   </div>
                 </div>
                 {/* Cloud Storage */}
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Cloud-Speicher</p>
+                <div className="border-t border-[rgba(255,255,255,0.07)] pt-4">
+                  <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">Cloud-Speicher</p>
                   <label className="flex items-center justify-between py-1 cursor-pointer">
                     <div>
-                      <span className="text-sm text-gray-700">Cloud-Speicher blockieren</span>
-                      <p className="text-xs text-gray-400">OneDrive, Dropbox, Google Drive, iCloud</p>
+                      <span className="text-sm text-[var(--text-secondary,#8b949e)]">Cloud-Speicher blockieren</span>
+                      <p className="text-xs text-[var(--text-muted,#6e7681)]">OneDrive, Dropbox, Google Drive, iCloud</p>
                     </div>
                     <input type="checkbox" checked={draft.adminTemplates.user.blockCloudStorage}
                       onChange={e => setAdmUser({ blockCloudStorage: e.target.checked })}
-                      className="w-4 h-4 rounded text-blue-600" />
+                      className="w-4 h-4 rounded accent-[#006FFF]" />
                   </label>
                 </div>
               </div>
@@ -1820,13 +1820,13 @@ function GPOEditModal({ gpo, onClose, onSave }: {
         </div>{/* end two-column body */}
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0">
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-[rgba(255,255,255,0.07)] flex-shrink-0">
           <button onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
+            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary,#8b949e)] bg-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.1)] rounded-lg">
             Cancel
           </button>
           <button onClick={handleSave}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">
+            className="px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg">
             Save Changes
           </button>
         </div>
@@ -1855,11 +1855,11 @@ interface GPOTemplate {
 }
 
 const CATEGORY_CHIP: Record<string, string> = {
-  security:   'bg-red-50 text-red-700 border-red-100',
-  compliance: 'bg-indigo-50 text-indigo-700 border-indigo-100',
-  software:   'bg-emerald-50 text-emerald-700 border-emerald-100',
-  access:     'bg-purple-50 text-purple-700 border-purple-100',
-  blank:      'bg-gray-50 text-gray-600 border-gray-200',
+  security:   'bg-[rgba(248,81,73,0.12)] text-[#f85149] border-[rgba(248,81,73,0.3)]',
+  compliance: 'bg-[rgba(0,111,255,0.12)] text-[#006FFF] border-[rgba(0,111,255,0.3)]',
+  software:   'bg-[rgba(63,185,80,0.12)] text-[#3fb950] border-[rgba(63,185,80,0.3)]',
+  access:     'bg-[rgba(163,113,247,0.12)] text-[#a371f7] border-[rgba(163,113,247,0.3)]',
+  blank:      'bg-[rgba(255,255,255,0.05)] text-[var(--text-secondary,#8b949e)] border-[rgba(255,255,255,0.07)]',
 };
 
 const GPO_TEMPLATES: GPOTemplate[] = [
@@ -1868,7 +1868,7 @@ const GPO_TEMPLATES: GPOTemplate[] = [
     name: 'Blank Policy',
     description: 'Start from scratch — no pre-configured settings.',
     category: 'blank',
-    color: 'bg-gray-200',
+    color: 'bg-[rgba(255,255,255,0.08)]',
     icon: DocumentTextIcon,
     tags: [],
     defaults: {},
@@ -2100,28 +2100,28 @@ function GPOWizard({ ous, onClose, onSave }: {
   const TplIcon = template && template.id !== 'tpl-blank' ? template.icon : null;
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-50"
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50"
          onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col"
+      <div className="bg-[var(--bg-surface,#161b22)] border border-[rgba(255,255,255,0.07)] rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col"
            onClick={e => e.stopPropagation()}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.07)] flex-shrink-0">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">New Group Policy Object</h2>
-            <p className="text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-[var(--text-primary,#e4e6ea)]">New Group Policy Object</h2>
+            <p className="text-sm text-[var(--text-muted,#6e7681)]">
               {step === 1 ? 'Choose a template to start from'
              : step === 2 ? 'Name and link your policy'
              :              'Review settings before creating'}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-primary,#e4e6ea)]">
             <XMarkIcon className="w-6 h-6" />
           </button>
         </div>
 
         {/* Step indicator */}
-        <div className="flex items-center px-6 py-3 bg-gray-50 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center px-6 py-3 bg-[var(--bg-surface-raised,#1c2128)] border-b border-[rgba(255,255,255,0.07)] flex-shrink-0">
           {STEP_LABELS.map((label, i) => {
             const n      = i + 1;
             const active = step === n;
@@ -2129,21 +2129,21 @@ function GPOWizard({ ous, onClose, onSave }: {
             return (
               <React.Fragment key={label}>
                 <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  active ? 'bg-blue-600 text-white'
-                : done   ? 'bg-green-100 text-green-700'
-                :          'text-gray-400'
+                  active ? 'bg-[#006FFF] text-white'
+                : done   ? 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]'
+                :          'text-[var(--text-muted,#6e7681)]'
                 }`}>
                   <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs leading-none font-bold ${
-                    active ? 'bg-white text-blue-600'
-                  : done   ? 'bg-green-500 text-white'
-                  :          'bg-gray-200 text-gray-500'
+                    active ? 'bg-[rgba(255,255,255,0.9)] text-[#006FFF]'
+                  : done   ? 'bg-[#3fb950] text-white'
+                  :          'bg-[rgba(255,255,255,0.1)] text-[var(--text-muted,#6e7681)]'
                   }`}>
                     {done ? '✓' : n}
                   </span>
                   {label}
                 </div>
                 {i < 2 && (
-                  <div className={`flex-1 h-px mx-2 ${step > n ? 'bg-green-300' : 'bg-gray-200'}`} />
+                  <div className={`flex-1 h-px mx-2 ${step > n ? 'bg-[rgba(63,185,80,0.4)]' : 'bg-[rgba(255,255,255,0.1)]'}`} />
                 )}
               </React.Fragment>
             );
@@ -2166,18 +2166,18 @@ function GPOWizard({ ous, onClose, onSave }: {
                     onClick={() => pickTemplate(tmpl)}
                     className={`text-left rounded-xl border-2 overflow-hidden transition-all hover:shadow-md ${
                       selected
-                        ? 'border-blue-500 shadow-md ring-2 ring-blue-100'
-                        : 'border-gray-100 hover:border-blue-200'
+                        ? 'border-[#006FFF] shadow-md ring-2 ring-[rgba(0,111,255,0.15)]'
+                        : 'border-[rgba(255,255,255,0.07)] hover:border-[rgba(0,111,255,0.3)]'
                     }`}
                   >
-                    <div className={`px-4 py-3 flex items-center gap-2 ${isBlank ? 'bg-gray-100' : tmpl.color}`}>
-                      <Icon className={`w-5 h-5 flex-shrink-0 ${isBlank ? 'text-gray-500' : 'text-white'}`} />
-                      <span className={`text-sm font-semibold truncate ${isBlank ? 'text-gray-700' : 'text-white'}`}>
+                    <div className={`px-4 py-3 flex items-center gap-2 ${isBlank ? 'bg-[rgba(255,255,255,0.08)]' : tmpl.color}`}>
+                      <Icon className={`w-5 h-5 flex-shrink-0 ${isBlank ? 'text-[var(--text-secondary,#8b949e)]' : 'text-white'}`} />
+                      <span className={`text-sm font-semibold truncate ${isBlank ? 'text-[var(--text-secondary,#8b949e)]' : 'text-white'}`}>
                         {tmpl.name}
                       </span>
                     </div>
-                    <div className="px-4 py-3 bg-white min-h-[80px]">
-                      <p className="text-xs text-gray-500 leading-relaxed mb-2 line-clamp-2">
+                    <div className="px-4 py-3 bg-[var(--bg-surface-raised,#1c2128)] min-h-[80px]">
+                      <p className="text-xs text-[var(--text-muted,#6e7681)] leading-relaxed mb-2 line-clamp-2">
                         {tmpl.description}
                       </p>
                       <div className="flex flex-wrap gap-1">
@@ -2220,20 +2220,20 @@ function GPOWizard({ ous, onClose, onSave }: {
                 )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
-                    GPO Name <span className="text-red-500">*</span>
+                  <label className="block text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-1.5">
+                    GPO Name <span className="text-[#f85149]">*</span>
                   </label>
                   <input
                     value={name}
                     onChange={e => setName(e.target.value)}
                     autoFocus
                     placeholder="e.g. Marketing Department Policy"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-1.5">
                     Description
                   </label>
                   <textarea
@@ -2241,18 +2241,18 @@ function GPOWizard({ ous, onClose, onSave }: {
                     onChange={e => setDesc(e.target.value)}
                     rows={2}
                     placeholder="Describe the purpose of this policy…"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF] resize-none" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-1.5">
                     Link to OU / Group
                   </label>
                   <select
                     value={linkedOU}
                     onChange={e => setLinkedOU(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}
                   >
                     <option value="">— Not linked —</option>
                     {allOUs.map(ou => (
@@ -2277,31 +2277,31 @@ function GPOWizard({ ous, onClose, onSave }: {
                     { label: 'Status',    value: 'Enabled' },
                     { label: 'Linked OU', value: allOUs.find(o => o.id === linkedOU)?.name || '— Not linked —' },
                   ].map(({ label, value }) => (
-                    <div key={label} className="bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-100">
-                      <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-                      <p className="text-sm font-semibold text-gray-900 truncate">{value}</p>
+                    <div key={label} className="bg-[var(--bg-surface-raised,#1c2128)] rounded-lg px-3 py-2.5 border border-[rgba(255,255,255,0.07)]">
+                      <p className="text-xs text-[var(--text-muted,#6e7681)] mb-0.5">{label}</p>
+                      <p className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] truncate">{value}</p>
                     </div>
                   ))}
                 </div>
 
                 {desc && (
-                  <div className="bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-100">
-                    <p className="text-xs text-gray-400 mb-0.5">Description</p>
-                    <p className="text-sm text-gray-700">{desc}</p>
+                  <div className="bg-[var(--bg-surface-raised,#1c2128)] rounded-lg px-3 py-2.5 border border-[rgba(255,255,255,0.07)]">
+                    <p className="text-xs text-[var(--text-muted,#6e7681)] mb-0.5">Description</p>
+                    <p className="text-sm text-[var(--text-secondary,#8b949e)]">{desc}</p>
                   </div>
                 )}
 
                 {/* Pre-configured settings */}
                 {previewLines.length > 0 && (
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">
                       Pre-configured Settings
                     </p>
                     <div className="space-y-1.5">
                       {previewLines.map((line, i) => (
-                        <div key={i} className="flex items-start gap-2 px-3 py-2 bg-blue-50 rounded-lg">
-                          <CheckCircleIcon className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                          <span className="text-sm text-blue-800">{line}</span>
+                        <div key={i} className="flex items-start gap-2 px-3 py-2 bg-[rgba(0,111,255,0.08)] border border-[rgba(0,111,255,0.15)] rounded-lg">
+                          <CheckCircleIcon className="w-4 h-4 text-[#006FFF] flex-shrink-0 mt-0.5" />
+                          <span className="text-sm text-[var(--text-secondary,#8b949e)]">{line}</span>
                         </div>
                       ))}
                     </div>
@@ -2311,28 +2311,28 @@ function GPOWizard({ ous, onClose, onSave }: {
                 {/* Software packages */}
                 {(template?.defaults.software?.packages?.length ?? 0) > 0 && (
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">
                       Software Packages
                     </p>
                     <div className="space-y-1">
                       {template!.defaults.software!.packages.map(pkg => (
-                        <div key={pkg.id} className="flex items-center gap-2 px-3 py-2 bg-emerald-50 rounded-lg">
+                        <div key={pkg.id} className="flex items-center gap-2 px-3 py-2 bg-[rgba(63,185,80,0.08)] border border-[rgba(63,185,80,0.15)] rounded-lg">
                           <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                             pkg.action === 'install'
-                              ? 'bg-emerald-200 text-emerald-800'
-                              : 'bg-red-100 text-red-700'
+                              ? 'bg-[rgba(63,185,80,0.2)] text-[#3fb950]'
+                              : 'bg-[rgba(248,81,73,0.15)] text-[#f85149]'
                           }`}>
                             {pkg.action}
                           </span>
-                          <span className="text-sm font-medium text-emerald-900">{pkg.name}</span>
-                          <span className="text-xs text-emerald-600 ml-auto">{pkg.version}</span>
+                          <span className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{pkg.name}</span>
+                          <span className="text-xs text-[#3fb950] ml-auto">{pkg.version}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <p className="text-xs text-gray-400 text-center pt-1">
+                <p className="text-xs text-[var(--text-muted,#6e7681)] text-center pt-1">
                   All settings can be fine-tuned after creation via the Edit button.
                 </p>
               </div>
@@ -2341,10 +2341,10 @@ function GPOWizard({ ous, onClose, onSave }: {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[rgba(255,255,255,0.07)] flex-shrink-0">
           <button
             onClick={step === 1 ? onClose : () => setStep(s => s - 1)}
-            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary,#8b949e)] hover:text-[var(--text-primary,#e4e6ea)] transition-colors"
           >
             {step === 1 ? 'Cancel' : '← Back'}
           </button>
@@ -2353,7 +2353,7 @@ function GPOWizard({ ous, onClose, onSave }: {
               <button
                 onClick={() => setStep(3)}
                 disabled={!name.trim()}
-                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg
+                className="px-5 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg
                            disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Review →
@@ -2362,7 +2362,7 @@ function GPOWizard({ ous, onClose, onSave }: {
             {step === 3 && (
               <button
                 onClick={handleCreate}
-                className="px-5 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                className="px-5 py-2 text-sm font-medium text-white bg-[#3fb950] hover:bg-[#2ea043] rounded-lg transition-colors"
               >
                 Create GPO
               </button>
@@ -2402,23 +2402,23 @@ function GPODetail({ gpo, ous, onToggle, onDelete, onEdit, onCopy, onExport, onR
   return (
     <div className="flex flex-col h-full">
       {/* GPO Header */}
-      <div className="flex items-start justify-between p-4 border-b border-gray-100">
+      <div className="flex items-start justify-between p-4 border-b border-[rgba(255,255,255,0.07)]">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-            gpo.status === 'enabled' ? 'bg-blue-50' : 'bg-gray-100'
+            gpo.status === 'enabled' ? 'bg-[rgba(0,111,255,0.12)]' : 'bg-[rgba(255,255,255,0.06)]'
           }`}>
-            <DocumentTextIcon className={`w-6 h-6 ${gpo.status === 'enabled' ? 'text-blue-600' : 'text-gray-400'}`} />
+            <DocumentTextIcon className={`w-6 h-6 ${gpo.status === 'enabled' ? 'text-[#006FFF]' : 'text-[var(--text-muted,#6e7681)]'}`} />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-gray-900">{gpo.name}</h3>
+            <h3 className="text-base font-semibold text-[var(--text-primary,#e4e6ea)]">{gpo.name}</h3>
             <div className="flex items-center gap-2 mt-0.5">
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                gpo.status === 'enabled' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                gpo.status === 'enabled' ? 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]' : 'bg-[rgba(255,255,255,0.06)] text-[var(--text-muted,#6e7681)]'
               }`}>
                 {gpo.status === 'enabled' ? <CheckCircleIcon className="w-3 h-3" /> : <XCircleIcon className="w-3 h-3" />}
                 {gpo.status === 'enabled' ? 'Enabled' : 'Disabled'}
               </span>
-              <span className="text-xs text-gray-500">v{gpo.version} · {countSettings(gpo)} settings</span>
+              <span className="text-xs text-[var(--text-muted,#6e7681)]">v{gpo.version} · {countSettings(gpo)} settings</span>
             </div>
           </div>
         </div>
@@ -2426,45 +2426,45 @@ function GPODetail({ gpo, ous, onToggle, onDelete, onEdit, onCopy, onExport, onR
           <button onClick={onToggle}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
               gpo.status === 'enabled'
-                ? 'text-yellow-700 bg-yellow-50 hover:bg-yellow-100'
-                : 'text-green-700 bg-green-50 hover:bg-green-100'
+                ? 'text-[#d29922] bg-[rgba(210,153,34,0.12)] hover:bg-[rgba(210,153,34,0.2)]'
+                : 'text-[#3fb950] bg-[rgba(63,185,80,0.12)] hover:bg-[rgba(63,185,80,0.2)]'
             }`}>
             {gpo.status === 'enabled' ? 'Disable' : 'Enable'}
           </button>
           <button onClick={onEdit}
-            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+            className="px-3 py-1.5 text-xs font-medium text-[var(--text-secondary,#8b949e)] bg-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.1)] rounded-lg"
             title="Edit GPO settings">
             <PencilIcon className="w-3.5 h-3.5" />
           </button>
           <button onClick={onCopy}
-            className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg"
+            className="px-3 py-1.5 text-xs font-medium text-[#006FFF] bg-[rgba(0,111,255,0.12)] hover:bg-[rgba(0,111,255,0.2)] rounded-lg"
             title="Copy GPO">
             <DocumentDuplicateIcon className="w-3.5 h-3.5" />
           </button>
           <button onClick={onExport}
-            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+            className="px-3 py-1.5 text-xs font-medium text-[var(--text-secondary,#8b949e)] bg-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.1)] rounded-lg"
             title="Export GPO as JSON">
             <ArrowDownTrayIcon className="w-3.5 h-3.5" />
           </button>
           <button onClick={onRSoP}
-            className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg flex items-center gap-1"
+            className="px-3 py-1.5 text-xs font-medium text-[#a371f7] bg-[rgba(163,113,247,0.12)] hover:bg-[rgba(163,113,247,0.2)] rounded-lg flex items-center gap-1"
             title="Resultant Set of Policy">
             <CalculatorIcon className="w-3.5 h-3.5" />
             <span>RSoP</span>
           </button>
           <button onClick={onDelete}
-            className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg">
+            className="px-3 py-1.5 text-xs font-medium text-[#f85149] bg-[rgba(248,81,73,0.12)] hover:bg-[rgba(248,81,73,0.2)] rounded-lg">
             <TrashIcon className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-100 px-4">
+      <div className="flex border-b border-[rgba(255,255,255,0.07)] px-4">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`py-2 px-3 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.key ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              tab === t.key ? 'border-[#006FFF] text-[#006FFF]' : 'border-transparent text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]'
             }`}>
             {t.label}
           </button>
@@ -2485,16 +2485,16 @@ function GPODetail({ gpo, ous, onToggle, onDelete, onEdit, onCopy, onExport, onR
                 { label: 'Created', value: fmtDate(gpo.createdAt) },
                 { label: 'Last Modified', value: fmtDate(gpo.modifiedAt) },
               ].map(({ label, value }) => (
-                <div key={label} className="bg-gray-50 rounded-lg px-3 py-2.5">
-                  <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-                  <p className="text-sm font-medium text-gray-900">{value}</p>
+                <div key={label} className="bg-[var(--bg-surface-raised,#1c2128)] rounded-lg px-3 py-2.5">
+                  <p className="text-xs text-[var(--text-muted,#6e7681)] mb-0.5">{label}</p>
+                  <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{value}</p>
                 </div>
               ))}
             </div>
             {gpo.description && (
-              <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-                <p className="text-xs text-gray-500 mb-0.5">Description</p>
-                <p className="text-sm text-gray-700">{gpo.description}</p>
+              <div className="bg-[var(--bg-surface-raised,#1c2128)] rounded-lg px-3 py-2.5">
+                <p className="text-xs text-[var(--text-muted,#6e7681)] mb-0.5">Description</p>
+                <p className="text-sm text-[var(--text-secondary,#8b949e)]">{gpo.description}</p>
               </div>
             )}
           </div>
@@ -2504,38 +2504,38 @@ function GPODetail({ gpo, ous, onToggle, onDelete, onEdit, onCopy, onExport, onR
         {tab === 'scope' && (
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2 flex items-center gap-1">
                 <LinkIcon className="w-3.5 h-3.5" /> Links
               </p>
               {linkedOUNames.length > 0 ? (
                 <div className="space-y-1">
                   {linkedOUNames.map(name => (
-                    <div key={name} className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg">
-                      <FolderOpenIcon className="w-4 h-4 text-blue-500" />
-                      <span className="text-sm text-blue-800">{name}</span>
-                      <span className="ml-auto text-xs text-blue-500">Linked</span>
+                    <div key={name} className="flex items-center gap-2 px-3 py-2 bg-[rgba(0,111,255,0.08)] border border-[rgba(0,111,255,0.15)] rounded-lg">
+                      <FolderOpenIcon className="w-4 h-4 text-[#006FFF]" />
+                      <span className="text-sm text-[var(--text-secondary,#8b949e)]">{name}</span>
+                      <span className="ml-auto text-xs text-[#006FFF]">Linked</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-400 italic">This GPO is not linked to any OU or group.</p>
+                <p className="text-sm text-[var(--text-muted,#6e7681)] italic">This GPO is not linked to any OU or group.</p>
               )}
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Security Filtering</p>
+              <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">Security Filtering</p>
               <div className="space-y-1">
                 {gpo.access.allowed.map(g => (
-                  <div key={g} className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-100 rounded-lg">
-                    <UserGroupIcon className="w-4 h-4 text-green-600" />
-                    <span className="text-sm text-green-800">{g === '*' ? 'Authenticated Users (All)' : g}</span>
-                    <span className="ml-auto text-xs text-green-600">Allow</span>
+                  <div key={g} className="flex items-center gap-2 px-3 py-2 bg-[rgba(63,185,80,0.08)] border border-[rgba(63,185,80,0.15)] rounded-lg">
+                    <UserGroupIcon className="w-4 h-4 text-[#3fb950]" />
+                    <span className="text-sm text-[var(--text-secondary,#8b949e)]">{g === '*' ? 'Authenticated Users (All)' : g}</span>
+                    <span className="ml-auto text-xs text-[#3fb950]">Allow</span>
                   </div>
                 ))}
                 {gpo.access.denied.map(g => (
-                  <div key={g} className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
-                    <UserGroupIcon className="w-4 h-4 text-red-500" />
-                    <span className="text-sm text-red-700">{g}</span>
-                    <span className="ml-auto text-xs text-red-500">Deny</span>
+                  <div key={g} className="flex items-center gap-2 px-3 py-2 bg-[rgba(248,81,73,0.08)] border border-[rgba(248,81,73,0.15)] rounded-lg">
+                    <UserGroupIcon className="w-4 h-4 text-[#f85149]" />
+                    <span className="text-sm text-[#f85149]">{g}</span>
+                    <span className="ml-auto text-xs text-[#f85149]">Deny</span>
                   </div>
                 ))}
               </div>
@@ -2550,18 +2550,18 @@ function GPODetail({ gpo, ous, onToggle, onDelete, onEdit, onCopy, onExport, onR
             <TreeSection title="Computer Configuration" icon={ComputerDesktopIcon}>
               <TreeSection title="Software Settings" icon={CubeIcon} defaultOpen={gpo.software.packages.length > 0}>
                 <div className="py-1">
-                  <p className="text-xs font-medium text-gray-500 px-2 mb-1">Software Installation</p>
+                  <p className="text-xs font-medium text-[var(--text-muted,#6e7681)] px-2 mb-1">Software Installation</p>
                   {gpo.software.packages.length > 0 ? (
                     gpo.software.packages.map(pkg => (
-                      <div key={pkg.id} className="flex items-center justify-between py-1.5 px-2 hover:bg-gray-50 rounded text-sm">
-                        <span className="text-gray-600">{pkg.name}</span>
+                      <div key={pkg.id} className="flex items-center justify-between py-1.5 px-2 hover:bg-[rgba(255,255,255,0.04)] rounded text-sm">
+                        <span className="text-[var(--text-secondary,#8b949e)]">{pkg.name}</span>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          pkg.action === 'install' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          pkg.action === 'install' ? 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]' : 'bg-[rgba(248,81,73,0.15)] text-[#f85149]'
                         }`}>{pkg.action} v{pkg.version}</span>
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-gray-400 italic px-2">No packages configured</p>
+                    <p className="text-sm text-[var(--text-muted,#6e7681)] italic px-2">No packages configured</p>
                   )}
                 </div>
               </TreeSection>
@@ -2570,14 +2570,14 @@ function GPODetail({ gpo, ous, onToggle, onDelete, onEdit, onCopy, onExport, onR
                 <TreeSection title="Security Settings" icon={ShieldCheckIcon} defaultOpen={gpo.password.enabled}>
                   <TreeSection title="Account Policies" icon={LockClosedIcon} defaultOpen={gpo.password.enabled}>
                     <div className="ml-2">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2 py-1">Password Policy</p>
+                      <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider px-2 py-1">Password Policy</p>
                       <BoolRow label="Password Policy" value={gpo.password.enabled} />
                       {gpo.password.enabled && (<>
                         <SettingRow label="Minimum password length" value={`${gpo.password.minLength} characters`} />
                         <SettingRow label="Enforce password history" value={`${gpo.password.history} passwords`} />
                         <SettingRow label="Password complexity" value={gpo.password.complexity ? 'Enabled' : 'Disabled'} />
                         <SettingRow label="Maximum password age" value={gpo.password.expiryDays > 0 ? `${gpo.password.expiryDays} days` : 'Never'} />
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2 py-1 mt-1">Account Lockout Policy</p>
+                        <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider px-2 py-1 mt-1">Account Lockout Policy</p>
                         <SettingRow label="Account lockout threshold" value={`${gpo.password.lockoutAttempts} attempts`} />
                         <SettingRow label="Lockout duration" value={`${gpo.password.lockoutDuration} minutes`} />
                       </>)}
@@ -2651,15 +2651,15 @@ function GPODetail({ gpo, ous, onToggle, onDelete, onEdit, onCopy, onExport, onR
                     <SettingRow label="Default Outbound" value={gpo.firewall.defaultOutbound} />
                     <SettingRow label="Total Rules"      value={String(gpo.firewall.rules.length)} configured={gpo.firewall.rules.length > 0} />
                     {gpo.firewall.rules.slice(0, 3).map(rule => (
-                      <div key={rule.id} className="flex items-center gap-1.5 py-1.5 px-2 text-xs hover:bg-gray-50 rounded">
-                        <span className={`px-1.5 py-0.5 rounded font-medium ${rule.action === 'allow' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{rule.action}</span>
-                        <span className="text-gray-500">{rule.direction}</span>
-                        <span className="font-mono text-gray-700">{rule.protocol}:{rule.port}</span>
-                        <span className="text-gray-400 truncate">{rule.description || rule.source}</span>
+                      <div key={rule.id} className="flex items-center gap-1.5 py-1.5 px-2 text-xs hover:bg-[rgba(255,255,255,0.04)] rounded">
+                        <span className={`px-1.5 py-0.5 rounded font-medium ${rule.action === 'allow' ? 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]' : 'bg-[rgba(248,81,73,0.15)] text-[#f85149]'}`}>{rule.action}</span>
+                        <span className="text-[var(--text-muted,#6e7681)]">{rule.direction}</span>
+                        <span className="font-mono text-[var(--text-secondary,#8b949e)]">{rule.protocol}:{rule.port}</span>
+                        <span className="text-[var(--text-muted,#6e7681)] truncate">{rule.description || rule.source}</span>
                       </div>
                     ))}
                     {gpo.firewall.rules.length > 3 && (
-                      <p className="text-xs text-gray-400 italic px-2">…and {gpo.firewall.rules.length - 3} more rules</p>
+                      <p className="text-xs text-[var(--text-muted,#6e7681)] italic px-2">…and {gpo.firewall.rules.length - 3} more rules</p>
                     )}
                   </>)}
                 </TreeSection>
@@ -2667,15 +2667,15 @@ function GPODetail({ gpo, ous, onToggle, onDelete, onEdit, onCopy, onExport, onR
                 <TreeSection title="System Services" icon={WrenchScrewdriverIcon} defaultOpen={gpo.systemServices?.enabled}>
                   <BoolRow label="Service Management Active" value={gpo.systemServices?.enabled ?? false} />
                   {gpo.systemServices?.enabled && gpo.systemServices.services.filter(s => s.startupType !== 'manual').map(svc => (
-                    <div key={svc.id} className="flex items-center justify-between py-1.5 px-2 hover:bg-gray-50 rounded text-sm">
-                      <span className="text-gray-600">{svc.displayName || svc.name}</span>
+                    <div key={svc.id} className="flex items-center justify-between py-1.5 px-2 hover:bg-[rgba(255,255,255,0.04)] rounded text-sm">
+                      <span className="text-[var(--text-secondary,#8b949e)]">{svc.displayName || svc.name}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        svc.startupType === 'enabled' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        svc.startupType === 'enabled' ? 'bg-[rgba(63,185,80,0.15)] text-[#3fb950]' : 'bg-[rgba(248,81,73,0.15)] text-[#f85149]'
                       }`}>{svc.startupType}</span>
                     </div>
                   ))}
                   {gpo.systemServices?.enabled && gpo.systemServices.services.filter(s => s.startupType !== 'manual').length === 0 && (
-                    <p className="text-sm text-gray-400 italic px-2">No service overrides configured</p>
+                    <p className="text-sm text-[var(--text-muted,#6e7681)] italic px-2">No service overrides configured</p>
                   )}
                 </TreeSection>
               </TreeSection>
@@ -2710,18 +2710,18 @@ function GPODetail({ gpo, ous, onToggle, onDelete, onEdit, onCopy, onExport, onR
         {/* ── Delegation ── */}
         {tab === 'delegation' && (
           <div className="space-y-3">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Delegated Permissions</p>
+            <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">Delegated Permissions</p>
             {[
               { group: 'Domain Admins', perm: 'Edit settings, delete, modify security' },
               { group: 'admins',        perm: 'Edit settings' },
               { group: 'Authenticated Users', perm: 'Read (Apply Group Policy)' },
             ].map(({ group, perm }) => (
-              <div key={group} className="flex items-center justify-between px-3 py-2.5 bg-gray-50 rounded-lg">
+              <div key={group} className="flex items-center justify-between px-3 py-2.5 bg-[var(--bg-surface-raised,#1c2128)] rounded-lg">
                 <div className="flex items-center gap-2">
-                  <UserGroupIcon className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm font-medium text-gray-800">{group}</span>
+                  <UserGroupIcon className="w-4 h-4 text-[var(--text-muted,#6e7681)]" />
+                  <span className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{group}</span>
                 </div>
-                <span className="text-xs text-gray-500">{perm}</span>
+                <span className="text-xs text-[var(--text-muted,#6e7681)]">{perm}</span>
               </div>
             ))}
           </div>
@@ -2788,17 +2788,17 @@ function RSoPModal({ gpos, ouTree, onClose }: {
   const effectiveAuditEnabled = applicableGPOs.some(g => g.audit?.enabled);
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-60 flex items-center justify-center p-4 z-[70]" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70]" onClick={onClose}>
+      <div className="bg-[var(--bg-surface,#161b22)] border border-[rgba(255,255,255,0.07)] rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.07)] flex-shrink-0">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Resultant Set of Policy (RSoP)</h2>
-            <p className="text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-[var(--text-primary,#e4e6ea)]">Resultant Set of Policy (RSoP)</h2>
+            <p className="text-sm text-[var(--text-muted,#6e7681)]">
               Effektive Richtlinien für eine Ziel-OU simulieren
-              {AD_DOMAIN && <span className="ml-1 font-mono text-gray-400 text-xs">({AD_DOMAIN})</span>}
+              {AD_DOMAIN && <span className="ml-1 font-mono text-[var(--text-muted,#6e7681)] text-xs">({AD_DOMAIN})</span>}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-primary,#e4e6ea)]">
             <XMarkIcon className="w-6 h-6" />
           </button>
         </div>
@@ -2806,11 +2806,11 @@ function RSoPModal({ gpos, ouTree, onClose }: {
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="flex items-end gap-3">
             <div className="flex-1">
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-1.5">
                 Target OU / Group
               </label>
               <select value={targetOU} onChange={e => { setTargetOU(e.target.value); setCalculated(false); }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="w-full border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#006FFF]" style={{ background: 'var(--bg-surface-raised, #1c2128)', color: 'var(--text-primary, #e4e6ea)' }}>
                 <option value="">— Select an OU or Group —</option>
                 {allOUs.map(ou => (
                   <option key={ou.id} value={ou.id}>{ou.name}</option>
@@ -2819,7 +2819,7 @@ function RSoPModal({ gpos, ouTree, onClose }: {
             </div>
             <button onClick={() => { if (targetOU) setCalculated(true); }}
               disabled={!targetOU}
-              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-40 flex-shrink-0">
+              className="px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg disabled:opacity-40 flex-shrink-0">
               Calculate
             </button>
           </div>
@@ -2828,19 +2828,19 @@ function RSoPModal({ gpos, ouTree, onClose }: {
             <div className="space-y-4">
               {/* Applied GPOs */}
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">
                   GPOs Applied ({applicableGPOs.length}) — in precedence order
                 </p>
                 {applicableGPOs.length === 0 ? (
-                  <p className="text-sm text-gray-400 italic">No enabled GPOs apply to this target.</p>
+                  <p className="text-sm text-[var(--text-muted,#6e7681)] italic">No enabled GPOs apply to this target.</p>
                 ) : (
                   <div className="space-y-1">
                     {applicableGPOs.map((g, i) => (
-                      <div key={g.id} className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-lg">
-                        <span className="text-xs text-indigo-400 font-mono w-6 text-right">{i + 1}</span>
-                        <DocumentTextIcon className="w-4 h-4 text-indigo-500" />
-                        <span className="text-sm font-medium text-indigo-900">{g.name}</span>
-                        <span className="ml-auto text-xs text-indigo-500">{countSettings(g)} settings</span>
+                      <div key={g.id} className="flex items-center gap-2 px-3 py-2 bg-[rgba(0,111,255,0.08)] border border-[rgba(0,111,255,0.15)] rounded-lg">
+                        <span className="text-xs text-[#006FFF] font-mono w-6 text-right">{i + 1}</span>
+                        <DocumentTextIcon className="w-4 h-4 text-[#006FFF]" />
+                        <span className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{g.name}</span>
+                        <span className="ml-auto text-xs text-[#006FFF]">{countSettings(g)} settings</span>
                       </div>
                     ))}
                   </div>
@@ -2850,39 +2850,39 @@ function RSoPModal({ gpos, ouTree, onClose }: {
               {/* Effective settings summary */}
               {applicableGPOs.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Effective Settings</p>
-                  <div className="bg-gray-50 rounded-lg p-3 space-y-2 text-sm">
+                  <p className="text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wider mb-2">Effective Settings</p>
+                  <div className="bg-[var(--bg-surface-raised,#1c2128)] rounded-lg p-3 space-y-2 text-sm">
                     {effectivePassword.enabled ? (
                       <div className="flex items-center gap-2">
-                        <CheckCircleIcon className="w-4 h-4 text-green-500 flex-shrink-0" />
-                        <span className="text-gray-700">Password Policy: min {effectivePassword.minLength} chars, {effectivePassword.expiryDays === 0 ? 'no expiry' : `${effectivePassword.expiryDays}d expiry`}, lockout after {effectivePassword.lockoutAttempts} attempts</span>
+                        <CheckCircleIcon className="w-4 h-4 text-[#3fb950] flex-shrink-0" />
+                        <span className="text-[var(--text-secondary,#8b949e)]">Password Policy: min {effectivePassword.minLength} chars, {effectivePassword.expiryDays === 0 ? 'no expiry' : `${effectivePassword.expiryDays}d expiry`}, lockout after {effectivePassword.lockoutAttempts} attempts</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <XCircleIcon className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                        <span className="text-gray-400">Password Policy: not configured</span>
+                        <XCircleIcon className="w-4 h-4 text-[var(--text-muted,#6e7681)] flex-shrink-0" />
+                        <span className="text-[var(--text-muted,#6e7681)]">Password Policy: not configured</span>
                       </div>
                     )}
                     <div className="flex items-center gap-2">
                       {effectiveMfa
-                        ? <><CheckCircleIcon className="w-4 h-4 text-green-500 flex-shrink-0" /><span className="text-gray-700">MFA: Required</span></>
-                        : <><XCircleIcon className="w-4 h-4 text-gray-300 flex-shrink-0" /><span className="text-gray-400">MFA: Not required</span></>
+                        ? <><CheckCircleIcon className="w-4 h-4 text-[#3fb950] flex-shrink-0" /><span className="text-[var(--text-secondary,#8b949e)]">MFA: Required</span></>
+                        : <><XCircleIcon className="w-4 h-4 text-[var(--text-muted,#6e7681)] flex-shrink-0" /><span className="text-[var(--text-muted,#6e7681)]">MFA: Not required</span></>
                       }
                     </div>
                     <div className="flex items-center gap-2">
                       {effectiveAuditEnabled
-                        ? <><CheckCircleIcon className="w-4 h-4 text-green-500 flex-shrink-0" /><span className="text-gray-700">Audit Policy: Active</span></>
-                        : <><XCircleIcon className="w-4 h-4 text-gray-300 flex-shrink-0" /><span className="text-gray-400">Audit Policy: Not configured</span></>
+                        ? <><CheckCircleIcon className="w-4 h-4 text-[#3fb950] flex-shrink-0" /><span className="text-[var(--text-secondary,#8b949e)]">Audit Policy: Active</span></>
+                        : <><XCircleIcon className="w-4 h-4 text-[var(--text-muted,#6e7681)] flex-shrink-0" /><span className="text-[var(--text-muted,#6e7681)]">Audit Policy: Not configured</span></>
                       }
                     </div>
                     <div className="flex items-center gap-2">
-                      <CheckCircleIcon className={`w-4 h-4 flex-shrink-0 ${effectiveFirewallRules.length > 0 ? 'text-green-500' : 'text-gray-300'}`} />
-                      <span className={effectiveFirewallRules.length > 0 ? 'text-gray-700' : 'text-gray-400'}>
+                      <CheckCircleIcon className={`w-4 h-4 flex-shrink-0 ${effectiveFirewallRules.length > 0 ? 'text-[#3fb950]' : 'text-[var(--text-muted,#6e7681)]'}`} />
+                      <span className={effectiveFirewallRules.length > 0 ? 'text-[var(--text-secondary,#8b949e)]' : 'text-[var(--text-muted,#6e7681)]'}>
                         Firewall Rules: {effectiveFirewallRules.length} rule{effectiveFirewallRules.length !== 1 ? 's' : ''} applied
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 ml-6">
+                      <span className="text-xs text-[var(--text-muted,#6e7681)] ml-6">
                         Total software packages: {applicableGPOs.reduce((n, g) => n + g.software.packages.length, 0)}
                       </span>
                     </div>
@@ -2893,9 +2893,9 @@ function RSoPModal({ gpos, ouTree, onClose }: {
           )}
         </div>
 
-        <div className="flex justify-end px-6 py-4 border-t border-gray-100 flex-shrink-0">
+        <div className="flex justify-end px-6 py-4 border-t border-[rgba(255,255,255,0.07)] flex-shrink-0">
           <button onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
+            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary,#8b949e)] bg-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.1)] rounded-lg">
             Close
           </button>
         </div>
@@ -3000,8 +3000,8 @@ export default function PolicyView() {
   if (loading) {
     return (
       <div className="p-6 animate-pulse space-y-4">
-        <div className="h-8 bg-gray-200 rounded w-1/3" />
-        <div className="h-64 bg-gray-200 rounded-xl" />
+        <div className="h-8 bg-[var(--bg-surface-raised,#1c2128)] rounded w-1/3" />
+        <div className="h-64 bg-[var(--bg-surface-raised,#1c2128)] rounded-xl" />
       </div>
     );
   }
@@ -3066,18 +3066,18 @@ export default function PolicyView() {
   };
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 space-y-4 min-h-screen" style={{ background: 'var(--bg-base, #0e1115)' }}>
       {/* Top-level tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-200 mb-2">
+      <div className="flex items-center gap-1 border-b border-[rgba(255,255,255,0.07)] mb-2">
         <button
           onClick={() => setViewTab('console')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${viewTab === 'console' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${viewTab === 'console' ? 'border-[#006FFF] text-[#006FFF]' : 'border-transparent text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)] hover:border-[rgba(255,255,255,0.07)]'}`}
         >
           GPO Console
         </button>
         <button
           onClick={() => setViewTab('gruppenrichtlinien')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${viewTab === 'gruppenrichtlinien' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${viewTab === 'gruppenrichtlinien' ? 'border-[#006FFF] text-[#006FFF]' : 'border-transparent text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)] hover:border-[rgba(255,255,255,0.07)]'}`}
         >
           Gruppenrichtlinien
         </button>
@@ -3089,29 +3089,29 @@ export default function PolicyView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Group Policy Management</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-semibold text-[var(--text-primary,#e4e6ea)]">Group Policy Management</h1>
+          <p className="text-sm text-[var(--text-muted,#6e7681)] mt-1">
             {enabledCount} of {gpos.length} policies active
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowWizard(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#a371f7] bg-[rgba(163,113,247,0.15)] hover:bg-[rgba(163,113,247,0.2)] border border-[rgba(163,113,247,0.3)] rounded-lg transition-colors"
           >
             <SparklesIcon className="w-4 h-4" />
             Policy Wizard
           </button>
           <button
             onClick={() => setShowRSoP(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#006FFF] bg-[rgba(0,111,255,0.15)] hover:bg-[rgba(0,111,255,0.2)] border border-[rgba(0,111,255,0.3)] rounded-lg transition-colors"
           >
             <CalculatorIcon className="w-4 h-4" />
             RSoP
           </button>
           <button
             onClick={() => setShowNewGPO(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#006FFF] hover:bg-[#0056cc] rounded-lg transition-colors"
           >
             <PlusIcon className="w-4 h-4" />
             New GPO
@@ -3123,12 +3123,12 @@ export default function PolicyView() {
       <div className="flex gap-4 h-[calc(100vh-220px)]">
 
         {/* Left panel */}
-        <div className="w-72 flex-shrink-0 bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
-          <div className="flex border-b border-gray-100">
+        <div className="w-72 flex-shrink-0 bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] shadow-sm flex flex-col overflow-hidden">
+          <div className="flex border-b border-[rgba(255,255,255,0.07)]">
             {(['tree', 'all'] as const).map(t => (
               <button key={t} onClick={() => setListTab(t)}
                 className={`flex-1 py-2 text-xs font-medium transition-colors ${
-                  listTab === t ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-700'
+                  listTab === t ? 'bg-[rgba(0,111,255,0.15)] text-[#006FFF] border-b-2 border-[#006FFF]' : 'text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]'
                 }`}>
                 {t === 'tree' ? 'Domain Tree' : `All GPOs (${gpos.length})`}
               </button>
@@ -3145,19 +3145,19 @@ export default function PolicyView() {
                 {gpos.map(gpo => (
                   <button key={gpo.id} onClick={() => setSelectedGPO(gpo)}
                     className={`flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                      selectedGPO?.id === gpo.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'
+                      selectedGPO?.id === gpo.id ? 'bg-[rgba(0,111,255,0.15)] text-[#006FFF]' : 'hover:bg-[rgba(255,255,255,0.04)] text-[var(--text-secondary,#8b949e)]'
                     }`}>
                     <DocumentTextIcon className={`w-4 h-4 flex-shrink-0 ${
-                      gpo.status === 'disabled' ? 'text-gray-300' : 'text-blue-400'
+                      gpo.status === 'disabled' ? 'text-[var(--text-muted,#6e7681)]' : 'text-[#4d94ff]'
                     }`} />
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium truncate ${gpo.status === 'disabled' ? 'text-gray-400' : ''}`}>
+                      <p className={`text-xs font-medium truncate ${gpo.status === 'disabled' ? 'text-[var(--text-muted,#6e7681)] line-through' : ''}`}>
                         {gpo.name}
                       </p>
-                      <p className="text-xs text-gray-400">{countSettings(gpo)} settings</p>
+                      <p className="text-xs text-[var(--text-muted,#6e7681)]">{countSettings(gpo)} settings</p>
                     </div>
                     <span className={`flex-shrink-0 w-2 h-2 rounded-full ${
-                      gpo.status === 'enabled' ? 'bg-green-500' : 'bg-gray-300'
+                      gpo.status === 'enabled' ? 'bg-[#3fb950]' : 'bg-[rgba(255,255,255,0.2)]'
                     }`} />
                   </button>
                 ))}
@@ -3167,7 +3167,7 @@ export default function PolicyView() {
         </div>
 
         {/* Right panel */}
-        <div className="flex-1 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex-1 bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] shadow-sm overflow-hidden">
           {selectedGPO ? (
             <GPODetail
               gpo={selectedGPO}
@@ -3180,15 +3180,15 @@ export default function PolicyView() {
               onRSoP={() => setShowRSoP(true)}
             />
           ) : gpos.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-gray-400 h-full">
+            <div className="flex-1 flex items-center justify-center text-[var(--text-muted,#6e7681)] h-full">
               <div className="text-center">
-                <DocumentTextIcon className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                <DocumentTextIcon className="w-10 h-10 mx-auto mb-2 text-[var(--text-muted,#6e7681)]" />
                 <p className="text-sm">No policies found</p>
                 <p className="text-xs mt-1">Create a new GPO to get started</p>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+            <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted,#6e7681)]">
               <DocumentTextIcon className="w-12 h-12 mb-3" />
               <p className="text-sm">Select a GPO from the left panel</p>
             </div>

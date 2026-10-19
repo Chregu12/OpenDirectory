@@ -1,7 +1,6 @@
 'use strict';
 
 const winston = require('winston');
-const amqplib = require('amqplib');
 const axios = require('axios');
 
 const logger = winston.createLogger({
@@ -15,31 +14,12 @@ const logger = winston.createLogger({
 });
 
 const DEVICE_SERVICE_URL = process.env.DEVICE_SERVICE_URL || 'http://device-service:3903';
-const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@rabbitmq:5672';
-const EXCHANGE_NAME = 'opendirectory.events';
 
 class DistributionEngine {
-  constructor(pool, wss) {
+  constructor(pool, wss, publishFn) {
     this.pool = pool;
     this.wss = wss;
-    this.amqpConnection = null;
-    this.amqpChannel = null;
-  }
-
-  /**
-   * Initialize RabbitMQ connection for event publishing
-   */
-  async initializeMessaging() {
-    try {
-      this.amqpConnection = await amqplib.connect(RABBITMQ_URL);
-      this.amqpChannel = await this.amqpConnection.createChannel();
-      await this.amqpChannel.assertExchange(EXCHANGE_NAME, 'topic', { durable: true });
-      logger.info('RabbitMQ connection established for distribution engine');
-    } catch (error) {
-      logger.warn('Failed to connect to RabbitMQ, events will not be published', {
-        error: error.message,
-      });
-    }
+    this._publish = publishFn || (() => {});
   }
 
   /**
@@ -464,18 +444,9 @@ class DistributionEngine {
     return p;
   }
 
-  /**
-   * Publish event to RabbitMQ
-   */
-  async _publishEvent(routingKey, data) {
-    if (!this.amqpChannel) return;
+  _publishEvent(routingKey, data) {
     try {
-      this.amqpChannel.publish(
-        EXCHANGE_NAME,
-        routingKey,
-        Buffer.from(JSON.stringify({ event: routingKey, data, timestamp: new Date().toISOString() })),
-        { persistent: true }
-      );
+      this._publish(routingKey, { event: routingKey, data, timestamp: new Date().toISOString() });
     } catch (error) {
       logger.warn('Failed to publish event', { routingKey, error: error.message });
     }
@@ -494,16 +465,8 @@ class DistributionEngine {
     });
   }
 
-  /**
-   * Cleanup resources
-   */
   async shutdown() {
-    try {
-      if (this.amqpChannel) await this.amqpChannel.close();
-      if (this.amqpConnection) await this.amqpConnection.close();
-    } catch (error) {
-      logger.warn('Error during distribution engine shutdown', { error: error.message });
-    }
+    // no-op: EventBusClient lifecycle managed by parent
   }
 }
 

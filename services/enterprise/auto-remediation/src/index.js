@@ -69,6 +69,16 @@ if (process.env.NODE_ENV !== 'production') {
     }));
 }
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'auto-remediation' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ====================================================================== //
 //  Import services
 // ====================================================================== //
@@ -76,6 +86,7 @@ if (process.env.NODE_ENV !== 'production') {
 const RemediationEngine = require('./services/remediationEngine');
 const ScriptGenerator = require('./services/scriptGenerator');
 const PlaybookManager = require('./services/playbookManager');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 // ====================================================================== //
 //  Validation schemas
@@ -201,6 +212,21 @@ class AutoRemediationService extends EventEmitter {
             next();
         });
 
+        // OIDC bearer-token auth (see src/middleware/oidcAuth.js for why: this
+        // service previously had NO HTTP authentication at all, so any
+        // unauthenticated caller could trigger remediation actions that
+        // change real systems). Mounted globally, ahead of every route below
+        // — /health and /metrics are exempt (liveness/readiness probes and
+        // the Prometheus scrape target, respectively — see
+        // infrastructure/monitoring/prometheus.yml, whose scrape_configs
+        // never send a bearer token, matching every other Prometheus-scraped
+        // OpenDirectory service; /metrics here is only process uptime/
+        // memory/cpu, no secrets). Individual mutation routes additionally
+        // require requireAdmin (see _initializeRoutes()); a verified JWT
+        // alone proves *who* is asking, not that they're allowed to execute
+        // remediation.
+        this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
+
         logger.info('Middleware setup completed');
     }
 
@@ -309,7 +335,13 @@ class AutoRemediationService extends EventEmitter {
         });
 
         // POST /api/remediation/execute/:issueId - Execute remediation
-        router.post('/execute/:issueId', (req, res, next) => {
+        // requireAdmin: this is the P0 finding — an authenticated-but-
+        // unprivileged (or, before this fix, entirely unauthenticated)
+        // caller could set force=true to bypass the approval workflow and
+        // execute a high/critical-severity remediation immediately. That
+        // directly changes real systems (BitLocker, firewall, agent
+        // installs, ...), so it's admin-only regardless of the force flag.
+        router.post('/execute/:issueId', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.executeRemediation.validate(req.body || {});
                 if (error) {
@@ -332,6 +364,12 @@ class AutoRemediationService extends EventEmitter {
                     return res.status(202).json(result);
                 }
 
+                publish('remediation.started', { issueId: req.params.issueId, executedBy: value.executedBy || 'api-user' });
+                if (result.status === 'completed' || result.success === true) {
+                    publish('remediation.completed', { issueId: req.params.issueId, result: result.status });
+                } else if (result.status === 'failed') {
+                    publish('remediation.failed', { issueId: req.params.issueId, error: result.error });
+                }
                 res.json(result);
             } catch (err) {
                 if (err.message.includes('not found')) {
@@ -378,7 +416,11 @@ class AutoRemediationService extends EventEmitter {
         });
 
         // POST /api/remediation/playbooks - Create custom playbook
-        router.post('/playbooks', (req, res, next) => {
+        // requireAdmin: a playbook defines the steps future remediations
+        // will execute against devices — letting any authenticated user
+        // author one is effectively letting them script unattended,
+        // system-changing actions, so this is admin-only alongside execute.
+        router.post('/playbooks', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.createPlaybook.validate(req.body);
                 if (error) {
@@ -436,7 +478,9 @@ class AutoRemediationService extends EventEmitter {
         });
 
         // POST /api/remediation/bulk-execute - Bulk remediation
-        router.post('/bulk-execute', (req, res, next) => {
+        // requireAdmin: same force-bypass concern as single-issue execute
+        // above, multiplied across every issueId in the batch.
+        router.post('/bulk-execute', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.bulkExecute.validate(req.body);
                 if (error) {
@@ -455,6 +499,7 @@ class AutoRemediationService extends EventEmitter {
                     }
                 );
 
+                publish('remediation.started', { issueIds: value.issueIds, executedBy: value.executedBy || 'api-user', bulk: true });
                 res.json(result);
             } catch (err) {
                 next(err);
@@ -519,6 +564,24 @@ class AutoRemediationService extends EventEmitter {
         const port = parseInt(process.env.PORT, 10) || 3904;
         const host = process.env.HOST || '0.0.0.0';
 
+        // Connect to event bus and subscribe to trigger events
+        connectBus().then(async () => {
+            try {
+                await _bus.subscribe('auto-remediation-triggers',
+                    ['compliance.violation.detected', 'device.non_compliant'],
+                    async (payload, { routingKey }) => {
+                        logger.info(`Received trigger event: ${routingKey}`, { deviceId: payload.deviceId });
+                        publish('remediation.started', { trigger: routingKey, deviceId: payload.deviceId });
+                    }
+                );
+                logger.info('Auto-remediation subscribed to trigger events');
+            } catch (err) {
+                logger.warn(`EventBusClient subscribe failed (non-critical): ${err.message}`);
+            }
+        }).catch((err) => {
+            logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+        });
+
         return new Promise((resolve, reject) => {
             this.server = this.app.listen(port, host, () => {
                 logger.info(`OpenDirectory Auto Remediation Engine started on ${host}:${port}`);
@@ -558,12 +621,25 @@ class AutoRemediationService extends EventEmitter {
 //  Export & auto-start
 // ====================================================================== //
 
-module.exports = AutoRemediationService;
+// Only auto-start (bind a port, connect the event bus) when this file is run
+// directly (docker entrypoint: `node src/index.js`). When required as a
+// module — e.g. by the e2e test suite, which needs the real Express app to
+// drive with supertest and needs to control start()/close() itself — the
+// caller decides when (or whether) to listen. Building the instance here
+// either way keeps `.app` available synchronously in both cases, since the
+// constructor only wires up Express (no port binding happens until start()).
+const service = new AutoRemediationService();
 
 if (require.main === module) {
-    const service = new AutoRemediationService();
     service.start().catch((err) => {
         logger.error('Failed to start Auto Remediation Engine', { message: err.message });
         process.exit(1);
     });
 }
+
+module.exports = {
+    app: service.app,
+    start: (...args) => service.start(...args),
+    service,
+    AutoRemediationService,
+};

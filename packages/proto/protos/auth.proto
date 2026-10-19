@@ -1,0 +1,15 @@
+syntax = "proto3";
+package opendirectory;
+
+service AuthService {
+  rpc ValidateToken (ValidateTokenRequest) returns (TokenValidationResponse);
+  rpc GetUser (GetUserRequest) returns (UserResponse);
+  rpc CheckPermission (CheckPermissionRequest) returns (PermissionResponse);
+}
+
+message ValidateTokenRequest { string token = 1; }
+message TokenValidationResponse { bool valid = 1; string user_id = 2; string username = 3; repeated string roles = 4; string expires_at = 5; }
+message GetUserRequest { string user_id = 1; }
+message UserResponse { string id = 1; string username = 2; string email = 3; repeated string roles = 4; bool mfa_enabled = 5; bool locked = 6; }
+message CheckPermissionRequest { string user_id = 1; string resource = 2; string action = 3; }
+message PermissionResponse { bool allowed = 1; string reason = 2; }

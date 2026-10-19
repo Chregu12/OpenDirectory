@@ -42,19 +42,19 @@ module.exports = {
     // Integration endpoints
     integrations: {
         enterpriseDirectory: {
-            url: process.env.ENTERPRISE_DIRECTORY_URL || 'http://localhost:3003',
+            url: process.env.ENTERPRISE_DIRECTORY_URL || 'http://enterprise-directory',
             apiKey: process.env.ENTERPRISE_DIRECTORY_API_KEY || 'default-api-key'
         },
         identityService: {
-            url: process.env.IDENTITY_SERVICE_URL || 'http://localhost:3001',
+            url: process.env.IDENTITY_SERVICE_URL || 'http://identity-service',
             apiKey: process.env.IDENTITY_SERVICE_API_KEY || 'default-api-key'
         },
         deviceService: {
-            url: process.env.DEVICE_SERVICE_URL || 'http://localhost:3004',
+            url: process.env.DEVICE_SERVICE_URL || 'http://device-service',
             apiKey: process.env.DEVICE_SERVICE_API_KEY || 'default-api-key'
         },
         notificationService: {
-            url: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3005',
+            url: process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service',
             apiKey: process.env.NOTIFICATION_SERVICE_API_KEY || 'default-api-key'
         },
         siemService: {

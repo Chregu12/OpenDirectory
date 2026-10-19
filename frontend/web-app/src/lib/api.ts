@@ -1,27 +1,33 @@
 import axios from 'axios';
+import { ensureSession, getAccessToken } from './auth';
 
 // Empty string = relative URLs → requests go through Next.js rewrites (cluster-internal proxy)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+const API_BASE_URL = '';
 
 // Create axios instance with default configuration
 export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  withCredentials: true, // Send httpOnly auth cookie automatically
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+api.interceptors.request.use(async (config) => {
+  if (typeof window !== 'undefined') {
+    const base = new URL(config.baseURL || '/', window.location.origin);
+    if (new URL(config.url || '/', base).origin !== window.location.origin) throw new Error('Bearer requests must remain same-origin');
+    const token = getAccessToken() || (await ensureSession()).access_token;
+    config.headers.set('Authorization', `Bearer ${token}`);
+  }
+  return config;
 });
 
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
-    }
     return Promise.reject(error);
   }
 );
@@ -548,6 +554,39 @@ export const securityApi = {
     api.get('/api/security/dlp/policies'),
 };
 
+// Compliance API → compliance-engine service (/api/compliance/*)
+// Consumed by ComplianceView (fleet compliance dashboard: baselines,
+// per-device scores, violations, waivers, report export).
+export const complianceApi = {
+  getStatus: () =>
+    api.get('/api/compliance/dashboard'),
+
+  getBaselines: () =>
+    api.get('/api/compliance/baselines'),
+
+  getWaivers: () =>
+    api.get('/api/compliance/waivers'),
+
+  // Fleet-wide per-device compliance roster. hostname is always null in the
+  // response — compliance-engine only stores device_id, not device metadata.
+  getDevices: () =>
+    api.get('/api/compliance/devices'),
+
+  // Violations grouped by severity (critical/high/medium/low), each with a
+  // fleet-wide count and a short list of the top offending checks.
+  getViolations: () =>
+    api.get('/api/compliance/violations'),
+
+  triggerScan: (deviceId: string) =>
+    api.post(`/api/compliance/evaluate/${deviceId}`),
+
+  deleteWaiver: (waiverId: string) =>
+    api.delete(`/api/compliance/waivers/${waiverId}`),
+
+  generateReport: (params?: Record<string, unknown>) =>
+    api.post('/api/compliance/reports/generate', params),
+};
+
 // Backup & DR API
 export const backupApi = {
   getBackups: () =>
@@ -612,6 +651,120 @@ export const aiApi = {
   
   trainModel: (modelData: any) =>
     api.post('/api/ai/models/train', modelData),
+};
+
+// Audit Log API (enterprise-directory service, port 3000)
+const DIRECTORY_BASE = '';
+
+export const auditApi = {
+  getEvents: (params?: {
+    from?: string;
+    to?: string;
+    actorId?: string;
+    targetDn?: string;
+    operation?: string;
+    category?: string;
+    severity?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.from)      query.set('from',      params.from);
+    if (params?.to)        query.set('to',        params.to);
+    if (params?.actorId)   query.set('actorId',   params.actorId);
+    if (params?.targetDn)  query.set('targetDn',  params.targetDn);
+    if (params?.operation) query.set('operation', params.operation);
+    if (params?.category)  query.set('category',  params.category);
+    if (params?.severity)  query.set('severity',  params.severity);
+    if (params?.search)    query.set('search',    params.search);
+    query.set('limit',  String(params?.limit  ?? 100));
+    query.set('offset', String(params?.offset ?? 0));
+    return api.get(`${DIRECTORY_BASE}/api/audit/log?${query.toString()}`);
+  },
+
+  getActorActivity: (actorId: string, params?: { from?: string; to?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.from) query.set('from', params.from);
+    if (params?.to)   query.set('to',   params.to);
+    return api.get(`${DIRECTORY_BASE}/api/audit/actors/${encodeURIComponent(actorId)}/activity?${query.toString()}`);
+  },
+
+  getObjectHistory: (dn: string) =>
+    api.get(`${DIRECTORY_BASE}/api/audit/objects/${encodeURIComponent(dn)}/history`),
+
+  getStats: () =>
+    api.get(`${DIRECTORY_BASE}/api/audit/stats`),
+
+  getIntegrity: () =>
+    api.get(`${DIRECTORY_BASE}/api/audit/integrity`),
+
+  // audit-service exposes this as /api/audit/events/correlation/:id (not
+  // /api/audit/correlations/:id — that path doesn't exist on any service).
+  getCorrelations: (correlationId: string) =>
+    api.get(`${DIRECTORY_BASE}/api/audit/events/correlation/${correlationId}`),
+
+  // audit-service has no /api/audit/export route; report generation is
+  // POST /api/audit/reports/{csv,pdf} with a { filters } body (see
+  // services/enterprise/audit-service/src/index.js). category/severity are
+  // passed through as filters to match that contract.
+  exportEvents: (params?: { format?: string; category?: string; severity?: string }) => {
+    const format = params?.format === 'pdf' ? 'pdf' : 'csv';
+    const filters: Record<string, string> = {};
+    if (params?.category) filters.category = params.category;
+    if (params?.severity) filters.severity = params.severity;
+    return api.post(`${DIRECTORY_BASE}/api/audit/reports/${format}`, { filters });
+  },
+};
+
+// PIM Sessions API (conditional-access service, port 3007)
+const PIM_BASE = '';
+
+export const pimSessionsApi = {
+  getSessions: () =>
+    api.get(`${PIM_BASE}/api/v1/pim/sessions`),
+
+  getSession: (id: string) =>
+    api.get(`${PIM_BASE}/api/v1/pim/sessions/${id}`),
+
+  getSessionReplay: (id: string) =>
+    api.get(`${PIM_BASE}/api/v1/pim/sessions/${id}/replay`),
+
+  getBreakGlassEvents: () =>
+    api.get(`${PIM_BASE}/api/v1/pim/breakglass`),
+
+  requestBreakGlass: (data: { reason: string; systemsAffected: string; estimatedDuration: number }) =>
+    api.post(`${PIM_BASE}/api/v1/pim/breakglass/request`, data),
+
+  activateBreakGlass: (id: string) =>
+    api.post(`${PIM_BASE}/api/v1/pim/breakglass/${id}/activate`, {}),
+
+  terminateBreakGlass: (id: string) =>
+    api.post(`${PIM_BASE}/api/v1/pim/breakglass/${id}/terminate`, {}),
+};
+
+// Quick Actions API (port 3950)
+const QUICK_ACTIONS_BASE = '';
+
+export const quickActionsApi = {
+  getComplianceSnapshot: () =>
+    api.get(`${QUICK_ACTIONS_BASE}/api/quick/compliance/snapshot`),
+
+  deployPolicy: (data: {
+    policyId?: string;
+    policy_id?: string;
+    targetType?: string;
+    target_type?: string;
+    targetId?: string;
+    target_value?: string;
+    enforced?: boolean;
+    dryRun?: boolean;
+    dry_run?: boolean;
+  }) =>
+    api.post(`${QUICK_ACTIONS_BASE}/api/quick/policies/deploy`, data),
+
+  getDeployment: (id: string) =>
+    api.get(`${QUICK_ACTIONS_BASE}/api/quick/policies/deployments/${id}`),
 };
 
 // Utility functions
@@ -688,7 +841,6 @@ export const appStoreApi = {
     api.post('/api/store/uninstall', data),
 };
 
-// Groups & Organisational Units API
 export const groupApi = {
   getGroups: () =>
     api.get('/api/groups'),
@@ -710,18 +862,6 @@ export const groupApi = {
 
   removeMember: (groupId: string, userId: string) =>
     api.delete(`/api/groups/${groupId}/members/${userId}`),
-
-  getOUs: () =>
-    api.get('/api/ous'),
-
-  createOU: (data: any) =>
-    api.post('/api/ous', data),
-
-  updateOU: (id: string, data: any) =>
-    api.put(`/api/ous/${id}`, data),
-
-  deleteOU: (id: string) =>
-    api.delete(`/api/ous/${id}`),
 };
 
 export default api;

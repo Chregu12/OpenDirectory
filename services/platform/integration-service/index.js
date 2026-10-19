@@ -81,7 +81,7 @@ app.use(express.json());
 const db = new Pool({
   host:     process.env.PGHOST     || 'postgres',
   port:     parseInt(process.env.PGPORT || '5432'),
-  database: process.env.PGDATABASE || 'opendirectory',
+  database: process.env.PGDATABASE || 'integration',
   user:     process.env.PGUSER     || 'opendirectory',
   password: process.env.PGPASSWORD || 'SecurePass2024!',
   max: 10,

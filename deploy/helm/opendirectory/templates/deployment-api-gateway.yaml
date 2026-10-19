@@ -44,7 +44,7 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           ports:
             - name: http
-              containerPort: {{ .Values.apiGateway.service.port }}
+              containerPort: {{ .Values.apiGateway.service.appPort }}
               protocol: TCP
             - name: metrics
               containerPort: 9090
@@ -56,7 +56,7 @@ spec:
                 name: {{ include "opendirectory.fullname" . }}-secret
           env:
             - name: PORT
-              value: {{ .Values.apiGateway.service.port | quote }}
+              value: {{ .Values.apiGateway.service.appPort | quote }}
             {{- range $k, $v := .Values.apiGateway.env }}
             - name: {{ $k }}
               value: {{ $v | quote }}

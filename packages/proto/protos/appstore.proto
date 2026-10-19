@@ -1,0 +1,15 @@
+syntax = "proto3";
+package opendirectory;
+
+service AppStoreService {
+  rpc GetApp (GetAppRequest) returns (AppResponse);
+  rpc GetPackageDownloadUrl (GetPackageRequest) returns (DownloadUrlResponse);
+  rpc ReportInstallResult (InstallResultRequest) returns (InstallResultResponse);
+}
+
+message GetAppRequest { string app_id = 1; }
+message AppResponse { string id = 1; string name = 2; string version = 3; string publisher = 4; }
+message GetPackageRequest { string app_id = 1; string platform = 2; }
+message DownloadUrlResponse { string url = 1; string checksum = 2; string format = 3; int64 size_bytes = 4; }
+message InstallResultRequest { string device_id = 1; string app_id = 2; string job_id = 3; bool success = 4; string error = 5; string version = 6; }
+message InstallResultResponse { bool acknowledged = 1; }

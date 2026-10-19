@@ -10,6 +10,15 @@ const compression = require('compression');
 const mongoose = require('mongoose');
 const Redis = require('redis');
 
+// ─── RabbitMQ Event Bus ───────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'certificate-network' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+
 // Configuration
 const config = require('./config');
 
@@ -259,6 +268,26 @@ class CertificateNetworkService {
       next();
     });
 
+    // Publish RabbitMQ events after profile deploy/revoke operations
+    this.app.use('/api/profiles', (req, res, next) => {
+      const origJson = res.json.bind(res);
+      res.json = (body) => {
+        if (body && body.success !== false) {
+          const url = req.path;
+          const profileId = body.profileId || body.id || (body.profile && body.profile.id) || 'unknown';
+          const deviceId = req.body && (req.body.targetId || req.body.deviceId) || 'unknown';
+          if (req.method === 'POST' && /\/(wifi|vpn|email)\/deploy/.test(url)) {
+            const type = url.split('/')[1];
+            publish('network.profile.deployed', { profileId, deviceId, type });
+          } else if (req.method === 'DELETE' || (req.method === 'POST' && /revoke/.test(url))) {
+            publish('network.profile.revoked', { profileId, deviceId });
+          }
+        }
+        return origJson(body);
+      };
+      next();
+    });
+
     // Routes
     this.app.use('/api/certificates', certificateRoutes);
     this.app.use('/api/profiles', profileRoutes);
@@ -311,6 +340,7 @@ class CertificateNetworkService {
           reject(error);
         } else {
           logger.info(`✅ Server listening on ${config.server.host}:${config.server.port}`);
+          connectBus();
           resolve();
         }
       });

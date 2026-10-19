@@ -5,8 +5,19 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { EventEmitter } = require('events');
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'device-lifecycle' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 const LifecycleManager = require('./services/lifecycleManager');
 const RiskScorer = require('./services/riskScorer');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 class DeviceLifecycleService extends EventEmitter {
     constructor() {
@@ -86,6 +97,27 @@ class DeviceLifecycleService extends EventEmitter {
             });
             next();
         });
+
+        // ── Auth ────────────────────────────────────────────────────────────
+        // P0 fix: this service previously had ZERO HTTP authentication (only
+        // helmet/cors/rate-limiting above) — any unauthenticated caller could
+        // list every device, and worse, drive devices (individually or in
+        // bulk) through lifecycle transitions including 'Retiring'/'Retired',
+        // i.e. unauthenticated mass device decommissioning. Every route below
+        // (other than /health and /metrics) now requires a verified bearer
+        // token; the two mutation routes (POST .../transition, POST
+        // /bulk-transition) additionally require an admin role/scope — see
+        // src/middleware/oidcAuth.js for the full rationale, including why no
+        // internal-service-token bypass is needed here.
+        //
+        // /metrics is a skipPath alongside /health, not gated: it's a
+        // Prometheus scrape target (see infrastructure/monitoring/
+        // prometheus.yml's scrape_configs — no job there sends a bearer
+        // token, matching every other Prometheus-scraped OpenDirectory
+        // service, e.g. oauth-provider/app-store/identity-service, which all
+        // also treat /metrics as public), and its payload here is just
+        // process uptime/memory/cpu — no secrets to protect.
+        this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
     }
 
     /**
@@ -154,7 +186,8 @@ class DeviceLifecycleService extends EventEmitter {
         });
 
         // POST /api/lifecycle/devices/:id/transition - Transition device state
-        this.app.post('/api/lifecycle/devices/:id/transition', (req, res) => {
+        // (includes Retiring/Retired — requireAdmin: see src/middleware/oidcAuth.js)
+        this.app.post('/api/lifecycle/devices/:id/transition', requireAdmin, (req, res) => {
             try {
                 const { targetState, performedBy, reason } = req.body;
 
@@ -171,6 +204,11 @@ class DeviceLifecycleService extends EventEmitter {
                     { performedBy: performedBy || 'api-user', reason: reason || '' }
                 );
 
+                if (targetState === 'active' || targetState === 'onboarded') {
+                    publish('device.lifecycle.onboarded', { deviceId: req.params.id, performedBy: performedBy || 'api-user' });
+                } else if (targetState === 'retired' || targetState === 'decommissioned') {
+                    publish('device.lifecycle.retired', { deviceId: req.params.id, performedBy: performedBy || 'api-user' });
+                }
                 res.json(result);
             } catch (error) {
                 if (error.message.includes('not found')) {
@@ -215,7 +253,8 @@ class DeviceLifecycleService extends EventEmitter {
         });
 
         // POST /api/lifecycle/bulk-transition - Bulk state transition
-        this.app.post('/api/lifecycle/bulk-transition', (req, res) => {
+        // (bulk retire/decommission — requireAdmin: see src/middleware/oidcAuth.js)
+        this.app.post('/api/lifecycle/bulk-transition', requireAdmin, (req, res) => {
             try {
                 const { deviceIds, targetState, performedBy, reason } = req.body;
 
@@ -335,6 +374,28 @@ class DeviceLifecycleService extends EventEmitter {
             const port = parseInt(process.env.PORT) || 3020;
             const host = process.env.HOST || '0.0.0.0';
 
+            // Connect to event bus and subscribe to trigger events
+            connectBus().then(async () => {
+                try {
+                    await _bus.subscribe('device-lifecycle-triggers',
+                        ['device.enrolled', 'device.retired'],
+                        async (payload, { routingKey }) => {
+                            console.log(`Received trigger event: ${routingKey}`, { deviceId: payload.deviceId });
+                            if (routingKey === 'device.enrolled') {
+                                publish('device.lifecycle.onboarded', { deviceId: payload.deviceId, trigger: routingKey });
+                            } else if (routingKey === 'device.retired') {
+                                publish('device.lifecycle.retired', { deviceId: payload.deviceId, trigger: routingKey });
+                            }
+                        }
+                    );
+                    console.log('Device lifecycle subscribed to trigger events');
+                } catch (err) {
+                    console.warn(`EventBusClient subscribe failed (non-critical): ${err.message}`);
+                }
+            }).catch((err) => {
+                console.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+            });
+
             this.server = this.app.listen(port, host, () => {
                 console.log(`OpenDirectory Device Lifecycle Manager started on ${host}:${port}`);
                 console.log(`Health check: http://${host}:${port}/health`);
@@ -373,8 +434,6 @@ class DeviceLifecycleService extends EventEmitter {
     }
 }
 
-module.exports = DeviceLifecycleService;
-
 if (require.main === module) {
     const service = new DeviceLifecycleService();
     service.start().catch((error) => {
@@ -382,3 +441,22 @@ if (require.main === module) {
         process.exit(1);
     });
 }
+
+// Build a single instance for require()-based consumers (the e2e auth test
+// suite via supertest, or any future embedder) so they get the same
+// {app, start, service} shape used elsewhere in the fleet (see e.g.
+// services/core/network-infrastructure/src/index.js) — `mod.app` for
+// supertest(app) and `mod.start()` to also exercise the real listen/
+// event-bus-connect path, without going through the CLI entrypoint above.
+// Guarded so the CLI path (require.main === module) never constructs a
+// second, port-binding instance in addition to the one built above.
+const _serviceInstance = require.main === module ? undefined : new DeviceLifecycleService();
+
+module.exports = require.main === module
+    ? DeviceLifecycleService
+    : {
+        app: _serviceInstance.app,
+        start: (...args) => _serviceInstance.start(...args),
+        service: _serviceInstance,
+        DeviceLifecycleService,
+    };

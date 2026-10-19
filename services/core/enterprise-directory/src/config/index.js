@@ -284,16 +284,16 @@ const config = {
   integration: {
     mobileManagement: {
       enabled: process.env.MOBILE_INTEGRATION_ENABLED !== 'false',
-      serviceURL: process.env.MOBILE_SERVICE_URL || 'http://localhost:3009',
+      serviceURL: process.env.MOBILE_SERVICE_URL || 'http://mobile-management',
       sharedSecret: process.env.MOBILE_SHARED_SECRET || 'shared-mobile-secret'
     },
     licenseManagement: {
       enabled: process.env.LICENSE_INTEGRATION_ENABLED !== 'false',
-      serviceURL: process.env.LICENSE_SERVICE_URL || 'http://localhost:3010',
+      serviceURL: process.env.LICENSE_SERVICE_URL || 'http://license-management',
       sharedSecret: process.env.LICENSE_SHARED_SECRET || 'shared-license-secret'
     },
     networkInfrastructure: {
-      serviceURL: process.env.NETWORK_SERVICE_URL || 'http://localhost:3007'
+      serviceURL: process.env.NETWORK_SERVICE_URL || 'http://network-infrastructure'
     },
     monitoring: {
       prometheus: {
@@ -302,7 +302,7 @@ const config = {
       },
       grafana: {
         enabled: process.env.GRAFANA_ENABLED !== 'false',
-        url: process.env.GRAFANA_URL || 'http://localhost:3500'
+        url: process.env.GRAFANA_URL || 'http://grafana'
       }
     }
   },

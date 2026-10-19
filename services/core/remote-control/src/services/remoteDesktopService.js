@@ -654,7 +654,7 @@ class RemoteDesktopService {
     try {
       // Integration with Mobile Management Service
       const axios = require('axios');
-      const mobileServiceUrl = process.env.MOBILE_MANAGEMENT_URL || 'http://mobile-management:3013';
+      const mobileServiceUrl = process.env.MOBILE_MANAGEMENT_URL || 'http://mobile-management';
       
       const response = await axios.get(`${mobileServiceUrl}/api/devices`, {
         headers: {
@@ -685,7 +685,7 @@ class RemoteDesktopService {
 
       // Integration with Mobile Management Service
       const axios = require('axios');
-      const mobileServiceUrl = process.env.MOBILE_MANAGEMENT_URL || 'http://mobile-management:3013';
+      const mobileServiceUrl = process.env.MOBILE_MANAGEMENT_URL || 'http://mobile-management';
       
       const response = await axios.post(`${mobileServiceUrl}/api/devices/${deviceId}/control`, {
         action,

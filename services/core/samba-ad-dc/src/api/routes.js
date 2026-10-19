@@ -18,7 +18,20 @@ const syncEngine = require('../ldap/syncEngine');
  */
 router.post('/domain/provision', async (req, res) => {
   try {
-    const { realm, domain, adminPassword, dnsBackend: dnsBack } = req.body;
+    const {
+      realm,
+      domain,
+      adminPassword,
+      dnsBackend: dnsBack,
+      dcHostname,
+      dcIp,
+      functionLevel,
+      dnsInterface,
+      dnsForwarders,
+      enableLdaps,
+      enableRfc2307,
+      serverRole
+    } = req.body;
 
     if (!realm || !domain || !adminPassword) {
       return res.status(400).json({
@@ -26,7 +39,16 @@ router.post('/domain/provision', async (req, res) => {
       });
     }
 
-    const result = await provisioner.provisionDomain(realm, domain, adminPassword, dnsBack);
+    const result = await provisioner.provisionDomain(realm, domain, adminPassword, dnsBack, {
+      dcHostname,
+      dcIp,
+      functionLevel,
+      dnsInterface,
+      dnsForwarders,
+      enableLdaps,
+      enableRfc2307,
+      serverRole
+    });
     res.status(201).json(result);
   } catch (err) {
     const status = err.message.includes('already provisioned') ? 409 : 500;

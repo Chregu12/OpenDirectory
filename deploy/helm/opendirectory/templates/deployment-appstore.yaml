@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opendirectory.fullname" . }}-appstore
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: appstore
+spec:
+  replicas: {{ .Values.appStore.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "opendirectory.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: appstore
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "opendirectory.labels" . | nindent 8 }}
+        app.kubernetes.io/component: appstore
+      annotations:
+        {{- include "opendirectory.prometheusAnnotations" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "opendirectory.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- include "opendirectory.podAntiAffinity" . | nindent 6 }}
+      containers:
+        - name: appstore
+          image: {{ include "opendirectory.image" (dict "root" . "name" .Values.appStore.image.name) }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.appStore.service.appPort }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.appStore.service.grpcPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "opendirectory.fullname" . }}-config
+            - secretRef:
+                name: {{ include "opendirectory.fullname" . }}-secret
+          env:
+            - name: PORT
+              value: {{ .Values.appStore.service.appPort | quote }}
+            - name: RABBITMQ_URL
+              value: "amqp://{{ .Values.rabbitmq.auth.username }}:{{ .Values.rabbitmq.auth.password }}@rabbitmq:5672/"
+          volumeMounts:
+            - name: package-storage
+              mountPath: /var/od/packages
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.appStore.resources | nindent 12 }}
+      volumes:
+        - name: package-storage
+          {{- if .Values.appStore.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "opendirectory.fullname" . }}-appstore-packages
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

@@ -81,12 +81,22 @@ const NODE_COLORS: Record<string, { bg: string; border: string; text: string }> 
   certificate: { bg: 'bg-pink-100',   border: 'border-pink-500',   text: 'text-pink-700' },
 };
 
+const NODE_STYLE_MAP: Record<string, { background: string; color: string }> = {
+  user:        { background: 'var(--accent-light)',              color: 'var(--accent)' },
+  group:       { background: 'rgba(168,85,247,0.15)',            color: '#a855f7' },
+  device:      { background: 'var(--success-light)',             color: 'var(--success)' },
+  policy:      { background: 'var(--warning-light)',             color: 'var(--warning)' },
+  update_ring: { background: 'rgba(6,182,212,0.15)',             color: '#06b6d4' },
+  permission:  { background: 'var(--danger-light)',              color: 'var(--danger)' },
+  certificate: { background: 'rgba(236,72,153,0.15)',            color: '#ec4899' },
+};
+
 const RISK_COLORS: Record<string, string> = {
-  critical: 'text-red-600',
-  high:     'text-orange-600',
-  medium:   'text-yellow-600',
-  low:      'text-blue-600',
-  none:     'text-gray-400',
+  critical: 'var(--danger)',
+  high:     '#f97316',
+  medium:   'var(--warning)',
+  low:      'var(--accent)',
+  none:     'var(--text-muted)',
 };
 
 const NODE_ICONS: Record<string, React.ComponentType<any>> = {
@@ -396,9 +406,9 @@ export default function GraphExplorerView() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-600" />
-        <span className="ml-3 text-gray-500">Loading Graph Explorer...</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <ArrowPathIcon style={{ width: 32, height: 32, color: 'var(--accent)' }} className="animate-spin" />
+        <span style={{ marginLeft: 12, color: 'var(--text-muted)' }}>Loading Graph Explorer...</span>
       </div>
     );
   }
@@ -448,33 +458,39 @@ export default function GraphExplorerView() {
     );
   }
 
+  const attackSeverityStyle = (severity: string): React.CSSProperties => ({
+    borderColor: severity === 'critical' ? 'var(--danger)' :
+                 severity === 'high' ? '#f97316' :
+                 'var(--warning)',
+  });
+
   // ── Expert Mode ──
   return (
-    <div className="flex flex-col h-full">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* ── Header ───────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', flexShrink: 0 }}>
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">AD Graph Explorer</h1>
-          <p className="text-sm text-gray-500">Unified Endpoint Intelligence - Relationship Graph</p>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)' }}>AD Graph Explorer</h1>
+          <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Unified Endpoint Intelligence - Relationship Graph</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ position: 'relative' }}>
+            <MagnifyingGlassIcon style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: 'var(--text-muted)' }} />
             <input
-              className="pl-9 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 w-64"
+              style={{ paddingLeft: 36, paddingRight: 12, paddingTop: 8, paddingBottom: 8, background: 'var(--bg-surface-raised)', border: '1px solid var(--border-strong)', borderRadius: 8, fontSize: 14, color: 'var(--text-primary)', outline: 'none', width: 256, boxSizing: 'border-box' }}
               placeholder="Search nodes..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
-          <button onClick={loadGraphData} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600" title="Refresh">
-            <ArrowPathIcon className="w-5 h-5" />
+          <button onClick={loadGraphData} style={{ padding: 8, borderRadius: 8, background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-secondary)' }} title="Refresh">
+            <ArrowPathIcon style={{ width: 20, height: 20 }} />
           </button>
         </div>
       </div>
 
       {/* ── Tabs ─────────────────────────────────────────────────────────── */}
-      <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 bg-gray-50">
+      <div style={{ display: 'flex', gap: 4, padding: '12px 24px 0', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface-raised)', flexShrink: 0 }}>
         {([
           ['graph',   'Relationship Graph'],
           ['attacks', `Attack Paths (${attackPaths.length})`],
@@ -492,42 +508,44 @@ export default function GraphExplorerView() {
       </div>
 
       {/* ── Content ──────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-hidden">
+      <div style={{ flex: 1, overflow: 'hidden' }}>
         {activeTab === 'graph' && (
-          <div className="flex h-full">
+          <div style={{ display: 'flex', height: '100%' }}>
             {/* Filter sidebar */}
-            <div className="w-48 border-r border-gray-200 bg-white p-4 flex flex-col gap-3">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1"><FunnelIcon className="w-3 h-3" /> Filters</h3>
+            <div style={{ width: 192, borderRight: '1px solid var(--border)', background: 'var(--bg-surface)', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
+              <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <FunnelIcon style={{ width: 12, height: 12 }} /> Filters
+              </h3>
               {Object.keys(NODE_COLORS).map(type => (
-                <label key={type} className="flex items-center gap-2 cursor-pointer text-sm">
+                <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
                   <input
                     type="checkbox"
                     checked={filterTypes.has(type)}
                     onChange={() => toggleFilter(type)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    style={{ accentColor: 'var(--accent)' }}
                   />
-                  <span className={NODE_COLORS[type].text}>{type.replace('_', ' ')}</span>
+                  <span style={{ color: NODE_STYLE_MAP[type]?.color || 'var(--text-secondary)' }}>{type.replace('_', ' ')}</span>
                 </label>
               ))}
-              <hr className="border-gray-200" />
-              <div className="text-xs text-gray-500">
+              <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 {filteredNodes.length} nodes / {filteredEdges.length} edges
               </div>
               {/* Zoom */}
-              <div className="flex gap-1 mt-auto">
-                <button onClick={() => setZoom(z => Math.min(z + 0.2, 2))} className="p-1 bg-gray-100 rounded text-xs hover:bg-gray-200 text-gray-600">
-                  <ArrowsPointingOutIcon className="w-4 h-4" />
+              <div style={{ display: 'flex', gap: 4, marginTop: 'auto' }}>
+                <button onClick={() => setZoom(z => Math.min(z + 0.2, 2))} style={{ padding: 4, background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                  <ArrowsPointingOutIcon style={{ width: 16, height: 16 }} />
                 </button>
-                <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.4))} className="p-1 bg-gray-100 rounded text-xs hover:bg-gray-200 text-gray-600">
-                  <ArrowsPointingInIcon className="w-4 h-4" />
+                <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.4))} style={{ padding: 4, background: 'var(--bg-surface-raised)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                  <ArrowsPointingInIcon style={{ width: 16, height: 16 }} />
                 </button>
-                <span className="text-xs text-gray-500 self-center ml-1">{Math.round(zoom * 100)}%</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center', marginLeft: 4 }}>{Math.round(zoom * 100)}%</span>
               </div>
             </div>
 
             {/* SVG Canvas */}
-            <div className="flex-1 relative overflow-auto bg-gray-50">
-              <svg ref={svgRef} width="1100" height="850" className="mx-auto" style={{ transform: `scale(${zoom})`, transformOrigin: 'center top' }}>
+            <div style={{ flex: 1, position: 'relative', overflow: 'auto', background: 'var(--bg-base)' }}>
+              <svg ref={svgRef} width="1100" height="850" style={{ display: 'block', margin: '0 auto', transform: `scale(${zoom})`, transformOrigin: 'center top' }}>
                 {/* Edges */}
                 {filteredEdges.map(e => {
                   const src = nodeMap.get(e.source);
@@ -538,14 +556,14 @@ export default function GraphExplorerView() {
                     <g key={e.id}>
                       <line
                         x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
-                        stroke={isHighlighted ? '#ef4444' : '#d1d5db'}
+                        stroke={isHighlighted ? '#f85149' : 'rgba(255,255,255,0.14)'}
                         strokeWidth={isHighlighted ? 2.5 : 1}
                         strokeDasharray={isHighlighted ? '' : '4 2'}
                         opacity={isHighlighted ? 1 : 0.6}
                       />
                       <text
                         x={(src.x + tgt.x) / 2} y={(src.y + tgt.y) / 2 - 6}
-                        fill="#9ca3af" fontSize={9} textAnchor="middle"
+                        fill="#6e7681" fontSize={9} textAnchor="middle"
                       >
                         {e.relationship}
                       </text>
@@ -557,23 +575,23 @@ export default function GraphExplorerView() {
                   const isHighlighted = highlightedPath.includes(n.id);
                   const isSelected = selectedNode?.id === n.id;
                   return (
-                    <g key={n.id} onClick={() => setSelectedNode(n)} className="cursor-pointer">
+                    <g key={n.id} onClick={() => setSelectedNode(n)} style={{ cursor: 'pointer' }}>
                       <circle
                         cx={n.x} cy={n.y}
                         r={isSelected ? 28 : isHighlighted ? 24 : 20}
-                        fill={isHighlighted ? '#fef2f2' : '#ffffff'}
-                        stroke={isSelected ? '#2563eb' : isHighlighted ? '#ef4444' : '#d1d5db'}
+                        fill={isHighlighted ? 'var(--danger-light)' : 'var(--bg-surface)'}
+                        stroke={isSelected ? 'var(--accent)' : isHighlighted ? '#f85149' : 'rgba(255,255,255,0.14)'}
                         strokeWidth={isSelected ? 3 : isHighlighted ? 2.5 : 1.5}
                       />
-                      <text x={n.x} y={n.y + 4} fill="#374151" fontSize={11} textAnchor="middle" fontWeight={isSelected ? 'bold' : 'normal'}>
+                      <text x={n.x} y={n.y + 4} fill="#e4e6ea" fontSize={11} textAnchor="middle" fontWeight={isSelected ? 'bold' : 'normal'}>
                         {n.type === 'user' ? '👤' : n.type === 'group' ? '👥' : n.type === 'device' ? '💻' : n.type === 'policy' ? '📋' : n.type === 'update_ring' ? '🔄' : '🔑'}
                       </text>
-                      <text x={n.x} y={n.y + 36} fill="#6b7280" fontSize={10} textAnchor="middle">
+                      <text x={n.x} y={n.y + 36} fill="#8b949e" fontSize={10} textAnchor="middle">
                         {n.label}
                       </text>
                       {n.riskLevel !== 'none' && n.riskLevel !== 'low' && (
                         <circle cx={n.x + 16} cy={n.y - 16} r={6}
-                          fill={n.riskLevel === 'critical' ? '#ef4444' : n.riskLevel === 'high' ? '#f97316' : '#eab308'}
+                          fill={n.riskLevel === 'critical' ? '#f85149' : n.riskLevel === 'high' ? '#f97316' : '#d29922'}
                         />
                       )}
                     </g>
@@ -584,45 +602,47 @@ export default function GraphExplorerView() {
 
             {/* Detail panel */}
             {selectedNode && (
-              <div className="w-72 border-l border-gray-200 bg-white p-4 overflow-y-auto">
-                <div className="flex justify-between items-start mb-4">
+              <div style={{ width: 288, borderLeft: '1px solid var(--border)', background: 'var(--bg-surface)', padding: 16, overflowY: 'auto', flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                   <div>
-                    <h3 className="font-semibold text-gray-900">{selectedNode.label}</h3>
-                    <span className={`text-xs px-2 py-0.5 rounded ${NODE_COLORS[selectedNode.type]?.bg} ${NODE_COLORS[selectedNode.type]?.text}`}>
+                    <h3 style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{selectedNode.label}</h3>
+                    <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, ...NODE_STYLE_MAP[selectedNode.type] }}>
                       {selectedNode.type.replace('_', ' ')}
                     </span>
                   </div>
-                  <button onClick={() => setSelectedNode(null)} className="text-gray-400 hover:text-gray-600">
-                    <XMarkIcon className="w-4 h-4" />
+                  <button onClick={() => setSelectedNode(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                    <XMarkIcon style={{ width: 16, height: 16 }} />
                   </button>
                 </div>
-                <div className="mb-3">
-                  <span className={`text-xs font-medium ${RISK_COLORS[selectedNode.riskLevel]}`}>
+                <div style={{ marginBottom: 12 }}>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: RISK_COLORS[selectedNode.riskLevel] }}>
                     Risk: {selectedNode.riskLevel.toUpperCase()}
                   </span>
                 </div>
-                <h4 className="text-xs text-gray-500 uppercase mb-2">Properties</h4>
-                <div className="space-y-1">
+                <h4 style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>Properties</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {Object.entries(selectedNode.properties).map(([k, v]) => (
-                    <div key={k} className="flex justify-between text-sm">
-                      <span className="text-gray-500">{k}</span>
-                      <span className="text-gray-700">{String(v)}</span>
+                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>{k}</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{String(v)}</span>
                     </div>
                   ))}
                 </div>
-                <h4 className="text-xs text-gray-500 uppercase mt-4 mb-2">Connections</h4>
-                <div className="space-y-1">
+                <h4 style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', marginTop: 16, marginBottom: 8 }}>Connections</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {edges
                     .filter(e => e.source === selectedNode.id || e.target === selectedNode.id)
                     .map(e => {
                       const otherId = e.source === selectedNode.id ? e.target : e.source;
                       const other = nodeMap.get(otherId);
                       return (
-                        <div key={e.id} className="text-sm flex items-center gap-1 text-gray-500 cursor-pointer hover:text-gray-900"
-                          onClick={() => { const o = nodeMap.get(otherId); if (o) setSelectedNode(o); }}>
-                          <ChevronRightIcon className="w-3 h-3" />
-                          <span className="text-gray-400">{e.relationship}</span>
-                          <span className={NODE_COLORS[other?.type || 'user']?.text}>{other?.label}</span>
+                        <div key={e.id} style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)', cursor: 'pointer' }}
+                          onClick={() => { const o = nodeMap.get(otherId); if (o) setSelectedNode(o); }}
+                          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+                          <ChevronRightIcon style={{ width: 12, height: 12, flexShrink: 0 }} />
+                          <span style={{ color: 'var(--text-muted)' }}>{e.relationship}</span>
+                          <span style={{ color: NODE_STYLE_MAP[other?.type || 'user']?.color || 'var(--text-secondary)' }}>{other?.label}</span>
                         </div>
                       );
                     })}
@@ -634,37 +654,43 @@ export default function GraphExplorerView() {
 
         {/* ── Attack Paths Tab ───────────────────────────────────────────── */}
         {activeTab === 'attacks' && (
-          <div className="p-6 space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
-            <p className="text-sm text-gray-500">Detected privilege escalation and lateral movement paths.</p>
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Detected privilege escalation and lateral movement paths.</p>
             {attackPaths.map(ap => (
-              <div key={ap.id} className={`od-card p-4 ${ap.severity === 'critical' ? 'border-red-200' : ap.severity === 'high' ? 'border-orange-200' : 'border-yellow-200'}`}>
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <ShieldExclamationIcon className="w-5 h-5 text-red-500" />
+              <div key={ap.id} className="od-card" style={{ padding: 16, ...attackSeverityStyle(ap.severity) }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <h3 style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ShieldExclamationIcon style={{ width: 20, height: 20, color: 'var(--danger)' }} />
                     {ap.name}
                   </h3>
-                  <span className={`text-xs px-2 py-1 rounded font-medium ${ap.severity === 'critical' ? 'od-badge-critical' : ap.severity === 'high' ? 'od-badge-high' : 'od-badge-medium'}`}>
+                  <span style={{
+                    fontSize: 12, padding: '4px 8px', borderRadius: 4, fontWeight: 500,
+                    color: ap.severity === 'critical' ? 'var(--danger)' : ap.severity === 'high' ? '#f97316' : 'var(--warning)',
+                    background: ap.severity === 'critical' ? 'var(--danger-light)' : ap.severity === 'high' ? 'rgba(249,115,22,0.15)' : 'var(--warning-light)',
+                  }}>
                     {ap.severity.toUpperCase()}
                   </span>
                 </div>
-                <p className="text-sm text-gray-600 mb-2">{ap.description}</p>
-                <div className="flex items-center gap-2 mb-3 text-xs">
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>{ap.description}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 12 }}>
                   {ap.path.map((nodeId, i) => {
                     const node = nodeMap.get(nodeId);
                     return (
                       <React.Fragment key={nodeId}>
-                        {i > 0 && <ChevronRightIcon className="w-3 h-3 text-gray-400" />}
-                        <span className={`px-2 py-0.5 rounded ${NODE_COLORS[node?.type || 'user']?.bg} ${NODE_COLORS[node?.type || 'user']?.text}`}>
+                        {i > 0 && <ChevronRightIcon style={{ width: 12, height: 12, color: 'var(--text-muted)', flexShrink: 0 }} />}
+                        <span style={{ padding: '2px 8px', borderRadius: 4, ...NODE_STYLE_MAP[node?.type || 'user'] }}>
                           {node?.label || nodeId}
                         </span>
                       </React.Fragment>
                     );
                   })}
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-green-700"><CheckCircleIcon className="w-4 h-4 inline mr-1" />{ap.mitigation}</div>
-                  <button onClick={() => highlightAttackPath(ap)} className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg">
-                    <EyeIcon className="w-3 h-3 inline mr-1" />Show in Graph
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 12, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <CheckCircleIcon style={{ width: 16, height: 16, display: 'inline' }} />{ap.mitigation}
+                  </div>
+                  <button onClick={() => highlightAttackPath(ap)} style={{ fontSize: 12, padding: '4px 12px', background: 'var(--bg-overlay)', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <EyeIcon style={{ width: 12, height: 12 }} />Show in Graph
                   </button>
                 </div>
               </div>
@@ -674,32 +700,32 @@ export default function GraphExplorerView() {
 
         {/* ── Shadow Admins Tab ──────────────────────────────────────────── */}
         {activeTab === 'shadow' && (
-          <div className="p-6 space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
-            <p className="text-sm text-gray-500">Accounts with admin-equivalent permissions through indirect/nested group membership.</p>
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Accounts with admin-equivalent permissions through indirect/nested group membership.</p>
             {shadowAdmins.map(sa => (
-              <div key={sa.userId} className="od-card p-4">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                      <UserIcon className="w-5 h-5 text-orange-600" />
+              <div key={sa.userId} className="od-card" style={{ padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 32, height: 32, background: 'rgba(249,115,22,0.15)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <UserIcon style={{ width: 20, height: 20, color: '#f97316' }} />
                     </div>
-                    <h3 className="font-semibold text-gray-900">{sa.userName}</h3>
+                    <h3 style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{sa.userName}</h3>
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-orange-600">{sa.riskScore}</div>
-                    <div className="text-xs text-gray-500">Risk Score</div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: '#f97316' }}>{sa.riskScore}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Risk Score</div>
                   </div>
                 </div>
-                <h4 className="text-xs text-gray-500 uppercase mb-1">Effective Permissions</h4>
-                <div className="flex flex-wrap gap-1 mb-3">
+                <h4 style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Effective Permissions</h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 12 }}>
                   {sa.effectivePermissions.map(p => (
-                    <span key={p} className="px-2 py-0.5 rounded od-badge-critical text-xs">{p}</span>
+                    <span key={p} className="od-badge-critical" style={{ padding: '2px 8px', borderRadius: 4, fontSize: 12 }}>{p}</span>
                   ))}
                 </div>
-                <h4 className="text-xs text-gray-500 uppercase mb-1">Inherited From</h4>
-                <div className="flex flex-wrap gap-1">
+                <h4 style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Inherited From</h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {sa.inheritedFrom.map(g => (
-                    <span key={g} className="px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-xs">{g}</span>
+                    <span key={g} style={{ padding: '2px 8px', borderRadius: 4, fontSize: 12, background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>{g}</span>
                   ))}
                 </div>
               </div>
@@ -709,48 +735,51 @@ export default function GraphExplorerView() {
 
         {/* ── Stats Tab ──────────────────────────────────────────────────── */}
         {activeTab === 'stats' && stats && (
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[calc(100vh-200px)]">
-            <div className="od-card p-4">
-              <div className="text-3xl font-bold text-blue-600">{stats.totalNodes}</div>
-              <div className="text-sm text-gray-500">Total Nodes</div>
+          <div style={{ padding: 24, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, overflowY: 'auto', maxHeight: 'calc(100vh - 200px)', alignContent: 'start' }}>
+            <div className="od-card" style={{ padding: 16 }}>
+              <div style={{ fontSize: 30, fontWeight: 700, color: 'var(--accent)' }}>{stats.totalNodes}</div>
+              <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>Total Nodes</div>
             </div>
-            <div className="od-card p-4">
-              <div className="text-3xl font-bold text-purple-600">{stats.totalEdges}</div>
-              <div className="text-sm text-gray-500">Total Edges</div>
+            <div className="od-card" style={{ padding: 16 }}>
+              <div style={{ fontSize: 30, fontWeight: 700, color: '#a855f7' }}>{stats.totalEdges}</div>
+              <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>Total Edges</div>
             </div>
-            <div className="od-card p-4">
-              <div className="text-3xl font-bold text-cyan-600">{(stats.density * 100).toFixed(1)}%</div>
-              <div className="text-sm text-gray-500">Graph Density</div>
+            <div className="od-card" style={{ padding: 16 }}>
+              <div style={{ fontSize: 30, fontWeight: 700, color: '#06b6d4' }}>{(stats.density * 100).toFixed(1)}%</div>
+              <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>Graph Density</div>
             </div>
-            <div className="od-card p-4">
-              <div className="text-3xl font-bold text-green-600">{stats.avgConnections.toFixed(1)}</div>
-              <div className="text-sm text-gray-500">Avg Connections</div>
+            <div className="od-card" style={{ padding: 16 }}>
+              <div style={{ fontSize: 30, fontWeight: 700, color: 'var(--success)' }}>{stats.avgConnections.toFixed(1)}</div>
+              <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>Avg Connections</div>
             </div>
-            <div className="od-card p-4">
-              <h3 className="text-sm font-semibold text-gray-600 mb-3">Nodes by Type</h3>
-              <div className="space-y-2">
+            <div className="od-card" style={{ padding: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 12 }}>Nodes by Type</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {Object.entries(stats.nodesByType).map(([type, count]) => (
-                  <div key={type} className="flex justify-between items-center text-sm">
-                    <span className={NODE_COLORS[type]?.text || 'text-gray-600'}>{type.replace('_', ' ')}</span>
-                    <span className="text-gray-700 font-mono">{count}</span>
+                  <div key={type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14 }}>
+                    <span style={{ color: NODE_STYLE_MAP[type]?.color || 'var(--text-secondary)' }}>{type.replace('_', ' ')}</span>
+                    <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{count}</span>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="od-card p-4">
-              <h3 className="text-sm font-semibold text-gray-600 mb-3">Risk Distribution</h3>
-              <div className="space-y-2">
+            <div className="od-card" style={{ padding: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 12 }}>Risk Distribution</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {Object.entries(stats.riskDistribution).map(([level, count]) => (
-                  <div key={level} className="flex justify-between items-center text-sm">
-                    <span className={RISK_COLORS[level]}>{level}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div key={level} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14 }}>
+                    <span style={{ color: RISK_COLORS[level] }}>{level}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 96, height: 8, background: 'var(--bg-overlay)', borderRadius: 9999, overflow: 'hidden' }}>
                         <div
-                          className={`h-full rounded-full ${level === 'critical' ? 'bg-red-500' : level === 'high' ? 'bg-orange-500' : level === 'medium' ? 'bg-yellow-500' : level === 'low' ? 'bg-blue-500' : 'bg-gray-300'}`}
-                          style={{ width: `${(count / stats.totalNodes) * 100}%` }}
+                          style={{
+                            height: '100%', borderRadius: 9999,
+                            background: level === 'critical' ? '#f85149' : level === 'high' ? '#f97316' : level === 'medium' ? '#d29922' : level === 'low' ? '#006FFF' : 'var(--bg-surface-raised)',
+                            width: `${(count / stats.totalNodes) * 100}%`,
+                          }}
                         />
                       </div>
-                      <span className="text-gray-700 font-mono w-6 text-right">{count}</span>
+                      <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', width: 24, textAlign: 'right' }}>{count}</span>
                     </div>
                   </div>
                 ))}

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-service
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  type: {{ .Values.backup.service.type }}
+  ports:
+    - port: {{ .Values.backup.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - name: grpc
+      port: {{ .Values.backup.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+  selector:
+    {{- include "opendirectory.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: backup

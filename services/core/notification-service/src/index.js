@@ -8,6 +8,22 @@ const nodemailer = require('nodemailer');
 const promClient = require('prom-client');
 const { v4: uuidv4 } = require('uuid');
 
+// ── RabbitMQ Event Bus ────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'notification-service' });
+async function connectBus() { await _bus.connect(); }
+function publishEvent(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+async function subscribeToEvents(queueName, routingKeys, handler) {
+  await _bus.subscribe(queueName, routingKeys, async (payload, meta) => {
+    await handler(meta.routingKey, payload);
+    await meta.ack();
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // --- Logger ---
 function log(level, msg, meta = {}) {
   console.log(JSON.stringify({ level, message: msg, service: 'notification-service', timestamp: new Date().toISOString(), ...meta }));
@@ -18,7 +34,7 @@ const PORT = parseInt(process.env.PORT, 10) || 3020;
 const DB_CONFIG = {
   host: process.env.DB_HOST || 'postgres',
   port: parseInt(process.env.DB_PORT, 10) || 5432,
-  database: process.env.DB_NAME || 'opendirectory',
+  database: process.env.DB_NAME || 'notifications',
   user: process.env.DB_USER || 'opendirectory',
   password: process.env.DB_PASSWORD || 'opendirectory',
   max: 10,
@@ -623,6 +639,87 @@ async function start() {
       log('warn', 'Database unavailable, running in in-memory mode', { error: err.message });
       dbAvailable = false;
     }
+
+    // Connect to RabbitMQ event bus and subscribe per event-routing.yaml:
+    //   notification.send  — direct send requests
+    //   monitoring.alert.* — alerts raised by the monitoring service
+    connectBus();
+    setTimeout(async () => {
+      await subscribeToEvents('notification.events', [
+        'notification.send',
+        'monitoring.alert.*',
+      ], async (routingKey, payload) => {
+        try {
+          // Determine subject and body from routing key and payload
+          let subject, message;
+
+          if (routingKey === 'notification.send') {
+            // Direct send request: payload may carry subject/body/channel_id
+            subject = payload.subject || `[NOTIFICATION] ${routingKey}`;
+            message = payload.body || payload.message || JSON.stringify(payload);
+
+            // If a specific channel_id is requested, send only to that channel
+            if (payload.channel_id) {
+              const channel = inMemoryChannels.get(payload.channel_id);
+              if (channel && channel.enabled) {
+                try {
+                  if (channel.type === 'email') {
+                    await sendEmail(channel, subject, message, payload.to || []);
+                  } else if (channel.type === 'slack') {
+                    await sendSlack(channel, subject, message);
+                  } else if (channel.type === 'webhook' || channel.type === 'teams') {
+                    await sendWebhook(channel, subject, message);
+                  }
+                  publishEvent('notification.sent', { routingKey, channel_id: payload.channel_id });
+                } catch (_) {
+                  publishEvent('notification.failed', { routingKey, channel_id: payload.channel_id, error: _.message });
+                }
+              }
+            }
+          } else {
+            // monitoring.alert.critical / monitoring.alert.warning
+            const severity = routingKey.endsWith('.critical') ? 'CRITICAL' : 'WARNING';
+            subject = payload.title ? `[${severity}] ${payload.title}` : `[${severity}] ${routingKey}`;
+            message = payload.message || JSON.stringify(payload);
+          }
+
+          const entry = {
+            id: require('crypto').randomUUID(),
+            channel_id: payload.channel_id || null,
+            subject,
+            body: message,
+            sent_at: new Date().toISOString(),
+            status: 'received',
+            source: payload._source || 'system',
+            routing_key: routingKey,
+          };
+
+          inMemoryHistory.unshift(entry);
+          if (inMemoryHistory.length > 500) inMemoryHistory.length = 500;
+
+          // For monitoring alerts, broadcast to all enabled channels
+          if (routingKey.startsWith('monitoring.alert.')) {
+            for (const channel of inMemoryChannels.values()) {
+              if (!channel.enabled) continue;
+              try {
+                if (channel.type === 'email') {
+                  await sendEmail(channel, subject, message, []);
+                } else if (channel.type === 'slack') {
+                  await sendSlack(channel, subject, message);
+                } else if (channel.type === 'webhook' || channel.type === 'teams') {
+                  await sendWebhook(channel, subject, message);
+                }
+                publishEvent('notification.sent', { routingKey, channel_id: channel.id });
+              } catch (_) {
+                publishEvent('notification.failed', { routingKey, channel_id: channel.id, error: _.message });
+              }
+            }
+          }
+        } catch (e) {
+          log('warn', 'Event notification handler error', { error: e.message });
+        }
+      });
+    }, 3000);
 
     app.listen(PORT, '0.0.0.0', () => {
       log('info', `Notification service running on port ${PORT}`);

@@ -68,13 +68,16 @@ interface DeviceMetric {
 }
 
 function UsageBar({ value, warn = 70, crit = 90 }: { value: number; warn?: number; crit?: number }) {
-  const color = value === 0 ? 'bg-gray-200' : value >= crit ? 'bg-red-500' : value >= warn ? 'bg-yellow-400' : 'bg-green-500';
+  const color = value === 0 ? '' : value >= crit ? 'bg-red-500' : value >= warn ? 'bg-yellow-400' : 'bg-green-500';
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${value}%` }} />
+      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-surface-raised)' }}>
+        <div
+          className={`h-full rounded-full ${color}`}
+          style={{ width: `${value}%`, ...(value === 0 ? { background: 'var(--bg-overlay)' } : {}) }}
+        />
       </div>
-      <span className="text-xs text-gray-500 w-8 text-right">{value > 0 ? `${value}%` : '—'}</span>
+      <span className="text-xs w-8 text-right" style={{ color: 'var(--text-muted)' }}>{value > 0 ? `${value}%` : '—'}</span>
     </div>
   );
 }
@@ -175,45 +178,49 @@ function ClientMetricsTable() {
   const onlineCount = devices.filter(d => d.status === 'online').length;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
       <div className="flex items-center gap-2 mb-4">
-        <ComputerDesktopIcon className="w-4 h-4 text-gray-500" />
-        <h2 className="text-sm font-semibold text-gray-700">Client Device Metrics</h2>
+        <ComputerDesktopIcon className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+        <h2 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Client Device Metrics</h2>
         {!loadingDevices && !noDevices && (
-          <span className="ml-auto text-xs text-gray-400">{onlineCount}/{devices.length} online</span>
+          <span className="ml-auto text-xs" style={{ color: 'var(--text-muted)' }}>{onlineCount}/{devices.length} online</span>
         )}
       </div>
 
       {loadingDevices ? (
-        <p className="text-sm text-gray-500">Loading device metrics…</p>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading device metrics…</p>
       ) : noDevices ? (
-        <p className="text-sm text-gray-500">No devices found</p>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No devices found</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-2 pr-4">Device</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-2 pr-4 w-20">Status</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-2 pr-4">CPU</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-2 pr-4">Memory</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-2">Disk</th>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left text-xs font-medium uppercase tracking-wide pb-2 pr-4" style={{ color: 'var(--text-muted)' }}>Device</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wide pb-2 pr-4 w-20" style={{ color: 'var(--text-muted)' }}>Status</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wide pb-2 pr-4" style={{ color: 'var(--text-muted)' }}>CPU</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wide pb-2 pr-4" style={{ color: 'var(--text-muted)' }}>Memory</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wide pb-2" style={{ color: 'var(--text-muted)' }}>Disk</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-[rgba(255,255,255,0.07)]">
               {devices.map(dev => (
-                <tr key={dev.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={dev.id} className="hover:bg-[#1c2128] transition-colors">
                   <td className="py-2.5 pr-4">
                     <div className="flex items-center gap-2">
-                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dev.status === 'online' ? 'bg-green-500' : 'bg-gray-300'}`} />
-                      <span className="text-sm font-medium text-gray-800">{dev.name}</span>
-                      <span className="text-xs text-gray-400 capitalize">{dev.platform}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dev.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}`} />
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{dev.name}</span>
+                      <span className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>{dev.platform}</span>
                     </div>
                   </td>
                   <td className="py-2.5 pr-4">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      dev.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                      style={dev.status === 'online'
+                        ? { background: 'var(--success-light)', color: 'var(--success)' }
+                        : { background: 'var(--bg-surface-raised)', color: 'var(--text-muted)' }
+                      }
+                    >
                       {dev.status}
                     </span>
                   </td>
@@ -302,43 +309,43 @@ export default function MonitoringView() {
           label: 'Service Uptime',
           value: pct('serviceUptime'),
           icon: ServerIcon,
-          color: 'text-green-600',
-          bg: 'bg-green-50',
+          color: 'text-green-400',
+          bg: 'bg-green-500/10',
         },
         {
           label: 'CPU Usage',
           value: pct('cpuUsage'),
           icon: CpuChipIcon,
-          color: 'text-blue-600',
-          bg: 'bg-blue-50',
+          color: 'text-[#006FFF]',
+          bg: 'bg-[rgba(0,111,255,0.15)]',
         },
         {
           label: 'Memory Usage',
           value: pct('memoryUsage'),
           icon: CircleStackIcon,
-          color: 'text-purple-600',
-          bg: 'bg-purple-50',
+          color: 'text-purple-400',
+          bg: 'bg-purple-500/10',
         },
         {
           label: 'Disk Usage',
           value: pct('diskUsage'),
           icon: ChartBarIcon,
-          color: 'text-orange-600',
-          bg: 'bg-orange-50',
+          color: 'text-orange-400',
+          bg: 'bg-orange-500/10',
         },
         {
           label: 'Users',
           value: typeof userCount === 'number' ? userCount.toLocaleString() : String(userCount),
           icon: ServerIcon,
-          color: 'text-indigo-600',
-          bg: 'bg-indigo-50',
+          color: 'text-indigo-400',
+          bg: 'bg-indigo-500/10',
         },
         {
           label: 'Devices',
           value: typeof deviceCount === 'number' ? deviceCount.toLocaleString() : String(deviceCount),
           icon: CpuChipIcon,
-          color: 'text-teal-600',
-          bg: 'bg-teal-50',
+          color: 'text-teal-400',
+          bg: 'bg-teal-500/10',
         },
       ]);
 
@@ -404,9 +411,11 @@ export default function MonitoringView() {
       <div className="p-6">
         <div className="animate-pulse space-y-6">
           <div className="grid grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => <div key={i} className="h-20 bg-gray-200 rounded-xl" />)}
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-20 rounded-xl" style={{ background: 'var(--bg-surface-raised)' }} />
+            ))}
           </div>
-          <div className="h-64 bg-gray-200 rounded-xl" />
+          <div className="h-64 rounded-xl" style={{ background: 'var(--bg-surface-raised)' }} />
         </div>
       </div>
     );
@@ -417,8 +426,8 @@ export default function MonitoringView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Monitoring</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Monitoring</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
             {healthyCount}/{services.length} services healthy
           </p>
         </div>
@@ -426,7 +435,8 @@ export default function MonitoringView() {
           <select
             value={timeRange}
             onChange={e => setTimeRange(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border-strong)' }}
           >
             <option value="15m">Last 15 min</option>
             <option value="1h">Last hour</option>
@@ -436,14 +446,16 @@ export default function MonitoringView() {
           </select>
           <button
             onClick={() => setShowWizard(true)}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            style={{ color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid rgba(0,111,255,0.25)' }}
           >
             <SparklesIcon className="w-4 h-4" />
             Monitoring Wizard
           </button>
           <button
             onClick={refresh}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg hover:bg-[#1c2128] transition-colors"
+            style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
           >
             <ArrowPathIcon className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
@@ -452,20 +464,20 @@ export default function MonitoringView() {
       </div>
 
       {/* Service health */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Service Health</h2>
+      <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
+        <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-secondary)' }}>Service Health</h2>
         {services.length === 0 ? (
-          <p className="text-sm text-gray-500">No service data available</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No service data available</p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {services.map(svc => (
-              <div key={svc.name} className="flex items-center justify-between border border-gray-100 rounded-lg px-3 py-2">
+              <div key={svc.name} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ border: '1px solid var(--border)' }}>
                 <div className="flex items-center gap-2 min-w-0">
                   {getStatusIcon(svc.status)}
-                  <span className="text-sm font-medium text-gray-800 truncate">{svc.name.replace(' Service', '')}</span>
+                  <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{svc.name.replace(' Service', '')}</span>
                 </div>
                 {svc.responseTime && (
-                  <span className="text-xs text-gray-400 ml-2 shrink-0">{svc.responseTime}ms</span>
+                  <span className="text-xs ml-2 shrink-0" style={{ color: 'var(--text-muted)' }}>{svc.responseTime}ms</span>
                 )}
               </div>
             ))}
@@ -489,19 +501,19 @@ export default function MonitoringView() {
       )}
 
       {/* Time series chart */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+      <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-700">Metrics</h2>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Metrics</h2>
           <div className="flex gap-2">
             {METRIC_OPTIONS.map(m => (
               <button
                 key={m.key}
                 onClick={() => setSelectedMetric(m.key)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                  selectedMetric === m.key
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+                style={selectedMetric === m.key
+                  ? { background: '#2563eb', color: '#fff' }
+                  : { background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)' }
+                }
               >
                 {m.label}
               </button>
@@ -519,14 +531,16 @@ export default function MonitoringView() {
                     <stop offset="95%" stopColor={currentMetric.color} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="time" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#6e7681' }} interval="preserveStartEnd" stroke="var(--text-muted)" />
                 <YAxis
-                  tick={{ fontSize: 11 }}
-                  label={{ value: currentMetric.unit, angle: -90, position: 'insideLeft', style: { fontSize: 11 } }}
+                  tick={{ fontSize: 11, fill: '#6e7681' }}
+                  stroke="var(--text-muted)"
+                  label={{ value: currentMetric.unit, angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: '#6e7681' } }}
                 />
                 <Tooltip
                   formatter={(v: any) => [`${typeof v === 'number' ? v.toFixed(2) : v} ${currentMetric.unit}`, currentMetric.label]}
+                  contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                 />
                 <Area
                   type="monotone"
@@ -540,9 +554,9 @@ export default function MonitoringView() {
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="h-56 flex items-center justify-center text-gray-400 text-sm">
+          <div className="h-56 flex items-center justify-center text-sm" style={{ color: 'var(--text-muted)' }}>
             <div className="text-center">
-              <ChartBarIcon className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+              <ChartBarIcon className="w-10 h-10 mx-auto mb-2" style={{ color: 'var(--text-muted)' }} />
               No metric data available — Prometheus may not be connected
             </div>
           </div>
@@ -554,8 +568,8 @@ export default function MonitoringView() {
 
       {/* Grafana dashboards (if configured) */}
       {grafanaDashboards.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Grafana Dashboards</h2>
+        <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border)' }}>
+          <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-secondary)' }}>Grafana Dashboards</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {grafanaDashboards.map(d => (
               <a
@@ -563,13 +577,14 @@ export default function MonitoringView() {
                 href={`${process.env.NEXT_PUBLIC_GRAFANA_URL}${d.url}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3 hover:bg-gray-50 transition-colors group"
+                className="flex items-center justify-between rounded-lg px-4 py-3 hover:bg-[#1c2128] transition-colors group"
+                style={{ border: '1px solid var(--border)' }}
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{d.title}</p>
-                  {d.folderTitle && <p className="text-xs text-gray-500 truncate">{d.folderTitle}</p>}
+                  <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{d.title}</p>
+                  {d.folderTitle && <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{d.folderTitle}</p>}
                 </div>
-                <span className="text-xs text-blue-600 group-hover:text-blue-700 ml-2 shrink-0">Open →</span>
+                <span className="text-xs ml-2 shrink-0" style={{ color: 'var(--accent)' }}>Open →</span>
               </a>
             ))}
           </div>

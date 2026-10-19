@@ -168,18 +168,21 @@ export default function BackupView({ onOpenWizard }: BackupViewProps) {
 
   // ── Expert Mode ──
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ background: 'var(--bg-base)', minHeight: '100vh' }}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Backup & Recovery</h1>
-          <p className="text-sm text-gray-500 mt-1">Datensicherung und Wiederherstellung verwalten</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Backup &amp; Recovery</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Datensicherung und Wiederherstellung verwalten</p>
         </div>
         <div className="flex items-center gap-3">
           {onOpenWizard && (
             <button
               onClick={onOpenWizard}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+              style={{ color: 'var(--text-secondary)', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface)')}
             >
               <WrenchScrewdriverIcon className="h-4 w-4" />
               Setup-Assistent
@@ -192,7 +195,10 @@ export default function BackupView({ onOpenWizard }: BackupViewProps) {
             <PlayIcon className="h-4 w-4" />
             Backup starten
           </button>
-          <button onClick={loadData} className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={loadData} className="p-2 transition-colors" style={{ color: 'var(--text-muted)' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)')}
+          >
             <ArrowPathIcon className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
@@ -200,60 +206,65 @@ export default function BackupView({ onOpenWizard }: BackupViewProps) {
 
       {/* Status Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-              <ClockIcon className="h-5 w-5 text-emerald-600" />
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.15)' }}>
+              <ClockIcon className="h-5 w-5 text-emerald-500" />
             </div>
-            <span className="text-sm text-gray-500">Letztes Backup</span>
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Letztes Backup</span>
           </div>
-          <p className="text-lg font-semibold text-gray-900">
+          <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
             {status.lastBackup ? new Date(status.lastBackup).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Noch keins'}
           </p>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <CircleStackIcon className="h-5 w-5 text-blue-600" />
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(59,130,246,0.15)' }}>
+              <CircleStackIcon className="h-5 w-5 text-blue-500" />
             </div>
-            <span className="text-sm text-gray-500">Backups gesamt</span>
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Backups gesamt</span>
           </div>
-          <p className="text-lg font-semibold text-gray-900">{status.totalBackups}</p>
+          <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{status.totalBackups}</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-              <ServerIcon className="h-5 w-5 text-purple-600" />
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.15)' }}>
+              <ServerIcon className="h-5 w-5 text-purple-500" />
             </div>
-            <span className="text-sm text-gray-500">Speicher</span>
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Speicher</span>
           </div>
-          <p className="text-lg font-semibold text-gray-900">{status.storageUsed}</p>
-          <p className="text-xs text-gray-400 mt-1 capitalize">{status.storageType}</p>
+          <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{status.storageUsed}</p>
+          <p className="text-xs mt-1 capitalize" style={{ color: 'var(--text-muted)' }}>{status.storageType}</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-              <ShieldCheckIcon className="h-5 w-5 text-amber-600" />
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(245,158,11,0.15)' }}>
+              <ShieldCheckIcon className="h-5 w-5 text-amber-500" />
             </div>
-            <span className="text-sm text-gray-500">Verschlüsselung</span>
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Verschlüsselung</span>
           </div>
-          <p className="text-lg font-semibold text-gray-900">{status.encryption ? 'AES-256' : 'Aus'}</p>
+          <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{status.encryption ? 'AES-256' : 'Aus'}</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex gap-6">
           {(['overview', 'history', 'recovery'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className="pb-3 text-sm font-medium border-b-2 transition-colors"
+              style={
+                activeTab === tab
+                  ? { borderColor: '#10b981', color: '#10b981' }
+                  : { borderColor: 'transparent', color: 'var(--text-muted)' }
+              }
+              onMouseEnter={(e) => { if (activeTab !== tab) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
+              onMouseLeave={(e) => { if (activeTab !== tab) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; }}
             >
               {tab === 'overview' ? 'Übersicht' : tab === 'history' ? 'Verlauf' : 'Wiederherstellung'}
             </button>
@@ -265,43 +276,43 @@ export default function BackupView({ onOpenWizard }: BackupViewProps) {
       {activeTab === 'overview' && (
         <div className="space-y-4">
           {/* Schedule Info */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 mb-3">Backup-Zeitplan</h3>
+          <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+            <h3 className="font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Backup-Zeitplan</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="text-gray-500">Nächstes Backup</span>
-                <p className="font-medium text-gray-900 mt-1">
+                <span style={{ color: 'var(--text-muted)' }}>Nächstes Backup</span>
+                <p className="font-medium mt-1" style={{ color: 'var(--text-primary)' }}>
                   {status.nextScheduled ? new Date(status.nextScheduled).toLocaleString('de-DE') : 'Nicht geplant'}
                 </p>
               </div>
               <div>
-                <span className="text-gray-500">Speicherort</span>
-                <p className="font-medium text-gray-900 mt-1 capitalize">{status.storageType}</p>
+                <span style={{ color: 'var(--text-muted)' }}>Speicherort</span>
+                <p className="font-medium mt-1 capitalize" style={{ color: 'var(--text-primary)' }}>{status.storageType}</p>
               </div>
               <div>
-                <span className="text-gray-500">Verschlüsselung</span>
-                <p className="font-medium text-gray-900 mt-1">{status.encryption ? 'Aktiviert (AES-256)' : 'Deaktiviert'}</p>
+                <span style={{ color: 'var(--text-muted)' }}>Verschlüsselung</span>
+                <p className="font-medium mt-1" style={{ color: 'var(--text-primary)' }}>{status.encryption ? 'Aktiviert (AES-256)' : 'Deaktiviert'}</p>
               </div>
             </div>
           </div>
 
           {/* Recent Backups */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 mb-3">Letzte Backups</h3>
+          <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+            <h3 className="font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Letzte Backups</h3>
             {backups.length > 0 ? (
               <div className="space-y-2">
                 {backups.slice(0, 5).map((b, i) => (
-                  <div key={b.id || i} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                  <div key={b.id || i} className="flex items-center justify-between py-2 last:border-0" style={{ borderBottom: '1px solid var(--border)' }}>
                     <div className="flex items-center gap-3">
                       {statusIcon(b.status)}
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{typeLabel(b.type)} Backup</p>
-                        <p className="text-xs text-gray-500">{new Date(b.startedAt).toLocaleString('de-DE')}</p>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{typeLabel(b.type)} Backup</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{new Date(b.startedAt).toLocaleString('de-DE')}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-gray-700">{b.size}</p>
-                      <p className={`text-xs ${b.status === 'completed' ? 'text-green-600' : b.status === 'failed' ? 'text-red-600' : 'text-blue-600'}`}>
+                      <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{b.size}</p>
+                      <p className={`text-xs ${b.status === 'completed' ? 'text-green-500' : b.status === 'failed' ? 'text-red-500' : 'text-blue-500'}`}>
                         {b.status === 'completed' ? 'Abgeschlossen' : b.status === 'running' ? 'Läuft...' : b.status === 'failed' ? 'Fehlgeschlagen' : 'Geplant'}
                       </p>
                     </div>
@@ -310,9 +321,9 @@ export default function BackupView({ onOpenWizard }: BackupViewProps) {
               </div>
             ) : (
               <div className="text-center py-8">
-                <CloudArrowUpIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-500">Noch keine Backups vorhanden.</p>
-                <p className="text-xs text-gray-400 mt-1">Starten Sie den Setup-Assistenten um Backups zu konfigurieren.</p>
+                <CloudArrowUpIcon className="h-12 w-12 mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Noch keine Backups vorhanden.</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Starten Sie den Setup-Assistenten um Backups zu konfigurieren.</p>
               </div>
             )}
           </div>
@@ -320,13 +331,13 @@ export default function BackupView({ onOpenWizard }: BackupViewProps) {
       )}
 
       {activeTab === 'history' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="font-semibold text-gray-900 mb-3">Backup-Verlauf</h3>
+        <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <h3 className="font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Backup-Verlauf</h3>
           {backups.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-gray-500 border-b border-gray-200">
+                  <tr className="text-left" style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
                     <th className="pb-2 font-medium">Status</th>
                     <th className="pb-2 font-medium">Typ</th>
                     <th className="pb-2 font-medium">Gestartet</th>
@@ -337,38 +348,38 @@ export default function BackupView({ onOpenWizard }: BackupViewProps) {
                 </thead>
                 <tbody>
                   {backups.map((b, i) => (
-                    <tr key={b.id || i} className="border-b border-gray-100 last:border-0">
+                    <tr key={b.id || i} className="last:border-0" style={{ borderBottom: '1px solid var(--border)' }}>
                       <td className="py-2.5">{statusIcon(b.status)}</td>
-                      <td className="py-2.5 text-gray-900">{typeLabel(b.type)}</td>
-                      <td className="py-2.5 text-gray-600">{new Date(b.startedAt).toLocaleString('de-DE')}</td>
-                      <td className="py-2.5 text-gray-600">{b.completedAt ? new Date(b.completedAt).toLocaleString('de-DE') : '–'}</td>
-                      <td className="py-2.5 text-gray-600">{b.size}</td>
-                      <td className="py-2.5 text-gray-600">{b.sources?.join(', ') || '–'}</td>
+                      <td className="py-2.5" style={{ color: 'var(--text-primary)' }}>{typeLabel(b.type)}</td>
+                      <td className="py-2.5" style={{ color: 'var(--text-secondary)' }}>{new Date(b.startedAt).toLocaleString('de-DE')}</td>
+                      <td className="py-2.5" style={{ color: 'var(--text-secondary)' }}>{b.completedAt ? new Date(b.completedAt).toLocaleString('de-DE') : '–'}</td>
+                      <td className="py-2.5" style={{ color: 'var(--text-secondary)' }}>{b.size}</td>
+                      <td className="py-2.5" style={{ color: 'var(--text-secondary)' }}>{b.sources?.join(', ') || '–'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p className="text-sm text-gray-500 text-center py-8">Keine Einträge vorhanden.</p>
+            <p className="text-sm text-center py-8" style={{ color: 'var(--text-muted)' }}>Keine Einträge vorhanden.</p>
           )}
         </div>
       )}
 
       {activeTab === 'recovery' && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 mb-3">Wiederherstellung</h3>
-            <p className="text-sm text-gray-500 mb-4">Wählen Sie ein Backup zur Wiederherstellung.</p>
+          <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+            <h3 className="font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Wiederherstellung</h3>
+            <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Wählen Sie ein Backup zur Wiederherstellung.</p>
             {backups.filter(b => b.status === 'completed').length > 0 ? (
               <div className="space-y-2">
                 {backups.filter(b => b.status === 'completed').map((b, i) => (
-                  <div key={b.id || i} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
+                  <div key={b.id || i} className="flex items-center justify-between rounded-lg px-4 py-3" style={{ background: 'var(--bg-surface-raised)' }}>
                     <div className="flex items-center gap-3">
-                      <FolderIcon className="h-5 w-5 text-emerald-600" />
+                      <FolderIcon className="h-5 w-5 text-emerald-500" />
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{typeLabel(b.type)} – {new Date(b.startedAt).toLocaleString('de-DE')}</p>
-                        <p className="text-xs text-gray-500">{b.size} · {b.sources?.join(', ')}</p>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{typeLabel(b.type)} – {new Date(b.startedAt).toLocaleString('de-DE')}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{b.size} · {b.sources?.join(', ')}</p>
                       </div>
                     </div>
                     <button
@@ -380,7 +391,8 @@ export default function BackupView({ onOpenWizard }: BackupViewProps) {
                           toast.error('Wiederherstellung fehlgeschlagen.');
                         }
                       }}
-                      className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-100 rounded-lg hover:bg-emerald-200 transition-colors"
+                      className="px-3 py-1.5 text-xs font-medium text-emerald-400 rounded-lg hover:bg-emerald-900/30 transition-colors"
+                      style={{ background: 'rgba(16,185,129,0.15)' }}
                     >
                       Wiederherstellen
                     </button>
@@ -388,7 +400,7 @@ export default function BackupView({ onOpenWizard }: BackupViewProps) {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-500 text-center py-8">Keine abgeschlossenen Backups zur Wiederherstellung verfügbar.</p>
+              <p className="text-sm text-center py-8" style={{ color: 'var(--text-muted)' }}>Keine abgeschlossenen Backups zur Wiederherstellung verfügbar.</p>
             )}
           </div>
         </div>

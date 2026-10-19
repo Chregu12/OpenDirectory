@@ -1,0 +1,55 @@
+import React from 'react';
+import {render,screen,waitFor,within} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import toast from 'react-hot-toast';
+import UserGroupsView from '../../components/views/UserGroupsView';
+import {api} from '../../lib/api';
+import {DirectoryGroup,groupEtag} from '../../lib/directoryGroups';
+import {ensureSession} from '../../lib/auth';
+jest.mock('../../lib/auth',()=>({ensureSession:jest.fn(async()=>({}))}));
+const actorId='11111111-1111-4111-8111-111111111111';const groupId='22222222-2222-4222-8222-222222222222';const memberId='33333333-3333-4333-8333-333333333333';
+let permissions:string[];let protocol:number|undefined;let groups:DirectoryGroup[];
+const record=(changes:Partial<DirectoryGroup>={}):DirectoryGroup=>({id:groupId,name:'Canonical engineering',members:[],createdAt:'2026-10-18T00:00:00Z',revision:'2',...changes});
+beforeEach(()=>{jest.clearAllMocks();permissions=['groups.read'];protocol=undefined;groups=[record()];
+ (api.get as jest.Mock).mockImplementation(async(url:string)=>{if(url==='/api/identity/access')return{data:{subject:'verified',userId:actorId,permissions,demoMode:false,directoryReadProtocol:1,directoryCreationProtocol:1,directoryGroupMutationProtocol:protocol}};if(url==='/api/groups')return{data:{groups,total:groups.length}};throw{response:{status:404}};});
+ (api.put as jest.Mock).mockImplementation(async(_url:string,patch:any)=>{groups=[{...groups[0],...patch,description:patch.description||undefined,revision:'3'}];return{data:groups[0]};});
+ (api.post as jest.Mock).mockImplementation(async(url:string,body:any)=>{if(url.endsWith('/members')){groups=[{...groups[0],members:[body.userId],revision:'3'}];return{data:{...groups[0],membershipReview:{required:true,membershipId:'44444444-4444-4444-8444-444444444444',effective:false}}};}groups=[record({...body,description:body.description||undefined})];return{data:groups[0]};});
+ (api.delete as jest.Mock).mockImplementation(async(url:string)=>url.includes('/members/')?{status:200,data:record({revision:'3'})}:{status:204});
+});
+async function select(){await userEvent.click(await screen.findByRole('button',{name:'Gruppe Canonical engineering'}));await screen.findByRole('article',{name:'Gruppendetails'});}
+test('ordinary principals do not fetch a group directory or receive fabricated administrator groups',async()=>{
+ permissions=[];render(<UserGroupsView/>);expect(await screen.findByText('Keine Berechtigung zum Lesen der Gruppenliste.')).toBeInTheDocument();expect(api.get).toHaveBeenCalledTimes(1);expect(api.get).toHaveBeenCalledWith('/api/identity/access');expect(screen.queryByText('Domain Admins')).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'Gruppe erstellen'})).not.toBeInTheDocument();
+});
+test('a reader sees actual group UUIDs and no invented distribution/dynamic types or administrative buttons',async()=>{
+ groups=[record({members:[memberId]})];render(<UserGroupsView/>);await select();expect(within(screen.getByRole('article',{name:'Gruppendetails'})).getByText(memberId)).toBeInTheDocument();for(const name of['Gruppenprofil bearbeiten','Mitglied verknüpfen','Gruppe löschen','Gruppe erstellen'])expect(screen.queryByRole('button',{name})).not.toBeInTheDocument();expect((api.get as jest.Mock).mock.calls.every(([url])=>['/api/identity/access','/api/groups'].includes(url))).toBe(true);
+});
+test('a confirmed empty response stays empty without examples or random identifiers',async()=>{
+ groups=[];render(<UserGroupsView/>);expect(await screen.findByText('Keine kanonischen Gruppen vorhanden.')).toBeInTheDocument();expect(screen.queryByText('Domain Admins')).not.toBeInTheDocument();expect(screen.queryByText('All Employees')).not.toBeInTheDocument();
+});
+test('failed reload clears old actionable group data rather than falling back to stale rows or samples',async()=>{
+ const user=userEvent.setup();render(<UserGroupsView/>);await select();(api.get as jest.Mock).mockImplementation(async(url:string)=>{if(url==='/api/identity/access')return{data:{subject:'verified',userId:actorId,permissions,demoMode:false,directoryReadProtocol:1}};throw{response:{status:503}};});await user.click(screen.getByRole('button',{name:'Gruppen neu laden'}));expect(await screen.findByRole('alert')).toHaveTextContent('nicht bestätigt');expect(screen.queryByRole('button',{name:'Gruppe Canonical engineering'})).not.toBeInTheDocument();expect(screen.queryByRole('article',{name:'Gruppendetails'})).not.toBeInTheDocument();expect(screen.queryByText('Domain Admins')).not.toBeInTheDocument();
+});
+test('down-level receiving APIs cannot make metadata/member/delete controls operate on globally scoped legacy routes',async()=>{
+ permissions=['groups.read','groups.create','groups.update','groups.members.manage','groups.delete'];groups=[record({members:[memberId]})];render(<UserGroupsView/>);await select();expect(screen.getByText(/Schreibaktionen bleiben gesperrt/)).toBeInTheDocument();for(const name of['Gruppenprofil bearbeiten','Mitglied verknüpfen','Gruppe löschen','Verknüpfung '+memberId+' entfernen'])expect(screen.getByRole('button',{name})).toBeDisabled();expect(screen.getByRole('button',{name:'Gruppe erstellen'})).toBeEnabled();expect(api.put).not.toHaveBeenCalled();expect(api.delete).not.toHaveBeenCalled();expect(api.post).not.toHaveBeenCalled();
+});
+test('a creation-only operator confirms an actual empty group without requiring any user or group-list read',async()=>{
+ permissions=['groups.create'];const user=userEvent.setup();render(<UserGroupsView/>);await user.click(await screen.findByRole('button',{name:'Gruppe erstellen'}));await user.type(screen.getByLabelText('Gruppenname'),'Actual created group');await user.click(screen.getByRole('button',{name:'Verbindlich speichern'}));expect(await screen.findByText(/Bestätigte Gruppe: Actual created group/)).toBeInTheDocument();expect(api.post).toHaveBeenCalledWith('/api/groups',{name:'Actual created group',description:null});expect((api.get as jest.Mock).mock.calls.every(([url])=>url==='/api/identity/access')).toBe(true);expect(toast.success).toHaveBeenCalledTimes(1);
+});
+test('a confirmed mutation receiver edits only real metadata with the displayed strong group ETag',async()=>{
+ protocol=1;permissions=['groups.read','groups.update'];const user=userEvent.setup();render(<UserGroupsView/>);await select();await user.click(screen.getByRole('button',{name:'Gruppenprofil bearbeiten'}));await user.clear(screen.getByLabelText('Gruppenname'));await user.type(screen.getByLabelText('Gruppenname'),'Renamed actual group');await user.click(screen.getByRole('button',{name:'Verbindlich speichern'}));expect(await screen.findByRole('heading',{name:'Renamed actual group'})).toBeInTheDocument();expect(api.put).toHaveBeenCalledWith('/api/groups/'+groupId,{name:'Renamed actual group',description:null},{headers:{'If-Match':groupEtag(record())}});expect(toast.success).toHaveBeenCalledTimes(1);
+});
+test('a stale group form cannot automatically retry or claim success after a conditional conflict',async()=>{
+ protocol=1;permissions=['groups.read','groups.update'];(api.put as jest.Mock).mockRejectedValue({response:{status:412}});const user=userEvent.setup();render(<UserGroupsView/>);await select();await user.click(screen.getByRole('button',{name:'Gruppenprofil bearbeiten'}));await user.click(screen.getByRole('button',{name:'Verbindlich speichern'}));expect(await screen.findByRole('alert')).toHaveTextContent('zwischenzeitlich geändert');expect(screen.getByRole('button',{name:'Verbindlich speichern'})).toBeDisabled();expect(api.put).toHaveBeenCalledTimes(1);expect(toast.success).not.toHaveBeenCalled();
+});
+test('group-only member administration uses a known canonical UUID and reports pending independent approval without a profile lookup',async()=>{
+ protocol=1;permissions=['groups.read','groups.members.manage'];const user=userEvent.setup();render(<UserGroupsView/>);await select();await user.click(screen.getByRole('button',{name:'Mitglied verknüpfen'}));await user.type(screen.getByLabelText('Kanonische Benutzer-ID'),memberId);await user.click(screen.getByRole('button',{name:'Verbindlich speichern'}));expect(await screen.findByText(/unabhängige Gruppenfreigabe ist noch ausstehend/)).toBeInTheDocument();expect(within(screen.getByRole('article',{name:'Gruppendetails'})).getByText(memberId)).toBeInTheDocument();expect(api.post).toHaveBeenCalledWith('/api/groups/'+groupId+'/members',{userId:memberId},{headers:{'If-Match':groupEtag(record())}});expect((api.get as jest.Mock).mock.calls.every(([url])=>['/api/identity/access','/api/groups'].includes(url))).toBe(true);
+});
+test('whole-group deletion requires explicit confirmation and removes no local row until an actual 204',async()=>{
+ protocol=1;permissions=['groups.read','groups.delete'];const user=userEvent.setup();render(<UserGroupsView/>);await select();await user.click(screen.getByRole('button',{name:'Gruppe löschen'}));expect(api.delete).not.toHaveBeenCalled();await user.click(within(screen.getByRole('alertdialog')).getByRole('button',{name:'Bestätigen'}));expect(await screen.findByText(/Kanonische Gruppe gelöscht/)).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Gruppe Canonical engineering'})).not.toBeInTheDocument();expect(api.delete).toHaveBeenCalledWith('/api/groups/'+groupId,{headers:{'If-Match':groupEtag(record())}});
+});
+test('an unconfirmed delete status retains the row and cannot become a green local deletion',async()=>{
+ protocol=1;permissions=['groups.read','groups.delete'];(api.delete as jest.Mock).mockResolvedValue({status:202});const user=userEvent.setup();render(<UserGroupsView/>);await select();await user.click(screen.getByRole('button',{name:'Gruppe löschen'}));await user.click(within(screen.getByRole('alertdialog')).getByRole('button',{name:'Bestätigen'}));expect(await screen.findByRole('alert')).toHaveTextContent('nicht bestätigt');expect(screen.getByRole('button',{name:'Gruppe Canonical engineering'})).toBeInTheDocument();expect(toast.success).not.toHaveBeenCalled();expect(api.delete).toHaveBeenCalledTimes(1);
+});
+test('own member removal warns of access loss, confirms the exact displayed version and rechecks the real browser session',async()=>{
+ protocol=1;permissions=['groups.read','groups.members.manage'];groups=[record({members:[actorId]})];const user=userEvent.setup();render(<UserGroupsView/>);await select();await user.click(screen.getByRole('button',{name:'Verknüpfung '+actorId+' entfernen'}));expect(screen.getByRole('alertdialog')).toHaveTextContent('Dein eigener Zugriff kann damit enden');expect(api.delete).not.toHaveBeenCalled();await user.click(within(screen.getByRole('alertdialog')).getByRole('button',{name:'Bestätigen'}));expect(await screen.findByText('Keine Benutzer verknüpft.')).toBeInTheDocument();expect(api.delete).toHaveBeenCalledWith('/api/groups/'+groupId+'/members/'+actorId,{headers:{'If-Match':groupEtag(record({members:[actorId]}))}});await waitFor(()=>expect(ensureSession).toHaveBeenCalledWith(true));
+});

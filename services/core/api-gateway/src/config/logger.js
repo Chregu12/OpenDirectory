@@ -63,9 +63,9 @@ logger.request = (req, res, next) => {
   
   res.on('finish', () => {
     const duration = Date.now() - start;
-    logger.info(`${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`, {
+    logger.info(`${req.method} ${req.path} ${res.statusCode} - ${duration}ms`, {
       method: req.method,
-      url: req.originalUrl,
+      url: req.path,
       status: res.statusCode,
       duration,
       ip: req.ip,

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-bus
+  namespace: {{ include "opendirectory.namespace" . }}
+  labels:
+    {{- include "opendirectory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: event-bus
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: {{ .Values.eventBus.grpcServerPort }}
+      targetPort: grpc
+      protocol: TCP
+  selector:
+    {{- include "opendirectory.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: event-bus

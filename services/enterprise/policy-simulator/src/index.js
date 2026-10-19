@@ -69,6 +69,16 @@ if (process.env.NODE_ENV !== 'production') {
     }));
 }
 
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'policy-simulator' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ====================================================================== //
 //  Import services
 // ====================================================================== //
@@ -77,6 +87,7 @@ const SimulationEngine = require('./services/simulationEngine');
 const ImpactAnalyzer = require('./services/impactAnalyzer');
 const DriftDetector = require('./services/driftDetector');
 const ComplianceTimeline = require('./services/complianceTimeline');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 // ====================================================================== //
 //  Validation schemas
@@ -175,6 +186,18 @@ class PolicySimulatorService extends EventEmitter {
         });
         this.app.use('/api', limiter);
 
+        // OIDC token verification (RS256 via JWKS). P0 fix: this service
+        // previously had no HTTP authentication at all — see
+        // middleware/oidcAuth.js for the full rationale. Mounted globally;
+        // /health and /metrics are exempt (the latter is a Prometheus scrape
+        // target — see infrastructure/monitoring/prometheus.yml, whose
+        // scrape_configs never send a bearer token, matching every other
+        // Prometheus-scraped OpenDirectory service; this /metrics payload is
+        // only process uptime/memory/cpu, no secrets). The one admin-gated
+        // route (POST /api/simulator/rollback-plan) additionally requires
+        // requireAdmin — see _initializeRoutes().
+        this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
+
         // Request logging
         this.app.use((req, res, next) => {
             const start = Date.now();
@@ -267,6 +290,12 @@ class PolicySimulatorService extends EventEmitter {
                     value.scope || {}
                 );
 
+                publish('policy.simulation.completed', {
+                    policyId: value.policyId,
+                    simulationId: result.id || result.simulationId,
+                    affectedDevices: result.affectedDevices,
+                    timestamp: new Date().toISOString(),
+                });
                 res.json(result);
             } catch (err) {
                 next(err);
@@ -338,7 +367,11 @@ class PolicySimulatorService extends EventEmitter {
         });
 
         // POST /api/simulator/rollback-plan
-        router.post('/rollback-plan', (req, res, next) => {
+        // (admin-only: surfaces fleet-wide affected-device counts, rollback
+        // timing, and service-interruption risk for a production policy —
+        // see middleware/oidcAuth.js for why this is gated but /simulate is
+        // not)
+        router.post('/rollback-plan', requireAdmin, (req, res, next) => {
             try {
                 const { error, value } = schemas.rollbackPlan.validate(req.body);
                 if (error) {
@@ -548,6 +581,11 @@ class PolicySimulatorService extends EventEmitter {
     async start() {
         const port = parseInt(process.env.PORT, 10) || 3020;
         const host = process.env.HOST || '0.0.0.0';
+
+        // Connect to event bus (fire and forget)
+        connectBus().catch((err) => {
+            logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+        });
 
         return new Promise((resolve, reject) => {
             this.server = this.app.listen(port, host, () => {

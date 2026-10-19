@@ -13,6 +13,7 @@ const Joi = require('joi');
 const { v4: uuidv4 } = require('uuid');
 const http = require('http');
 const WebSocket = require('ws');
+const { oidcAuth, requireAdmin } = require('./middleware/oidcAuth');
 
 // ====================================================================== //
 //  Logger setup
@@ -66,6 +67,16 @@ if (process.env.NODE_ENV !== 'production') {
     level: process.env.LOG_LEVEL || 'debug',
   }));
 }
+
+// ── EventBusClient ────────────────────────────────────────────────────────────
+const EventBusClient = (() => {
+  try { return require('@opendirectory/grpc-event-bus').EventBusClient; }
+  catch (_) { return require('../../../../packages/grpc-event-bus/src').EventBusClient; }
+})();
+const _bus = new EventBusClient({ source: 'security-scanner' });
+async function connectBus() { await _bus.connect(); }
+function publish(routingKey, payload) { _bus.publish(routingKey, payload).catch(() => {}); }
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ====================================================================== //
 //  Import services
@@ -505,6 +516,17 @@ class SecurityScannerService extends EventEmitter {
       next();
     });
 
+    // OIDC bearer-token auth (see src/middleware/oidcAuth.js). Mounted
+    // globally so every route defined in _initializeRoutes() below requires
+    // a verified JWT, except /health (liveness probe) and /metrics
+    // (Prometheus scrape target — see infrastructure/monitoring/
+    // prometheus.yml, whose scrape_configs never send a bearer token,
+    // matching every other Prometheus-scraped OpenDirectory service; this
+    // /metrics payload is only process uptime/memory/cpu, no secrets).
+    // Mutating routes additionally require requireAdmin — wired directly on
+    // those routes in _initializeRoutes().
+    this.app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
+
     logger.info('Middleware setup completed');
   }
 
@@ -551,12 +573,31 @@ class SecurityScannerService extends EventEmitter {
       });
     });
 
+    // ---- Metrics ----
+    //
+    // Was referenced by the rate-limiter's `skip` check above (and implied
+    // by this service's own comment there) but never actually registered —
+    // GET /metrics 401'd/404'd for every caller. Added here to match the
+    // exact pattern used by device-lifecycle/auto-remediation/graph-explorer/
+    // policy-simulator's /metrics (process uptime/memory/cpu JSON, no
+    // secrets); see the skipPaths comment on oidcAuth() below for why it's
+    // public.
+    this.app.get('/metrics', (_req, res) => {
+      res.json({
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        cpu: process.cpuUsage(),
+      });
+    });
+
     // ---- Scanner API ----
 
     const router = express.Router();
 
-    // POST /api/scanner/scan - Start a new scan
-    router.post('/scan', async (req, res, next) => {
+    // POST /api/scanner/scan - Start a new scan (admin-only: fleet-wide
+    // GPO/AD/device exposure scan, resource-intensive and disclosure-heavy)
+    router.post('/scan', requireAdmin, async (req, res, next) => {
       try {
         const { error, value } = schemas.startScan.validate(req.body);
         if (error) {
@@ -693,8 +734,9 @@ class SecurityScannerService extends EventEmitter {
       }
     });
 
-    // POST /api/scanner/schedule - Schedule a recurring scan
-    router.post('/schedule', (req, res, next) => {
+    // POST /api/scanner/schedule - Schedule a recurring scan (admin-only:
+    // persists a cron job that repeatedly triggers fleet-wide scans)
+    router.post('/schedule', requireAdmin, (req, res, next) => {
       try {
         const { error, value } = schemas.scheduleScan.validate(req.body);
         if (error) {
@@ -851,9 +893,18 @@ class SecurityScannerService extends EventEmitter {
       });
     };
 
-    this.scanner.on('scanStarted', (data) => broadcast('scanStarted', data));
+    this.scanner.on('scanStarted', (data) => {
+      broadcast('scanStarted', data);
+      publish('security.scan.started', { scanId: data.scanId });
+    });
     this.scanner.on('scanProgress', (data) => broadcast('scanProgress', data));
-    this.scanner.on('scanCompleted', (data) => broadcast('scanCompleted', data));
+    this.scanner.on('scanCompleted', (data) => {
+      broadcast('scanCompleted', data);
+      publish('security.scan.completed', { scanId: data.scanId, results: data.results });
+      if (data.results && data.results.totalFindings > 0) {
+        publish('security.vulnerability.found', { scanId: data.scanId, totalFindings: data.results.totalFindings, bySeverity: data.results.bySeverity });
+      }
+    });
     this.scanner.on('scanFailed', (data) => broadcast('scanFailed', data));
     this.scanner.on('scanScheduled', (data) => broadcast('scanScheduled', data));
 
@@ -917,6 +968,11 @@ class SecurityScannerService extends EventEmitter {
   async start() {
     this.port = parseInt(process.env.PORT, 10) || 3902;
     const host = process.env.HOST || '0.0.0.0';
+
+    // Connect to event bus (fire and forget)
+    connectBus().catch((err) => {
+      logger.warn(`EventBusClient connection failed (non-critical): ${err.message}`);
+    });
 
     return new Promise((resolve, reject) => {
       this.server = http.createServer(this.app);

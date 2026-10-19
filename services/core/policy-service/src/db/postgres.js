@@ -76,20 +76,31 @@ async function runMigrations() {
     .filter(f => f.endsWith('.sql'))
     .sort();
 
-  for (const file of files) {
-    const filePath = path.join(migrationsDir, file);
-    const sql = fs.readFileSync(filePath, 'utf-8');
-    try {
-      await query(sql);
-      logger.info(`Migration applied: ${file}`);
-    } catch (err) {
-      // Ignore "already exists" errors for idempotent migrations
-      if (err.code === '42P07' || err.code === '42710') {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('opendirectory-policy-migrations:'||current_database()||':'||current_schema(),0))");
+    for (const file of files) {
+      const filePath = path.join(migrationsDir, file);
+      const sql = fs.readFileSync(filePath, 'utf-8');
+      await client.query('SAVEPOINT migration_file');
+      try {
+        await client.query(sql);
+        logger.info(`Migration staged: ${file}`);
+      } catch (error) {
+        if (error.code !== '42P07' && error.code !== '42710') throw error;
+        await client.query('ROLLBACK TO SAVEPOINT migration_file');
         logger.debug(`Migration already applied: ${file}`);
-      } else {
-        throw err;
       }
+      await client.query('RELEASE SAVEPOINT migration_file');
     }
+    await client.query('COMMIT');
+    logger.info('Migration batch committed', { files: files.length });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
 }
 

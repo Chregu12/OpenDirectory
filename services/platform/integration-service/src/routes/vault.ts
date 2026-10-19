@@ -1,9 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { VaultService } from '../services/vault.service';
+import { requireAdmin } from '../middleware/oidcAuth';
 import logger from '../lib/logger';
 
 const router = Router();
 const vaultService = new VaultService();
+
+// Every route under /api/vault requires admin, not just the obvious
+// mutations (secret write, token create, policy write). This is a proxy
+// giving unrestricted access to HashiCorp Vault — even the "read" routes
+// (list/get secrets, get policies, lookup tokens, get auth methods) hand out
+// the full contents of the platform's secrets store, which is exactly the
+// P0 finding this fix closes (src/routes/vault.ts:27,47,259,350 previously
+// reachable with no auth at all). oidcAuth (mounted globally in
+// src/index.ts) has already verified the caller's JWT by the time this runs.
+router.use(requireAdmin);
 
 // Return true if error is a network/connection issue (Vault not running)
 function isUnavailable(error: any): boolean {

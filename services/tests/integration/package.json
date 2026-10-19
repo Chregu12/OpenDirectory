@@ -1,0 +1,9 @@
+{
+  "name": "@opendirectory/cross-service-integration-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real device-service ⇄ printer-service HTTP + persistence integration suite. Boots both real routers as separate processes; requires no Postgres/Redis/oidcAuth. Separate from the per-service jest unit gate.",
+  "scripts": {
+    "test:integration": "node --test cross-service.integration.test.js"
+  }
+}

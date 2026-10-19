@@ -109,7 +109,8 @@ function CopyButton({ value, label }: { value: string; label?: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors"
+      className="flex items-center gap-1 text-xs hover:text-blue-600 transition-colors"
+      style={{ color: 'var(--text-muted)' }}
     >
       {copied ? <CheckIcon className="w-3.5 h-3.5 text-green-500" /> : <ClipboardDocumentIcon className="w-3.5 h-3.5" />}
       {label && <span>{copied ? 'Kopiert!' : label}</span>}
@@ -127,7 +128,7 @@ function CodeBlock({ code, language = 'bash' }: { code: string; language?: strin
         <CopyButton value={code} label="Kopieren" />
       </div>
       <div className="absolute top-2 left-2">
-        <span className="text-xs text-gray-500 font-mono">{language}</span>
+        <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{language}</span>
       </div>
     </div>
   );
@@ -161,14 +162,14 @@ function WindowsEnrollment({ token, domain }: { token: string; domain: string })
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode A — Autopilot JSON (Zero-Touch, OOBE)</h4>
-        <p className="text-xs text-gray-500 mb-2">JSON-Datei auf FAT32-USB-Stick als <code className="font-mono">AutopilotConfigurationFile.json</code> im Root-Verzeichnis ablegen:</p>
+        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode A — Autopilot JSON (Zero-Touch, OOBE)</h4>
+        <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>JSON-Datei auf FAT32-USB-Stick als <code className="font-mono">AutopilotConfigurationFile.json</code> im Root-Verzeichnis ablegen:</p>
         <CodeBlock language="json" code={autopilotJson} />
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode B — PowerShell Agent (bestehende PCs)</h4>
-        <p className="text-xs text-gray-500 mb-2">In einer Admin-PowerShell ausführen:</p>
+        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode B — PowerShell Agent (bestehende PCs)</h4>
+        <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>In einer Admin-PowerShell ausführen:</p>
         <CodeBlock code={`# OpenDirectory Agent installieren
 $token = "${token}"
 $url = "${agentUrl}?token=$token"
@@ -177,7 +178,7 @@ Invoke-Expression (Invoke-WebRequest -Uri $url -UseBasicParsing).Content`} />
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode C — Winget / MECM / Intune Migration</h4>
+        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode C — Winget / MECM / Intune Migration</h4>
         <CodeBlock code={`winget install --id OpenDirectory.Agent --silent --enrollment-token ${token}`} />
       </div>
 
@@ -190,7 +191,7 @@ Invoke-Expression (Invoke-WebRequest -Uri $url -UseBasicParsing).Content`} />
           { label: 'Windows Hello', ok: true },
           { label: 'Autopilot Reset', ok: true },
         ].map(f => (
-          <div key={f.label} className="flex items-center gap-1.5 text-gray-600">
+          <div key={f.label} className="flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
             <CheckIcon className="w-3.5 h-3.5 text-green-500 shrink-0" />
             {f.label}
           </div>
@@ -208,19 +209,19 @@ function MacOSEnrollment({ token, domain }: { token: string; domain: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex gap-3">
-        <InformationCircleIcon className="w-5 h-5 text-gray-600 shrink-0 mt-0.5" />
+      <div className="rounded-xl p-4 flex gap-3" style={{ background: 'var(--bg-surface-raised)', border: '1px solid var(--border)' }}>
+        <InformationCircleIcon className="w-5 h-5 shrink-0 mt-0.5" style={{ color: 'var(--text-muted)' }} />
         <div className="text-sm">
-          <p className="font-semibold text-gray-800">Apple Business Manager-Style DEP</p>
-          <p className="text-gray-600 text-xs mt-1">
+          <p className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Apple Business Manager-Style DEP</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
             Wie ABM: Macs enrollen sich via MDM-Profil automatisch beim ersten Start. OpenDirectory übernimmt die Rolle des MDM-Servers — Jamf Pro, Mosyle oder Kandji nicht nötig.
           </p>
         </div>
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode A — MDM Profil (Empfohlen, wie ABM)</h4>
-        <p className="text-xs text-gray-500 mb-2">Auf dem Mac öffnen oder per URL verteilen:</p>
+        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode A — MDM Profil (Empfohlen, wie ABM)</h4>
+        <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>Auf dem Mac öffnen oder per URL verteilen:</p>
         <div className="flex items-center gap-2 bg-gray-900 rounded-lg px-4 py-3">
           <code className="text-green-400 text-xs font-mono flex-1 truncate">{profileUrl}</code>
           <CopyButton value={profileUrl} />
@@ -235,12 +236,12 @@ function MacOSEnrollment({ token, domain }: { token: string; domain: string }) {
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode B — Terminal Agent (bestehende Macs)</h4>
+        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode B — Terminal Agent (bestehende Macs)</h4>
         <CodeBlock code={`curl -fsSL "${agentUrl}" | sudo bash`} />
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode C — Homebrew (DEV/IT Macs)</h4>
+        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode C — Homebrew (DEV/IT Macs)</h4>
         <CodeBlock code={`brew install opendirectory-agent
 sudo od-agent enroll --token ${token} --server https://${domain}`} />
       </div>
@@ -257,7 +258,7 @@ sudo od-agent enroll --token ${token} --server https://${domain}`} />
           'Homebrew App Deploy',
           'AirPrint/AirScan',
         ].map(f => (
-          <div key={f} className="flex items-center gap-1.5 text-gray-600">
+          <div key={f} className="flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
             <CheckIcon className="w-3.5 h-3.5 text-green-500 shrink-0" />
             {f}
           </div>
@@ -283,12 +284,12 @@ function LinuxEnrollment({ token, domain }: { token: string; domain: string }) {
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode A — One-Line Install (alle Distros)</h4>
+        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode A — One-Line Install (alle Distros)</h4>
         <CodeBlock code={`curl -fsSL https://${domain}/api/enroll/linux/install.sh | sudo bash -s -- --token ${token}`} />
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode B — Paketmanager</h4>
+        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode B — Paketmanager</h4>
         <CodeBlock code={`# Ubuntu / Debian
 curl -fsSL https://${domain}/gpg | sudo gpg --dearmor -o /usr/share/keyrings/opendirectory.gpg
 echo "deb [signed-by=/usr/share/keyrings/opendirectory.gpg] https://${domain}/apt stable main" | \\
@@ -307,7 +308,7 @@ sudo od-agent enroll --token ${token}`} />
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode C — PXE / Kickstart / Cloud-Init (Server-Fleet)</h4>
+        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode C — PXE / Kickstart / Cloud-Init (Server-Fleet)</h4>
         <CodeBlock language="yaml" code={`# cloud-init user-data
 #cloud-config
 runcmd:
@@ -327,7 +328,7 @@ runcmd:
           'Snap / Flatpak',
           'systemd-Services',
         ].map(f => (
-          <div key={f} className="flex items-center gap-1.5 text-gray-600">
+          <div key={f} className="flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
             <CheckIcon className="w-3.5 h-3.5 text-green-500 shrink-0" />
             {f}
           </div>
@@ -357,7 +358,7 @@ function IOSEnrollment({ token, domain }: { token: string; domain: string }) {
       <div className="flex gap-4">
         <div className="flex-1 space-y-3">
           <div>
-            <h4 className="text-sm font-semibold text-gray-800 mb-1">Enrollment URL (Safari auf iPhone/iPad)</h4>
+            <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Enrollment URL (Safari auf iPhone/iPad)</h4>
             <div className="flex items-center gap-2 bg-gray-900 rounded-lg px-4 py-3">
               <code className="text-green-400 text-xs font-mono flex-1 truncate">{mdmUrl}</code>
               <CopyButton value={mdmUrl} />
@@ -365,7 +366,7 @@ function IOSEnrollment({ token, domain }: { token: string; domain: string }) {
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold text-gray-800 mb-1">Per E-Mail / Link versenden</h4>
+            <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Per E-Mail / Link versenden</h4>
             <button
               onClick={() => toast.success('Enrollment-Link wird per E-Mail versendet...')}
               className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -384,7 +385,7 @@ function IOSEnrollment({ token, domain }: { token: string; domain: string }) {
               'MDM App Deploy',
               'Remote Wipe/Lock',
             ].map(f => (
-              <div key={f} className="flex items-center gap-1.5 text-gray-600">
+              <div key={f} className="flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
                 <CheckIcon className="w-3.5 h-3.5 text-green-500 shrink-0" />
                 {f}
               </div>
@@ -394,9 +395,9 @@ function IOSEnrollment({ token, domain }: { token: string; domain: string }) {
 
         {/* QR Code Placeholder */}
         <div className="flex-shrink-0">
-          <div className="w-36 h-36 bg-gray-100 border-2 border-gray-200 rounded-xl flex flex-col items-center justify-center gap-2">
-            <QrCodeIcon className="w-16 h-16 text-gray-400" />
-            <p className="text-xs text-gray-400 text-center leading-tight">QR-Code<br />für iOS</p>
+          <div className="w-36 h-36 border-2 rounded-xl flex flex-col items-center justify-center gap-2" style={{ background: 'var(--bg-surface-raised)', borderColor: 'var(--border)' }}>
+            <QrCodeIcon className="w-16 h-16" style={{ color: 'var(--text-muted)' }} />
+            <p className="text-xs text-center leading-tight" style={{ color: 'var(--text-muted)' }}>QR-Code<br />für iOS</p>
           </div>
         </div>
       </div>
@@ -422,17 +423,17 @@ function AndroidEnrollment({ token, domain }: { token: string; domain: string })
       <div className="flex gap-4">
         <div className="flex-1 space-y-4">
           <div>
-            <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode A — QR-Code beim Erststart</h4>
-            <p className="text-xs text-gray-500">Beim "Willkommen"-Screen: 6x auf Display tippen → Kamera öffnet sich → QR-Code scannen.</p>
+            <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode A — QR-Code beim Erststart</h4>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Beim "Willkommen"-Screen: 6x auf Display tippen → Kamera öffnet sich → QR-Code scannen.</p>
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode B — NFC Provisioning</h4>
-            <p className="text-xs text-gray-500">Zwei Geräte aneinander halten beim Erststart — NFC überträgt Enrollment-Token automatisch.</p>
+            <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode B — NFC Provisioning</h4>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Zwei Geräte aneinander halten beim Erststart — NFC überträgt Enrollment-Token automatisch.</p>
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold text-gray-800 mb-1">Methode C — Enrollment Token manuell</h4>
+            <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Methode C — Enrollment Token manuell</h4>
             <CodeBlock code={`# ADB (IT-Admin, bestehende Geräte)
 adb shell am start -n com.google.android.apps.work.clouddpc/.MainActivity \\
   --es extra_provisioning_device_admin_package_checksum "<checksum>" \\
@@ -449,7 +450,7 @@ adb shell am start -n com.google.android.apps.work.clouddpc/.MainActivity \\
               'App Deploy (APK)',
               'Remote Lock/Wipe',
             ].map(f => (
-              <div key={f} className="flex items-center gap-1.5 text-gray-600">
+              <div key={f} className="flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
                 <CheckIcon className="w-3.5 h-3.5 text-green-500 shrink-0" />
                 {f}
               </div>
@@ -458,9 +459,9 @@ adb shell am start -n com.google.android.apps.work.clouddpc/.MainActivity \\
         </div>
 
         <div className="flex-shrink-0">
-          <div className="w-36 h-36 bg-gray-100 border-2 border-gray-200 rounded-xl flex flex-col items-center justify-center gap-2">
-            <QrCodeIcon className="w-16 h-16 text-gray-400" />
-            <p className="text-xs text-gray-400 text-center leading-tight">QR-Code<br />für Android</p>
+          <div className="w-36 h-36 border-2 rounded-xl flex flex-col items-center justify-center gap-2" style={{ background: 'var(--bg-surface-raised)', borderColor: 'var(--border)' }}>
+            <QrCodeIcon className="w-16 h-16" style={{ color: 'var(--text-muted)' }} />
+            <p className="text-xs text-center leading-tight" style={{ color: 'var(--text-muted)' }}>QR-Code<br />für Android</p>
           </div>
         </div>
       </div>
@@ -473,16 +474,16 @@ adb shell am start -n com.google.android.apps.work.clouddpc/.MainActivity \\
 function TokenCard({ token }: { token: EnrollmentToken }) {
   const pct = Math.round((token.uses / token.maxUses) * 100);
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
+    <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
       <div className="flex items-center justify-between mb-2">
-        <code className="text-sm font-mono font-semibold text-gray-900">{token.token}</code>
+        <code className="text-sm font-mono font-semibold" style={{ color: 'var(--text-primary)' }}>{token.token}</code>
         <CopyButton value={token.token} label="Kopieren" />
       </div>
-      <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+      <div className="flex items-center justify-between text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
         <span>Läuft ab: {token.expires}</span>
         <span>{token.uses}/{token.maxUses} verwendet</span>
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-1.5">
+      <div className="w-full rounded-full h-1.5" style={{ background: 'var(--bg-overlay)' }}>
         <div
           className={`h-1.5 rounded-full transition-all ${pct > 80 ? 'bg-red-500' : pct > 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
           style={{ width: `${pct}%` }}
@@ -568,16 +569,17 @@ export default function EnrollmentHubView() {
             <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
               <ShieldCheckIcon className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Enrollment Hub</h1>
+            <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Enrollment Hub</h1>
             <span className="bg-indigo-100 text-indigo-700 text-xs px-2.5 py-1 rounded-full font-medium">Intune + ABM Ersatz</span>
           </div>
-          <p className="text-sm text-gray-500 ml-12">
+          <p className="text-sm ml-12" style={{ color: 'var(--text-muted)' }}>
             Zero-Touch Enrollment für alle Plattformen — wie Apple Business Manager, aber für jedes OS
           </p>
         </div>
         <button
           onClick={() => toast.success('Enrollment-Bericht wird erstellt...')}
-          className="flex items-center gap-1.5 text-sm text-gray-600 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+          className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+          style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}
         >
           <ArrowPathIcon className="w-4 h-4" />
           Refresh
@@ -593,12 +595,13 @@ export default function EnrollmentHubView() {
             className={`rounded-xl border p-3 text-center transition-all ${
               selected === p.id
                 ? `${p.bg} ${p.border} ring-2 ring-offset-1 ring-current`
-                : 'bg-white border-gray-200 hover:border-gray-300'
+                : 'hover:border-gray-300'
             }`}
+            style={selected === p.id ? undefined : { background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
           >
             <div className="text-2xl mb-1">{p.icon}</div>
-            <p className="text-xl font-bold text-gray-900">{enrolledCounts[p.id] ?? 0}</p>
-            <p className="text-xs text-gray-500">{p.name}</p>
+            <p className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{enrolledCounts[p.id] ?? 0}</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{p.name}</p>
           </button>
         ))}
       </div>
@@ -607,7 +610,7 @@ export default function EnrollmentHubView() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Platform List */}
         <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Plattform auswählen</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-muted)' }}>Plattform auswählen</h3>
           {PLATFORMS.map(p => (
             <button
               key={p.id}
@@ -615,22 +618,23 @@ export default function EnrollmentHubView() {
               className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
                 selected === p.id
                   ? `${p.bg} ${p.border} ring-1 ring-current`
-                  : 'bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  : 'hover:border-gray-300 hover:bg-gray-50'
               }`}
+              style={selected === p.id ? undefined : { background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
             >
               <span className="text-xl shrink-0">{p.icon}</span>
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-semibold ${selected === p.id ? p.color : 'text-gray-800'}`}>{p.name}</p>
-                <p className="text-xs text-gray-400 truncate">{p.method}</p>
+                <p className={`text-sm font-semibold ${selected === p.id ? p.color : ''}`} style={selected === p.id ? undefined : { color: 'var(--text-secondary)' }}>{p.name}</p>
+                <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{p.method}</p>
               </div>
-              <span className="text-xs font-bold text-gray-600 shrink-0">{enrolledCounts[p.id] ?? 0}</span>
+              <span className="text-xs font-bold shrink-0" style={{ color: 'var(--text-muted)' }}>{enrolledCounts[p.id] ?? 0}</span>
             </button>
           ))}
 
           {/* Token für gewählte Plattform */}
           <div className="pt-3">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Enrollment Token</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Enrollment Token</h3>
               <button
                 onClick={() => toast.success('Neuer Token generiert')}
                 className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
@@ -653,18 +657,18 @@ export default function EnrollmentHubView() {
               <TokenCard token={{ platform: selected, token: currentTokenData.token, created: '', expires: currentTokenData.expires, uses: currentTokenData.uses, maxUses: currentTokenData.maxUses }} />
             )}
             {!tokensLoading && !tokensError && !currentTokenData && (
-              <p className="text-xs text-gray-400">Kein Token für diese Plattform gefunden.</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Kein Token für diese Plattform gefunden.</p>
             )}
           </div>
         </div>
 
         {/* Right: Enrollment Instructions */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
-          <div className={`flex items-center gap-2 mb-5 pb-4 border-b border-gray-100`}>
+        <div className="lg:col-span-2 rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <div className="flex items-center gap-2 mb-5 pb-4" style={{ borderBottom: '1px solid var(--border)' }}>
             <span className="text-2xl">{currentPlatform.icon}</span>
             <div>
-              <h3 className="text-base font-semibold text-gray-900">{currentPlatform.name} Enrollment</h3>
-              <p className="text-xs text-gray-500">{currentPlatform.description}</p>
+              <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{currentPlatform.name} Enrollment</h3>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{currentPlatform.description}</p>
             </div>
           </div>
           {renderEnrollment()}
@@ -672,31 +676,31 @@ export default function EnrollmentHubView() {
       </div>
 
       {/* Comparison vs Microsoft */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">OpenDirectory vs. Microsoft Intune + Apple ABM — Enrollment-Vergleich</h3>
+      <div className="rounded-xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>OpenDirectory vs. Microsoft Intune + Apple ABM — Enrollment-Vergleich</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-500 uppercase w-40">Plattform</th>
-                <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-500 uppercase">Microsoft Intune / ABM</th>
-                <th className="text-left py-2 text-xs font-semibold text-gray-500 uppercase">OpenDirectory</th>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left py-2 pr-4 text-xs font-semibold uppercase w-40" style={{ color: 'var(--text-muted)' }}>Plattform</th>
+                <th className="text-left py-2 pr-4 text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>Microsoft Intune / ABM</th>
+                <th className="text-left py-2 text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)' }}>OpenDirectory</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {[
                 { os: '🪟 Windows', ms: 'Autopilot (Azure-Konto erforderlich)', od: 'Autopilot-Style, kein Azure-Konto', better: true },
                 { os: ' macOS', ms: 'ABM DEP + Jamf/Mosyle (kostenpflichtig)', od: 'Eigener MDM-Server, kein Jamf nötig', better: true },
                 { os: '🐧 Linux', ms: 'Kaum Support (nur Edge-Browser)', od: 'Vollständig: Ubuntu, Fedora, RHEL, Arch', better: true },
                 { os: '📱 iOS/iPadOS', ms: 'ABM DEP + Intune MDM', od: 'APNS MDM, Supervised + User Enroll', better: false },
                 { os: '🤖 Android', ms: 'Android Zero-Touch + Intune', od: 'Zero-Touch, QR, Android Enterprise', better: false },
-              ].map(row => (
-                <tr key={row.os}>
-                  <td className="py-2.5 pr-4 font-medium text-gray-800">{row.os}</td>
-                  <td className="py-2.5 pr-4 text-gray-500 text-xs">{row.ms}</td>
+              ].map((row, idx) => (
+                <tr key={row.os} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="py-2.5 pr-4 font-medium" style={{ color: 'var(--text-secondary)' }}>{row.os}</td>
+                  <td className="py-2.5 pr-4 text-xs" style={{ color: 'var(--text-muted)' }}>{row.ms}</td>
                   <td className="py-2.5 text-xs">
-                    <span className={row.better ? 'text-green-700 font-medium' : 'text-gray-600'}>{row.od}</span>
-                    {row.better && <span className="ml-2 bg-green-100 text-green-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">Besser</span>}
+                    <span style={row.better ? { color: 'var(--success)', fontWeight: 500 } : { color: 'var(--text-muted)' }}>{row.od}</span>
+                    {row.better && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: 'var(--success-light)', color: 'var(--success)' }}>Besser</span>}
                   </td>
                 </tr>
               ))}

@@ -10,7 +10,15 @@ COPY package*.json ./
 RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
 
 # Copy application code
-COPY server.js ./
+# NOTE: server.js requires ./utils/serviceClient (device-service delegation
+# client) and ./db (Postgres persistence for users/devices/enrollment
+# tokens/setup config, with migrations/*.sql run at boot) — both must be
+# copied too, or the container crashes on boot with "Cannot find module
+# './utils/serviceClient'" / "./db". __tests__ is intentionally NOT copied
+# — dev/test-only, not needed at runtime.
+COPY server.js db.js ./
+COPY utils ./utils/
+COPY migrations ./migrations/
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \

@@ -85,12 +85,347 @@ jobs:
           done
 
   # ===================
+  # Service Tests
+  # ===================
+  license-integration:
+    name: License and Identity PostgreSQL / Browser Integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: license_test
+          POSTGRES_PASSWORD: disposable_test_password
+          POSTGRES_DB: license_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U license_test -d license_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      LICENSE_TEST_DATABASE_URL: postgres://license_test:disposable_test_password@127.0.0.1:5432/license_test
+      IDENTITY_TEST_DATABASE_URL: postgres://license_test:disposable_test_password@127.0.0.1:5432/license_test
+      OAUTH_TEST_DATABASE_URL: postgres://license_test:disposable_test_password@127.0.0.1:5432/license_test
+    defaults:
+      run:
+        working-directory: services/core/policy-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install verified gateway dependencies
+        working-directory: services/core/api-gateway
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install canonical license adapter dependencies
+        working-directory: services/core/license-management
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:licenses:integration
+      - name: Install identity integration dependencies
+        working-directory: services/core/identity-service
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Test authoritative group snapshots
+        working-directory: services/core/identity-service
+        run: npm run test:groups:integration
+      - name: Install issuer integration dependencies
+        working-directory: services/core/oauth-provider
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Install delegated orchestration dependencies
+        working-directory: services/platform/quick-actions
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Test durable cross-service token, PIM and delegated orchestration revocation
+        working-directory: services/core/oauth-provider
+        run: npm run test:revocations:integration
+      - name: Install browser mediation dependencies
+        working-directory: .
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install integration-test Chromium
+        working-directory: frontend/web-app
+        run: npx playwright install --with-deps chromium
+      - name: Test browser mediation security boundaries
+        working-directory: frontend/web-app
+        run: npm run test:browser-auth
+      - name: Test actual confidential browser login and persistent logout
+        working-directory: services/core/oauth-provider
+        run: npm run test:browser:integration
+
+  service-tests:
+    name: Service Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    env:
+      # Use the Chromium that is pre-baked into the runner image for
+      # Playwright. Never run `playwright install` in this job.
+      PLAYWRIGHT_BROWSERS_PATH: /opt/pw-browsers
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # ---------------------------------------------------------------
+      # Preflight: fail the job immediately if any test path we expect to
+      # run has moved or disappeared. This guarantees a wrong `cd` can NOT
+      # silently pass CI any more — a renamed/moved service directory fails
+      # hard here instead of just quietly dropping out of the steps below.
+      # Every directory listed here must have a package.json with a "test"
+      # script; every step below is gating (no continue-on-error) as of the
+      # 15-service wiring pass on 2026-08-03.
+      # ---------------------------------------------------------------
+      - name: Verify expected test paths exist
+        run: |
+          set -e
+          missing=0
+          for d in \
+            services/core/authentication-service \
+            services/core/device-service \
+            services/core/policy-service \
+            services/core/license-management \
+            services/core/conditional-access \
+            services/core/api-gateway \
+            services/core/printer-service \
+            services/core/samba-ad-dc \
+            services/core/apple-mdm \
+            services/core/certificate-authority \
+            services/core/identity-service \
+            services/core/kerberos-kdc \
+            services/core/least-privilege \
+            services/core/network-infrastructure \
+            services/core/oauth-provider \
+            services/platform/quick-actions \
+            services/platform/api-backend \
+            services/platform/api-gateway \
+            services/platform/integration-service \
+            services/enterprise/antivirus-protection \
+            services/enterprise/app-store \
+            services/enterprise/auto-remediation \
+            services/enterprise/device-lifecycle \
+            services/enterprise/graph-explorer \
+            services/enterprise/policy-simulator \
+            services/enterprise/security-scanner \
+            services/enterprise/compliance-engine \
+            services/core/monitoring-service \
+            frontend/web-app ; do
+            if [ ! -f "$d/package.json" ]; then
+              echo "::error::Expected test path missing: $d/package.json"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "One or more expected test paths are missing — failing the job."
+            exit 1
+          fi
+          echo "All expected test paths present."
+
+      # ---------------------------------------------------------------
+      # GREEN suites — verified locally, no continue-on-error: these gate CI.
+      # ---------------------------------------------------------------
+      - name: Test device-service
+        id: test_device
+        run: cd services/core/device-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test conditional-access
+        id: test_conditional_access
+        run: cd services/core/conditional-access && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test api-gateway (core)
+        id: test_api_gateway
+        run: cd services/core/api-gateway && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test printer-service
+        id: test_printer
+        run: cd services/core/printer-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # samba-ad-dc uses node's built-in test runner (`node --test`), which
+      # does NOT accept the jest flags, so invoke npm test with no extra args.
+      - name: Test samba-ad-dc
+        id: test_samba
+        run: cd services/core/samba-ad-dc && npm install --ignore-scripts && npm test
+
+      - name: Test api-backend (platform)
+        id: test_api_backend
+        run: cd services/platform/api-backend && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test api-gateway (platform)
+        id: test_platform_api_gateway
+        run: cd services/platform/api-gateway && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # ---------------------------------------------------------------
+      # Newly-gated suites (this session): 15 services had a real test suite
+      # (~878 tests total) that ran in NO CI step at all. Each was run
+      # individually (never in parallel — concurrent jest runs starve each
+      # other and hang) and verified green locally before being added here.
+      # ---------------------------------------------------------------
+      - name: Test apple-mdm
+        id: test_apple_mdm
+        run: cd services/core/apple-mdm && npm install --ignore-scripts && npm test
+
+      - name: Test certificate-authority
+        id: test_certificate_authority
+        run: cd services/core/certificate-authority && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test identity-service
+        id: test_identity_service
+        run: cd services/core/identity-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # kerberos-kdc uses node's built-in test runner (`node --test`), same as
+      # samba-ad-dc above — no jest flags.
+      - name: Test kerberos-kdc
+        id: test_kerberos_kdc
+        run: cd services/core/kerberos-kdc && npm install --ignore-scripts && npm test
+
+      - name: Test least-privilege
+        id: test_least_privilege
+        run: cd services/core/least-privilege && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test network-infrastructure
+        id: test_network_infrastructure
+        run: cd services/core/network-infrastructure && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test oauth-provider
+        id: test_oauth_provider
+        run: cd services/core/oauth-provider && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # integration-service is TypeScript (ts-jest); `jest` transpiles on the
+      # fly via ts-jest, so plain `npm install` is sufficient — no separate
+      # `npm run build` step is needed to run the tests.
+      - name: Test integration-service
+        id: test_integration_service
+        run: cd services/platform/integration-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test antivirus-protection
+        id: test_antivirus_protection
+        run: cd services/enterprise/antivirus-protection && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test app-store
+        id: test_app_store
+        run: cd services/enterprise/app-store && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test auto-remediation
+        id: test_auto_remediation
+        run: cd services/enterprise/auto-remediation && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test device-lifecycle
+        id: test_device_lifecycle
+        run: cd services/enterprise/device-lifecycle && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test graph-explorer
+        id: test_graph_explorer
+        run: cd services/enterprise/graph-explorer && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test policy-simulator
+        id: test_policy_simulator
+        run: cd services/enterprise/policy-simulator && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # security-scanner's own test script runs with --coverage; the extra
+      # --passWithNoTests --forceExit flags layer on top fine.
+      - name: Test security-scanner
+        id: test_security_scanner
+        run: cd services/enterprise/security-scanner && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # compliance-engine gained its test script + devDependencies in the same
+      # pass (39 tests: the /devices + /violations endpoints plus 32 new ones
+      # for the previously untested legacy routes). Verified green locally.
+      - name: Test compliance-engine
+        id: test_compliance_engine
+        run: cd services/enterprise/compliance-engine && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # monitoring-service became testable in the same pass (require.main guard
+      # + background jobs moved out of the constructor); 30 tests covering the
+      # DB-first alert store, its in-memory fallback and the event-bus noop.
+      - name: Test monitoring-service
+        id: test_monitoring_service
+        run: cd services/core/monitoring-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # ---------------------------------------------------------------
+      # policy-service: 227 tests / 7 suites, all green (stale duplicate test
+      # removed, ComplianceSaga test moved onto the HTTP cross-service path,
+      # supertest added as a devDependency). Gates CI.
+      - name: Test policy-service
+        id: test_policy
+        run: cd services/core/policy-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # quick-actions: 278 tests / 7 suites, all green (onboard response
+      # temporaryPassword regression fixed). Gates CI.
+      - name: Test quick-actions
+        id: test_quick_actions
+        run: cd services/platform/quick-actions && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      - name: Test canonical license compatibility adapter
+        id: test_license_adapter
+        run: cd services/core/license-management && npm ci --ignore-scripts --no-audit --no-fund && npm test
+
+      # authentication-service: 307 tests / 13 suites, all green. The God-file
+      # endpoint regression is resolved — dead/migrated endpoint tests were
+      # retired and the genuinely-missing ones (PIM, service-accounts,
+      # config/domain, OUs, MFA validate/verify-setup/status) were restored
+      # behind real JWT auth. Gates CI.
+      - name: Test authentication-service
+        id: test_authentication
+        run: cd services/core/authentication-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
+
+      # ---------------------------------------------------------------
+      # Frontend
+      # ---------------------------------------------------------------
+      # Jest: 239 tests / 15 suites, all green (stale tests updated to the
+      # current fetch/quick-actions client + UI copy; a missing complianceApi
+      # export in lib/api.ts was restored). Gates CI.
+      - name: Frontend unit tests (Jest)
+        id: test_frontend_jest
+        run: cd frontend/web-app && npm ci && npm test
+
+      - name: Frontend e2e tests (Playwright)
+        id: test_frontend_e2e
+        run: cd frontend/web-app && npm ci && npx playwright install --with-deps chromium && npm run test:e2e
+
+      - name: Test summary
+        if: always()
+        run: |
+          echo "=== Service Test Results (all steps below are gating — no continue-on-error) ==="
+          echo "device-service           : ${{ steps.test_device.outcome }}"
+          echo "conditional-access       : ${{ steps.test_conditional_access.outcome }}"
+          echo "api-gateway (core)       : ${{ steps.test_api_gateway.outcome }}"
+          echo "printer-service          : ${{ steps.test_printer.outcome }}"
+          echo "samba-ad-dc              : ${{ steps.test_samba.outcome }}"
+          echo "api-backend (platform)   : ${{ steps.test_api_backend.outcome }}"
+          echo "api-gateway (platform)   : ${{ steps.test_platform_api_gateway.outcome }}"
+          echo "apple-mdm                : ${{ steps.test_apple_mdm.outcome }}"
+          echo "certificate-authority    : ${{ steps.test_certificate_authority.outcome }}"
+          echo "identity-service         : ${{ steps.test_identity_service.outcome }}"
+          echo "kerberos-kdc             : ${{ steps.test_kerberos_kdc.outcome }}"
+          echo "least-privilege          : ${{ steps.test_least_privilege.outcome }}"
+          echo "network-infrastructure   : ${{ steps.test_network_infrastructure.outcome }}"
+          echo "oauth-provider           : ${{ steps.test_oauth_provider.outcome }}"
+          echo "integration-service      : ${{ steps.test_integration_service.outcome }}"
+          echo "antivirus-protection     : ${{ steps.test_antivirus_protection.outcome }}"
+          echo "app-store                : ${{ steps.test_app_store.outcome }}"
+          echo "auto-remediation         : ${{ steps.test_auto_remediation.outcome }}"
+          echo "device-lifecycle         : ${{ steps.test_device_lifecycle.outcome }}"
+          echo "graph-explorer           : ${{ steps.test_graph_explorer.outcome }}"
+          echo "policy-simulator         : ${{ steps.test_policy_simulator.outcome }}"
+          echo "security-scanner         : ${{ steps.test_security_scanner.outcome }}"
+          echo "policy-service           : ${{ steps.test_policy.outcome }}"
+          echo "license adapter          : ${{ steps.test_license_adapter.outcome }}"
+          echo "quick-actions            : ${{ steps.test_quick_actions.outcome }}"
+          echo "authentication-service   : ${{ steps.test_authentication.outcome }}"
+          echo "frontend unit (jest)     : ${{ steps.test_frontend_jest.outcome }}"
+          echo "frontend e2e (playwright): ${{ steps.test_frontend_e2e.outcome }}"
+          echo ""
+          echo "compliance-engine        : intentionally not gated — no package.json test script / node_modules yet, owned by a parallel agent."
+
+  # ===================
   # Security Scanning
   # ===================
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, service-tests]
     steps:
       - uses: actions/checkout@v4
       

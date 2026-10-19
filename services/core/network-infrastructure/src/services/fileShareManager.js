@@ -638,6 +638,16 @@ class FileShareManager extends EventEmitter {
   isHealthy() {
     return this.shares.size >= 0;
   }
+
+  // Added alongside the auth fix: src/index.js's circuit breaker setup does
+  // `new CircuitBreaker(this.fileShareManager.performOperation.bind(...), ...)`
+  // unconditionally at construction time; this method didn't exist, so the
+  // service could never even be instantiated. The resulting circuit breaker
+  // is never actually `.fire()`d anywhere today, so this only needs to
+  // exist, not do anything meaningful yet.
+  async performOperation(...args) {
+    return { ok: true, service: 'fileShare', args };
+  }
 }
 
 module.exports = FileShareManager;

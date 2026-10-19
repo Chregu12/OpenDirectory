@@ -1103,12 +1103,91 @@ class ActiveDirectoryService extends EventEmitter {
     };
   }
 
+  // ─── SSSD Config Delivery ──────────────────────────────────────────────────
+
+  /**
+   * Deliver an SSSD configuration to a Linux host via SSH and restart sssd.
+   *
+   * The method:
+   *   1. Validates that hostname and sshKey are provided.
+   *   2. Writes the SSH private key to a temporary file.
+   *   3. Pipes sssdConfig over SSH into /etc/sssd/sssd.conf on the remote host.
+   *   4. Restarts the sssd service via systemctl.
+   *   5. Cleans up the temporary key file.
+   *
+   * @param {string} hostname    Reachable IP or DNS name of the target Linux host
+   * @param {string} sshKey      PEM-encoded SSH private key (used as identity file)
+   * @param {string} sssdConfig  Full text content of sssd.conf to deploy
+   * @returns {{ success: boolean, output?: string, error?: string }}
+   */
+  async deliverSSSDConfig(hostname, sshKey, sssdConfig) {
+    if (!hostname || !sshKey) {
+      return { success: false, error: 'SSH credentials not configured' };
+    }
+
+    const { execFile } = require('child_process');
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+
+    // Write key to a temp file with restricted permissions
+    const keyPath = path.join(os.tmpdir(), `od-sssd-key-${Date.now()}`);
+    try {
+      fs.writeFileSync(keyPath, sshKey, { mode: 0o600 });
+    } catch (err) {
+      return { success: false, error: `Failed to write SSH key: ${err.message}` };
+    }
+
+    const sshBase = [
+      '-i', keyPath,
+      '-o', 'StrictHostKeyChecking=no',
+      '-o', 'BatchMode=yes',
+      `root@${hostname}`,
+    ];
+
+    /**
+     * Helper: run ssh with a remote command, optionally piping stdin.
+     * @returns {Promise<string>} combined stdout
+     */
+    const runSSH = (remoteCmd, stdin) =>
+      new Promise((resolve, reject) => {
+        const child = execFile('ssh', [...sshBase, remoteCmd], { timeout: 60_000 }, (err, stdout, stderr) => {
+          if (err) {
+            reject(new Error(stderr || err.message));
+          } else {
+            resolve(stdout);
+          }
+        });
+        if (stdin !== undefined && child.stdin) {
+          child.stdin.write(stdin);
+          child.stdin.end();
+        }
+      });
+
+    try {
+      // 1. Deploy the config
+      const deployOut = await runSSH('cat > /etc/sssd/sssd.conf', sssdConfig);
+
+      // 2. Restart sssd
+      const restartOut = await runSSH('systemctl restart sssd');
+
+      const output = [deployOut, restartOut].filter(Boolean).join('\n').trim();
+      logger.info(`SSSD config delivered to ${hostname}`);
+      return { success: true, output };
+    } catch (err) {
+      logger.error(`SSSD delivery failed for ${hostname}: ${err.message}`);
+      return { success: false, error: err.message };
+    } finally {
+      try { fs.unlinkSync(keyPath); } catch { /* best-effort cleanup */ }
+    }
+  }
+
   async stop() {
     logger.info('🛑 Stopping Active Directory Service...');
-    
+
     // Clean up resources, close connections, etc.
     this.domainControllers.clear();
-    
+
     logger.info('✅ Active Directory Service stopped');
   }
 }

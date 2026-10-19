@@ -13,7 +13,7 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-const DEVICE_SERVICE_URL = process.env.DEVICE_SERVICE_URL || 'http://device-service:3903';
+const DEVICE_SERVICE_URL = process.env.DEVICE_SERVICE_URL || 'http://device-service:3003';
 const IDENTITY_SERVICE_URL = process.env.IDENTITY_SERVICE_URL || 'http://authentication-service:3001';
 const DIRECTORY_SERVICE_URL = process.env.DIRECTORY_SERVICE_URL || 'http://enterprise-directory:3002';
 
