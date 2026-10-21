@@ -24,6 +24,34 @@ async function creation() {
   render(<AppRegistrationsView />); const user = userEvent.setup(); await user.click(await screen.findByRole('button', { name: 'Anwendung registrieren' }));
   await user.type(screen.getByLabelText('Name'), 'New canonical app'); await user.type(screen.getByLabelText('Redirect-URIs, eine pro Zeile'), 'https://new-app.test/callback'); return user;
 }
+test('the direct app-account flow needs only a name and leaves identity scopes and redirect URIs empty', async () => {
+  render(<AppRegistrationsView />); const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'App-Konto erstellen' }));
+  expect(screen.getByRole('dialog', { name: 'Neues App-Konto' })).toBeInTheDocument();
+  expect(screen.queryByLabelText('Redirect-URIs, eine pro Zeile')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Scopes, durch Leerzeichen getrennt')).toHaveValue('');
+  await user.type(screen.getByLabelText('Name'), 'Nightly job');
+  await user.click(screen.getByRole('button', { name: 'Verbindlich speichern' }));
+  await screen.findByTestId('client-secret');
+  expect(api.post).toHaveBeenCalledWith('/api/clients', { name: 'Nightly job', redirectUris: [], scopes: [], grantTypes: ['client_credentials'], publicClient: false, enabled: false });
+  expect(screen.getByText(/node scripts\/od.mjs check/)).toBeInTheDocument();
+  expect(api.put).not.toHaveBeenCalled();
+});
+test('switching a web registration to an app account clears inappropriate login scopes', async () => {
+  const user = await creation();
+  await user.selectOptions(screen.getByLabelText('Client-Typ'), 'workload');
+  expect(screen.getByLabelText('Scopes, durch Leerzeichen getrennt')).toHaveValue('');
+  expect(screen.queryByLabelText('Redirect-URIs, eine pro Zeile')).not.toBeInTheDocument();
+});
+test('editing an existing app account cannot reintroduce default login scopes', async () => {
+  rows = [entry({ scopes: [], grantTypes: ['client_credentials'], redirectUris: [] })];
+  render(<AppRegistrationsView />); const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Konfiguration bearbeiten' }));
+  expect(screen.getByLabelText('Scopes, durch Leerzeichen getrennt')).toHaveValue('');
+  await user.click(screen.getByRole('button', { name: 'Verbindlich speichern' }));
+  await screen.findByText(/Konfiguration gespeichert/);
+  expect((api.put as jest.Mock).mock.calls[0][1].scopes).toEqual([]);
+});
 test('ordinary users do not read a registration list or see sample administrators', async () => {
   permissions = []; render(<AppRegistrationsView />); await screen.findByText('Keine Leseberechtigung für das Anwendungsregister.');
   expect(api.get).toHaveBeenCalledTimes(1); expect(screen.queryByText('Grafana Dashboard')).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Anwendung registrieren' })).not.toBeInTheDocument();

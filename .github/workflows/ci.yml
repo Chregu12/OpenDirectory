@@ -230,6 +230,9 @@ jobs:
         id: test_device
         run: cd services/core/device-service && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit
 
+      - name: Test app-account automation client
+        run: npm run test:automation-client
+
       - name: Test conditional-access
         id: test_conditional_access
         run: cd services/core/conditional-access && npm install --ignore-scripts && npm test -- --passWithNoTests --forceExit

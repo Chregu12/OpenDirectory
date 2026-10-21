@@ -93,6 +93,7 @@ run_suite() {
   fi
 }
 
+npm run test:automation-client || failed=1
 for s in "${GATING[@]}"; do run_suite "$s" 1; done
 
 if [ "${INCLUDE_NON_GATING:-0}" = "1" ]; then

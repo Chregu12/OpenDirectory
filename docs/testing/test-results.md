@@ -1,5 +1,14 @@
 # Testresultate: Neuausrichtung auf OpenDirectory Business
 
+## 21. Oktober 2026: Direkte App-Konten und Automations-CLI
+
+Erster abgeschlossener Teil: direkter App-Konto-Einstieg ohne Redirect und Standardrechte sowie eine mitgelieferte Node-CLI für Erstellung, getrennte Aktivierung, Introspection, Rotation, Deaktivierung und bedingte API-Aufrufe. Bestehende Register-, Scope-, Versions- und Receiver-Grenzen bleiben erhalten. Kein neuer Mail-Connector, keine Postfach-Provisionierung und kein serverseitiger Skript-Scheduler; die Anbieterfrage ist noch offen.
+
+Acht Node-Client-Regressionen und 23 AppRegistrationsView-Definitionen bestanden; TypeScript-Prüfung ebenfalls Exit 0. Ein zusätzlicher OAuth-Test startet die tatsächlich ausgelieferte CLI als separaten Prozess gegen den tatsächlichen lokalen HTTP-Service und prüft den vollständigen Kontolebenszyklus einschliesslich verweigerter Administration und ungültigem altem Secret. Der OAuth-Gesamtlauf umfasst damit 475 erfolgreiche Definitionen in 19 Suiten. Der Authentifizierungs-Upstream und die Datenbank dieses HTTP-Tests verwenden die bestehenden Demo-/Testgrenzen; dies ist keine produktive Tenant- oder Mailabnahme.
+
+Die acht eigenständigen Client-Fälle sind im Root-Runner und in CI eingebunden. Ein versehentlich gestarteter voller Repository-Runner wurde unmittelbar beendet; die dabei geänderte fremde Lockdatei wurde auf ihren vorherigen Stand zurückgesetzt. Dieser Lauf zählt nicht als bestandene Gesamtsuite. Es wurden keine echten App-Konten, externen Postfächer oder E-Mail-Sendungen angelegt beziehungsweise ausgelöst.
+
+
 ## 21. Oktober 2026: ADE-Korrektur, OIDC-Adapter und SAML-IdP-Start
 
 Die DEP-Endpunkte behaupten ohne Apple-Verbindung keine Geräte oder erfolgreiche Zuweisung mehr. Der zentrale OIDC-Adapter wurde bis zur signierten lokalen Token-Ausgabe mit echtem lokalem Discovery-/Token-/JWKS-Server geprüft. SAML-Response und Assertion besitzen überprüfbare XML-Signaturen und ein echtes X.509-Zertifikat. Authentifizierte IdP-initiierte HTTP-POST-Starts sind implementiert; SP-initiierte Requests, SLO und eine Abnahme gegen externe Kundentenants sind nicht enthalten.

@@ -77,3 +77,7 @@ services:
 Publish `/oauth/federation/*` and `/saml/*` at the configured HTTPS issuer alongside its existing OAuth endpoints. Those paths must be reachable without an additional gateway login challenge. The SAML launch itself requires a bearer token. Existing protected signing-key, MFA-key, identity and database configuration remains required.
 
 Run `npm test -- --runInBand` here. Adapter tests run a real local discovery/token/JWKS server, finish the central authorization-code flow, reject invalid tokens and replay, and check SAML signatures with an independent XML signature verifier. Live external IdP/SAML tenant acceptance still requires your own configuration.
+
+## App accounts and scripts
+
+Use **App-Konto erstellen** in the OAuth/OIDC UI for a confidential workload with no redirects or default scopes. The [app-account automation guide](../../../docs/features/app-accounts-automation.md) describes the shipped `scripts/od.mjs` CLI, protected secrets, separate activation and existing permission boundaries. No additional mail-provider connection or tenant-wide automation permission is implicit in app registration.

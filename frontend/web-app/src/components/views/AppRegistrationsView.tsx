@@ -29,10 +29,10 @@ export default function AppRegistrationsView() {
     }).catch(failure => { if (active) { setError(clientError(failure)); setClients([]); } }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [attempt]);
-  function open(client: RegisteredClient | null) {
+  function open(client: RegisteredClient | null, mode = 'web') {
     setMutationError(''); setNotice('');
-    setForm({ target: client, name: client?.name || '', redirects: client?.redirectUris.join('\n') || '', scopes: client?.scopes.join(' ') || 'openid profile email',
-      mode: client && !client.grantTypes.includes('authorization_code') ? 'workload' : client?.publicClient ? 'public' : 'web' });
+    setForm({ target: client, name: client?.name || '', redirects: client?.redirectUris.join('\n') || '', scopes: client ? client.scopes.join(' ') : mode === 'workload' ? '' : 'openid profile email',
+      mode: client && !client.grantTypes.includes('authorization_code') ? 'workload' : client?.publicClient ? 'public' : mode });
   }
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (!form || busy || mutationError || !can(form.target ? 'applications.update' : 'applications.create')) return;
@@ -58,7 +58,7 @@ export default function AppRegistrationsView() {
   }
   const begin = (client: RegisteredClient, kind: 'enabled' | 'rotate' | 'delete') => { setMutationError(''); setAction({ client, kind }); };
   return <section className="space-y-4 text-[var(--text-primary)]" aria-label="Anwendungsregistrierungen">
-    <header><h2 className="text-lg font-semibold">Anwendungsregistrierungen</h2><p className="text-sm">Kanonische OAuth/OIDC-Clients. Keine AD/Kerberos-Servicekonten oder Softwareinstallationen.</p></header>
+    <header><h2 className="text-lg font-semibold">Anwendungsregistrierungen</h2><p className="text-sm">App-Konten für Skripte und Automationen sowie OAuth/OIDC-Anwendungen mit Benutzeranmeldung.</p></header>
     {error && <p role="alert">{error} <button className={buttonClass} onClick={reload}>Neu laden</button></p>}
     {!access && !error && <p role="status">Berechtigungen werden geprüft …</p>}
     {access?.demoMode && <p role="alert">Expliziter Entwicklungsspeicher. Keine persistente Anwendungsautorität.</p>}
@@ -67,9 +67,10 @@ export default function AppRegistrationsView() {
     {secret && <aside className="space-y-2 rounded border border-amber-500 p-4" aria-label="Einmalige Zugangsdaten">
       <h3 className="font-semibold">{secret.client.name}: einmalige Zugangsdaten</h3><p>Client-ID: <code>{secret.client.clientId}</code></p>
       {secret.clientSecret ? <><p>Jetzt sicher übernehmen. Das Geheimnis wird nicht erneut lesbar gespeichert.</p><code className="block break-all" data-testid="client-secret">{secret.clientSecret}</code></> : <p>Öffentlicher Client: kein Geheimnis, S256 PKCE erforderlich.</p>}
+      {secret.client.grantTypes.includes('client_credentials') && <p>Im Secret-Store als OPENDIRECTORY_CLIENT_SECRET hinterlegen. Client-ID über OPENDIRECTORY_CLIENT_ID setzen; nach separater Aktivierung mit <code>node scripts/od.mjs check</code> prüfen.</p>}
       <button className={buttonClass} onClick={() => setSecret(null)}>Zugangsdaten schließen</button>
     </aside>}
-    <div className="flex gap-2">{can('applications.create') && <button className={buttonClass} onClick={() => open(null)}>Anwendung registrieren</button>}{access && <button className={buttonClass} onClick={reload}>Register neu laden</button>}</div>
+    <div className="flex gap-2">{can('applications.create') && <><button className={buttonClass} onClick={() => open(null, 'workload')}>App-Konto erstellen</button><button className={buttonClass} onClick={() => open(null)}>Anwendung registrieren</button></>}{access && <button className={buttonClass} onClick={reload}>Register neu laden</button>}</div>
     {truncated && <p role="alert">Nur die ersten 100 Registrierungen werden angezeigt. Kein vollständiger Bestandsbericht.</p>}
     {loading && access && <p role="status">Register wird geprüft …</p>}
     {!error && !loading && access && can('applications.read') && <div className="space-y-3">{clients.length === 0 ? <p>Keine Registrierungen bestätigt.</p> : clients.map(client => <article key={client.clientId} className="space-y-2 rounded border border-[var(--border)] p-4" aria-label={client.name}>
@@ -84,10 +85,11 @@ export default function AppRegistrationsView() {
     </article>)}</div>}
     {access && <AppAssignmentsView access={access} selectedClientId={assignmentClient} />}
     {access && <AppAuthenticationView access={access} selectedClientId={authenticationClient} />}
-    {form && <form onSubmit={save} role="dialog" aria-label={form.target ? 'Anwendung bearbeiten' : 'Neue Anwendung'} className="space-y-3 rounded border border-[var(--border)] p-4">
-      <h3>{form.target ? 'Anwendung bearbeiten' : 'Neue Anwendung'}</h3><p>Jede Konfigurationsänderung beendet bestehende Client-Generationen. Neue Registrierungen starten deaktiviert.</p>
+    {form && <form onSubmit={save} role="dialog" aria-label={form.target ? 'Anwendung bearbeiten' : form.mode === 'workload' ? 'Neues App-Konto' : 'Neue Anwendung'} className="space-y-3 rounded border border-[var(--border)] p-4">
+      <h3>{form.target ? 'Anwendung bearbeiten' : form.mode === 'workload' ? 'Neues App-Konto' : 'Neue Anwendung'}</h3><p>Jede Konfigurationsänderung beendet bestehende Client-Generationen. Neue Registrierungen starten deaktiviert.</p>
+      {form.mode === 'workload' && <p>App-Konto mit Client-ID und einmaligem Secret, ohne Redirect-URL oder Benutzeranmeldung. Nur ausdrücklich unterstützte App-Berechtigungen erlauben API-Aktionen. Mailanbieter und Microsoft Graph benötigen eine eigene Verbindung.</p>}
       <label className="block">Name<input className={fieldClass} required maxLength={255} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>
-      {!form.target && <div><label className="block" htmlFor="registered-client-type">Client-Typ</label><select id="registered-client-type" className={fieldClass} value={form.mode} onChange={event => setForm({ ...form, mode: event.target.value })}><option value="web">Vertrauliche Webanwendung</option><option value="public">Öffentlich, S256 PKCE</option><option value="workload">Workload, Client Credentials</option></select></div>}
+      {!form.target && <div><label className="block" htmlFor="registered-client-type">Client-Typ</label><select id="registered-client-type" className={fieldClass} value={form.mode} onChange={event => setForm({ ...form, mode: event.target.value, scopes: event.target.value === 'workload' ? '' : form.scopes })}><option value="web">Vertrauliche Webanwendung</option><option value="public">Öffentlich, S256 PKCE</option><option value="workload">App-Konto, Client Credentials</option></select></div>}
       {form.mode !== 'workload' && <label className="block">Redirect-URIs, eine pro Zeile<textarea className={fieldClass} required value={form.redirects} onChange={event => setForm({ ...form, redirects: event.target.value })} /></label>}
       <label className="block">Scopes, durch Leerzeichen getrennt<input className={fieldClass} value={form.scopes} onChange={event => setForm({ ...form, scopes: event.target.value })} /></label>
       {!can('applications.permissions.assign') && <p>Nur Identitäts- und eigene Sitzungs-Scopes. Keine Plattformrollen, administrativen Scopes oder Einwilligungsdelegation.</p>}

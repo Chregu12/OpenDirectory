@@ -93,6 +93,35 @@ async function administrator() {
   return (await tokenPair('root', 'openid roles')).access_token;
 }
 
+test('the shipped CLI creates, separately activates, checks, rotates and disables an actual app account without human privileges', async () => {
+  const path = require('path');
+  const execFile = require('util').promisify(require('child_process').execFile);
+  const admin = await administrator();
+  const origin = 'http://127.0.0.1:' + testServer.address().port;
+  const run = async (args, credentials = {}) => {
+    const result = await execFile(process.execPath, [path.resolve(__dirname, '../../../../../scripts/od.mjs'), ...args], { env: { ...process.env,
+      OPENDIRECTORY_ISSUER: origin, OPENDIRECTORY_API_URL: origin, OPENDIRECTORY_ADMIN_ACCESS_TOKEN: admin, OPENDIRECTORY_SCOPES: '',
+      OPENDIRECTORY_CLIENT_ID: '', OPENDIRECTORY_CLIENT_SECRET: '', ...credentials } });
+    return JSON.parse(result.stdout);
+  };
+  const created = await run(['app', 'create', 'CLI automation']);
+  expect(created).toMatchObject({ enabled: false, publicClient: false, grantTypes: ['client_credentials'], scopes: [], redirectUris: [] });
+  const credentials = { OPENDIRECTORY_CLIENT_ID: created.clientId, OPENDIRECTORY_CLIENT_SECRET: created.clientSecret };
+  await expect(run(['check'], credentials)).rejects.toMatchObject({ code: 1 });
+  expect((await run(['app', 'enable', created.clientId])).enabled).toBe(true);
+  const checked = await run(['check'], credentials);
+  expect(checked).toMatchObject({ active: true, actor_type: 'application', client_id: created.clientId, scope: '' });
+  expect(checked.roles).toBeUndefined();
+  await expect(run(['request', 'GET', '/api/clients'], credentials)).rejects.toMatchObject({ code: 1 });
+  const rotated = await run(['app', 'rotate', created.clientId]);
+  expect(rotated.clientSecret).not.toBe(created.clientSecret);
+  await expect(run(['check'], credentials)).rejects.toMatchObject({ code: 1 });
+  const replacement = { ...credentials, OPENDIRECTORY_CLIENT_SECRET: rotated.clientSecret };
+  expect((await run(['check'], replacement)).active).toBe(true);
+  expect((await run(['app', 'disable', created.clientId])).enabled).toBe(false);
+  await expect(run(['check'], replacement)).rejects.toMatchObject({ code: 1 });
+}, 20000);
+
 async function createClient(metadata) {
   const token = await administrator();
   const response = await request(app).post('/api/clients').set('Authorization', `Bearer ${token}`).send({

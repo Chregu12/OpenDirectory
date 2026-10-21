@@ -144,95 +144,13 @@ The `oauth-provider` service implements:
 
 ---
 
-## 5. Service Principals (App Identities)
+## 5. App accounts and automation
 
-A **Service Principal** is a non-human identity for an application or service. It allows automated processes to authenticate to OpenDirectory APIs without using a user account.
+Use **Identity Provider → OAuth2/OIDC → App-Konto erstellen** for a confidential `client_credentials` account. A name is enough to create it with no redirects or default permissions, initially disabled. Store the one-time secret, then activate it separately. Existing application administration permissions and version checks apply.
 
-### What a Service Principal provides
+The [app-account CLI and scripting guide](app-accounts-automation.md) documents creation, activation, access checking, secret rotation, disablement and conditional API requests. It includes Bash/PowerShell usage and an importable Node.js client. Workload identities receive only explicitly supported app permissions; human MFA and tenant/resource ownership remain enforced by each receiver. App registration does not provision a mailbox or grant Microsoft Graph access.
 
-- **ClientID** — unique identifier (UUID)
-- **ClientSecret** — a high-entropy secret (60+ characters) for the client credentials flow
-- **Kerberos SPN** — a Service Principal Name registered in Samba AD DC so the app can acquire Kerberos tickets
-- **Permissions** — a set of assigned API permissions scoped to the principal
-
-### Create a Service Principal
-
-The `quick-actions` service creates a Service Principal in a single orchestrated operation:
-
-```bash
-curl -X POST http://quick-actions:3950/api/service-principals \
-  -H "Content-Type: application/json" \
-  -d '{
-    "appName": "backup-agent",
-    "description": "Automated backup service",
-    "permissions": ["read-users", "read-devices", "audit-logs"],
-    "createdBy": "it-admin"
-  }'
-```
-
-**What happens under the hood:**
-1. A user account is created in the authentication-service (representing the SP).
-2. An AD computer/service account is created in Samba AD DC.
-3. A Kerberos SPN is registered (`backup-agent/opendirectory.corp.example.com`).
-4. The requested permissions are assigned via the PIM permissions API.
-
-**Response:**
-```json
-{
-  "clientId": "550e8400-e29b-41d4-a716-446655440000",
-  "clientSecret": "eyJhbGciOiJIUzI1NiJ9...",
-  "spn": "backup-agent/opendirectory.corp.example.com",
-  "permissions": ["read-users", "read-devices", "audit-logs"],
-  "createdAt": "2026-06-07T10:00:00Z"
-}
-```
-
-The ClientSecret is only shown once. Store it immediately (e.g. in a `.env` file or secrets manager). The UI provides a masked view with a reveal button and a `.env` download button.
-
-### Using a Service Principal
-
-```bash
-# Client credentials flow — obtain an access token
-curl -X POST http://oauth-provider/oauth/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=client_credentials&client_id=<clientId>&client_secret=<clientSecret>&scope=api"
-
-# Use the token in API calls
-curl http://authentication-service:3001/api/auth/users \
-  -H "Authorization: Bearer <accessToken>"
-```
-
-### Available permissions
-
-| Permission | Access granted |
-|------------|---------------|
-| `read-users` | Read user accounts, attributes, group membership |
-| `read-devices` | Read device inventory and compliance status |
-| `write-policies` | Create and modify Group Policy objects |
-| `admin-access` | Full administrative access (use sparingly) |
-| `api-gateway` | Access via the external API gateway |
-| `audit-logs` | Read audit log entries |
-
-### Rotate a Service Principal secret
-
-```bash
-curl -X POST http://quick-actions:3950/api/service-principals/<clientId>/rotate-secret
-# Returns: clientId, newClientSecret, rotatedAt
-# The old secret is invalidated immediately.
-```
-
-### List and delete Service Principals
-
-```bash
-# List all service principals
-curl http://quick-actions:3950/api/service-principals
-
-# Get details for a specific principal
-curl http://quick-actions:3950/api/service-principals/<clientId>
-
-# Delete a service principal (removes AD account, SPN, and permissions)
-curl -X DELETE http://quick-actions:3950/api/service-principals/<clientId>
-```
+The older quick-actions AD/Kerberos service-principal orchestration is a separate legacy integration. It is not the authoritative OAuth app-account creation flow. Its illustrative permission labels are not equivalent to granted OAuth API rights.
 
 ---
 

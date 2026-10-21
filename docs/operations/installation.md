@@ -148,3 +148,7 @@ Vor Deployment die tatsächlichen Identity-/Device-/Policy-Daten sowie alle ursp
 ## Externe OIDC-Anmeldung und SAML
 
 Der zentrale OAuth-Dienst unterstützt den [OIDC-Adapter und authentifizierte SAML-IdP-Starts](../../services/core/oauth-provider/README.md). Dort stehen die geschützten Konfigurationsdateien, exakten Callback-URLs, Zertifikate, Compose-Mounts und Routingvoraussetzungen. Ohne Konfiguration bleiben die bestehenden lokalen Anmeldewege verfügbar. Alte `/api/auth/sso/*`-Callbacks sind mit HTTP 410 stillgelegt. Apple ADE benötigt eine separate, weiterhin nicht abgenommene Anbindung; siehe [Einrichtungsleitfaden](../integrations/apple-automated-device-enrollment.md).
+
+## CLI für App-Konten
+
+Node.js 20+ und `node scripts/od.mjs --help` genügen. Es werden keine neuen Server-Abhängigkeiten eingeführt. Die CLI benötigt die tatsächliche HTTPS-Origin des Issuers und gegebenenfalls eine separate API-Origin; Zugangsdaten kommen aus der Secret-Verwaltung des Runners. App-Verwaltung und Automationsläufe verwenden ausdrücklich verschiedene Identitäten. Einrichtung und Grenzen stehen im [App-Konto-Leitfaden](../features/app-accounts-automation.md).
