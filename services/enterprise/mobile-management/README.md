@@ -2,6 +2,8 @@
 
 A comprehensive Mobile Device Management (MDM), Mobile Application Management (MAM), and Mobile Threat Defense (MTD) solution for enterprise environments.
 
+Current acceptance boundary: the DEP/VPP descriptions below document legacy/prototype services, not an accepted Apple integration. The active [Apple MDM service](../../core/apple-mdm/README.md) has no connected ABM/ASM ADE connector and reports `503 apple_ade_not_configured`. See the [ADE guide](../../../docs/integrations/apple-automated-device-enrollment.md) and the separate [SAML/OIDC configuration](../../core/oauth-provider/README.md).
+
 ## Overview
 
 The OpenDirectory Mobile Management Suite provides enterprise-grade mobile device security and management capabilities through four integrated services:
@@ -572,11 +574,11 @@ npm run config-validate
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](../../../LICENSE) file for details.
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! Please see [CONTRIBUTING.md](../../../CONTRIBUTING.md) for guidelines.
 
 ---
 

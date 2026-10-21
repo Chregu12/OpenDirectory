@@ -370,3 +370,20 @@ describe('admin-only /api/mdm mutations: unauth -> 401, non-admin -> 403, admin 
     });
   }
 });
+
+describe('ADE reports missing integration honestly', () => {
+  test('does not return simulated Apple inventory', async () => {
+    const response = await request(app).get('/api/mdm/dep/devices').set(bearer(userToken));
+    assert.equal(response.status, 503);
+    assert.equal(response.body.error, 'apple_ade_not_configured');
+    assert.equal(response.body.devices, undefined);
+  });
+  test('does not claim a successful assignment or enrollment', async () => {
+    const response = await request(app).post('/api/mdm/dep/assign').set(bearer(adminToken))
+      .send({ serialNumbers: ['C02XG1ZHJGH7'], blueprintId: 'bp-1' });
+    assert.equal(response.status, 503);
+    assert.equal(response.body.error, 'apple_ade_not_configured');
+    assert.equal(response.body.assigned, undefined);
+    assert.equal(response.body.results, undefined);
+  });
+});

@@ -67,13 +67,6 @@ const blueprintAppliesTotal = new promClient.Counter({
   registers: [register],
 });
 
-const depEnrollmentsTotal = new promClient.Counter({
-  name: 'mdm_dep_enrollments_total',
-  help: 'Total DEP device assignments',
-  labelNames: ['result'],
-  registers: [register],
-});
-
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const PORT = parseInt(process.env.APPLE_MDM_PORT || process.env.PORT || '3014', 10);
@@ -175,22 +168,7 @@ const memDevices = new Map();          // udid -> device object
 const memCommands = new Map();         // id   -> command object
 const memBlueprintStatus = new Map();  // `${blueprintId}:${deviceId}` -> status object
 const memProfiles = new Map();         // profileId -> profile object
-const memDepDevices = new Map();       // serialNumber -> dep device object
 const memScripts = new Map();          // `${blueprintId}:${deviceId}` -> scripts array
-
-// ─── Seed simulated DEP devices ──────────────────────────────────────────────
-
-const DEP_SEED = [
-  { serialNumber: 'C02XG1ZHJGH7', model: 'MacBook Pro (16-inch, 2021)', color: 'Space Grey', os: 'macOS 14.4', status: 'unassigned', blueprintId: null },
-  { serialNumber: 'FVFXC2MNPH29', model: 'MacBook Air (M2, 2022)', color: 'Midnight', os: 'macOS 14.4', status: 'unassigned', blueprintId: null },
-  { serialNumber: 'DLXW3V26PHFR', model: 'iPad Pro 12.9" (M2)', color: 'Silver', os: 'iPadOS 17.4', status: 'unassigned', blueprintId: null },
-  { serialNumber: 'HVTN4J8KMQR2', model: 'iPhone 15 Pro', color: 'Natural Titanium', os: 'iOS 17.4', status: 'unassigned', blueprintId: null },
-  { serialNumber: 'PQRX7M2LJKF5', model: 'MacBook Pro (14-inch, M3)', color: 'Space Black', os: 'macOS 14.4', status: 'assigned', blueprintId: null },
-];
-
-for (const d of DEP_SEED) {
-  memDepDevices.set(d.serialNumber, d);
-}
 
 // ─── DB helpers ──────────────────────────────────────────────────────────────
 
@@ -1163,34 +1141,15 @@ app.get('/api/mdm/blueprints/:blueprintId/apply-status', async (req, res) => {
 
 // ─── DEP Devices ─ GET /api/mdm/dep/devices ──────────────────────────────────
 
-app.get('/api/mdm/dep/devices', (req, res) => {
-  const devices = Array.from(memDepDevices.values());
-  res.json({ devices, count: devices.length });
-});
+function adeUnavailable(_req, res) {
+  res.set('Cache-Control', 'no-store');
+  res.status(503).json({ error: 'apple_ade_not_configured', status: 'not_configured',
+    message: 'Apple Business / Apple School Manager is not connected. No device assignment or enrollment was performed.' });
+}
 
-// ─── DEP Assign ─ POST /api/mdm/dep/assign ───────────────────────────────────
-
-app.post('/api/mdm/dep/assign', requireAdmin, (req, res) => {
-  const { serialNumbers, blueprintId } = req.body || {};
-  if (!Array.isArray(serialNumbers) || serialNumbers.length === 0) {
-    return res.status(400).json({ error: 'serialNumbers array is required' });
-  }
-
-  const results = [];
-  for (const sn of serialNumbers) {
-    const device = memDepDevices.get(sn);
-    if (!device) {
-      results.push({ serialNumber: sn, success: false, error: 'Device not found' });
-      continue;
-    }
-    const updated = { ...device, blueprintId: blueprintId || null, status: blueprintId ? 'assigned' : 'unassigned' };
-    memDepDevices.set(sn, updated);
-    results.push({ serialNumber: sn, success: true, blueprintId: blueprintId || null });
-    depEnrollmentsTotal.inc({ result: 'assigned' });
-  }
-
-  res.json({ results, assigned: results.filter(r => r.success).length });
-});
+// Keep the legacy DEP URLs, but never report simulated devices or local assignments as Apple operations.
+app.get('/api/mdm/dep/devices', adeUnavailable);
+app.post('/api/mdm/dep/assign', requireAdmin, adeUnavailable);
 
 // ─── Profile Management ─ GET /api/mdm/profiles ───────────────────────────────
 

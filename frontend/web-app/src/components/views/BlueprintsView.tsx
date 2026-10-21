@@ -473,6 +473,7 @@ export default function BlueprintsView() {
   const [activeTab, setActiveTab] = useState<'blueprints' | 'dep'>('blueprints');
   const [depDevices, setDepDevices] = useState<DepDevice[]>([]);
   const [depLoading, setDepLoading] = useState(false);
+  const [depError, setDepError] = useState('');
   const [depAssigning, setDepAssigning] = useState(false);
   const [selectedDepSerials, setSelectedDepSerials] = useState<string[]>([]);
   const [depAssignBlueprintId, setDepAssignBlueprintId] = useState('');
@@ -535,12 +536,15 @@ export default function BlueprintsView() {
 
   const fetchDepDevices = useCallback(async () => {
     setDepLoading(true);
+    setDepError('');
     try {
       const res = await api.get('/api/mdm/dep/devices');
       const data = res.data as { devices: DepDevice[] };
       setDepDevices(data.devices || []);
     } catch {
-      toast.error('DEP-Geräte konnten nicht geladen werden');
+      setDepDevices([]);
+      setSelectedDepSerials([]);
+      setDepError('Apple-Geräte konnten nicht abgerufen werden. ABM-/ASM-Anbindung prüfen; eine Registrierung oder Zuweisung ist nicht bestätigt.');
     } finally {
       setDepLoading(false);
     }
@@ -829,7 +833,7 @@ export default function BlueprintsView() {
           >
             {tab === 'blueprints'
               ? <><RectangleStackIcon className="w-4 h-4" /> Blueprints</>
-              : <><DevicePhoneMobileIcon className="w-4 h-4" /> DEP Geräte</>
+              : <><DevicePhoneMobileIcon className="w-4 h-4" /> ADE Geräte</>
             }
           </button>
         ))}
@@ -975,12 +979,12 @@ export default function BlueprintsView() {
         </div>
       )}
 
-      {/* ─── DEP Geräte tab ─────────────────────────────────────────────────────── */}
+      {/* ─── ADE Geräte tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'dep' && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <p style={{ fontSize: 13, color: 'var(--text-secondary, #8b949e)' }}>
-              Geräte, die über Apple DEP / Zero-Touch-Enrollment automatisch konfiguriert werden können.
+              Automated Device Enrollment (ADE, früher DEP) über Apple Business / Apple School Manager.
             </p>
             <button
               onClick={fetchDepDevices}
@@ -990,6 +994,20 @@ export default function BlueprintsView() {
               Aktualisieren
             </button>
           </div>
+
+          <details style={{ marginBottom: 16 }}>
+            <summary>ADE einrichten und Geräte beschaffen</summary>
+            <ol style={{ paddingLeft: 24 }}>
+              <li>Organisation bei Apple registrieren und Administrationsrechte einrichten.</li>
+              <li>Organisations-ID mit einem teilnehmenden Händler austauschen und dessen Händler-ID hinterlegen. Vor dem Kauf die Zuordnungsfähigkeit der Geräte bestätigen lassen.</li>
+              <li>Einen MDM-Dienst bei Apple verknüpfen, Geräte diesem Dienst zuweisen und dort das Enrollment-Profil konfigurieren.</li>
+              <li>Beim ersten Einrichten mit Internetzugang registriert sich das zugewiesene Gerät beim MDM. Apps und Einstellungen folgen über den MDM-Dienst.</li>
+            </ol>
+            <p>Geräte ausserhalb der unterstützten Beschaffung lassen sich je nach Modell über Apple Configurator hinzufügen. Dabei gilt eine vorläufige Frist von 30 Tagen, in der die Verwaltung entfernt werden kann. Fernlöschen und weitere Befehle benötigen eine tatsächlich funktionierende MDM-Anbindung.</p>
+            <p>OpenDirectory besitzt derzeit keinen abgenommenen ABM-/ASM-Connector. Lokale Blueprints bestätigen keine Apple-Zuweisung.</p>
+            <p><a href="https://www.apple.com/chde/business/enterprise/" target="_blank" rel="noreferrer">Apple für Unternehmen</a>{' · '}<a href="https://support.apple.com/en-gb/guide/business/axm200a54d59/web" target="_blank" rel="noreferrer">Apple Configurator und die 30-Tage-Frist</a></p>
+          </details>
+          {depError && <p role="alert" style={{ marginBottom: 16 }}>{depError}</p>}
 
           {/* DEP assign bar */}
           {selectedDepSerials.length > 0 && (
@@ -1026,7 +1044,7 @@ export default function BlueprintsView() {
             ) : depDevices.length === 0 ? (
               <div style={{ padding: 60, textAlign: 'center' }}>
                 <DevicePhoneMobileIcon className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--text-muted, #6e7681)' }} />
-                <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 4 }}>Keine DEP-Geräte gefunden</p>
+                <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary, #e4e6ea)', marginBottom: 4 }}>{depError ? 'Apple-Registrierung nicht verfügbar' : 'Keine ADE-Geräte vorhanden'}</p>
               </div>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>

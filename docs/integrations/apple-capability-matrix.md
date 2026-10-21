@@ -1,6 +1,6 @@
 # Apple Capability Matrix
 
-Prüfstand: 19. Oktober 2026. Diese Matrix unterscheidet offiziell dokumentierte Funktionen von unserer Implementierung. Es wurden keine externen Schreiboperationen oder Geräteeffekte ausgeführt.
+Prüfstand: 21. Oktober 2026. Diese Matrix unterscheidet offiziell dokumentierte Funktionen von unserer Implementierung. Es wurden keine externen Schreiboperationen oder Geräteeffekte ausgeführt.
 
 | Gewünschte Funktion | Offizielle Grundlage | Zugriff/Voraussetzungen | Eigener Status und Grenze | Alternative |
 | --- | --- | --- | --- | --- |
@@ -18,3 +18,7 @@ Für die Schweiz führt die aktuelle Verfügbarkeitstabelle unter anderem Untern
 Noch kein implementierter Runtime-Vertrag: `DeviceManagementProvider` muss Synchronisierung, Statusabfrage und tatsächliche unterstützte Aktionen ausdrücklich unterscheiden. Modi: Inventory Only, External MDM, Native MDM. Capability-Angaben sind provider-/geräteabhängig. Ohne dokumentierte Unterstützung bleibt die Aktion Unsupported; ohne bestätigte Ausführung bleibt ein Auftrag angenommen/ausstehend/unbekannt, nicht erfolgreich.
 
 Alle künftigen Connectoren brauchen Tenant-/Connection-ID, Versions-/Cursorverwaltung, Secret-Referenz statt Token im Datensatz, idempotente Jobs, Retry/DLQ und Zustellhistorie. Mocks bleiben ausschliesslich Test-/Demo-Provider. Service-Accounts erhalten nur überprüfte benötigte Rechte. Konkrete Apple-URLs, OAuth-Scopes oder Bezahlvorgänge werden nicht erfunden.
+
+## ADE-Korrektur und Authentifizierung
+
+Die bisherige DEP-Simulation wurde entfernt: `/api/mdm/dep/devices` und `/api/mdm/dep/assign` melden `503 apple_ade_not_configured`, ohne simuliertes Inventar oder lokale Erfolgszuweisung. Der [ADE-Leitfaden](apple-automated-device-enrollment.md) erläutert Beschaffung, IDs und die Configurator-Frist. Der neue [OIDC-Adapter und SAML-IdP-Start](../../services/core/oauth-provider/README.md) ist eine separate Anwendungsanmeldung, keine abgenommene Apple-Föderation oder Geräteintegration.
