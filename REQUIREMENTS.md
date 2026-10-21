@@ -478,7 +478,7 @@ curl -s http://localhost:<port>/health
 These rules apply to every line of code written:
 
 ### Authentication
-- All API endpoints require JWT authentication except: `/health`, `/.well-known/*`, `/oauth/authorize`, `/oauth/token`, `/saml/sso`, `/api/enrollment/register`
+- All API endpoints require JWT authentication except: `/health`, `/.well-known/*`, `/oauth/authorize`, `/oauth/token`, `/api/enrollment/register`. OIDC federation callbacks use one-time browser-bound transactions; SAML launches require a verified user bearer token.
 - Admin endpoints require `role: admin` claim in JWT
 - Rate limiting on all auth endpoints: 10 req/min per IP
 

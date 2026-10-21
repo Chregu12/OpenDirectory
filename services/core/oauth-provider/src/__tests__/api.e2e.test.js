@@ -13,7 +13,7 @@
  *
  * src/index.js is a ~1900-line "god file" that, as a side effect of being
  * required, immediately:
- *   1. Generates two RSA-2048 keypairs (RS256 signing + SAML signing).
+ *   1. Initializes RSA signing material for OAuth tokens.
  *   2. Seeds in-memory OAuth clients / SCIM users / enrollment tokens /
  *      device registry.
  *   4. Starts two `setInterval` timers (metrics gauge refresh, device

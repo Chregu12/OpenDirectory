@@ -3,7 +3,8 @@
 const { validUuid, validRevision } = require('./identity-authorization-contract');
 
 function validMethods(methods) {
-  return Array.isArray(methods) && (JSON.stringify(methods) === '["pwd"]' || JSON.stringify(methods) === '["pwd","otp"]');
+  return Array.isArray(methods) && ['pwd', 'federated'].includes(methods[0])
+    && (methods.length === 1 || (methods.length === 2 && methods[1] === 'otp'));
 }
 
 function validMfaContext(context) {

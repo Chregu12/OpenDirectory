@@ -92,20 +92,6 @@ const signingKeyId = signingKeys.kid;
 const identityAuthority = new IdentityAuthority({ signingKeys, issuer: ISSUER, demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
 const companyRegistration = new (require('./CompanyRegistrationGateway').CompanyRegistrationGateway)({ signingKeys, issuer: ISSUER, client: id => clientRegistry.get(id) });
 
-// ─── SAML Signing Key Pair ────────────────────────────────────────────────────
-
-const { privateKey: samlPrivKey, publicKey: samlPubKey } = crypto.generateKeyPairSync('rsa', {
-  modulusLength: 2048,
-  publicKeyEncoding: { type: 'spki', format: 'pem' },
-  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-});
-
-// Strip PEM headers for embedding in XML / metadata
-const samlCertBody = samlPubKey
-  .replace('-----BEGIN PUBLIC KEY-----', '')
-  .replace('-----END PUBLIC KEY-----', '')
-  .replace(/\n/g, '');
-
 // Build JWK representation of the public key
 configureJwks(signingKeys.jwks());
 
@@ -444,6 +430,7 @@ app.get('/oauth/authorize', protocol((req, res) => {
     <span>App:</span>
     <strong>${escapeHtml(client.name || client_id)}</strong>
   </div>
+  ${federationLinks({ client_id, redirect_uri, response_type: 'code', scope: approvedScope, ...Object.fromEntries(Object.entries({ state, nonce, code_challenge, code_challenge_method, device_id }).filter(([, value]) => typeof value === 'string')) })}
   <form id="loginForm" method="POST" action="/oauth/authorize/login">
     <input type="hidden" name="client_id" value="${escapeHtml(client_id)}">
     <input type="hidden" name="redirect_uri" value="${escapeHtml(redirect_uri)}">
@@ -477,20 +464,33 @@ app.get('/oauth/authorize', protocol((req, res) => {
 </html>`);
 }));
 
-app.post('/oauth/authorize/login', protocol(async (req, res) => {
-  const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, device_id, username, password, mfaCode, otpCode, nonce } = req.body;
+function validateAuthorization(req, res, params) {
+  const { redirect_uri, scope, code_challenge, code_challenge_method, nonce, state, device_id } = params;
   const client = req.oauthClient;
-  if (!client?.enabled) return res.status(400).send('<h2>Error: invalid_client</h2>');
-  if (!client.grantTypes?.includes('authorization_code')) return res.status(400).json({ error: 'unauthorized_client' });
-  if (typeof redirect_uri !== 'string' || !client.redirectUris.includes(redirect_uri)) return res.status(400).json({ error: 'invalid_redirect_uri' });
+  const fail = (status, error) => { res.status(status).json({ error }); return null; };
+  if (!client?.enabled) return fail(400, 'invalid_client');
+  if (!client.grantTypes?.includes('authorization_code')) return fail(400, 'unauthorized_client');
+  if (req.method === 'GET' && params.response_type !== 'code') return fail(400, 'unsupported_response_type');
+  if (typeof redirect_uri !== 'string' || !client.redirectUris.includes(redirect_uri)) return fail(400, 'invalid_redirect_uri');
   const approvedScope = resolveScopes(client, scope, ['openid', 'profile', 'email']);
-  if (approvedScope === null) return res.status(400).json({ error: 'invalid_scope' });
-  if (!validPkceRequest(client, code_challenge, code_challenge_method) || (nonce !== undefined && (typeof nonce !== 'string' || nonce.length > 255))) {
-    return res.status(400).json({ error: 'invalid_request' });
-  }
+  if (approvedScope === null) return fail(400, 'invalid_scope');
+  if (!validPkceRequest(client, code_challenge, code_challenge_method)
+    || [nonce, state, device_id].some(value => value !== undefined && (typeof value !== 'string' || value.length > 255))) return fail(400, 'invalid_request');
+  return approvedScope;
+}
+
+app.post('/oauth/authorize/login', protocol(async (req, res) => {
+  if (validateAuthorization(req, res, req.body) === null) return;
+  const { username, password, mfaCode } = req.body;
   const authentication = await authenticateUser({ username, password, mfaCode });
   if (authentication.error) return res.status(authentication.status).json({ error: authentication.error });
-  let userInfo = authentication.user;
+  return authorizeUser(req, res, req.oauthClient, authentication.user);
+}));
+
+async function authorizeUser(req, res, client, authenticatedUser, primaryMethod = 'pwd') {
+  const { client_id, redirect_uri, state, code_challenge, code_challenge_method, device_id, otpCode, nonce } = req.body;
+  const approvedScope = resolveScopes(client, req.body.scope, ['openid', 'profile', 'email']);
+  let userInfo = authenticatedUser;
   const userId = userInfo.id;
   if (!await clientRegistry.current(client)) return res.status(400).json({ error: 'unauthorized_client' });
 
@@ -499,7 +499,7 @@ app.post('/oauth/authorize/login', protocol(async (req, res) => {
     const state = await identityAuthority.state(userId);
     identityContext = state.context;
     applicationContext = await applicationAccess.context(client_id,state);
-    mfaContext = await mfaAuthority.login(state.context?.userId, otpCode);
+    mfaContext = await mfaAuthority.login(state.context?.userId, otpCode, primaryMethod);
     if ((client.mfaRequired || state.authentication?.required) && mfaContext.methods.length !== 2) throw new MfaError(401, 'mfa_enrollment_required');
     if (state.authorization) userInfo = { ...userInfo, ...state.authorization };
   }
@@ -529,7 +529,9 @@ app.post('/oauth/authorize/login', protocol(async (req, res) => {
   redirectUrl.searchParams.set('code', code);
   if (state) redirectUrl.searchParams.set('state', state);
   res.redirect(redirectUrl.toString());
-}));
+}
+
+const federationLinks = require('./federationRoutes').mountFederation(app, { issuer: ISSUER, protocol, validate: validateAuthorization, authorize: authorizeUser });
 
 // ─── Token Endpoint ───────────────────────────────────────────────────────────────
 
@@ -1009,135 +1011,8 @@ app.post('/oauth/device/approve', express.urlencoded({ extended: true }), protoc
   res.send('<html><body><h2 style="font-family:system-ui;color:#16a34a;">Device authorized! You may close this window.</h2></body></html>');
 }, false));
 
-// ─── SAML Helper: build signed assertion XML ─────────────────────────────────
-
-function buildSamlResponse(spEntityId, relayState, userId) {
-  const now = new Date();
-  const notBefore = now.toISOString();
-  const notOnOrAfter = new Date(now.getTime() + 3600_000).toISOString();
-  const responseId = `_${crypto.randomBytes(16).toString('hex')}`;
-  const assertionId = `_${crypto.randomBytes(16).toString('hex')}`;
-  const scimUser = userId ? scimUsers.get(userId) : null;
-  const nameId = scimUser?.emails?.[0]?.value ?? `${userId ?? 'user'}@opendirectory.local`;
-  const displayName = scimUser?.name?.formatted ?? scimUser?.displayName ?? userId ?? 'User';
-
-  // Build the Assertion XML (unsigned first, then compute signature)
-  const assertionXml = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="${assertionId}" IssueInstant="${notBefore}" Version="2.0">` +
-    `<saml:Issuer>${ISSUER}</saml:Issuer>` +
-    `<saml:Subject>` +
-      `<saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">${nameId}</saml:NameID>` +
-      `<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">` +
-        `<saml:SubjectConfirmationData NotOnOrAfter="${notOnOrAfter}" Recipient="${ISSUER}/saml/acs-demo"/>` +
-      `</saml:SubjectConfirmation>` +
-    `</saml:Subject>` +
-    `<saml:Conditions NotBefore="${notBefore}" NotOnOrAfter="${notOnOrAfter}">` +
-      `<saml:AudienceRestriction><saml:Audience>${spEntityId || ISSUER}</saml:Audience></saml:AudienceRestriction>` +
-    `</saml:Conditions>` +
-    `<saml:AuthnStatement AuthnInstant="${notBefore}">` +
-      `<saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext>` +
-    `</saml:AuthnStatement>` +
-    `<saml:AttributeStatement>` +
-      `<saml:Attribute Name="email"><saml:AttributeValue>${nameId}</saml:AttributeValue></saml:Attribute>` +
-      `<saml:Attribute Name="name"><saml:AttributeValue>${displayName}</saml:AttributeValue></saml:Attribute>` +
-      `<saml:Attribute Name="groups"><saml:AttributeValue>users</saml:AttributeValue></saml:Attribute>` +
-    `</saml:AttributeStatement>` +
-  `</saml:Assertion>`;
-
-  // Sign the assertion with RS256
-  const sign = crypto.createSign('SHA256');
-  sign.update(assertionXml);
-  const signatureBase64 = sign.sign(samlPrivKey, 'base64');
-
-  const signedAssertionXml = assertionXml.replace(
-    `<saml:Issuer>${ISSUER}</saml:Issuer>`,
-    `<saml:Issuer>${ISSUER}</saml:Issuer>` +
-    `<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">` +
-      `<ds:SignedInfo>` +
-        `<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>` +
-        `<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>` +
-        `<ds:Reference URI="#${assertionId}">` +
-          `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>` +
-          `<ds:DigestValue>${crypto.createHash('sha256').update(assertionXml).digest('base64')}</ds:DigestValue>` +
-        `</ds:Reference>` +
-      `</ds:SignedInfo>` +
-      `<ds:SignatureValue>${signatureBase64}</ds:SignatureValue>` +
-      `<ds:KeyInfo><ds:X509Data><ds:X509Certificate>${samlCertBody}</ds:X509Certificate></ds:X509Data></ds:KeyInfo>` +
-    `</ds:Signature>`
-  );
-
-  const responseXml = `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="${responseId}" InResponseTo="" IssueInstant="${notBefore}" Version="2.0">` +
-      `<saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">${ISSUER}</saml:Issuer>` +
-      `<samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>` +
-      signedAssertionXml +
-    `</samlp:Response>`;
-
-  return Buffer.from(responseXml).toString('base64');
-}
-
-// ─── SAML SSO Endpoint (GET + POST) ──────────────────────────────────────────
-
-function handleSamlSso(req, res) {
-  const rawRequest = req.query.SAMLRequest ?? req.body?.SAMLRequest;
-  const relayState = req.query.RelayState ?? req.body?.RelayState ?? '';
-
-  let spEntityId = ISSUER;
-  if (rawRequest) {
-    try {
-      const decoded = Buffer.from(rawRequest, 'base64').toString('utf-8');
-      const match = decoded.match(/<(?:[a-zA-Z]+:)?Issuer[^>]*>([^<]+)<\/(?:[a-zA-Z]+:)?Issuer>/);
-      if (match) spEntityId = match[1].trim();
-    } catch (_) { /* ignore parse errors */ }
-  }
-
-  const acsUrl = req.query.redirect_uri ?? req.body?.redirect_uri ?? `${ISSUER}/saml/acs-demo`;
-  const samlResponseBase64 = buildSamlResponse(spEntityId, relayState);
-
-  res.set('Content-Type', 'text/html; charset=utf-8');
-  res.send(`<!DOCTYPE html><html><head><title>SAML SSO — OpenDirectory</title></head><body>` +
-    `<form method="POST" action="${acsUrl}">` +
-      `<input type="hidden" name="SAMLResponse" value="${samlResponseBase64}" />` +
-      `<input type="hidden" name="RelayState" value="${relayState}" />` +
-      `<script>document.forms[0].submit();</script>` +
-    `</form>` +
-    `<p>Redirecting to service provider&hellip;</p>` +
-    `</body></html>`);
-}
-
-app.get('/saml/sso', handleSamlSso);
-app.post('/saml/sso', handleSamlSso);
-
-// ─── SAML Certificate Endpoint ────────────────────────────────────────────────
-
-app.get('/saml/certificate', (req, res) => {
-  res.set('Content-Type', 'text/plain; charset=utf-8');
-  res.send(samlPubKey);
-});
-
-// ─── SAML Metadata ────────────────────────────────────────────────────────────────
-
-app.get('/saml/metadata', (req, res) => {
-  res.set('Content-Type', 'application/xml');
-  res.send(`<?xml version="1.0"?>
-<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${ISSUER}">
-  <IDPSSODescriptor WantAuthnRequestsSigned="false"
-                    protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
-    <KeyDescriptor use="signing">
-      <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
-        <ds:X509Data>
-          <ds:X509Certificate>${samlCertBody}</ds:X509Certificate>
-        </ds:X509Data>
-      </ds:KeyInfo>
-    </KeyDescriptor>
-    <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-                         Location="${ISSUER}/saml/sso"/>
-    <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
-                         Location="${ISSUER}/saml/sso"/>
-    <SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
-                         Location="${ISSUER}/saml/slo"/>
-  </IDPSSODescriptor>
-</EntityDescriptor>`);
-});
+// SAML launches use verified user tokens and a registered ACS; no anonymous assertions.
+require('./samlRoutes').mountSaml(app, { issuer: ISSUER, adminAuth, protocol, clientRegistry, identityAuthority, applicationAccess });
 
 // ─── OAuth2 Client Management API (full CRUD) ─────────────────────────────────────
 

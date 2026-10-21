@@ -113,3 +113,20 @@ test('password reauthentication never forwards credentials through an upstream r
     for (const server of [upstream, destination]) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   }
 });
+
+test('federated primary authentication is labelled honestly and does not count as local MFA', async () => {
+  const context = await service.login(payload.identity_authorization.userId, undefined, 'federated');
+  expect(context.methods).toEqual(['federated']);
+  expect(boundMfa(claims(context))).toBe(true);
+  expect(provenMfa(claims(context))).toBe(false);
+  expect(await service.matches(claims(context))).toBe(true);
+  await expect(service.login(payload.identity_authorization.userId, undefined, 'otp')).rejects.toMatchObject({ code: 'invalid_authentication_method' });
+});
+test('federated login still requires an independently verified local OTP', async () => {
+  const { setup, counter } = await enabled();
+  await expect(service.login(payload.identity_authorization.userId, undefined, 'federated')).rejects.toMatchObject({ code: 'otp_required' });
+  const context = await service.login(payload.identity_authorization.userId, totp(setup.secret, counter), 'federated');
+  expect(context.methods).toEqual(['federated', 'otp']);
+  expect(provenMfa(claims(context))).toBe(true);
+  expect(await service.matches(claims(context))).toBe(true);
+});

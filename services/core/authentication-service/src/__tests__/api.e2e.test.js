@@ -920,34 +920,12 @@ describe('Authentication Service - E2E API Tests', () => {
 
   // ─── SSO endpoints ────────────────────────────────────────────────────────────
 
-  describe('GET /api/auth/sso/providers', () => {
-    it('returns list of SSO providers', async () => {
-      service.authManager.getSSOProviders.mockResolvedValueOnce([
-        { id: 'google', name: 'Google' },
-      ]);
-
-      const res = await request(app).get('/api/auth/sso/providers');
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('providers');
-      expect(Array.isArray(res.body.providers)).toBe(true);
-    });
-
-    it('returns 500 when SSO provider lookup fails', async () => {
-      service.authManager.getSSOProviders.mockRejectedValueOnce(new Error('SSO error'));
-
-      const res = await request(app).get('/api/auth/sso/providers');
-      expect(res.status).toBe(500);
-    });
-  });
-
-  describe('GET /api/auth/sso/:provider', () => {
-    it('redirects to SSO auth URL', async () => {
-      service.authManager.initiateSSOLogin.mockResolvedValueOnce('https://accounts.google.com/o/oauth2/auth?...');
-
-      const res = await request(app).get('/api/auth/sso/google');
-      expect(res.status).toBe(302);
-      expect(res.headers.location).toMatch(/accounts\.google\.com/);
-    });
+  test.each(['/api/auth/sso/providers', '/api/auth/sso/google', '/api/auth/sso/google/callback?code=untrusted&state=forged'])('retires unsafe legacy SSO endpoint %s', async url => {
+    const res = await request(app).get(url);
+    expect(res.status).toBe(410);
+    expect(res.body.error).toBe('legacy_sso_retired');
+    expect(res.headers.location).toBeUndefined();
+    expect(service.authManager.handleSSOCallback).not.toHaveBeenCalled();
   });
 
   // ─── Admin user management ────────────────────────────────────────────────────

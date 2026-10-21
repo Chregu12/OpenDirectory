@@ -43,6 +43,20 @@ async function enable(service, payload) {
   await service.confirm(payload, totp(setup.secret, counter)); return { setup, counter };
 }
 
+test('persistent federated evidence needs an independent local OTP and survives another verifier instance', () => authority(async ({ service, create, payload }) => {
+  const userId = payload.identity_authorization.userId;
+  const weak = claims(payload, await service.login(userId, undefined, 'federated'));
+  assert.deepEqual(weak.amr, ['federated']);
+  assert.equal(await create().matches(weak), true);
+  const { setup, counter } = await enable(service, payload);
+  assert.equal(await create().matches(weak), false);
+  await assert.rejects(create().login(userId, undefined, 'federated'), { code: 'otp_required' });
+  const context = await create().login(userId, totp(setup.secret, counter + 1), 'federated');
+  assert.deepEqual(context.methods, ['federated', 'otp']);
+  assert.equal(await create().matches(claims(payload, context)), true);
+  await assert.rejects(create().login(userId, totp(setup.secret, counter + 1), 'federated'), { code: 'invalid_otp' });
+}));
+
 test('persistent MFA evidence and anti-replay counters survive independent instances and migration reapplication', () => authority(async ({ service, create, migrate, payload }) => {
   const weaker = claims(payload, await service.login(payload.identity_authorization.userId)); const { setup, counter } = await enable(service, payload);
   assert.equal(await create().matches(weaker), false);

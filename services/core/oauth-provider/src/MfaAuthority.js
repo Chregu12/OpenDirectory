@@ -202,15 +202,16 @@ class MfaAuthority {
     });
     if (result.error) fail(result.status, result.error); return result;
   }
-  async login(userId, code) {
-    if (this.demo && !validUuid(userId)) return { authTime: Math.floor(Date.now() / 1000), methods: ['pwd'] };
+  async login(userId, code, primaryMethod = 'pwd') {
+    if (!['pwd', 'federated'].includes(primaryMethod)) fail(400, 'invalid_authentication_method');
+    if (this.demo && !validUuid(userId)) return { authTime: Math.floor(Date.now() / 1000), methods: [primaryMethod] };
     const result = await this.transaction(userId, async (row, now, audit) => {
       if (row.enabled && !code) return { status: 401, error: 'otp_required' };
       if (row.enabled) {
         const proof = await this.verify(row, code, now, 'active', audit); if (proof.error) return proof;
         await audit('verified');
       }
-      return { schemaVersion: 1, userId, revision: String(row.revision), methods: row.enabled ? ['pwd', 'otp'] : ['pwd'], authTime: Math.floor(now / 1000) };
+      return { schemaVersion: 1, userId, revision: String(row.revision), methods: row.enabled ? [primaryMethod, 'otp'] : [primaryMethod], authTime: Math.floor(now / 1000) };
     });
     if (result.error) fail(result.status, result.error); return result;
   }

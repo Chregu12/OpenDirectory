@@ -2,7 +2,6 @@
 
 const bcrypt = require('bcryptjs');
 const ldap = require('ldapjs');
-const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger');
 const config = require('../utils/config');
@@ -10,8 +9,7 @@ const config = require('../utils/config');
 /**
  * AuthenticationManager
  *
- * Handles local password authentication, LDAP user mapping, LDAP user creation,
- * and SSO provider management.
+ * Handles local password authentication, LDAP user mapping and LDAP user creation.
  *
  * All users-table access goes through the injected userRepository (IUserRepository).
  * The db connection is kept only for LDAP operations that do not touch the users table.
@@ -223,112 +221,6 @@ class AuthenticationManager {
         });
       });
     });
-  }
-
-  /**
-   * Return configured SSO providers.
-   */
-  async getSSOProviders() {
-    const configured = config.sso?.providers || [];
-    return configured.map(name => ({
-      name,
-      displayName: name.charAt(0).toUpperCase() + name.slice(1),
-      type: 'oauth2',
-    }));
-  }
-
-  /**
-   * Build the authorization URL to redirect the user to for a given SSO provider.
-   */
-  async initiateSSOLogin(provider) {
-    const providerConfig = this._getSSOProviderConfig(provider);
-    if (!providerConfig) {
-      throw new Error(`Unknown SSO provider: ${provider}`);
-    }
-
-    const state = uuidv4();
-    const params = new URLSearchParams({
-      client_id: providerConfig.clientId,
-      redirect_uri: providerConfig.callbackUrl,
-      response_type: 'code',
-      scope: providerConfig.scope || 'openid email profile',
-      state,
-    });
-
-    return `${providerConfig.authorizationUrl}?${params.toString()}`;
-  }
-
-  /**
-   * Handle the OAuth2 callback from an SSO provider.
-   */
-  async handleSSOCallback(provider, query) {
-    const { code, error } = query;
-
-    if (error) {
-      this._logger.warn(`AuthenticationManager.handleSSOCallback: provider returned error: ${error}`);
-      return { success: false, error };
-    }
-
-    const providerConfig = this._getSSOProviderConfig(provider);
-    if (!providerConfig) {
-      return { success: false, error: `Unknown provider: ${provider}` };
-    }
-
-    try {
-      const tokenResponse = await axios.post(providerConfig.tokenUrl, {
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: providerConfig.callbackUrl,
-        client_id: providerConfig.clientId,
-        client_secret: providerConfig.clientSecret,
-      });
-
-      const { access_token: accessToken } = tokenResponse.data;
-
-      const userInfoResponse = await axios.get(providerConfig.userInfoUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      const profile = userInfoResponse.data;
-      const username = profile.preferred_username || profile.email || profile.sub;
-
-      const user = await this._upsertSSOUser({
-        username,
-        email: profile.email,
-        firstName: profile.given_name || '',
-        lastName: profile.family_name || '',
-        provider,
-        externalId: profile.sub,
-      });
-
-      const jwt = require('jsonwebtoken');
-      const token = jwt.sign(
-        { sub: user.id, username: user.username, roles: user.roles },
-        config.jwt.secret,
-        { expiresIn: config.jwt.expiresIn, issuer: config.jwt.issuer }
-      );
-
-      return { success: true, user, token };
-    } catch (err) {
-      this._logger.error('AuthenticationManager.handleSSOCallback: failed', { error: err.message });
-      return { success: false, error: err.message };
-    }
-  }
-
-  // ── Private helpers ─────────────────────────────────────────────────────────
-
-  _getSSOProviderConfig(provider) {
-    const clientId = process.env[`SSO_${provider.toUpperCase()}_CLIENT_ID`];
-    const clientSecret = process.env[`SSO_${provider.toUpperCase()}_CLIENT_SECRET`];
-    const authorizationUrl = process.env[`SSO_${provider.toUpperCase()}_AUTH_URL`];
-    const tokenUrl = process.env[`SSO_${provider.toUpperCase()}_TOKEN_URL`];
-    const userInfoUrl = process.env[`SSO_${provider.toUpperCase()}_USERINFO_URL`];
-    const callbackUrl = process.env[`SSO_${provider.toUpperCase()}_CALLBACK_URL`]
-      || `${config.frontend.url}/api/auth/sso/${provider}/callback`;
-
-    if (!clientId || !authorizationUrl) return null;
-
-    return { clientId, clientSecret, authorizationUrl, tokenUrl, userInfoUrl, callbackUrl };
   }
 
   /**

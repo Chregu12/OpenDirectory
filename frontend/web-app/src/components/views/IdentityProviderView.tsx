@@ -110,9 +110,9 @@ function OverviewTab({ domain }: { domain: string }) {
       <div className="bg-[rgba(63,185,80,0.15)] border border-[rgba(63,185,80,0.3)] rounded-xl p-4 flex items-start gap-3">
         <CheckCircleIcon className="w-5 h-5 text-[#3fb950] mt-0.5 shrink-0" />
         <div>
-          <p className="text-sm font-semibold text-[#3fb950]">Identity Provider aktiv</p>
+          <p className="text-sm font-semibold text-[#3fb950]">Authentifizierung konfigurieren</p>
           <p className="text-xs text-[#3fb950] mt-0.5">
-            OpenDirectory läuft als vollständiger OAuth2/OIDC/SAML Identity Provider. Alle SaaS-Apps können sich gegen diesen Endpoint authentifizieren — kein Entra ID oder Okta nötig.
+            Die zentrale Anmeldung unterstützt OAuth2/OIDC und konfigurierte externe OIDC-Anbieter. SAML unterstützt angemeldete IdP-initiierte Starts zu registrierten Anwendungen; die Verbindung muss mit der jeweiligen Anwendung geprüft werden.
           </p>
         </div>
       </div>
@@ -302,54 +302,16 @@ function SamlTab({ domain }: { domain: string }) {
   const issuer = `https://${domain}`;
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">SAML 2.0 Service Provider Verbindungen</h3>
-        <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">OpenDirectory fungiert als SAML Identity Provider (IdP) für alle verbundenen SPs</p>
-      </div>
-
+      <h3 className="text-sm font-semibold">SAML 2.0 Identity Provider</h3>
+      <p>Unterstützt sind angemeldete, IdP-initiierte HTTP-POST-Starts für fest konfigurierte Anwendungen. SP-initiierte AuthnRequests und Single Logout sind noch nicht verfügbar.</p>
+      <p>Eine Konfiguration mit gültigem X.509-Zertifikat und passenden lokalen Anwendungszuweisungen ist erforderlich. Ohne Konfiguration melden die Endpunkte HTTP 503. Diese Ansicht bestätigt keine eingerichtete Verbindung.</p>
       <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-5 space-y-3">
-        <h4 className="text-xs font-semibold text-[var(--text-secondary,#8b949e)] uppercase tracking-wide">IdP Metadaten</h4>
         <EndpointRow label="Entity ID / Issuer" value={issuer} />
-        <EndpointRow label="SSO URL (POST)"     value={`${issuer}/saml/sso`} />
-        <EndpointRow label="SSO URL (Redirect)" value={`${issuer}/saml/sso?binding=redirect`} />
-        <EndpointRow label="SLO URL"            value={`${issuer}/saml/slo`} />
-        <EndpointRow label="Metadata XML"       value={`${issuer}/saml/metadata`} />
-        <div className="pt-2">
-          <button
-            onClick={() => toast.success('Metadaten-XML wird heruntergeladen...')}
-            className="flex items-center gap-2 text-sm text-[#006FFF] hover:text-[#0056cc] font-medium"
-          >
-            <ArrowTopRightOnSquareIcon className="w-4 h-4" />
-            IdP Metadaten herunterladen
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[
-          { name: 'GitLab', logo: '🦊', entityId: 'https://gitlab.example.com', users: 5, nameid: 'email' },
-        ].map(sp => (
-          <div key={sp.name} className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xl">{sp.logo}</span>
-              <span className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">{sp.name}</span>
-              <span className="ml-auto bg-[rgba(63,185,80,0.15)] text-[#3fb950] text-xs px-2 py-0.5 rounded-full">Aktiv</span>
-            </div>
-            <div className="text-xs text-[var(--text-muted,#6e7681)] space-y-1">
-              <div><span className="text-[var(--text-muted,#6e7681)]">Entity ID:</span> <code className="font-mono">{sp.entityId}</code></div>
-              <div><span className="text-[var(--text-muted,#6e7681)]">NameID Format:</span> <code className="font-mono">{sp.nameid}</code></div>
-              <div><span className="text-[var(--text-muted,#6e7681)]">Aktive Nutzer:</span> {sp.users}</div>
-            </div>
-          </div>
-        ))}
-
-        <button
-          onClick={() => toast.success('SAML SP Wizard geöffnet')}
-          className="bg-[var(--bg-surface-raised,#1c2128)] border-2 border-dashed border-[rgba(255,255,255,0.15)] rounded-xl p-4 flex items-center justify-center gap-2 text-[var(--text-muted,#6e7681)] hover:border-[#a371f7] hover:text-[#a371f7] hover:bg-[rgba(163,113,247,0.1)] transition-colors"
-        >
-          <PlusIcon className="w-5 h-5" />
-          <span className="text-sm font-medium">Service Provider verbinden</span>
-        </button>
+        <EndpointRow label="Start (POST mit Benutzer-Bearer und appId)" value={`${issuer}/saml/sso`} />
+        <EndpointRow label="Metadata XML" value={`${issuer}/saml/metadata`} />
+        <EndpointRow label="X.509-Zertifikat" value={`${issuer}/saml/certificate`} />
+        <p>NameID: persistenter lokaler Subject-Identifier. Benutzerattribute und Gruppen werden derzeit nicht übertragen.</p>
+        <a href={`${issuer}/saml/metadata`} target="_blank" rel="noreferrer" className="text-[#006FFF]">Metadaten beim Identity Provider öffnen</a>
       </div>
     </div>
   );
