@@ -1,5 +1,26 @@
 # Testresultate: Neuausrichtung auf OpenDirectory Business
 
+## 21. Oktober 2026: ADE-Korrektur, OIDC-Adapter und SAML-IdP-Start
+
+Die DEP-Endpunkte behaupten ohne Apple-Verbindung keine Geräte oder erfolgreiche Zuweisung mehr. Der zentrale OIDC-Adapter wurde bis zur signierten lokalen Token-Ausgabe mit echtem lokalem Discovery-/Token-/JWKS-Server geprüft. SAML-Response und Assertion besitzen überprüfbare XML-Signaturen und ein echtes X.509-Zertifikat. Authentifizierte IdP-initiierte HTTP-POST-Starts sind implementiert; SP-initiierte Requests, SLO und eine Abnahme gegen externe Kundentenants sind nicht enthalten.
+
+| Prüfung | Erfolgreiche Definitionen | Umfang |
+| --- | ---: | --- |
+| OAuth Jest | 474 | 19 Suiten; Signatur, Issuer, Audience, Nonce, PKCE, Bindung, Replay, Timeout, zentraler Code-/Token-Flow und MFA |
+| Authentication Jest | 314 | 14 Suiten; alte ungeprüfte SSO-Callbacks liefern HTTP 410 |
+| Apple MDM | 52 | 5 Suiten; Auth/Admin-Grenzen und ausdrückliche ADE-Nichtverfügbarkeit |
+| Identity Jest | 1'152 | 56 Suiten; gemeinsame MFA-Verträge |
+| Policy Jest | 1'305 | 37 Suiten; gemeinsame MFA-Verträge |
+| Bestehende Frontend-Suite | 2'927 | 112 Suiten |
+| Neue Frontend-Regressionen | 2 | ADE-Fehlerzustand und wahrheitsgemässe SAML-Anzeige |
+| Browser-Auth Node | 46 | vorhandener serverseitiger Callback und Sitzungsablauf |
+| Gezielte native PostgreSQL-Integration | 90 | Clients, MFA und Policy-Gerätewarteschlange; einschliesslich neuem persistentem Föderation-/OTP-/Anti-Replay-Fall |
+
+Diese gezählten Läufe endeten mit Exit 0. TypeScript-Prüfung, `next build` und `git diff --check` ebenfalls erfolgreich. Der Build meldete zusätzlich das bestehende Next.js-/Workspace-Problem bei der automatischen SWC-Lockfile-Reparatur; es verhinderte den Build nicht. Die bereits lokal gelöschte veraltete Callback-Seite wurde in den Auth-Commit übernommen: der bestehende Server-Callback bleibt zuständig, die alte Seite referenzierte entfernte Funktionen und kollidierte mit ihm.
+
+Der anfänglich gestartete breitere PostgreSQL-Runner wurde nach 103 Erfolgen kontrolliert beendet; dieser unterbrochene Lauf gilt ausdrücklich nicht als bestandene Gesamtsuite und wird nicht zusätzlich gezählt. Danach bestanden alle 90 Fälle des oben abgegrenzten Datenbanklaufs. Kein vollständiger Repository-Testlauf, kein produktives Apple-Enrollment und keine externen IdP-/SP-Schreiboperationen wurden ausgeführt.
+
+
 
 ## Business-Slice 21: Eigene Firmen-Blueprints und immutable Freigaben
 

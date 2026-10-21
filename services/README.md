@@ -2,6 +2,8 @@
 
 Consolidated service architecture for the OpenDirectory Universal Endpoint Management platform.
 
+Current integration boundaries: [central OIDC adapter and SAML IdP launches](core/oauth-provider/README.md), [Apple MDM/ADE status](core/apple-mdm/README.md). Legacy authentication-service SSO callbacks are retired; ABM/ASM enrollment is not connected.
+
 ## 📁 Service Organization
 
 ```
@@ -129,9 +131,9 @@ npm test
 
 Detailed documentation for each service is available in their respective directories:
 - [Platform Services](./platform/README.md)
-- [Core Services](./core/README.md)
+- [Core Services](../docs/services/README.md)
 - [Enterprise Services](./enterprise/README.md)
-- [Domain Services](./domains/README.md)
+- [Domain Services](../docs/architecture/domain-model.md)
 
 ## 🤝 Contributing
 

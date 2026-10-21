@@ -25,6 +25,8 @@ Welcome to the OpenDirectory documentation. OpenDirectory is a self-hosted, open
 - [Generated Organization OpenAPI](api/openapi.yaml)
 - [Local Organization Setup](operations/installation.md)
 - [Apple Capability Matrix](integrations/apple-capability-matrix.md)
+- [Apple ADE, supplier setup and Configurator](integrations/apple-automated-device-enrollment.md)
+- [External OIDC adapter and SAML IdP launches](../services/core/oauth-provider/README.md)
 - [Test Strategy](testing/test-strategy.md)
 - [Current Test Results](testing/test-results.md)
 
@@ -54,10 +56,6 @@ Welcome to the OpenDirectory documentation. OpenDirectory is a self-hosted, open
 - [samba-ad-dc](services/samba-ad-dc.md)
 - [kerberos-kdc](services/kerberos-kdc.md)
 - [ldap-proxy](services/ldap-proxy.md)
-- [least-privilege](services/least-privilege.md)
-- [certificate-authority](services/certificate-authority.md)
-- [compliance-engine](services/compliance-engine.md)
-- [audit-service](services/audit-service.md)
 - [quick-actions](services/quick-actions.md)
 
 ### UI Guide

@@ -23,7 +23,7 @@ OpenDirectory consists of approximately 30 microservices across three layers. Se
 | update-management | varies | PostgreSQL | OS/app update orchestration |
 | remote-control | varies | — | Remote desktop, command execution |
 | oauth-provider | varies | PostgreSQL | OAuth 2.0 authorization server |
-| apple-mdm | varies | — | Apple APNS, DEP, VPP integration |
+| apple-mdm | varies | — | Apple MDM/APNs plumbing; ADE unavailable (no ABM/ASM connector) |
 | configuration-service | varies | PostgreSQL | Centralised config management |
 | monitoring-service | varies | — | Prometheus aggregation, health dashboard |
 | license-management | varies | PostgreSQL | Software license tracking |
@@ -66,3 +66,5 @@ OpenDirectory consists of approximately 30 microservices across three layers. Se
 - Redis — session cache, distributed locks, WebSocket message queuing
 
 **Health checks:** Every service exposes `GET /health` returning `{ status, service, timestamp, uptime }`. The device-service health check additionally reports WebSocket connection counts and pending enrollment counts.
+
+For the supported SAML launch flow and external OIDC configuration, see the [OAuth provider README](../../services/core/oauth-provider/README.md). For Apple enrollment prerequisites and limits, see the [Apple MDM README](../../services/core/apple-mdm/README.md).

@@ -66,9 +66,9 @@ Password policies (minimum length, complexity, history of last 10 hashes) are en
 | POST | `/api/auth/change-password` | Change password (requires current password) | Yes |
 | POST | `/api/auth/reset-password` | Initiate password reset (sends email) | No |
 | POST | `/api/auth/password-reset/confirm` | Confirm reset with token and new password | No |
-| GET | `/api/auth/sso/providers` | List configured SSO providers | No |
-| GET | `/api/auth/sso/:provider` | Initiate SSO redirect | No |
-| GET | `/api/auth/sso/:provider/callback` | SSO callback handler | No |
+| GET | `/api/auth/sso/providers` | Retired (410); use central OAuth authorization | No |
+| GET | `/api/auth/sso/:provider` | Retired (410); use central OAuth authorization | No |
+| GET | `/api/auth/sso/:provider/callback` | Retired (410); use central OAuth federation callback | No |
 | GET | `/api/auth/users` | List all users (admin) | Admin |
 | GET | `/api/auth/users/:userId` | Get user by ID (admin) | Admin |
 | PUT | `/api/auth/users/:userId` | Update user attributes (admin) | Admin |

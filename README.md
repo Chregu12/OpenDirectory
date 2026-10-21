@@ -12,6 +12,8 @@ Implemented slices include company profiles and directory, groups and organizati
 
 See the [installation guide](docs/operations/installation.md) for the current local setup and prerequisites. The product and integration boundaries are described in the [architecture](docs/architecture/architecture.md) and [Apple capability matrix](docs/integrations/apple-capability-matrix.md).
 
+The central login supports an [external OIDC adapter and authenticated SAML IdP launches](services/core/oauth-provider/README.md). Both need explicit configuration; SAML currently supports IdP-initiated HTTP-POST. [Apple ADE setup](docs/integrations/apple-automated-device-enrollment.md) is separate: there is no accepted ABM/ASM connector, and unavailable enrollment APIs no longer report demo devices or successful assignments.
+
 ## Development
 
 Run tests for the component you change; setup and test commands are in the [test strategy](docs/testing/test-strategy.md) and [test results](docs/testing/test-results.md). Contributions are welcome—please open an issue for substantial changes.

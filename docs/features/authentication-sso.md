@@ -127,28 +127,13 @@ curl -X POST http://authentication-service:3001/api/auth/users/<userId>/sessions
 
 ## 4. Single Sign-On (SSO)
 
-### OIDC provider integration
+### Central OIDC federation and SAML
 
-OpenDirectory can delegate authentication to external OIDC identity providers (Google Workspace, Azure AD, Okta, etc.).
+External OIDC authentication now uses the central `oauth-provider` authorization page and its generic adapter. It validates discovery, RS256 ID tokens, state, nonce and S256 PKCE. Explicit issuer/subject bindings select existing local identities; application assignments and independent local OTP requirements remain enforced. Tokens distinguish federated authentication from local passwords.
 
-```bash
-# List configured SSO providers
-curl http://authentication-service:3001/api/auth/sso/providers
+SAML supports authenticated **IdP-initiated HTTP-POST** launches to registered applications, with a persistent matching X.509 signing certificate, signed response and assertion, fixed ACS and audience, local application assignment checks and MFA policy. SP-initiated AuthnRequests, inbound SAML SP federation and Single Logout are not implemented. Without configuration SAML returns `503 saml_not_configured`.
 
-# Initiate SSO login (redirects to IdP)
-curl -L http://authentication-service:3001/api/auth/sso/google
-
-# Handle callback (called by IdP after authentication)
-# GET /api/auth/sso/:provider/callback?code=<authCode>&state=<state>
-```
-
-### SAML 2.0 SP support
-
-OpenDirectory acts as a SAML 2.0 Service Provider. Configure a SAML IdP in **Settings → SSO → SAML** by providing:
-- IdP metadata URL or XML
-- Entity ID
-- Assertion Consumer Service URL (provided by OpenDirectory)
-- Attribute mapping (email, displayName, groups)
+See the [configuration, endpoints, examples and limits](../../services/core/oauth-provider/README.md). The previous `/api/auth/sso/*` endpoints return `410 legacy_sso_retired`; their unvalidated callback and JWT-in-URL behavior has been removed. A Settings → SSO → SAML configuration UI is not implemented. Apple device enrollment and Managed Apple Account federation require separate integrations.
 
 ### OAuth 2.0 flows
 
