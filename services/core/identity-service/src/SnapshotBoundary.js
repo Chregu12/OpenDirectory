@@ -21,7 +21,9 @@ class SnapshotBoundary{
   async actor(client,frame,tenant){
     const user=frame.user;const state=await new AuthorizationState({transaction:operation=>operation(client)}).state(user.iss,user.sub);
     if(!state.active || !sameContext(state.context,user.identity_authorization) || !sameTenantContext(state.tenant,tenant) || !acceptsRoleAuthentication(state.authentication,user))fail(401,'Original snapshot authority changed');
-    if(!(frame.self && frame.kind==='user' && frame.id===state.context.userId) && !getIdentityPermissions({actor_type:'user',roles:state.roles}).includes(frame.permission))fail(403,'Canonical snapshot duty required');
+    const companyGroup = frame.companyGroup === true && frame.kind === 'group' && frame.permission === 'groups.read'
+      && (await require('./CompanyOwner').companyDirectoryPermissions(client, user)).includes('groups.read');
+    if(!(frame.self && frame.kind==='user' && frame.id===state.context.userId) && !companyGroup && !getIdentityPermissions({actor_type:'user',roles:state.roles}).includes(frame.permission))fail(403,'Canonical snapshot duty required');
     return state.authentication;
   }
   async workloadState(client,user){

@@ -21,7 +21,7 @@ V2-Offboarding erfasst alle lokalen Quellen und aktiven Blueprint-Bindungen eins
 ## Grenzen
 
 - Eine lokale Blueprint-Freigabe bestätigt keine Installation, Gerätekonfiguration oder Apple-MDM-Ausführung.
-- Es gibt keine Gruppen-, Geräte-, Standort- oder OU-Zuweisung und keine automatische Lizenzvererbung.
+- Allgemeine Konfigurationszuweisungen an Gruppen, Geräte, Standorte und OUs bleiben offen. Für lokale Lizenzen existiert jetzt der gesonderte [Lizenzgruppen-Abgleich](company-license-groups.md) mit lizenzreinen Blueprints und ausdrücklicher Pool-Verknüpfung.
 - Externe App-Käufe, Herstellerbestände und Providerzustellung sind nicht Teil dieser Funktion.
 - Outbox-Belege sind tatsächlich `pending`; ein Worker oder zugestelltes Ereignis wird damit nicht behauptet.
 - Die getrennten Identity-/Policy-Commits bilden keine verteilte Transaktion.

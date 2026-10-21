@@ -234,3 +234,7 @@ Returns a list of setting keys that are defined by multiple active policies, alo
 ```
 
 Returns `503` if the database connection fails.
+
+## Own-company license groups
+
+`/api/licenses/company/groups` links ordinary home-tenant directory groups to finite own pools, with explicit paged reconciliation. The existing source-aware allocator shares one seat per pool/user and preserves independent origins. See [license groups](../features/company-license-groups.md) for exact routes, original human/MFA authority, partial results, CLI commands and migration 028. General blueprint configuration deployment to groups and unattended app delegation remain open.

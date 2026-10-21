@@ -17,6 +17,7 @@ COPY packages/policy-command-contract.js /packages/policy-command-contract.js
 COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
 COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-contract.js
 COPY packages/company-license-contract/ /packages/company-license-contract/
+COPY packages/company-license-group-contract.js /packages/company-license-group-contract.js
 COPY packages/company-blueprint-contract/ /packages/company-blueprint-contract/
 COPY packages/company-blueprint-assignment-contract/ /packages/company-blueprint-assignment-contract/
 COPY packages/group-license-lease-contract.js /packages/group-license-lease-contract.js

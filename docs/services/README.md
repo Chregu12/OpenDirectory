@@ -68,3 +68,5 @@ OpenDirectory consists of approximately 30 microservices across three layers. Se
 **Health checks:** Every service exposes `GET /health` returning `{ status, service, timestamp, uptime }`. The device-service health check additionally reports WebSocket connection counts and pending enrollment counts.
 
 For the supported SAML launch flow and external OIDC configuration, see the [OAuth provider README](../../services/core/oauth-provider/README.md). For Apple enrollment prerequisites and limits, see the [Apple MDM README](../../services/core/apple-mdm/README.md).
+
+[Own-company license groups](../features/company-license-groups.md) use identity-service canonical group snapshots and policy-service pool links/source-aware allocations. UI and CLI writes retain the original human owner session and current MFA.

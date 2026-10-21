@@ -259,6 +259,15 @@ function inventoryAuthority() {
     const current=await new AuthorizationState(database).state(actor.iss,actor.sub);if(!current.active)throw Object.assign(new Error('Actual inventory source inactive'),{status:401});return current.tenant;
   }});
 }
+test('actual roleless owner can provide only own company group snapshots, including retained deletion',async()=>{
+  const first=await activeCompany();const second=await activeCompany();const {creator,groups}=ownDirectory();const bearer='Bearer actual-original-owner';
+  const own=await creator.group({name:'License members'},first.user,bearer);const foreign=await creator.group({name:'Foreign license members'},second.user,bearer);
+  const boundary=new(require('../SnapshotBoundary').SnapshotBoundary)(database,{issuer,revalidateTenant:async(_bearer,user)=>(await new AuthorizationState(database).state(issuer,user.sub)).tenant});
+  const read=id=>new(require('../GroupSnapshotStore').GroupSnapshotStore)(boundary.scoped({user:first.user,authorization:bearer,id,kind:'group',permission:'groups.read',write:true,companyGroup:true})).snapshot(id,{issuer,subject:first.user.sub});
+  assert.deepEqual(first.user.roles,[]);assert.equal((await read(own.id)).groupId,own.id);await assert.rejects(read(foreign.id),error=>error.status===404);
+  await groups.remove(own.id,require('../GroupMutator').groupEtag(own),first.user,bearer);assert.equal((await read(own.id)).deleted,true);
+  first.user.auth_time-=301;first.user.mfa_authorization.authTime-=301;await assert.rejects(read(own.id),error=>[401,403].includes(error.status));
+});
 test('actual roleless company owner supplies bounded live inventory authority and only own canonical recipient snapshots',async()=>{
   const first=await activeCompany();const second=await activeCompany();const bearer='Bearer actual-original-owner';const authority=inventoryAuthority();
   const employee=await ownDirectory().creator.user({username:'inventory-employee',email:'inventory@example.invalid'},first.user,bearer);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 import { createClient } from './lib/opendirectory-client.mjs';
+import { createGroupClient } from './lib/license-groups.mjs';
 
 const usage = `OpenDirectory app accounts and API automation (Node.js 20+)
 
@@ -8,6 +9,12 @@ const usage = `OpenDirectory app accounts and API automation (Node.js 20+)
   node scripts/od.mjs app enable CLIENT_ID
   node scripts/od.mjs app disable CLIENT_ID
   node scripts/od.mjs app rotate CLIENT_ID
+  node scripts/od.mjs group create "Name"
+  node scripts/od.mjs group member add|remove GROUP_ID USER_ID
+  node scripts/od.mjs license-group list [GROUP_ID]
+  node scripts/od.mjs license-group link GROUP_ID POOL_ID "Reason (10–500 characters)"
+  node scripts/od.mjs license-group sync RULE_ID "Reason (10–500 characters)"
+  node scripts/od.mjs license-group unlink RULE_ID "Reason (10–500 characters)"
   node scripts/od.mjs check
   node scripts/od.mjs request GET /api/path
   node scripts/od.mjs request POST /api/path body.json [--if-match ETAG]
@@ -17,7 +24,7 @@ OPENDIRECTORY_API_URL     API origin; defaults to the issuer
 OPENDIRECTORY_CLIENT_ID   App client ID
 OPENDIRECTORY_CLIENT_SECRET App secret from your secret store
 OPENDIRECTORY_SCOPES      Approved scopes for this run; defaults to empty
-OPENDIRECTORY_ADMIN_ACCESS_TOKEN User token, only for app management
+OPENDIRECTORY_ADMIN_ACCESS_TOKEN Original human token for app/group management
 
 Creation starts disabled and prints the secret once. Activation is separate.
 No automatic write retries. Inspect the current state after an uncertain result.
@@ -29,9 +36,16 @@ try {
   const client = createClient({ issuer: process.env.OPENDIRECTORY_ISSUER, apiUrl: process.env.OPENDIRECTORY_API_URL || process.env.OPENDIRECTORY_ISSUER,
     clientId: process.env.OPENDIRECTORY_CLIENT_ID, clientSecret: process.env.OPENDIRECTORY_CLIENT_SECRET, scopes: process.env.OPENDIRECTORY_SCOPES || '', adminToken: process.env.OPENDIRECTORY_ADMIN_ACCESS_TOKEN });
   let result;
+  const groups = createGroupClient(client);
   if (command === 'app' && action === 'create' && args.length >= 1 && args.length <= 2) result = await client.createApp(args[0], (args[1] || '').split(/\s+/).filter(Boolean));
   else if (command === 'app' && ['enable', 'disable'].includes(action) && args.length === 1) result = await client.enableApp(args[0], action === 'enable');
   else if (command === 'app' && action === 'rotate' && args.length === 1) result = await client.rotateApp(args[0]);
+  else if (command === 'group' && action === 'create' && args.length === 1) result = await groups.create(args[0]);
+  else if (command === 'group' && action === 'member' && args.length === 3) result = await groups.member(args[0], args[1], args[2]);
+  else if (command === 'license-group' && action === 'list' && args.length <= 1) result = await groups.list(args[0]);
+  else if (command === 'license-group' && action === 'link' && args.length === 3) result = await groups.linkPool(...args);
+  else if (command === 'license-group' && action === 'sync' && args.length === 2) result = await groups.sync(...args);
+  else if (command === 'license-group' && action === 'unlink' && args.length === 2) result = await groups.unlink(...args);
   else if (command === 'check' && !action && args.length === 0) result = await client.check();
   else if (command === 'request' && action && args.length >= 1 && args.length <= 4) {
     const conditional = args.indexOf('--if-match'); let etag;
@@ -44,6 +58,7 @@ try {
     result = await client.request(action.toUpperCase(), args[0], body, { etag });
   } else throw new Error('Invalid command; use --help');
   console.log(JSON.stringify(result, null, 2));
+  if (result?.hasBlocked) process.exitCode = 2;
 } catch (error) {
   // Never include request bodies, credentials or provider responses in diagnostics.
   console.error(error?.name === 'ApiError' ? error.message : 'Operation failed or is unconfirmed. Check configuration, authorization and current state; use --help.');

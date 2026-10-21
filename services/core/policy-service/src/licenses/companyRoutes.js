@@ -8,6 +8,7 @@ const { poolEtag, offboardingEtag } = require('../../../../../packages/company-l
 function companyLicenseRoutes(allocator, options) {
   const router = Router(); const store = new CompanyLicenses(allocator, options);
   const offboarding = new CompanyOffboarding(store, options?.offboarding);
+  router.use('/groups', require('./companyGroupRoutes').companyGroupRoutes(store, options?.groups));
   router.use('/v2', require('./companyV2Routes').companyLicenseV2Routes(store.v2, offboarding.v2));
   router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); req.companyLicenseCorrelation = randomUUID(); res.set('X-Correlation-ID', req.companyLicenseCorrelation);
     if (req.headers['x-api-key'] || req.method !== 'GET' && Object.keys(req.query).length || req.method === 'GET' && Object.keys(req.body || {}).length) return res.status(400).json({ error: 'Exact company license request required' }); next(); });

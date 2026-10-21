@@ -10,6 +10,7 @@ Welcome to the OpenDirectory documentation. OpenDirectory is a self-hosted, open
 - [Actual Implementation Status and Gap Analysis](implementation-status.md)
 - [Tenant-Bound License and Policy Sources](features/tenant-license-sources.md)
 - [Own-Company Local License Inventory and Allocation](features/company-licenses.md)
+- [Normale Gruppen, Lizenzgruppen und Skript-Verknüpfungen](features/company-license-groups.md)
 - [Dauerhaftes lokales Mitarbeiter-Offboarding](features/company-offboarding.md)
 - [Unabhängig berechtigter Rollen-/PIM-Entzug beim Austritt](features/company-offboarding-access.md)
 - [Geräterückgabe anfordern und manuell bestätigen](features/device-returns.md)

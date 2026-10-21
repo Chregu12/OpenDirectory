@@ -1,6 +1,7 @@
 'use strict';
 const{randomUUID}=require('node:crypto');
 jest.mock('../AuthorizationState',()=>({AuthorizationState:jest.fn()}));
+jest.mock('../CompanyOwner',()=>({companyDirectoryPermissions:jest.fn(async()=>[])}));
 const{AuthorizationState}=require('../AuthorizationState');const{SnapshotBoundary}=require('../SnapshotBoundary');
 let user;let tenant;let current;let query;let database;let boundary;let frame;let revalidateTenant;let revalidateAccess;let binding;
 beforeEach(()=>{
@@ -20,6 +21,13 @@ test('claimed admin and permissions do not replace current canonical duties or r
 test('own minimal eligibility can be read without global license duties, not another recipient',async()=>{current.roles=['user'];frame.self=true;frame.id=user.identity_authorization.userId;await expect(boundary.run(frame,async()=>({enabled:true}))).resolves.toEqual({enabled:true});frame.id=randomUUID();query.mockClear();await expect(boundary.run(frame,jest.fn())).rejects.toMatchObject({status:403});expect(query).not.toHaveBeenCalled();});
 test.each([null,'foreign'])('retained foreign or unowned targets remain hidden even from canonical administration: %s',async owner=>{current.roles=['admin'];query.mockResolvedValue({rows:[{tenant_id:owner}]});const operation=jest.fn();await expect(boundary.run(frame,operation)).rejects.toMatchObject({status:404});expect(operation).not.toHaveBeenCalled();});
 test('a group refresh uses the same own-target boundary before entering its controlled write transaction',async()=>{current.roles=['license-group-reader'];frame={...frame,kind:'group',permission:'licenses.groups.read',write:true};await boundary.run(frame,async()=>({}));expect(database.transaction).toHaveBeenCalledWith(expect.any(Function),{readOnly:false});});
+test('only the explicit company group path can use actual roleless owner directory permission', async () => {
+  current.roles=[]; frame={...frame,kind:'group',permission:'groups.read',write:true,companyGroup:true};
+  const {companyDirectoryPermissions}=require('../CompanyOwner'); companyDirectoryPermissions.mockResolvedValue(['groups.read']);
+  await expect(boundary.run(frame,async()=>({own:true}))).resolves.toEqual({own:true}); expect(companyDirectoryPermissions).toHaveBeenCalledTimes(2);
+  await expect(boundary.run({...frame,companyGroup:false},jest.fn())).rejects.toMatchObject({status:403});
+  companyDirectoryPermissions.mockResolvedValue([]); await expect(boundary.run(frame,jest.fn())).rejects.toMatchObject({status:403});
+});
 test('original identity drift or inadequate MFA never reaches target data',async()=>{current.context.revision='2';const operation=jest.fn();await expect(boundary.run(frame,operation)).rejects.toMatchObject({status:401});expect(operation).not.toHaveBeenCalled();current.context.revision='1';user.auth_time-=301;await expect(boundary.run(frame,operation)).rejects.toMatchObject({status:401});});
 test('late original bearer revocation discards the result before the outer transaction returns',async()=>{const operation=jest.fn(async()=>({wouldBe:'released'}));revalidateTenant.mockResolvedValueOnce(tenant).mockRejectedValueOnce(Object.assign(new Error('revoked'),{status:401}));await expect(boundary.run(frame,operation)).rejects.toMatchObject({status:401});expect(operation).toHaveBeenCalledTimes(1);});
 test('a tenant generation change after actual SQL cannot release the source snapshot',async()=>{revalidateTenant.mockResolvedValueOnce(tenant).mockResolvedValueOnce(tenant).mockResolvedValueOnce({...tenant,generation:'2'});await expect(boundary.run(frame,async()=>({}))).rejects.toMatchObject({status:401});});

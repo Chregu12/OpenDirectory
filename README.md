@@ -16,6 +16,8 @@ The central login supports an [external OIDC adapter and authenticated SAML IdP 
 
 App accounts can be created directly in the UI and managed from scripts with the [automation CLI](docs/features/app-accounts-automation.md). Mail provisioning still needs a selected provider and a separate connector.
 
+[License groups](docs/features/company-license-groups.md) link ordinary directory groups to finite license pools. UI and script reconciliation allocate one seat per user/pool, retain separate origins and release only the departing group's source.
+
 ## Development
 
 Run tests for the component you change; setup and test commands are in the [test strategy](docs/testing/test-strategy.md) and [test results](docs/testing/test-results.md). Contributions are welcome—please open an issue for substantial changes.

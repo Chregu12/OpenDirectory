@@ -152,3 +152,9 @@ Der zentrale OAuth-Dienst unterstützt den [OIDC-Adapter und authentifizierte SA
 ## CLI für App-Konten
 
 Node.js 20+ und `node scripts/od.mjs --help` genügen. Es werden keine neuen Server-Abhängigkeiten eingeführt. Die CLI benötigt die tatsächliche HTTPS-Origin des Issuers und gegebenenfalls eine separate API-Origin; Zugangsdaten kommen aus der Secret-Verwaltung des Runners. App-Verwaltung und Automationsläufe verwenden ausdrücklich verschiedene Identitäten. Einrichtung und Grenzen stehen im [App-Konto-Leitfaden](../features/app-accounts-automation.md).
+
+## Lizenzgruppen und Skript-Abgleich
+
+Der [Lizenzgruppenweg](../features/company-license-groups.md) benötigt aktuellen Identity-Code mit Migrationen **001–047**, Policy **001–028** und koordiniertes Gateway/Frontend. Keine neue Identity-Migration oder Dependency. Policy 028 ergänzt Links, Events/Pending-Outbox und Gruppeneffekte; bestehende Legacy-Gruppenworker werden nicht für Firmenpools freigeschaltet. Das Policy-Dockerfile kopiert `packages/company-license-group-contract.js` im bestehenden Root-Buildkontext.
+
+Unter Verzeichnisgruppen den Pool ausdrücklich verknüpfen. UI und die CLI-Mitgliedsbefehle starten den Abgleich; sonst muss die Integration `license-group sync` auslösen. Originaler menschlicher Bearer und aktuelle eigene MFA bleiben erforderlich, keine unbeaufsichtigte App-Schreibdelegation. Bei Timeout oder Teilfehler tatsächlichen Stand prüfen; frühere Benutzer können bereits gespeichert sein. Kein Produktivrollout oder Herstellerzugriff wird hier ausgeführt.

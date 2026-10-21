@@ -6,6 +6,8 @@ import {directoryGroups,DirectoryGroup,GroupProfile} from '@/lib/directoryGroups
 import {directoryError,DirectoryAccess} from '@/lib/directoryUsers';
 import {ensureSession} from '@/lib/auth';
 import {DirectoryConfirmation} from './UserDetailPanel';
+import CompanyLicenseGroupsPanel from './CompanyLicenseGroupsPanel';
+import {companyLicenseGroups} from '@/lib/companyLicenseGroups';
 
 type Editor='create'|'edit'|'member'|null;
 type Confirmation={kind:'delete'|'remove';group:DirectoryGroup;userId?:string}|null;
@@ -43,7 +45,20 @@ export default function UserGroupsView(){
  }
  async function confirm(){
   if(!confirmation||busy||operationError||!canMutate||!can(confirmation.kind==='delete'?'groups.delete':'groups.members.manage'))return;const action=confirmation;setBusy(true);
-  try{if(action.kind==='delete'){await directoryGroups.remove(action.group);setGroups(previous=>previous.filter(group=>group.id!==action.group.id));setSelected(null);setNotice('Kanonische Gruppe gelöscht. Externe Wirkungen sind separat zu prüfen.');}
+  try{if(action.kind==='delete'){await directoryGroups.remove(action.group);setGroups(previous=>previous.filter(group=>group.id!==action.group.id));setSelected(null);setNotice('Kanonische Gruppe gelöscht. Externe Wirkungen sind separat zu prüfen.');
+    if(access?.companyOwner&&access.userId){
+     try{
+      const linked=await companyLicenseGroups.list(action.group.id,access.userId);
+      if(linked.truncated)throw new Error('Unvollständige Lizenzgruppen');
+      let blocked=false;
+      for(const rule of linked.rules){
+       const results=await companyLicenseGroups.sync(rule,'Lizenzabgleich nach bestätigter Gruppenlöschung',linked);
+       blocked ||= results.some(row=>row.status==='blocked');
+      }
+      setNotice(blocked?'Gruppe gelöscht; einzelne lokale Lizenzentfernungen sind blockiert. Lizenzgruppen per Skript prüfen.':'Gruppe gelöscht; lokale Lizenzgruppen abgeglichen. Externe Wirkungen separat prüfen.');
+     }catch{setNotice('Gruppe gelöscht. Lizenzabgleich nicht vollständig bestätigt; Lizenzgruppen per Skript prüfen. Frühere Zuweisungen können bestehen bleiben.');}
+    }
+   }
    else{update(await directoryGroups.removeMember(action.group,action.userId!));setNotice('Entfernung der aktuellen Verknüpfung bestätigt. Externe Lizenzentfernung ist damit nicht bestätigt.');}
    selfCheck(action.group,action.userId);setConfirmation(null);toast.success('Verzeichnisaktion bestätigt.');
   }catch(failure){setOperationError(directoryError(failure));}finally{setBusy(false);}
@@ -66,6 +81,7 @@ export default function UserGroupsView(){
     <div className="flex flex-wrap gap-3">{can('groups.update')&&<button className={control} disabled={!canMutate||busy} onClick={()=>open('edit')}>Gruppenprofil bearbeiten</button>}{can('groups.members.manage')&&<button className={control} disabled={!canMutate||busy} onClick={()=>open('member')}>Mitglied verknüpfen</button>}{can('groups.delete')&&<button className={control} disabled={!canMutate||busy} onClick={()=>{setOperationError('');setConfirmation({kind:'delete',group:selected});}}>Gruppe löschen</button>}</div>
     <h3 className="font-semibold">Verknüpfte Benutzer-IDs</h3>{!selected.members.length?<p>Keine Benutzer verknüpft.</p>:<ul className="space-y-2">{selected.members.map(userId=><li key={userId} className="flex flex-wrap items-center justify-between gap-2"><span className="break-all">{userId}</span>{can('groups.members.manage')&&<button className={control} disabled={!canMutate||busy} aria-label={'Verknüpfung '+userId+' entfernen'} onClick={()=>{setOperationError('');setConfirmation({kind:'remove',group:selected,userId});}}>Verknüpfung entfernen</button>}</li>)}</ul>}
     <p className="text-sm">Angezeigt werden kanonische Verknüpfungen, keine behaupteten effektiven Berechtigungen. Unabhängige Freigaben und Fristen findest du unter <a className="underline" href="/roles">Rollen &amp; Rechte</a>. Benutzerprofile werden für diese Ansicht nicht abgerufen.</p>
+    {access?.companyOwner && access.userId && <CompanyLicenseGroupsPanel group={selected} actorUserId={access.userId}/>}
    </article>:<p>Wähle eine kanonische Gruppe.</p>}
   </div>}
   {!loading&&!can('groups.read')&&selected&&<p role="status">Bestätigte Gruppe: {selected.name} · {selected.id}</p>}

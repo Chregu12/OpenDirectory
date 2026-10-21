@@ -32,9 +32,9 @@ const companyOffboarding = new (require('./CompanyOffboarding').CompanyOffboardi
 const companyOffboardingGroups = new (require('./CompanyOffboardingGroups').CompanyOffboardingGroups)(db);
 const companyOffboardingAccess = new (require('./CompanyOffboardingAccess').CompanyOffboardingAccess)(db);
 const snapshotBoundary = new (require('./SnapshotBoundary').SnapshotBoundary)(db);
-function snapshotDatabase(req,permission,{self=false,kind='user',write=false,workload=false}={}){
+function snapshotDatabase(req,permission,{self=false,kind='user',write=false,workload=false,companyGroup=false}={}){
   if(Object.keys(req.query).length || Object.keys(req.body || {}).length || req.headers['x-api-key'])throw Object.assign(new Error('Exact snapshot request required'),{status:400});
-  return snapshotBoundary.scoped({user:req.user,authorization:req.headers.authorization,id:req.params.id,kind,permission,self,write,workload});
+  return snapshotBoundary.scoped({user:req.user,authorization:req.headers.authorization,id:req.params.id,kind,permission,self,write,workload,companyGroup});
 }
 const { AuthorizationState, authorizationRequest, authorizationTargetRequest } = require('./AuthorizationState');
 const authorizationState = new AuthorizationState(db);
@@ -122,6 +122,17 @@ for (const method of ['get', 'post']) app[method]('/api/identity/company-bluepri
   if (req.user?.actor_type !== 'user') return res.status(403).json({ error: 'Canonical company blueprint assignment human required' });
   if (method === 'post') require('../../../../packages/company-blueprint-assignment-contract').exact(req.body, ['userId']);
   res.json(await companyBlueprintAssignmentAuthority.read(req.user, req.headers.authorization, ...(method === 'post' ? [req.body] : [])));
+}));
+app.get('/api/identity/company-license-groups/:id/snapshot', asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store').set('X-OD-License-Snapshot-Protocol', '1');
+  if (req.method !== 'GET') return res.status(404).json({ error: 'Not found' });
+  if (Object.keys(req.query).length || req.headers['x-api-key'] !== undefined || Array.isArray(req.body) || Object.keys(req.body || {}).length
+    || Number(req.headers['content-length'] || 0) > 0 || req.headers['transfer-encoding'] !== undefined) return res.status(400).json({ error: 'Exact company group snapshot required' });
+  if (req.user?.actor_type !== 'user') return res.status(403).json({ error: 'Company group human required' });
+  await companyLicenseAuthority.read(req.user, req.headers.authorization);
+  const snapshot = await new GroupSnapshotStore(snapshotDatabase(req, 'groups.read', { kind: 'group', write: true, companyGroup: true })).snapshot(req.params.id, { issuer: req.user.iss, subject: req.user.sub });
+  await companyLicenseAuthority.read(req.user, req.headers.authorization);
+  res.json(snapshot);
 }));
 app.use('/api', requireIdentityAccess);
 const demoMode = process.env.IDENTITY_DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';

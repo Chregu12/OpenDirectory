@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.19.0",
+    "version": "1.20.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, employee credential provisioning, external legal verification or production SaaS acceptance."
   },
   "security": [
@@ -30555,6 +30555,555 @@
           }
         }
       }
+    },
+    "/api/licenses/company/groups": {
+      "get": {
+        "operationId": "listOwnCompanyLicenseGroups",
+        "description": "Original own-company human bearer with current owner or canonical home-admin authority and independently bound MFA at most 300 seconds old. No API key, workload, caller tenant or authority replacement. One license-only immutable blueprint per group/pool link; existing allocator deduplicates seats per pool/user and preserves other direct/blueprint sources. Eligible effective canonical members only; independent group review remains required. No background worker or external provider provisioning. A sync processes at most 25 sorted user UUIDs and may commit some users before a later error. Cursor pages pin one directory revision; changed content, eligibility, pool versions or original authority can stop a run. Shortage is reported per user as blocked, never as full success.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own local state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLicenseGroups"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "401": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "403": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "404": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "409": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "412": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "428": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "503": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          }
+        }
+      },
+      "post": {
+        "operationId": "linkOwnCompanyLicenseGroup",
+        "description": "Original own-company human bearer with current owner or canonical home-admin authority and independently bound MFA at most 300 seconds old. No API key, workload, caller tenant or authority replacement. One license-only immutable blueprint per group/pool link; existing allocator deduplicates seats per pool/user and preserves other direct/blueprint sources. Eligible effective canonical members only; independent group review remains required. No background worker or external provider provisioning. A sync processes at most 25 sorted user UUIDs and may commit some users before a later error. Cursor pages pin one directory revision; changed content, eligibility, pool versions or original authority can stop a run. Shortage is reported per user as blocked, never as full success.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Confirmed local linkage or bounded member results, with pending delivery only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLicenseGroupReceipt"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^\"company-license-group-[a-f0-9-]{36}-[12]\"$"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "401": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "403": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "404": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "409": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "412": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "428": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "503": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "groupId",
+                  "poolId",
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "groupId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "poolId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/licenses/company/groups/{id}/preview": {
+      "get": {
+        "operationId": "previewOwnCompanyLicenseGroup",
+        "description": "Original own-company human bearer with current owner or canonical home-admin authority and independently bound MFA at most 300 seconds old. No API key, workload, caller tenant or authority replacement. One license-only immutable blueprint per group/pool link; existing allocator deduplicates seats per pool/user and preserves other direct/blueprint sources. Eligible effective canonical members only; independent group review remains required. No background worker or external provider provisioning. A sync processes at most 25 sorted user UUIDs and may commit some users before a later error. Cursor pages pin one directory revision; changed content, eligibility, pool versions or original authority can stop a run. Shortage is reported per user as blocked, never as full success.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own local state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLicenseGroupPreview"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "401": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "403": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "404": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "409": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "412": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "428": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "503": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          }
+        }
+      }
+    },
+    "/api/licenses/company/groups/{id}/sync": {
+      "post": {
+        "operationId": "syncOwnCompanyLicenseGroup",
+        "description": "Original own-company human bearer with current owner or canonical home-admin authority and independently bound MFA at most 300 seconds old. No API key, workload, caller tenant or authority replacement. One license-only immutable blueprint per group/pool link; existing allocator deduplicates seats per pool/user and preserves other direct/blueprint sources. Eligible effective canonical members only; independent group review remains required. No background worker or external provider provisioning. A sync processes at most 25 sorted user UUIDs and may commit some users before a later error. Cursor pages pin one directory revision; changed content, eligibility, pool versions or original authority can stop a run. Shortage is reported per user as blocked, never as full success.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Confirmed local linkage or bounded member results, with pending delivery only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLicenseGroupSync"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^\"company-license-group-[a-f0-9-]{36}-[12]\"$"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "401": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "403": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "404": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "409": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "412": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "428": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "503": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "groupRevision",
+                  "cursor",
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "groupRevision": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Exact PostgreSQL BIGINT string."
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "cursor": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/licenses/company/groups/{id}/unlink": {
+      "post": {
+        "operationId": "unlinkOwnCompanyLicenseGroup",
+        "description": "Original own-company human bearer with current owner or canonical home-admin authority and independently bound MFA at most 300 seconds old. No API key, workload, caller tenant or authority replacement. One license-only immutable blueprint per group/pool link; existing allocator deduplicates seats per pool/user and preserves other direct/blueprint sources. Eligible effective canonical members only; independent group review remains required. No background worker or external provider provisioning. A sync processes at most 25 sorted user UUIDs and may commit some users before a later error. Cursor pages pin one directory revision; changed content, eligibility, pool versions or original authority can stop a run. Shortage is reported per user as blocked, never as full success.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"company-license-group-[a-f0-9-]{36}-[12]\"$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Confirmed local linkage or bounded member results, with pending delivery only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLicenseGroupReceipt"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^\"company-license-group-[a-f0-9-]{36}-[12]\"$"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "401": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "403": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "404": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "409": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "412": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "428": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "503": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/company-license-groups/{id}/snapshot": {
+      "get": {
+        "operationId": "readOriginalCompanyLicenseGroupSnapshot",
+        "description": "Original own-company human bearer with current owner or canonical home-admin authority and independently bound MFA at most 300 seconds old. No API key, workload, caller tenant or authority replacement. One license-only immutable blueprint per group/pool link; existing allocator deduplicates seats per pool/user and preserves other direct/blueprint sources. Eligible effective canonical members only; independent group review remains required. No background worker or external provider provisioning. A sync processes at most 25 sorted user UUIDs and may commit some users before a later error. Cursor pages pin one directory revision; changed content, eligibility, pool versions or original authority can stop a run. Shortage is reported per user as blocked, never as full success.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own local state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseGroupSnapshot"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-OD-License-Snapshot-Protocol": {
+                "required": true,
+                "schema": {
+                  "const": "1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "401": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "403": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "404": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "409": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "412": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "428": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          },
+          "503": {
+            "description": "Request rejected or unconfirmed. Earlier member operations may already be committed; read actual state before retrying."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -40366,6 +40915,339 @@
                 }
               }
             }
+          }
+        }
+      },
+      "CompanyLicenseGroup": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "tenantId",
+          "groupId",
+          "poolId",
+          "blueprintId",
+          "status",
+          "revision",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "poolId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "blueprintId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "unlinked"
+            ]
+          },
+          "revision": {
+            "enum": [
+              "1",
+              "2"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CompanyLicenseGroups": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyLicenseGroupsProtocol",
+          "actorUserId",
+          "tenantId",
+          "allocationMode",
+          "rules",
+          "truncated"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyLicenseGroupsProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "allocationMode": {
+            "const": "local-only"
+          },
+          "rules": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/CompanyLicenseGroup"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CompanyLicenseGroupReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyLicenseGroupsProtocol",
+          "actorUserId",
+          "tenantId",
+          "allocationMode",
+          "rule"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyLicenseGroupsProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "allocationMode": {
+            "const": "local-only"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/CompanyLicenseGroup"
+          }
+        }
+      },
+      "CompanyLicenseGroupPreview": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyLicenseGroupsProtocol",
+          "actorUserId",
+          "tenantId",
+          "allocationMode",
+          "rule",
+          "groupRevision",
+          "groupName",
+          "eligibleMembers",
+          "assignedMembers",
+          "pendingMembers",
+          "removalMembers"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyLicenseGroupsProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "allocationMode": {
+            "const": "local-only"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/CompanyLicenseGroup"
+          },
+          "groupRevision": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Exact PostgreSQL BIGINT string."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "groupName": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eligibleMembers": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "assignedMembers": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "pendingMembers": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "removalMembers": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          }
+        }
+      },
+      "CompanyLicenseGroupSync": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyLicenseGroupsProtocol",
+          "actorUserId",
+          "tenantId",
+          "allocationMode",
+          "rule",
+          "groupRevision",
+          "results",
+          "nextCursor",
+          "hasBlocked"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyLicenseGroupsProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "allocationMode": {
+            "const": "local-only"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/CompanyLicenseGroup"
+          },
+          "groupRevision": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Exact PostgreSQL BIGINT string."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "results": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "userId",
+                "status",
+                "code"
+              ],
+              "properties": {
+                "userId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "status": {
+                  "enum": [
+                    "assigned",
+                    "removed",
+                    "retained",
+                    "blocked"
+                  ]
+                },
+                "code": {
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 499
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "nextCursor": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasBlocked": {
+            "type": "boolean"
           }
         }
       }

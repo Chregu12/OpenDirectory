@@ -6,6 +6,12 @@ const userId = '22222222-2222-4222-8222-222222222222';
 const{groupSnapshot}=require('../../../../../../scripts/lib/group-license-snapshot-fixture.cjs');
 const snapshot=groupSnapshot({groupId,name:'Engineering',revision:'42',memberIds:[userId]});
 const snapshotHeaders = { 'X-OD-License-Snapshot-Protocol': '1' };
+test('company snapshots use the independent owner endpoint with the original bearer',async()=>{
+ const fetchImpl=jest.fn(async()=>new Response(JSON.stringify(snapshot),{headers:snapshotHeaders}));
+ await new GroupSnapshotClient({baseUrl:'https://identity.test',fetchImpl}).snapshot(groupId,'Bearer original',true);
+ expect(fetchImpl.mock.calls[0][0].pathname).toBe('/api/identity/company-license-groups/'+groupId+'/snapshot');
+ expect(fetchImpl.mock.calls[0][1].headers).toEqual({Authorization:'Bearer original'});
+});
 const consent={grantId:'33333333-3333-4333-8333-333333333333',version:'1',issuer:'https://identity.test',clientId:'group-worker',clientRevision:'2',expiresAt:new Date(Date.parse(snapshot.observedAt)+60000).toISOString()};
 test('source-consent metadata is separate from the stable canonical content hash and preserves the original v2 hash representation',()=>{
  const human=normalizeSnapshot(snapshot,groupId);const workload=normalizeSnapshot({...snapshot,sourceAuthorization:consent},groupId);expect(workload.hash).toBe(human.hash);expect(workload.sourceAuthorization).toEqual(consent);expect(workload.schemaVersion).toBe(3);

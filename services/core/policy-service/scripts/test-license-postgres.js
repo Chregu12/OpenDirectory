@@ -18,6 +18,7 @@ runPostgresTests({
     '../src/licenses/__tests__/companyBlueprintAssignments.integration.cjs',
     '../src/licenses/__tests__/companyBlueprintLifecycle.integration.cjs',
     '../src/licenses/__tests__/companyLicenses.integration.cjs',
+    '../src/licenses/__tests__/companyLicenseGroups.integration.cjs',
     '../src/licenses/__tests__/companyOffboardingJournal.unit.cjs',
     '../src/licenses/__tests__/companyOffboardingJournal.integration.cjs',
   ].map(filename => path.join(__dirname, filename))],

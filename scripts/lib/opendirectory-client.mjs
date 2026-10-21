@@ -40,12 +40,13 @@ export function createClient({ issuer, apiUrl = issuer, clientId, clientSecret, 
       || result.data.token_type?.toLowerCase() !== 'bearer' || !Number.isFinite(result.data.expires_in) || result.data.expires_in <= 0) throw new Error('Token issuance was not confirmed');
     return result.data.access_token;
   }
-  async function request(method, path, body, { administrative = false, etag } = {}) {
+  async function request(method, path, body, { administrative = false, etag, operationId } = {}) {
     if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) || (method === 'GET' && body !== undefined)) throw new Error('Unsupported request');
     const url = apiPath(path);
+    if (operationId !== undefined && (typeof operationId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(operationId))) throw new Error('Canonical operation UUID required');
     if (administrative && (typeof adminToken !== 'string' || !adminToken)) throw new Error('An administrator user access token is required');
     const bearer = administrative ? adminToken : await token();
-    return json(url, { method, headers: { Authorization: 'Bearer ' + bearer, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(etag ? { 'If-Match': etag } : {}) },
+    return json(url, { method, headers: { Authorization: 'Bearer ' + bearer, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(etag ? { 'If-Match': etag } : {}), ...(operationId ? { 'Idempotency-Key': operationId } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   }
   function clientPath(id) {

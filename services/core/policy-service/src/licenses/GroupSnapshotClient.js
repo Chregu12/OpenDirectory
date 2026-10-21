@@ -78,9 +78,10 @@ class GroupSnapshotClient {
     } finally { clearTimeout(timer); }
   }
 
-  async snapshot(groupId, authorization) {
+  async snapshot(groupId, authorization, company = false) {
     if (typeof groupId !== 'string' || !UUID.test(groupId)) throw new LicenseError(400, 'A canonical identity group UUID is required');
-    const result=normalizeSnapshot(await this.read(`/api/license-groups/${groupId.toLowerCase()}/snapshot`, authorization,MAX_RESPONSE_BYTES), groupId);
+    const prefix = company ? '/api/identity/company-license-groups' : '/api/license-groups';
+    const result=normalizeSnapshot(await this.read(`${prefix}/${groupId.toLowerCase()}/snapshot`, authorization,MAX_RESPONSE_BYTES), groupId);
     if(Date.parse(result.observedAt)>Date.now()+5000||Date.parse(result.validUntil)<=Date.now()||result.sourceAuthorization&&Date.parse(result.sourceAuthorization.expiresAt)<=Date.now()||result.memberships.some(member=>member.reviewDeadlineAt!==null&&Date.parse(member.reviewDeadlineAt)<=Date.now()))throw new LicenseError(503,'Group source observation is not current');return result;
   }
 

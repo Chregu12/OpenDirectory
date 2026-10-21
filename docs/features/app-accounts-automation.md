@@ -1,6 +1,6 @@
 # App-Konten und Skript-Automationen
 
-Stand: 21. Oktober 2026. App-Konten verwenden das bestehende persistente OAuth-Register. Es gibt keine zweite Kontodatenbank und keine pauschale Übernahme von Benutzerrollen.
+Stand: 22. Oktober 2026. App-Konten verwenden das bestehende persistente OAuth-Register. Es gibt keine zweite Kontodatenbank und keine pauschale Übernahme von Benutzerrollen.
 
 ## App-Konto anlegen
 
@@ -64,6 +64,10 @@ Ein App-Konto ist nach der Aktivierung authentifizierbar, erhält aber nicht aut
 
 Rotation, Deaktivierung und Konfigurationsänderungen invalidieren die vorherige Clientgeneration. Tenant-/Quellenbindungen werden dabei nicht stillschweigend auf die neue Generation übertragen. Die CLI liest vor Registeränderungen den aktuellen ETag; Versionskonflikte bleiben Fehler.
 
+## Gruppen und Lizenzpools
+
+Die CLI unterstützt auch `group create`, `group member add|remove` und `license-group list|link|sync|unlink`. Die [Lizenzgruppen-Anleitung](company-license-groups.md) beschreibt den vollständigen Ablauf. Normale Gruppen erhalten durch eine ausdrückliche eigene Pool-Verknüpfung eine Lizenzfunktion; die Mitgliedsbefehle gleichen diese Verknüpfungen als tatsächlicher Company-Owner ab. Diese Schreibaktionen verwenden `OPENDIRECTORY_ADMIN_ACCESS_TOKEN` mit aktuellen eigenen Rechten und MFA, keine App-Tokens. Exit-Code 2 meldet blockierte Benutzer; bereits bestätigte Mitgliederänderungen werden bei einem späteren Vergabefehler nicht zurückgerollt.
+
 ## E-Mail
 
 Eine OpenDirectory-Appregistrierung ist keine Registrierung oder Einwilligung bei Microsoft, Google oder einem Mailserver. Der Mailanbieter für diesen Arbeitsauftrag ist noch nicht ausgewählt; ein neuer Mail-Connector oder Postfach-Provisionierungsablauf wurde deshalb nicht behauptet oder aktiviert.
@@ -72,4 +76,4 @@ Bei Microsoft 365 wäre Versand ein eigener Graph-Adapter: [sendMail](https://le
 
 ## Prüfung
 
-`npm run test:automation-client` führt die acht Node-Client-Regressionen aus; sie sind im Root-Runner und in CI eingebunden. Der OAuth-Service testet die tatsächlich ausgelieferte CLI als separaten Prozess gegen den echten lokalen HTTP-Server: Erstellung, separate Aktivierung, Introspection, fehlende Administrationsrechte, Rotation und Deaktivierung. Die Oberfläche testet den direkten App-Konto-Einstieg und leere Standardrechte.
+`npm run test:automation-client` führt die Node-Regressionen für App-Konten und Lizenzgruppen aus; sie sind im Root-Runner und in CI eingebunden. Der OAuth-Service testet die tatsächlich ausgelieferte CLI als separaten Prozess gegen den echten lokalen HTTP-Server: Erstellung, separate Aktivierung, Introspection, fehlende Administrationsrechte, Rotation und Deaktivierung. Die Oberfläche testet den direkten App-Konto-Einstieg und leere Standardrechte.

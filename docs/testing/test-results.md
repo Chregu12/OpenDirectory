@@ -991,3 +991,20 @@ Der Offboarding-Workflow verglich gespeicherte JSON-Zeitstempel mit `to_jsonb`-W
 | Browser-/Next-E2E | **Nicht bestanden** | Produktionsbuild gelingt; Browser wartet auf `Blueprint-Mitarbeiter auswählen`, das in diesem least-privilege-Szenario nicht erscheint. Kein grüner Browsernachweis |
 
 Die Browser-E2E-Lücke bleibt offen und wird nicht als Produktivabnahme behauptet. MDM-/Apple-Gerätebefehle, vollständige Business-Plattform, übrige BRs und Betriebsabnahme bleiben ebenfalls offen.
+
+## 22. Oktober 2026 — Lizenzgruppen und Skript-Abgleich
+
+Begrenzter lokaler Ablauf: normale Gruppen mit ausdrücklichen eigenen Pool-Verknüpfungen, Mitgliedsabgleich aus UI/CLI und Erhalt anderer Lizenzherkünfte. Keine neue Hersteller-Provisionierung oder unbeaufsichtigte App-Schreibdelegation.
+
+| Prüfung | Ergebnis |
+| --- | --- |
+| Identity Jest | 1'162 bestanden, 57 Suites; ein vorübergehender Socket-Abbruch in einer vorhandenen Routingdefinition bestand beim vollständigen Wiederholungslauf |
+| Policy Jest | 1'313 bestanden, 38 Suites; einschliesslich generiertem OpenAPI-Readback |
+| CLI/Node | 16 bestanden; tatsächlicher CLI-Prozess über HTTP mit ursprünglichem menschlichem Bearer, Operation-Key und Exit 2 bei knappem Pool |
+| Frontend, relevante Gruppen-/Blueprint-Definitionen | 48 bestanden; die zuletzt geänderten Lizenzgruppen-Definitionen zusätzlich 11/11 |
+| Identity PostgreSQL | 63 bestanden; tatsächlicher rollenloser Owner, fremde Gruppen, retained Löschung und MFA-Grenze |
+| Policy PostgreSQL, Lizenzgruppen und Firmenlizenzen | 114 bestanden, davon 9 neue Lizenzgruppenfälle: Poolknappheit, Herkunftsüberlappung, Paginierung, parallele Vergabe, Eligibility-Wechsel, Original-Intent-Recovery und Rollback bei physischem Deadline-Ablauf |
+| Policy PostgreSQL, bestehende Blueprint-Zuweisungen | 11 bestanden mit dem abschliessenden Migrationsstand; Mehrquellen-Vergabe, Rollback, negative Eligibility und historische Recovery |
+| TypeScript / Next-Produktionsbuild | Bestanden; lokaler Next-Lockfile-Patcher meldete eine bestehende Workspace-Warnung, Build mit bereits installiertem SWC und `NEXT_IGNORE_INCORRECT_LOCKFILE=1` ebenfalls bestanden |
+
+Native Tests verwenden isolierte Wegwerf-PostgreSQL-Cluster. Die bisher offene allgemeine Browser-Offboarding-Abnahme ist durch diese Prüfungen nicht erledigt. Keine Produktivdatenbank, externe Lizenzplattform oder Mailbereitstellung wurde verändert.

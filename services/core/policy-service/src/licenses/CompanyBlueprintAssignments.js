@@ -147,7 +147,7 @@ class CompanyBlueprintAssignments {
       return { ...envelope(source), userId, assignments: bindings.map(binding => binding.value), ...await this.configuration(client, bindings), applications: apps };
     });
   }
-  async change(action, id, input, tag, operationId, user, authorization, correlationId = randomUUID()) {
+  async change(action, id, input, tag, operationId, user, authorization, correlationId = randomUUID(), checks = {}) {
     identifier(operationId); identifier(correlationId); if (!['assigned', 'removed'].includes(action)) fail(400, 'Unsupported own assignment action');
     exact(input, action === 'assigned' ? ['id', 'userId', 'blueprintId', 'version', 'eligibilityRevision', 'pools', 'reason', 'confirm'] : ['userId', 'eligibilityRevision', 'pools', 'reason', 'confirm']);
     if (input.confirm !== true) fail(400, 'Explicit assignment confirmation required'); identifier(input.userId); revision(input.eligibilityRevision); text(input.reason, 10, 500);
@@ -155,7 +155,7 @@ class CompanyBlueprintAssignments {
     if (action === 'removed') { if (tag === undefined) fail(428, 'Original assignment If-Match required'); const match = typeof tag === 'string' && /^"company-blueprint-assignment-([a-f0-9-]{36})-([1-9][0-9]{0,18})"$/.exec(tag); if (!match || match[1] !== id) fail(412, 'Original assignment version changed'); expectedRevision = revision(match[2]); }
     const command = { id: operationId, correlationId, action, assignmentId: id, expectedRevision, userId: input.userId, eligibilityRevision: input.eligibilityRevision,
       blueprintId: action === 'assigned' ? identifier(input.blueprintId) : null, version: action === 'assigned' ? versionNumber(input.version) : null, pools: captures(input.pools), reason: input.reason, values: null };
-    return this.execute(command, user, authorization);
+    return this.execute(command, user, authorization, checks);
   }
   async execute(command, user, authorization, supplied = {}) {
     identifier(command.id); identifier(command.userId); const applicationNeeded = command.pools.length > 0;
@@ -168,7 +168,11 @@ class CompanyBlueprintAssignments {
     const actor = source || applicationSource; if (!actor) fail(403, 'Original assignment authority required');
     const principal = { issuer: actor.issuer, subject: actor.subject, userId: actor.actorUserId, enabled: true }; let result;
     const scope = { database: this.database, tenantId: actor.tenant.id, licenseId: null, actorUserId: actor.actorUserId, targetUserId: command.userId,
-      verify: async (client, after) => { await this.unchanged(source, applicationSource, user, authorization); if (!after) await client.query('SELECT company_blueprint_assignment_begin($1::jsonb,$2::jsonb,$3::jsonb)', [source, applicationSource, command]); },
+      verify: async (client, after) => {
+        await this.unchanged(source, applicationSource, user, authorization);
+        if (!after) await client.query('SELECT company_blueprint_assignment_begin($1::jsonb,$2::jsonb,$3::jsonb)', [source, applicationSource, command]);
+        if (supplied.verify) await supplied.verify(client, after, command);
+      },
       complete: async client => { result = (await client.query('SELECT company_blueprint_assignment_finish($1) AS result', [command.id])).rows[0].result; },
       eligibility: async userId => { if (userId !== command.userId) fail(403, 'Recipient outside original assignment'); return { schemaVersion: 1, userId, revision: actor.target.eligibilityRevision, enabled: actor.target.enabled, deleted: actor.target.deleted }; },
     };
