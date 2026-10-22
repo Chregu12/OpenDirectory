@@ -1,5 +1,6 @@
 const { createRemoteJWKSet, jwtVerify } = require('jose');
 const { createAccessStateClient } = require('../../../../../packages/oidc-access-state');
+const { workload } = require('../../../../../packages/company-automation-contract');
 const accessState = createAccessStateClient();
 
 const JWKS_URI = process.env.JWKS_URI || 'http://localhost:3001/jwks';
@@ -24,7 +25,8 @@ function oidcAuth({ skipPaths = [] } = {}) {
       if (payload.token_use !== 'access') return res.status(403).json({ error: 'invalid_token_purpose' });
       await accessState(auth, payload);
       if (payload.actor_type === 'application') {
-        return res.status(403).json({ error: 'workload_policy_administration_forbidden' });
+        if (req.method !== 'POST' || req.path !== '/api/licenses/automation/groups/step') return res.status(403).json({ error: 'workload_policy_administration_forbidden' });
+        workload(payload, ISSUER);
       }
       req.user = payload;
       req.verifiedAccess = Object.freeze({ authorization: auth, claims: structuredClone(payload) });

@@ -8,14 +8,17 @@ const { LicenseAllocator } = require('./LicenseAllocator');
 const { companyLicenseContext } = require('./CompanyLicenseContext');
 const { principalContext } = require('./LicensePrincipal');
 const { COMPANY_BLUEPRINT_ASSIGNMENT_PERMISSIONS, validSource, exact, identifier, revision, text, versionNumber, pagination } = require('../../../../../packages/company-blueprint-assignment-contract');
+const { actorId, validSource: validAutomationSource } = require('../../../../../packages/company-license-automation-contract');
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 function storageError(error) {
   if (error.status) return error;
   return Object.assign(new Error(error.code === '42501' ? 'Purpose-bound company assignment evidence unavailable' : error.message), { status: ({ P0002: 404, '40001': 412, '23505': 409, '23514': 409, '55P03': 409, '22P02': 400, '22003': 409 }[error.code]) || 503, cause: error });
 }
-function envelope(source) { return { schemaVersion: 1, actorUserId: source.actorUserId, tenantId: source.tenant.id }; }
+function envelope(source) { return { schemaVersion: 1, actorUserId: source.kind === 'application' ? null : source.actorUserId, tenantId: source.tenant.id,
+  ...(source.kind === 'application' ? { actor: { kind: 'application', id: source.grantId, clientId: source.subject, clientRevision: source.clientRevision } } : {}) }; }
 function validApplicationSource(source, user, userId) {
+  if (source?.kind === 'application') return validAutomationSource(source, user, userId);
   try {
     exact(source, ['schemaVersion', 'issuer', 'subject', 'tokenId', 'expiresAt', 'context', 'tenant', 'actorUserId', 'permissions', 'validUntil', 'target']);
     return JSON.stringify(source.permissions) === JSON.stringify(['company.apps.read', 'company.apps.create', 'company.apps.assign'])
@@ -57,12 +60,13 @@ class CompanyBlueprintAssignments {
     if (!validSource(source, user, userId)) fail(503, 'Invalid original assignment source'); return source;
   }
   async unchanged(source, applicationSource, user, authorization) {
-    if (source && !isDeepStrictEqual(source, await this.source(user, authorization, source.target?.id || null))) fail(401, 'Original assignment authority changed');
-    if (applicationSource && (!validApplicationSource(applicationSource, user, applicationSource.target.id) || !isDeepStrictEqual(applicationSource, await this.applicationAuthority.read(authorization, user, applicationSource.target.id)))) fail(401, 'Original application authority changed');
+    if (source && !isDeepStrictEqual(source, await this.source(user, authorization, source.target?.id || null))) fail(source.kind === 'application' ? 412 : 401, 'Original assignment authority changed');
+    if (applicationSource && (!validApplicationSource(applicationSource, user, applicationSource.target.id) || !isDeepStrictEqual(applicationSource, await this.applicationAuthority.read(authorization, user, applicationSource.target.id)))) fail(applicationSource.kind === 'application' ? 412 : 401, 'Original application authority changed');
   }
   async appSource(source, user, authorization, userId) {
     const application = await this.applicationAuthority.read(authorization, user, userId);
     if (!validApplicationSource(application, user, userId)) fail(503, 'Invalid original application source');
+    if (source.kind === 'application') { if (!isDeepStrictEqual(source, application)) fail(412, 'Original app license authority changed'); return application; }
     const { companyBlueprintAssignmentsProtocol, permissions, validUntil, ...base } = source;
     if (!isDeepStrictEqual(base, Object.fromEntries(Object.entries(application).filter(([field]) => !['permissions', 'validUntil'].includes(field))))) fail(401, 'Independent application actor does not match');
     return application;
@@ -132,7 +136,7 @@ class CompanyBlueprintAssignments {
   async removalPreview(id, user, authorization) {
     identifier(id); const base = await this.source(user, authorization); const metadata = await this.observe(user, authorization, null, async (client, source) => (await this.own(client, id, source)).value);
     return this.observe(user, authorization, metadata.userId, async (client, source, applications) => {
-      if (base.actorUserId !== source.actorUserId || base.tenant.id !== source.tenant.id) fail(401, 'Original removal actor changed'); const binding = (await this.own(client, id, source)).value;
+      if (actorId(base) !== actorId(source) || base.tenant.id !== source.tenant.id) fail(401, 'Original removal actor changed'); const binding = (await this.own(client, id, source)).value;
       if (binding.status !== 'active') fail(409, 'Original active binding required'); if (binding.appPoolIds.length) await applications();
       return { ...envelope(source), assignment: binding, eligibilityRevision: source.target.eligibilityRevision, pools: (await this.pools(client, source, binding.appPoolIds)).map(({ poolId, poolRevision }) => ({ poolId, poolRevision })) };
     });
@@ -166,8 +170,9 @@ class CompanyBlueprintAssignments {
     if (applicationSource && !validApplicationSource(applicationSource, user, command.userId)) fail(503, 'Invalid original application source');
     if (source && applicationSource) await this.appSource(source, user, authorization, command.userId);
     const actor = source || applicationSource; if (!actor) fail(403, 'Original assignment authority required');
-    const principal = { issuer: actor.issuer, subject: actor.subject, userId: actor.actorUserId, enabled: true }; let result;
-    const scope = { database: this.database, tenantId: actor.tenant.id, licenseId: null, actorUserId: actor.actorUserId, targetUserId: command.userId,
+    // The allocator's legacy actor slot is a principal UUID; app proof has no human context or MFA.
+    const principal = { issuer: actor.issuer, subject: actor.subject, userId: actorId(actor), enabled: true, ...(actor.kind === 'application' ? { kind: 'application' } : {}) }; let result;
+    const scope = { database: this.database, tenantId: actor.tenant.id, licenseId: null, actorUserId: actorId(actor), targetUserId: command.userId,
       verify: async (client, after) => {
         await this.unchanged(source, applicationSource, user, authorization);
         if (!after) await client.query('SELECT company_blueprint_assignment_begin($1::jsonb,$2::jsonb,$3::jsonb)', [source, applicationSource, command]);
@@ -188,21 +193,21 @@ class CompanyBlueprintAssignments {
           await companyLicenseContext.run({ ...scope, licenseId: capture.poolId }, async () => {
             const positive = ['assigned', 'manual_assign'].includes(command.action);
             const snapshots = positive ? await this.allocator.users.active([command.userId], { authorization }) : [];
-            await this.allocator.lockSubjects(client, actor.actorUserId, positive ? [command.userId] : [], snapshots); const license = await this.allocator.lockLicense(client, capture.poolId); await this.allocator.authorizeOperation(client, license.id, 'assignments.manage');
+            await this.allocator.lockSubjects(client, actorId(actor), positive ? [command.userId] : [], snapshots); const license = await this.allocator.lockLicense(client, capture.poolId); await this.allocator.authorizeOperation(client, license.id, 'assignments.manage');
             const current = await this.allocator.findAssignment(client, license.id, { assignee_type: 'user', assignee_id: command.userId });
             if (positive && current && String(current.eligibility_revision) !== command.eligibilityRevision) fail(409, 'Existing grant incarnation requires explicit withdrawal');
             if (positive) {
               if (!current && await this.allocator.count(client, license.id) >= license.total_seats) fail(409, 'No seats available for complete blueprint');
-              await client.query('INSERT INTO license_assignment_sources(license_id,user_id,source_type,source_id,assigned_by) VALUES($1,$2,$3,$4,$5)', [license.id, command.userId, command.action === 'assigned' ? 'blueprint' : 'direct', command.action === 'assigned' ? command.assignmentId : 'direct', actor.actorUserId]);
+              await client.query('INSERT INTO license_assignment_sources(license_id,user_id,source_type,source_id,assigned_by) VALUES($1,$2,$3,$4,$5)', [license.id, command.userId, command.action === 'assigned' ? 'blueprint' : 'direct', command.action === 'assigned' ? command.assignmentId : 'direct', actorId(actor)]);
             } else if (command.action === 'retire_sources') {
               await client.query('DELETE FROM license_assignment_sources WHERE license_id=$1 AND user_id=$2', [license.id, command.userId]);
             } else {
               const removed = await client.query('DELETE FROM license_assignment_sources WHERE license_id=$1 AND user_id=$2 AND source_type=$3 AND source_id=$4 RETURNING grant_id', [license.id, command.userId, command.action === 'removed' ? 'blueprint' : 'direct', command.action === 'removed' ? command.assignmentId : 'direct']);
               if (removed.rows.length !== 1) fail(409, 'Original source incarnation changed');
             }
-            await this.allocator.syncUser(client, license.id, command.userId, actor.actorUserId); await this.allocator.syncCounter(client, license.id);
+            await this.allocator.syncUser(client, license.id, command.userId, actorId(actor)); await this.allocator.syncCounter(client, license.id);
             const details = command.action === 'retire_sources' ? (await client.query("SELECT jsonb_build_object('userId',target_user_id,'assignmentId',before_state#>'{assignment,id}','sources',before_state->'sources') AS value FROM license_company_commands WHERE id=$1", [child])).rows[0].value : (await client.query('SELECT license_company_p2_result($1) AS value', [child])).rows[0].value;
-            await this.allocator.audit(client, license.id, command.action === 'retire_sources' ? 'company-sources-retired' : 'company-source-change', actor.actorUserId, details); await client.query('SELECT license_company_p2_finish($1)', [child]);
+            await this.allocator.audit(client, license.id, command.action === 'retire_sources' ? 'company-sources-retired' : 'company-source-change', actorId(actor), details); await client.query('SELECT license_company_p2_finish($1)', [child]);
           });
         }
       })));

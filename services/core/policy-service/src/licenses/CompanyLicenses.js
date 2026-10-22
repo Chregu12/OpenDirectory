@@ -24,7 +24,7 @@ class CompanyLicenses {
   }
   async unchanged(source, user, authorization) {
     const current = await this.authority.read(authorization, user, source.target?.id || null);
-    if (!isDeepStrictEqual(current, source) || source.validUntil * 1000 <= Date.now()) fail(401, 'Original company license authority changed');
+    if (!isDeepStrictEqual(current, source) || source.validUntil * 1000 <= Date.now()) fail(source.kind === 'application' ? 412 : 401, 'Original company license authority changed');
     return current;
   }
   async capabilities(user, authorization) {
@@ -91,12 +91,12 @@ class CompanyLicenses {
     identifier(id); const { page, limit } = pagination(query);
     return this.read(user, authorization, async (client, source) => {
       await this.ownPool(client, id, source.tenant.id);
-      await this.requireV1Sources(client, id, null, source.tenant.id);
       const total = (await client.query('SELECT count(*)::integer AS total FROM license_company_events WHERE license_id=$1 AND tenant_id=$2', [id, source.tenant.id])).rows[0].total;
       const rows = (await client.query(`SELECT events.* FROM license_company_events events JOIN license_company_outbox outbox ON outbox.id=events.id AND outbox.status='pending'
         WHERE events.license_id=$1 AND events.tenant_id=$2 ORDER BY events.created_at DESC,events.id LIMIT $3 OFFSET $4`, [id, source.tenant.id, limit, (page - 1) * limit])).rows;
       if (rows.length !== Math.min(limit, Math.max(0, total - (page - 1) * limit))) fail(503, 'Complete company license history unavailable');
-      return { schemaVersion: 1, actorUserId: source.actorUserId, tenantId: source.tenant.id, poolId: id, events: rows.map(row => ({ id: row.id, type: row.type, version: row.version, actorUserId: row.actor_user_id, userId: row.target_user_id,
+      return { schemaVersion: 1, actorUserId: source.actorUserId, tenantId: source.tenant.id, poolId: id, events: rows.map(row => ({ id: row.id, type: row.type, version: row.version, actorUserId: row.proof?.source?.kind === 'application' ? null : row.actor_user_id,
+        ...(row.proof?.source?.kind === 'application' ? { actor: { kind: 'application', id: row.actor_user_id, clientId: row.proof.source.subject, clientRevision: row.proof.source.clientRevision } } : {}), userId: row.target_user_id,
         correlationId: row.correlation_id, createdAt: row.created_at.toISOString(), beforeRevision: row.before_revision === null ? null : String(row.before_revision), afterRevision: String(row.after_revision), deliveryStatus: 'pending' })), total, page, limit };
     });
   }

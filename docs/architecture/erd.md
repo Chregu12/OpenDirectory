@@ -871,3 +871,16 @@ erDiagram
 ```
 
 Die Zuweisungs-/Operations-/Event-/Outbox-Tabellen und V2-Workflowtabellen gehören Policy. Tenant/User-IDs bleiben kanonische Identity-IDs ohne Cross-DB-FKs. Eine effektive Seat-Zuordnung liegt weiterhin in `license_assignments`; mehrere manuelle/Blueprint-Quellen teilen diesen einen Sitz. Das Workflow-JSON hält ein vollständiges unveränderliches Quellen-/Binding-Manifest, einschliesslich app-freier Blueprints. Getrennte Datenbanktransaktionen von Identity und Policy werden nicht als atomar dargestellt. [Verhalten und Grenzen](../features/company-blueprint-assignments.md).
+
+## App-Lizenzabgleich: Identity 049 und Policy 029
+
+```mermaid
+erDiagram
+  identity_automation_grants ||--o{ identity_automation_jobs : actual_grant_FK
+  identity_automation_schedules o|--o{ identity_automation_jobs : optional_schedule_FK
+  company_license_groups ||--o{ company_license_automation_cycles : actual_rule_FK
+  company_license_automation_cycles ||--o{ company_license_automation_pages : composite_cycle_FK
+  company_license_automation_cycles ||--o{ company_license_automation_outbox : composite_cycle_FK
+```
+
+Die ersten drei Tabellen gehören Identity, die anderen Policy. Job-/Grant-/Tenant-IDs in einem Policy-Zyklus sind separat live gebundene Quellen, keine Cross-DB-FKs. Zyklus und Seiten sind je Job/Retry-Epoche/Zyklus und Seitenordinal eindeutig; Seite 0 der Pending-Outbox belegt die Erfassung. Seiten behalten echte geordnete Einzelresultate und Original-Actor/-Gruppenhash, nicht einen zweiten Sitzbestand. `identity_automation_jobs.progress` ist nur der bestätigte Fortschritt dieser getrennten Ausführung. [Modell und Grenzen](domain-model.md#appgebundener-lizenzabgleich-identity-049-und-policy-029), [ausführbarer Ablauf](../features/company-license-automation.md).

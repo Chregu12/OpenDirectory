@@ -2,21 +2,27 @@ import { z } from 'zod';
 import { api } from './api';
 import { companyUuid as uuid, companyRevision as revision, companyReason, CompanyWire } from './companyAssignmentProtocol';
 const base = '/api/identity/automation';
-export const automationActions = ['directory.users.export', 'directory.groups.export', 'directory.ous.export'] as const;
+export const automationActions = ['directory.users.export', 'directory.groups.export', 'directory.ous.export', 'licenses.groups.reconcile'] as const;
+export const licenseAutomationAction = 'licenses.groups.reconcile';
 const action = z.enum(automationActions); const timestamp = z.string().datetime({ offset: true });
 const principalSchema = z.object({ kind: z.literal('owner'), userId: uuid, tenantId: uuid }).strict();
 const envelope = { schemaVersion: z.literal(1), companyAutomationProtocol: z.literal(1), principal: principalSchema };
-const grantSchema = z.object({ id: uuid, enrollmentId: uuid, tenantId: uuid, clientId: z.string().min(1).max(255), clientRevision: revision, actions: z.array(action).min(1).max(3),
+const grantSchema = z.object({ id: uuid, enrollmentId: uuid, tenantId: uuid, clientId: z.string().min(1).max(255), clientRevision: revision, actions: z.array(action).min(1).max(4),
   expiresAt: timestamp, status: z.enum(['active', 'revoked']), revision: z.enum(['1', '2']), createdAt: timestamp }).strict()
   .refine(value => new Set(value.actions).size === value.actions.length && (value.status === 'active' ? value.revision === '1' : value.revision === '2'));
+const progressSchema = z.object({ runId: uuid, retryCount: z.number().int().nonnegative(), cycle: z.number().int().min(1).max(5), completed: z.number().int().min(0).max(10000), total: z.number().int().min(0).max(10000), blocked: z.number().int().min(0).max(10000) }).strict().refine(value => value.blocked <= value.completed && value.completed <= value.total);
 const jobSchema = z.object({ id: uuid, grantId: uuid, tenantId: uuid, scheduleId: uuid.nullable(), action, format: z.enum(['csv', 'json']),
-  status: z.enum(['queued', 'running', 'retry_wait', 'succeeded', 'failed', 'cancelled']), revision, attemptCount: z.number().int().min(0).max(5), retryCount: z.number().int().nonnegative(),
+  status: z.enum(['queued', 'running', 'retry_wait', 'succeeded', 'partial', 'failed', 'cancelled']), revision, attemptCount: z.number().int().min(0).max(5), retryCount: z.number().int().nonnegative(),
   availableAt: timestamp, leaseUntil: timestamp.nullable(), errorCode: z.string().nullable(), rowCount: z.number().int().min(0).max(10000).nullable(), artifactSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
-  createdAt: timestamp, updatedAt: timestamp }).strict().refine(value => (value.status === 'running') === (value.leaseUntil !== null)
-    && (value.status === 'succeeded' ? value.rowCount !== null && value.artifactSha256 !== null : value.rowCount === null && value.artifactSha256 === null));
+  createdAt: timestamp, updatedAt: timestamp, ruleId: uuid.optional(), progress: progressSchema.nullable().optional() }).strict().refine(value => (value.status === 'running') === (value.leaseUntil !== null)
+    && (['succeeded','partial'].includes(value.status) ? value.rowCount !== null && value.artifactSha256 !== null : value.rowCount === null && value.artifactSha256 === null)
+    && (value.action === licenseAutomationAction ? value.ruleId !== undefined && value.progress !== undefined && value.format === 'json'
+      && (!value.progress || value.progress.runId === value.id && value.progress.retryCount <= value.retryCount)
+      && (!['succeeded','partial'].includes(value.status) || !!value.progress && value.progress.retryCount === value.retryCount && value.progress.completed === value.progress.total && value.rowCount === value.progress.total && (value.status === 'partial') === (value.progress.blocked > 0))
+      : value.ruleId === undefined && value.progress === undefined && value.status !== 'partial'));
 const scheduleSchema = z.object({ id: uuid, grantId: uuid, tenantId: uuid, action, format: z.enum(['csv', 'json']), intervalSeconds: z.number().int().min(60).max(2592000),
-  enabled: z.boolean(), nextRunAt: timestamp, revision, createdAt: timestamp }).strict();
-const grantsSchema = z.object({ ...envelope, grants: z.array(grantSchema).max(25), page: z.number().int().positive(), limit: z.literal(25), total: z.number().int().nonnegative(), supportedActions: z.array(action).length(3) }).strict();
+  enabled: z.boolean(), nextRunAt: timestamp, revision, createdAt: timestamp, ruleId: uuid.optional() }).strict().refine(value => value.action === licenseAutomationAction ? value.ruleId !== undefined && value.format === 'json' : value.ruleId === undefined);
+const grantsSchema = z.object({ ...envelope, grants: z.array(grantSchema).max(25), page: z.number().int().positive(), limit: z.literal(25), total: z.number().int().nonnegative(), supportedActions: z.array(action).length(4) }).strict();
 const enrollmentSchema = z.object({ ...envelope, id: uuid, clientId: z.string().min(1).max(255), clientRevision: revision, name: z.string().min(1).max(160), expiresAt: timestamp, requestedScope: z.literal('company.automation') }).strict();
 const grantReceipt = z.object({ ...envelope, grant: grantSchema }).strict();
 const jobReceipt = z.object({ ...envelope, job: jobSchema }).strict(); const scheduleReceipt = z.object({ ...envelope, schedule: scheduleSchema }).strict();
@@ -24,13 +30,18 @@ const page = { ...envelope, grantId: uuid, tenantId: uuid, page: z.number().int(
 const jobsSchema = z.object({ ...page, jobs: z.array(jobSchema).max(25) }).strict(); const schedulesSchema = z.object({ ...page, schedules: z.array(scheduleSchema).max(25) }).strict();
 const historySchema = z.object({ ...envelope, jobId: uuid, tenantId: uuid, page: z.number().int().positive(), limit: z.literal(25), total: z.number().int().nonnegative(), events: z.array(z.object({ revision, actor: z.union([
   z.object({ kind: z.literal('owner'), userId: uuid }).strict(), z.object({ kind: z.literal('application'), clientId: z.string().min(1).max(255), clientRevision: revision }).strict(),
-]), status: z.enum(['queued', 'running', 'retry_wait', 'succeeded', 'failed', 'cancelled']), attemptCount: z.number().int().min(0).max(5), errorCode: z.string().nullable(), createdAt: timestamp }).strict()).max(25) }).strict();
+]), status: z.enum(['queued', 'running', 'retry_wait', 'succeeded', 'partial', 'failed', 'cancelled']), attemptCount: z.number().int().min(0).max(5), errorCode: z.string().nullable(), createdAt: timestamp }).strict()).max(25) }).strict();
+const licenseReportSchema = z.object({ schemaVersion: z.literal(1), companyLicenseAutomationProtocol: z.literal(1), grantId: uuid, jobId: uuid, ruleId: uuid,
+  actor: z.object({ kind: z.literal('application'), id: uuid, clientId: z.string().min(1).max(255), clientRevision: revision }).strict(), progress: progressSchema,
+  finished: z.literal(true), hasBlocked: z.boolean(), results: z.array(z.object({ userId: uuid, status: z.enum(['assigned','retained','removed','blocked']), code: z.union([z.literal(403),z.literal(404),z.literal(409)]).nullable() }).strict()
+    .refine(value => value.status === 'blocked' ? value.code !== null : value.code === null)).max(10000) }).strict();
 export type AutomationGrant = CompanyWire<z.infer<typeof grantSchema>>;
-export type AutomationJob = CompanyWire<z.infer<typeof jobSchema>>;
-export type AutomationSchedule = CompanyWire<z.infer<typeof scheduleSchema>>;
+export type AutomationJob = Omit<CompanyWire<z.infer<typeof jobSchema>>, 'ruleId' | 'progress'> & { ruleId?: string; progress?: CompanyWire<z.infer<typeof progressSchema>> | null };
+export type AutomationSchedule = Omit<CompanyWire<z.infer<typeof scheduleSchema>>, 'ruleId'> & { ruleId?: string };
 export type AutomationEnrollment = CompanyWire<z.infer<typeof enrollmentSchema>>;
 export type AutomationPrincipal = CompanyWire<z.infer<typeof principalSchema>>;
 export type AutomationHistory = CompanyWire<z.infer<typeof historySchema>>;
+export type AutomationLicenseReport = CompanyWire<z.infer<typeof licenseReportSchema>>;
 function parse<S extends z.ZodTypeAny>(schema: S, value: unknown): CompanyWire<z.infer<S>> { return schema.parse(value); }
 function fail(): never { throw new Error('Automationsstand nicht bestätigt. Freigaben und gespeicherte Jobs neu laden; frühere Schritte können bereits gespeichert sein.'); }
 function checked<T extends { principal: AutomationPrincipal }>(value: T, expected: AutomationPrincipal) {
@@ -41,7 +52,7 @@ export const companyAutomation = {
   async grants(userId: string, number = 1) {
     uuid.parse(userId); const response = await api.get(base + '/grants', { params: { page: number } }); if (response.status !== 200) fail(); const value = parse(grantsSchema, response.data);
     if (value.principal.userId !== userId || value.grants.some(row => row.tenantId !== value.principal.tenantId) || new Set(value.grants.map(row => row.id)).size !== value.grants.length
-      || new Set(value.supportedActions).size !== 3 || value.page !== number || value.grants.length > value.total) fail(); return value;
+      || new Set(value.supportedActions).size !== 4 || value.page !== number || value.grants.length > value.total) fail(); return value;
   },
   async enrollment(id: string, expected: AutomationPrincipal) {
     uuid.parse(id); const response = await api.get(base + '/enrollments/' + id); if (response.status !== 200) fail();
@@ -66,12 +77,13 @@ export const companyAutomation = {
     const value = checked(parse(schedulesSchema, response.data), expected);
     if (value.grantId !== grant.id || value.tenantId !== expected.tenantId || value.page !== number || value.schedules.some(row => row.grantId !== grant.id || row.tenantId !== expected.tenantId)) fail(); return value;
   },
-  async queue(grant: AutomationGrant, selectedAction: string, format: 'json' | 'csv', expected: AutomationPrincipal, intervalSeconds?: number) {
+  async queue(grant: AutomationGrant, selectedAction: string, format: 'json' | 'csv', expected: AutomationPrincipal, intervalSeconds?: number, ruleId?: string) {
     if (grant.tenantId !== expected.tenantId || grant.status !== 'active' || !grant.actions.includes(action.parse(selectedAction))) fail();
     const scheduled = intervalSeconds !== undefined; if (scheduled && (!Number.isInteger(intervalSeconds) || intervalSeconds < 60 || intervalSeconds > 2592000)) fail();
-    const id = crypto.randomUUID(); const response = await api.post(base + (scheduled ? '/schedules' : '/jobs'), { id, grantId: grant.id, action: selectedAction, format, ...(scheduled ? { intervalSeconds } : {}) });
+    if (selectedAction === licenseAutomationAction ? !uuid.safeParse(ruleId).success || format !== 'json' : ruleId !== undefined) fail();
+    const id = crypto.randomUUID(); const response = await api.post(base + (scheduled ? '/schedules' : '/jobs'), { id, grantId: grant.id, action: selectedAction, format, ...(selectedAction === licenseAutomationAction ? { ruleId } : {}), ...(scheduled ? { intervalSeconds } : {}) });
     if (response.status !== 201) fail(); const value = scheduled ? checked(parse(scheduleReceipt, response.data), expected).schedule : checked(parse(jobReceipt, response.data), expected).job;
-    if (value.id !== id || value.grantId !== grant.id || value.tenantId !== expected.tenantId || value.action !== selectedAction || value.format !== format) fail(); return value;
+    if (value.id !== id || value.grantId !== grant.id || value.tenantId !== expected.tenantId || value.action !== selectedAction || value.format !== format || value.ruleId !== ruleId || scheduled && 'intervalSeconds' in value && value.intervalSeconds !== intervalSeconds) fail(); return value;
   },
   async revoke(grant: AutomationGrant, expected: AutomationPrincipal) {
     if (grant.tenantId !== expected.tenantId || grant.status !== 'active') fail();
@@ -93,9 +105,18 @@ export const companyAutomation = {
     const schema = z.object({ ...envelope, jobId: uuid, grantId: uuid, tenantId: uuid, rowCount: z.number().int().nonnegative(), sha256: z.string().regex(/^[a-f0-9]{64}$/),
       contentType: z.enum(['application/json', 'text/csv;charset=utf-8']), filename: z.string().regex(/^[a-z0-9.-]+\.(csv|json)$/), content: z.string().max(4194304) }).strict();
     const response = await api.get(base + '/jobs/' + job.id + '/result'); if (response.status !== 200) fail(); const value = checked(parse(schema, response.data), expected);
-    if (job.status !== 'succeeded' || job.tenantId !== expected.tenantId || value.jobId !== job.id || value.grantId !== job.grantId || value.tenantId !== expected.tenantId || value.sha256 !== job.artifactSha256 || value.rowCount !== job.rowCount) fail();
+    if (!['succeeded','partial'].includes(job.status) || job.tenantId !== expected.tenantId || value.jobId !== job.id || value.grantId !== job.grantId || value.tenantId !== expected.tenantId || value.sha256 !== job.artifactSha256 || value.rowCount !== job.rowCount) fail();
     const actual = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value.content))), byte => byte.toString(16).padStart(2, '0')).join('');
     if (actual !== value.sha256) fail(); return value;
+  },
+  async licenseReport(job: AutomationJob, grant: AutomationGrant, expected: AutomationPrincipal) {
+    if (job.action !== licenseAutomationAction || job.grantId !== grant.id || !job.progress) fail();
+    const artifact = await this.artifact(job, expected); if (artifact.contentType !== 'application/json') fail();
+    const report = parse(licenseReportSchema, JSON.parse(artifact.content));
+    if (report.jobId !== job.id || report.grantId !== grant.id || report.ruleId !== job.ruleId || report.actor.id !== grant.id || report.actor.clientId !== grant.clientId || report.actor.clientRevision !== grant.clientRevision
+      || report.progress.runId !== job.id || report.progress.retryCount !== job.retryCount || Object.keys(report.progress).some(key => report.progress[key as keyof typeof report.progress] !== job.progress?.[key as keyof typeof report.progress]) || report.progress.completed !== report.progress.total
+      || report.results.length !== report.progress.total || report.results.length !== job.rowCount || report.progress.blocked !== report.results.filter(row => row.status === 'blocked').length
+      || report.hasBlocked !== (job.status === 'partial') || report.hasBlocked !== (report.progress.blocked > 0) || new Set(report.results.map(row => row.userId)).size !== report.results.length) fail(); return report;
   },
   async history(job: AutomationJob, expected: AutomationPrincipal, number = 1) {
     const response = await api.get(base + '/jobs/' + job.id + '/history', { params: { page: number } }); if (response.status !== 200) fail(); const value = checked(parse(historySchema, response.data), expected);

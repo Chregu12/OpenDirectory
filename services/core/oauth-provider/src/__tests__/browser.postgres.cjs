@@ -156,7 +156,7 @@ before(async () => {
     const chunks = []; for await (const chunk of request) chunks.push(chunk);
     const credentials = JSON.parse(Buffer.concat(chunks)); credentialAttempts++;
     response.setHeader('Content-Type', 'application/json');
-    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
+    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner','company-license-automation-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
       response.statusCode = 401; return response.end('{"success":false}');
     }
     const actor = actors.get(credentials.username);
@@ -183,7 +183,7 @@ before(async () => {
   }, issuerProcess, () => issuerOutput);
   const identityDatabaseUrl = new URL(process.env.OAUTH_TEST_DATABASE_URL); identityDatabaseUrl.searchParams.set('options', `-c search_path=${identitySchema},public`);
   Object.assign(process.env, { NODE_ENV: 'test', DATABASE_URL: identityDatabaseUrl.toString(), OIDC_ISSUER: logicalIssuer,
-    JWKS_URI: issuerBase + '/.well-known/jwks.json', OIDC_ACCESS_STATE_URL: issuerBase + '/oauth/access-state', IDENTITY_DEMO_MODE: 'false' });
+    JWKS_URI: issuerBase + '/.well-known/jwks.json', OIDC_ACCESS_STATE_URL: issuerBase + '/oauth/access-state', IDENTITY_DEMO_MODE: 'false', POLICY_SERVICE_URL:policyBase });
   identityDb = require('../../../identity-service/src/db'); assert.equal(await identityDb.initDb(), true);
   await identityDb.query(fs.readFileSync(path.join(__dirname, '../../../identity-service/migrations/045_company_offboarding_receipts.sql'), 'utf8'));
   await identityDb.query(fs.readFileSync(path.join(__dirname, '../../../identity-service/migrations/046_company_offboarding_groups.sql'), 'utf8'));
@@ -202,7 +202,7 @@ before(async () => {
   const policyUrl=new URL(process.env.OAUTH_TEST_DATABASE_URL); policyUrl.searchParams.set('options',`-c search_path=${policySchema},public`);
   Object.assign(process.env,{ DATABASE_URL:policyUrl.toString(),IDENTITY_SERVICE_URL:identityBase,LICENSE_DEMO_MODE:'false',OAUTH_PROVIDER_URL:issuerBase });
   policyDb=require('../../../policy-service/src/db/postgres');
-  for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[012345678])_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
+  for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[0123456789])_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
   policyServer=require('../../../policy-service/src').listen(Number(new URL(policyBase).port),'127.0.0.1'); await serverBase(policyServer);
   process.env.OAUTH_POLICY_SOURCE_URL=policyBase;
   process.env.DATABASE_URL=identityDatabaseUrl.toString();
@@ -2865,4 +2865,90 @@ test('real company automation Owner UI grants an actual app worker, downloads it
     await page.getByText('Benutzer exportieren · Abgebrochen · Versuch 0/5', { exact: true }).waitFor();
     await page.screenshot({ path: '/tmp/od-company-automation-browser.png', fullPage: true });
   } finally { await adminContext.close(); await ownerContext.close(); }
+});
+
+test('real scheduled app worker assigns and returns a group license through OAuth, Identity, Policy and the Owner UI', { timeout: 360000 }, async () => {
+  const ownerUsername = 'company-license-automation-owner';
+  const company = await require('../../../../../scripts/lib/company-owner-fixture.cjs').activeCompany(identityDb, identitySchema, logicalIssuer,
+    { subject: ownerUsername + '-subject', username: ownerUsername });
+  const adminContext = await context(); const ownerContext = await context(); const adminPage = await adminContext.newPage(); const page = await ownerContext.newPage();
+  let worker; let workerOutput = ''; let workerErrors = ''; const receiverRejections = []; const originalFetch = global.fetch;
+  global.fetch = async (...args) => {
+    const response = await originalFetch(...args); const pathname = new URL(String(args[0])).pathname;
+    if (!response.ok && ['/api/licenses/automation/groups/step', '/api/identity/automation/license-source'].includes(pathname)) receiverRejections.push({ pathname, status: response.status, error: (await response.clone().json()).error });
+    return response;
+  };
+  try {
+    await login(adminPage, 'organization-console-admin'); const admin = await mediated(adminPage); assert.equal(admin.status, 200);
+    const created = await fetch(issuerBase + '/api/clients', { method: 'POST', headers: { Authorization: 'Bearer ' + admin.body.access_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Actual browser license app', publicClient: false, enabled: true, redirectUris: [], grantTypes: ['client_credentials'], scopes: ['company.automation'] }) });
+    assert.equal(created.status, 201, await created.clone().text()); const client = await created.json();
+    const environment = { ...process.env, OPENDIRECTORY_ISSUER: issuerBase, OPENDIRECTORY_API_URL: identityBase,
+      OPENDIRECTORY_CLIENT_ID: client.clientId, OPENDIRECTORY_CLIENT_SECRET: client.clientSecret, OPENDIRECTORY_SCOPES: 'company.automation', OPENDIRECTORY_ADMIN_ACCESS_TOKEN: '' };
+    const cliPath = path.resolve(__dirname, '../../../../../scripts/od.mjs');
+    const execute = require('node:util').promisify(require('node:child_process').execFile);
+    const enrolled = JSON.parse((await execute(process.execPath, [cliPath, 'automation', 'enroll', 'Actual scheduled license worker'], { env: environment })).stdout);
+    await reviewFirstFactor(page, ownerUsername); await login(page, ownerUsername); const owner = await mediated(page); assert.equal(owner.status, 200);
+    const claims = JSON.parse(Buffer.from(owner.body.access_token.split('.')[1], 'base64url')); assert.deepEqual(claims.roles, []);
+    const request = async (url, method, body, headers = {}, status = 200) => {
+      const response = await fetch(url, { method, headers: { Authorization: 'Bearer ' + owner.body.access_token, 'Content-Type': 'application/json', ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      assert.equal(response.status, status, await response.clone().text()); return { value: await response.json(), etag: response.headers.get('etag') };
+    };
+    let group = await request(identityBase + '/api/groups', 'POST', { name: 'Actual scheduled license group' }, {}, 201);
+    group = await request(identityBase + '/api/groups/' + group.value.id + '/members', 'POST', { userId: company.receipt.administratorId }, { 'If-Match': group.etag });
+    const product = await request(policyBase + '/api/licenses/company/pools', 'POST', { name: 'Actual app-managed pool', vendor: 'Local browser fixture', description: '', totalSeats: 1, reason: 'Create one real local seat for scheduled app reconciliation' }, {}, 201);
+    const linked = await request(policyBase + '/api/licenses/company/groups', 'POST', { groupId: group.value.id, poolId: product.value.id, reason: 'Link actual own group to the finite local pool', confirm: true }, { 'Idempotency-Key': randomUUID() }, 201);
+    const rule = linked.value.rule;
+    await page.setViewportSize({ width: 1440, height: 1100 }); await page.goto(origin + '/automation?licenseRule=' + rule.id);
+    await page.getByRole('heading', { name: 'Automationen', exact: true }).waitFor();
+    await page.getByLabel('App-Anmeldungs-ID', { exact: true }).fill(enrolled.id); await page.getByRole('button', { name: 'App-Anmeldung prüfen', exact: true }).click();
+    await page.getByLabel('Gruppenlizenzen zuweisen und entziehen', { exact: true }).check();
+    await page.getByLabel('Freigabe-Laufzeit in Stunden', { exact: true }).fill('1');
+    await page.getByLabel('Automationsfreigabe begründen', { exact: true }).fill('Owner explicitly approves actual unattended assignment and return of local group license seats');
+    await page.getByRole('button', { name: 'Ausgewählte App-Rechte bestätigen', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'App-Datenzugriff bestätigen', exact: true }); await dialog.getByText(/Lizenzsitze/).waitFor();
+    const approving = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/automation/grants' && response.request().method() === 'POST');
+    await dialog.getByRole('button', { name: 'Verbindlich bestätigen', exact: true }).click(); const approved = await approving;
+    assert.equal(approved.status(), 201, await approved.text()); const permission = (await approved.json()).grant; assert.deepEqual(permission.actions, ['licenses.groups.reconcile']);
+    await page.getByLabel('Automationsfreigabe auswählen', { exact: true }).selectOption(permission.id);
+    await page.getByLabel('Automationsaktion', { exact: true }).selectOption('licenses.groups.reconcile');
+    assert.equal(await page.getByLabel('Lizenzgruppen-Verknüpfungs-ID', { exact: true }).inputValue(), rule.id);
+    await page.getByRole('button', { name: 'Lizenzgruppe prüfen', exact: true }).click(); await page.getByText(/Gruppe: Actual scheduled license group/).waitFor();
+    const scheduling = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/automation/schedules' && response.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Zeitplan erstellen', exact: true }).click(); const scheduled = await scheduling;
+    assert.equal(scheduled.status(), 201, await scheduled.text()); const schedule = (await scheduled.json()).schedule; assert.equal(schedule.ruleId, rule.id); assert.equal(schedule.intervalSeconds, 60);
+    worker = spawn(process.execPath, [cliPath, 'automation', 'worker', permission.id], { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
+    worker.stdout.on('data', chunk => { workerOutput += chunk; }); worker.stderr.on('data', chunk => { workerErrors += chunk; });
+    const completedJob = async afterId => {
+      const deadline = Date.now() + 100000;
+      while (Date.now() < deadline) {
+        assert.equal(worker.exitCode, null, 'Worker stopped: ' + workerErrors);
+        const rows = (await identityDb.query('SELECT * FROM identity_automation_jobs WHERE schedule_id=$1 ORDER BY created_at', [schedule.id])).rows;
+        const current = rows.find(row => row.id !== afterId);
+        if (current && ['succeeded', 'partial', 'failed', 'retry_wait'].includes(current.status)) { assert.equal(current.status, 'succeeded', JSON.stringify({ status: current.status, errorCode: current.error_code, progress: current.progress, receiverRejections })); return current; }
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      assert.fail('Actual scheduled license job did not complete: ' + workerErrors);
+    };
+    const first = await completedJob(); assert.equal(first.progress.completed, 1); assert.equal(first.progress.blocked, 0);
+    assert.equal((await policyDb.query('SELECT used_seats FROM license_catalog WHERE id=$1', [product.value.id])).rows[0].used_seats, 1);
+    await page.getByRole('button', { name: 'Automationen neu laden', exact: true }).click(); await page.getByRole('button', { name: 'Lizenzbericht anzeigen', exact: true }).click();
+    const report = page.getByRole('complementary', { name: 'Geprüfter Lizenzbericht', exact: true }); await report.getByText(new RegExp(client.clientId)).waitFor();
+    await report.getByText(company.receipt.administratorId + ' · Zugewiesen', { exact: true }).waitFor();
+    await page.screenshot({ path: '/tmp/od-company-license-automation-assigned.png', fullPage: true });
+    group = await request(identityBase + '/api/groups/' + group.value.id + '/members/' + company.receipt.administratorId, 'DELETE', undefined, { 'If-Match': group.etag });
+    // Wait for the real 60-second schedule; do not modify its persisted clock or impersonate an owner on the worker.
+    const second = await completedJob(first.id); assert.equal(second.progress.completed, 1);
+    assert.equal((await policyDb.query('SELECT used_seats FROM license_catalog WHERE id=$1', [product.value.id])).rows[0].used_seats, 0);
+    assert.equal(JSON.parse(second.artifact_content).results[0].status, 'removed');
+    await page.getByRole('button', { name: 'Automationen neu laden', exact: true }).click();
+    const jobCard = page.locator('article').filter({ hasText: second.id }); await jobCard.getByRole('button', { name: 'Lizenzbericht anzeigen', exact: true }).click();
+    await report.getByText(company.receipt.administratorId + ' · Gruppenquelle nicht mehr zugewiesen', { exact: true }).waitFor();
+    await page.screenshot({ path: '/tmp/od-company-license-automation-returned.png', fullPage: true });
+    await page.getByRole('button', { name: 'Zeitplan stoppen', exact: true }).click(); await page.getByText('Zeitplan gestoppt; bereits erstellte Jobs separat beachten.', { exact: true }).waitFor();
+    assert.equal((await identityDb.query('SELECT enabled FROM identity_automation_schedules WHERE id=$1', [schedule.id])).rows[0].enabled, false);
+    const lines = workerOutput.trim().split('\n').map(line => JSON.parse(line)); assert.ok(lines.length >= 2);
+    for (const line of lines) { assert.equal(line.principal.kind, 'application'); assert.equal(line.principal.clientId, client.clientId); assert.equal(Object.hasOwn(line.principal, 'userId'), false); }
+    assert.equal(workerOutput.includes(client.clientSecret), false); assert.equal(workerOutput.includes(owner.body.access_token), false);
+  } finally { global.fetch = originalFetch; await stop(worker); await adminContext.close(); await ownerContext.close(); }
 });

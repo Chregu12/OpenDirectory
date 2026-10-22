@@ -1030,7 +1030,7 @@ test('pool edit receiving rejects missing migration, changed constraints, replic
 test('pool edit retained history survives later assignment, release, expired authority and full migration replay', async () => {
   const original = await assign(await create()); fixture.source.validUntil = Math.floor(Date.now() / 1000) + 2;
   const deadline = fixture.source.validUntil; const edited = await update(original, { totalSeats: 4 });
-  fixture.source.validUntil = Math.floor(Date.now() / 1000) + 300;
+  fixture.source.validUntil = Math.min(fixture.user.exp, fixture.user.auth_time + 300);
   const assignment = (await companies.assignments(edited.id, {}, fixture.user, bearer)).assignments[0];
   const released = await revoke(edited, assignment); const reassigned = await assign(released);
   const before = await snapshot(); await migrate(); await migrate(); assert.deepEqual(await snapshot(), before);

@@ -47,6 +47,31 @@ test('approval keys cannot substitute another client or tenant, and rotation/rev
  await assert.rejects(automation.run({grantId:permission.id},{...app,client_revision:'2'},appBearer),{status:404});
  revoked=true;await assert.rejects(automation.run({grantId:permission.id},app,appBearer),{status:401});
 });
+test('a live license job exposes only its own canonical group and recipient through an explicit machine proof without human MFA claims',async()=>{
+ const {DirectoryCreator}=require('../DirectoryCreator');const {GroupMutator,groupEtag}=require('../GroupMutator');
+ const revalidate=async(_auth,user)=>(await new AuthorizationState(database).state(issuer,user.sub)).tenant;
+ const creator=new DirectoryCreator(database,{issuer,revalidate});let group=await creator.group({name:'Actual app license source'},owner.user,bearer);
+ group=await new GroupMutator(database,{issuer,revalidate,revalidateAccess:async()=>{}}).add(group.id,{userId:owner.receipt.administratorId},groupEtag(group),owner.user,bearer);
+ const other=await activeCompany(database,schema,issuer);const foreign=await creator.group({name:'Foreign private group'},other.user,bearer);
+ const permission=await grant(['licenses.groups.reconcile']);const ruleId=randomUUID();
+ const queued=await automation.enqueue({id:randomUUID(),grantId:permission.id,action:'licenses.groups.reconcile',format:'json',ruleId},app,appBearer);
+ owner.user.auth_time-=301;owner.user.mfa_authorization.authTime-=301;
+ let observed;
+ automation.licenseClient={step:async job=>{
+  const input={grantId:permission.id,jobId:job.id,leaseToken:job.lease_token,groupId:group.id,userId:owner.receipt.administratorId};
+  observed=await automation.licenseSource(input,app,appBearer);
+  assert.equal(require('../../../../../packages/company-license-automation-contract').validSource(observed,app,owner.receipt.administratorId),true);
+  assert.deepEqual(observed.group.memberIds,[owner.receipt.administratorId]);assert.equal(observed.ruleId,ruleId);
+  for(const field of ['context','actorUserId','identity_authorization','mfa_authorization','auth_time','roles'])assert.equal(Object.hasOwn(observed,field),false);
+  await assert.rejects(automation.licenseSource({...input,groupId:foreign.id},app,appBearer),{status:404});
+  await assert.rejects(automation.licenseSource({...input,userId:other.receipt.administratorId},app,appBearer),{status:404});
+  await assert.rejects(automation.licenseSource({...input,leaseToken:randomUUID()},app,appBearer),{status:403});
+  const base=await automation.licenseSource({...input,groupId:null,userId:null},app,appBearer);assert.equal(base.group,null);assert.equal(base.target,null);
+  throw new Error('Stop before the separate policy receiver fixture');
+ }};
+ const result=await automation.run({grantId:permission.id},app,appBearer);assert.equal(result.job.status,'retry_wait');assert.equal(result.job.errorCode,'license_step_unconfirmed');assert.ok(observed);
+ await assert.rejects(automation.licenseSource({grantId:permission.id,jobId:queued.job.id,leaseToken:observed.leaseToken,groupId:group.id,userId:null},app,appBearer),{status:403});
+});
 test('revocation atomically cancels queued work and schedules, prevents result access by the app, and retains all original evidence',async()=>{
  const permission=await grant();const queued=await enqueue(permission);const schedule=await automation.enqueue({id:randomUUID(),grantId:permission.id,action:permission.actions[0],format:'csv',intervalSeconds:60},app,appBearer,true);
  const revoked=await automation.revoke(permission.id,{confirm:true},`"company-automation-grant-${permission.id}-1"`,owner.user,bearer);assert.equal(revoked.grant.status,'revoked');
@@ -54,6 +79,40 @@ test('revocation atomically cancels queued work and schedules, prevents result a
  await assert.rejects(automation.run({grantId:permission.id},app,appBearer),{status:403});await assert.rejects(automation.result(queued.job.id,app,appBearer),{status:403});
  await assert.rejects(pool.query('DELETE FROM identity_automation_events'),{code:'42501'});await assert.rejects(pool.query('TRUNCATE identity_automation_jobs CASCADE'),{code:'42501'});
  assert.ok(schedule.schedule.id);
+});
+test('license job checkpoints survive a new worker, retain partial results and begin an explicit new retry epoch', async () => {
+ const permission = await grant(['licenses.groups.reconcile']); const ruleId = randomUUID();
+ const queued = await automation.enqueue({ id: randomUUID(), grantId: permission.id, action: permission.actions[0], format: 'json', ruleId }, app, appBearer);
+ const recipients = Array.from({ length: 27 }, () => randomUUID()); let finish = false; let blocked = 2;
+ const licenseClient = { step: async row => ({ schemaVersion: 1, companyLicenseAutomationProtocol: 1, grantId: permission.id, jobId: row.id, ruleId,
+  actor: { kind: 'application', id: permission.id, clientId: app.client_id, clientRevision: '1' },
+  progress: { runId: row.id, retryCount: row.retry_count, cycle: 1, completed: finish ? 27 : 25, total: 27, blocked: finish ? blocked : 0 },
+  finished: finish, hasBlocked: finish && blocked > 0, results: finish ? recipients.map((userId, index) => ({ userId, status: index < blocked ? 'blocked' : 'assigned', code: index < blocked ? 409 : null })) : [] }) };
+ automation.licenseClient = licenseClient;
+ const first = await automation.run({ grantId: permission.id }, app, appBearer);
+ assert.equal(first.job.status, 'queued'); assert.equal(first.job.progress.completed, 25); assert.equal(first.job.attemptCount, 0); assert.equal(first.job.artifactSha256, null);
+ finish = true;
+ const restarted = new CompanyAutomation(database, { issuer, authority: automation.authority, revalidate: automation.revalidate, licenseClient });
+ const second = await restarted.run({ grantId: permission.id }, { ...app, jti: randomUUID() }, appBearer);
+ assert.equal(second.job.id, queued.job.id); assert.equal(second.job.status, 'partial'); assert.equal(second.job.rowCount, 27); assert.equal(second.job.progress.blocked, 2);
+ const retained = await restarted.result(second.job.id, app, appBearer); assert.equal(JSON.parse(retained.content).hasBlocked, true);
+ const retry = await restarted.changeJob(second.job.id, 'retry', `"company-automation-job-${second.job.id}-${second.job.revision}"`, owner.user, bearer);
+ assert.equal(retry.job.status, 'queued'); assert.equal(retry.job.retryCount, 1); assert.equal(retry.job.progress.retryCount, 0); assert.equal(retry.job.artifactSha256, null);
+ blocked = 0; const third = await restarted.run({ grantId: permission.id }, app, appBearer);
+ assert.equal(third.job.status, 'succeeded'); assert.equal(third.job.progress.retryCount, 1);
+ assert.deepEqual((await restarted.history(third.job.id, app, appBearer)).events.map(item => item.status), ['queued', 'running', 'queued', 'running', 'partial', 'queued', 'running', 'succeeded']);
+});
+test('a real elapsed schedule interval continues an unfinished license job instead of stacking another job', { timeout: 90000 }, async () => {
+ const permission = await grant(['licenses.groups.reconcile']); const ruleId = randomUUID();
+ const plan = await automation.enqueue({ id: randomUUID(), grantId: permission.id, action: permission.actions[0], ruleId, format: 'json', intervalSeconds: 60 }, app, appBearer, true);
+ automation.licenseClient = { step: async row => ({ progress: { runId: row.id, retryCount: row.retry_count, cycle: 1, completed: 25, total: 27, blocked: 0 }, finished: false, hasBlocked: false, results: [] }) };
+ const first = await automation.run({ grantId: permission.id }, app, appBearer); assert.equal(first.job.status, 'queued');
+ const due = (await automation.list({ grantId: permission.id }, app, appBearer, true)).schedules[0].nextRunAt;
+ await new Promise(resolve => setTimeout(resolve, Math.max(1, Date.parse(due) - Date.now() + 100)));
+ const second = await automation.run({ grantId: permission.id }, { ...app, jti: randomUUID() }, appBearer);
+ assert.equal(second.job.id, first.job.id); assert.equal(second.job.status, 'queued');
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_automation_jobs WHERE schedule_id=$1', [plan.schedule.id])).rows[0].count, 1);
+ assert.ok(Date.parse((await automation.list({ grantId: permission.id }, app, appBearer, true)).schedules[0].nextRunAt) > Date.parse(due));
 });
 test('concurrent workers claim one job only and scheduled runs survive a new worker instance without duplicate jobs',async()=>{
  const permission=await grant();await automation.enqueue({id:randomUUID(),grantId:permission.id,action:permission.actions[0],format:'csv',intervalSeconds:60},app,appBearer,true);
@@ -105,7 +164,7 @@ test('every offered dataset executes against real own canonical rows and migrati
   const queued=await automation.enqueue({id:randomUUID(),grantId:permission.id,action,format:'json'},app,appBearer);
   const result=await automation.run({grantId:permission.id},app,appBearer);assert.equal(result.job.status,'succeeded');
   const artifact=await automation.result(queued.job.id,app,appBearer);assert.deepEqual(JSON.parse(artifact.content).rows.map(row=>row.id),[expected]);
-  await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/048_company_automation.sql'),'utf8'));
+  for(const file of ['048_company_automation.sql','049_company_license_automation.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
   assert.equal((await automation.result(queued.job.id,app,appBearer)).sha256,artifact.sha256);
  }
 });

@@ -3,8 +3,10 @@
 const blueprint = require('../company-blueprint-contract');
 const COMPANY_BLUEPRINT_ASSIGNMENT_PERMISSIONS = Object.freeze(['company.blueprints.assignments.read', 'company.blueprints.assign']);
 const { fail, exact, identifier, revision, text, versionNumber, pagination } = blueprint;
+const automation = require('../company-license-automation-contract');
 
 function validSource(source, user, userId = null, now = Date.now()) {
+  if (source?.kind === 'application') return automation.validSource(source, user, userId, now);
   try {
     exact(source, ['schemaVersion', 'companyBlueprintAssignmentsProtocol', 'issuer', 'subject', 'tokenId', 'expiresAt', 'context', 'tenant', 'actorUserId', 'permissions', 'validUntil', 'target']);
     if (source.companyBlueprintAssignmentsProtocol !== 1 || JSON.stringify(source.permissions) !== JSON.stringify(COMPANY_BLUEPRINT_ASSIGNMENT_PERMISSIONS)) return false;

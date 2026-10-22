@@ -1,6 +1,6 @@
 # Eigene App-Freigaben und dauerhafte Jobs
 
-Stand: 22. Oktober 2026. Die neue Jobbasis verbindet ein ausdrücklich freigegebenes App-Konto mit dem eigenen Mandanten. Sie speichert Jobs, Worker-Leases, begrenzte Wiederholungen, Zeitpläne und unveränderliche Historie in PostgreSQL. Der erste ausführbare Handler exportiert tatsächliche eigene Benutzer, Gruppen oder Organisationseinheiten. Weitere Aktionen – insbesondere automatischer Firmenlizenzabgleich und Provider-Schreiboperationen – gehören zum [Gesamtauftrag](../implementation-worklist.md) und sind noch offen.
+Stand: 23. Oktober 2026. Die Jobbasis verbindet ein ausdrücklich freigegebenes App-Konto mit dem eigenen Mandanten. Sie speichert Jobs, Worker-Leases, begrenzte Wiederholungen, Zeitpläne und unveränderliche Historie in PostgreSQL. Ausführbar sind eigene Benutzer-/Gruppen-/OU-Exporte und der [automatische Lizenzgruppenabgleich](company-license-automation.md) über den vorhandenen endlichen Allocator. Weitere Schreib- und Provideraktionen gehören zum [Gesamtauftrag](../implementation-worklist.md) und bleiben offen.
 
 ## App anmelden und ausdrücklich freigeben
 
@@ -37,6 +37,7 @@ Aktuell ausführbare Aktionen:
 | `directory.users.export` | Eigene Benutzer-ID, Benutzername, E-Mail, Anzeigename, Abteilung, Funktion und Enabled; keine Passwörter, Token oder MFA-Secrets |
 | `directory.groups.export` | Eigene Gruppen, Beschreibung, Revision und kanonische eigene Mitglieder-IDs |
 | `directory.ous.export` | Eigene Einheiten, Beschreibung, Parent-ID und Revision |
+| `licenses.groups.reconcile` | Bestehende eigene Gruppen-/Pool-Verknüpfung; lokale Quellen zuweisen/entziehen, Fortschritt und vollständiger JSON-Bericht mit echten Teilresultaten |
 
 Ein Export umfasst vollständig höchstens 10'000 Zeilen und vier MiB. Überschreitung ist ein sichtbarer Fehler, kein abgeschnittener erfolgreicher Bericht. CSV maskiert Formeleinstiege und zitiert Sonderzeichen. JSON/CSV sind personenbezogene Daten; die Freigabe benennt den Export ausdrücklich. Ergebnisse werden erst nach bestätigtem lokalem Commit angeboten und beim Download gegen ihren SHA-256 geprüft.
 
@@ -56,7 +57,7 @@ node scripts/od.mjs automation history JOB_ID
 node scripts/od.mjs automation result JOB_ID
 ```
 
-Die Oberfläche kann Jobs einreihen, Zeitpläne erstellen/stoppen, bestätigte Artefakte herunterladen, einzelne Jobs abbrechen und fehlgeschlagene Jobs ausdrücklich erneut einreihen. Freigaben, Jobs, Zeitpläne und Historie sind paginiert. Ein fehlender oder gestoppter Runner lässt Jobs dauerhaft eingereiht; ein Browser meldet deshalb nur die tatsächliche Einreihung. Ein aktivierter Zeitplan ist keine Behauptung, dass ein Runner bereits läuft.
+Die Oberfläche kann Jobs einreihen, Zeitpläne erstellen/stoppen, bestätigte Artefakte herunterladen, einzelne Jobs abbrechen und fehlgeschlagene oder teilweise abgeschlossene Jobs ausdrücklich erneut einreihen. Lizenzjobs benötigen zusätzlich genau eine geprüfte `ruleId` und JSON; `automation license-sync GRANT_ID RULE_ID [INTERVAL_SECONDS]` verwendet denselben Vertrag. Freigaben, Jobs, Zeitpläne und Historie sind paginiert. Ein fehlender oder gestoppter Runner lässt Jobs dauerhaft eingereiht; ein Browser meldet deshalb nur die tatsächliche Einreihung. Ein aktivierter Zeitplan ist keine Behauptung, dass ein Runner bereits läuft.
 
 Der Worker fragt fällige Jobs mit seinem aktuellen App-Token ab. Jeder Claim erhält einen eigenen zufälligen Lease-Token und höchstens 45 Sekunden Laufzeit, zusätzlich begrenzt durch Token und Grant. Verlorene/abgelaufene Claims können von einem frischen Worker derselben genehmigten Clientgeneration aufgenommen werden. Ein alter Claim kann keinen späteren Claim abschliessen. Parallele Worker verwenden PostgreSQL-Row-Locks und eine eigene Grant-Quota; doppelte Ausführung eines bereits beanspruchten Jobs wird verhindert.
 
@@ -70,13 +71,13 @@ Zeitpläne benötigen Intervalle von 60 Sekunden bis 30 Tagen. Nach längerer Un
 
 **App-Freigabe widerrufen** bestätigt die genaue Grant-Version, stoppt zugehörige Zeitpläne und bricht wartende/laufende Jobs in derselben Transaktion ab. Weitere App-Ausführung und App-Downloads sind gesperrt. Bereits heruntergeladene Dateien lassen sich beim Empfänger dadurch nicht zurückholen. Der aktuelle Eigentümer behält Zugriff auf eigene historische Belege. **Zeitplan stoppen** verhindert künftige Einreihungen; bestehende Jobs werden separat behandelt.
 
-Identity-Migration **048** speichert Anmeldungen, Grants, Jobs, Schedules, Originalevents und Pending-Outbox. Originale Firmenhoheit, aktuelle App-Autorisierung, Claim-/Grant-Deadline und tatsächliche Effekte werden vor/nach Operationen und durch SQL-Commit-Guards bestätigt. Globale Rollen und frühere menschliche Directory-/Lizenzpfade bleiben unverändert. Ein neuer Automationsscope kann keine kanonischen Benutzer, Gruppen oder fremden Authority-Tabellen nebenbei ändern; die vorhandenen Receiving-Fences werden auf die neuen Tabellen erweitert. Fehlendes Schema, deaktivierte Guards oder abweichende Originalbelege sperren die Aktion.
+Identity-Migration **048** speichert Anmeldungen, Grants, Jobs, Schedules, Originalevents und Pending-Outbox. **049** ergänzt feste Lizenzziele, wiederaufnehmbaren Fortschritt und `partial`; Policy **029** bindet den maschinellen Pfad an den bestehenden Allocator samt ursprünglichen Seiten-/Pending-Belegen. Originale Firmenhoheit, aktuelle App-Autorisierung, Claim-/Grant-Deadline und tatsächliche Effekte werden vor/nach Operationen und durch SQL-Commit-Guards bestätigt. Globale Rollen und frühere menschliche Directory-/Lizenzpfade bleiben unverändert. Ein neuer Automationsscope kann keine kanonischen Benutzer, Gruppen oder fremden Authority-Tabellen nebenbei ändern; die vorhandenen Receiving-Fences werden auf die neuen Tabellen erweitert. Fehlendes Schema, deaktivierte Guards oder abweichende Originalbelege sperren die Aktion.
 
 Artefakte und Metadaten liegen in der eigenen Identity-Datenbank. Ein vollständiger automatischer Retention-/Lösch- und Betriebsprozess gehört weiterhin zum offenen Gesamtauftrag. Hier wurden keine Produktivdaten, externen Postfächer oder Herstellerlizenzen verändert.
 
 ## Installation, API und Prüfung
 
-Identity **001–048**, aktueller OAuth-Code mit dem neuen festen Workload-Scope und aktuelles Frontend koordiniert ausrollen. Der vorhandene Gateway-/Next-Prefix `/api/identity/*` reicht den ursprünglichen Bearer unverändert an Identity weiter. Keine neue Datenbank, Runtime-Dependency oder Server-Maschinen-Secret-Art. Der Runner verwendet reguläre Client-Credentials; das Identity-Dockerfile kopiert `packages/company-automation-contract.js` im vorhandenen Root-Buildkontext.
+Identity **001–049**, Policy **001–029**, aktueller OAuth-Code mit dem festen Workload-Scope und aktuelles Frontend koordiniert ausrollen. `POLICY_SERVICE_URL` bei Identity und `IDENTITY_SERVICE_URL` bei Policy müssen auf die tatsächlichen Empfänger zeigen. Der vorhandene Gateway-/Next-Prefix `/api/identity/*` reicht den ursprünglichen Bearer unverändert an Identity weiter. Keine neue Datenbank, Runtime-Dependency oder Server-Maschinen-Secret-Art. Der Runner verwendet reguläre Client-Credentials; beide Dockerfiles kopieren die gemeinsamen Verträge im vorhandenen Root-Buildkontext.
 
 Die generierte [OpenAPI](../api/openapi.yaml) enthält die tatsächlichen Routen unter `/api/identity/automation`: App-Anmeldung, Grant-Approval/-Widerruf, Jobs, Schedules, Worker-Run, Resultate und Historie. `run` ist ausschliesslich für die tatsächlich genehmigte App erreichbar; `204` bestätigt, dass gerade kein Job fällig ist. Menschliche Verwaltungsänderungen benötigen aktuelle Eigentümerhoheit/MFA. API-Keys, Query-Bearer, fremde Tenant-Selektoren und nicht unterstützte Aktionen werden nicht als Ersatz akzeptiert.
 

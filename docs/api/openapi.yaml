@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.21.0",
+    "version": "1.22.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, employee credential provisioning, external legal verification or production SaaS acceptance."
   },
   "security": [
@@ -31432,13 +31432,14 @@
                   "actions": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 3,
+                    "maxItems": 4,
                     "uniqueItems": true,
                     "items": {
                       "enum": [
                         "directory.users.export",
                         "directory.groups.export",
-                        "directory.ous.export"
+                        "directory.ous.export",
+                        "licenses.groups.reconcile"
                       ]
                     }
                   },
@@ -31706,39 +31707,77 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "id",
-                  "grantId",
-                  "action",
-                  "format"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "grantId",
+                      "action",
+                      "format"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "grantId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "action": {
+                        "enum": [
+                          "directory.users.export",
+                          "directory.groups.export",
+                          "directory.ous.export"
+                        ]
+                      },
+                      "format": {
+                        "enum": [
+                          "json",
+                          "csv"
+                        ]
+                      }
+                    }
                   },
-                  "grantId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
-                  },
-                  "action": {
-                    "enum": [
-                      "directory.users.export",
-                      "directory.groups.export",
-                      "directory.ous.export"
-                    ]
-                  },
-                  "format": {
-                    "enum": [
-                      "json",
-                      "csv"
-                    ]
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "grantId",
+                      "action",
+                      "format",
+                      "ruleId"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "grantId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "action": {
+                        "const": "licenses.groups.reconcile"
+                      },
+                      "format": {
+                        "const": "json"
+                      },
+                      "ruleId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      }
+                    }
                   }
-                }
+                ]
               }
             }
           }
@@ -31888,45 +31927,89 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "id",
-                  "grantId",
-                  "action",
-                  "format",
-                  "intervalSeconds"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "grantId",
+                      "action",
+                      "format",
+                      "intervalSeconds"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "grantId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "action": {
+                        "enum": [
+                          "directory.users.export",
+                          "directory.groups.export",
+                          "directory.ous.export"
+                        ]
+                      },
+                      "format": {
+                        "enum": [
+                          "json",
+                          "csv"
+                        ]
+                      },
+                      "intervalSeconds": {
+                        "type": "integer",
+                        "minimum": 60,
+                        "maximum": 2592000
+                      }
+                    }
                   },
-                  "grantId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
-                  },
-                  "action": {
-                    "enum": [
-                      "directory.users.export",
-                      "directory.groups.export",
-                      "directory.ous.export"
-                    ]
-                  },
-                  "format": {
-                    "enum": [
-                      "json",
-                      "csv"
-                    ]
-                  },
-                  "intervalSeconds": {
-                    "type": "integer",
-                    "minimum": 60,
-                    "maximum": 2592000
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "grantId",
+                      "action",
+                      "format",
+                      "ruleId",
+                      "intervalSeconds"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "grantId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "action": {
+                        "const": "licenses.groups.reconcile"
+                      },
+                      "format": {
+                        "const": "json"
+                      },
+                      "ruleId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "intervalSeconds": {
+                        "type": "integer",
+                        "minimum": 60,
+                        "maximum": 2592000
+                      }
+                    }
                   }
-                }
+                ]
               }
             }
           }
@@ -31936,7 +32019,7 @@
     "/api/identity/automation/run": {
       "post": {
         "operationId": "runGrantedCompanyAutomationJob",
-        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery. Only the pinned app may execute. Claims use an expiring lease, up to five attempts and bounded exponential backoff; an expired worker cannot acknowledge another claim. Schedules skip missed bursts. All currently supported handlers are read-only directory exports, so retry cannot duplicate an external mutation.",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery. Only the pinned app may execute. Claims use an expiring lease, up to five attempts and bounded exponential backoff; an expired worker cannot acknowledge another claim. Schedules skip missed bursts. Local exports are read-only. Explicitly delegated license reconciliation uses the existing source-aware allocator and durable per-member receipts. Incomplete pages requeue the same job; a completed pass with blocked members is partial, not succeeded. These handlers do not perform external mutations.",
         "security": [
           {
             "bearerAuth": []
@@ -32466,6 +32549,230 @@
                 "properties": {
                   "confirm": {
                     "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/automation/license-source": {
+      "post": {
+        "operationId": "readOriginalCompanyLicenseAutomationSource",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery. Private receiver source. Requires the actual running license job, exact grant and current lease. A base lookup has groupId=userId=null; a recipient requires the captured own group. Returns canonical current eligibility and review deadlines without human identity/MFA fields. Source lifetime is at most the original job lease (45 seconds), current app token, grant and membership review deadline. This source is not a reusable bearer.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLicenseAutomationSource"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "grantId",
+                  "jobId",
+                  "leaseToken",
+                  "groupId",
+                  "userId"
+                ],
+                "properties": {
+                  "grantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "jobId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "leaseToken": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "groupId": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "userId": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/licenses/automation/groups/step": {
+      "post": {
+        "operationId": "stepGrantedCompanyLicenseGroupReconciliation",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery. Private Policy receiver for the original live app JWT and the exact current running Identity job. Processes at most 25 captured canonical users per step through the existing finite allocator. Immutable cycles/pages and original receipts support recovery after lost acknowledgements. At most five bounded rescans per retry epoch, no invented human authority. Partial results report blocked users; assigned/removed confirm only local group origins, never provider provisioning. No arbitrary pool, group, Blueprint, tenant or URL selector. An unfinished response contains progress and no complete results; the Identity job remains queued. Missing/corrupt evidence fails closed.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLicenseAutomationStep"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "grantId",
+                  "jobId",
+                  "leaseToken",
+                  "ruleId"
+                ],
+                "properties": {
+                  "grantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "jobId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "leaseToken": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "ruleId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
                   }
                 }
               }
@@ -34757,16 +35064,25 @@
               "app.license.pool.created",
               "app.license.pool.updated",
               "app.license.assigned",
-              "app.license.released"
+              "app.license.released",
+              "app.license.source.assigned",
+              "app.license.source.released"
             ]
           },
           "version": {
             "const": 1
           },
           "actorUserId": {
-            "type": "string",
-            "format": "uuid",
-            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "userId": {
             "oneOf": [
@@ -34808,8 +35124,61 @@
           },
           "deliveryStatus": {
             "const": "pending"
+          },
+          "actor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "id",
+              "clientId",
+              "clientRevision"
+            ],
+            "properties": {
+              "kind": {
+                "const": "application"
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "clientRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              }
+            }
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "actorUserId": {
+                  "type": "null"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "actor"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "actor"
+                ]
+              }
+            }
+          }
+        ]
       },
       "CompanyPoolEditCapabilities": {
         "type": "object",
@@ -39888,115 +40257,259 @@
         }
       },
       "CompanyBlueprintUserAssignment": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "tenantId",
-          "userId",
-          "blueprintId",
-          "version",
-          "eligibilityRevision",
-          "revision",
-          "status",
-          "actorUserId",
-          "operationId",
-          "removalOperationId",
-          "createdAt",
-          "removedAt",
-          "appPoolIds"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
-          },
-          "tenantId": {
-            "type": "string",
-            "format": "uuid",
-            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
-          },
-          "userId": {
-            "type": "string",
-            "format": "uuid",
-            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
-          },
-          "blueprintId": {
-            "type": "string",
-            "format": "uuid",
-            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
-          },
-          "version": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 2147483647
-          },
-          "eligibilityRevision": {
-            "type": "string",
-            "pattern": "^[1-9][0-9]{0,18}$",
-            "description": "Canonical positive PostgreSQL int8, at most 9223372036854775807; never converted to a JSON number."
-          },
-          "revision": {
-            "type": "string",
-            "pattern": "^[1-9][0-9]{0,18}$",
-            "description": "Canonical positive PostgreSQL int8, at most 9223372036854775807; never converted to a JSON number."
-          },
-          "status": {
-            "enum": [
-              "active",
-              "removed"
-            ]
-          },
-          "actorUserId": {
-            "type": "string",
-            "format": "uuid",
-            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
-          },
-          "operationId": {
-            "type": "string",
-            "format": "uuid",
-            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
-          },
-          "removalOperationId": {
-            "anyOf": [
-              {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "tenantId",
+              "userId",
+              "blueprintId",
+              "version",
+              "eligibilityRevision",
+              "revision",
+              "status",
+              "actorUserId",
+              "operationId",
+              "removalOperationId",
+              "createdAt",
+              "removedAt",
+              "appPoolIds"
+            ],
+            "properties": {
+              "id": {
                 "type": "string",
                 "format": "uuid",
                 "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
               },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Canonical UTC ISO timestamp."
-          },
-          "removedAt": {
-            "anyOf": [
-              {
+              "tenantId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "blueprintId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "eligibilityRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL int8, at most 9223372036854775807; never converted to a JSON number."
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL int8, at most 9223372036854775807; never converted to a JSON number."
+              },
+              "status": {
+                "enum": [
+                  "active",
+                  "removed"
+                ]
+              },
+              "actorUserId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "operationId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "removalOperationId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "createdAt": {
                 "type": "string",
                 "format": "date-time",
                 "description": "Canonical UTC ISO timestamp."
               },
-              {
-                "type": "null"
+              "removedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Canonical UTC ISO timestamp."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "appPoolIds": {
+                "type": "array",
+                "maxItems": 25,
+                "items": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                }
               }
-            ]
+            }
           },
-          "appPoolIds": {
-            "type": "array",
-            "maxItems": 25,
-            "items": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "tenantId",
+              "userId",
+              "blueprintId",
+              "version",
+              "eligibilityRevision",
+              "revision",
+              "status",
+              "actorUserId",
+              "operationId",
+              "removalOperationId",
+              "createdAt",
+              "removedAt",
+              "appPoolIds",
+              "actor"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "tenantId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "blueprintId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "eligibilityRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL int8, at most 9223372036854775807; never converted to a JSON number."
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL int8, at most 9223372036854775807; never converted to a JSON number."
+              },
+              "status": {
+                "enum": [
+                  "active",
+                  "removed"
+                ]
+              },
+              "actorUserId": {
+                "type": "null"
+              },
+              "operationId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "removalOperationId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Canonical UTC ISO timestamp."
+              },
+              "removedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Canonical UTC ISO timestamp."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "appPoolIds": {
+                "type": "array",
+                "maxItems": 25,
+                "items": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                }
+              },
+              "actor": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "id",
+                  "clientId",
+                  "clientRevision"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "application"
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$",
+                    "description": "Canonical positive PostgreSQL int8, at most 9223372036854775807; never converted to a JSON number."
+                  }
+                }
+              }
             }
           }
-        }
+        ]
       },
       "CompanyBlueprintUserAssignmentPage": {
         "type": "object",
@@ -42759,13 +43272,14 @@
           "actions": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 3,
+            "maxItems": 4,
             "uniqueItems": true,
             "items": {
               "enum": [
                 "directory.users.export",
                 "directory.groups.export",
-                "directory.ous.export"
+                "directory.ous.export",
+                "licenses.groups.reconcile"
               ]
             }
           },
@@ -42845,7 +43359,8 @@
             "enum": [
               "directory.users.export",
               "directory.groups.export",
-              "directory.ous.export"
+              "directory.ous.export",
+              "licenses.groups.reconcile"
             ]
           },
           "format": {
@@ -42860,6 +43375,7 @@
               "running",
               "retry_wait",
               "succeeded",
+              "partial",
               "failed",
               "cancelled"
             ]
@@ -42932,8 +43448,83 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "ruleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "progress": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CompanyLicenseAutomationProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "licenses.groups.reconcile"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            "then": {
+              "required": [
+                "ruleId",
+                "progress"
+              ],
+              "properties": {
+                "format": {
+                  "const": "json"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "directory.users.export",
+                    "directory.groups.export",
+                    "directory.ous.export"
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "retry_wait",
+                    "succeeded",
+                    "failed",
+                    "cancelled"
+                  ]
+                }
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "ruleId"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "progress"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
       },
       "CompanyAutomationSchedule": {
         "type": "object",
@@ -42970,7 +43561,8 @@
             "enum": [
               "directory.users.export",
               "directory.groups.export",
-              "directory.ous.export"
+              "directory.ous.export",
+              "licenses.groups.reconcile"
             ]
           },
           "format": {
@@ -42998,6 +43590,530 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "ruleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "licenses.groups.reconcile"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            "then": {
+              "required": [
+                "ruleId"
+              ],
+              "properties": {
+                "format": {
+                  "const": "json"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "directory.users.export",
+                    "directory.groups.export",
+                    "directory.ous.export"
+                  ]
+                }
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "ruleId"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "CompanyLicenseAutomationProgress": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runId",
+          "retryCount",
+          "cycle",
+          "completed",
+          "total",
+          "blocked"
+        ],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "retryCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cycle": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "blocked": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          }
+        }
+      },
+      "CompanyLicenseAutomationActor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "id",
+          "clientId",
+          "clientRevision"
+        ],
+        "properties": {
+          "kind": {
+            "const": "application"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "clientRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          }
+        }
+      },
+      "CompanyLicenseAutomationStep": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyLicenseAutomationProtocol",
+          "grantId",
+          "jobId",
+          "ruleId",
+          "actor",
+          "progress",
+          "finished",
+          "hasBlocked",
+          "results"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyLicenseAutomationProtocol": {
+            "const": 1
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "ruleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/CompanyLicenseAutomationActor"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/CompanyLicenseAutomationProgress"
+          },
+          "finished": {
+            "type": "boolean"
+          },
+          "hasBlocked": {
+            "type": "boolean"
+          },
+          "results": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "userId",
+                    "status",
+                    "code"
+                  ],
+                  "properties": {
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "status": {
+                      "enum": [
+                        "assigned",
+                        "retained",
+                        "removed"
+                      ]
+                    },
+                    "code": {
+                      "type": "null"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "userId",
+                    "status",
+                    "code"
+                  ],
+                  "properties": {
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "status": {
+                      "const": "blocked"
+                    },
+                    "code": {
+                      "enum": [
+                        403,
+                        404,
+                        409
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "finished": {
+                  "const": false
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "results": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "CompanyLicenseAutomationSource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyLicenseAutomationProtocol",
+          "kind",
+          "issuer",
+          "subject",
+          "tokenId",
+          "expiresAt",
+          "clientRevision",
+          "tenant",
+          "grantId",
+          "jobId",
+          "leaseToken",
+          "ruleId",
+          "retryCount",
+          "validUntil",
+          "permissions",
+          "target",
+          "group"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyLicenseAutomationProtocol": {
+            "const": 1
+          },
+          "kind": {
+            "const": "application"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "tokenId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "integer"
+          },
+          "clientRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$"
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$"
+              }
+            }
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "leaseToken": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "ruleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "retryCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "validUntil": {
+            "type": "integer"
+          },
+          "permissions": {
+            "const": [
+              "licenses.groups.reconcile"
+            ]
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "revision",
+                  "eligibilityRevision",
+                  "enabled",
+                  "deleted"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "revision": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "eligibilityRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "deleted": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "group": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "schemaVersion",
+                  "groupId",
+                  "name",
+                  "revision",
+                  "deleted",
+                  "memberIds",
+                  "inactiveMemberIds",
+                  "unresolvedMemberIds",
+                  "memberships"
+                ],
+                "properties": {
+                  "schemaVersion": {
+                    "const": 3
+                  },
+                  "groupId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "name": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 255
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  },
+                  "deleted": {
+                    "type": "boolean"
+                  },
+                  "memberIds": {
+                    "type": "array",
+                    "maxItems": 10000,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    }
+                  },
+                  "inactiveMemberIds": {
+                    "type": "array",
+                    "maxItems": 10000,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    }
+                  },
+                  "unresolvedMemberIds": {
+                    "type": "array",
+                    "maxItems": 10000,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    }
+                  },
+                  "memberships": {
+                    "type": "array",
+                    "maxItems": 10000,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "userId",
+                        "membershipId",
+                        "eligibilityRevision",
+                        "reviewDeadlineAt"
+                      ],
+                      "properties": {
+                        "userId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "membershipId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "eligibilityRevision": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$"
+                        },
+                        "reviewDeadlineAt": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -43311,7 +44427,8 @@
             "const": [
               "directory.users.export",
               "directory.groups.export",
-              "directory.ous.export"
+              "directory.ous.export",
+              "licenses.groups.reconcile"
             ]
           }
         }
@@ -43794,6 +44911,7 @@
                     "running",
                     "retry_wait",
                     "succeeded",
+                    "partial",
                     "failed",
                     "cancelled"
                   ]

@@ -4,8 +4,8 @@ Auftrag vom 22. Oktober 2026: sämtliche in der Bestandsaufnahme genannten fehle
 
 | Bereich | Verbindlicher Restumfang | Stand |
 | --- | --- | --- |
-| App-Automation | Eigene widerrufbare App-Schreibdelegation; persistente Jobs, Zeitplanung, Wiederholungen, Dead Letter und Historie; Lizenzabgleich ohne offene Eigentümersitzung | Teil umgesetzt: eigene explizite App-Freigaben, persistente Exportjobs/-Zeitpläne, Worker-Leases, Backoff, fünf Versuche, Historie und UI/CLI. Offen: Lizenz-/weitere Schreibhandler und tenantgebundene App-Registerverwaltung |
-| Gruppen/Lizenzen | Dynamische und verschachtelte Gruppen; externe Änderungsereignisse; automatischer Abgleich bei freiem Bestand; Quellen-/Kapazitäts-/Review-Regeln erhalten | Offen; manuelle UI-/Skript-Verknüpfungen vorhanden |
+| App-Automation | Eigene widerrufbare App-Schreibdelegation; persistente Jobs, Zeitplanung, Wiederholungen, Dead Letter und Historie; Lizenzabgleich ohne offene Eigentümersitzung | Teil umgesetzt: eigene explizite App-Freigaben, persistente Export- und Lizenzgruppenjobs/-Zeitpläne, Worker-Leases, Backoff, fünf Versuche, wiederaufnehmbare Seiten, Teilresultate, Historie und UI/CLI. Offen: weitere Schreib-/Providerhandler und tenantgebundene App-Registerverwaltung |
+| Gruppen/Lizenzen | Dynamische und verschachtelte Gruppen; externe Änderungsereignisse; automatischer Abgleich bei freiem Bestand; Quellen-/Kapazitäts-/Review-Regeln erhalten | Teil umgesetzt: normale Gruppen-/Pool-Verknüpfungen, manuelle UI-/Skript-Verwaltung und explizit delegierter zeitgesteuerter lokaler App-Abgleich. Dynamische/verschachtelte Gruppen und externe Änderungsereignisse offen |
 | Mitarbeiteraufnahme | Einladungen, tatsächliche Zugangsdaten und erste Passwort-/MFA-Anmeldung; SCIM-Synchronisierung | Offen |
 | Rollen | Eigene Firmenrollen, OU-Scopes, kontrollierte Delegation und Gruppenvererbung | Offen |
 | Mail/Cloud | Ausgewählter Anbieter, Domainprüfung, Postfächer, Aliase, Kalender und Herstellerlizenzen mit tatsächlichem Providerstatus | Offen; Microsoft 365 als erster Adapter vorgesehen, Präferenz angefragt |

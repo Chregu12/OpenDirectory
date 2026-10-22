@@ -14,7 +14,7 @@ See the [installation guide](docs/operations/installation.md) for the current lo
 
 The central login supports an [external OIDC adapter and authenticated SAML IdP launches](services/core/oauth-provider/README.md). Both need explicit configuration; SAML currently supports IdP-initiated HTTP-POST. [Apple ADE setup](docs/integrations/apple-automated-device-enrollment.md) is separate: there is no accepted ABM/ASM connector, and unavailable enrollment APIs no longer report demo devices or successful assignments.
 
-App accounts can be created directly in the UI and managed from scripts with the [automation CLI](docs/features/app-accounts-automation.md). Explicit [company app grants and durable jobs](docs/features/company-automation.md) support unattended directory exports with schedules, worker leases and retained history. Mail provisioning still needs a provider connector.
+App accounts can be created directly in the UI and managed from scripts with the [automation CLI](docs/features/app-accounts-automation.md). Explicit [company app grants and durable jobs](docs/features/company-automation.md) support unattended directory exports and [group license reconciliation](docs/features/company-license-automation.md), with schedules, worker leases, recoverable progress and retained history. Licensing uses existing finite local pools; mail provisioning and manufacturer activation still need provider connectors.
 
 [License groups](docs/features/company-license-groups.md) link ordinary directory groups to finite license pools. UI and script reconciliation allocate one seat per user/pool, retain separate origins and release only the departing group's source.
 

@@ -14,9 +14,11 @@ const capabilities = z.object({ ...envelope, companyBlueprintAssignmentsProtocol
 ]), configurationMode: z.literal('local-only'), allocationMode: z.literal('local-only'), supportedTargets: z.tuple([z.literal('user')]), maxApplications: z.literal(25) }).strict();
 const ordinal = z.number().int().min(1).max(2147483647);
 const poolCapture = z.object({ poolId: uuid, poolRevision: revision }).strict();
-const binding = z.object({ id: uuid, tenantId: uuid, userId: uuid, blueprintId: uuid, version: ordinal, eligibilityRevision: revision, revision,
-  status: z.enum(['active', 'removed']), actorUserId: uuid, operationId: uuid, removalOperationId: uuid.nullable(), createdAt: timestamp, removedAt: timestamp.nullable(),
-  appPoolIds: z.array(uuid).max(25).refine(values => new Set(values).size === values.length) }).strict().refine(value => value.status === 'active'
+const bindingFields = { id: uuid, tenantId: uuid, userId: uuid, blueprintId: uuid, version: ordinal, eligibilityRevision: revision, revision,
+  status: z.enum(['active', 'removed']), operationId: uuid, removalOperationId: uuid.nullable(), createdAt: timestamp, removedAt: timestamp.nullable(),
+  appPoolIds: z.array(uuid).max(25).refine(values => new Set(values).size === values.length) };
+const binding = z.union([z.object({ ...bindingFields, actorUserId: uuid }).strict(), z.object({ ...bindingFields, actorUserId: z.null(),
+  actor: z.object({ kind: z.literal('application'), id: uuid, clientId: z.string().min(1).max(255), clientRevision: revision }).strict() }).strict()]).refine(value => value.status === 'active'
     ? value.removalOperationId === null && value.removedAt === null && value.revision === '1'
     : value.removalOperationId !== null && value.removedAt !== null && BigInt(value.revision) > BigInt(1) && Date.parse(value.removedAt) >= Date.parse(value.createdAt));
 const source = z.object({ blueprintId: uuid, configurationId: uuid }).strict();

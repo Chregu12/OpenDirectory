@@ -43,11 +43,13 @@ const returnResultSchema = z.discriminatedUnion('status', [
   z.object({ poolId: uuid, assignmentId: uuid, status: z.literal('not_attempted'), code: z.null() }).strict(),
 ]);
 const returnInputSchema = z.object({ reason: reasonSchema, confirm: z.literal(true) }).strict();
-const eventSchema = z.object({
-  id: uuid, type: z.enum(['app.license.pool.created', 'app.license.pool.updated', 'app.license.assigned', 'app.license.released']), version: z.literal(1),
-  actorUserId: uuid, userId: uuid.nullable(), correlationId: uuid, createdAt: timestamp,
+const eventFields = {
+  id: uuid, type: z.enum(['app.license.pool.created', 'app.license.pool.updated', 'app.license.assigned', 'app.license.released', 'app.license.source.assigned', 'app.license.source.released']), version: z.literal(1),
+  userId: uuid.nullable(), correlationId: uuid, createdAt: timestamp,
   beforeRevision: revision.nullable(), afterRevision: revision, deliveryStatus: z.literal('pending'),
-}).strict().refine(value => value.type === 'app.license.pool.created'
+};
+const eventSchema = z.union([z.object({ ...eventFields, actorUserId: uuid }).strict(), z.object({ ...eventFields, actorUserId: z.null(),
+  actor: z.object({ kind: z.literal('application'), id: uuid, clientId: z.string().min(1).max(255), clientRevision: revision }).strict() }).strict()]).refine(value => value.type === 'app.license.pool.created'
   ? value.beforeRevision === null && value.afterRevision === '1' && value.userId === null
   : value.beforeRevision !== null && (value.type === 'app.license.pool.updated' ? value.userId === null : value.userId !== null)
     && BigInt(value.afterRevision) === BigInt(value.beforeRevision) + BigInt(1));

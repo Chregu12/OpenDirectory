@@ -1,5 +1,5 @@
 'use strict';
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createHash } = require('node:crypto');
 const { v5 } = require('uuid');
 const { identifier, exact } = require('../../../../../packages/company-license-contract');
 const { linkValues, syncValues, unlinkValues } = require('../../../../../packages/company-license-group-contract');
@@ -7,22 +7,30 @@ const { CompanyBlueprints } = require('../CompanyBlueprints');
 const { CompanyBlueprintAssignments } = require('./CompanyBlueprintAssignments');
 const { GroupSnapshotClient } = require('./GroupSnapshotClient');
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
-function envelope(source) { return { schemaVersion: 1, companyLicenseGroupsProtocol: 1, actorUserId: source.actorUserId, tenantId: source.tenant.id, allocationMode: 'local-only' }; }
+function envelope(source) { return { schemaVersion: 1, companyLicenseGroupsProtocol: 1, actorUserId: source.kind === 'application' ? null : source.actorUserId, tenantId: source.tenant.id, allocationMode: 'local-only',
+  ...(source.kind === 'application' ? { actor: { kind: 'application', id: source.grantId, clientId: source.subject, clientRevision: source.clientRevision } } : {}) }; }
 function view(row) { return { id: row.id, tenantId: row.tenant_id, groupId: row.group_id, poolId: row.pool_id, blueprintId: row.blueprint_id,
   status: row.status, revision: String(row.revision), createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString() }; }
 class CompanyLicenseGroups {
-  constructor(companies, { blueprints = new CompanyBlueprints(companies.database), assignments = new CompanyBlueprintAssignments(companies.database, { allocator: companies.allocator }), groups = new GroupSnapshotClient() } = {}) {
-    this.companies = companies; this.database = companies.database; this.blueprints = blueprints; this.assignments = assignments; this.groups = groups;
+  constructor(companies, { blueprints = new CompanyBlueprints(companies.database), assignments = new CompanyBlueprintAssignments(companies.database, { allocator: companies.allocator }), groups = new GroupSnapshotClient(), correlationId = null } = {}) {
+    this.companies = companies; this.database = companies.database; this.blueprints = blueprints; this.assignments = assignments; this.groups = groups; this.correlationId = correlationId;
   }
   async rule(client, id, source) {
     identifier(id); await client.query('SELECT company_license_group_receiving()');
     const row = (await client.query(`SELECT rule.* FROM company_license_groups rule WHERE id=$1 AND tenant_id=$2
       AND EXISTS(SELECT 1 FROM company_license_group_events event JOIN company_license_group_outbox box ON box.id=event.id
-        WHERE event.rule_id=rule.id AND event.result=to_jsonb(rule) AND box.status='pending')`, [id, source.tenant.id])).rows[0];
+        WHERE event.rule_id=rule.id AND event.result-'created_at'-'updated_at'=to_jsonb(rule)-'created_at'-'updated_at'
+          AND (event.result->>'created_at')::timestamptz=rule.created_at AND (event.result->>'updated_at')::timestamptz=rule.updated_at AND box.status='pending')`, [id, source.tenant.id])).rows[0];
     if (!row) fail(404, 'Own license group not found'); return row;
   }
   async snapshot(rule, source, authorization) {
     if (rule.status === 'unlinked') return null;
+    if (source.kind === 'application') {
+      if (typeof this.groups.machineSnapshot !== 'function') fail(403, 'Purpose-bound app group source required');
+      const proof = await this.groups.machineSnapshot(authorization);
+      if (proof.kind !== 'application' || proof.grantId !== source.grantId || proof.jobId !== source.jobId || proof.ruleId !== rule.id || proof.tenant.id !== rule.tenant_id || proof.group?.groupId !== rule.group_id || proof.group.unresolvedMemberIds.length) fail(503, 'Complete own app group source required');
+      return { ...proof.group, hash: createHash('sha256').update(JSON.stringify(proof.group)).digest('hex'), validUntil: new Date(proof.validUntil * 1000).toISOString() };
+    }
     const group = await this.groups.snapshot(rule.group_id, authorization, true);
     if (group.viewerUserId !== source.actorUserId || group.viewerEnabled !== true || group.sourceAuthorization !== null) fail(403, 'Original company license group viewer required');
     return group;
@@ -87,14 +95,16 @@ class CompanyLicenseGroups {
     if (!prior && match[2] !== String(rule.revision)) fail(412, 'License group version changed');
     return this.write(source, operationId, id, { ...values, revision: match[2] }, null, user, authorization);
   }
-  async sync(id, input, user, authorization) {
+  async sync(id, input, user, authorization, selectedUsers = null) {
     const values = syncValues(input); const source = await this.companies.authority.read(authorization, user); const rule = await this.rule(this.database, id, source);
     const group = await this.snapshot(rule, source, authorization);
     if ((group?.revision || null) !== values.groupRevision) fail(412, 'Group changed; capture a fresh preview');
     const bindings = await this.bindings(this.database, rule); const desired = new Set(group?.deleted ? [] : group?.memberIds || []);
     const members = new Map((group?.memberships || []).map(member => [member.userId, member]));
     const all = [...new Set([...desired, ...bindings.map(binding => binding.user_id)])].sort();
-    const selected = all.filter(userId => !values.cursor || userId > values.cursor).slice(0, 25); const results = [];
+    if (selectedUsers !== null && (source.kind !== 'application' || !Array.isArray(selectedUsers) || !selectedUsers.length || selectedUsers.length > 25 || new Set(selectedUsers).size !== selectedUsers.length)) fail(400, 'Bounded captured app targets required');
+    if (selectedUsers) selectedUsers.forEach(identifier);
+    const selected = selectedUsers || all.filter(userId => !values.cursor || userId > values.cursor).slice(0, 25); const results = [];
     const verify = async (client, after, command) => {
       await client.query('SELECT id FROM company_license_groups WHERE id=$1 FOR SHARE', [rule.id]);
       const currentRule = await this.rule(client, rule.id, source);
@@ -117,7 +127,7 @@ class CompanyLicenseGroups {
           const preview = await this.assignments.removalPreview(binding.id, user, authorization);
           await this.assignments.change('removed', binding.id, { userId, eligibilityRevision: preview.eligibilityRevision,
             pools: preview.pools.map(({ poolId, poolRevision }) => ({ poolId, poolRevision })), reason: values.reason, confirm: true },
-          `"company-blueprint-assignment-${binding.id}-${binding.revision}"`, randomUUID(), user, authorization, randomUUID(), { verify });
+          `"company-blueprint-assignment-${binding.id}-${binding.revision}"`, randomUUID(), user, authorization, this.correlationId || randomUUID(), { verify });
           binding = null;
         }
         if (desired.has(userId) && !binding) {
@@ -125,11 +135,11 @@ class CompanyLicenseGroups {
           if (preview.eligibilityRevision !== members.get(userId).eligibilityRevision) fail(412, 'Current group recipient generation changed');
           await this.assignments.change('assigned', undefined, { id: randomUUID(), userId, blueprintId: rule.blueprint_id, version: 1,
             eligibilityRevision: preview.eligibilityRevision, pools: preview.pools.map(({ poolId, poolRevision }) => ({ poolId, poolRevision })), reason: values.reason, confirm: true },
-          undefined, randomUUID(), user, authorization, randomUUID(), { verify });
+          undefined, randomUUID(), user, authorization, this.correlationId || randomUUID(), { verify });
           results.push({ userId, status: 'assigned', code: null });
         } else results.push({ userId, status: desired.has(userId) ? 'retained' : 'removed', code: null });
       } catch (error) {
-        if ([401, 403, 412, 428].includes(error.status) || !error.status || error.status >= 500) throw error;
+        if ([401, 412, 428].includes(error.status) || error.status === 403 && (source.kind !== 'application' || error.authorityDenied) || !error.status || error.status >= 500) throw error;
         results.push({ userId, status: 'blocked', code: error.status });
       }
     }

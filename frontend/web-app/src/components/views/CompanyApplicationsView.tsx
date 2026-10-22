@@ -11,7 +11,7 @@ import CompanyApplicationAssignmentsPanel from './CompanyApplicationAssignmentsP
 import CompanyOffboardingV2Panel from './CompanyOffboardingV2Panel';
 
 const initialValues: CompanyPoolInput = { name: '', vendor: '', description: '', totalSeats: 1, reason: '' };
-const eventLabels = { 'app.license.pool.created': 'Lizenzpool erstellt', 'app.license.pool.updated': 'App und Lizenzbestand aktualisiert', 'app.license.assigned': 'Lizenz zugewiesen', 'app.license.released': 'Lizenz freigegeben' };
+const eventLabels = { 'app.license.pool.created': 'Lizenzpool erstellt', 'app.license.pool.updated': 'App und Lizenzbestand aktualisiert', 'app.license.assigned': 'Lizenz zugewiesen', 'app.license.released': 'Lizenz freigegeben', 'app.license.source.assigned': 'Lizenzquelle zugewiesen', 'app.license.source.released': 'Lizenzquelle zurückgegeben' };
 const returnLabels = { released: 'Freigabe bestätigt', unconfirmed: 'Ergebnis nicht bestätigt', not_attempted: 'Nicht versucht' };
 function Pagination({ page, total, label, disabled, onPage }: { page: number; total: number; label: string; disabled: boolean; onPage: (page: number) => void }) {
   return <nav aria-label={label} className="flex flex-wrap items-center gap-4 py-3 text-sm">
@@ -330,7 +330,7 @@ export default function CompanyApplicationsView() {
             <h3 className="font-semibold">Lizenzhistorie</h3>
             {history ? <><ol className="space-y-4">{history.events.map(event => <li key={event.id} className="text-sm space-y-1">
               <p className="font-medium">{eventLabels[event.type]}</p><p><time dateTime={event.createdAt}>{event.createdAt}</time> · Version {event.beforeRevision || '—'} → {event.afterRevision}</p>
-              <p className="break-words">Benutzer: {event.userId || '—'} · Ausgeführt von: {event.actorUserId}</p>
+              <p className="break-words">Benutzer: {event.userId || '—'} · Ausgeführt von: {'actor' in event ? 'App ' + event.actor.clientId : event.actorUserId}</p>
               <p className="break-words">Korrelations-ID: {event.correlationId}</p><p className="opacity-70">Ereigniszustellung ausstehend</p>
             </li>)}</ol>{history.events.length === 0 && <p>Keine Ereignisse vorhanden.</p>}<Pagination label="Historienseite" page={history.page} total={history.total} disabled={busy} onPage={setHistoryPage} /></> : <p role="status">Lizenzhistorie wird geladen …</p>}
           </section>}

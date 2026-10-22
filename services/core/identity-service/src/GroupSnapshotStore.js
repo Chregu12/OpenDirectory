@@ -22,7 +22,12 @@ class GroupSnapshotStore {
       const link = await this.resolveSubject(client, viewer);
       const viewerState = { viewerUserId: link.userId, viewerEnabled: link.enabled };
       const sourceAuthorization=authorize?await authorize(client):null;
-      await client.query('SELECT identity_membership_review_refresh($1)',[groupId]);
+      return this.readSnapshot(client, groupId, { viewerState, sourceAuthorization, authorize });
+    });
+  }
+
+  async readSnapshot(client, groupId, { viewerState = { viewerUserId: null, viewerEnabled: null }, sourceAuthorization = null, authorize, refreshReviews = true } = {}) {
+      if (refreshReviews) await client.query('SELECT identity_membership_review_refresh($1)',[groupId]);
       const observed=(await client.query("SELECT date_trunc('milliseconds',identity_group_snapshot_now()) AS observed_at")).rows[0].observed_at;
       const observation={observedAt:observed.toISOString(),validUntil:new Date(observed.getTime()+LEASE_SECONDS*1000).toISOString()};
       const result = await client.query("SELECT id, name, revision FROM groups WHERE id = $1 AND identity_tenant_id('group',id) IS NOT NULL", [groupId]);
@@ -53,7 +58,6 @@ class GroupSnapshotStore {
         unresolvedMemberIds: members.rows.filter(member => !member.id).map(member => member.user_id),
         memberships:members.rows.filter(active).map(member=>({userId:member.id,membershipId:member.membership_id,eligibilityRevision:String(member.eligibility_revision),reviewDeadlineAt:member.review_deadline_at?.toISOString()||null})),
       };
-    });
   }
 }
 

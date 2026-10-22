@@ -1,6 +1,6 @@
 # Normale Gruppen und Lizenzgruppen
 
-Stand: 22. Oktober 2026. Eine Lizenzgruppe ist eine normale kanonische Verzeichnisgruppe mit einer ausdrücklichen Verknüpfung zu einem eigenen Lizenzpool. Eine Gruppe kann mehrere Pools verwenden. Gruppen ohne Pool bleiben normale Gruppen.
+Stand: 23. Oktober 2026. Eine Lizenzgruppe ist eine normale kanonische Verzeichnisgruppe mit einer ausdrücklichen Verknüpfung zu einem eigenen Lizenzpool. Eine Gruppe kann mehrere Pools verwenden. Gruppen ohne Pool bleiben normale Gruppen.
 
 ## Oberfläche
 
@@ -22,7 +22,7 @@ Der Bestand und die Vergabe sind lokal. Eine erfolgreiche Zuweisung bestätigt k
 
 ## Skripte
 
-Node.js 20+ und die vorhandene [CLI-Konfiguration](app-accounts-automation.md) verwenden. `OPENDIRECTORY_ADMIN_ACCESS_TOKEN` ist der ursprüngliche menschliche Zugriffstoken mit aktuellen eigenen Rechten und MFA. Ein `client_credentials`-App-Konto erhält damit keine Firmenlizenzrechte. Token nicht als Befehlsargument oder im Repository ablegen.
+Node.js 20+ und die vorhandene [CLI-Konfiguration](app-accounts-automation.md) verwenden. Für diese manuellen Befehle ist `OPENDIRECTORY_ADMIN_ACCESS_TOKEN` der ursprüngliche menschliche Zugriffstoken mit aktuellen eigenen Rechten und MFA. Ein App-Konto verwendet stattdessen den separat ausdrücklich freigegebenen [Automationsweg](company-license-automation.md); seine Registrierung allein gewährt keine Firmenlizenzrechte. Token nicht als Befehlsargument oder im Repository ablegen.
 
 ```bash
 node scripts/od.mjs group create 'Engineering'
@@ -56,7 +56,7 @@ const result = await groups.linkPool(ordinary.id, process.env.POOL_ID,
 console.log({ ruleId: result.rule.id, blocked: result.hasBlocked });
 ```
 
-Externe Gruppen- oder Reviewänderungen starten keinen unbeaufsichtigten Firmenlizenz-Worker. Die Integration muss `sync` mit einer weiterhin gültigen ursprünglichen menschlichen Sitzung auslösen. Eine dauerhafte appgebundene Schreibdelegation ist nicht implementiert; vorhandene Legacy-Gruppenworker bleiben für Firmenpools gesperrt.
+Für den [automatischen App-Abgleich](company-license-automation.md) unter der Verknüpfung **Automatischen Abgleich einrichten** öffnen. Der tatsächliche Owner kann einer konkreten App-Generation den Lizenzabgleich ausdrücklich freigeben und einen Zeitplan speichern. Der eigene Worker arbeitet mit seinen App-Zugangsdaten ohne menschliche Sitzung. Gruppen-/Reviewänderungen und freier Bestand werden beim nächsten Lauf geprüft; externe Ereigniszustellung fehlt weiterhin. Vorhandene Legacy-Gruppenworker bleiben für Firmenpools gesperrt.
 
 ## API und Datenmodell
 
@@ -79,7 +79,7 @@ Policy-Migration **028** ergänzt `company_license_groups`, unveränderliche Eve
 
 ## Installation und Prüfung
 
-Identity mit aktuellem Code und Migrationen 001–047, Policy mit **001–028**, Gateway und Frontend koordiniert aktualisieren. Die neue Identity-Route benötigt keine zusätzliche Identity-Migration. Policy-Dockerfile kopiert den gemeinsamen `packages/company-license-group-contract.js` im bestehenden Repository-Root-Buildkontext. Keine neuen Dependencies oder Secrets.
+Identity mit aktuellem Code und Migrationen **001–049**, Policy mit **001–029**, Gateway und Frontend koordiniert aktualisieren. 028 enthält die manuellen Verknüpfungen; 049/029 erweitern sie um den echten App-Abgleich und dessen ursprüngliche Belege. Die Dockerfiles kopieren die gemeinsamen Verträge im bestehenden Repository-Root-Buildkontext. Keine neuen Dependencies oder zusätzliche Secret-Art.
 
 ```bash
 npm run test:automation-client

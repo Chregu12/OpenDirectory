@@ -64,6 +64,7 @@ export default function CompanyLicenseGroupsPanel({ group, actorUserId }: { grou
       <button className={button} disabled={busy || !poolId || reason.trim().length < 10 || rules.some(rule => rule.poolId === poolId && rule.status === 'active')} onClick={() => void run()}>Pool verknüpfen und Mitglieder zuweisen</button>
       {!rules.length && <p>Normale Gruppe: kein Lizenzpool verknüpft.</p>}
       {rules.map(rule => <article key={rule.id} className="rounded border border-white/10 p-3"><p>Pool {pools.find(pool => pool.id === rule.poolId)?.name || rule.poolId} · {rule.status === 'active' ? 'Verknüpft' : 'Verknüpfung beendet'}</p>
+        <p><a className="underline" href={'/automation?licenseRule=' + encodeURIComponent(rule.id)}>Automatischen Abgleich einrichten</a></p>
         <button className={button} disabled={busy || reason.trim().length < 10} onClick={() => void run(rule)}>Mitglieder abgleichen</button>
         {rule.status === 'active' && <button className={button} disabled={busy || reason.trim().length < 10} onClick={() => setConfirmation(rule)}>Pool-Verknüpfung entfernen</button>}
       </article>)}

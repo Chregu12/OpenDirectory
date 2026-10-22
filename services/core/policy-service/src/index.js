@@ -55,6 +55,7 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 }));
 app.use(oidcAuth({ skipPaths: ['/health', '/metrics'] }));
 app.use('/api/company-blueprints', require('./companyBlueprintRoutes').companyBlueprintRoutes(db));
 app.use('/api/company-blueprint-assignments', require('./companyBlueprintAssignmentRoutes').companyBlueprintAssignmentRoutes(db));
+app.use('/api/licenses/automation/groups', require('./licenses/companyAutomationRoutes').companyAutomationRoutes(db));
 app.use('/api', requirePolicyAccess);
 
 // --- Engine singletons ---

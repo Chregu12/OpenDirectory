@@ -19,8 +19,12 @@ function grant(value, principal) {
 }
 function job(value, grantId) {
   for (const field of ['id','grantId','tenantId']) contract.identifier(value?.[field]);
-  if (value.grantId !== grantId || !contract.ACTIONS.includes(value.action) || !['json','csv'].includes(value.format) || !['queued','running','retry_wait','succeeded','failed','cancelled'].includes(value.status)
+  if (value.grantId !== grantId || !contract.ACTIONS.includes(value.action) || !['json','csv'].includes(value.format) || !['queued','running','retry_wait','succeeded','partial','failed','cancelled'].includes(value.status)
     || typeof value.revision !== 'string' || !/^[1-9][0-9]*$/.test(value.revision) || !Number.isInteger(value.attemptCount) || value.attemptCount < 0 || value.attemptCount > 5) throw new Error('Job target unconfirmed');
+  if(value.action===contract.LICENSE_ACTION){contract.identifier(value.ruleId);if(value.format!=='json'||value.progress===undefined||!Number.isSafeInteger(value.retryCount)||value.retryCount<0)throw new Error('License job target unconfirmed');
+    if(value.progress!==null){const progress=value.progress;contract.exact(progress,['runId','retryCount','cycle','completed','total','blocked']);if(progress.runId!==value.id||!Number.isInteger(progress.retryCount)||progress.retryCount<0||progress.retryCount>value.retryCount||!Number.isInteger(progress.cycle)||progress.cycle<1||progress.cycle>5||['completed','total','blocked'].some(key=>!Number.isInteger(progress[key])||progress[key]<0||progress[key]>10000)||progress.blocked>progress.completed||progress.completed>progress.total)throw new Error('License progress unconfirmed');}
+    if(['succeeded','partial'].includes(value.status)&&(!value.progress||value.progress.retryCount!==value.retryCount||value.progress.completed!==value.progress.total||value.rowCount!==value.progress.total||(value.status==='partial')!==(value.progress.blocked>0)||typeof value.artifactSha256!=='string'||!/^[a-f0-9]{64}$/.test(value.artifactSha256)))throw new Error('License completion unconfirmed');
+  }else if(value.ruleId!==undefined||value.progress!==undefined||value.status==='partial')throw new Error('Unexpected license progress');
   return value;
 }
 export async function runAutomationWorker(automation, grantId, { once = false, signal, onResult = () => {}, onRetry = () => {} } = {}) {
@@ -50,13 +54,13 @@ export function createAutomationClient(client) {
       if (actual.id !== input.id || actual.enrollmentId !== input.enrollmentId || actual.clientId !== input.clientId || actual.clientRevision !== input.clientRevision || JSON.stringify(actual.actions) !== JSON.stringify(input.actions) || actual.expiresAt !== input.expiresAt || actual.status !== 'active') throw new Error('Approval unconfirmed'); return value;
     },
     async grants(administrative = false, page = 1) { if (!Number.isInteger(page) || page < 1) throw new Error('Positive page required'); const value = checked(await request('GET', '/grants?page=' + page, undefined, administrative), [200], administrative ? 'owner' : 'application'); if (value.page !== page || !Array.isArray(value.grants) || value.grants.length > 25) throw new Error('Grant page unconfirmed'); value.grants.forEach(row => grant(row,value.principal)); return value; },
-    async enqueue(grantId, action, format = 'json') {
-      const input = contract.jobInput({ id: randomUUID(), grantId, action, format }); const value = checked(await request('POST', '/jobs', input), [201]); const actual = job(value.job, grantId);
-      if (actual.id !== input.id || actual.action !== action || actual.format !== format || actual.status !== 'queued') throw new Error('Queueing unconfirmed'); return value;
+    async enqueue(grantId, action, format = 'json', ruleId) {
+      const input = contract.jobInput({ id: randomUUID(), grantId, action, format, ...(ruleId === undefined ? {} : { ruleId }) }); const value = checked(await request('POST', '/jobs', input), [201]); const actual = job(value.job, grantId);
+      if (actual.id !== input.id || actual.action !== action || actual.format !== format || actual.status !== 'queued' || actual.ruleId !== ruleId) throw new Error('Queueing unconfirmed'); return value;
     },
-    async schedule(grantId, action, intervalSeconds, format = 'json') {
-      const input = contract.jobInput({ id: randomUUID(), grantId, action, format, intervalSeconds }, true); const value = checked(await request('POST', '/schedules', input), [201]); const actual = value.schedule;
-      if (!actual || actual.id !== input.id || actual.grantId !== grantId || actual.action !== action || actual.format !== format || actual.intervalSeconds !== intervalSeconds || actual.enabled !== true) throw new Error('Schedule unconfirmed'); contract.identifier(actual.tenantId); return value;
+    async schedule(grantId, action, intervalSeconds, format = 'json', ruleId) {
+      const input = contract.jobInput({ id: randomUUID(), grantId, action, format, intervalSeconds, ...(ruleId === undefined ? {} : { ruleId }) }, true); const value = checked(await request('POST', '/schedules', input), [201]); const actual = value.schedule;
+      if (!actual || actual.id !== input.id || actual.grantId !== grantId || actual.action !== action || actual.format !== format || actual.ruleId !== ruleId || actual.intervalSeconds !== intervalSeconds || actual.enabled !== true) throw new Error('Schedule unconfirmed'); contract.identifier(actual.tenantId); return value;
     },
     async jobs(grantId, page = 1, administrative = false) { contract.identifier(grantId); if (!Number.isInteger(page) || page < 1) throw new Error('Positive page required'); const value = checked(await request('GET', '/jobs?grantId=' + grantId + '&page=' + page, undefined, administrative), [200], administrative ? 'owner' : 'application'); if (value.page !== page || value.grantId !== grantId || !Array.isArray(value.jobs) || value.jobs.length > 25) throw new Error('Job page unconfirmed'); value.jobs.forEach(row => job(row,grantId)); return value; },
     async schedules(grantId, page = 1) { contract.identifier(grantId); if (!Number.isInteger(page) || page < 1) throw new Error('Positive page required'); return checked(await request('GET', '/schedules?grantId=' + grantId + '&page=' + page)); },

@@ -22,6 +22,10 @@ test('generated automation contract describes real scope, conditional writes and
  const spec=require('../../scripts/company-automation-openapi').companyAutomationOpenApi();const base='/api/identity/automation';
  expect(spec.paths[base+'/run'].post.responses[204]).toBeDefined();
  expect(spec.paths[base+'/grants/{id}/revoke'].post.parameters.map(row=>row.name)).toEqual(['id','If-Match']);
- expect(spec.components.schemas.CompanyAutomationGrant.properties.actions.items.enum).toEqual(['directory.users.export','directory.groups.export','directory.ous.export']);
- expect(spec.paths[base+'/jobs'].post.requestBody.content['application/json'].schema.additionalProperties).toBe(false);
+ expect(spec.components.schemas.CompanyAutomationGrant.properties.actions.items.enum).toEqual(['directory.users.export','directory.groups.export','directory.ous.export','licenses.groups.reconcile']);
+ expect(spec.paths[base+'/jobs'].post.requestBody.content['application/json'].schema.oneOf.every(schema=>schema.additionalProperties===false)).toBe(true);
+ expect(spec.paths[base+'/license-source'].post.requestBody.content['application/json'].schema.required).toEqual(['grantId','jobId','leaseToken','groupId','userId']);
+ expect(spec.components.schemas.CompanyLicenseAutomationSource.required).toHaveLength(18);
+ expect(spec.components.schemas.CompanyLicenseAutomationSource.properties.context).toBeUndefined();
+ expect(spec.paths['/api/licenses/automation/groups/step'].post.requestBody.content['application/json'].schema.required).toEqual(['grantId','jobId','leaseToken','ruleId']);
 });

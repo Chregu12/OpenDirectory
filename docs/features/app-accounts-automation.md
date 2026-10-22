@@ -66,7 +66,7 @@ Rotation, Deaktivierung und Konfigurationsänderungen invalidieren die vorherige
 
 ## Eigene App-Freigaben und dauerhafte Jobs
 
-Ein dediziertes Konto mit exakt `company.automation` kann sich anmelden; anschliessend genehmigt der tatsächliche Firmeninhaber konkrete eigene Exportaktionen und höchstens 30 Tage Laufzeit. Der App-Worker verwendet seine eigenen Client-Credentials ohne offene menschliche Sitzung. Jobs, Zeitpläne, Leases, Backoff, begrenzte Versuche, Historie und geprüfte JSON-/CSV-Artefakte sind persistent. [Einrichtung und tatsächlicher Umfang](company-automation.md). Der Scope allein gewährt keinen Tenant-Zugriff. Firmenlizenz-Schreibdelegation und Provider-Aktionen bleiben weitere Schritte des vollständigen Auftrags.
+Ein dediziertes Konto mit exakt `company.automation` kann sich anmelden; anschliessend genehmigt der tatsächliche Firmeninhaber konkrete eigene Export- und/oder [Lizenzgruppenaktionen](company-license-automation.md) und höchstens 30 Tage Laufzeit. Der App-Worker verwendet seine eigenen Client-Credentials ohne offene menschliche Sitzung. Jobs, Zeitpläne, Leases, Backoff, begrenzte Versuche, Historie und geprüfte JSON-/CSV-Artefakte sind persistent. Lizenzjobs behalten Fortschritt, echte Einzelresultate und den Status `partial` bei blockierten Mitgliedern. [Einrichtung und tatsächlicher Umfang](company-automation.md). Der Scope allein gewährt keinen Tenant-Zugriff. Tenantgebundene App-Registerverwaltung und Provider-Aktionen bleiben weitere Schritte des vollständigen Auftrags.
 
 ## Gruppen und Lizenzpools
 

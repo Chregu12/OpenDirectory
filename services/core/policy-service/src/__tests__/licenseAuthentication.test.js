@@ -84,6 +84,19 @@ test.each([
   expect(db.query).not.toHaveBeenCalled();
 });
 
+test('a signed dedicated automation app reaches only the exact license step and cannot acquire human policy access', async () => {
+  const token = await issueToken({ sub: 'actual-worker', actor_type: 'application', client_id: 'actual-worker', client_revision: '1', scope: 'company.automation', permissions: ['company.automation'] });
+  db.query.mockClear();
+  const acceptedBoundary = await request(app).post('/api/licenses/automation/groups/step').set('Authorization', `Bearer ${token}`).send({});
+  expect(acceptedBoundary.status).toBe(400); expect(acceptedBoundary.body.error).toBe('Exact company license fields required');
+  for (const [method, path] of [['get', '/api/licenses/automation/groups/step'], ['post', '/api/licenses/automation/groups/step/other'], ['post', '/api/licenses/company/pools'], ['get', '/api/policies']]) {
+    expect((await request(app)[method](path).set('Authorization', `Bearer ${token}`)).status).toBe(403);
+  }
+  const expanded = await issueToken({ sub: 'actual-worker', actor_type: 'application', client_id: 'actual-worker', client_revision: '1', scope: 'company.automation users.delete', permissions: ['company.automation'] });
+  expect((await request(app).post('/api/licenses/automation/groups/step').set('Authorization', `Bearer ${expanded}`).send({})).status).toBe(403);
+  expect(db.query).not.toHaveBeenCalled();
+});
+
 test('ignores administrative claims supplied in headers, the body, or requested scopes', async () => {
   const token = await issueToken({ sub: 'alice', scope: 'licenses.catalog.manage', roles: ['user'] });
   const response = await request(app).post('/api/licenses').set('Authorization', `Bearer ${token}`)

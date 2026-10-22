@@ -46,7 +46,7 @@ function companyBlueprintAssignmentOpenApi() {
   const schemas = {
     CompanyBlueprintAssignmentSource: object({ ...sourceFields, companyBlueprintAssignmentsProtocol: { const: 1 }, permissions: { const: [...COMPANY_BLUEPRINT_ASSIGNMENT_PERMISSIONS] }, target: nullable(target) }),
     CompanyBlueprintAssignmentCapability: object({ ...actor, companyBlueprintAssignmentsProtocol: { const: 1 }, permissions: { const: [...COMPANY_BLUEPRINT_ASSIGNMENT_PERMISSIONS] }, configurationMode: { const: 'local-only' }, allocationMode: { const: 'local-only' }, supportedTargets: { const: ['user'] }, maxApplications: { const: 25 } }),
-    CompanyBlueprintUserAssignment: binding,
+    CompanyBlueprintUserAssignment: { oneOf: [binding, object({ ...binding.properties, actorUserId: { type: 'null' }, actor: object({ kind: { const: 'application' }, id: uuid, clientId: { type: 'string', minLength: 1, maxLength: 255 }, clientRevision: revision }) })] },
     CompanyBlueprintUserAssignmentPage: object({ ...actor, userId: uuid, assignments: array(reference('CompanyBlueprintUserAssignment')), ...page }),
     CompanyBlueprintUserAssignmentDetail: object({ ...actor, assignment: reference('CompanyBlueprintUserAssignment') }),
     CompanyBlueprintAssignmentRemovalPreview: object({ ...actor, assignment: reference('CompanyBlueprintUserAssignment'), eligibilityRevision: revision, pools: array(capturedPool) }),

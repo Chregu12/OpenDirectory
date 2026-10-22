@@ -20,6 +20,11 @@ function reject(): never { throw new Error('Lizenzgruppen-Ergebnis nicht bestät
 function checked<T extends LicenseGroupContext>(result: T, expected: LicenseGroupContext) { if (result.actorUserId !== expected.actorUserId || result.tenantId !== expected.tenantId) reject(); return result; }
 function sameRule(left: CompanyLicenseGroup, right: CompanyLicenseGroup) { if (['id', 'tenantId', 'groupId', 'poolId', 'blueprintId', 'revision', 'status'].some(key => left[key as keyof CompanyLicenseGroup] !== right[key as keyof CompanyLicenseGroup])) reject(); }
 export const companyLicenseGroups = {
+  async inspect(ruleId: string, expected: LicenseGroupContext) {
+    uuid.parse(ruleId); const response = await api.get(base + '/' + ruleId + '/preview');
+    if (response.status !== 200) reject(); const result = checked(parse(previewSchema, response.data), expected);
+    if (result.rule.id !== ruleId || result.rule.tenantId !== expected.tenantId) reject(); return result;
+  },
   async list(groupId: string, actorUserId: string, signal?: AbortSignal) {
     uuid.parse(groupId); uuid.parse(actorUserId); const response = await api.get(base, { params: { groupId }, signal });
     if (response.status !== 200) reject(); const result = parse(listSchema, response.data);

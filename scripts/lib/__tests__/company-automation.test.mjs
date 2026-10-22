@@ -67,3 +67,32 @@ test('a complete four-MiB CSV artifact survives worst-case JSON transport escapi
  try{const issuer='http://127.0.0.1:'+server.address().port;const client=createClient({issuer,clientId:'worker',clientSecret:'disposable'});assert.equal((await createAutomationClient(client).result(id(1))).content,content);}
  finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+test('license scheduling pins one rule and rejects export formats or a substituted target', async () => {
+ let calls = 0; let substitute = false;
+ const client = createAutomationClient({ request: async (_method, _path, body) => { calls++; return response({ schedule: { ...body, tenantId: id(3), enabled: true, ruleId: substitute ? id(9) : body.ruleId } }, 201); } });
+ await assert.rejects(client.enqueue(id(1), 'licenses.groups.reconcile', 'json')); await assert.rejects(client.enqueue(id(1), 'licenses.groups.reconcile', 'csv', id(4))); assert.equal(calls, 0);
+ const plan = await client.schedule(id(1), 'licenses.groups.reconcile', 60, 'json', id(4)); assert.equal(plan.schedule.ruleId, id(4));
+ substitute = true; await assert.rejects(client.schedule(id(1), 'licenses.groups.reconcile', 60, 'json', id(4)));
+});
+
+test('the actual license-sync CLI pins the rule and a partial worker report exits with code 2', async () => {
+ let requested; let mismatch = false;
+ const server = http.createServer(async (req, res) => {
+  const chunks = []; for await (const chunk of req) chunks.push(chunk); res.setHeader('Content-Type', 'application/json');
+  if (req.url === '/oauth/token') return res.end(JSON.stringify({ access_token: 'app-token', token_type: 'Bearer', expires_in: 60 }));
+  requested = JSON.parse(Buffer.concat(chunks)); assert.equal(req.headers.authorization, 'Bearer app-token');
+  if (req.url === '/api/identity/automation/schedules') { res.statusCode = 201; return res.end(JSON.stringify(response({ schedule: { ...requested, tenantId: id(3), enabled: true } }).data)); }
+  assert.equal(req.url, '/api/identity/automation/run');
+  res.end(JSON.stringify(response({ job: { id: id(2), grantId: id(1), tenantId: id(3), action: 'licenses.groups.reconcile', ruleId: id(4), format: 'json', status: mismatch ? 'succeeded' : 'partial', revision: '3', attemptCount: 1, retryCount: 0, rowCount: 2, artifactSha256: 'a'.repeat(64),
+   progress: { runId: id(2), retryCount: 0, cycle: 1, completed: 2, total: 2, blocked: 1 } } }).data));
+ });
+ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); const origin = 'http://127.0.0.1:' + server.address().port;
+ try {
+  const env = { ...process.env, OPENDIRECTORY_ISSUER: origin, OPENDIRECTORY_API_URL: origin, OPENDIRECTORY_CLIENT_ID: 'worker', OPENDIRECTORY_CLIENT_SECRET: 'disposable', OPENDIRECTORY_SCOPES: 'company.automation', OPENDIRECTORY_ADMIN_ACCESS_TOKEN: '' };
+  const cli = (...args) => promisify(execFile)(process.execPath, [fileURLToPath(new URL('../../od.mjs', import.meta.url)), 'automation', ...args], { env });
+  await cli('license-sync', id(1), id(4), '60'); assert.equal(requested.ruleId, id(4)); assert.equal(requested.intervalSeconds, 60); assert.equal(requested.format, 'json');
+  await assert.rejects(cli('worker', id(1), '--once'), error => error.code === 2 && JSON.parse(error.stdout.split('\n')[0]).job.status === 'partial');
+  mismatch = true; await assert.rejects(cli('worker', id(1), '--once'), error => error.code === 1 && !error.stdout.includes('succeeded'));
+ } finally { await new Promise(resolve => server.close(resolve)); }
+});

@@ -17,6 +17,11 @@ function companyLicenseOpenApi() {
     CompanyPoolEditCapabilities: object({ schemaVersion: { const: 1 }, companyPoolEditProtocol: { const: 1 }, actorUserId: identifier, tenantId: identifier, poolId: identifier, poolRevision: revision }),
   };
   const page = { schemaVersion: { const: 1 }, actorUserId: identifier, tenantId: identifier, total: { type: 'integer', minimum: 0 }, page: { type: 'integer', minimum: 1, maximum: 1000000 }, limit: { type: 'integer', minimum: 1, maximum: 100 } };
+  const event = schemas.CompanyLicenseEvent;
+  event.properties.type.enum.push('app.license.source.assigned','app.license.source.released');
+  const appActor = object({ kind: { const: 'application' }, id: identifier, clientId: { type: 'string', minLength: 1, maxLength: 255 }, clientRevision: revision });
+  event.properties.actorUserId = { oneOf: [identifier, { type: 'null' }] }; event.properties.actor = appActor;
+  event.allOf = [{ if: { properties: { actorUserId: { type: 'null' } } }, then: { required: ['actor'] }, else: { not: { required: ['actor'] } } }];
   schemas.CompanyLicensePoolsPage = object({ ...page, pools: { type: 'array', maxItems: 100, items: reference('CompanyLicensePool') } });
   schemas.CompanyLicenseAssignmentsPage = object({ ...page, poolId: identifier, assignments: { type: 'array', maxItems: 100, items: reference('CompanyLicenseAssignment') } });
   schemas.CompanyLicenseHistoryPage = object({ ...page, poolId: identifier, events: { type: 'array', maxItems: 100, items: reference('CompanyLicenseEvent') } });

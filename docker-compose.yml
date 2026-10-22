@@ -157,6 +157,7 @@ services:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3001
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres/identity
+      - POLICY_SERVICE_URL=http://policy-service:3004
       - OIDC_TENANT_STATE_URL=http://oauth-provider:3010/oauth/tenant-state
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - RABBITMQ_URL=amqp://opendirectory:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}@rabbitmq:5672

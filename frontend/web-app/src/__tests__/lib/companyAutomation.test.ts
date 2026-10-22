@@ -9,7 +9,7 @@ const job: any = { id: id(5), grantId: id(3), tenantId: id(2), scheduleId: null,
 const envelope = (data: any) => ({ schemaVersion: 1, companyAutomationProtocol: 1, principal, ...data });
 beforeEach(() => { jest.resetAllMocks(); Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: () => id(99) }); });
 test('owner reads actual tenant grants without running a worker or mutation', async () => {
-  (api.get as jest.Mock).mockResolvedValue({ status: 200, data: envelope({ grants: [grant], page: 1, limit: 25, total: 1, supportedActions: ['directory.users.export', 'directory.groups.export', 'directory.ous.export'] }) });
+  (api.get as jest.Mock).mockResolvedValue({ status: 200, data: envelope({ grants: [grant], page: 1, limit: 25, total: 1, supportedActions: ['directory.users.export', 'directory.groups.export', 'directory.ous.export','licenses.groups.reconcile'] }) });
   expect((await companyAutomation.grants(id(1))).grants[0].clientId).toBe('worker'); expect(api.post).not.toHaveBeenCalled();
 });
 test('queues a stable captured job without claiming execution or using a human worker', async () => {
@@ -36,4 +36,23 @@ test('actual pages stay bound to the selected grant and current owner', async ()
 test('does not download an artifact substituted for another job', async () => {
   (api.get as jest.Mock).mockResolvedValue({ status: 200, data: envelope({ jobId: id(9), grantId: grant.id, tenantId: grant.tenantId, rowCount: 1, sha256: 'a'.repeat(64), contentType: 'application/json', filename: 'export.json', content: '{}' }) });
   await expect(companyAutomation.artifact({ ...job, status: 'succeeded', rowCount: 1, artifactSha256: 'a'.repeat(64) }, principal)).rejects.toThrow();
+});
+test('license list refuses a claimed success without completed matching progress', async () => {
+ const licensed = { ...grant, actions: ['licenses.groups.reconcile'] };
+ (api.get as jest.Mock).mockResolvedValue({ status: 200, data: envelope({ grantId: grant.id, tenantId: grant.tenantId, page: 1, limit: 25, total: 1, jobs: [{ ...job, action: 'licenses.groups.reconcile', ruleId: id(7), progress: null, status: 'succeeded', rowCount: 1, artifactSha256: 'a'.repeat(64) }] }) });
+ await expect(companyAutomation.jobs(licensed, principal)).rejects.toThrow();
+});
+test('a license report binds all progress counters, the actual app and every blocked member to the current job', async () => {
+ const progress = { runId: job.id, retryCount: 0, cycle: 1, completed: 2, total: 2, blocked: 1 };
+ const licensed = { ...grant, actions: ['licenses.groups.reconcile'] };
+ const current = { ...job, action: 'licenses.groups.reconcile', ruleId: id(7), status: 'partial', rowCount: 2, progress };
+ const report = { schemaVersion: 1, companyLicenseAutomationProtocol: 1, grantId: grant.id, jobId: job.id, ruleId: id(7), actor: { kind: 'application', id: grant.id, clientId: 'worker', clientRevision: '1' }, progress: { ...progress }, finished: true, hasBlocked: true,
+  results: [{ userId: id(8), status: 'assigned', code: null }, { userId: id(9), status: 'blocked', code: 409 }] };
+ const artifact = jest.spyOn(companyAutomation, 'artifact').mockImplementation(async () => ({ contentType: 'application/json', content: JSON.stringify(report) } as any));
+ try {
+  expect((await companyAutomation.licenseReport(current, licensed, principal)).hasBlocked).toBe(true);
+  await expect(companyAutomation.licenseReport({ ...current, progress: { ...progress, blocked: 0 } }, licensed, principal)).rejects.toThrow();
+  report.actor.clientId = 'foreign'; await expect(companyAutomation.licenseReport(current, licensed, principal)).rejects.toThrow();
+  report.actor.clientId = 'worker'; report.results[1].code = null; await expect(companyAutomation.licenseReport(current, licensed, principal)).rejects.toThrow();
+ } finally { artifact.mockRestore(); }
 });
