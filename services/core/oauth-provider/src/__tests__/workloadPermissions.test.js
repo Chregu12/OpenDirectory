@@ -7,3 +7,7 @@ test('only the explicit user-eligibility scope maps to a narrowly scoped workloa
   expect(workloadAuthorizationClaims('licenses.users.read')).toEqual({ permissions:['licenses.users.read'] });
   expect(workloadAuthorizationClaims('licenses.users.read roles users.delete')).toEqual({ permissions:['licenses.users.read'] });
 });
+test('company automation adds only its dedicated purpose; resource access still requires an independent owner grant',()=>{
+ expect(workloadAuthorizationClaims('company.automation')).toEqual({permissions:['company.automation']});
+ expect(workloadAuthorizationClaims('company.apps.assign users.create')).toEqual({});
+});

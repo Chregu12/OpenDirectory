@@ -27,7 +27,7 @@ function userAuthorizationClaims(user, scope) {
   return { roles: stringList(user.roles), permissions: stringList(user.permissions) };
 }
 function workloadAuthorizationClaims(scope) {
-  const permissions = ['licenses.users.read','licenses.groups.derive'].filter(permission => scope.split(' ').includes(permission));
+  const permissions = ['licenses.users.read','licenses.groups.derive','company.automation'].filter(permission => scope.split(' ').includes(permission));
   return permissions.length ? { permissions } : {};
 }
 

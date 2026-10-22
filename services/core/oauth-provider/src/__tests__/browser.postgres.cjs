@@ -156,7 +156,7 @@ before(async () => {
     const chunks = []; for await (const chunk of request) chunks.push(chunk);
     const credentials = JSON.parse(Buffer.concat(chunks)); credentialAttempts++;
     response.setHeader('Content-Type', 'application/json');
-    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
+    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
       response.statusCode = 401; return response.end('{"success":false}');
     }
     const actor = actors.get(credentials.username);
@@ -202,7 +202,7 @@ before(async () => {
   const policyUrl=new URL(process.env.OAUTH_TEST_DATABASE_URL); policyUrl.searchParams.set('options',`-c search_path=${policySchema},public`);
   Object.assign(process.env,{ DATABASE_URL:policyUrl.toString(),IDENTITY_SERVICE_URL:identityBase,LICENSE_DEMO_MODE:'false',OAUTH_PROVIDER_URL:issuerBase });
   policyDb=require('../../../policy-service/src/db/postgres');
-  for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[01234567])_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
+  for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[012345678])_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
   policyServer=require('../../../policy-service/src').listen(Number(new URL(policyBase).port),'127.0.0.1'); await serverBase(policyServer);
   process.env.OAUTH_POLICY_SOURCE_URL=policyBase;
   process.env.DATABASE_URL=identityDatabaseUrl.toString();
@@ -296,6 +296,7 @@ async function context({ realQuick = false, onboarded = true } = {}) {
     if (pathname === '/api/company-blueprint-assignments' || pathname.startsWith('/api/company-blueprint-assignments/')) return route.continue();
     if (pathname === '/api/identity/company-blueprint-assignments') return route.continue();
     if (pathname === '/api/identity/company-blueprints') return route.continue();
+    if (pathname.startsWith('/api/identity/automation/')) return route.continue();
     if (pathname === '/api/groups' || pathname.startsWith('/api/groups/')) return route.continue();
     if (pathname === '/api/ous' || pathname.startsWith('/api/ous/')) return route.continue();
     if (pathname === '/api/devices' || pathname.startsWith('/api/devices/')) return route.continue();
@@ -2807,4 +2808,61 @@ test('real own-company Owner UI assigns pinned blueprints and displays actual li
     if (GatewayModule) await GatewayModule.closeDatabase();
     for (const [name, value] of Object.entries(savedEnvironment)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
   }
+});
+
+test('real company automation Owner UI grants an actual app worker, downloads its own export and revokes queued work', { timeout: 240000 }, async () => {
+  const ownerUsername = 'company-automation-owner';
+  const company = await require('../../../../../scripts/lib/company-owner-fixture.cjs').activeCompany(identityDb, identitySchema, logicalIssuer,
+    { subject: ownerUsername + '-subject', username: ownerUsername });
+  const adminContext = await context(); const ownerContext = await context(); const adminPage = await adminContext.newPage(); const page = await ownerContext.newPage();
+  try {
+    await login(adminPage, 'organization-console-admin');
+    const admin = await mediated(adminPage); assert.equal(admin.status, 200);
+    const created = await fetch(issuerBase + '/api/clients', { method: 'POST', headers: { Authorization: 'Bearer ' + admin.body.access_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Actual browser automation app', publicClient: false, enabled: true, redirectUris: [], grantTypes: ['client_credentials'], scopes: ['company.automation'] }) });
+    assert.equal(created.status, 201, await created.clone().text()); const client = await created.json();
+    const execute = require('node:util').promisify(require('node:child_process').execFile);
+    const cli = async args => execute(process.execPath, [path.resolve(__dirname, '../../../../../scripts/od.mjs'), ...args], { env: { ...process.env,
+      OPENDIRECTORY_ISSUER: issuerBase, OPENDIRECTORY_API_URL: identityBase, OPENDIRECTORY_CLIENT_ID: client.clientId, OPENDIRECTORY_CLIENT_SECRET: client.clientSecret,
+      OPENDIRECTORY_SCOPES: 'company.automation', OPENDIRECTORY_ADMIN_ACCESS_TOKEN: '' } });
+    const enrolled = JSON.parse((await cli(['automation', 'enroll', 'Actual browser export worker'])).stdout);
+    assert.equal(enrolled.clientId, client.clientId); assert.equal(enrolled.clientRevision, client.version);
+    await reviewFirstFactor(page, ownerUsername); await login(page, ownerUsername); const owner = await mediated(page); assert.equal(owner.status, 200);
+    const claims = JSON.parse(Buffer.from(owner.body.access_token.split('.')[1], 'base64url')); assert.deepEqual(claims.roles, []); assert.equal(claims.identity_authorization.userId, company.receipt.administratorId);
+    await page.setViewportSize({ width: 1440, height: 1100 }); await page.goto(origin + '/automation'); await page.getByRole('heading', { name: 'Automationen', exact: true }).waitFor();
+    await page.getByLabel('App-Anmeldungs-ID', { exact: true }).fill(enrolled.id); await page.getByRole('button', { name: 'App-Anmeldung prüfen', exact: true }).click();
+    await page.getByText('Von der App angegebener Name: Actual browser export worker', { exact: true }).waitFor();
+    await page.getByLabel('Benutzer exportieren', { exact: true }).check(); await page.getByLabel('Freigabe-Laufzeit in Stunden', { exact: true }).fill('1');
+    await page.getByLabel('Automationsfreigabe begründen', { exact: true }).fill('Actual roleless owner approves only its own user export for this exact app generation');
+    await page.getByRole('button', { name: 'Ausgewählte App-Rechte bestätigen', exact: true }).click();
+    const approvalDialog = page.getByRole('dialog', { name: 'App-Datenzugriff bestätigen', exact: true }); await approvalDialog.getByText(new RegExp(client.clientId)).waitFor();
+    const approving = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/automation/grants' && response.request().method() === 'POST');
+    await approvalDialog.getByRole('button', { name: 'Verbindlich bestätigen', exact: true }).click(); const approved = await approving; assert.equal(approved.status(), 201, await approved.text());
+    const permission = (await approved.json()).grant; assert.equal(permission.tenantId, company.receipt.tenantId); assert.deepEqual(permission.actions, ['directory.users.export']);
+    await page.getByLabel('Automationsfreigabe auswählen', { exact: true }).selectOption(permission.id);
+    await page.getByLabel('Automationsaktion', { exact: true }).selectOption('directory.users.export'); await page.getByLabel('Exportformat', { exact: true }).selectOption('csv');
+    const queueing = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/automation/jobs' && response.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Exportjob einreihen', exact: true }).click(); const queued = await queueing; assert.equal(queued.status(), 201); const firstJob = (await queued.json()).job;
+    const worker = await cli(['automation', 'worker', permission.id, '--once']); const workerLines = worker.stdout.trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(workerLines[0].job.id, firstJob.id); assert.equal(workerLines[0].job.status, 'succeeded'); assert.equal(workerLines[0].principal.kind, 'application'); assert.equal(workerLines[0].principal.clientId, client.clientId);
+    await page.getByRole('button', { name: 'Automationen neu laden', exact: true }).click();
+    const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export herunterladen (1 Zeilen)', exact: true }).click();
+    const downloaded = await downloading; const file = path.join(directory, 'actual-company-automation.csv'); await downloaded.saveAs(file); const csv = fs.readFileSync(file, 'utf8');
+    assert.ok(csv.includes(company.receipt.administratorId)); assert.ok(csv.includes(ownerUsername)); assert.equal(csv.includes(actors.get('organization-console-admin').userId), false);
+    await page.screenshot({ path: '/tmp/od-company-automation-export.png', fullPage: true });
+    await page.getByRole('button', { name: 'Job-Historie', exact: true }).click(); await page.getByRole('complementary', { name: 'Job-Historie', exact: true }).getByText(new RegExp(client.clientId)).first().waitFor();
+    await page.getByLabel('Automationsaktion', { exact: true }).selectOption('directory.users.export');
+    const queueingAgain = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/automation/jobs' && response.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Exportjob einreihen', exact: true }).click(); const secondJob = (await (await queueingAgain).json()).job;
+    await page.getByRole('button', { name: 'App-Freigabe widerrufen', exact: true }).click();
+    const revoking = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/automation/grants/' + permission.id + '/revoke');
+    await page.getByRole('dialog', { name: 'App-Freigabe widerrufen', exact: true }).getByRole('button', { name: 'Verbindlich bestätigen', exact: true }).click();
+    const revoked = await revoking; assert.equal(revoked.status(), 200); assert.equal((await revoked.json()).grant.status, 'revoked');
+    await assert.rejects(cli(['automation', 'worker', permission.id, '--once']), error => error.code === 1);
+    const records = (await identityDb.query('SELECT id,status FROM identity_automation_jobs WHERE grant_id=$1 ORDER BY id', [permission.id])).rows;
+    assert.equal(records.find(row => row.id === firstJob.id).status, 'succeeded'); assert.equal(records.find(row => row.id === secondJob.id).status, 'cancelled');
+    await page.getByText('App-Freigabe widerrufen.', { exact: true }).waitFor();
+    await page.getByText('Benutzer exportieren · Abgebrochen · Versuch 0/5', { exact: true }).waitFor();
+    await page.screenshot({ path: '/tmp/od-company-automation-browser.png', fullPage: true });
+  } finally { await adminContext.close(); await ownerContext.close(); }
 });

@@ -77,7 +77,7 @@ import OnboardingWizard from '@/components/setup/OnboardingWizard';
 import TrustManagementView from '@/components/views/TrustManagementView';
 import KerberosAdminView from '@/components/views/KerberosAdminView';
 import ReplicationView from '@/components/views/ReplicationView';
-import AutomationView from '@/components/views/AutomationView';
+import AutomationView from '@/components/views/CompanyAutomationView';
 
 // ─── Placeholder for views not yet implemented ────────────────────────────────
 

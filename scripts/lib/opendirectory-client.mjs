@@ -11,13 +11,13 @@ export class ApiError extends Error {
   constructor(status, code) { super(`${code} (HTTP ${status})`); this.name = 'ApiError'; this.status = status; this.code = code; }
 }
 
-async function json(url, options) {
+async function json(url, options, maximumBody = MAX_BODY) {
   const response = await fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000), cache: 'no-store' });
   if (response.status === 204) return { status: 204, data: null, etag: response.headers.get('etag') };
   if (!response.headers.get('content-type')?.includes('application/json')) throw new ApiError(response.status, 'unexpected_response');
   const chunks = []; let length = 0;
   for await (const chunk of response.body) {
-    length += chunk.length; if (length > MAX_BODY) throw new ApiError(response.status, 'response_too_large'); chunks.push(Buffer.from(chunk));
+    length += chunk.length; if (length > maximumBody) throw new ApiError(response.status, 'response_too_large'); chunks.push(Buffer.from(chunk));
   }
   const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   if (!response.ok) throw new ApiError(response.status, typeof data?.error === 'string' && /^[a-z0-9_]{1,80}$/.test(data.error) ? data.error : 'request_failed');
@@ -40,14 +40,15 @@ export function createClient({ issuer, apiUrl = issuer, clientId, clientSecret, 
       || result.data.token_type?.toLowerCase() !== 'bearer' || !Number.isFinite(result.data.expires_in) || result.data.expires_in <= 0) throw new Error('Token issuance was not confirmed');
     return result.data.access_token;
   }
-  async function request(method, path, body, { administrative = false, etag, operationId } = {}) {
+  async function request(method, path, body, { administrative = false, etag, operationId, maxResponseBytes = MAX_BODY } = {}) {
     if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) || (method === 'GET' && body !== undefined)) throw new Error('Unsupported request');
     const url = apiPath(path);
+    if (!Number.isInteger(maxResponseBytes) || maxResponseBytes < 1024 || maxResponseBytes > 32 * MAX_BODY) throw new Error('Bounded response size required');
     if (operationId !== undefined && (typeof operationId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(operationId))) throw new Error('Canonical operation UUID required');
     if (administrative && (typeof adminToken !== 'string' || !adminToken)) throw new Error('An administrator user access token is required');
     const bearer = administrative ? adminToken : await token();
     return json(url, { method, headers: { Authorization: 'Bearer ' + bearer, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(etag ? { 'If-Match': etag } : {}), ...(operationId ? { 'Idempotency-Key': operationId } : {}) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, maxResponseBytes);
   }
   function clientPath(id) {
     if (typeof id !== 'string' || !/^[A-Za-z0-9._~-]{1,255}$/.test(id) || ['.', '..'].includes(id)) throw new Error('Invalid app ID');

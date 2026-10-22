@@ -30,7 +30,7 @@ async function runPostgresTests({ files, environmentVariable, label }) {
       await new Promise(resolve => portProbe.close(resolve));
       execute(path.join(binaries, 'initdb'), ['-D', path.join(cluster, 'data'), '-U', 'postgres', '-A', 'trust', '--no-locale', '-E', 'UTF8']);
       execute(path.join(binaries, 'pg_ctl'), ['-D', path.join(cluster, 'data'), '-l', path.join(cluster, 'postgres.log'),
-        '-o', `-h 127.0.0.1 -p ${port} -k ${cluster} -c max_connections=40`, '-w', 'start']);
+        '-o', `-h 127.0.0.1 -p ${port} -k ${cluster} -c max_connections=40 -c max_locks_per_transaction=256`, '-w', 'start']);
       started = true;
       databaseUrl = `postgres://postgres@127.0.0.1:${port}/postgres`;
     }

@@ -131,6 +131,14 @@ async function createClient(metadata) {
   expect(response.status).toBe(201);
   return { ...response.body, adminToken: token };
 }
+test('actual client-credentials issuance carries the dedicated automation purpose without human or tenant authority', async () => {
+  const client = await createClient({ name: 'Dedicated automation worker', publicClient: false, grantTypes: ['client_credentials'], redirectUris: [], scopes: ['company.automation'] });
+  const response = await request(app).post('/oauth/token').type('form').send({ grant_type: 'client_credentials', client_id: client.clientId, client_secret: client.clientSecret, scope: 'company.automation' });
+  expect(response.status).toBe(200); const payload = verifiedPayload(response.body.access_token);
+  expect(payload).toMatchObject({ actor_type: 'application', sub: client.clientId, client_id: client.clientId, client_revision: client.version, scope: 'company.automation', permissions: ['company.automation'] });
+  expect(payload.roles).toBeUndefined(); expect(payload.identity_authorization).toBeUndefined(); expect(payload.tenant).toBeUndefined(); expect(payload.mfa_authorization).toBeUndefined();
+  expect((await request(app).get('/api/clients').set('Authorization', 'Bearer ' + response.body.access_token)).status).toBe(403);
+});
 
 async function deviceCode(scope = 'openid') {
   const response = await request(app).post('/oauth/device/code').send({ client_id: clientId, client_secret: clientSecret, scope });

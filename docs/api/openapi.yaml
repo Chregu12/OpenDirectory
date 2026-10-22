@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.20.0",
+    "version": "1.21.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, employee credential provisioning, external legal verification or production SaaS acceptance."
   },
   "security": [
@@ -31104,6 +31104,1375 @@
           }
         }
       }
+    },
+    "/api/identity/automation/enrollments": {
+      "post": {
+        "operationId": "enrollCompanyAutomationApp",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationEnrollment"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/automation/enrollments/{id}": {
+      "get": {
+        "operationId": "readPendingCompanyAutomationEnrollment",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual authorized persistent state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationEnrollment"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        }
+      }
+    },
+    "/api/identity/automation/grants": {
+      "get": {
+        "operationId": "listCompanyAutomationGrants",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999999,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual authorized persistent state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationGrants"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        }
+      },
+      "post": {
+        "operationId": "approveCompanyAutomationApp",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationGrantReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "enrollmentId",
+                  "clientId",
+                  "clientRevision",
+                  "actions",
+                  "expiresAt",
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "enrollmentId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  },
+                  "actions": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": [
+                        "directory.users.export",
+                        "directory.groups.export",
+                        "directory.ous.export"
+                      ]
+                    }
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/automation/grants/{id}/revoke": {
+      "post": {
+        "operationId": "revokeCompanyAutomationApp",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"company-automation-grant-[a-f0-9-]{36}-[1-9][0-9]{0,18}\"$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationGrantReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "confirm"
+                ],
+                "properties": {
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/automation/jobs": {
+      "get": {
+        "operationId": "listCompanyAutomationJobs",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "grantId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999999,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual authorized persistent state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationJobs"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        }
+      },
+      "post": {
+        "operationId": "queueCompanyAutomationJob",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationJobReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "grantId",
+                  "action",
+                  "format"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "grantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "action": {
+                    "enum": [
+                      "directory.users.export",
+                      "directory.groups.export",
+                      "directory.ous.export"
+                    ]
+                  },
+                  "format": {
+                    "enum": [
+                      "json",
+                      "csv"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/automation/schedules": {
+      "get": {
+        "operationId": "listCompanyAutomationSchedules",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "grantId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999999,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual authorized persistent state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationSchedules"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        }
+      },
+      "post": {
+        "operationId": "scheduleCompanyAutomationJob",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationScheduleReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "grantId",
+                  "action",
+                  "format",
+                  "intervalSeconds"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "grantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "action": {
+                    "enum": [
+                      "directory.users.export",
+                      "directory.groups.export",
+                      "directory.ous.export"
+                    ]
+                  },
+                  "format": {
+                    "enum": [
+                      "json",
+                      "csv"
+                    ]
+                  },
+                  "intervalSeconds": {
+                    "type": "integer",
+                    "minimum": 60,
+                    "maximum": 2592000
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/automation/run": {
+      "post": {
+        "operationId": "runGrantedCompanyAutomationJob",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery. Only the pinned app may execute. Claims use an expiring lease, up to five attempts and bounded exponential backoff; an expired worker cannot acknowledge another claim. Schedules skip missed bursts. All currently supported handlers are read-only directory exports, so retry cannot duplicate an external mutation.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationJobReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No due job; schedules remain persistent."
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "grantId"
+                ],
+                "properties": {
+                  "grantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/automation/jobs/{id}/result": {
+      "get": {
+        "operationId": "downloadCompanyAutomationArtifact",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual authorized persistent state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationArtifact"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        }
+      }
+    },
+    "/api/identity/automation/jobs/{id}/history": {
+      "get": {
+        "operationId": "readCompanyAutomationJobHistory",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999999,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual authorized persistent state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationHistory"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        }
+      }
+    },
+    "/api/identity/automation/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "cancelCompanyAutomationJob",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"company-automation-job-[a-f0-9-]{36}-[1-9][0-9]{0,18}\"$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationJobReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "confirm"
+                ],
+                "properties": {
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/automation/jobs/{id}/retry": {
+      "post": {
+        "operationId": "retryFailedCompanyAutomationJob",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"company-automation-job-[a-f0-9-]{36}-[1-9][0-9]{0,18}\"$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationJobReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "confirm"
+                ],
+                "properties": {
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/automation/schedules/{id}/disable": {
+      "post": {
+        "operationId": "disableCompanyAutomationSchedule",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"company-automation-schedule-[a-f0-9-]{36}-[1-9][0-9]{0,18}\"$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationScheduleReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "confirm"
+                ],
+                "properties": {
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -41248,6 +42617,1208 @@
           },
           "hasBlocked": {
             "type": "boolean"
+          }
+        }
+      },
+      "CompanyAutomationEnrollment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationProtocol",
+          "principal",
+          "id",
+          "clientId",
+          "clientRevision",
+          "name",
+          "expiresAt",
+          "requestedScope"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationProtocol": {
+            "const": 1
+          },
+          "principal": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "userId",
+                  "tenantId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "owner"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "clientId",
+                  "clientRevision"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "application"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  }
+                }
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestedScope": {
+            "const": "company.automation"
+          }
+        }
+      },
+      "CompanyAutomationGrant": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "enrollmentId",
+          "tenantId",
+          "clientId",
+          "clientRevision",
+          "actions",
+          "expiresAt",
+          "status",
+          "revision",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "enrollmentId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "directory.users.export",
+                "directory.groups.export",
+                "directory.ous.export"
+              ]
+            }
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "revoked"
+            ]
+          },
+          "revision": {
+            "enum": [
+              "1",
+              "2"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CompanyAutomationJob": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "grantId",
+          "tenantId",
+          "scheduleId",
+          "action",
+          "format",
+          "status",
+          "revision",
+          "attemptCount",
+          "retryCount",
+          "availableAt",
+          "leaseUntil",
+          "errorCode",
+          "rowCount",
+          "artifactSha256",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "scheduleId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "action": {
+            "enum": [
+              "directory.users.export",
+              "directory.groups.export",
+              "directory.ous.export"
+            ]
+          },
+          "format": {
+            "enum": [
+              "json",
+              "csv"
+            ]
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "retry_wait",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "attemptCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "retryCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "availableAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "leaseUntil": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errorCode": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rowCount": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifactSha256": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CompanyAutomationSchedule": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "grantId",
+          "tenantId",
+          "action",
+          "format",
+          "intervalSeconds",
+          "enabled",
+          "nextRunAt",
+          "revision",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "action": {
+            "enum": [
+              "directory.users.export",
+              "directory.groups.export",
+              "directory.ous.export"
+            ]
+          },
+          "format": {
+            "enum": [
+              "json",
+              "csv"
+            ]
+          },
+          "intervalSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 2592000
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "nextRunAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CompanyAutomationGrantReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationProtocol",
+          "principal",
+          "grant"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationProtocol": {
+            "const": 1
+          },
+          "principal": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "userId",
+                  "tenantId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "owner"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "clientId",
+                  "clientRevision"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "application"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  }
+                }
+              }
+            ]
+          },
+          "grant": {
+            "$ref": "#/components/schemas/CompanyAutomationGrant"
+          }
+        }
+      },
+      "CompanyAutomationJobReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationProtocol",
+          "principal",
+          "job"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationProtocol": {
+            "const": 1
+          },
+          "principal": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "userId",
+                  "tenantId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "owner"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "clientId",
+                  "clientRevision"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "application"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  }
+                }
+              }
+            ]
+          },
+          "job": {
+            "$ref": "#/components/schemas/CompanyAutomationJob"
+          }
+        }
+      },
+      "CompanyAutomationScheduleReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationProtocol",
+          "principal",
+          "schedule"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationProtocol": {
+            "const": 1
+          },
+          "principal": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "userId",
+                  "tenantId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "owner"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "clientId",
+                  "clientRevision"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "application"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  }
+                }
+              }
+            ]
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/CompanyAutomationSchedule"
+          }
+        }
+      },
+      "CompanyAutomationGrants": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationProtocol",
+          "principal",
+          "page",
+          "limit",
+          "total",
+          "grants",
+          "supportedActions"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationProtocol": {
+            "const": 1
+          },
+          "principal": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "userId",
+                  "tenantId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "owner"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "clientId",
+                  "clientRevision"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "application"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  }
+                }
+              }
+            ]
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "limit": {
+            "const": 25
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "grants": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/CompanyAutomationGrant"
+            }
+          },
+          "supportedActions": {
+            "type": "array",
+            "const": [
+              "directory.users.export",
+              "directory.groups.export",
+              "directory.ous.export"
+            ]
+          }
+        }
+      },
+      "CompanyAutomationJobs": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationProtocol",
+          "principal",
+          "page",
+          "limit",
+          "total",
+          "grantId",
+          "tenantId",
+          "jobs"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationProtocol": {
+            "const": 1
+          },
+          "principal": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "userId",
+                  "tenantId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "owner"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "clientId",
+                  "clientRevision"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "application"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  }
+                }
+              }
+            ]
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "limit": {
+            "const": 25
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "jobs": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/CompanyAutomationJob"
+            }
+          }
+        }
+      },
+      "CompanyAutomationSchedules": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationProtocol",
+          "principal",
+          "page",
+          "limit",
+          "total",
+          "grantId",
+          "tenantId",
+          "schedules"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationProtocol": {
+            "const": 1
+          },
+          "principal": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "userId",
+                  "tenantId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "owner"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "clientId",
+                  "clientRevision"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "application"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  }
+                }
+              }
+            ]
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "limit": {
+            "const": 25
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "schedules": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/CompanyAutomationSchedule"
+            }
+          }
+        }
+      },
+      "CompanyAutomationArtifact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationProtocol",
+          "principal",
+          "jobId",
+          "grantId",
+          "tenantId",
+          "rowCount",
+          "sha256",
+          "contentType",
+          "filename",
+          "content"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationProtocol": {
+            "const": 1
+          },
+          "principal": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "userId",
+                  "tenantId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "owner"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "clientId",
+                  "clientRevision"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "application"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  }
+                }
+              }
+            ]
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "rowCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "contentType": {
+            "enum": [
+              "application/json",
+              "text/csv;charset=utf-8"
+            ]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 4194304
+          }
+        }
+      },
+      "CompanyAutomationHistory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationProtocol",
+          "principal",
+          "page",
+          "limit",
+          "total",
+          "jobId",
+          "tenantId",
+          "events"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationProtocol": {
+            "const": 1
+          },
+          "principal": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "userId",
+                  "tenantId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "owner"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "clientId",
+                  "clientRevision"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "application"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "clientRevision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$"
+                  }
+                }
+              }
+            ]
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "limit": {
+            "const": 25
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "revision",
+                "actor",
+                "status",
+                "attemptCount",
+                "errorCode",
+                "createdAt"
+              ],
+              "properties": {
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,18}$"
+                },
+                "actor": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "kind",
+                        "userId"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "const": "owner"
+                        },
+                        "userId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "kind",
+                        "clientId",
+                        "clientRevision"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "const": "application"
+                        },
+                        "clientId": {
+                          "type": "string"
+                        },
+                        "clientRevision": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "retry_wait",
+                    "succeeded",
+                    "failed",
+                    "cancelled"
+                  ]
+                },
+                "attemptCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 5
+                },
+                "errorCode": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
           }
         }
       }

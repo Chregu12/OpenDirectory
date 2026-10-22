@@ -41,7 +41,7 @@ node scripts/od.mjs app rotate 'CLIENT_ID'
 node scripts/od.mjs app disable 'CLIENT_ID'
 ```
 
-PowerShell kann dieselben Befehle aufrufen; die Variablen werden dort mit `$env:OPENDIRECTORY_CLIENT_ID = '…'` gesetzt. Externe Runner wie Cron, Windows Aufgabenplanung oder CI starten die CLI; ein neuer serverseitiger Scheduler oder beliebiger Skript-Executor ist damit nicht implementiert. Ein nicht erfolgreicher oder unbestätigter Aufruf endet mit Exit-Code 1. Zeitüberschreitungen und Schreibfehler werden nicht automatisch wiederholt. Erfolgreiche Antworten enthalten HTTP-Status, Daten und gegebenenfalls den beobachteten ETag.
+PowerShell kann dieselben Befehle aufrufen; die Variablen werden dort mit `$env:OPENDIRECTORY_CLIENT_ID = '…'` gesetzt. Externe Runner wie Cron, Windows Aufgabenplanung oder CI starten die CLI. Der neue [Firmen-Automationsweg](company-automation.md) speichert freigegebene Exportjobs und Intervallzeitpläne dauerhaft und führt sie über den tatsächlich genehmigten App-Worker aus. Ein beliebiger Skript-Executor wird dadurch nicht freigeschaltet. Ein nicht erfolgreicher oder unbestätigter Aufruf endet mit Exit-Code 1. Zeitüberschreitungen und Schreibfehler werden nicht automatisch wiederholt. Erfolgreiche Antworten enthalten HTTP-Status, Daten und gegebenenfalls den beobachteten ETag.
 
 Eigene Node-Skripte können den Client direkt importieren:
 
@@ -64,16 +64,20 @@ Ein App-Konto ist nach der Aktivierung authentifizierbar, erhält aber nicht aut
 
 Rotation, Deaktivierung und Konfigurationsänderungen invalidieren die vorherige Clientgeneration. Tenant-/Quellenbindungen werden dabei nicht stillschweigend auf die neue Generation übertragen. Die CLI liest vor Registeränderungen den aktuellen ETag; Versionskonflikte bleiben Fehler.
 
+## Eigene App-Freigaben und dauerhafte Jobs
+
+Ein dediziertes Konto mit exakt `company.automation` kann sich anmelden; anschliessend genehmigt der tatsächliche Firmeninhaber konkrete eigene Exportaktionen und höchstens 30 Tage Laufzeit. Der App-Worker verwendet seine eigenen Client-Credentials ohne offene menschliche Sitzung. Jobs, Zeitpläne, Leases, Backoff, begrenzte Versuche, Historie und geprüfte JSON-/CSV-Artefakte sind persistent. [Einrichtung und tatsächlicher Umfang](company-automation.md). Der Scope allein gewährt keinen Tenant-Zugriff. Firmenlizenz-Schreibdelegation und Provider-Aktionen bleiben weitere Schritte des vollständigen Auftrags.
+
 ## Gruppen und Lizenzpools
 
 Die CLI unterstützt auch `group create`, `group member add|remove` und `license-group list|link|sync|unlink`. Die [Lizenzgruppen-Anleitung](company-license-groups.md) beschreibt den vollständigen Ablauf. Normale Gruppen erhalten durch eine ausdrückliche eigene Pool-Verknüpfung eine Lizenzfunktion; die Mitgliedsbefehle gleichen diese Verknüpfungen als tatsächlicher Company-Owner ab. Diese Schreibaktionen verwenden `OPENDIRECTORY_ADMIN_ACCESS_TOKEN` mit aktuellen eigenen Rechten und MFA, keine App-Tokens. Exit-Code 2 meldet blockierte Benutzer; bereits bestätigte Mitgliederänderungen werden bei einem späteren Vergabefehler nicht zurückgerollt.
 
 ## E-Mail
 
-Eine OpenDirectory-Appregistrierung ist keine Registrierung oder Einwilligung bei Microsoft, Google oder einem Mailserver. Der Mailanbieter für diesen Arbeitsauftrag ist noch nicht ausgewählt; ein neuer Mail-Connector oder Postfach-Provisionierungsablauf wurde deshalb nicht behauptet oder aktiviert.
+Eine OpenDirectory-Appregistrierung ist keine Registrierung oder Einwilligung bei Microsoft, Google oder einem Mailserver. Microsoft 365 ist vorläufig als erster Mailadapter vorgesehen. Ein vollständiger Mail-Connector oder Postfach-Provisionierungsablauf ist noch nicht implementiert.
 
 Bei Microsoft 365 wäre Versand ein eigener Graph-Adapter: [sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0) verwendet unter anderem die Anwendungsberechtigung `Mail.Send`. Ein angenommener Versandauftrag ist kein Zustellnachweis. App-Zugriff auf erlaubte Postfächer lässt sich mit [Exchange Application RBAC](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac) begrenzen. Postfachbereitstellung, Aliase und Lizenzierung müssen davon getrennt mit dem ausgewählten Anbieter geplant werden. Es wurden keine externen Konten erstellt und keine E-Mails versendet.
 
 ## Prüfung
 
-`npm run test:automation-client` führt die Node-Regressionen für App-Konten und Lizenzgruppen aus; sie sind im Root-Runner und in CI eingebunden. Der OAuth-Service testet die tatsächlich ausgelieferte CLI als separaten Prozess gegen den echten lokalen HTTP-Server: Erstellung, separate Aktivierung, Introspection, fehlende Administrationsrechte, Rotation und Deaktivierung. Die Oberfläche testet den direkten App-Konto-Einstieg und leere Standardrechte.
+`npm run test:automation-client` führt die Node-Regressionen für App-Konten, Lizenzgruppen und die neue Jobbasis aus; sie sind im Root-Runner und in CI eingebunden. Der OAuth-Service testet die tatsächlich ausgelieferte CLI als separaten Prozess gegen den echten lokalen HTTP-Server: Erstellung, separate Aktivierung, Introspection, fehlende Administrationsrechte, Rotation und Deaktivierung. Die Oberfläche testet den direkten App-Konto-Einstieg und leere Standardrechte. Der zusätzliche echte Automationsbrowser verbindet Owner-Freigabe, aktuellen App-Worker, Exportdownload und Widerruf; [Belege](../testing/test-results.md#22-oktober-2026--eigene-app-freigaben-und-dauerhafte-exportjobs).

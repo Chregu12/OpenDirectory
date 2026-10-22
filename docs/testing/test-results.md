@@ -1008,3 +1008,28 @@ Begrenzter lokaler Ablauf: normale Gruppen mit ausdrücklichen eigenen Pool-Verk
 | TypeScript / Next-Produktionsbuild | Bestanden; lokaler Next-Lockfile-Patcher meldete eine bestehende Workspace-Warnung, Build mit bereits installiertem SWC und `NEXT_IGNORE_INCORRECT_LOCKFILE=1` ebenfalls bestanden |
 
 Native Tests verwenden isolierte Wegwerf-PostgreSQL-Cluster. Die bisher offene allgemeine Browser-Offboarding-Abnahme ist durch diese Prüfungen nicht erledigt. Keine Produktivdatenbank, externe Lizenzplattform oder Mailbereitstellung wurde verändert.
+
+## 22. Oktober 2026 — Eigene App-Freigaben und dauerhafte Exportjobs
+
+Begrenzt abgenommen: dedizierter `company.automation`-Scope ohne menschliche Rollen, ausdrückliche zeitlich begrenzte Owner-/MFA-Freigaben für eine konkrete Clientgeneration sowie tatsächliche eigene Benutzer-, Gruppen- und OU-Exporte. Identity 048 ergänzt persistente Jobs, Zeitpläne, Worker-Leases, fünf Versuche mit Backoff, manuelle Wiederaufnahme und unveränderliche Historie. Der bestehende kanonische Identity-/Lizenzschreibweg bleibt separat.
+
+| Prüfung | Ergebnis und Grenze |
+| --- | --- |
+| Identity Jest | **1'179/1'179**, 59 Suites; vollständiger Lauf mit dem abschliessenden Backendstand |
+| OAuth Jest | **477/477**, 19 Suites; einschliesslich tatsächlicher JWT-Ausgabe für den neuen Scope ohne menschliche/mandantenbezogene Rollen und verweigerter globaler Clientverwaltung |
+| CLI/Node | **23/23**; tatsächliche Worker-Prozesse über HTTP, durchgehend parsebare JSON-Zeilen, Exit 2 bei bestätigtem fehlgeschlagenem Job und vollständiger Vier-MiB-Download auch bei maximaler JSON-Escapierung |
+| Frontend | **11/11** in den zwei neuen Automationssuiten; Kontext-/Antwortprüfung, Freigabe, unbekannte Ergebnisse, Queue und Versionen |
+| Gateway | **2/2**; vorhandener kanonischer Identity-Prefix mit ursprünglichem Bearer, keine neue globale Gateway-Berechtigung |
+| OpenAPI-Regression | **7/7**; generierter Vertrag **1.21.0**, zwölf neue Pfade und zwölf neue Schemas, vorhandene Pfade/Schemas semantisch unverändert |
+| Native PostgreSQL, neuer Automationsweg | **14/14**; tatsächliche kanonische Owner-Aktivierung, eigene/fremde Daten, Widerruf, Rotation, Parallelität, alle Exporttypen, physische Deadline, abgebrochene Worker einschliesslich fünftem Lease, fünf Versuche/manuelle Recovery, beschädigte Originalbelege, inkohärente fremde OU-Parents und begrenzte parallele App-Anmeldungen |
+| Native PostgreSQL, vollständige Identity-Suite | **710/710** im abschliessenden vollständigen Lauf; enthält die 14 obigen Automationsfälle. Der gezielte gemeinsame Lauf von 102 Quell-/Registrierungs-/Creation-/Automationsfällen bestand ebenfalls; Wiederholungen sind keine zusätzliche Abdeckung |
+| Lokaler Produktionsbrowser | **1/1**, echter Chrome mit frisch gebautem `next start`, realer OAuth-/Identity-/PostgreSQL-Verbindung und tatsächlichem CLI-Prozess; App-Erstellung, Enrollment, roleless Owner mit MFA, explizite Freigabe, eigener CSV-Download, Historie und Widerruf mit wartendem Jobabbruch |
+| TypeScript / Next-Produktionsbuild | Bestanden; zusätzlich baut die Browserumgebung ihren eigenen Produktionsserver |
+
+Der Browserlauf entdeckte einen CLI-Formatfehler: Nach JSON-Zeilen gab der Worker seine Abschlussmeldung eingerückt aus. Beide Ausgaben sind jetzt JSON-Zeilen; ein eigenständiger tatsächlicher CLI-Prozess prüft auch den Fehler-Exit. Zwei frühere Browserfehler betrafen die neue Fixture: Ersteinrichtung für ein Konto ohne verpflichtende MFA und die nicht vorhandene Playwright-Response-Methode `clone`. Die endgültige Definition verwendet die tatsächlich vorgesehenen Anmeldewege und prüft echte Antworten. Die visuelle Prüfung korrigierte ausserdem die schlecht lesbaren hellen Formfelder auf die vorhandenen Designvariablen.
+
+Die volle native Regression deckte zusätzlich eine Wechselwirkung des neuen globalen Fences mit eingeschränkten SQL-Logins auf. Der Fence liest seine private Historie jetzt wie die vorhandenen Fences als Definer mit festem Schema/UTC; PUBLIC-Ausführung ist entzogen, ursprüngliche Session-/Owner-Prüfungen bleiben erhalten. Die bestehende Quellen-Fixture erwartet nun 48 Migrationen. Der lokale Wegwerf-Cluster verwendet `max_locks_per_transaction=256`, nachdem paralleler Schema-Cleanup sein zuvor reduziertes Lock-Budget erschöpfte; dies verändert keine externe Datenbankkonfiguration.
+
+Lokale Nachweise: `/tmp/od-automation-identity-final.log`, `/tmp/od-automation-oauth-final.log`, `/tmp/od-automation-cli-final.log`, `/tmp/od-automation-web-tests.log`, `/tmp/od-automation-gateway-tests.log`, `/tmp/od-automation-openapi-final.log`, `/tmp/od-company-automation-pg-final.log`, `/tmp/od-automation-pg-receivers-final.log`, `/tmp/od-automation-identity-pg-all-final.log` und `/tmp/od-company-automation-browser.log`. Browserbilder: `/tmp/od-company-automation-export.png` und `/tmp/od-company-automation-browser.png`; keine Produktivdaten oder Secrets.
+
+Offen bleiben insbesondere unbeaufsichtigter Firmenlizenzabgleich, tenantgebundene eigene App-Registerverwaltung, Mail-/Apple-/andere Provider-Schreibhandler, Artefakt-Retention und vollständige Betriebs-/Last-/Restore-/WCAG-Abnahme. Die allgemeine bestehende Blueprint-Offboarding-Browserlücke wird durch den neuen Automationsbrowser nicht geschlossen. Vollständige BRs und der [Gesamtauftrag](../implementation-worklist.md) bleiben offen; kein produktiver Rollout oder externer Mail-/Lizenzkauf fand statt.

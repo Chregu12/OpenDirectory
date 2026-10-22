@@ -19,7 +19,7 @@ Statuswerte: `Not Started`, `In Progress`, `Implemented`, `Tested`, `Blocked`, `
 | BR-009 Billing | Not Started | Vorhandene Subscription-Ansicht ist kein nachgewiesener Billing-Prozess | Pläne/Entitlements, Rechnungen, Usage, Planwechsel und geprüfter Zahlungsadapter |
 | BR-010 Support | Not Started | Kein hier abgenommener Business-Ticketprozess | Ticketmodell, Verantwortliche, SLA/Anhänge/Benachrichtigungen und ITSM-Adapter |
 | BR-011 Collaboration | Not Started | Kein hier abgenommener Mail-/Calendar-/Storage-Lifecycle | Domainprüfung, Providerverträge, Zuweisungen/Quotas und kontrollierte Freigaben |
-| BR-012 Integrationen | In Progress | Gateway, OAuth-/API-Clients, explizite offline bestellte eigene Eligibility-Quellen, verpflichtendes Snapshot-Receiver-Protokoll und vorhandene Event-/Outbox-Bausteine | Durchgängige Connector-/Job-/Webhook-Historie mit Retry/DLQ, Rotation, vollständige API-Dokumentation und Operations-Abnahme |
+| BR-012 Integrationen | In Progress | Gateway, OAuth-/API-Clients, explizite eigene Eligibility-Quellen, Snapshot-Receiver und [eigene App-Freigaben mit persistenten Exportjobs, Zeitplänen, begrenzten Versuchen und Historie](features/company-automation.md) | Weitere Connector-/Webhook- und Schreibhandler, durchgängige Herstellerstatus/Recovery, vollständige API-Dokumentation und Operations-Abnahme |
 
 Die Tabelle ist keine vollständige Security- oder Code-Audit-Abnahme. Bestehende Prototypmodule werden nicht allein wegen einer Datei oder eines Menüeintrags als implementierte Business Capability gezählt.
 
@@ -122,3 +122,7 @@ Für den Organisations-Slice liegen ein [reales Teilmodell](architecture/domain-
 ## Lizenzgruppen und Pool-Verknüpfungen
 
 Normale Gruppen können ausdrücklich mit eigenen endlichen Pools verknüpft werden. Der [Lizenzgruppenweg](features/company-license-groups.md) verwendet lizenzreine immutable Blueprint-Versionen und den bestehenden Allocator. Mehrere Herkünfte teilen einen Sitz; Austritt/Unlink entfernt nur die eigene Gruppenquelle. Oberfläche und CLI gleichen bestätigte Änderungen in begrenzten Seiten ab; knapper Bestand bleibt pro Benutzer blockiert. Policy 028 speichert Link, Herkunftseffekte und unveränderliche Event-/Pending-Outbox-Belege. Neue UI-, CLI-, Routing- und echte PostgreSQL-Regressionen prüfen diesen lokalen Ablauf. Ein unbeaufsichtigter App-Worker und externe Herstellerfreischaltung sind nicht Bestandteil dieses Slices.
+
+## App-Freigaben und dauerhafte Exportjobs
+
+Der [neue Automationsweg](features/company-automation.md) bindet eine tatsächlich authentifizierte Clientgeneration nach ausdrücklicher Owner-/MFA-Freigabe an feste eigene Exportaktionen. Identity 048 enthält Jobs, Zeitpläne, Leases, Retained Events und Pending-Outbox; UI/CLI nutzen denselben tatsächlichen Ablauf. Die angebotenen Benutzer-, Gruppen- und OU-Exporte sind lokal ausführbar und durch einen tatsächlichen App-/Owner-/Worker-/Download-/Widerruf-Browserablauf geprüft. [Abnahme und Grenzen](testing/test-results.md#22-oktober-2026--eigene-app-freigaben-und-dauerhafte-exportjobs). Automatischer Firmenlizenzabgleich, eigene tenantgebundene App-Registerverwaltung, Provider-Schreibhandler und Artefakt-Retention sind noch offen. Der [vollständige Arbeitsumfang](implementation-worklist.md) bleibt unverändert aktiv.

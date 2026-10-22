@@ -244,7 +244,9 @@ function organizationOpenApi() {
   Object.assign(document.paths, companyBlueprintAssignments.paths); Object.assign(document.components.schemas, companyBlueprintAssignments.components.schemas);
   const companyLicenseGroups = require('../../policy-service/scripts/company-license-group-openapi').companyLicenseGroupOpenApi();
   Object.assign(document.paths, companyLicenseGroups.paths); Object.assign(document.components.schemas, companyLicenseGroups.components.schemas);
-  document.info.version = '1.20.0';
+  const companyAutomation = require('./company-automation-openapi').companyAutomationOpenApi();
+  Object.assign(document.paths, companyAutomation.paths); Object.assign(document.components.schemas, companyAutomation.components.schemas);
+  document.info.version = '1.21.0';
   return document;
 }
 if (require.main === module) process.stdout.write(JSON.stringify(organizationOpenApi(), null, 2) + '\n');

@@ -81,3 +81,5 @@ Run `npm test -- --runInBand` here. Adapter tests run a real local discovery/tok
 ## App accounts and scripts
 
 Use **App-Konto erstellen** in the OAuth/OIDC UI for a confidential workload with no redirects or default scopes. The [app-account automation guide](../../../docs/features/app-accounts-automation.md) describes the shipped `scripts/od.mjs` CLI, protected secrets, separate activation and existing permission boundaries. No additional mail-provider connection or tenant-wide automation permission is implicit in app registration.
+
+The dedicated `company.automation` client-credentials scope supports [explicit company app grants and durable jobs](../../../docs/features/company-automation.md). Its JWT contains only that workload permission; an actual company owner separately approves fixed export actions for the exact client generation. Identity migration 048, the current receiver and frontend are required. The worker uses its own credentials for scheduled own-directory exports. Client rotation or disablement invalidates the previous generation; company licensing writes and mail provisioning remain open.

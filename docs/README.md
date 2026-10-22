@@ -46,6 +46,8 @@ Welcome to the OpenDirectory documentation. OpenDirectory is a self-hosted, open
 - [Security & Compliance](features/security-compliance.md)
 - [Authentication & SSO](features/authentication-sso.md)
 - [App-Konten und Skript-Automationen](features/app-accounts-automation.md)
+- [Eigene App-Freigaben, Jobs und Zeitpläne](features/company-automation.md)
+- [Vollständiger Umsetzungsauftrag und offener Arbeitsstand](implementation-worklist.md)
 - [Audit & Logging](features/audit-logging.md)
 
 ### Services Reference

@@ -1,0 +1,42 @@
+import React from 'react';
+import '@testing-library/jest-dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import CompanyAutomationView from '@/components/views/CompanyAutomationView';
+import { companyAutomation } from '@/lib/companyAutomation';
+import { directoryUsers } from '@/lib/directoryUsers';
+jest.mock('@/lib/directoryUsers', () => ({ directoryUsers: { access: jest.fn() } }));
+jest.mock('@/lib/companyAutomation', () => ({ automationActions: ['directory.users.export', 'directory.groups.export', 'directory.ous.export'], companyAutomation: { grants: jest.fn(), enrollment: jest.fn(), approve: jest.fn(), jobs: jest.fn(), schedules: jest.fn(), queue: jest.fn(), revoke: jest.fn(), changeJob: jest.fn(), disable: jest.fn(), history: jest.fn() } }));
+const id = (n: number) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
+const principal = { kind: 'owner', userId: id(1), tenantId: id(2) };
+const grant: any = { id: id(3), tenantId: id(2), clientId: 'worker', clientRevision: '1', actions: ['directory.users.export'], expiresAt: '2099-10-22T10:00:00.000Z', status: 'active', revision: '1' };
+beforeEach(() => {
+  jest.clearAllMocks(); (directoryUsers.access as jest.Mock).mockResolvedValue({ userId: id(1), demoMode: false, companyOwner: true });
+  (companyAutomation.grants as jest.Mock).mockResolvedValue({ principal, grants: [grant], page: 1, limit: 25, total: 1 });
+  (companyAutomation.jobs as jest.Mock).mockResolvedValue({ jobs: [], total: 0 }); (companyAutomation.schedules as jest.Mock).mockResolvedValue({ schedules: [], total: 0 });
+  (companyAutomation.enrollment as jest.Mock).mockResolvedValue({ principal, id: id(4), clientId: 'worker', clientRevision: '1', name: 'Export worker', expiresAt: '2099-10-22T10:00:00.000Z' });
+  (companyAutomation.queue as jest.Mock).mockResolvedValue({}); (companyAutomation.approve as jest.Mock).mockResolvedValue(grant); (companyAutomation.revoke as jest.Mock).mockResolvedValue({ ...grant, status: 'revoked' });
+});
+async function ready() { await waitFor(() => expect(screen.getByLabelText('Automationsaktion')).toBeEnabled()); }
+test('shows only own actual grants and never starts jobs just by opening the page', async () => {
+  render(<CompanyAutomationView/>); await ready(); expect(screen.getByText(/Worker auf deinem Runner starten/)).toBeInTheDocument(); expect(companyAutomation.queue).not.toHaveBeenCalled();
+});
+test('an ordinary principal sees no approval or fabricated workflow data', async () => {
+  (directoryUsers.access as jest.Mock).mockResolvedValue({ userId: id(1), demoMode: false, companyOwner: false }); render(<CompanyAutomationView/>); await screen.findByRole('alert'); expect(companyAutomation.grants).not.toHaveBeenCalled();
+});
+test('queues one actual export and reports only durable queueing', async () => {
+  render(<CompanyAutomationView/>); await ready(); fireEvent.change(screen.getByLabelText('Automationsaktion'), { target: { value: 'directory.users.export' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Exportjob einreihen' })); await screen.findByText(/Job dauerhaft eingereiht/);
+  expect(companyAutomation.queue).toHaveBeenCalledWith(grant, 'directory.users.export', 'json', principal);
+});
+test('owner approval displays the actual app generation and requires an explicit confirmation', async () => {
+  render(<CompanyAutomationView/>); await ready(); fireEvent.change(screen.getByLabelText('App-Anmeldungs-ID'), { target: { value: id(4) } });
+  fireEvent.click(screen.getByRole('button', { name: 'App-Anmeldung prüfen' })); await screen.findByText(/Von der App angegebener Name/);
+  fireEvent.click(screen.getByLabelText('Benutzer exportieren')); fireEvent.change(screen.getByLabelText('Automationsfreigabe begründen'), { target: { value: 'Eigene Benutzer ausdrücklich exportieren' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Ausgewählte App-Rechte bestätigen' })); expect(companyAutomation.approve).not.toHaveBeenCalled();
+  expect(screen.getByRole('dialog')).toHaveTextContent('Generation 1'); fireEvent.click(screen.getByRole('button', { name: 'Verbindlich bestätigen' }));
+  await waitFor(() => expect(companyAutomation.approve).toHaveBeenCalledTimes(1));
+});
+test('revocation is separate from selection and preserves the concrete confirmation', async () => {
+  render(<CompanyAutomationView/>); await ready(); fireEvent.click(screen.getByRole('button', { name: 'App-Freigabe widerrufen' })); expect(companyAutomation.revoke).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Verbindlich bestätigen' })); await waitFor(() => expect(companyAutomation.revoke).toHaveBeenCalledWith(grant, principal));
+});

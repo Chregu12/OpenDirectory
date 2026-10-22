@@ -134,6 +134,7 @@ app.get('/api/identity/company-license-groups/:id/snapshot', asyncRoute(async (r
   await companyLicenseAuthority.read(req.user, req.headers.authorization);
   res.json(snapshot);
 }));
+app.use('/api/identity/automation', require('./CompanyAutomationRoutes').companyAutomationRoutes(db));
 app.use('/api', requireIdentityAccess);
 const demoMode = process.env.IDENTITY_DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
 const snapshots = new GroupSnapshotStore(db);
