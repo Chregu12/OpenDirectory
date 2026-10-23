@@ -94,6 +94,7 @@ const signingKeyId = signingKeys.kid;
 const credentialAuthority = new CredentialAuthority({ signingKeys, issuer: ISSUER });
 const identityAuthority = new IdentityAuthority({ signingKeys, issuer: ISSUER, credentialAuthority, demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
 const companyRegistration = new (require('./CompanyRegistrationGateway').CompanyRegistrationGateway)({ signingKeys, issuer: ISSUER, client: id => clientRegistry.get(id) });
+const employeeInvitations = new (require('./EmployeeInvitationGateway').EmployeeInvitationGateway)({ signingKeys, issuer: ISSUER });
 
 // Build JWK representation of the public key
 configureJwks(signingKeys.jwks());
@@ -300,6 +301,32 @@ app.post('/oauth/company-registration/:operation', rateLimit({ windowMs: 60_000,
   if (req.params.operation === 'activate' && process.env.COMPANY_ACTIVATION_ENABLED !== 'true') return res.status(503).json({ error: 'company_activation_disabled' });
   try { const receipt = await companyRegistration.execute(req.params.operation, req.body); res.status(req.params.operation === 'submit' && !receipt.replayed ? 201 : 200).json(receipt); }
   catch (error) { res.status(error.status || 503).json({ error: error.code || (error.status === 400 ? 'invalid_company_registration' : 'company_registration_unavailable') }); }
+});
+app.use('/oauth/employee-invitations', (_req, res, next) => { res.set('Cache-Control', 'no-store').set('Referrer-Policy', 'no-referrer'); next(); });
+app.get('/oauth/employee-invitations', (req, res) => {
+  res.set('Cache-Control', 'no-store').set('Referrer-Policy', 'no-referrer');
+  if (Object.keys(req.query).length || Object.keys(req.body || {}).length) return res.status(400).json({ error: 'invalid_employee_invitation' });
+  res.json({ schemaVersion: 1, enabled: process.env.OAUTH_REVOCATION_DEMO_MODE !== 'true', requiresFirstLoginMfa: true });
+});
+app.post('/oauth/employee-invitations/owner/:operation', rateLimit({ windowMs: 60_000, max: 40, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'employee_invitation_rate_limited' } }), adminAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store').set('Referrer-Policy', 'no-referrer');
+  if (process.env.OAUTH_REVOCATION_DEMO_MODE === 'true') return res.status(503).json({ error: 'employee_invitations_disabled' });
+  if (Object.keys(req.query).length || req.headers['x-api-key'] !== undefined || req.user?.actor_type !== 'user'
+    || !req.user.identity_authorization?.userId || !['create', 'list', 'get', 'revoke'].includes(req.params.operation)) return res.status(403).json({ error: 'original_employee_invitation_owner_required' });
+  try {
+    const result = await employeeInvitations.manage(req.params.operation, req.body, req.headers.authorization, req.user.identity_authorization.userId);
+    return res.status(req.params.operation === 'create' && result.created ? 201 : 200).json(result);
+  } catch (error) { return res.status(error.status || 503).json({ error: error.code || 'employee_invitation_unavailable' }); }
+});
+app.post('/oauth/employee-invitations/:operation', rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false, message: { error: 'employee_invitation_rate_limited' } }), async (req, res) => {
+  res.set('Cache-Control', 'no-store').set('Referrer-Policy', 'no-referrer');
+  if (process.env.OAUTH_REVOCATION_DEMO_MODE === 'true') return res.status(503).json({ error: 'employee_invitations_disabled' });
+  if (!['inspect', 'accept'].includes(req.params.operation) || Object.keys(req.query).length) return res.status(400).json({ error: 'invalid_employee_invitation' });
+  try {
+    const result = req.params.operation === 'inspect' ? await employeeInvitations.inspect(req.body?.token) : await employeeInvitations.accept(req.body);
+    return res.json(result);
+  } catch (error) { return res.status(error.status || 503).json({ error: error.code || 'employee_invitation_unavailable' }); }
 });
 
 // ─── Prometheus metrics middleware ────────────────────────────────────────────

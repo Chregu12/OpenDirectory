@@ -55,6 +55,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   { id: 'dashboard',    name: 'Dashboard',           view: 'dashboard',    type: 'Seite' },
   { id: 'devices',      name: 'Geräte',              view: 'devices',      type: 'Seite' },
   { id: 'users',        name: 'Benutzer',            view: 'users',        type: 'Seite' },
+  { id: 'employee-invitations', name: 'Mitarbeitereinladungen', view: 'employee-invitations', type: 'Seite' },
   { id: 'policies',     name: 'Richtlinien',         view: 'policies',     type: 'Seite' },
   { id: 'applications', name: 'Anwendungen',         view: 'applications', type: 'Seite' },
   { id: 'security',     name: 'Sicherheit',          view: 'security',     type: 'Seite' },
@@ -325,6 +326,7 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
 
     { type: 'section', label: 'Verzeichnis' },
     { type: 'item', id: 'users',          name: 'Benutzer',          icon: UserGroupIcon },
+    { type: 'item', id: 'employee-invitations', name: 'Mitarbeitereinladungen', icon: UserGroupIcon },
     { type: 'item', id: 'usergroups',     name: 'Gruppen',           icon: UserGroupIcon },
     { type: 'item', id: 'permissions',    name: 'Rollen & Rechte',   icon: KeyIcon },
     { type: 'item', id: 'pim',            name: 'PIM',               icon: ShieldCheckIcon },

@@ -3,8 +3,8 @@
 import React, { useState } from 'react';
 import { mfaRecovery, mfaEnrollment, recoveryError, RecoverySetup } from '@/lib/mfaRecovery';
 
-export default function MfaRecoveryView({ enrollment = false }: { enrollment?: boolean }) {
-  const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [providerCode, setProviderCode] = useState('');
+export default function MfaRecoveryView({ enrollment = false, initialUsername = '' }: { enrollment?: boolean; initialUsername?: string }) {
+  const [username, setUsername] = useState(initialUsername); const [password, setPassword] = useState(''); const [providerCode, setProviderCode] = useState('');
   const [recoveryCode, setRecoveryCode] = useState(''); const [code, setCode] = useState('');
   const [setup, setSetup] = useState<RecoverySetup | null>(null); const [done, setDone] = useState(false); const [uncertain, setUncertain] = useState(false);
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');

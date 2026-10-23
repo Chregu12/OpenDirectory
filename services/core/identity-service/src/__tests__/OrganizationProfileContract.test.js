@@ -23,13 +23,14 @@ test('the checked-in API document is generated from the current shared contract'
   const fs = require('node:fs'); const path = require('node:path'); const { organizationOpenApi } = require('../../scripts/organization-openapi');
   expect(JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../../docs/api/openapi.yaml'), 'utf8'))).toEqual(organizationOpenApi());
 });
-test('employee receiving documents the private original proof boundary and separate owner bearer without inventing a public onboarding facade',()=>{
+test('employee receiving documents the private original proof boundary and a redacted public recipient flow',()=>{
   const document=require('../../scripts/organization-openapi').organizationOpenApi();const routes=document.paths;
   expect(routes['/internal/auth/employee-invitations/create'].post.parameters).toEqual([expect.objectContaining({name:'X-OpenDirectory-Owner-Authorization',required:true})]);
   expect(routes['/internal/identity/employee-invitations/complete'].post.security).toEqual([{employeeInvitationWorkload:[]}]);
   expect(routes['/internal/identity/employee-invitations/accepted-source'].post.description).toContain('ORIGINAL Auth activate');
   expect(routes['/internal/auth/employee-invitations/revoked-source'].post.description).toContain('ORIGINAL withdraw');
-  expect(routes['/api/employee-invitations']).toBeUndefined();expect(document.components.schemas.EmployeeBinding.properties.linkRevision).toMatchObject({type:'string'});
+  expect(routes['/oauth/employee-invitations/inspect'].post.security).toEqual([]);expect(routes['/oauth/employee-invitations/accept'].post.requestBody.content['application/json'].schema.required).toEqual(['token','password']);
+  expect(document.components.schemas.EmployeeInvitationPublicPreview.properties.organizationName).toEqual({type:'string'});expect(document.components.schemas.EmployeeBinding.properties.linkRevision).toMatchObject({type:'string'});
 });
 test('every minimal license or policy source documents the mandatory receiving protocol without a tenant selector', () => {
   const document = require('../../scripts/organization-openapi').organizationOpenApi();
@@ -45,7 +46,7 @@ test('every minimal license or policy source documents the mandatory receiving p
 });
 test('company license operations document real finite inventory, exact versions and explicit original source without a global licensing permission', () => {
   const document = require('../../scripts/organization-openapi').organizationOpenApi(); const schemas = document.components.schemas;
-  expect(document.info.version).toBe('1.29.0'); expect(schemas.CompanyLicensePool.properties.totalSeats).toEqual({ type: 'integer', minimum: 1, maximum: 10000 });
+  expect(document.info.version).toBe('1.30.0'); expect(schemas.CompanyLicensePool.properties.totalSeats).toEqual({ type: 'integer', minimum: 1, maximum: 10000 });
   expect(schemas.CompanyLicensePool.properties.allocationMode.const).toBe('local-only'); expect(schemas.CompanyLicenseCapabilities.properties.permissions.const).toEqual(['company.apps.read', 'company.apps.create', 'company.apps.assign']);
   expect(document.paths['/api/licenses/company/pools/{id}/assignments'].post.parameters).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'If-Match', required: true })]));
   expect(document.paths['/api/licenses/company/pools/{id}/assignments/{assignmentId}/revoke'].post.requestBody.content['application/json'].schema.properties.confirm.const).toBe(true);

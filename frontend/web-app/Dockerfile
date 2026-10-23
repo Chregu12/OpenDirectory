@@ -17,6 +17,9 @@ RUN npm install
 COPY frontend/web-app/ .
 COPY packages/organization-profile-contract/ /packages/organization-profile-contract/
 COPY packages/company-registration-contract/ /packages/company-registration-contract/
+COPY packages/employee-invitation-contract.js /packages/employee-invitation-contract.js
+COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
+COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-contract.js
 COPY packages/directory-role-contract.js /packages/directory-role-contract.js
 
 # Build the application

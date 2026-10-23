@@ -118,8 +118,8 @@ class BrowserAuth {
       || !equal(request.headers.get('x-od-csrf'), session.csrf)) throw new BrowserAuthError(403, 'browser_auth_origin_or_csrf_denied');
   }
 
-  async json(endpoint, options = {}, limit = 65536, errorMapper) {
-    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 5000);
+  async json(endpoint, options = {}, limit = 65536, errorMapper, timeoutMs = 5000) {
+    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await this.fetch(new URL(endpoint, this.internalUrl), { ...options, redirect: 'error', cache: 'no-store', signal: controller.signal });
       if (!response.headers.get('content-type')?.includes('application/json')) throw new BrowserAuthError(503, 'browser_auth_authority_unavailable');
@@ -161,6 +161,102 @@ class BrowserAuth {
       return new Response(JSON.stringify(receipt), { status: operation === 'submit' && !receipt.replayed ? 201 : 200, headers });
     } catch (error) {
       return new Response(JSON.stringify({ error: error instanceof BrowserAuthError ? error.code : 'company_registration_unavailable' }), { status: error instanceof BrowserAuthError ? error.status : 503, headers });
+    }
+  }
+
+  async employeeInvitation(request, operation) {
+    const headers = this.headers(); headers.set('Content-Type', 'application/json'); headers.set('X-Content-Type-Options', 'nosniff');
+    try {
+      const contract = require('../../../../packages/employee-invitation-contract');
+      if (!['capabilities', 'inspect', 'accept'].includes(operation) || new URL(request.url).search) throw new BrowserAuthError(400, 'invalid_employee_invitation');
+      if (operation === 'capabilities') {
+        if (request.method !== 'GET') throw new BrowserAuthError(400, 'invalid_employee_invitation');
+        const value = await this.json('/oauth/employee-invitations');
+        if (!value || Object.keys(value).length !== 3 || value.schemaVersion !== 1 || typeof value.enabled !== 'boolean' || value.requiresFirstLoginMfa !== true) throw new BrowserAuthError(503, 'employee_invitation_unavailable');
+        return new Response(JSON.stringify(value), { headers });
+      }
+      if (request.method !== 'POST' || request.headers.get('content-type')?.split(';')[0] !== 'application/json') throw new BrowserAuthError(400, 'invalid_employee_invitation');
+      if (request.headers.get('origin') !== this.origin || request.headers.get('x-od-employee-invitation') !== '1'
+        || (request.headers.has('sec-fetch-site') && !['same-origin', 'none'].includes(request.headers.get('sec-fetch-site')))) throw new BrowserAuthError(403, 'browser_auth_origin_or_csrf_denied');
+      const chunks = []; let length = 0;
+      if (Number(request.headers.get('content-length')) > 8192) throw new BrowserAuthError(400, 'invalid_employee_invitation');
+      for await (const chunk of request.body || []) { length += chunk.length; if (length > 8192) throw new BrowserAuthError(400, 'invalid_employee_invitation'); chunks.push(Buffer.from(chunk)); }
+      let input;
+      try {
+        const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        if (operation === 'inspect') { contract.exact(value, ['token']); contract.parseToken(value.token); input = { token: value.token }; }
+        else { contract.exact(value, ['token', 'password']); contract.parseToken(value.token); contract.password(value.password); input = { token: value.token, password: value.password }; }
+      } catch { throw new BrowserAuthError(400, 'invalid_employee_invitation'); }
+      const errors = new Set(['invalid_employee_invitation', 'employee_invitation_rejected', 'employee_invitation_changed', 'employee_password_requires_12_characters_and_at_most_72_utf8_bytes',
+        'employee_invitation_activation_unconfirmed', 'employee_invitation_rate_limited']);
+      const result = await this.json('/oauth/employee-invitations/' + operation, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }, 16384,
+        (status, data) => [400, 401, 403, 404, 409, 429].includes(status) && errors.has(data?.error)
+          ? new BrowserAuthError(status, data.error === 'employee_invitation_rejected' ? 'invalid_employee_invitation' : data.error)
+          : new BrowserAuthError(status === 429 ? 429 : 503, status === 429 ? 'employee_invitation_rate_limited' : 'employee_invitation_unavailable'), operation === 'accept' ? 22000 : 8000);
+      if (operation === 'inspect') {
+        if (!result || Object.keys(result).length !== 6 || typeof result.organizationName !== 'string' || typeof result.loginName !== 'string'
+          || !['pending', 'credential_pending', 'accepted'].includes(result.status) || typeof result.expiresAt !== 'string' || !Number.isFinite(Date.parse(result.expiresAt))
+          || typeof result.credentialCreated !== 'boolean' || typeof result.identityConfirmed !== 'boolean') throw new BrowserAuthError(503, 'employee_invitation_unavailable');
+      } else if (!result || Object.keys(result).length !== 6 || result.schemaVersion !== 1 || result.employeeInvitationProtocol !== 1 || result.status !== 'accepted'
+        || typeof result.organizationName !== 'string' || typeof result.loginName !== 'string' || result.mfaEnrollmentRequired !== true) throw new BrowserAuthError(503, 'employee_invitation_unavailable');
+      return new Response(JSON.stringify(result), { headers });
+    } catch (error) {
+      return new Response(JSON.stringify({ error: error instanceof BrowserAuthError ? error.code : 'employee_invitation_unavailable' }),
+        { status: error instanceof BrowserAuthError ? error.status : 503, headers });
+    }
+  }
+
+  async employeeInvitationOwner(request, operation) {
+    const headers = this.headers(); headers.set('Content-Type', 'application/json'); headers.set('X-Content-Type-Options', 'nosniff');
+    try {
+      const contract = require('../../../../packages/employee-invitation-contract');
+      if (!['create', 'list', 'get', 'revoke'].includes(operation) || request.method !== 'POST' || new URL(request.url).search
+        || request.headers.get('content-type')?.split(';')[0] !== 'application/json') throw new BrowserAuthError(400, 'invalid_employee_invitation');
+      if (request.headers.get('origin') !== this.origin || request.headers.get('x-od-employee-invitation-owner') !== '1'
+        || (request.headers.has('sec-fetch-site') && !['same-origin', 'none'].includes(request.headers.get('sec-fetch-site')))) throw new BrowserAuthError(403, 'browser_auth_origin_or_csrf_denied');
+      const authorization = request.headers.get('authorization');
+      if (typeof authorization !== 'string' || authorization.length > 16384 || !/^Bearer [A-Za-z0-9._~-]+$/.test(authorization)) throw new BrowserAuthError(401, 'employee_invitation_owner_required');
+      const chunks = []; let length = 0;
+      if (Number(request.headers.get('content-length')) > 32768) throw new BrowserAuthError(400, 'invalid_employee_invitation');
+      for await (const chunk of request.body || []) { length += chunk.length; if (length > 32768) throw new BrowserAuthError(400, 'invalid_employee_invitation'); chunks.push(Buffer.from(chunk)); }
+      let input;
+      try {
+        const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        if (operation === 'create') input = contract.createInput(value);
+        else if (operation === 'list') { contract.exact(value, ['page']); if (!Number.isSafeInteger(value.page) || value.page < 1 || value.page > 1000000) throw new Error(); input = value; }
+        else if (operation === 'get') { contract.exact(value, ['id']); contract.identifier(value.id); input = value; }
+        else {
+          contract.exact(value, ['id', 'revision', 'reason', 'confirm']); contract.identifier(value.id);
+          if (typeof value.revision !== 'string' || !/^[1-9][0-9]{0,18}$/.test(value.revision) || value.confirm !== true) throw new Error();
+          input = { ...value, reason: contract.text(value.reason, 10, 500) };
+        }
+      } catch { throw new BrowserAuthError(400, 'invalid_employee_invitation'); }
+      const errors = new Set(['invalid_employee_invitation', 'employee_invitation_owner_required', 'original_employee_invitation_owner_required',
+        'employee_invitation_rejected', 'employee_invitation_changed', 'employee_invitation_withdrawal_unconfirmed', 'employee_invitation_rate_limited']);
+      const result = await this.json('/oauth/employee-invitations/owner/' + operation, { method: 'POST', headers: { Authorization: authorization, 'Content-Type': 'application/json' }, body: JSON.stringify(input) }, 32768,
+        (status, data) => [400, 401, 403, 404, 409, 412, 428, 429].includes(status) && errors.has(data?.error)
+          ? new BrowserAuthError(status, data.error === 'employee_invitation_rejected' ? 'employee_invitation_changed' : data.error)
+          : new BrowserAuthError(status === 429 ? 429 : 503, status === 429 ? 'employee_invitation_rate_limited' : 'employee_invitation_owner_unavailable'), 10000);
+      const validView = value => !!value && !Array.isArray(value) && Object.keys(value).length === 11
+        && ['id', 'tenantId', 'userId'].every(field => typeof value[field] === 'string') && typeof value.loginName === 'string' && typeof value.organizationName === 'string'
+        && ['pending', 'credential_pending', 'accepted', 'revoked'].includes(value.status) && typeof value.revision === 'string' && /^[1-9][0-9]{0,18}$/.test(value.revision)
+        && ['createdAt', 'expiresAt'].every(field => typeof value[field] === 'string' && Number.isFinite(Date.parse(value[field])))
+        && typeof value.credentialCreated === 'boolean' && typeof value.identityConfirmed === 'boolean' && value.identityConfirmed === (value.status === 'accepted');
+      const exact = fields => !!result && !Array.isArray(result) && Object.keys(result).length === fields.length && fields.every(field => Object.hasOwn(result, field));
+      if (operation === 'create') {
+        if (!exact(['schemaVersion', 'employeeInvitationProtocol', 'invitation', 'created', 'invitationToken']) || result.schemaVersion !== 1 || result.employeeInvitationProtocol !== 1
+          || !validView(result.invitation) || typeof result.created !== 'boolean' || (result.created ? typeof result.invitationToken !== 'string' : result.invitationToken !== null)) throw new BrowserAuthError(503, 'employee_invitation_owner_unavailable');
+      } else if (operation === 'list') {
+        if (!exact(['schemaVersion', 'employeeInvitationProtocol', 'page', 'hasMore', 'invitations']) || result.schemaVersion !== 1 || result.employeeInvitationProtocol !== 1
+          || result.page !== input.page || typeof result.hasMore !== 'boolean' || !Array.isArray(result.invitations) || result.invitations.length > 25 || result.invitations.some(value => !validView(value))) throw new BrowserAuthError(503, 'employee_invitation_owner_unavailable');
+      } else if (operation === 'get') {
+        if (!exact(['schemaVersion', 'employeeInvitationProtocol', 'invitation']) || result.schemaVersion !== 1 || result.employeeInvitationProtocol !== 1 || !validView(result.invitation)) throw new BrowserAuthError(503, 'employee_invitation_owner_unavailable');
+      } else if (!exact(['schemaVersion', 'employeeInvitationProtocol', 'invitation', 'partialEnrollmentWithdrawn']) || result.schemaVersion !== 1 || result.employeeInvitationProtocol !== 1
+        || !validView(result.invitation) || result.invitation.status !== 'revoked' || result.partialEnrollmentWithdrawn !== true) throw new BrowserAuthError(503, 'employee_invitation_owner_unavailable');
+      return new Response(JSON.stringify(result), { status: operation === 'create' && result.created ? 201 : 200, headers });
+    } catch (error) {
+      return new Response(JSON.stringify({ error: error instanceof BrowserAuthError ? error.code : 'employee_invitation_owner_unavailable' }),
+        { status: error instanceof BrowserAuthError ? error.status : 503, headers });
     }
   }
 
