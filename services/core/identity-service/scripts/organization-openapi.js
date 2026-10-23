@@ -209,9 +209,9 @@ function organizationOpenApi() {
   document.components.schemas.LicenseDelegateSnapshot = snapshotSchema({ ...roleSnapshot, delegationRevision: evidenceRevision });
   document.components.schemas.PolicyPublicationActorSnapshot = snapshotSchema({ ...roleSnapshot, requestRevision: evidenceRevision, reviewRevision: evidenceRevision });
   const timestamp = { type: 'string', format: 'date-time' };
-  document.components.schemas.LicenseGroupSnapshot = snapshotSchema({ schemaVersion: { const: 3 }, groupId: identifier, name: { type: ['string', 'null'] }, revision, deleted: { type: 'boolean' },
+  document.components.schemas.LicenseGroupSnapshot = snapshotSchema({ schemaVersion: { const: 3 }, groupId: identifier, name: { type: ['string', 'null'] }, revision: { ...revision, description: 'Monotonic source observation revision. Rule-managed groups include retained own-tenant source changes and passed review deadlines; distinct from physical group ETags. Exact BIGINT string.' }, deleted: { type: 'boolean' },
     memberIds: { type: 'array', maxItems: 10000, items: identifier }, inactiveMemberIds: { type: 'array', maxItems: 10000, items: identifier }, unresolvedMemberIds: { type: 'array', maxItems: 10000, items: { type: 'string' } },
-    memberships: { type: 'array', maxItems: 10000, items: snapshotSchema({ userId: identifier, membershipId: identifier, eligibilityRevision: revision, reviewDeadlineAt: { oneOf: [timestamp, { type: 'null' }] } }) },
+    memberships: { type: 'array', maxItems: 10000, items: snapshotSchema({ userId: identifier, membershipId: identifier, eligibilityRevision: revision, reviewDeadlineAt: { oneOf: [timestamp, { type: 'null' }], description: 'Effective source deadline including nested review witnesses: minimum of own deadline and latest valid alternative; null means no finite review bound.' } }) },
     sourceAuthorization: { oneOf: [snapshotSchema({ grantId: identifier, version: revision, issuer: { type: 'string' }, clientId: { type: 'string' }, clientRevision: revision, expiresAt: timestamp }), { type: 'null' }] },
     observedAt: timestamp, validUntil: timestamp, viewerUserId: { oneOf: [identifier, { type: 'null' }] }, viewerEnabled: { type: ['boolean', 'null'] },
   });
@@ -219,7 +219,7 @@ function organizationOpenApi() {
   const sourceDescription = 'Original live canonical human and current duty required before target lookup; only the retained home tenant is visible. Exact lowercase UUID, empty body/query and no API key. Claimed JWT admin aliases, caller tenant selectors and company ownership alone do not grant a duty. Revalidate the original bearer, actor, tenant incarnation and deadline before releasing the result. Responses are minimal source observations, not authorization to allocate licenses or publish policies. Protocol 1 is mandatory at receivers; no downgrade fallback.';
   const sources = [
     ['license-users', 'readOwnTenantLicenseUserSource', 'LicenseUserSnapshot', 'licenses.users.read', ' A normal human may read only their own eligibility. A dedicated exact licenses.users.read client-credentials token additionally requires the offline reviewed immutable issuer/client/home-tenant binding at its current client revision. Disabled, deleted and paused-tenant negatives remain readable to this bound workload; no binding is inferred from the requested target.'],
-    ['license-groups', 'readOwnTenantLicenseGroupSource', 'LicenseGroupSnapshot', 'licenses.groups.read', ' Controlled own-group review refresh is allowed. A separate exact group-source-consent workload needs an unexpired explicit group grant from the group home tenant; no general group read. Foreign retained member IDs fail closed, including historical/deleted identities. DTO schema 3 and directory lease deadlines are unchanged.'],
+    ['license-groups', 'readOwnTenantLicenseGroupSource', 'LicenseGroupSnapshot', 'licenses.groups.read', ' Controlled own-group review refresh is allowed. A separate exact group-source-consent workload needs an unexpired explicit group grant from the group home tenant; no general group read. Foreign retained member IDs fail closed, including historical/deleted identities. DTO schema 3 retains the 300-second directory lease. Current saved rule and nested source validity are evaluated on read; inherited review deadlines additionally bound the member. Source revisions include upstream rule changes. Cross-service cached lease invalidation and physical seat return are separate.'],
     ['license-reviewers', 'readOwnTenantLicenseReviewerSource', 'LicenseReviewerSnapshot', 'licenses.reviewers.read', ' No profile fields.'],
     ['license-scope-reviewers', 'readOwnTenantLicenseScopeReviewerSource', 'LicenseReviewerSnapshot', 'licenses.scope-reviewers.read', ' No profile fields.'],
     ['license-activation-reviewers', 'readOwnTenantLicenseActivationReviewerSource', 'LicenseActivationReviewerSnapshot', 'licenses.activation-reviewers.read', ' Same-person evidence remains self-readable.'],
@@ -248,7 +248,7 @@ function organizationOpenApi() {
   Object.assign(document.paths, companyAutomation.paths); Object.assign(document.components.schemas, companyAutomation.components.schemas);
   const companyGroupRules = require('./company-group-rule-openapi').companyGroupRuleOpenApi();
   Object.assign(document.paths, companyGroupRules.paths); Object.assign(document.components.schemas, companyGroupRules.components.schemas);
-  document.info.version = '1.24.0';
+  document.info.version = '1.25.0';
   return document;
 }
 if (require.main === module) process.stdout.write(JSON.stringify(organizationOpenApi(), null, 2) + '\n');

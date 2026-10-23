@@ -86,3 +86,5 @@ Welcome to the OpenDirectory documentation. OpenDirectory is a self-hosted, open
 - [Docker Compose](deployment/docker-compose.md)
 - [Kubernetes / Helm](deployment/kubernetes.md)
 - [Environment Variables](deployment/environment-variables.md)
+
+Die [aktuelle Gruppenquellenprüfung](features/company-group-live-sources.md) unterscheidet gespeicherte Links und effektive Regelquellen. Physische Mitgliedschaften und Lizenzsitze werden weiterhin separat abgeglichen.

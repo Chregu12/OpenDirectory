@@ -25,3 +25,9 @@ test('history distinguishes an original app grant from a missing or substituted 
  (api.get as jest.Mock).mockResolvedValue({status:200,data:{...history,events:[{...event,application:undefined}]}});await expect(companyGroupRules.history(page)).rejects.toThrow();
  (api.get as jest.Mock).mockResolvedValue({status:200,data:{...history,events:[{...event,actorUserId:id(1)}]}});await expect(companyGroupRules.history(page)).rejects.toThrow();
 });
+
+test('preview requires explicit effective state and a finite ISO source deadline without inventing an inactive grant',async()=>{
+ const preview={...base,groupId:id(3),groupName:'Actual source',groupRevision:'9007199254740993',ruleRevision:'1',enabled:true,observation:'a'.repeat(64),executionMode:'manual',desired:[],existing:[{userId:id(4),membershipId:id(5),managed:true,effective:false,validUntil:null}],additions:0};
+ (api.get as jest.Mock).mockResolvedValue({status:200,data:preview});expect((await companyGroupRules.preview(page)).existing[0].effective).toBe(false);
+ for(const replacement of [{effective:undefined},{effective:'false'},{validUntil:'infinity'},{validUntil:rule.createdAt}]){(api.get as jest.Mock).mockResolvedValue({status:200,data:{...preview,existing:[{...preview.existing[0],...replacement}]}});await expect(companyGroupRules.preview(page)).rejects.toThrow();}
+});

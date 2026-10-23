@@ -8,7 +8,7 @@ class CompanyGroupRuleWorker {
   const actor = await this.automation.actor(user, authorization); if (actor.kind !== 'application') fail(403, 'Actual group-rule app required');
   return this.database.transaction(async client => {
    await client.query("SET LOCAL timezone='UTC';SET LOCAL lock_timeout='3s';SET LOCAL statement_timeout='15s'");
-   await client.query('SELECT identity_company_group_rule_app_receiving()');
+   await client.query('SELECT identity_company_group_rule_live_receiving()');
    const permission = await this.automation.grant(client, job.grant_id, actor);
    const current = (await client.query('SELECT * FROM identity_automation_jobs WHERE id=$1 AND grant_id=$2',[job.id, permission.id])).rows[0];
    if (!current || current.action !== GROUP_ACTION || current.status !== 'running' || current.lease_token !== job.lease_token || current.lease_until <= new Date()) fail(403, 'Current group-rule job lease required');

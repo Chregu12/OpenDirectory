@@ -15,3 +15,10 @@ test('the actual CLI sync emits confirmed pending review and exits 2 without acq
  try{await assert.rejects(promisify(execFile)(process.execPath,[fileURLToPath(new URL('../../od.mjs',import.meta.url)),'group-rule','sync',id(3),'Actual independently reviewed group membership'],{env:{...process.env,OPENDIRECTORY_ISSUER:origin,OPENDIRECTORY_API_URL:origin,OPENDIRECTORY_ADMIN_ACCESS_TOKEN:'original-human'}}),error=>error.code===2&&JSON.parse(error.stdout).requiresReview===true);}
  finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+test('script preview retains actual effectiveness and rejects missing, fabricated or nonfinite source deadlines',async()=>{
+ const member={userId:id(4),membershipId:id(5),managed:true,effective:false,validUntil:null};let actual=member;
+ const client=createGroupRuleClient({request:async(_method,route)=>route.endsWith('/preview')?{status:200,data:{...base,ruleRevision:'1',executionMode:'manual',observation:'a'.repeat(64),desired:[],existing:[actual]}}:{status:200,data:page,etag:page.etag}});
+ assert.equal((await client.preview(id(3))).existing[0].effective,false);
+ for(const change of [{effective:undefined},{effective:'false'},{validUntil:undefined},{validUntil:'infinity'},{validUntil:'2026-10-23T00:00:00.000Z'}]){actual={...member,...change};await assert.rejects(client.preview(id(3)),/provenance unconfirmed/);}
+});

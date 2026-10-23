@@ -15,3 +15,5 @@ See [App-Konten und Skript-Automationen](../docs/features/app-accounts-automatio
 Run `npm run test:automation-client` from the repository root. Other service/operator scripts retain their documented prerequisites and authority boundaries.
 
 `automation group-sync GRANT_ID GROUP_ID [INTERVAL_SECONDS]` führt gespeicherte eigene Gruppenregeln über die ausdrücklich genehmigte Aktion `directory.groups.reconcile` aus. Der vorhandene App-Worker braucht keine offene menschliche Sitzung; ausstehende unabhängige Reviews bleiben `partial`. [Einrichtung und Grenzen](../docs/features/company-group-rule-automation.md).
+
+Die [aktuelle Gruppenquellenprüfung](../docs/features/company-group-live-sources.md) unterscheidet gespeicherte Links und effektive Regelquellen. Physische Mitgliedschaften und Lizenzsitze werden weiterhin separat abgeglichen.

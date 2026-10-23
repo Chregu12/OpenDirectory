@@ -1,8 +1,15 @@
 'use strict';
 const{SCHEMA_VERSION,LEASE_SECONDS,MAX_MEMBERS}=require('../../../../packages/group-license-lease-contract');
+const{validRevision}=require('../../../../packages/identity-authorization-contract');
 
 class GroupSnapshotStore {
   constructor(database) { this.database = database; }
+  async confirmSource(client, groupId, revision) {
+    if(!validRevision(revision))throw Object.assign(new Error('Effective group source revision unavailable'),{status:503});
+    const current=(await client.query('SELECT identity_group_source_revision($1) AS revision',[groupId])).rows[0]?.revision;
+    if(!validRevision(current))throw Object.assign(new Error('Effective group source revision unavailable'),{status:503});
+    if(current!==revision)throw Object.assign(new Error('Effective group sources changed during observation'),{status:409});
+  }
 
   async resolveSubject(client, viewer) {
     const link = viewer ? await client.query(`SELECT account.id,identity_tenant_user_enabled(account.id) AS enabled FROM identity_subject_links links JOIN users account ON account.id=links.user_id
@@ -30,12 +37,13 @@ class GroupSnapshotStore {
       if (refreshReviews) await client.query('SELECT identity_membership_review_refresh($1)',[groupId]);
       const observed=(await client.query("SELECT date_trunc('milliseconds',identity_group_snapshot_now()) AS observed_at")).rows[0].observed_at;
       const observation={observedAt:observed.toISOString(),validUntil:new Date(observed.getTime()+LEASE_SECONDS*1000).toISOString()};
-      const result = await client.query("SELECT id, name, revision FROM groups WHERE id = $1 AND identity_tenant_id('group',id) IS NOT NULL", [groupId]);
+      const result = await client.query("SELECT id, name, revision,identity_group_source_revision(id,revision) AS source_revision FROM groups WHERE id = $1 AND identity_tenant_id('group',id) IS NOT NULL", [groupId]);
       if (!result.rows.length) {
-        const tombstone = await client.query('SELECT group_id, revision FROM identity_deleted_groups WHERE group_id = $1', [groupId]);
+        const tombstone = await client.query('SELECT group_id, revision,identity_group_source_revision(group_id,revision) AS source_revision FROM identity_deleted_groups WHERE group_id = $1', [groupId]);
         if (!tombstone.rows.length) throw Object.assign(new Error('Group not found'), { status: 404 });
         if(authorize&&JSON.stringify(sourceAuthorization)!==JSON.stringify(await authorize(client)))throw Object.assign(new Error('Source consent changed'),{status:409});
-        return { schemaVersion:SCHEMA_VERSION,groupId:tombstone.rows[0].group_id,name:null,revision:String(tombstone.rows[0].revision),deleted:true,memberIds:[],inactiveMemberIds:[],unresolvedMemberIds:[],memberships:[],sourceAuthorization,...observation,...viewerState };
+        await this.confirmSource(client,groupId,tombstone.rows[0].source_revision);
+        return { schemaVersion:SCHEMA_VERSION,groupId:tombstone.rows[0].group_id,name:null,revision:tombstone.rows[0].source_revision,deleted:true,memberIds:[],inactiveMemberIds:[],unresolvedMemberIds:[],memberships:[],sourceAuthorization,...observation,...viewerState };
       }
       const group = result.rows[0];
       const coherent=(await client.query(`SELECT NOT EXISTS(SELECT 1 FROM group_members member
@@ -45,14 +53,15 @@ class GroupSnapshotStore {
       if(coherent!==true)throw Object.assign(new Error('Group contains foreign retained identities'),{status:503});
       const members = await client.query(`SELECT membership.user_id,membership.membership_id,account.id,
         (identity_tenant_user_enabled(account.id) AND identity_tenant_id('user',account.id)=identity_tenant_id('group',membership.group_id)) AS enabled,account.eligibility_revision,
-        review.deadline_at AS review_deadline_at,identity_membership_review_allowed(membership.membership_id) AS review_allowed FROM group_members membership
-        LEFT JOIN users account ON account.id::text=membership.user_id LEFT JOIN identity_membership_review_leases review ON review.membership_id=membership.membership_id
+        CASE WHEN effective.deadline_at='infinity'::timestamptz THEN NULL ELSE effective.deadline_at END AS review_deadline_at,effective.deadline_at>identity_membership_review_now() AS review_allowed FROM group_members membership
+        LEFT JOIN users account ON account.id::text=membership.user_id CROSS JOIN LATERAL(SELECT identity_membership_rule_deadline(membership.membership_id) AS deadline_at OFFSET 0) effective
         WHERE membership.group_id=$1 ORDER BY membership.user_id LIMIT ${MAX_MEMBERS+1}`, [groupId]);
       if (members.rows.length > MAX_MEMBERS) throw Object.assign(new Error('Group exceeds the snapshot size limit'), { status: 413 });
       const active=member=>member.id&&member.enabled&&member.review_allowed===true&&(!member.review_deadline_at||member.review_deadline_at>observed);
       if(authorize&&JSON.stringify(sourceAuthorization)!==JSON.stringify(await authorize(client)))throw Object.assign(new Error('Source consent changed'),{status:409});
+      await this.confirmSource(client,groupId,group.source_revision);
       return {
-        schemaVersion:SCHEMA_VERSION,groupId:group.id,name:group.name,revision:String(group.revision),deleted:false,sourceAuthorization,...viewerState,...observation,
+        schemaVersion:SCHEMA_VERSION,groupId:group.id,name:group.name,revision:group.source_revision,deleted:false,sourceAuthorization,...viewerState,...observation,
         memberIds:members.rows.filter(active).map(member=>member.id),
         inactiveMemberIds:members.rows.filter(member=>member.id&&!active(member)).map(member=>member.id),
         unresolvedMemberIds: members.rows.filter(member => !member.id).map(member => member.user_id),

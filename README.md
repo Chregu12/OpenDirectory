@@ -6,7 +6,7 @@ OpenDirectory is a self-hosted business-management platform in development. Its 
 
 Implemented slices include company profiles and directory, groups and organizational units, device inventory, immutable blueprints, and source-aware application licensing. See the [implementation status](docs/implementation-status.md) for what works and what remains open.
 
-Own company owners can configure [dynamic and nested group rules](docs/features/company-group-rules.md), preview real canonical results and explicitly reconcile memberships through the UI or CLI. Existing manual origins and independent reviews remain distinct. Saved rules also support [explicitly delegated app jobs and schedules](docs/features/company-group-rule-automation.md), with actual app provenance. Immediate source propagation and external events remain open.
+Own company owners can configure [dynamic and nested group rules](docs/features/company-group-rules.md), preview real canonical results and explicitly reconcile memberships through the UI or CLI. Existing manual origins and independent reviews remain distinct. Saved rules also support [explicitly delegated app jobs and schedules](docs/features/company-group-rule-automation.md), with actual app provenance. Existing rule links use [live source checks and inherited review deadlines](docs/features/company-group-live-sources.md) before worker cleanup. Event dispatch, cross-service cached invalidation and external events remain open.
 
 **Not production-ready:** OpenDirectory is not yet a complete SaaS platform or Apple Business replacement. Device inventory does not mean MDM enrollment or remote device control. External integrations and unfinished workflows are clearly marked in the documentation.
 

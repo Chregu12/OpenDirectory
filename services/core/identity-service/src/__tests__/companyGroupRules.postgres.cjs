@@ -102,7 +102,7 @@ test('a changed rule reissues its exact old origins in a new captured cycle whil
  const first=await worker.run();assert.equal(first.job.status,'queued',JSON.stringify(first));assert.equal(first.job.progress.cycle,2);assert.equal(first.job.progress.completed,0);
  const second=await worker.run();assert.equal(second.job.status,'succeeded',JSON.stringify(second));const actual=(await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,userId])).rows[0].membership_id;assert.notEqual(actual,original);
  assert.deepEqual((await pool.query('SELECT cycle FROM identity_company_group_rule_runs WHERE job_id=$1 ORDER BY cycle',[queued.job.id])).rows.map(row=>row.cycle),[1,2]);
- await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/051_company_group_rule_automation.sql'),'utf8'));await pool.query('SELECT identity_company_group_rule_app_receiving()');
+ await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/051_company_group_rule_automation.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/052_live_company_group_rules.sql'),'utf8'));await pool.query('SELECT identity_company_group_rule_live_receiving()');
  assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_steps WHERE run_id IN(SELECT id FROM identity_company_group_rule_runs WHERE job_id=$1)',[queued.job.id])).rows[0].count,2);
 });
 test('actual owner stores a conditional rule and preview evaluates real attributes, canonical child members and exclusions without pretending membership changes', async () => {
@@ -185,7 +185,7 @@ test('rule reconciliation creates actual memberships, preserves manual links and
  const manualReplacement = (await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,managed])).rows[0].membership_id;
  assert.notEqual(manualReplacement,next); await save(parent,input({enabled:false}),'3'); assert.deepEqual(await sync(parent),[]);
  assert.equal((await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,managed])).rows[0].membership_id,manualReplacement);
- await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/050_company_group_rules.sql'),'utf8'));
+ for(const file of ['050_company_group_rules.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
  assert.equal((await rules.get(parent.id,owner.user,bearer)).rule.revision,'4'); assert.equal((await rules.history(parent.id,{},owner.user,bearer)).total,7);
 });
 test('a silently suppressed pending effect receipt rolls back the actual canonical membership rather than acknowledging a partial write', async () => {
@@ -243,4 +243,81 @@ test('nested rules use effective canonical child membership and remain ordinary 
  for (const collection of [child, parent, grandparent]) assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1 AND user_id=$2', [collection.id, userId])).rows[0].count, 1);
  await save(child, input({ enabled: false }), '1'); await sync(child); await sync(parent); await sync(grandparent);
  assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE user_id=$1', [userId])).rows[0].count, 0);
+});
+
+async function snapshot(collection) {
+ const {GroupSnapshotStore}=require('../GroupSnapshotStore');
+ return new GroupSnapshotStore(database).snapshot(collection.id,null,{refreshReviews:false});
+}
+async function changeDepartment(userId,department) {
+ const {UserMutator}=require('../UserMutator');const {userEtag,userFromRow}=require('../DirectoryUsers');
+ const current=(await pool.query('SELECT * FROM users WHERE id=$1',[userId])).rows[0];
+ const revalidate=async()=> (await new AuthorizationState(database).state(issuer,owner.user.sub)).tenant;
+ return new UserMutator(database,{issuer,revalidate}).update(userId,{department},userEtag(userFromRow(current)),owner.user,bearer);
+}
+test('attribute loss immediately removes human and app rule sources from live authorization and snapshots across three levels before cleanup',async()=>{
+ const child=await group('Live dynamic child');const parent=await group('Live nested parent');const root=await group('Live nested root');const userId=await person('Engineering');
+ const subject='live-group-person-'+userId;await pool.query('INSERT INTO identity_subject_links(issuer,subject,user_id) VALUES($1,$2,$3)',[issuer,subject,userId]);
+ await save(child);await save(parent,input({draft:{dynamic:null,childGroupIds:[child.id],excludedUserIds:[]}}));await save(root,input({draft:{dynamic:null,childGroupIds:[parent.id],excludedUserIds:[]}}));
+ const worker=await appWorker();await worker.queue(child.id);assert.equal((await worker.run()).job.status,'succeeded');await sync(parent);await sync(root);
+ const first=await snapshot(root);assert.deepEqual(first.memberIds,[userId]);assert.equal((await new AuthorizationState(database).state(issuer,subject)).memberships.length,3);
+ const physical=(await pool.query('SELECT id,revision FROM groups WHERE id=ANY($1::uuid[]) ORDER BY id',[[child.id,parent.id,root.id]])).rows;
+ await changeDepartment(userId,'Operations');
+ assert.deepEqual((await new AuthorizationState(database).state(issuer,subject)).memberships,[]);assert.equal((await new AuthorizationState(database).target('group',root.id,userId)).actorIsMember,true);
+ for(const collection of [child,parent,root]){const current=await snapshot(collection);assert.deepEqual(current.memberIds,[]);assert.deepEqual(current.inactiveMemberIds,[userId]);const preview=await rules.preview(collection.id,owner.user,bearer);assert.equal(preview.existing[0].effective,false);assert.equal(preview.existing[0].validUntil,null);}
+ const second=await snapshot(root);assert.ok(BigInt(second.revision)>BigInt(first.revision));
+ assert.deepEqual((await pool.query('SELECT id,revision FROM groups WHERE id=ANY($1::uuid[]) ORDER BY id',[[child.id,parent.id,root.id]])).rows,physical);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE user_id=$1',[userId])).rows[0].count,3);
+ await changeDepartment(userId,'Engineering');assert.deepEqual((await snapshot(root)).memberIds,[userId]);
+});
+test('removing the last real child link or changing a standing rule invalidates its materialized parent while retaining unrelated manual origins',async()=>{
+ let child=await group('Live manual child');let parent=await group('Live source parent');const nested=await person('Operations');const manual=await person('Operations');
+ child=await groups.add(child.id,{userId:nested},groupEtag(child),owner.user,bearer);parent=await groups.add(parent.id,{userId:manual},groupEtag(parent),owner.user,bearer);
+ const draft={dynamic:null,childGroupIds:[child.id],excludedUserIds:[]};await save(parent,input({draft}));await sync(parent);const first=await snapshot(parent);
+ await groups.removeMember(child.id,nested,groupEtag(child),owner.user,bearer);const second=await snapshot(parent);assert.deepEqual(second.memberIds,[manual]);assert.ok(BigInt(second.revision)>BigInt(first.revision));
+ const current=(await pool.query('SELECT id,revision FROM groups WHERE id=$1',[child.id])).rows[0];await groups.add(child.id,{userId:nested},groupEtag(current),owner.user,bearer);assert.deepEqual((await snapshot(parent)).memberIds,[manual,nested].sort());
+ await save(parent,input({draft,enabled:false}),'1');assert.deepEqual((await snapshot(parent)).memberIds,[manual]);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[parent.id])).rows[0].count,2);
+});
+test('source observation revisions isolate other tenants, survive retained deletion, remain exact and reject mixed read-committed observations',async()=>{
+ const parent=await group('Stable own live revision');await person('Engineering');await save(parent);await sync(parent);const first=await snapshot(parent);
+ const foreign=await activeCompany(database,schema,issuer);await creator.group({name:'Independent foreign group'},foreign.user,bearer);assert.equal((await snapshot(parent)).revision,first.revision);
+ const extra=await group('Retained own group');const added=await snapshot(parent);assert.ok(BigInt(added.revision)>BigInt(first.revision));await groups.remove(extra.id,groupEtag(extra),owner.user,bearer);assert.ok(BigInt((await snapshot(parent)).revision)>BigInt(added.revision));
+ const {GroupSnapshotStore}=require('../GroupSnapshotStore');let changed=false;const racing={transaction:operation=>database.transaction(client=>operation({query:async(sql,values)=>{
+  const result=await client.query(sql,values);if(!changed&&sql.includes('ORDER BY membership.user_id')){changed=true;await save(parent,input({enabled:false}),'1');}return result;
+ }}))};
+ await assert.rejects(new GroupSnapshotStore(racing).snapshot(parent.id,null,{refreshReviews:false}),{status:409});assert.equal(changed,true);assert.deepEqual((await snapshot(parent)).memberIds,[]);
+});
+test('unavailable original live source evidence and receiver changes fail closed before a positive snapshot',async()=>{
+ const parent=await group('Fail closed live source');await person('Engineering');await save(parent);await sync(parent);
+ await pool.query('ALTER TABLE identity_company_group_rule_effect_outbox DISABLE TRIGGER company_group_rule_effect_before');
+ await pool.query("UPDATE identity_company_group_rule_effect_outbox SET fingerprint=repeat('0',64)");
+ await pool.query('ALTER TABLE identity_company_group_rule_effect_outbox ENABLE TRIGGER company_group_rule_effect_before');
+ await assert.rejects(snapshot(parent),{code:'42501'});
+});
+test('nested sources inherit the latest valid alternative review deadline and revoke at expiry without a worker or renewed review',async()=>{
+ const {GroupMembershipReviews,reviewTag}=require('../GroupMembershipReviews');const authority=new AuthorizationState(database);
+ async function reviewer(role){const id=await person('Independent governance');const subject='live-reviewer-'+id;await pool.query('INSERT INTO identity_subject_links(issuer,subject,user_id) VALUES($1,$2,$3)',[issuer,subject,id]);await pool.query('INSERT INTO identity_role_assignments(user_id,role,reason) VALUES($1,$2,$3)',[id,role,'Explicit independent live-rule review duty']);const state=await authority.state(issuer,subject);const now=Math.floor(Date.now()/1000);return {actor_type:'user',iss:issuer,sub:subject,roles:state.roles,identity_authorization:state.context,jti:randomUUID(),exp:now+3600,auth_time:now,amr:['pwd','otp'],mfa_authorization:{schemaVersion:1,userId:id,revision:'1',authTime:now,methods:['pwd','otp']}};}
+ const manager=await reviewer('group-review-administrator');const voter=await reviewer('group-reviewer');const reviews=new GroupMembershipReviews(database,{revalidate:async()=>{}});
+ const child=await group('Short reviewed child');const other=await group('Long reviewed child');const parent=await group('Alternative live witnesses');const own=await group('Own shorter review');const dynamic=await group('Independent dynamic witness');const userId=await person('Engineering');
+ async function governed(collection,intervalSeconds){await reviews.create({groupId:collection.id,intervalSeconds,windowSeconds:60,reviewerUserIds:[voter.identity_authorization.userId],reason:'Actual independent live source review policy',acknowledgeEffects:true},manager,bearer);}
+ async function approve(collection){const lease=(await pool.query('SELECT lease.id FROM identity_membership_review_leases lease JOIN identity_membership_origins origin ON origin.membership_id=lease.membership_id WHERE origin.group_id=$1 AND origin.user_id=$2',[collection.id,userId])).rows[0];const before=await reviews.get(lease.id,voter);return reviews.decide(lease.id,reviewTag(before),{decision:'retain',reason:'Actual independent bounded live source approval',acknowledgeScope:true},voter,bearer);}
+ await governed(child,300);await governed(other,600);await governed(own,120);await save(child);await save(other);await sync(child);await sync(other);await approve(child);await approve(other);
+ const draft={dynamic:null,childGroupIds:[child.id,other.id].sort(),excludedUserIds:[]};await save(parent,input({draft}));await sync(parent);await save(own,input({draft}));await sync(own);await approve(own);await save(dynamic,input({draft:{...draft,dynamic:input().draft.dynamic}}));await sync(dynamic);
+ const first=await snapshot(parent);const longer=(await snapshot(other)).memberships[0].reviewDeadlineAt;const shorter=(await snapshot(child)).memberships[0].reviewDeadlineAt;const ownDeadline=(await pool.query('SELECT deadline_at FROM identity_membership_review_leases lease JOIN identity_membership_origins origin ON origin.membership_id=lease.membership_id WHERE origin.group_id=$1 AND origin.user_id=$2',[own.id,userId])).rows[0].deadline_at.toISOString();
+ assert.equal(first.memberships[0].reviewDeadlineAt,longer);assert.equal((await snapshot(own)).memberships[0].reviewDeadlineAt,ownDeadline);assert.equal((await snapshot(dynamic)).memberships[0].reviewDeadlineAt,null);
+ assert.equal((await rules.preview(parent.id,owner.user,bearer)).existing[0].validUntil,longer);
+ const physical=(await pool.query('SELECT revision FROM groups WHERE id=$1',[parent.id])).rows[0].revision;
+ async function advance(timestamp){await pool.query("CREATE OR REPLACE FUNCTION identity_membership_review_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT '"+new Date(Date.parse(timestamp)+1).toISOString()+"'::timestamptz $$");}
+ await advance(shorter);const alternate=await snapshot(parent);assert.deepEqual(alternate.memberIds,[userId]);assert.equal(alternate.memberships[0].reviewDeadlineAt,longer);assert.ok(BigInt(alternate.revision)>BigInt(first.revision));assert.deepEqual((await snapshot(own)).memberIds,[]);
+ await advance(longer);const expired=await snapshot(parent);assert.deepEqual(expired.memberIds,[]);assert.ok(BigInt(expired.revision)>BigInt(alternate.revision));assert.deepEqual((await snapshot(dynamic)).memberIds,[userId]);
+ assert.equal((await pool.query('SELECT revision FROM groups WHERE id=$1',[parent.id])).rows[0].revision,physical);assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE user_id=$1',[userId])).rows[0].count,5);
+});
+test('bounded live graph resolution never returns a partial positive when traversal is incomplete',async()=>{
+ const child=await group('Bounded child');const parent=await group('Bounded parent');const root=await group('Bounded root');const userId=await person('Engineering');await save(child);await save(parent,input({draft:{dynamic:null,childGroupIds:[child.id],excludedUserIds:[]}}));await save(root,input({draft:{dynamic:null,childGroupIds:[parent.id],excludedUserIds:[]}}));await sync(child);await sync(parent);await sync(root);
+ const membership=(await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[root.id,userId])).rows[0].membership_id;
+ await assert.rejects(pool.query('SELECT * FROM identity_membership_rule_resolve($1,ARRAY[]::uuid[],2)',[membership]),{code:'42501'});
+ assert.equal((await pool.query('SELECT remaining,deadline_at>clock_timestamp() AS allowed FROM identity_membership_rule_resolve($1,ARRAY[]::uuid[],3)',[membership])).rows[0].allowed,true);
+ await pool.query("CREATE OR REPLACE FUNCTION identity_company_group_rule_dynamic(setting identity_company_group_rules,target UUID) RETURNS BOOLEAN LANGUAGE sql AS $$ SELECT true $$");
+ await assert.rejects(snapshot(root),{code:'42501'});await assert.rejects(new AuthorizationState(database).state(issuer,owner.user.sub),{code:'42501'});
 });

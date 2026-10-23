@@ -70,3 +70,5 @@ OpenDirectory consists of approximately 30 microservices across three layers. Se
 For the supported SAML launch flow and external OIDC configuration, see the [OAuth provider README](../../services/core/oauth-provider/README.md). For Apple enrollment prerequisites and limits, see the [Apple MDM README](../../services/core/apple-mdm/README.md).
 
 [Own-company license groups](../features/company-license-groups.md) use identity-service canonical group snapshots and policy-service pool links/source-aware allocations. UI and CLI writes retain the original human owner session and current MFA.
+
+Identity 052 evaluates [current group-rule sources](../features/company-group-live-sources.md) for application authority and group-license observations before worker cleanup. Snapshot source revisions differ from physical group ETags; Policy retains its existing lease and hash checks.

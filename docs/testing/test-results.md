@@ -1114,3 +1114,34 @@ Die Integration erforderte `FOR NO KEY UPDATE` für den schon exklusiv ausgefüh
 Logs: `/tmp/od-group-app-unit-frozen.log`, `/tmp/od-group-app-final-core.log`, `/tmp/od-group-app-identity-pg-final-frozen.log`, `/tmp/od-group-app-cli.log`, `/tmp/od-group-app-ui-final.log`, `/tmp/od-group-app-types-final.log`, `/tmp/od-group-app-policy-contract-final.log`, `/tmp/od-group-app-contract-frozen.log` und `/tmp/od-group-app-browser-final-frozen.log`. Visuell geprüft: `/tmp/od-company-group-rule-automation-browser.png` und `/tmp/od-company-group-rule-app-history.png`. Der Produktionsbuild endet erfolgreich; die bestehende nicht fatale Next-Lockfile-Patchwarnung bleibt im Log. Getrennte Hintergrund-Inventaraufrufe ohne passende frische Inventar-MFA werden im Browser weiterhin korrekt abgelehnt. Keine Inventarberechtigung wurde für diesen Ablauf ergänzt.
 
 Unmittelbare effektive Quellenpropagation, externe Änderungsereignisse, tenantgebundene eigene App-Registerverwaltung, Mail-/Apple-/sonstige Provider und sämtliche übrigen offenen BR-/WF-/Betriebsabnahmen bleiben Teil des [Gesamtauftrags](../implementation-worklist.md). Zeitpläne und getrennte Gruppenschritte sind keine atomare Hierarchieänderung. Die bestehende allgemeine Blueprint-Offboarding-Browserlücke bleibt separat offen; keine Produktivdatenbank oder externe Plattform wurde verändert.
+
+## 23. Oktober 2026 — Aktuelle Gruppenquellen und vererbte Review-Fristen
+
+Die [aktuelle Quellenprüfung](../features/company-group-live-sources.md) verwendet Identity 052 und die bestehenden kanonischen Membership-/Konfigurationsbelege. Der neue Resolver prüft aktuelle Regelversion, Eligibility, Attribute, Untergruppen und unabhängige Reviews beim Berechtigungs-/Quellenlesen. Neue Links und tatsächliche Sitzrückgaben bleiben getrennte Abgleichschritte; dienstübergreifende Cache-Invalidierung und Ereigniszustellung sind damit nicht abgenommen.
+
+Die sechs neuen nativen Fälle belegen vor physischer Bereinigung: tatsächliche UserMutator-Attributänderung über drei Gruppenebenen mit menschlichen und echten App-Origins; Untergruppenentzug und Erhalt manueller Quellen; monotone eigene Quellenrevision nach retained Löschung und Isolierung anderer Tenants; Ablehnung gemischter Read-Committed-Beobachtungen; fehlende Original-/Pending-Belege; alternative Kind-Review-Fristen, eigene kürzere Frist und unabhängiger dynamischer Zeuge; sowie Ablehnung unvollständiger Traversierung und veränderter Receiver. Auflösung ist auf 16 Links und 1'024 besuchte Memberships je Wurzel begrenzt.
+
+Bestätigte Prüfungen:
+
+| Prüfung | Ergebnis |
+| --- | --- |
+| Identity Jest, sämtliche 62 Dateien | 1'200 bestanden |
+| Frontend Jest, sämtliche 119 Dateien | 2'968 bestanden |
+| CLI, sämtliche vier Dateien | 28 bestanden |
+| Policy OpenAPI und echter Snapshot-Empfänger | 135 bestanden |
+| Native Policy-Gruppenleases und Firmen-Lizenzgruppen, zwei Dateien | 102 bestanden |
+| Native Identity, gesamter Runner mit 22 Dateien | 737 Definitionen ausgeführt; sämtliche anfangs fehlgeschlagenen Fälle abschliessend erfolgreich wiederholt, genaue Abgrenzung unten |
+| Vollständige abschliessende Wiederholungen der betroffenen Dateien | Allgemeine Identity-Datei 130/130; kanonische Gruppen und Offboarding 54/54; Gruppenregeln 24/24 im kombinierten Lauf |
+| Vollständiger Frontend-Typecheck | bestanden |
+| Generierte OpenAPI / versionierte Datei | bytegleich, 1.25.0 |
+| Echter Chrome gegen neuen Produktionsbuild, tatsächlichen Issuer/Identity/Policy und reguläre Zeitpläne | 1/1 bestanden |
+
+Im Browser bleiben nach Deaktivierung zunächst beide echten App-Membership-Links gespeichert. Die zentrale Identity-Berechtigung enthält sie bereits nicht mehr, und die ursprüngliche Owner-API sowie die Oberfläche zeigen `effective:false`/`validUntil:null`. Anschliessend entfernt der reguläre 60-Sekunden-App-Zeitplan die Links; ursprüngliche App-/Regelgeschichte bleibt sichtbar. `/tmp/od-company-group-live-source-browser.png` wurde visuell geprüft. Keine menschliche MFA oder Providerwirkung wird für den Worker hergestellt.
+
+Migration-Replay-Fixtures wenden nach älteren Creation-/Membership-/Review-Migrationen auch die tatsächlich benötigten nachfolgenden 051/052 an; veraltete Receiver werden nicht akzeptiert. Die beiden Fehlerfälle mit deaktivierten kanonischen Membership-/Commit-Guards scheitern nun ausdrücklich bei der zentralen Authority mit SQLSTATE 42501 und der ursprünglichen Receiver-Meldung, bevor die früheren lokalen Receiver erreicht werden. Physische Links und fehlende Entzugsbelege werden weiterhin ausdrücklich geprüft.
+
+Der vollständige Runner lieferte zunächst 627/737: Eine alte Fehlercode-Erwartung sowie eine ungeschützte Hilfs-Uhrtabelle verursachten die Fehler; die liegen gebliebene Tabelle löste 109 Folgefehler derselben Datei aus. Die Test-Uhren liegen jetzt in einem getrennten Fixture-Schema. Ein innerhalb einer laufenden Transaktion ersetzter Funktionskörper war als Uhr ungeeignet: Die externe Verbindung sah die neue Funktion, die laufende Transaktion noch den bisherigen Körper. Die getrennte Uhrtabelle erhält die echte Änderung während des finalen Checks. Der allgemeine Identity-Lauf besteht abschliessend mit 130/130, die Gruppen-/Offboarding-Wiederholung mit 54/54. Alle 110 ursprünglichen Fehlerdefinitionen besitzen einen erfolgreichen Abschlusslauf. Es wird kein einzelner komplett grüner 737er-Lauf behauptet. Die physische `actorIsMember`-Konfliktprüfung bleibt erhalten und erlaubt ausstehenden oder unwirksamen eigenen Mitgliedern keine App-Selbstadministration.
+
+Logs: `/tmp/od-live-unit-end.log`, `/tmp/od-live-ui-full.log`, `/tmp/od-live-cli-full.log`, `/tmp/od-live-policy-unit.log`, `/tmp/od-live-policy-native.log`, `/tmp/od-live-rules-native.log`, `/tmp/od-live-type-final.log`, `/tmp/od-live-browser-final.log`; vollständige Identity-Regression unter `/tmp/od-live-identity-final.log`, abschliessende Wiederholungen unter `/tmp/od-live-negative-final.log`, `/tmp/od-live-identity-last.log` und `/tmp/od-live-postgres-ok.log`. Der Produktionsbuild endet erfolgreich; die bestehende nicht fatale Next-Lockfile-Patchwarnung und abgelehnte Hintergrund-Inventaraufrufe ohne passende frische Inventar-MFA bleiben im Browserlog sichtbar. Zwei frühe Clusterstarts scheiterten vor Testausführung am langen macOS-Socketpfad; kurze Clusterlabels funktionieren. Frühe Jest-Läufe mit einzelnen abweichenden Routing-Statuscodes wurden isoliert und abschliessend vollständig erfolgreich geprüft; deren Ursache ist nicht nachgewiesen.
+
+Der vollständige BR-/WF-Auftrag bleibt aktiv. Keine Live-Abnahme bei Apple/Microsoft, kein produktiver Linux-/Restore-/Lasttest und keine universelle sofortige dienstübergreifende Revokation werden durch diesen Teilprozess behauptet.

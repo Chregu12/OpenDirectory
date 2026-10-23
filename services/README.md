@@ -147,3 +147,4 @@ When adding new services:
 ## 📄 License
 
 Part of the OpenDirectory UEM Platform - Enterprise-grade endpoint management solution.
+Identity 052 adds [live group-rule source checks](../docs/features/company-group-live-sources.md), inherited review deadlines and monotonic source observations. Physical group cleanup and license-seat reconciliation remain separate jobs; cross-service cached invalidation and provider effects remain open.

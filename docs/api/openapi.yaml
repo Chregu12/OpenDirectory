@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.24.0",
+    "version": "1.25.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, employee credential provisioning, external legal verification or production SaaS acceptance."
   },
   "security": [
@@ -10352,7 +10352,7 @@
       "get": {
         "operationId": "readOwnTenantLicenseGroupSource",
         "summary": "Read a minimal retained own-tenant license-groups observation",
-        "description": "Original live canonical human and current duty required before target lookup; only the retained home tenant is visible. Exact lowercase UUID, empty body/query and no API key. Claimed JWT admin aliases, caller tenant selectors and company ownership alone do not grant a duty. Revalidate the original bearer, actor, tenant incarnation and deadline before releasing the result. Responses are minimal source observations, not authorization to allocate licenses or publish policies. Protocol 1 is mandatory at receivers; no downgrade fallback. Canonical duty: licenses.groups.read. Controlled own-group review refresh is allowed. A separate exact group-source-consent workload needs an unexpired explicit group grant from the group home tenant; no general group read. Foreign retained member IDs fail closed, including historical/deleted identities. DTO schema 3 and directory lease deadlines are unchanged.",
+        "description": "Original live canonical human and current duty required before target lookup; only the retained home tenant is visible. Exact lowercase UUID, empty body/query and no API key. Claimed JWT admin aliases, caller tenant selectors and company ownership alone do not grant a duty. Revalidate the original bearer, actor, tenant incarnation and deadline before releasing the result. Responses are minimal source observations, not authorization to allocate licenses or publish policies. Protocol 1 is mandatory at receivers; no downgrade fallback. Canonical duty: licenses.groups.read. Controlled own-group review refresh is allowed. A separate exact group-source-consent workload needs an unexpired explicit group grant from the group home tenant; no general group read. Foreign retained member IDs fail closed, including historical/deleted identities. DTO schema 3 retains the 300-second directory lease. Current saved rule and nested source validity are evaluated on read; inherited review deadlines additionally bound the member. Source revisions include upstream rule changes. Cross-service cached lease invalidation and physical seat return are separate.",
         "parameters": [
           {
             "name": "id",
@@ -32791,7 +32791,7 @@
     "/api/groups/{id}/rule": {
       "get": {
         "operationId": "readOwnCompanyGroupRule",
-        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended saved rule execution uses the separately explicitly granted directory.groups.reconcile job action; these owner endpoints remain manual. Immediate source propagation and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
+        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended saved rule execution uses the separately explicitly granted directory.groups.reconcile job action; these owner endpoints remain manual. Current rule version, eligibility, literal attributes and effective child witnesses are checked at membership reads. Removed sources stop authorizing before physical cleanup; inherited review deadlines bound each live witness. New memberships and physical license-seat returns still require reconciliation. Cross-service cached lease invalidation and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
         "security": [
           {
             "bearerAuth": []
@@ -32848,7 +32848,7 @@
       },
       "put": {
         "operationId": "configureOwnCompanyGroupRule",
-        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended saved rule execution uses the separately explicitly granted directory.groups.reconcile job action; these owner endpoints remain manual. Immediate source propagation and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
+        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended saved rule execution uses the separately explicitly granted directory.groups.reconcile job action; these owner endpoints remain manual. Current rule version, eligibility, literal attributes and effective child witnesses are checked at membership reads. Removed sources stop authorizing before physical cleanup; inherited review deadlines bound each live witness. New memberships and physical license-seat returns still require reconciliation. Cross-service cached lease invalidation and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
         "security": [
           {
             "bearerAuth": []
@@ -32959,7 +32959,7 @@
     "/api/groups/{id}/rule/preview": {
       "get": {
         "operationId": "previewOwnCompanyGroupRule",
-        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended saved rule execution uses the separately explicitly granted directory.groups.reconcile job action; these owner endpoints remain manual. Immediate source propagation and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
+        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended saved rule execution uses the separately explicitly granted directory.groups.reconcile job action; these owner endpoints remain manual. Current rule version, eligibility, literal attributes and effective child witnesses are checked at membership reads. Removed sources stop authorizing before physical cleanup; inherited review deadlines bound each live witness. New memberships and physical license-seat returns still require reconciliation. Cross-service cached lease invalidation and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
         "security": [
           {
             "bearerAuth": []
@@ -33018,7 +33018,7 @@
     "/api/groups/{id}/rule/sync": {
       "post": {
         "operationId": "reconcileOwnCompanyGroupRule",
-        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended saved rule execution uses the separately explicitly granted directory.groups.reconcile job action; these owner endpoints remain manual. Immediate source propagation and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects. At most 25 sorted captured targets per page and 10000 overall. Keep the exact observation and follow nextCursor. Direct manual memberships are preserved. Only actual rule-created membership UUIDs can be removed. A changed rule version or recipient generation requires removal/reissue; no silent review renewal. No atomic transaction over all members and no automatic uncertain write retry.",
+        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended saved rule execution uses the separately explicitly granted directory.groups.reconcile job action; these owner endpoints remain manual. Current rule version, eligibility, literal attributes and effective child witnesses are checked at membership reads. Removed sources stop authorizing before physical cleanup; inherited review deadlines bound each live witness. New memberships and physical license-seat returns still require reconciliation. Cross-service cached lease invalidation and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects. At most 25 sorted captured targets per page and 10000 overall. Keep the exact observation and follow nextCursor. Direct manual memberships are preserved. Only actual rule-created membership UUIDs can be removed. A changed rule version or recipient generation requires removal/reissue; no silent review renewal. No atomic transaction over all members and no automatic uncertain write retry.",
         "security": [
           {
             "bearerAuth": []
@@ -33120,7 +33120,7 @@
     "/api/groups/{id}/rule/history": {
       "get": {
         "operationId": "readOwnCompanyGroupRuleHistory",
-        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended saved rule execution uses the separately explicitly granted directory.groups.reconcile job action; these owner endpoints remain manual. Immediate source propagation and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
+        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended saved rule execution uses the separately explicitly granted directory.groups.reconcile job action; these owner endpoints remain manual. Current rule version, eligibility, literal attributes and effective child witnesses are checked at membership reads. Removed sources stop authorizing before physical cleanup; inherited review deadlines bound each live witness. New memberships and physical license-seat returns still require reconciliation. Cross-service cached lease invalidation and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
         "security": [
           {
             "bearerAuth": []
@@ -35139,7 +35139,7 @@
           "revision": {
             "type": "string",
             "pattern": "^[1-9][0-9]{0,18}$",
-            "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never a JSON number."
+            "description": "Monotonic source observation revision. Rule-managed groups include retained own-tenant source changes and passed review deadlines; distinct from physical group ETags. Exact BIGINT string."
           },
           "deleted": {
             "type": "boolean"
@@ -35202,7 +35202,8 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Effective source deadline including nested review witnesses: minimum of own deadline and latest valid alternative; null means no finite review bound."
                 }
               }
             }
@@ -45873,7 +45874,9 @@
               "required": [
                 "userId",
                 "membershipId",
-                "managed"
+                "managed",
+                "effective",
+                "validUntil"
               ],
               "properties": {
                 "userId": {
@@ -45888,6 +45891,20 @@
                 },
                 "managed": {
                   "type": "boolean"
+                },
+                "effective": {
+                  "type": "boolean"
+                },
+                "validUntil": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }

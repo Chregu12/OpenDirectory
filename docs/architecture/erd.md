@@ -913,3 +913,5 @@ erDiagram
 ```
 
 Die ersten drei Tabellen gehören Identity, die anderen Policy. Job-/Grant-/Tenant-IDs in einem Policy-Zyklus sind separat live gebundene Quellen, keine Cross-DB-FKs. Zyklus und Seiten sind je Job/Retry-Epoche/Zyklus und Seitenordinal eindeutig; Seite 0 der Pending-Outbox belegt die Erfassung. Seiten behalten echte geordnete Einzelresultate und Original-Actor/-Gruppenhash, nicht einen zweiten Sitzbestand. `identity_automation_jobs.progress` ist nur der bestätigte Fortschritt dieser getrennten Ausführung. [Modell und Grenzen](domain-model.md#appgebundener-lizenzabgleich-identity-049-und-policy-029), [ausführbarer Ablauf](../features/company-license-automation.md).
+
+Identity 052 ergänzt keine Tabelle: Die [aktuelle Quellenprüfung](../features/company-group-live-sources.md) verwendet vorhandene Originalbelege, retained Revisionen und Review-Fristen. Snapshot-Quellenrevision und physischer Gruppen-ETag bleiben getrennt.

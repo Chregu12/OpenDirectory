@@ -13,7 +13,7 @@ class CompanyGroupRules {
   identifier(groupId); const source = await this.authority.read(user, authorization);
   const result = await this.database.transaction(async client => {
    await client.query("SET LOCAL timezone='UTC';SET LOCAL lock_timeout='3s';SET LOCAL statement_timeout='10s'");
-   await client.query('SELECT identity_company_group_rule_receiving()');
+   await client.query('SELECT identity_company_group_rule_live_receiving()');
    const owner = await ownerState(client, source.actorUserId);
    if (!owner?.active || owner.tenant_id !== source.tenant.id || owner.issuer !== source.issuer || owner.subject !== source.subject) fail(403, 'Actual company owner required for group rules');
    const group = (await client.query("SELECT id,name,revision FROM groups WHERE id=$1 AND identity_tenant_id('group',id)=$2", [groupId, source.tenant.id])).rows[0];
@@ -77,7 +77,8 @@ class CompanyGroupRules {
    if (existing.length > 10000) fail(409, 'Complete group-rule membership inventory exceeds 10000 users');
    const observation = this.observation(row, desired);
    return { ...envelope(source), groupId, groupName: group.name, groupRevision: String(group.revision), ruleRevision: String(row.revision), enabled: row.enabled, observation, executionMode: 'manual',
-    desired, existing: existing.map(item => ({ userId: item.user_id, membershipId: item.membership_id, managed: !!item.rule_revision })), additions: desired.filter(item => !existing.some(member => member.user_id === item.userId)).length };
+    desired, existing: existing.map(item => ({ userId: item.user_id, membershipId: item.membership_id, managed: !!item.rule_revision, effective: item.effective,
+     validUntil: item.effective && item.effective_until ? item.effective_until.toISOString() : null })), additions: desired.filter(item => !existing.some(member => member.user_id === item.userId)).length };
   }, { readOnly: true });
  }
  observation(row, desired) { return createHash('sha256').update(JSON.stringify({ revision: String(row.revision), desired })).digest('hex'); }
@@ -87,9 +88,12 @@ class CompanyGroupRules {
    LEFT JOIN identity_membership_origins origin ON origin.membership_id=membership.membership_id WHERE membership.group_id=$1
     AND(account.id IS NULL OR identity_tenant_id('user',account.id) IS DISTINCT FROM $2::uuid OR origin.group_id IS DISTINCT FROM membership.group_id OR origin.user_id IS DISTINCT FROM account.id)) AS coherent`, [groupId, tenantId])).rows[0]?.coherent;
   if (coherent !== true) fail(503, 'Complete own canonical group-rule membership inventory unavailable');
-  return (await client.query(`SELECT membership.user_id,membership.membership_id,origin.eligibility_revision,effect.rule_revision FROM group_members membership JOIN users account ON account.id::text=membership.user_id
+  return (await client.query(`SELECT membership.user_id,membership.membership_id,origin.eligibility_revision,effect.rule_revision,
+   identity_tenant_user_enabled(account.id) AND effective.deadline_at>identity_membership_review_now() AS effective,
+   CASE WHEN effective.deadline_at IN('infinity'::timestamptz,'-infinity'::timestamptz) THEN NULL ELSE effective.deadline_at END AS effective_until FROM group_members membership JOIN users account ON account.id::text=membership.user_id
    JOIN identity_membership_origins origin ON origin.membership_id=membership.membership_id
    LEFT JOIN identity_company_group_rule_effects effect ON effect.membership_id=membership.membership_id AND effect.action='member-add' AND effect.group_id=membership.group_id
+   CROSS JOIN LATERAL(SELECT identity_membership_rule_deadline(membership.membership_id) AS deadline_at OFFSET 0) effective
    WHERE membership.group_id=$1 AND identity_tenant_id('user',account.id)=$2 ORDER BY membership.user_id LIMIT 10001`, [groupId, tenantId])).rows;
  }
  async effectsValid(client, groupId, tenantId) {

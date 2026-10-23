@@ -14,6 +14,7 @@ const { RoleAuthentication, policyEtag } = require('../RoleAuthentication');
 const { PrivilegedAccessPolicy, activationEtag } = require('../PrivilegedAccessPolicy');
 
 const schema = `identity_test_${randomUUID().replaceAll('-', '')}`;
+const clockSchema = schema + '_clock';
 const administration = new Pool({ connectionString: process.env.IDENTITY_TEST_DATABASE_URL, max: 1 });
 let database;
 let snapshots;
@@ -100,9 +101,9 @@ test('source consent audit loss rolls back configuration instead of creating an 
  assert.equal((await database.query('SELECT count(*)::int AS count FROM identity_group_source_grants')).rows[0].count,0);
 });
 test('source authorization expiring during the final live check cannot commit and its known deadline cannot produce a snapshot',async()=>{
- await database.query('CREATE TABLE owned_source_clock(offset_seconds integer NOT NULL);INSERT INTO owned_source_clock VALUES(0)');await database.query("CREATE OR REPLACE FUNCTION identity_group_source_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT clock_timestamp()+offset_seconds*interval '1 second' FROM owned_source_clock; $$");
- const fixture=await sourceFixture();fixture.state.onCheck=async count=>{if(count===3)await database.query('UPDATE owned_source_clock SET offset_seconds=3601');};
- try{await assert.rejects(fixture.create(),error=>error.status===409||error.code==='23514');assert.equal((await database.query('SELECT count(*)::int AS count FROM identity_group_source_grants')).rows[0].count,0);}finally{await database.query('DROP TABLE owned_source_clock');}
+ await administration.query('CREATE TABLE '+clockSchema+'.source_clock(offset_seconds integer NOT NULL);INSERT INTO '+clockSchema+'.source_clock VALUES(0)');await database.query("CREATE OR REPLACE FUNCTION identity_group_source_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT clock_timestamp()+offset_seconds*interval '1 second' FROM "+clockSchema+".source_clock; $$");
+ const fixture=await sourceFixture();fixture.state.onCheck=async count=>{if(count===3)await administration.query('UPDATE '+clockSchema+'.source_clock SET offset_seconds=3601');};
+ try{await assert.rejects(fixture.create(),error=>error.status===409||error.code==='23514');assert.equal((await database.query('SELECT count(*)::int AS count FROM identity_group_source_grants')).rows[0].count,0);}finally{await database.query('CREATE OR REPLACE FUNCTION identity_group_source_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT clock_timestamp(); $$');await administration.query('DROP TABLE '+clockSchema+'.source_clock');}
 });
 test('concurrent source consent writers have one exact current consent and one audited winner',async()=>{
  const fixture=await sourceFixture();const results=await Promise.allSettled([fixture.create(),fixture.create()]);assert.equal(results.filter(value=>value.status==='fulfilled').length,1);assert.equal((await database.query('SELECT count(*)::int AS count FROM identity_group_source_grants')).rows[0].count,1);assert.equal((await database.query('SELECT count(*)::int AS count FROM identity_group_source_audit')).rows[0].count,1);
@@ -196,7 +197,7 @@ test('membership incarnations are immutable and survive migration reapplication,
   await assert.rejects(database.query('UPDATE group_members SET membership_id=gen_random_uuid() WHERE group_id=$1',[groupId]));
   await database.query(fs.readFileSync(path.join(__dirname,'../../migrations/009_application_memberships.sql'),'utf8'));
   assert.equal((await database.query('SELECT membership_id FROM group_members WHERE group_id=$1',[groupId])).rows[0].membership_id,first);
-  await database.query(fs.readFileSync(path.join(__dirname,'../../migrations/028_directory_group_mutations.sql'),'utf8'));
+  await database.query(fs.readFileSync(path.join(__dirname,'../../migrations/028_directory_group_mutations.sql'),'utf8'));for(const file of ['051_company_group_rule_automation.sql','052_live_company_group_rules.sql'])await database.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
   await database.write('DELETE FROM group_members WHERE group_id=$1 AND user_id=$2',[groupId,userId],'membership-operator'); await add(groupId,userId);
   assert.notEqual((await database.query('SELECT membership_id FROM group_members WHERE group_id=$1',[groupId])).rows[0].membership_id,first);
 });
@@ -228,7 +229,7 @@ test('a membership removed between canonical identity and membership reads canno
 });
 
 before(async () => {
-  await administration.query(`CREATE SCHEMA ${schema}`);
+  await administration.query(`CREATE SCHEMA ${schema}`);await administration.query('CREATE SCHEMA '+clockSchema);
   const url = new URL(process.env.IDENTITY_TEST_DATABASE_URL);
   url.searchParams.set('options', `-c search_path=${schema},public`);
   process.env.DATABASE_URL = url.toString();
@@ -280,7 +281,7 @@ after(async () => {
     if (listener) { listener.closeAllConnections(); await new Promise(resolve => listener.close(resolve)); }
   }
   if (database) await database.pool.end();
-  await administration.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+  await administration.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await administration.query('DROP SCHEMA IF EXISTS '+clockSchema+' CASCADE');
   await administration.end();
 });
 
@@ -901,7 +902,7 @@ test('review audit failure cannot confirm a cutoff projection with an unchanged 
 });
 test('review origin and history cannot be overwritten, deleted or extended through raw SQL',async()=>{
  const fixture=await membershipFixture();for(const sql of ['UPDATE identity_membership_origins SET created_by=NULL','DELETE FROM identity_membership_review_policies','UPDATE identity_membership_review_leases SET deadline_at=deadline_at+interval \'1 day\'','DELETE FROM identity_membership_review_audit'])await assert.rejects(database.query(sql),error=>error.code==='42501');
- const before=(await database.query('SELECT * FROM identity_membership_review_leases')).rows[0];await database.query(fs.readFileSync(path.join(__dirname,'../../migrations/019_group_membership_reviews.sql'),'utf8'));assert.deepEqual((await database.query('SELECT * FROM identity_membership_review_leases')).rows[0],before);
+ const before=(await database.query('SELECT * FROM identity_membership_review_leases')).rows[0];await database.query(fs.readFileSync(path.join(__dirname,'../../migrations/019_group_membership_reviews.sql'),'utf8'));for(const file of ['029_scoped_group_reviews.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql'])await database.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));assert.deepEqual((await database.query('SELECT * FROM identity_membership_review_leases')).rows[0],before);
 });
 test('adding the only voter to its governed group cannot eliminate the independent path or commit an awaiting source',async()=>{
  const fixture=await membershipFixture(false);assert.equal((await groupApi('POST','/api/groups/'+fixture.groupId+'/members',fixture.creator,{userId:fixture.voter.userId})).status,409);assert.equal((await database.query('SELECT count(*)::int AS count FROM group_members WHERE group_id=$1',[fixture.groupId])).rows[0].count,0);assert.equal((await database.query('SELECT count(*)::int AS count FROM identity_membership_origins WHERE group_id=$1',[fixture.groupId])).rows[0].count,0);
@@ -911,9 +912,10 @@ test('original group-writer issuer loss after insertion rolls back the membershi
  await assert.rejects(store.add(fixture.groupId,fixture.owner.userId,{...fixture.creator,iss:issuer},'Bearer owned'),error=>error.status===401);assert.equal((await database.query('SELECT count(*)::int AS count FROM group_members WHERE group_id=$1',[fixture.groupId])).rows[0].count,0);assert.equal((await database.query('SELECT revision FROM groups WHERE id=$1',[fixture.groupId])).rows[0].revision,before);
 });
 test('a first approval crossing its original response deadline during the final issuer call cannot open membership',async()=>{
- await database.query('CREATE TABLE owned_membership_clock(offset_seconds integer NOT NULL)');await database.query('INSERT INTO owned_membership_clock VALUES(0)');await database.query("CREATE OR REPLACE FUNCTION identity_membership_review_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT clock_timestamp()+offset_seconds*interval '1 second' FROM owned_membership_clock; $$");
- const fixture=await membershipFixture(false);assert.equal((await groupApi('POST','/api/groups/'+fixture.groupId+'/members',fixture.creator,{userId:fixture.owner.userId})).status,200);const row=(await membershipRows(fixture))[0];let calls=0;const store=new(require('../GroupMembershipReviews').GroupMembershipReviews)(database,{revalidate:async()=>{if(++calls===2)await database.query('UPDATE owned_membership_clock SET offset_seconds=61');}});
- await assert.rejects(store.decide(row.id,`"od-membership-review:${row.id}:1:1"`,{decision:'retain',reason:membershipReason,acknowledgeScope:true},{...fixture.voter,iss:issuer},'Bearer owned'),error=>error.status===409);assert.equal((await database.query('SELECT version FROM identity_membership_review_leases WHERE id=$1',[row.id])).rows[0].version,'1');assert.deepEqual((await new AuthorizationState(database).state(issuer,fixture.owner.sub)).memberships,[]);
+ await administration.query('CREATE TABLE '+clockSchema+'.membership_clock(offset_seconds integer NOT NULL);INSERT INTO '+clockSchema+'.membership_clock VALUES(0)');await database.query("CREATE OR REPLACE FUNCTION identity_membership_review_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT clock_timestamp()+offset_seconds*interval '1 second' FROM "+clockSchema+".membership_clock; $$");
+ const fixture=await membershipFixture(false);assert.equal((await groupApi('POST','/api/groups/'+fixture.groupId+'/members',fixture.creator,{userId:fixture.owner.userId})).status,200);const row=(await membershipRows(fixture))[0];let calls=0;const store=new(require('../GroupMembershipReviews').GroupMembershipReviews)(database,{revalidate:async()=>{if(++calls===2)await administration.query('UPDATE '+clockSchema+'.membership_clock SET offset_seconds=61');}});
+ try{await assert.rejects(store.decide(row.id,`"od-membership-review:${row.id}:1:1"`,{decision:'retain',reason:membershipReason,acknowledgeScope:true},{...fixture.voter,iss:issuer},'Bearer owned'),error=>error.status===409);assert.equal((await database.query('SELECT version FROM identity_membership_review_leases WHERE id=$1',[row.id])).rows[0].version,'1');assert.deepEqual((await new AuthorizationState(database).state(issuer,fixture.owner.sub)).memberships,[]);}
+ finally{await membershipTime(0);await administration.query('DROP TABLE '+clockSchema+'.membership_clock');}
 });
 test('removed historical memberships cannot crowd a current waiting target out of the bounded assigned queue',async()=>{
  const fixture=await membershipFixture(false);const store=new(require('../GroupMembershipReviews').GroupMembershipReviews)(database,{revalidate:async()=>{}});const actor={...fixture.creator,iss:issuer};

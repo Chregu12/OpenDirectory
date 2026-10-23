@@ -61,6 +61,7 @@ class AuthorizationState {
           AND binding.tenant_id=tenant.id WHERE identity_subject_links.issuer=$1 AND identity_subject_links.subject=$2`, [issuer, subject]);
       const row = result.rows[0];
       if (!row || row.enabled !== true) return { schemaVersion: 1, issuer, subject, active: false };
+      await client.query('SELECT identity_company_group_rule_live_receiving()');
       const { roles, rolesRevision, authentication } = await readRoleState(client, row.id);
       const memberships = (await client.query(`SELECT group_members.group_id,group_members.membership_id FROM group_members
         JOIN groups ON groups.id=group_members.group_id WHERE group_members.user_id=$1 AND identity_membership_review_allowed(group_members.membership_id)

@@ -11,7 +11,7 @@ const ruleSchema = z.object({ groupId: uuid, tenantId: uuid, revision, enabled: 
 const envelope = { schemaVersion: z.literal(1), companyGroupRuleProtocol: z.literal(1), actorUserId: uuid, tenantId: uuid };
 const pageSchema = z.object({ ...envelope, groupId: uuid, rule: ruleSchema.nullable(), etag: z.string(), executionMode: z.literal('manual') }).strict();
 const previewSchema = z.object({ ...envelope, groupId: uuid, groupName: z.string().max(255), groupRevision: revision, ruleRevision: revision, enabled: z.boolean(), observation: sha, executionMode: z.literal('manual'),
- desired: z.array(z.object({ userId: uuid, eligibilityRevision: revision }).strict()).max(10000), existing: z.array(z.object({ userId: uuid, membershipId: uuid, managed: z.boolean() }).strict()).max(10000), additions: z.number().int().min(0).max(10000) }).strict();
+ desired: z.array(z.object({ userId: uuid, eligibilityRevision: revision }).strict()).max(10000), existing: z.array(z.object({ userId: uuid, membershipId: uuid, managed: z.boolean(), effective: z.boolean(), validUntil: stamp.nullable() }).strict()).max(10000), additions: z.number().int().min(0).max(10000) }).strict();
 const resultSchema = z.object({ userId: uuid, status: z.enum(['added','retained','manual-retained','removed','awaiting-review','blocked']), code: z.union([z.literal(403),z.literal(404),z.literal(409),z.literal(428)]).nullable() }).strict().refine(row => row.status === 'blocked' ? row.code !== null : row.code === null);
 const receiptSchema = z.object({ ...envelope, outcome: z.enum(['applied','already_applied']), rule: ruleSchema }).strict();
 const syncSchema = z.object({ ...envelope, groupId: uuid, ruleRevision: revision, observation: sha, results: z.array(resultSchema).max(25), nextCursor: uuid.nullable(), hasBlocked: z.boolean() }).strict();
@@ -39,7 +39,7 @@ export const companyGroupRules = {
  async preview(page: CompanyGroupRulePage): Promise<CompanyGroupRulePreview> {
   const response = await api.get(base(page.groupId) + '/preview'); if (response.status !== 200) fail(); const value = previewSchema.parse(response.data); checked(value as CompanyGroupRulePreview, page.groupId, page.actorUserId, page.tenantId);
   if (value.ruleRevision !== page.rule?.revision || value.enabled !== page.rule.enabled || new Set(value.desired.map(row => row.userId)).size !== value.desired.length || new Set(value.existing.map(row => row.userId)).size !== value.existing.length
-   || value.additions !== value.desired.filter(row => !value.existing.some(member => member.userId === row.userId)).length) fail(); return value as CompanyGroupRulePreview;
+   || value.existing.some(row => !row.effective && row.validUntil !== null) || value.additions !== value.desired.filter(row => !value.existing.some(member => member.userId === row.userId)).length) fail(); return value as CompanyGroupRulePreview;
  },
  async history(page: CompanyGroupRulePage, number = 1): Promise<CompanyGroupRuleHistory> {
   const response = await api.get(base(page.groupId) + '/history', { params: { page: number } }); if (response.status !== 200) fail(); const value = historySchema.parse(response.data); checked(value as CompanyGroupRuleHistory, page.groupId, page.actorUserId, page.tenantId);

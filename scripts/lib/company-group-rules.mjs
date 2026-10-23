@@ -25,7 +25,7 @@ export function createGroupRuleClient(client) {
    const current = await api.get(groupId); const value = checked(await request('GET', path(groupId) + '/preview', undefined, { maxResponseBytes: 4 * 1024 * 1024 }), groupId, current);
    if (value.executionMode !== 'manual' || value.ruleRevision !== current.rule?.revision || typeof value.observation !== 'string' || !/^[a-f0-9]{64}$/.test(value.observation)
     || !Array.isArray(value.desired) || value.desired.length > 10000 || !Array.isArray(value.existing) || value.existing.length > 10000 || new Set(value.desired.map(row => row.userId)).size !== value.desired.length || new Set(value.existing.map(row => row.userId)).size !== value.existing.length) throw new Error('Complete group rule observation unconfirmed');
-   for (const row of [...value.desired,...value.existing]) identifier(row.userId); for (const row of value.existing) { identifier(row.membershipId); if (typeof row.managed !== 'boolean') throw new Error('Group rule provenance unconfirmed'); } return value;
+   for (const row of [...value.desired,...value.existing]) identifier(row.userId); for (const row of value.existing) { identifier(row.membershipId); if (typeof row.managed !== 'boolean' || typeof row.effective !== 'boolean' || row.validUntil !== null && (typeof row.validUntil !== 'string' || !Number.isFinite(Date.parse(row.validUntil)) || new Date(row.validUntil).toISOString() !== row.validUntil) || !row.effective && row.validUntil !== null) throw new Error('Group rule provenance unconfirmed'); } return value;
   },
   async sync(groupId, reason) {
    reason = text(reason,10,500);

@@ -24,14 +24,14 @@ test('a malformed group identifier cannot reach storage', async () => {
 });
 
 test('oversized groups fail explicitly instead of returning a truncated allocation source', async () => {
-  const query = jest.fn().mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{observed_at:new Date()}]}).mockResolvedValueOnce({ rows: [{ id: groupId, revision: '9007199254740993' }] }).mockResolvedValueOnce({rows:[{coherent:true}]}).mockResolvedValueOnce({ rows: Array.from({ length: 10001 }, () => ({})) });
+  const query = jest.fn().mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{observed_at:new Date()}]}).mockResolvedValueOnce({ rows: [{ id: groupId, revision: '9007199254740993', source_revision: '9007199254740993' }] }).mockResolvedValueOnce({rows:[{coherent:true}]}).mockResolvedValueOnce({ rows: Array.from({ length: 10001 }, () => ({})) });
   const database = { transaction: jest.fn(async operation => operation({ query })) };
   await expect(new GroupSnapshotStore(database).snapshot(groupId)).rejects.toMatchObject({ status: 413 });
   expect(database.transaction).toHaveBeenCalledWith(expect.any(Function));
 });
 
 test('large revisions remain exact strings rather than imprecise JavaScript numbers', async () => {
-  const query = jest.fn().mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{observed_at:new Date()}]}).mockResolvedValueOnce({ rows: [{ id: groupId, revision: '9007199254740993' }] }).mockResolvedValueOnce({rows:[{coherent:true}]}).mockResolvedValueOnce({ rows: [] });
+  const query = jest.fn().mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{observed_at:new Date()}]}).mockResolvedValueOnce({ rows: [{ id: groupId, revision: '9007199254740993', source_revision: '9007199254740993' }] }).mockResolvedValueOnce({rows:[{coherent:true}]}).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({rows:[{revision:'9007199254740993'}]});
   const result = await new GroupSnapshotStore({ transaction: operation => operation({ query }) }).snapshot(groupId);
   expect(result.revision).toBe('9007199254740993');
 });
@@ -41,6 +41,10 @@ test.each([false, undefined])('foreign or unavailable retained membership owners
   expect(query).toHaveBeenCalledTimes(4);
 });
 test('only explicitly effective reviewed members enter the license source, without reporting pending humans disabled globally',async()=>{
- const userId='22222222-2222-4222-8222-222222222222';const query=jest.fn().mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{observed_at:new Date()}]}).mockResolvedValueOnce({rows:[{id:groupId,name:'Reviewed group',revision:'1'}]}).mockResolvedValueOnce({rows:[{coherent:true}]}).mockResolvedValueOnce({rows:[{id:userId,user_id:userId,enabled:true,review_allowed:false}]});
+ const userId='22222222-2222-4222-8222-222222222222';const query=jest.fn().mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{observed_at:new Date()}]}).mockResolvedValueOnce({rows:[{id:groupId,name:'Reviewed group',revision:'1',source_revision:'1'}]}).mockResolvedValueOnce({rows:[{coherent:true}]}).mockResolvedValueOnce({rows:[{id:userId,user_id:userId,enabled:true,review_allowed:false}]}).mockResolvedValueOnce({rows:[{revision:'1'}]});
  const result=await new GroupSnapshotStore({transaction:operation=>operation({query})}).snapshot(groupId);expect(result.memberIds).toEqual([]);expect(result.inactiveMemberIds).toEqual([userId]);expect(query.mock.calls[0]).toEqual(['SELECT identity_membership_review_refresh($1)',[groupId]]);
+});
+test.each([['2',409],[undefined,503],[9007199254740993,503]])('a source revision changing during observation cannot publish mixed membership: %j',async(current,status)=>{
+ const query=jest.fn().mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{observed_at:new Date()}]}).mockResolvedValueOnce({rows:[{id:groupId,name:'Actual group',revision:'1',source_revision:'1'}]}).mockResolvedValueOnce({rows:[{coherent:true}]}).mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{revision:current}]});
+ await expect(new GroupSnapshotStore({transaction:operation=>operation({query})}).snapshot(groupId)).rejects.toMatchObject({status});
 });

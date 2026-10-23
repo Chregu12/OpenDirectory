@@ -219,7 +219,7 @@ test('missing receivers and suppressed mandatory child or cleanup evidence canno
     assert.equal((await receipts()).length, 0); assert.deepEqual(await groupLinks(value.groups[0].id), before);
   }
   await pool.query('ALTER TABLE group_members DISABLE TRIGGER identity_directory_group_commit');
-  try { await assert.rejects(remove(value), error => error.code === '55000'); }
+  try { await assert.rejects(remove(value), {code:'42501',message:'Actual group-rule app receiving required'}); }
   finally { await pool.query('ALTER TABLE group_members ENABLE TRIGGER identity_directory_group_commit'); }
   assert.deepEqual(await groupLinks(value.groups[0].id), before);
 });

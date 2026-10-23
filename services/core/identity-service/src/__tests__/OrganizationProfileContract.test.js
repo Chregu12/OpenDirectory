@@ -37,7 +37,7 @@ test('every minimal license or policy source documents the mandatory receiving p
 });
 test('company license operations document real finite inventory, exact versions and explicit original source without a global licensing permission', () => {
   const document = require('../../scripts/organization-openapi').organizationOpenApi(); const schemas = document.components.schemas;
-  expect(document.info.version).toBe('1.24.0'); expect(schemas.CompanyLicensePool.properties.totalSeats).toEqual({ type: 'integer', minimum: 1, maximum: 10000 });
+  expect(document.info.version).toBe('1.25.0'); expect(schemas.CompanyLicensePool.properties.totalSeats).toEqual({ type: 'integer', minimum: 1, maximum: 10000 });
   expect(schemas.CompanyLicensePool.properties.allocationMode.const).toBe('local-only'); expect(schemas.CompanyLicenseCapabilities.properties.permissions.const).toEqual(['company.apps.read', 'company.apps.create', 'company.apps.assign']);
   expect(document.paths['/api/licenses/company/pools/{id}/assignments'].post.parameters).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'If-Match', required: true })]));
   expect(document.paths['/api/licenses/company/pools/{id}/assignments/{assignmentId}/revoke'].post.requestBody.content['application/json'].schema.properties.confirm.const).toBe(true);
