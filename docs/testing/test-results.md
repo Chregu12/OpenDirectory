@@ -1285,3 +1285,19 @@ Die vorhandenen vier Jest-Fixtures mit pauschalen SQL-Fallbackantworten mussten 
 Logs: `/tmp/od-employee-enrollment-auth-final-unit.log`, `/tmp/od-employee-enrollment-identity-unit-final3.log`, `/tmp/od-employee-enrollment-openapi-final.log`, `/tmp/od-employee-enrollment-auth-final3-native.log`, `/tmp/od-employee-enrollment-identity-final2-full.log`, `/tmp/od-employee-enrollment-replay-final.log` und `/tmp/od-employee-enrollment-registration-final-full.log`. Zwischenläufe sind zusätzlich in `/tmp/od-employee-enrollment-identity-native2-full.log` und den gezielten Einladungslogs dokumentiert.
 
 Keine Oberfläche, CLI oder öffentliche OAuth-Einladungsfassade ist in dieser Lieferung enthalten; deshalb kein neuer Frontend-/Browserbuild. Die zentrale Credential-/Originalpasswort-/Token- und Challenge-Bindung, die vollständige erste Pflicht-MFA-Anmeldung, kontrollierte Namespace-Wiederverwendung, Review geänderter Teilaufnahmen und SCIM bleiben offen. Der lokale Docker-Daemon ist weiterhin nicht erreichbar; kein tatsächlicher Container-/Linux-Build oder Rollout wurde ausgeführt. Keine produktiven Konten, externen Mail-/Graph-/Apple-Anbieter oder Geräte wurden verändert. Der [vollständige Auftrag](../implementation-worklist.md) bleibt aktiv.
+
+## 23. Oktober 2026 — Zentrale Credential-Revision an Token und MFA-Challenge gebunden
+
+Die Auth-Passwortprüfung gibt jetzt den `security_revision`-Stand derselben gespeicherten erfolgreichen Prüfung zurück. Ein neuer privater Auth-Reader prüft mit kurzlebigem signiertem OAuth-Workload-Proof tatsächliche lokale Credential- und Einladungsevidenz. Identity vergleicht akzeptierte Mitarbeiterzertifikate mit dem ursprünglichen Invitation-/Subject-/Tenant-Eintrag. OAuth bindet lokale bekannte Credentials in `credential_authorization` an Subject-ID, kanonische User-ID, optionale Einladungs-ID und Credential-Revision. Die Prüfung läuft bei Tokenzugriff und Refresh erneut. Passwortänderung, Sperre, MFA-Credentialänderung oder ein nicht erreichbarer Credential-Reader lässt alte Tokens nicht weiterlaufen.
+
+MFA-Einrichtungs- und Recovery-Challenges speichern dieselbe Credentialbindung unter einer neuen additiven OAuth-Migration 015. Bestehende ungebundene Challenges werden nicht nachträglich einer bekannten lokalen Revision zugeordnet. Das neue OpenAPI 1.29.0 beschreibt den privaten Credential-State-Reader und seine eigene enge Workload-Assertion. Die öffentliche Mitarbeiterfassade, UI/CLI und vollständige erste Pflicht-MFA-Anmeldung sind weiter offen.
+
+| Prüfung | Ergebnis |
+| --- | --- |
+| JavaScript-Syntax | `node --check` für geänderte Auth-/OAuth-Dateien, die beiden OpenAPI-Generatoren und betroffene Fixtures bestanden |
+| OpenAPI-Artefakt | Generatorausgabe bytegleich mit `docs/api/openapi.yaml` |
+| Diff-Format | `git diff --check` bestanden |
+| Jest-/PostgreSQL-/Browser-Suites | Nicht ausgeführt |
+| Compose-/Image-/Produktionskette | Nicht ausgeführt; lokaler Docker-Daemon ist nicht verfügbar |
+
+Die neue Credential-Prüfung und Migration 015 sind daher noch nicht funktional abgenommen und dürfen vor dem nächsten Rollout nicht als getestet gelten. Bereits laufende lokale OAuth-Sitzungen, deren Token kein `credential_authorization` enthält, werden für bekannte lokale Konten abgewiesen und müssen sich nach verfügbarer Migration/Reader-Konfiguration erneut anmelden. Kein Live-Dienst oder Konto wurde geändert. Der [Gesamtauftrag](../implementation-worklist.md) bleibt offen.

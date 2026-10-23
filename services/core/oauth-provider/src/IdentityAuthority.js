@@ -6,6 +6,8 @@ const { PATH, TARGET_PATH, TARGET_PURPOSE, COMPANY_CONSOLE_PATH, COMPANY_CONSOLE
 const { validRoles, rolePermissions } = require('../../../../packages/directory-role-contract');
 const { validAuthentication, acceptsRoleAuthentication } = require('../../../../packages/role-authentication-contract');
 const { validTenantContext } = require('../../../../packages/tenant-authorization-contract');
+const credentialContract = require('../../../../packages/credential-authorization-contract');
+const { CredentialAuthority } = require('./CredentialAuthority');
 
 class IdentityAuthorityError extends Error {
   constructor(status, code) { super(code); this.status = status; this.code = code; }
@@ -13,11 +15,12 @@ class IdentityAuthorityError extends Error {
 
 class IdentityAuthority {
   constructor({ signingKeys, issuer, endpoint = process.env.OAUTH_IDENTITY_AUTHORITY_URL || 'http://identity-service:3001' + PATH,
-    demo = false, production = process.env.NODE_ENV === 'production', fetchImpl = (...args) => global.fetch(...args) }) {
+    credentialAuthority, demo = false, production = process.env.NODE_ENV === 'production', fetchImpl = (...args) => global.fetch(...args) }) {
     if (demo && production) throw new Error('Identity authority bypass is forbidden in production');
     const url = new URL(endpoint);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash || url.search || url.pathname !== PATH) throw new Error('Invalid identity authority URL');
     this.url = url; this.issuer = issuer; this.keys = signingKeys; this.demo = demo; this.fetch = fetchImpl;
+    this.credentials = credentialAuthority || new CredentialAuthority({ signingKeys, issuer });
   }
 
   async request(path, purpose, scope, body, claims) {
@@ -45,9 +48,28 @@ class IdentityAuthority {
     if (typeof subject !== 'string' || !subject.trim() || subject.length > 255) throw new IdentityAuthorityError(403, 'identity_not_eligible');
     const state = await this.request(PATH, PURPOSE, 'identity.authorization.read', { subject }, { request_subject: subject });
     if (![1,6].includes(state?.schemaVersion) || state.issuer !== this.issuer || state.subject !== subject || typeof state.active !== 'boolean'
-      || (state.active && (state.schemaVersion !== 6 || !validTenantContext(state.tenant) || !validContext(state.context) || !validRoles(state.roles) || !validMemberships(state.memberships) || !validAuthentication(state.authentication)))) throw new IdentityAuthorityError(503, 'identity_authority_unavailable');
+      || (state.active && (state.schemaVersion !== 6 || !validTenantContext(state.tenant) || !validContext(state.context) || !validRoles(state.roles) || !validMemberships(state.memberships) || !validAuthentication(state.authentication)
+        || (state.employeeBinding !== undefined && (!state.employeeBinding || !credentialContract.exact(state.employeeBinding,
+          ['schemaVersion','issuer','invitationId','subjectId','userId','tenantId','acceptanceEventId','linkRevision']) || state.employeeBinding.schemaVersion !== 1
+          || typeof state.employeeBinding.issuer !== 'string' || state.employeeBinding.issuer !== this.issuer || !credentialContract.uuid(state.employeeBinding.invitationId)
+          || state.employeeBinding.subjectId !== subject || !credentialContract.uuid(state.employeeBinding.subjectId) || !credentialContract.uuid(state.employeeBinding.userId)
+          || !credentialContract.uuid(state.employeeBinding.tenantId) || !credentialContract.uuid(state.employeeBinding.acceptanceEventId)
+          || !validRevision(state.employeeBinding.linkRevision)))))) throw new IdentityAuthorityError(503, 'identity_authority_unavailable');
     if (!state.active) throw new IdentityAuthorityError(403, 'identity_not_eligible');
-    return { context: state.context, tenant: state.tenant, authorization: { roles: state.roles, permissions: rolePermissions(state.roles) }, memberships: state.memberships, authentication: state.authentication };
+    let credential;
+    try { credential = await this.credentials.state(subject); }
+    catch (error) { if (error.status === 403) throw new IdentityAuthorityError(403, 'credential_not_eligible'); throw new IdentityAuthorityError(503, 'credential_authority_unavailable'); }
+    const employee = state.employeeBinding;
+    if (employee && (!credential.known || !credential.invitation || credential.invitation.invitationId !== employee.invitationId
+      || credential.invitation.userId !== employee.userId || credential.invitation.tenant.id !== employee.tenantId
+      || credential.subjectId !== employee.subjectId || state.context.userId !== employee.userId)) throw new IdentityAuthorityError(403, 'employee_binding_changed');
+    if (!employee && credential.invitation) throw new IdentityAuthorityError(403, 'employee_binding_changed');
+    if (credential.known && !validContext(state.context)) throw new IdentityAuthorityError(403, 'canonical_user_required');
+    const credentialAuthorization = credential.known ? { schemaVersion: 1, subjectId: credential.subjectId, userId: state.context.userId,
+      invitationId: credential.invitation?.invitationId || null, securityRevision: credential.securityRevision } : null;
+    if (credentialAuthorization && !credentialContract.validBinding(credentialAuthorization)) throw new IdentityAuthorityError(503, 'credential_authority_unavailable');
+    return { context: state.context, tenant: state.tenant, authorization: { roles: state.roles, permissions: rolePermissions(state.roles) }, memberships: state.memberships,
+      authentication: state.authentication, credentialAuthorization };
   }
 
   async target(targetType, targetId, actorUserId) {
@@ -81,6 +103,7 @@ class IdentityAuthority {
     try {
       const state = await this.state(payload.sub);
       if (!sameContext(state.context, payload.identity_authorization) || !acceptsRoleAuthentication(state.authentication, payload)) return false;
+      if (!credentialContract.sameBinding(state.credentialAuthorization, payload.credential_authorization)) return false;
       const expected = payload.scope?.split(' ').includes('roles') ? state.authorization : {};
       return ['roles', 'permissions'].every(claim => JSON.stringify(payload[claim]) === JSON.stringify(expected[claim])) ? state : false;
     }

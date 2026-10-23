@@ -27,6 +27,7 @@ COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-co
 COPY packages/oidc-tenant-state.js /packages/oidc-tenant-state.js
 COPY packages/oidc-access-state.js /packages/oidc-access-state.js
 COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
+COPY packages/credential-authorization-contract.js /packages/credential-authorization-contract.js
 COPY packages/mfa-authorization-contract.js /packages/mfa-authorization-contract.js
 COPY packages/role-authentication-contract.js /packages/role-authentication-contract.js
 COPY packages/directory-role-contract.js /packages/directory-role-contract.js

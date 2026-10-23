@@ -20,6 +20,7 @@ const { bootstrapApplications } = require('./fixtures/bootstrapApplications.cjs'
 const { nextOtp, rememberFactor } = require('./fixtures/mfa.cjs');
 const { totp } = require('../MfaAuthority');
 const { provenMfa } = require('../../../../../packages/mfa-authorization-contract');
+const credentialContract = require('../../../../../packages/credential-authorization-contract');
 const { MFA_LOCKED_ROLES } = require('../../../../../packages/directory-role-contract');
 const { changeSource } = require('../../../identity-service/scripts/license-user-source-operator');
 
@@ -413,8 +414,25 @@ before(async () => {
   Object.assign(process.env, { OAUTH_SIGNING_KEY_FILE: firstKeyFile, OAUTH_VERIFICATION_JWKS_FILE: published, OAUTH_EPHEMERAL_SIGNING_KEYS: 'false' });
   credentialServer = http.createServer(async (incoming, response) => {
     const chunks = []; for await (const chunk of incoming) chunks.push(chunk);
-    const credentials = JSON.parse(Buffer.concat(chunks));
+    let credentials;
+    try { credentials = JSON.parse(Buffer.concat(chunks)); } catch { response.statusCode = 400; return response.end('{}'); }
     response.setHeader('Content-Type', 'application/json');
+    if (incoming.url === credentialContract.PATH && incoming.method === 'POST') {
+      try {
+        const authorization = incoming.headers.authorization || '';
+        const token = authorization.startsWith('Bearer ') && authorization.slice(7);
+        const verified = jwt.verify(token, load(firstKeyFile).publicKey, { algorithms: ['RS256'], issuer, audience: credentialContract.AUDIENCE });
+        const header = jwt.decode(token, { complete: true }).header;
+        if (!credentialContract.exact(credentials, ['subject']) || !credentialContract.validSubject(credentials.subject)
+          || !credentialContract.exact(verified, ['iss','sub','aud','actor_type','token_use','scope','htm','htu','request_subject','jti','iat','exp'])
+          || Object.keys(header).length !== 3 || header.typ !== credentialContract.TYPE || verified.sub !== 'oauth-provider'
+          || verified.actor_type !== 'workload' || verified.token_use !== credentialContract.PURPOSE || verified.scope !== credentialContract.SCOPE
+          || verified.htm !== 'POST' || verified.htu !== credentialContract.PATH || verified.request_subject !== credentials.subject
+          || !credentialContract.uuid(verified.jti) || verified.exp <= Math.floor(Date.now() / 1000) || verified.exp - verified.iat > 30) throw new Error('Invalid credential request');
+        return response.end(JSON.stringify({ schemaVersion: 1, credentialAuthenticationProtocol: 1, subject: credentials.subject,
+          known: false, ready: false, subjectId: null, securityRevision: null, invitation: null }));
+      } catch { response.statusCode = 401; return response.end('{}'); }
+    }
     if (incoming.url !== '/api/auth/login' || ![...canonicalSubjects.keys(), 'gone', 'unlinked', 'company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner'].includes(credentials.username) || credentials.password !== 'disposable-password') {
       response.statusCode = 401; return response.end('{}');
     }

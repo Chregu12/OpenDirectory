@@ -68,7 +68,9 @@ class AuthApplicationService {
     await this._publishDomainEvents(session);
 
     const userJson = user.toJSON();
-    return { user: { ...userJson, id: String(userJson.id) }, token, expiresAt, mfaRequired: user.mfaEnabled };
+    const credentialAuthentication=user.securityRevision===undefined?undefined:{schemaVersion:1,subjectId:String(user.id),securityRevision:user.securityRevision};
+    if(credentialAuthentication&&!require('../../../../../packages/credential-authorization-contract').validSnapshot(credentialAuthentication))throw Object.assign(new Error('Credential authentication snapshot unavailable'),{status:503});
+    return { user: { ...userJson, id: String(userJson.id) }, token, expiresAt, mfaRequired: user.mfaEnabled,...(credentialAuthentication?{credentialAuthentication}:{}) };
   }
 
   async logout(token) {

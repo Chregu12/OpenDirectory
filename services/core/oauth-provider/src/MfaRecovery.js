@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { MfaError, base32, matchedCounter } = require('./MfaAuthority');
 const { validContext, validUuid, sameContext } = require('../../../../packages/identity-authorization-contract');
+const credentialContract = require('../../../../packages/credential-authorization-contract');
 const CODE = /^[a-f0-9]{8}(?:-[a-f0-9]{8}){3}$/;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 function fail(status, code) { throw new MfaError(status, code); }
@@ -33,10 +34,10 @@ class MfaRecovery {
       for (const table of ['oauth_mfa_recovery_codes', 'oauth_mfa_recovery_challenges', 'oauth_mfa_recovery_audit']) await connection.query(`SELECT * FROM ${table} LIMIT 0`);
     });
   }
-  async current(subject, context) {
+  async current(subject, context, credentialAuthorization) {
     try {
       const state = await this.identity.state(subject);
-      if (!sameContext(state.context, context)) fail(401, 'recovery_identity_changed');
+      if (!sameContext(state.context, context) || !credentialContract.sameBinding(state.credentialAuthorization, credentialAuthorization ?? null)) fail(401, 'recovery_identity_changed');
     } catch (error) { throw new MfaError(error.status || 503, error.code || 'identity_authority_unavailable'); }
   }
   async audit(connection, row, action, sessionId = null, challengeId = null) {
@@ -69,12 +70,16 @@ class MfaRecovery {
     });
     if (result.error) fail(result.status, result.error); return result;
   }
-  async start(subject, context, recoveryCode) {
+  async start(subject, context, recoveryCode, credentialAuthentication) {
     this.persistent();
     if (typeof subject !== 'string' || !subject || subject.length > 255 || !validContext(context)) fail(403, 'canonical_user_required');
+    let initialState;
+    try { initialState = await this.identity.state(subject); } catch (error) { throw new MfaError(error.status || 503, error.code || 'identity_authority_unavailable'); }
+    if (!sameContext(initialState.context, context) || !credentialContract.matchesPasswordAuthentication(initialState, credentialAuthentication, subject)) fail(401, 'recovery_identity_changed');
+    const credentialAuthorization = initialState.credentialAuthorization || null;
     const userId = context.userId; const codeHash = recoveryHash(userId, recoveryCode);
     const result = await this.mfa.transaction(userId, async (row, now, audit, connection) => {
-      await this.current(subject, context);
+      await this.current(subject, context, credentialAuthorization);
       if (!row.enabled) fail(401, 'invalid_recovery_code');
       if (row.locked_until && new Date(row.locked_until).getTime() > now) fail(429, 'mfa_temporarily_locked');
       const used = await connection.query(`UPDATE oauth_mfa_recovery_codes SET consumed_at=clock_timestamp()
@@ -86,14 +91,16 @@ class MfaRecovery {
       row.failed_attempts = 0; row.locked_until = null;
       await connection.query('UPDATE oauth_mfa_recovery_challenges SET superseded_at=clock_timestamp() WHERE user_id=$1 AND consumed_at IS NULL AND superseded_at IS NULL', [userId]);
       const id = crypto.randomUUID(); const challenge = id + '.' + crypto.randomBytes(32).toString('base64url'); const secret = base32(crypto.randomBytes(20));
-      const record = (await connection.query(`INSERT INTO oauth_mfa_recovery_challenges(id,token_hash,user_id,factor_revision,issuer,subject,identity_context,encrypted_seed,expires_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp()) RETURNING expires_at`,
-      [id, hash(challenge), userId, row.revision, this.issuer, subject, JSON.stringify(context), this.mfa.cipher.encrypt(userId, 'recovery:' + id, secret)])).rows[0];
+      const record = (await connection.query(`INSERT INTO oauth_mfa_recovery_challenges(id,token_hash,user_id,factor_revision,issuer,subject,identity_context,encrypted_seed,expires_at,credential_authorization)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp(),$9) RETURNING expires_at`,
+      [id, hash(challenge), userId, row.revision, this.issuer, subject, JSON.stringify(context), this.mfa.cipher.encrypt(userId, 'recovery:' + id, secret),
+        credentialAuthorization ? JSON.stringify(credentialAuthorization) : null])).rows[0];
+      await this.current(subject, context, credentialAuthorization);
       await this.audit(connection, row, 'started', null, id);
       return { challenge, ...setup(userId, secret, record.expires_at) };
     });
     if (result.error) fail(result.status, result.error);
-    await this.current(subject, context); return result;
+    await this.current(subject, context, credentialAuthorization); return result;
   }
   async confirm(challenge, code) {
     this.persistent(); const { id, tokenHash } = parseChallenge(challenge);
@@ -103,7 +110,7 @@ class MfaRecovery {
     const result = await this.mfa.transaction(snapshot.user_id, async (row, now, audit, connection) => {
       const current = (await connection.query('SELECT * FROM oauth_mfa_recovery_challenges WHERE id=$1 AND token_hash=$2 FOR UPDATE', [id, tokenHash])).rows[0];
       if (!active(current, row, now)) fail(401, 'invalid_recovery_challenge');
-      await this.current(current.subject, current.identity_context);
+      await this.current(current.subject, current.identity_context, current.credential_authorization);
       if (current.locked_until && new Date(current.locked_until).getTime() > now) fail(429, 'mfa_temporarily_locked');
       const secret = this.mfa.cipher.decrypt(row.user_id, 'recovery:' + id, current.encrypted_seed);
       const counter = matchedCounter(secret, code, now, -1);
@@ -116,7 +123,7 @@ class MfaRecovery {
       await connection.query("SELECT set_config('opendirectory.mfa_recovery',$1,true)", [id]);
       row.revision = String(BigInt(row.revision) + 1n); row.encrypted_seed = this.mfa.cipher.encrypt(row.user_id, 'active', secret);
       row.last_counter = String(counter); row.failed_attempts = 0; row.locked_until = null;
-      await audit('recovered'); await this.audit(connection, row, 'completed', null, id);
+      await audit('recovered'); await this.audit(connection, row, 'completed', null, id); await this.current(current.subject, current.identity_context, current.credential_authorization);
       return { enabled: true, reauthenticationRequired: true };
     });
     if (result.error) fail(result.status, result.error); return result;

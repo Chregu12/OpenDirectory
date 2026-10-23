@@ -10,6 +10,7 @@ RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
 
 COPY services/core/authentication-service/ ./
 COPY packages/employee-invitation-contract.js /packages/employee-invitation-contract.js
+COPY packages/credential-authorization-contract.js /packages/credential-authorization-contract.js
 COPY packages/employee-invitation-request.js /packages/employee-invitation-request.js
 COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
 COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-contract.js

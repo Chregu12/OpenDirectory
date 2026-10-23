@@ -13,7 +13,8 @@ const tenant = { id: crypto.randomUUID(), version: '1', generation: '2' };
 let fetchImpl; let authority;
 beforeEach(() => {
   fetchImpl = jest.fn(async () => Response.json({ schemaVersion: 6, tenant, authentication, issuer, subject, active: true, context, roles: [], memberships: [] }));
-  authority = new IdentityAuthority({ signingKeys: keys, issuer, fetchImpl });
+  authority = new IdentityAuthority({ signingKeys: keys, issuer, fetchImpl,
+    credentialAuthority: { state: async () => ({ known: false, ready: false, binding: null, invitation: null }) } });
 });
 
 test.each([undefined,{}, { required:'true',maxAgeSeconds:300 },{ required:true,maxAgeSeconds:299 },{ required:false,maxAgeSeconds:86401 },{ required:true,maxAgeSeconds:300,ignore:true }])('missing or malformed role assurance cannot become a permissive legacy response: %j', async policy => {

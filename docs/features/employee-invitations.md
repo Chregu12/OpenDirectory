@@ -26,7 +26,7 @@ Die Aktivierung verwendet den vorhandenen kanonischen User-Mutation-Kernel, sein
 
 Auth entsperrt erst nach einem zweiten direkten Read-only-Check des tatsächlichen Identity-Receipts. Diese Bestätigungsquelle verlangt weiterhin den unveränderten ursprünglichen Aktivierungsstand und dieselbe Linkrevision. Ein später berechtigt bearbeitetes Teilkonto wird bei Recovery nicht erneut aktiviert oder überschrieben. Die historischen Belege bleiben lesbar; ein solcher Fall verlangt Review. Es wird keine atomare Transaktion über beide Datenbanken behauptet.
 
-Die kanonische Rollenquelle verlangt für diese tatsächliche Mitarbeiterbindung MFA, ohne eine globale Rolle hinzuzufügen. Strengere bestehende Rollenregeln behalten ihre Fristen. Die Firmenkonsolenfreigabe gilt nur für den ursprünglich erfassten Console-Client. Die private Autorisierungsquelle liefert den ursprünglichen `employeeBinding` zusätzlich; die zentrale OAuth-Credentialprüfung und die komplette erste MFA-/Browseranmeldung sind noch nicht verbunden. Eine spätere normale Profiländerung ersetzt das historische Zertifikat nicht und entzieht allein deshalb nicht die ursprüngliche Konsolenbindung.
+Die kanonische Rollenquelle verlangt für diese tatsächliche Mitarbeiterbindung MFA, ohne eine globale Rolle hinzuzufügen. Strengere bestehende Rollenregeln behalten ihre Fristen. Die Firmenkonsolenfreigabe gilt nur für den ursprünglich erfassten Console-Client. Die zentrale OAuth-Hoheit liest den tatsächlichen Auth-Credentialstand und vergleicht ihn mit dem Sicherheitsstand aus derselben erfolgreichen Passwortprüfung. Token tragen die aktuelle Credentialrevision; Zugriffsprüfung und Refresh lesen sie erneut. MFA-Einrichtungs- und Recovery-Challenges speichern dieselbe Bindung. Die akzeptierte Mitarbeiter-Einladung muss zusätzlich mit dem originalen `employeeBinding`, der Subject-Verknüpfung und dem Tenant übereinstimmen. Eine spätere normale Profiländerung ersetzt das historische Zertifikat nicht und entzieht allein deshalb nicht die ursprüngliche Konsolenbindung.
 
 ## Zustände
 
@@ -41,7 +41,7 @@ Widerruf verwendet exakt `{id,revision,reason,confirm:true}`. Eine Wiederholung 
 
 Das widerrufene unfertige Credential bleibt gesperrt und behält Login/E-Mail und Belege. Dessen kontrollierte Namespace-Freigabe/Wiederverwendung ist **noch offen**. Der öffentliche Ablauf für Aktivierung/Widerruf/Review ist ebenfalls noch zu verbinden; diese internen Schritte laufen noch nicht automatisch über eine Oberfläche.
 
-Die eigene `users.security_revision` steigt bei Passwort-, Sperr- oder Credential-MFA-Änderungen, nicht bei gewöhnlichen Loginzählern. Der private `state`-Leser liefert für dieses Originalcredential nur nach `accepted` und ohne Sperre `ready:true`. Die Bindung dieser Revision an tatsächliche OAuth-Zugriffs-/Refresh-Tokens und MFA-Challenges ist **noch umzusetzen**. Dieser Leser allein belegt keinen vollständigen Sessionwiderruf.
+Die eigene `users.security_revision` steigt bei Passwort-, Sperr- oder Credential-MFA-Änderungen, nicht bei gewöhnlichen Loginzählern. Der private `state`-Leser liefert für ein bekanntes Credential nur bei gültigem, entsperrtem Konto eine aktuelle Revision; angenommene Mitarbeiterkonten müssen ausserdem ihr tatsächliches Identity-Zertifikat erfüllen. Ein neuer RS256-Reader ist auf `POST /internal/auth/credential-state` verfügbar. Zentrale Tokens ohne gespeicherte Bindung werden für bekannte lokale Konten nicht nachträglich hochgestuft. Bei unerreichbarem Auth-Reader wird die Prüfung verweigert. Bestehende lokale OAuth-Sitzungen ohne die neue Claim-Bindung müssen sich erneut anmelden; die komplette erste MFA-/Browseranmeldung und öffentliche Mitarbeiterfassade bleiben offen.
 
 ## Interner Transport und Installation
 
@@ -53,7 +53,7 @@ Auth benötigt alle elf vorhandenen SQL-Dateien bis **010**, einschliesslich bei
 
 Identity benötigt zusätzlich **055** und `AUTH_SERVICE_URL` als gepinnten tatsächlichen Auth-Origin. Beide Compose-Dateien setzen ihn. Nach Replay älterer Directory-/Gruppen-/Automationsmigrationen zuletzt **055_employee_enrollments.sql** anwenden. Die Migration erweitert die vorhandenen Transaktionsfences auch auf ihre neuen Tabellen und pinnt die tatsächlich beteiligten Routinen/Trigger. Einträge entstehen nur durch den tatsächlichen Aktivierungsvorgang; bestehende Verzeichnisbenutzer werden nicht adoptiert. Keine neue Runtime-Dependency wird in diesem Schritt eingeführt.
 
-Der generierte [OpenAPI-Vertrag](../api/openapi.yaml) **1.28.0** beschreibt die tatsächlich montierten internen Empfänger, Originalproofs, separaten Owner-Header, Witness-/Receipt-Schemas und die zusätzliche kanonische `employeeBinding`. Er erfindet noch keine öffentliche Einladungsroute.
+Der generierte [OpenAPI-Vertrag](../api/openapi.yaml) **1.29.0** beschreibt die tatsächlich montierten internen Empfänger, Originalproofs, separaten Owner-Header, Witness-/Receipt-Schemas, kanonische `employeeBinding` und privaten Credential-State-Reader. Er erfindet noch keine öffentliche Einladungsroute.
 
 ## Prüfung
 

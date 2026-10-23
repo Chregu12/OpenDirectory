@@ -1,12 +1,14 @@
 'use strict';
 
+const { validSnapshot } = require('../../../../packages/credential-authorization-contract');
+
 async function authenticateUser({ username, password, mfaCode }) {
   if (typeof username !== 'string' || !username.trim() || typeof password !== 'string' || !password
     || username.length > 255 || password.length > 4096 || (mfaCode !== undefined && typeof mfaCode !== 'string')) {
     return { status: 400, error: 'invalid_request' };
   }
   try {
-    const baseUrl = process.env.AUTH_SERVICE_URL || 'http://authentication-service';
+    const baseUrl = process.env.AUTH_SERVICE_URL || 'http://auth-service:3002';
     const response = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       redirect: 'error',
@@ -21,7 +23,9 @@ async function authenticateUser({ username, password, mfaCode }) {
     const user = data?.user;
     if (response.status !== 200 || data?.success !== true || typeof user?.id !== 'string' || !user.id.trim()
       || user.active === false || user.status === 'disabled') return { status: 401, error: 'invalid_credentials' };
-    return { user };
+    const snapshot = data.credentialAuthentication;
+    if (snapshot !== undefined && (!validSnapshot(snapshot) || snapshot.subjectId !== user.id)) return { status: 503, error: 'credential_state_invalid' };
+    return { user, ...(snapshot ? { credentialAuthentication: snapshot } : {}) };
   } catch {
     return { status: 503, error: 'authentication_unavailable' };
   }

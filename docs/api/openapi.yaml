@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.28.0",
-    "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, complete public employee onboarding, external legal verification or production SaaS acceptance. Private original employee invitation, canonical directory activation and partial withdrawal receivers are implemented; public invitation/MFA onboarding and central credential-bound tokens remain open."
+    "version": "1.29.0",
+    "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, complete public employee onboarding, external legal verification or production SaaS acceptance. Private original employee invitation, canonical directory activation and partial withdrawal receivers are implemented; public invitation UI/MFA onboarding remains open. Central OAuth user tokens and MFA enrollment/recovery challenges now bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
     {
@@ -37096,6 +37096,229 @@
         }
       }
     },
+    "/internal/auth/credential-state": {
+      "post": {
+        "operationId": "readCredentialAuthorizationState",
+        "summary": "Read the actual current local credential authorization generation",
+        "description": "Private read-only Auth source. The signed request binds the exact subject and fixed path. Known local credentials report the current positive security revision only while unlocked and eligible; accepted employee invitation metadata is checked against Identity’s retained certificate. An authoritative unknown subject is only a non-local provider subject, never an outage fallback. Password hashes and password proof material are not returned.",
+        "security": [
+          {
+            "credentialStateWorkload": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "subject"
+                ],
+                "properties": {
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual local credential generation or explicit unknown external subject",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialState"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/internal/identity/employee-invitations/observe": {
       "post": {
         "operationId": "employeeInvitationObserve",
@@ -38360,6 +38583,12 @@
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "description": "Private issuer workload: RS256, typ od-employee-invitation+jwt, audience opendirectory-employee-invitations, purpose employee-invitation-receiving, fixed employees.invitations.OPERATION scope, exact POST/path/body and at most 30 seconds. Ordinary API user/app tokens are rejected. Owner operations additionally bind the separate original human Bearer header."
+      },
+      "credentialStateWorkload": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Read-only Auth workload: RS256, typ od-credential-state+jwt, audience opendirectory-credential-authorization, purpose credential-state-read, scope credentials.authorization.read, exact subject/path and at most 30 seconds."
       }
     },
     "schemas": {
@@ -53136,6 +53365,161 @@
             "type": "string",
             "pattern": "^[1-9][0-9]{0,18}$",
             "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+          }
+        }
+      },
+      "CredentialAuthorization": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "subjectId",
+          "userId",
+          "invitationId",
+          "securityRevision"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "subjectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "invitationId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "securityRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+          }
+        }
+      },
+      "CredentialStateInvitation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "invitationId",
+          "userId",
+          "tenant"
+        ],
+        "properties": {
+          "invitationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              }
+            }
+          }
+        }
+      },
+      "CredentialState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "credentialAuthenticationProtocol",
+          "subject",
+          "known",
+          "ready",
+          "subjectId",
+          "securityRevision",
+          "invitation"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "credentialAuthenticationProtocol": {
+            "const": 1
+          },
+          "subject": {
+            "type": "string"
+          },
+          "known": {
+            "type": "boolean"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "subjectId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "securityRevision": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "invitation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CredentialStateInvitation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }

@@ -37,11 +37,12 @@ class PostgresUserRepository extends IUserRepository {
        user.loginAttempts];
     const result= user.recordRevision===undefined
       ? await this._db.query(`INSERT INTO users(id,username,email,password_hash,roles,mfa_enabled,mfa_secret,recovery_codes,is_locked,locked_until,login_attempts,created_at,updated_at)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING record_revision`,[...values,user.toJSON().createdAt,new Date()])
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING record_revision,security_revision`,[...values,user.toJSON().createdAt,new Date()])
       : await this._db.query(`UPDATE users SET username=$2,email=$3,password_hash=$4,roles=$5,mfa_enabled=$6,mfa_secret=$7,recovery_codes=$8,is_locked=$9,locked_until=$10,login_attempts=$11,updated_at=$12
-          WHERE id=$1 AND record_revision=$13 RETURNING record_revision`,[...values,new Date(),user.recordRevision]);
+          WHERE id=$1 AND record_revision=$13 RETURNING record_revision,security_revision`,[...values,new Date(),user.recordRevision]);
     if(result.rows.length!==1)throw Object.assign(new Error('Credential record changed; reload before retrying'),{status:409,code:'credential_record_changed'});
     user._recordRevision=String(result.rows[0].record_revision);
+    user._securityRevision=String(result.rows[0].security_revision);
     return user;
   }
 
@@ -117,6 +118,7 @@ class PostgresUserRepository extends IUserRepository {
       lockUntil: row.locked_until,
       loginAttempts: row.login_attempts || 0,
       recordRevision: row.record_revision===undefined?undefined:String(row.record_revision),
+      securityRevision: row.security_revision===undefined?undefined:String(row.security_revision),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     });

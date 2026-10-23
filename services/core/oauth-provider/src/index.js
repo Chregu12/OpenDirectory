@@ -15,6 +15,7 @@ const { TokenRevocationStore } = require('./TokenRevocationStore');
 const { SessionStore, viewer } = require('./SessionStore');
 const { SigningKeys } = require('./SigningKeys');
 const { IdentityAuthority, IdentityAuthorityError } = require('./IdentityAuthority');
+const { CredentialAuthority } = require('./CredentialAuthority');
 const { ClientRegistry, permissionsOf, publicClient, etag } = require('./ClientRegistry');
 const { hashSecret } = require('./clientSecrets');
 const { ApplicationAccess } = require('./ApplicationAccess');
@@ -23,6 +24,7 @@ const { MfaRecovery } = require('./MfaRecovery');
 const { MfaEnrollment } = require('./MfaEnrollment');
 const { acceptsAuthentication } = require('./applicationAuthentication');
 const { sameContext } = require('../../../../packages/identity-authorization-contract');
+const credentialContract = require('../../../../packages/credential-authorization-contract');
 const { oidcAuth, configureJwks, requireAdmin } = require('./middleware/oidcAuth');
 const { requirePolicyDeviceAccess, policyDeviceView } = require('./middleware/policyDeviceAccess');
 
@@ -89,7 +91,8 @@ const TOKEN_TTL = parseInt(process.env.TOKEN_TTL_SECONDS ?? '3600', 10);
 const signingKeys = new SigningKeys();
 const privateKey = signingKeys.privateKey;
 const signingKeyId = signingKeys.kid;
-const identityAuthority = new IdentityAuthority({ signingKeys, issuer: ISSUER, demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
+const credentialAuthority = new CredentialAuthority({ signingKeys, issuer: ISSUER });
+const identityAuthority = new IdentityAuthority({ signingKeys, issuer: ISSUER, credentialAuthority, demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
 const companyRegistration = new (require('./CompanyRegistrationGateway').CompanyRegistrationGateway)({ signingKeys, issuer: ISSUER, client: id => clientRegistry.get(id) });
 
 // Build JWK representation of the public key
@@ -484,20 +487,24 @@ app.post('/oauth/authorize/login', protocol(async (req, res) => {
   const { username, password, mfaCode } = req.body;
   const authentication = await authenticateUser({ username, password, mfaCode });
   if (authentication.error) return res.status(authentication.status).json({ error: authentication.error });
-  return authorizeUser(req, res, req.oauthClient, authentication.user);
+  return authorizeUser(req, res, req.oauthClient, authentication.user, 'pwd', authentication.credentialAuthentication);
 }));
 
-async function authorizeUser(req, res, client, authenticatedUser, primaryMethod = 'pwd') {
+async function authorizeUser(req, res, client, authenticatedUser, primaryMethod = 'pwd', credentialAuthentication) {
   const { client_id, redirect_uri, state, code_challenge, code_challenge_method, device_id, otpCode, nonce } = req.body;
   const approvedScope = resolveScopes(client, req.body.scope, ['openid', 'profile', 'email']);
   let userInfo = authenticatedUser;
   const userId = userInfo.id;
   if (!await clientRegistry.current(client)) return res.status(400).json({ error: 'unauthorized_client' });
 
-  let identityContext; let applicationContext; let mfaContext;
+  let identityContext; let credentialAuthorization; let applicationContext; let mfaContext;
   try {
     const state = await identityAuthority.state(userId);
+    if (primaryMethod === 'pwd' && !credentialContract.matchesPasswordAuthentication(state, credentialAuthentication, userId)) {
+      throw new MfaError(401, 'credential_authorization_changed');
+    }
     identityContext = state.context;
+    credentialAuthorization = state.credentialAuthorization;
     applicationContext = await applicationAccess.context(client_id,state);
     mfaContext = await mfaAuthority.login(state.context?.userId, otpCode, primaryMethod);
     if ((client.mfaRequired || state.authentication?.required) && mfaContext.methods.length !== 2) throw new MfaError(401, 'mfa_enrollment_required');
@@ -515,6 +522,7 @@ async function authorizeUser(req, res, client, authenticatedUser, primaryMethod 
     userId,
     userInfo,
     identityContext,
+    credentialAuthorization,
     applicationContext,
     mfaContext,
     authTime: mfaContext.authTime,
@@ -667,6 +675,7 @@ app.post('/oauth/token', protocol(async (req, res) => {
     const payload = {
       sub:   record.userId,
       ...(record.identityContext ? { identity_authorization: record.identityContext } : {}),
+      ...(record.credentialAuthorization ? { credential_authorization: record.credentialAuthorization } : {}),
       ...(record.applicationContext ? { application_authorization: record.applicationContext } : {}),
       auth_time: record.authTime,
       amr: record.mfaContext?.methods || ['pwd'],
@@ -687,7 +696,7 @@ app.post('/oauth/token', protocol(async (req, res) => {
     try { issued = await issueSession(payload, 'user', client.grantTypes.includes('refresh_token'), client); }
     catch (error) { return res.status(error.status || 503).json({ error: error.code || 'session_authority_unavailable' }); }
     const access_token = issued.accessToken;
-    const identityPayload = Object.fromEntries(Object.entries(issued.payload).filter(([claim]) => !['roles', 'permissions', 'scope'].includes(claim)));
+    const identityPayload = Object.fromEntries(Object.entries(issued.payload).filter(([claim]) => !['roles', 'permissions', 'scope', 'credential_authorization'].includes(claim)));
     const id_token = approvedScope.split(' ').includes('openid')
       ? signToken({ ...identityPayload, token_use: 'id', ...(record.nonce ? { nonce: record.nonce } : {}) }) : undefined;
 
@@ -743,6 +752,7 @@ app.post('/oauth/token', protocol(async (req, res) => {
       amr: record.mfaContext?.methods || ['pwd'],
       ...(record.mfaContext?.schemaVersion ? { mfa_authorization: record.mfaContext } : {}),
       ...(record.identityContext ? { identity_authorization: record.identityContext } : {}),
+      ...(record.credentialAuthorization ? { credential_authorization: record.credentialAuthorization } : {}),
       ...(record.applicationContext ? { application_authorization: record.applicationContext } : {}), ...userAuthorizationClaims(record.userInfo, approvedScope) };
     let access_token;
     try { access_token = (await issueSession(payload, 'user', false, client)).accessToken; }
@@ -988,11 +998,15 @@ app.post('/oauth/device/approve', express.urlencoded({ extended: true }), protoc
   if (!client?.enabled || found[1].clientRevision !== client.version || !Array.isArray(client.grantTypes) || !client.grantTypes.includes(DEVICE_GRANT)) return res.status(400).json({ error: 'unauthorized_client' });
   if (resolveScopes(client, found[1].scope) === null) return res.status(403).json({ error: 'invalid_scope' });
   if (found[1].expiresAt <= Date.now() || found[1].approved) return res.status(400).json({ error: 'invalid_grant' });
-  let identityContext; let applicationContext; let mfaContext;
+  let identityContext; let credentialAuthorization; let applicationContext; let mfaContext;
   let userInfo = authentication.user;
   try {
     const state = await identityAuthority.state(userInfo.id);
+    if (!credentialContract.matchesPasswordAuthentication(state, authentication.credentialAuthentication, userInfo.id)) {
+      throw new MfaError(401, 'credential_authorization_changed');
+    }
     identityContext = state.context;
+    credentialAuthorization = state.credentialAuthorization;
     applicationContext = await applicationAccess.context(found[1].client_id,state);
     mfaContext = await mfaAuthority.login(state.context?.userId, otpCode);
     if ((client.mfaRequired || state.authentication?.required) && mfaContext.methods.length !== 2) throw new MfaError(401, 'mfa_enrollment_required');
@@ -1005,6 +1019,7 @@ app.post('/oauth/device/approve', express.urlencoded({ extended: true }), protoc
   found[1].userId = authentication.user.id;
   found[1].userInfo = userInfo;
   found[1].identityContext = identityContext;
+  found[1].credentialAuthorization = credentialAuthorization;
   found[1].applicationContext = applicationContext;
   found[1].mfaContext = mfaContext;
   found[1].authTime = mfaContext.authTime;
@@ -1049,7 +1064,9 @@ async function reauthenticateMfa(req) {
   if (result.error) throw new MfaError(result.status, result.error);
   if (result.user.id !== req.user.sub) throw new MfaError(403, 'same_user_required');
   const state = await identityAuthority.state(result.user.id);
-  if (!sameContext(state.context, req.user.identity_authorization)) throw new MfaError(401, 'authorization_changed');
+  if (!credentialContract.matchesPasswordAuthentication(state, result.credentialAuthentication, result.user.id)
+    || !sameContext(state.context, req.user.identity_authorization)
+    || !credentialContract.sameBinding(state.credentialAuthorization, req.user.credential_authorization)) throw new MfaError(401, 'authorization_changed');
 }
 app.get('/api/mfa', ...mfaRoute([], req => mfaAuthority.status(req.user)));
 app.post('/api/mfa/enroll', ...mfaRoute(['username', 'password', 'mfaCode'], async req => {
@@ -1076,7 +1093,7 @@ app.post('/oauth/mfa/recovery/start', protocol(async (req, res) => {
   const authentication = await authenticateUser(req.body);
   if (authentication.error) return res.status(authentication.status).json({ error: authentication.error });
   const state = await identityAuthority.state(authentication.user.id);
-  return res.json(await mfaRecovery.start(authentication.user.id, state.context, req.body.recoveryCode));
+  return res.json(await mfaRecovery.start(authentication.user.id, state.context, req.body.recoveryCode, authentication.credentialAuthentication));
 }, false));
 app.post('/oauth/mfa/recovery/confirm', protocol(async (req, res) => {
   recoveryRequest(req, ['challenge', 'code']); return res.json(await mfaRecovery.confirm(req.body.challenge, req.body.code));
@@ -1085,7 +1102,7 @@ app.post('/oauth/mfa/enrollment/start', protocol(async (req, res) => {
   recoveryRequest(req, ['clientId', 'username', 'password', 'mfaCode']);
   const authentication = await authenticateUser(req.body);
   if (authentication.error) return res.status(authentication.status).json({ error: authentication.error });
-  return res.json(await mfaEnrollment.start(req.body.clientId, authentication.user.id));
+  return res.json(await mfaEnrollment.start(req.body.clientId, authentication.user.id, authentication.credentialAuthentication));
 }, false));
 app.post('/oauth/mfa/enrollment/confirm', protocol(async (req, res) => {
   recoveryRequest(req, ['challenge', 'code']); return res.json(await mfaEnrollment.confirm(req.body.challenge, req.body.code));

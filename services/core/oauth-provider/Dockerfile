@@ -12,6 +12,7 @@ COPY services/core/oauth-provider/scripts/mfa-key.js ./scripts/mfa-key.js
 COPY services/core/oauth-provider/scripts/bootstrap-application-access.js ./scripts/bootstrap-application-access.js
 COPY packages/grpc-event-bus/ /packages/grpc-event-bus/
 COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
+COPY packages/credential-authorization-contract.js /packages/credential-authorization-contract.js
 COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-contract.js
 COPY packages/company-app-contract.js /packages/company-app-contract.js
 COPY packages/mfa-authorization-contract.js /packages/mfa-authorization-contract.js

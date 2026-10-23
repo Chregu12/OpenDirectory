@@ -295,6 +295,7 @@ class UserService {
           lockUntil: safe.lockedUntil !== undefined ? safe.lockedUntil : aggregate.lockUntil,
           loginAttempts: aggregate.loginAttempts,
           recordRevision: aggregate.recordRevision,
+          securityRevision: aggregate.securityRevision,
           createdAt: json.createdAt,
           updatedAt: new Date(),
         });
@@ -522,6 +523,7 @@ class UserService {
           lockUntil: lockedUntil,
           loginAttempts: aggregate.loginAttempts,
           recordRevision: aggregate.recordRevision,
+          securityRevision: aggregate.securityRevision,
           createdAt: json.createdAt,
           updatedAt: new Date(),
         });

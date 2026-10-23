@@ -16,6 +16,7 @@ class UserAggregate {
     this._lockUntil = props.lockUntil || null;
     this._loginAttempts = props.loginAttempts || 0;
     this._recordRevision = props.recordRevision;
+    this._securityRevision = props.securityRevision;
     this._createdAt = props.createdAt || new Date();
     this._updatedAt = props.updatedAt || new Date();
     this._domainEvents = [];
@@ -129,6 +130,7 @@ class UserAggregate {
   get lockUntil() { return this._lockUntil; }
   get loginAttempts() { return this._loginAttempts; }
   get recordRevision() { return this._recordRevision; }
+  get securityRevision() { return this._securityRevision; }
 
   getAndClearDomainEvents() {
     const events = [...this._domainEvents];

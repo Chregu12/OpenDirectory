@@ -249,6 +249,7 @@ class AuthenticationManager {
             lockUntil: aggregate.lockUntil,
             loginAttempts: aggregate.loginAttempts,
             recordRevision: aggregate.recordRevision,
+            securityRevision: aggregate.securityRevision,
             createdAt: aggregate.toJSON().createdAt,
             updatedAt: new Date(),
           });

@@ -14,6 +14,8 @@ const { nextOtp, rememberFactor } = require('./fixtures/mfa.cjs');
 const { totp } = require('../MfaAuthority');
 const net = require('node:net');
 const { Pool } = require('pg');
+const jwt = require('jsonwebtoken');
+const credentialContract = require('../../../../../packages/credential-authorization-contract');
 const { bootstrapApplications } = require('./fixtures/bootstrapApplications.cjs');
 
 const frontend = path.resolve(__dirname, '../../../../../frontend/web-app');
@@ -151,6 +153,22 @@ before(async () => {
   const policyProbe=net.createServer().listen(0,'127.0.0.1');policyBase=await serverBase(policyProbe);await new Promise(resolve=>policyProbe.close(resolve));
   credentialServer = http.createServer(async (request, response) => {
     response.setHeader('Content-Type', 'application/json');
+    if (request.url === credentialContract.PATH && request.method === 'POST') {
+      try {
+        const chunks = []; for await (const chunk of request) chunks.push(chunk);
+        const body = JSON.parse(Buffer.concat(chunks)); const token = (request.headers.authorization || '').replace(/^Bearer /, '');
+        const verified = jwt.verify(token, require('node:crypto').createPublicKey(fs.readFileSync(signing)), { algorithms: ['RS256'], issuer: logicalIssuer, audience: credentialContract.AUDIENCE });
+        const header = jwt.decode(token, { complete: true }).header;
+        if (!credentialContract.exact(body, ['subject']) || !credentialContract.validSubject(body.subject)
+          || !credentialContract.exact(verified, ['iss','sub','aud','actor_type','token_use','scope','htm','htu','request_subject','jti','iat','exp'])
+          || Object.keys(header).length !== 3 || header.typ !== credentialContract.TYPE || verified.sub !== 'oauth-provider'
+          || verified.actor_type !== 'workload' || verified.token_use !== credentialContract.PURPOSE || verified.scope !== credentialContract.SCOPE
+          || verified.htm !== 'POST' || verified.htu !== credentialContract.PATH || verified.request_subject !== body.subject
+          || !credentialContract.uuid(verified.jti) || verified.exp <= Math.floor(Date.now() / 1000) || verified.exp - verified.iat > 30) throw new Error('Invalid credential state request');
+        return response.end(JSON.stringify({ schemaVersion: 1, credentialAuthenticationProtocol: 1, subject: body.subject,
+          known: false, ready: false, subjectId: null, securityRevision: null, invitation: null }));
+      } catch { response.statusCode = 401; return response.end('{}'); }
+    }
     if (request.url.startsWith('/api/users')) { legacyUserRequests++; return response.end(JSON.stringify({ users: [{ id: 'legacy-shadow', role: 'admin' }] })); }
     if (request.url !== '/api/auth/login' || request.method !== 'POST') { response.statusCode = 404; return response.end('{}'); }
     const chunks = []; for await (const chunk of request) chunks.push(chunk);

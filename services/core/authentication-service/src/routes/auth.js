@@ -87,6 +87,7 @@ function createAuthRoutes(services) {
 
         res.json({
           success: true,
+          ...(user.credentialAuthentication?{credentialAuthentication:user.credentialAuthentication}:{}),
           user: {
             id: user.id,
             username: user.username,
