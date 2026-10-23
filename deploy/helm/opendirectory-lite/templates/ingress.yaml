@@ -1,0 +1,45 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-opendirectory
+  labels:
+    {{- include "opendirectory-lite.labels" . | nindent 4 }}
+  {{- $annotations := .Values.ingress.annotations | default dict }}
+  {{- if .Values.ingress.clusterIssuer }}
+  {{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.ingress.clusterIssuer }}
+  {{- end }}
+  annotations:
+    {{- toYaml $annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tlsSecretName | quote }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /.well-known
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-oauth-provider
+                port:
+                  number: 3010
+          - path: /oauth
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-oauth-provider
+                port:
+                  number: 3010
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-web-app
+                port:
+                  number: 3000
+{{- end }}

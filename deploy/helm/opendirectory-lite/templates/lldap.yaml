@@ -1,0 +1,85 @@
+{{- if .Values.lldap.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-lldap
+  labels:
+    {{- include "opendirectory-lite.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: lldap
+  ports:
+    - name: ldap
+      port: 3890
+      targetPort: ldap
+    - name: web
+      port: 17170
+      targetPort: web
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-lldap
+  labels:
+    {{- include "opendirectory-lite.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-lldap
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: lldap
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/name: lldap
+    spec:
+      containers:
+        - name: lldap
+          image: {{ .Values.lldap.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: ldap
+              containerPort: 3890
+            - name: web
+              containerPort: 17170
+          env:
+            - name: LLDAP_LDAP_BASE_DN
+              value: {{ .Values.lldap.baseDN | quote }}
+            - name: LLDAP_LDAP_USER_DN
+              value: {{ .Values.lldap.adminDN | quote }}
+            - name: LLDAP_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.runtimeName }}
+                  key: lldap-jwt-secret
+            - name: LLDAP_LDAP_USER_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.runtimeName }}
+                  key: lldap-admin-password
+          readinessProbe:
+            tcpSocket:
+              port: ldap
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.lldap.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.lldap.storage }}
+{{- end }}

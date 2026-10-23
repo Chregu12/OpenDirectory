@@ -1,0 +1,115 @@
+{{- $root := . -}}
+{{- range $name, $app := .Values.apps }}
+{{- if $app.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ printf "%s-%s" $root.Release.Name $name | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "opendirectory-lite.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  replicas: {{ $app.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: {{ $name }}
+    spec:
+      {{- with $root.Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $root.Values.global.image.registry }}/{{ $app.image }}:{{ $root.Values.global.image.tag }}"
+          imagePullPolicy: {{ $app.pullPolicy | default $root.Values.appDefaults.pullPolicy }}
+          {{- with $app.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $app.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $app.port }}
+          ports:
+            - name: http
+              containerPort: {{ . }}
+              protocol: TCP
+          {{- end }}
+          {{- if or $app.env $app.secretEnv }}
+          env:
+            {{- range $key, $value := $app.env }}
+            - name: {{ $key }}
+              value: {{ tpl (toString $value) $root | quote }}
+            {{- end }}
+            {{- range $key, $reference := $app.secretEnv }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.secrets.runtimeName }}
+                  key: {{ $reference.key }}
+                  optional: {{ $reference.optional | default false }}
+            {{- end }}
+          {{- end }}
+          {{- if $app.port }}
+          readinessProbe:
+            {{- if $app.healthPath }}
+            httpGet:
+              path: {{ $app.healthPath }}
+              port: http
+            {{- else }}
+            tcpSocket:
+              port: http
+            {{- end }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 20
+          {{- end }}
+          resources:
+            {{- toYaml ($app.resources | default $root.Values.appDefaults.resources) | nindent 12 }}
+          {{- if $app.mountFiles }}
+          volumeMounts:
+            - name: credentials
+              mountPath: /run/opendirectory
+              readOnly: true
+          {{- end }}
+      {{- if $app.mountFiles }}
+      volumes:
+        - name: credentials
+          secret:
+            secretName: {{ $root.Values.secrets.filesName }}
+            defaultMode: 0444
+      {{- end }}
+{{- if $app.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-%s" $root.Release.Name $name | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "opendirectory-lite.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+    app.kubernetes.io/component: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $app.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}
+{{- end }}
+{{- end }}

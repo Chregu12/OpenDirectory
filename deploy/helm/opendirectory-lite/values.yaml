@@ -1,0 +1,276 @@
+global:
+  image:
+    registry: harbor.heusser.local/opendirectory
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  imagePullSecrets:
+    - name: harbor-opendirectory
+  storageClass: longhorn
+  publicURL: https://opendirectory.example.com
+
+secrets:
+  runtimeName: opendirectory-runtime
+  filesName: opendirectory-files
+
+graphMail:
+  tenantId: ""
+  clientId: ""
+  sender: ""
+
+postgres:
+  image: postgres:15-alpine
+  storage: 20Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+redis:
+  image: redis:7-alpine
+  storage: 2Gi
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+lldap:
+  enabled: true
+  image: nitnelave/lldap:stable
+  baseDN: dc=opendirectory,dc=local
+  adminDN: admin
+  storage: 2Gi
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+
+appDefaults:
+  pullPolicy: IfNotPresent
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+apps:
+  identity-service:
+    enabled: true
+    image: identity-service
+    port: 3001
+    healthPath: /health
+    env:
+      NODE_ENV: production
+      PORT: "3001"
+      OIDC_ISSUER: "{{ .Values.global.publicURL }}"
+      OIDC_AUDIENCE: opendirectory-api
+      JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
+      AUTH_SERVICE_URL: "http://{{ .Release.Name }}-auth-service:3002"
+      POLICY_SERVICE_URL: "http://{{ .Release.Name }}-policy-service:3004"
+      OIDC_ACCESS_STATE_URL: "http://{{ .Release.Name }}-oauth-provider:3010/oauth/access-state"
+      OIDC_TENANT_STATE_URL: "http://{{ .Release.Name }}-oauth-provider:3010/oauth/tenant-state"
+      IDENTITY_DEMO_MODE: "false"
+    secretEnv:
+      DATABASE_URL: { key: identity-database-url }
+      REDIS_URL: { key: redis-url }
+
+  integration-service:
+    enabled: true
+    image: integration-service
+    port: 3005
+    healthPath: /health
+    env:
+      NODE_ENV: production
+      PORT: "3005"
+      PGHOST: "{{ .Release.Name }}-postgres"
+      PGPORT: "5432"
+      PGUSER: opendirectory
+      PGDATABASE: integration
+      LLDAP_URL: "http://{{ .Release.Name }}-lldap:17170"
+      LLDAP_ADMIN_USER: admin
+      CORS_ORIGINS: "{{ .Values.global.publicURL }}"
+      OIDC_ISSUER: "{{ .Values.global.publicURL }}"
+      JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
+      LOG_LEVEL: info
+    secretEnv:
+      PGPASSWORD: { key: postgres-password }
+      LLDAP_ADMIN_PASSWORD: { key: lldap-admin-password }
+
+  auth-service:
+    enabled: true
+    image: auth-service
+    port: 3002
+    healthPath: /health
+    env:
+      NODE_ENV: production
+      PORT: "3002"
+      OIDC_ISSUER: "{{ .Values.global.publicURL }}"
+      JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
+      IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
+      LDAP_URL: "ldap://{{ .Release.Name }}-lldap:3890"
+    secretEnv:
+      DATABASE_URL: { key: auth-database-url }
+      REDIS_URL: { key: redis-url }
+      JWT_SECRET: { key: jwt-secret }
+
+  device-service:
+    enabled: true
+    image: device-service
+    port: 3003
+    healthPath: /health
+    env:
+      NODE_ENV: production
+      PORT: "3003"
+      DB_HOST: "{{ .Release.Name }}-postgres"
+      DB_PORT: "5432"
+      DB_NAME: devices
+      DB_USER: opendirectory
+      OIDC_ISSUER: "{{ .Values.global.publicURL }}"
+      IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
+      JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
+    secretEnv:
+      DB_PASSWORD: { key: postgres-password }
+
+  policy-service:
+    enabled: true
+    image: policy-service
+    port: 3004
+    healthPath: /health
+    env:
+      NODE_ENV: production
+      PORT: "3004"
+      OIDC_ISSUER: "{{ .Values.global.publicURL }}"
+      OIDC_AUDIENCE: opendirectory-api
+      JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
+      IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
+      OAUTH_PROVIDER_URL: "http://{{ .Release.Name }}-oauth-provider:3010"
+      LICENSE_DEMO_MODE: "false"
+    secretEnv:
+      DATABASE_URL: { key: policy-database-url }
+      REDIS_URL: { key: redis-url }
+      LICENSE_GROUP_READ_TOKEN: { key: license-group-read-token, optional: true }
+      LICENSE_USER_READ_TOKEN: { key: license-user-read-token, optional: true }
+
+  oauth-provider:
+    enabled: true
+    image: oauth-provider
+    port: 3010
+    healthPath: /health
+    mountFiles: true
+    env:
+      NODE_ENV: production
+      OAUTH_ISSUER: "{{ .Values.global.publicURL }}"
+      OAUTH_API_AUDIENCE: opendirectory-api
+      OAUTH_IDENTITY_AUTHORITY_URL: "http://{{ .Release.Name }}-identity-service:3001/internal/identity/authorization-state"
+      OAUTH_POLICY_SOURCE_URL: "http://{{ .Release.Name }}-policy-service:3004"
+      OAUTH_SIGNING_KEY_FILE: /run/opendirectory/oauth-signing.pem
+      OAUTH_MFA_KEY_FILE: /run/opendirectory/mfa-encryption.key
+      OAUTH_VERIFICATION_JWKS_FILE: /run/opendirectory/oauth-verification.jwks.json
+      OAUTH_WEB_CLIENT_ID: web-app
+      OAUTH_WEB_CLIENT_SECRET_FILE: /run/opendirectory/oauth-web-client.secret
+      OAUTH_WEB_REDIRECT_URIS: '["{{ .Values.global.publicURL }}/auth/callback"]'
+      OAUTH_EPHEMERAL_SIGNING_KEYS: "false"
+      COMPANY_REGISTRATION_ENABLED: "false"
+      COMPANY_ACTIVATION_ENABLED: "false"
+      OAUTH_EMPLOYEE_INVITATION_GRAPH_TENANT_ID: "{{ .Values.graphMail.tenantId }}"
+      OAUTH_EMPLOYEE_INVITATION_GRAPH_CLIENT_ID: "{{ .Values.graphMail.clientId }}"
+      OAUTH_EMPLOYEE_INVITATION_GRAPH_SENDER: "{{ .Values.graphMail.sender }}"
+      OAUTH_EMPLOYEE_INVITATION_PUBLIC_URL: "{{ .Values.global.publicURL }}"
+    secretEnv:
+      DATABASE_URL: { key: oauth-database-url }
+      REDIS_URL: { key: redis-url }
+      OAUTH_EMPLOYEE_INVITATION_GRAPH_CLIENT_SECRET: { key: graph-client-secret, optional: true }
+
+  api-gateway:
+    enabled: true
+    image: api-gateway
+    port: 3000
+    healthPath: /health
+    env:
+      NODE_ENV: production
+      API_GATEWAY_PORT: "3000"
+      REDIS_HOST: "{{ .Release.Name }}-redis"
+      REDIS_PORT: "6379"
+      LOG_LEVEL: info
+    secretEnv:
+      REDIS_PASSWORD: { key: redis-password }
+      JWT_SECRET: { key: jwt-secret }
+
+  api-backend:
+    enabled: true
+    image: api-backend
+    port: 8080
+    healthPath: /health
+    env:
+      NODE_ENV: production
+      PORT: "8080"
+      CORS_ORIGIN: "{{ .Values.global.publicURL }}"
+      DEVICE_SERVICE_URL: "http://{{ .Release.Name }}-device-service:3003"
+      IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
+      AUTH_SERVICE_URL: "http://{{ .Release.Name }}-auth-service:3002"
+      POLICY_SERVICE_URL: "http://{{ .Release.Name }}-policy-service:3004"
+    secretEnv:
+      DATABASE_URL: { key: api-database-url }
+      REDIS_URL: { key: redis-url }
+      JWT_SECRET: { key: jwt-secret }
+
+  license-management:
+    enabled: true
+    image: license-management
+    port: 3018
+    healthPath: /health
+    env:
+      NODE_ENV: production
+      LICENSE_SERVICE_PORT: "3018"
+      CORS_ORIGINS: "{{ .Values.global.publicURL }}"
+      POLICY_SERVICE_URL: "http://{{ .Release.Name }}-policy-service:3004"
+
+  license-fulfillment:
+    enabled: true
+    image: policy-service
+    command: [node, scripts/license-fulfillment-worker.js]
+    mountFiles: true
+    env:
+      NODE_ENV: production
+      LICENSE_FULFILLMENT_CONFIG_FILE: /run/opendirectory/license-fulfillment.json
+    secretEnv:
+      DATABASE_URL: { key: license-fulfillment-database-url }
+
+  license-capacity:
+    enabled: true
+    image: policy-service
+    command: [node, scripts/license-capacity-observer.js]
+    mountFiles: true
+    env:
+      NODE_ENV: production
+      LICENSE_CAPACITY_CONFIG_FILE: /run/opendirectory/license-capacity.json
+    secretEnv:
+      DATABASE_URL: { key: license-capacity-database-url }
+
+  web-app:
+    enabled: true
+    image: web-app
+    port: 3000
+    mountFiles: true
+    env:
+      NODE_ENV: production
+      PORT: "3000"
+      BROWSER_AUTH_ORIGIN: "{{ .Values.global.publicURL }}"
+      BROWSER_AUTH_PUBLIC_URL: "{{ .Values.global.publicURL }}"
+      BROWSER_AUTH_ISSUER: "{{ .Values.global.publicURL }}"
+      BROWSER_AUTH_INTERNAL_URL: "http://{{ .Release.Name }}-oauth-provider:3010"
+      BROWSER_AUTH_API_AUDIENCE: opendirectory-api
+      BROWSER_AUTH_CLIENT_ID: web-app
+      BROWSER_AUTH_KEY_FILE: /run/opendirectory/browser-cookie.key
+      BROWSER_AUTH_CLIENT_SECRET_FILE: /run/opendirectory/browser-client.secret
+      INTEGRATION_SERVICE_URL: "http://{{ .Release.Name }}-integration-service:3005"
+      AUTH_SERVICE_URL: "http://{{ .Release.Name }}-auth-service:3002"
+      IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
+      DEVICE_SERVICE_URL: "http://{{ .Release.Name }}-device-service:3003"
+      OAUTH_PROVIDER_URL: "http://{{ .Release.Name }}-oauth-provider:3010"
+      CORE_GATEWAY_URL: "http://{{ .Release.Name }}-api-backend:8080"
+      API_BACKEND_URL: "http://{{ .Release.Name }}-api-backend:8080"
+      POLICY_SERVICE_URL: "http://{{ .Release.Name }}-policy-service:3004"
+      LICENSE_ADAPTER_URL: "http://{{ .Release.Name }}-license-management:3018"
+
+ingress:
+  enabled: true
+  className: nginx
+  host: opendirectory.example.com
+  tlsSecretName: opendirectory-tls
+  clusterIssuer: letsencrypt-prod
+  annotations: {}

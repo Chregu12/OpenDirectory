@@ -1,0 +1,6 @@
+apiVersion: v2
+name: opendirectory-lite
+description: OpenDirectory core services for Kubernetes, based on docker-compose.lite.yml
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
