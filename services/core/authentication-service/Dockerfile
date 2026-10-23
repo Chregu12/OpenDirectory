@@ -4,11 +4,15 @@ RUN apk add --no-cache dumb-init
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY services/core/authentication-service/package*.json ./
 
 RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
 
-COPY . .
+COPY services/core/authentication-service/ ./
+COPY packages/employee-invitation-contract.js /packages/employee-invitation-contract.js
+COPY packages/employee-invitation-request.js /packages/employee-invitation-request.js
+COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
+COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-contract.js
 
 RUN addgroup -S appuser && adduser -S -G appuser appuser
 RUN chown -R appuser:appuser /app

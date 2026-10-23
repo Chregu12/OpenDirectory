@@ -184,8 +184,8 @@ services:
 
   auth-service:
     build:
-      context: ./services/core/authentication-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/core/authentication-service/Dockerfile
     container_name: od-auth-service
     environment:
       - NODE_ENV=${NODE_ENV:-production}
@@ -194,6 +194,9 @@ services:
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/auth
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - OIDC_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
+      - JWKS_URI=http://oauth-provider:3010/.well-known/jwks.json
+      - IDENTITY_SERVICE_URL=http://identity-service:3001
       - LDAP_URL=ldap://lldap:3890
     ports:
       - "3002:3002"

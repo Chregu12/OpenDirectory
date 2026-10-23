@@ -10,7 +10,7 @@ async function stop(child){
  let timer;await Promise.race([exited,new Promise(resolve=>{timer=setTimeout(resolve,2500);})]);clearTimeout(timer);
  if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await exited;}
 }
-async function startAuthenticationService(databaseUrl,useDatabaseUrl=false){
+async function startAuthenticationService(databaseUrl,useDatabaseUrl=false,environment={}){
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'auth-runtime-'));const redisPort=await port();const httpPort=await port();const redisUrl='redis://127.0.0.1:'+redisPort+'/9';
  let redisProcess,service,redis;let output='';let startupError;
  const cleanup=async()=>{await stop(service);if(redis)redis.disconnect();await stop(redisProcess);fs.rmSync(directory,{recursive:true,force:true});};
@@ -25,7 +25,7 @@ async function startAuthenticationService(databaseUrl,useDatabaseUrl=false){
   if(!connected)throw new Error('Disposable Redis readiness deadline');
   service=spawn(process.execPath,[path.join(__dirname,'../../index.js')],{cwd:directory,stdio:['ignore','pipe','pipe'],env:{...process.env,
    NODE_ENV:'production',PORT:String(httpPort),AUTH_DATABASE_URL:useDatabaseUrl?'':databaseUrl,DATABASE_URL:useDatabaseUrl?databaseUrl:'postgres://[',REDIS_URL:redisUrl,REDIS_PORT:'1',
-   JWT_SECRET:randomBytes(32).toString('hex'),SESSION_SECRET:useDatabaseUrl?'':randomBytes(32).toString('hex'),LOG_DIR:path.join(directory,'logs')}});
+   JWT_SECRET:randomBytes(32).toString('hex'),SESSION_SECRET:useDatabaseUrl?'':randomBytes(32).toString('hex'),LOG_DIR:path.join(directory,'logs'),...environment}});
   service.on('error',error=>{startupError=error;});for(const stream of [service.stdout,service.stderr])stream.on('data',chunk=>{output=(output+chunk.toString()).slice(-32768);});
   const url='http://127.0.0.1:'+httpPort;const deadline=Date.now()+15000;
   while(Date.now()<deadline){

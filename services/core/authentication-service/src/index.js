@@ -265,6 +265,7 @@ class UnifiedAuthenticationService {
   }
 
   initializeRoutes() {
+    this.app.use(require('./EmployeeInvitationRoutes').employeeInvitationRoutes(require('./db')));
     this.app.use(/^\/(?:\.well-known\/openid-configuration|authorize|auth|token|userinfo|me|jwks|end_session|session\/end|introspect|revoke|interaction)(?=\/|$)/,(_req,res)=>{
       res.set('Cache-Control','no-store').status(410).json({error:'legacy_oidc_retired',message:'Use the configured central oauth-provider issuer.'});
     });

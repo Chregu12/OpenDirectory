@@ -242,7 +242,7 @@ class PasswordPolicyEnforcer {
     // History check
     const history = await this.getPasswordHistory(userId, policy.historyCount);
     if (history.length > 0) {
-      const bcrypt = require('bcrypt');
+      const bcrypt = require('bcryptjs');
       for (const entry of history) {
         let matches = false;
         try { matches = await bcrypt.compare(newPassword, entry.passwordHash); } catch { /* skip */ }

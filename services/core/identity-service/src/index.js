@@ -73,6 +73,12 @@ app.use(helmet());
 app.use(cors());
 app.use(compression());
 const authorityLimits = authorityAdmission();
+app.post('/internal/identity/employee-invitations/observe',authorityLimits.ingress,express.json({limit:'32kb'}),
+ require('./EmployeeInvitationRequest').invitationRequest()('observe','/internal/identity/employee-invitations/observe'),
+ asyncRoute(async(req,res)=>{
+  try{res.set('Cache-Control','no-store').json(await new(require('./EmployeeInvitationObserver').EmployeeInvitationObserver)(db).read(req.body,req.employeeInvitationProof));}
+  catch(error){res.set('Cache-Control','no-store').status(error.status||503).json({error:error.code||'employee_invitation_observation_unavailable'});}
+ }));
 const registrationRequest = require('./CompanyRegistrations').registrationRequest();
 for (const operation of ['submit', 'status', 'activate']) app.post('/internal/identity/company-registrations/' + operation,
   authorityLimits.ingress, express.json({ limit: '32kb' }), registrationRequest(operation), authorityLimits.verified, asyncRoute(async (req, res) => {
@@ -144,6 +150,11 @@ app.get('/api/identity/company-apps',asyncRoute(async(req,res)=>{
   res.set('Cache-Control','no-store');
   if(req.method!=='GET'||Object.keys(req.query).length||req.headers['x-api-key']!==undefined||Array.isArray(req.body)||Object.keys(req.body||{}).length||Number(req.headers['content-length']||0)||req.headers['transfer-encoding'])return res.status(400).json({error:'exact_company_app_source_required'});
   res.json(await new(require('./CompanyAppAuthority').CompanyAppAuthority)(db).read(req.user,req.headers.authorization));
+}));
+app.post('/api/identity/employee-invitations',asyncRoute(async(req,res)=>{
+ res.set('Cache-Control','no-store');
+ if(Object.keys(req.query).length||req.headers['x-api-key']!==undefined)return res.status(400).json({error:'exact_employee_invitation_source_required'});
+ res.json(await new(require('./EmployeeInvitationAuthority').EmployeeInvitationAuthority)(db).read(req.user,req.headers.authorization,req.body));
 }));
 app.use('/api/identity/automation', require('./CompanyAutomationRoutes').companyAutomationRoutes(db));
 app.use('/api', requireIdentityAccess);

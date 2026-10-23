@@ -65,9 +65,10 @@ const inMemoryAuditLog = [];
 
 function isAvailable() { return dbAvailable; }
 async function close(){dbAvailable=false;await pool.end();}
+const getClient=()=>pool.connect();
 
 async function query(sql, params) {
   return pool.query(sql, params);
 }
 
-module.exports = { initDb, logAuditEvent, getRecentEvents, isAvailable, query, close };
+module.exports = { initDb, logAuditEvent, getRecentEvents, isAvailable, query, close, getClient };
