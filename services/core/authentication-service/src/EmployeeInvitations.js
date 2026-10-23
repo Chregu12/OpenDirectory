@@ -109,7 +109,15 @@ class EmployeeInvitations{
   contract.exact(input,['witness']);const original=proof('complete',input,claims);contract.identifier(input.witness?.id);
   return this.transaction(async client=>{const row=await this.row(client,input.witness.id);const credential=(await client.query('SELECT id,record_revision,is_locked FROM users WHERE id=$1',[row.subject_id])).rows[0];
    const valid=row.grant_source.issuer===original.issuer&&isDeepStrictEqual(witness(row),input.witness)&&['credential_pending','accepted'].includes(row.status)&&!!credential&&(row.status==='accepted'||credential.is_locked&&String(credential.record_revision)===String(row.credential_revision));
-   return{schemaVersion:1,employeeInvitationProtocol:1,witness:witness(row),valid};
+   return{schemaVersion:1,employeeInvitationProtocol:1,witness:witness(row),status:row.status,valid};
+  },{proof:original});
+ }
+ async revokedSource(input,claims){
+  contract.exact(input,['witness']);const original=proof('withdraw',input,claims);contract.invitationWitness(input.witness);
+  return this.transaction(async client=>{const row=await this.row(client,input.witness.id);const credential=(await client.query('SELECT id,record_revision,is_locked FROM users WHERE id=$1',[row.subject_id])).rows[0];
+   const revoked=row.grant_source.issuer===original.issuer&&isDeepStrictEqual(witness(row),input.witness)&&row.status==='revoked'
+    &&(!row.credential_event_id||!!credential&&credential.is_locked&&String(credential.record_revision)===String(row.credential_revision));
+   return{schemaVersion:1,employeeInvitationProtocol:1,witness:witness(row),revoked};
   },{proof:original});
  }
  async activate(input,claims,authorization){

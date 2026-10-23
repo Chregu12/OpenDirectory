@@ -1,5 +1,6 @@
 'use strict';
 const {createHash}=require('node:crypto');
+const {isDeepStrictEqual}=require('node:util');
 const {validUuid,validRevision,validContext,sameContext}=require('./identity-authorization-contract');
 const {validTenantContext}=require('./tenant-authorization-contract');
 const SOURCE_PATH='/api/identity/employee-invitations';
@@ -34,4 +35,21 @@ function source(value,user){
   if(!validRevision(row.revision)||!validRevision(row.tenantGeneration)||typeof row.username!=='string'||typeof row.email!=='string'||typeof row.enabled!=='boolean'||typeof row.unlinked!=='boolean'||typeof row.ordinary!=='boolean')fail(503,'original_employee_invitation_target_unconfirmed');}
  return value;
 }
-module.exports={SOURCE_PATH,AUTH_BASE,IDENTITY_BASE,AUDIENCE,PURPOSE,TYPE,PERMISSIONS,exact,identifier,text,createInput,parseToken,password,digest,source,fail};
+function invitationWitness(value){
+ exact(value,['id','tenant','subjectId','request','source','createdAt','expiresAt','creationEventId','credential']);identifier(value.id);identifier(value.subjectId);identifier(value.creationEventId);
+ const request=createInput(value.request);const original=value.source;
+ exact(original,['schemaVersion','employeeInvitationProtocol','issuer','subject','tokenId','expiresAt','context','tenant','actorUserId','permissions','validUntil','consoleClientId','organizationName','target']);
+ if(original.schemaVersion!==1||original.employeeInvitationProtocol!==1||typeof original.issuer!=='string'||!original.issuer||typeof original.subject!=='string'||!original.subject
+  ||!validContext(original.context)||!validTenantContext(value.tenant)||!isDeepStrictEqual(value.tenant,original.tenant)||original.actorUserId!==original.context.userId
+  ||!isDeepStrictEqual(original.permissions,PERMISSIONS)||!Number.isSafeInteger(original.validUntil)||!Number.isSafeInteger(original.expiresAt)||original.validUntil>original.expiresAt
+  ||typeof original.consoleClientId!=='string'||!/^[A-Za-z0-9._~-]{1,255}$/.test(original.consoleClientId)||typeof original.organizationName!=='string'||!original.organizationName.trim()
+  ||!isDeepStrictEqual(request,value.request)||value.id!==request.id||!Number.isFinite(Date.parse(value.createdAt))||!Number.isFinite(Date.parse(value.expiresAt))
+  ||new Date(value.createdAt).toISOString()!==value.createdAt||new Date(value.expiresAt).toISOString()!==value.expiresAt
+  ||Date.parse(value.createdAt)>original.validUntil*1000||Date.parse(value.expiresAt)-Date.parse(value.createdAt)!==request.durationHours*3600000)fail(400,'original_employee_invitation_witness_required');
+ const target=original.target;exact(target,['id','revision','username','email','enabled','unlinked','ordinary','tenantGeneration']);identifier(target.id);
+ if(target.id!==request.userId||target.revision!==request.userRevision||!validRevision(target.tenantGeneration)||typeof target.username!=='string'||typeof target.email!=='string'
+  ||target.enabled!==false||target.unlinked!==true||target.ordinary!==true)fail(400,'original_ordinary_employee_witness_required');
+ if(value.credential!==null){exact(value.credential,['eventId','revision']);identifier(value.credential.eventId);if(!validRevision(value.credential.revision))fail(400,'original_employee_credential_witness_required');}
+ return value;
+}
+module.exports={SOURCE_PATH,AUTH_BASE,IDENTITY_BASE,AUDIENCE,PURPOSE,TYPE,PERMISSIONS,exact,identifier,text,createInput,parseToken,password,digest,source,invitationWitness,fail};

@@ -4,6 +4,7 @@ const { createRemoteJWKSet, jwtVerify } = require('jose');
 const { readRoleState } = require('./RoleState');
 const { PATH, TARGET_PATH, TARGET_PURPOSE, COMPANY_CONSOLE_PATH, COMPANY_CONSOLE_PURPOSE, AUDIENCE, PURPOSE, TYPE, validUuid, validMemberships } = require('../../../../packages/identity-authorization-contract');
 const { ownerState } = require('./CompanyOwner');
+const {employeeBinding:readEmployeeBinding}=require('./EmployeeBinding');
 const { createHash } = require('node:crypto');
 const { validTenantContext } = require('../../../../packages/tenant-authorization-contract');
 const {TENANT_PATH,TENANT_PURPOSE}=require('../../../../packages/company-app-contract');
@@ -54,8 +55,9 @@ class AuthorizationState {
   }
   async companyConsole(issuer, clientId, userId) {
     return this.database.transaction(async client => {
-      const owner = await ownerState(client, userId); const active = !!owner?.active && owner.issuer === issuer && owner.console_client_id === clientId;
-      return { schemaVersion: 1, clientId, userId, active, revision: active ? createHash('sha256').update(JSON.stringify(['company-console-owner-v1', clientId, userId, owner.id, owner.tenant_id])).digest('hex') : null };
+      const owner = await ownerState(client, userId); const owned = !!owner?.active && owner.issuer === issuer && owner.console_client_id === clientId;
+      const employee=owned?null:await readEmployeeBinding(client,userId);const enrolled=!!employee?.active&&employee.issuer===issuer&&employee.consoleClientId===clientId;const active=owned||enrolled;
+      return { schemaVersion: 1, clientId, userId, active, revision: active ? createHash('sha256').update(JSON.stringify(owned?['company-console-owner-v1', clientId, userId, owner.id, owner.tenant_id]:['company-console-employee-v1',clientId,userId,employee.binding])).digest('hex') : null };
     }, { readOnly: true });
   }
 
@@ -71,7 +73,9 @@ class AuthorizationState {
       const row = result.rows[0];
       if (!row || row.enabled !== true) return { schemaVersion: 1, issuer, subject, active: false };
       await client.query('SELECT identity_company_group_rule_live_receiving()');
-      const { roles, rolesRevision, authentication } = await readRoleState(client, row.id);
+      let roleState;
+      try{roleState=await readRoleState(client,row.id);}catch(error){if(error.code==='employee_binding_changed')return{schemaVersion:1,issuer,subject,active:false};throw error;}
+      const { roles, rolesRevision, authentication,employeeBinding } = roleState;
       const memberships = (await client.query(`SELECT group_members.group_id,group_members.membership_id FROM group_members
         JOIN groups ON groups.id=group_members.group_id WHERE group_members.user_id=$1 AND identity_membership_review_allowed(group_members.membership_id)
         AND identity_tenant_id('group',groups.id)=identity_tenant_id('user',$1::uuid) ORDER BY group_members.group_id LIMIT 257`, [row.id])).rows
@@ -79,7 +83,8 @@ class AuthorizationState {
       if (!validMemberships(memberships)) throw new Error('Invalid canonical membership state');
       const tenant = { id: row.tenant_id, version: String(row.tenant_version), generation: String(row.tenant_generation) };
       if (!validTenantContext(tenant)) throw new Error('Invalid canonical tenant state');
-      return { schemaVersion: 6, issuer, subject, active: true, roles, memberships, authentication, tenant,
+      if(employeeBinding&&(employeeBinding.subjectId!==subject||employeeBinding.issuer!==issuer))return{schemaVersion:1,issuer,subject,active:false};
+      return { schemaVersion: 6, issuer, subject, active: true, roles, memberships, authentication, tenant,...(employeeBinding?{employeeBinding}:{}),
         context: { userId: row.id, revision: String(row.revision), linkRevision: String(row.link_revision), rolesRevision } };
     }, { readOnly: true });
   }

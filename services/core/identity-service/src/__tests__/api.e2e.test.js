@@ -53,6 +53,7 @@ function makeFakePool() {
 
   function query(sql, params = []) {
     const s = sql.trim();
+    if(s.includes('FROM identity_employee_enrollments'))return Promise.resolve({rows:[]});
     if (s.includes('FROM identity_subject_links') && s.includes('link_revision')) return Promise.resolve({rows:[{id:mockActor,enabled:true,revision:'1',link_revision:'2',tenant_id:mockTenant.id,tenant_version:'1',tenant_generation:'2'}]});
     if (s.includes('identity_membership_review_allowed')) return Promise.resolve({rows:[]});
     if (s.includes('SELECT id FROM users WHERE id=$1 FOR SHARE') && params[0]===mockActor) return Promise.resolve({rows:[{id:mockActor}]});

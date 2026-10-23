@@ -4,6 +4,7 @@ const { createHash } = require('crypto');
 const { ROLES, MFA_LOCKED_ROLES, validRoles } = require('../../../../packages/directory-role-contract');
 const { validRevision } = require('../../../../packages/identity-authorization-contract');
 const { ownerState } = require('./CompanyOwner');
+const {employeeBinding}=require('./EmployeeBinding');
 function validPolicy(row) {
   if (!row || !ROLES.includes(row.role) || !validRevision(String(row.version)) || typeof row.mfa_required !== 'boolean'
     || !Number.isInteger(row.max_age_seconds) || row.max_age_seconds < 300 || row.max_age_seconds > 86400
@@ -42,6 +43,14 @@ async function readRoleState(client, userId, { delegateEvidence = false, scopeRe
   if (owner?.active) {
     result.authentication = { required: true, maxAgeSeconds: 300 };
     result.rolesRevision = createHash('sha256').update(JSON.stringify(['company-owner-v1', result.rolesRevision, owner.id, owner.tenant_id])).digest('hex');
+  } else {
+    const employee=await employeeBinding(client,userId);
+    if(employee){
+      if(!employee.active)throw Object.assign(new Error('employee_binding_changed'),{status:401,code:'employee_binding_changed'});
+      result.authentication={required:true,maxAgeSeconds:result.authentication.maxAgeSeconds};
+      result.rolesRevision=createHash('sha256').update(JSON.stringify(['company-employee-v1',result.rolesRevision,employee.binding])).digest('hex');
+      result.employeeBinding=employee.binding;
+    }
   }
   if (delegateEvidence) result.delegationRevision = roles.includes('license-delegate') ? createHash('sha256').update(JSON.stringify(['license-delegate-v1',
     grants.filter(grant => grant.role === 'license-delegate').map(grant => [grant.id,String(grant.policy_version),String(grant.activation_version),

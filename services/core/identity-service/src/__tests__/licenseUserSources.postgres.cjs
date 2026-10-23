@@ -21,8 +21,8 @@ let databaseUrl;
 
 before(async () => {
   const files = fs.readdirSync(migrations).filter(filename => filename.endsWith('.sql')).sort();
-  assert.equal(files.length, 54);
-  assert.deepEqual(files.map(filename => filename.slice(0, 3)), Array.from({ length: 54 }, (_, index) => String(index + 1).padStart(3, '0')));
+  assert.equal(files.length, 55);
+  assert.deepEqual(files.map(filename => filename.slice(0, 3)), Array.from({ length: 55 }, (_, index) => String(index + 1).padStart(3, '0')));
   await administration.query('CREATE SCHEMA ' + schema);
   const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL);
   address.searchParams.set('options', '-c search_path=' + schema + ',public');

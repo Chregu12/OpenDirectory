@@ -74,7 +74,7 @@ test('global mandatory activation cannot omit independent named reviewers',async
 });
 test('role authority rejects absent or malformed activation origins and filters stale/direct-only claims', async () => {
   const grant = { id:randomUUID(),role:'license-manager',policy_version:'1',activation_version:'2',activation_required:true,max_duration_seconds:600 };
-  const client = { query:async sql => ({ rows:sql.includes('FROM identity_company_activations') ? [] : sql.includes('FROM identity_role_assignments') ? [grant] : [{ role:grant.role,version:'1',mfa_required:false,max_age_seconds:3600 }] }) };
+  const client = { query:async sql => ({ rows:(sql.includes('FROM identity_company_activations') || sql.includes('FROM identity_employee_enrollments')) ? [] : sql.includes('FROM identity_role_assignments') ? [grant] : [{ role:grant.role,version:'1',mfa_required:false,max_age_seconds:3600 }] }) };
   expect((await readRoleState(client,randomUUID())).roles).toEqual([]);
   grant.policy_version = '2'; expect((await readRoleState(client,randomUUID())).roles).toEqual([]);
   grant.activation_request_id = randomUUID(); expect((await readRoleState(client,randomUUID())).roles).toEqual(['license-manager']);

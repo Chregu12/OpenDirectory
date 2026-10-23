@@ -4,11 +4,12 @@ const fs=require('node:fs');const path=require('node:path');const {Pool}=require
 const {activeCompany}=require('../../../../../scripts/lib/company-owner-fixture.cjs');const {DirectoryCreator}=require('../../../identity-service/src/DirectoryCreator');
 const {AuthorizationState}=require('../../../identity-service/src/AuthorizationState');const {EmployeeInvitationAuthority}=require('../../../identity-service/src/EmployeeInvitationAuthority');
 const {EmployeeInvitationObserver}=require('../../../identity-service/src/EmployeeInvitationObserver');const {EmployeeInvitations}=require('../EmployeeInvitations');
+const {EmployeeEnrollments}=require('../../../identity-service/src/EmployeeEnrollments');
 const contract=require('../../../../../packages/employee-invitation-contract');const {runMigrations}=require('../runMigrations');
 const administration=new Pool({connectionString:process.env.AUTH_TEST_DATABASE_URL,max:1});const issuer='https://employee.native';const bearer='Bearer original-owner';
-let authPool,identityPool,identity,owner,employee,store,schema,identitySchema;
+let authPool,identityPool,identity,owner,employee,store,enrollments,schema,identitySchema;
 function claims(operation,input,ownerBearer){const now=Math.floor(Date.now()/1000);return{iss:issuer,sub:'oauth-provider',aud:contract.AUDIENCE,actor_type:'workload',token_use:contract.PURPOSE,scope:'employees.invitations.'+operation,
- htm:'POST',htu:(['observe','complete'].includes(operation)?contract.IDENTITY_BASE:contract.AUTH_BASE)+'/'+operation,body_sha256:contract.digest(input),owner_sha256:ownerBearer?contract.digest(ownerBearer):null,jti:randomUUID(),iat:now,exp:now+30};}
+ htm:'POST',htu:(['observe','complete','withdraw'].includes(operation)?contract.IDENTITY_BASE:contract.AUTH_BASE)+'/'+operation,body_sha256:contract.digest(input),owner_sha256:ownerBearer?contract.digest(ownerBearer):null,jti:randomUUID(),iat:now,exp:now+30};}
 beforeEach(async()=>{
  schema='auth_employee_'+randomUUID().replaceAll('-','');identitySchema='identity_employee_'+randomUUID().replaceAll('-','');await administration.query('CREATE SCHEMA '+schema);await administration.query('CREATE SCHEMA '+identitySchema);
  authPool=new Pool({connectionString:process.env.AUTH_TEST_DATABASE_URL,options:'-c search_path='+schema+',public -c timezone=UTC'});identityPool=new Pool({connectionString:process.env.AUTH_TEST_DATABASE_URL,options:'-c search_path='+identitySchema+',public -c timezone=UTC'});
@@ -18,6 +19,7 @@ beforeEach(async()=>{
  employee=await new DirectoryCreator(identity,{issuer,revalidate}).user({username:'actual-employee',email:randomUUID()+'@example.invalid'},owner.user,bearer);
  const authority=new EmployeeInvitationAuthority(identity,{issuer,revalidate});const observer=new EmployeeInvitationObserver(identity);
  store=new EmployeeInvitations({isAvailable:()=>true,getClient:()=>authPool.connect()},{authority:{owner:async(authorization,userId=null)=>{assert.equal(authorization,bearer);return authority.read(owner.user,authorization,{userId});}},observe:async witness=>{const input={witness};return observer.read(input,claims('observe',input));}});
+ enrollments=new EmployeeEnrollments(identity,{credentials:{read:(operation,input)=>store[operation==='complete'?'identitySource':'revokedSource'](input,claims(operation,input))}});
 });
 afterEach(async()=>{await authPool.end();await identityPool.end();await administration.query('DROP SCHEMA '+schema+' CASCADE');await administration.query('DROP SCHEMA '+identitySchema+' CASCADE');});after(()=>administration.end());
 function input(){return{id:randomUUID(),userId:employee.id,userRevision:employee.revision,loginName:'employee-'+randomUUID(),durationHours:24,reason:'Explicit own ordinary employee account invitation',confirm:true};}
@@ -144,4 +146,144 @@ test('expiration at the physical commit rolls back an already inserted credentia
 test('retained invitation events and outbox fingerprints cannot be changed or removed',async()=>{
  const created=await invite();for(const statement of ["UPDATE auth_employee_invitation_events SET reason='Replaced original audit reason'",'DELETE FROM auth_employee_invitation_outbox','TRUNCATE auth_employee_invitation_events CASCADE'])await assert.rejects(authPool.query(statement),{code:'42501'});
  const read={id:created.invitation.id};assert.equal((await store.get(read,claims('get',read,bearer),bearer)).invitation.id,created.invitation.id);
+});
+test('actual canonical enrollment links and enables only the original recipient, then independently unlocks its credential',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};
+ const completed=await enrollments.complete(input,claims('complete',input),'Bearer original-private');assert.equal(completed.active,true);assert.equal(completed.replayed,false);
+ const actual=(await identityPool.query('SELECT * FROM users WHERE id=$1',[employee.id])).rows[0];assert.equal(actual.enabled,true);
+ const link=(await identityPool.query('SELECT * FROM identity_subject_links WHERE issuer=$1 AND subject=$2',[issuer,input.witness.subjectId])).rows[0];assert.equal(link.user_id,employee.id);assert.equal(String(link.authorization_revision),completed.receipt.linkRevision);
+ assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);
+ const event=(await identityPool.query('SELECT * FROM identity_employee_enrollment_events')).rows[0];assert.equal(event.actor.kind,'workload');assert.equal(event.actor.subject,'oauth-provider');
+ const state=await new AuthorizationState(identity).state(issuer,input.witness.subjectId);assert.equal(state.authentication.required,true);assert.deepEqual(state.roles,[]);assert.equal(state.employeeBinding.invitationId,created.invitation.id);
+ assert.equal((await new AuthorizationState(identity).companyConsole(issuer,'web-app',employee.id)).active,true);assert.equal((await new AuthorizationState(identity).companyConsole(issuer,'foreign-console',employee.id)).active,false);
+ const core=(await identityPool.query('SELECT * FROM identity_directory_user_events WHERE id=$1',[completed.receipt.acceptanceEventId])).rows[0];assert.equal(core.actor.userId,null);assert.equal(core.actor.subject,'oauth-provider');
+ store.accepted=(input)=>enrollments.acceptedSource(input,claims('activate',input));const activate={id:created.invitation.id,receipt:completed.receipt};
+ assert.equal((await store.activate(activate,claims('activate',activate),'Bearer activation')).invitation.status,'accepted');
+ assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,false);
+ assert.equal((await enrollments.complete(input,claims('complete',input),'Bearer original-private')).replayed,true);
+ assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_employee_enrollment_events')).rows[0].n,'1');
+});
+test('actual revocation withdraws an unchanged partial canonical enrollment and retains its negative evidence',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};await enrollments.complete(input,claims('complete',input),'Bearer private');
+ const revoke={id:created.invitation.id,revision:created.credential.invitation.revision,reason:'Withdraw this actual partially completed enrollment',confirm:true};await store.revoke(revoke,claims('revoke',revoke,bearer),bearer);
+ const result=await enrollments.withdraw(input,claims('withdraw',input),'Bearer original-withdrawal');assert.equal(result.withdrawn,true);assert.equal(result.changed,true);
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
+ assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_subject_links WHERE issuer=$1 AND subject=$2',[issuer,input.witness.subjectId])).rows[0].n,'0');
+ assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_subject_tenant_bindings WHERE issuer=$1 AND subject=$2',[issuer,input.witness.subjectId])).rows[0].n,'1');
+ assert.equal((await identityPool.query('SELECT state FROM identity_employee_enrollments')).rows[0].state,'withdrawn');
+ assert.equal((await enrollments.withdraw(input,claims('withdraw',input),'Bearer original-withdrawal')).changed,false);
+ assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);
+});
+test('a pending credential cannot activate after revocation or a changed original directory recipient',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};
+ const revoke={id:created.invitation.id,revision:created.credential.invitation.revision,reason:'Stop before any canonical employee activation',confirm:true};await store.revoke(revoke,claims('revoke',revoke,bearer),bearer);
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:409});
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_employee_enrollments')).rows[0].n,'0');
+});
+async function changeRecipient(displayName){const {UserMutator}=require('../../../identity-service/src/UserMutator');const {userEtag,userFromRow}=require('../../../identity-service/src/DirectoryUsers');
+ const current=(await identityPool.query('SELECT * FROM users WHERE id=$1',[employee.id])).rows[0];const revalidate=async(_auth,user)=>(await new AuthorizationState(identity).state(issuer,user.sub)).tenant;
+ await new UserMutator(identity,{issuer,revalidate}).update(employee.id,{displayName},userEtag(userFromRow(current)),owner.user,bearer);
+}
+test('a recipient changed after credential creation cannot be enabled by its old invitation',async()=>{
+ const created=await credentialed();await changeRecipient('Changed after original credential creation');const input={witness:created.credential.witness};
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:409});assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
+ assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);
+});
+test('later legitimate edits are preserved by recovery and prevent automatic activation or withdrawal of a partial enrollment',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};const completed=await enrollments.complete(input,claims('complete',input),'Bearer private');
+ await changeRecipient('Later actual authorized profile edit');const recovered=await enrollments.complete(input,claims('complete',input),'Bearer private');assert.equal(recovered.replayed,true);assert.equal(recovered.active,false);
+ const activate={id:created.invitation.id,receipt:completed.receipt};assert.equal((await enrollments.acceptedSource(activate,claims('activate',activate))).active,false);
+ const revoke={id:created.invitation.id,revision:created.credential.invitation.revision,reason:'Revoke but preserve later actual changes for review',confirm:true};await store.revoke(revoke,claims('revoke',revoke,bearer),bearer);
+ await assert.rejects(enrollments.withdraw(input,claims('withdraw',input),'Bearer private'),{status:409,code:'changed_partial_employee_requires_review'});
+ const actual=(await identityPool.query('SELECT enabled,display_name FROM users WHERE id=$1',[employee.id])).rows[0];assert.equal(actual.display_name,'Later actual authorized profile edit');assert.equal(actual.enabled,true);
+ assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);
+});
+test('two actual simultaneous canonical enrollment attempts retain one original transition',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};const results=await Promise.all([enrollments.complete(input,claims('complete',input),'Bearer private'),enrollments.complete(input,claims('complete',input),'Bearer private')]);
+ assert.deepEqual(results[0].receipt,results[1].receipt);assert.equal(results.filter(value=>value.replayed).length,1);assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_employee_enrollment_events')).rows[0].n,'1');
+});
+test('suppressed canonical enrollment outbox rolls back the actual user, link and certificate together',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};await identityPool.query('CREATE RULE suppress_employee_outbox AS ON INSERT TO identity_employee_enrollment_outbox DO INSTEAD NOTHING');
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:503});
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
+ for(const table of ['identity_employee_enrollments','identity_employee_enrollment_events','identity_employee_enrollment_outbox'])assert.equal((await identityPool.query('SELECT count(*) AS n FROM '+table)).rows[0].n,'0');
+ assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_subject_links WHERE subject=$1',[input.witness.subjectId])).rows[0].n,'0');
+ assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);
+});
+test('physical canonical commit expiry leaves the original separately stored credential locked for recovery',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};const read=enrollments.credentials.read;let calls=0;let alreadyWritten=false;
+ enrollments.credentials.read=async(...args)=>{const source=await read(...args);if(++calls===2){alreadyWritten=true;await new Promise(resolve=>setTimeout(resolve,2100));}return source;};
+ const proof={...claims('complete',input),exp:Math.floor(Date.now()/1000)+2};await assert.rejects(enrollments.complete(input,proof,'Bearer private'),{status:503});assert.equal(alreadyWritten,true);
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_employee_enrollments')).rows[0].n,'0');
+ assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);assert.equal((await authPool.query('SELECT status FROM auth_employee_invitations')).rows[0].status,'credential_pending');
+});
+test('actual canonical acceptance and role assurance survive the current migration replay',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};const first=await enrollments.complete(input,claims('complete',input),'Bearer private');const state=await new AuthorizationState(identity).state(issuer,input.witness.subjectId);
+ await identityPool.query(fs.readFileSync(path.join(__dirname,'../../../identity-service/migrations/055_employee_enrollments.sql'),'utf8'));
+ assert.deepEqual(await new AuthorizationState(identity).state(issuer,input.witness.subjectId),state);assert.deepEqual((await enrollments.complete(input,claims('complete',input),'Bearer private')).receipt,first.receipt);
+});
+test('a real revocation during the final credential recheck rolls back a started canonical activation',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};const read=enrollments.credentials.read;let calls=0;
+ enrollments.credentials.read=async(...args)=>{if(++calls===2){const revoke={id:created.invitation.id,revision:created.credential.invitation.revision,reason:'Actual revocation wins before canonical commit',confirm:true};await store.revoke(revoke,claims('revoke',revoke,bearer),bearer);}return read(...args);};
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:409});
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_employee_enrollments')).rows[0].n,'0');
+ assert.equal((await authPool.query('SELECT status FROM auth_employee_invitations')).rows[0].status,'revoked');assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);
+});
+function interceptIdentityQueries(intercept){const transaction=identity.transaction;identity.transaction=(operation,options)=>transaction(client=>operation({query:async(sql,values)=>{
+ await intercept(sql,values,client);return client.query(sql,values);}}),options);}
+test('an earlier unrelated canonical write cannot ride employee activation at the physical commit',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};let injected=false;
+ interceptIdentityQueries(async(sql,_values,client)=>{if(!injected&&sql.includes("set_config('opendirectory.employee_enrollment'")){injected=true;await client.query("UPDATE users SET title='Unrelated side effect' WHERE id=$1",[owner.receipt.administratorId]);}});
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:503});assert.equal(injected,true);
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);assert.equal((await identityPool.query('SELECT title FROM users WHERE id=$1',[owner.receipt.administratorId])).rows[0].title,null);
+});
+test('a missing actual employee commit receiver prevents canonical writes before activation',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};await identityPool.query('DROP TRIGGER employee_enrollment_commit ON identity_employee_enrollments');
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:503});assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
+ assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_employee_enrollments')).rows[0].n,'0');
+});
+test('accepted canonical certificates, original events and fingerprints are retained and immutable',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};await enrollments.complete(input,claims('complete',input),'Bearer private');
+ for(const statement of ["UPDATE identity_employee_enrollments SET subject='replacement'",'DELETE FROM identity_employee_enrollment_events',"UPDATE identity_employee_enrollment_outbox SET fingerprint=repeat('a',64)",'TRUNCATE identity_employee_enrollments CASCADE'])await assert.rejects(identityPool.query(statement),{code:'42501'});
+ assert.equal((await new AuthorizationState(identity).state(issuer,input.witness.subjectId)).active,true);
+});
+test('a real parent tenant suspension does not prevent the negative withdrawal of its unchanged partial enrollment',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};await enrollments.complete(input,claims('complete',input),'Bearer private');
+ const revoke={id:created.invitation.id,revision:created.credential.invitation.revision,reason:'Withdraw original partial employee before tenant suspension',confirm:true};await store.revoke(revoke,claims('revoke',revoke,bearer),bearer);
+ await require('../../../../../scripts/lib/tenant-ownership-fixture.cjs').enableTenant(identity,identitySchema,created.tenant.id,false);
+ const result=await enrollments.withdraw(input,claims('withdraw',input),'Bearer private');assert.equal(result.withdrawn,true);assert.equal(result.changed,true);
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);
+});
+test('canonical activation and its retained receipt are independent of a caller connection time zone',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};await identityPool.query("SET timezone='Pacific/Honolulu'");
+ const completed=await enrollments.complete(input,claims('complete',input),'Bearer private');assert.equal(completed.active,true);
+ const activate={id:created.invitation.id,receipt:completed.receipt};assert.equal((await enrollments.acceptedSource(activate,claims('activate',activate))).active,true);
+ await identityPool.query("SET timezone='Europe/Zurich'");assert.deepEqual((await enrollments.complete(input,claims('complete',input),'Bearer private')).receipt,completed.receipt);
+});
+test('a later actual unlink and relink cannot adopt the retained employee certificate or its original console access',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};await enrollments.complete(input,claims('complete',input),'Bearer private');
+ await identityPool.query('DELETE FROM identity_subject_links WHERE issuer=$1 AND subject=$2',[issuer,input.witness.subjectId]);
+ await identityPool.query('INSERT INTO identity_subject_links(issuer,subject,user_id) VALUES($1,$2,$3)',[issuer,input.witness.subjectId,employee.id]);
+ assert.equal((await new AuthorizationState(identity).state(issuer,input.witness.subjectId)).active,false);assert.equal((await new AuthorizationState(identity).companyConsole(issuer,'web-app',employee.id)).active,false);
+ assert.equal((await enrollments.complete(input,claims('complete',input),'Bearer private')).active,false);assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);
+});
+test('parent suspension cannot disguise an intervening independent user revision as the original partial enrollment',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};await enrollments.complete(input,claims('complete',input),'Bearer private');
+ const revoke={id:created.invitation.id,revision:created.credential.invitation.revision,reason:'Withdraw but retain later independently changed employee state',confirm:true};await store.revoke(revoke,claims('revoke',revoke,bearer),bearer);
+ await identityPool.query('UPDATE users SET updated_at=updated_at WHERE id=$1',[employee.id]);
+ await require('../../../../../scripts/lib/tenant-ownership-fixture.cjs').enableTenant(identity,identitySchema,created.tenant.id,false);
+ await assert.rejects(enrollments.withdraw(input,claims('withdraw',input),'Bearer private'),{status:409,code:'changed_partial_employee_requires_review'});
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,true);assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_subject_links WHERE subject=$1',[input.witness.subjectId])).rows[0].n,'1');
+});
+test('the retained admission fingerprint rejects replacement of the original workload proof after the final live checks',async()=>{
+ const created=await credentialed();const input={witness:created.credential.witness};let inserted=false,replaced=false;
+ interceptIdentityQueries(async(sql,_values,client)=>{
+  if(sql.startsWith('INSERT INTO identity_employee_enrollments'))inserted=true;
+  if(inserted&&!replaced&&sql.startsWith('SELECT enrollment.*')){
+   const scope=JSON.parse((await client.query("SELECT current_setting('opendirectory.employee_enrollment') AS scope")).rows[0].scope);scope.proof.tokenId=randomUUID();
+   await client.query("SELECT set_config('opendirectory.employee_enrollment',$1,true)",[JSON.stringify(scope)]);replaced=true;
+  }
+ });
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:503});assert.equal(replaced,true);
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_employee_enrollments')).rows[0].n,'0');
 });

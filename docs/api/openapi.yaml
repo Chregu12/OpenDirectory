@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.27.0",
-    "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, employee credential provisioning, external legal verification or production SaaS acceptance."
+    "version": "1.28.0",
+    "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, complete public employee onboarding, external legal verification or production SaaS acceptance. Private original employee invitation, canonical directory activation and partial withdrawal receivers are implemented; public invitation/MFA onboarding and central credential-bound tokens remain open."
   },
   "security": [
     {
@@ -3566,7 +3566,7 @@
     "/internal/identity/company-console": {
       "post": {
         "operationId": "readActualCompanyConsoleOwner",
-        "summary": "Read only the actual current owner source for one configured console and canonical user",
+        "summary": "Read actual current Owner or retained employee binding for one original company console",
         "security": [
           {
             "companyConsoleWorkload": []
@@ -34277,6 +34277,4056 @@
           }
         }
       }
+    },
+    "/internal/auth/employee-invitations/create": {
+      "post": {
+        "operationId": "employeeInvitationCreate",
+        "summary": "Private employee invitation create",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. Replaying exactly the original UUID and normalized intent returns created=false and invitationToken=null. Changed intent is rejected. New targets must be disabled, unlinked and ordinary in the exact requested version.",
+        "x-jwt-scope": "employees.invitations.create",
+        "x-jwt-htu": "/internal/auth/employee-invitations/create",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-OpenDirectory-Owner-Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 16384
+            },
+            "description": "Unchanged original human Bearer JWT. Private proof owner_sha256 binds this exact header; actual company ownership and independent MFA no older than 300 seconds are checked by Identity. Not an API key or app delegation."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeeInvitationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "actorUserId",
+                    "tenant",
+                    "invitation",
+                    "created",
+                    "invitationToken"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "tenant": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "version",
+                        "generation"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        },
+                        "generation": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        }
+                      }
+                    },
+                    "invitation": {
+                      "$ref": "#/components/schemas/EmployeeInvitation"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "invitationToken": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "minLength": 80,
+                          "maxLength": 80,
+                          "description": "Original UUID.secret; the secret is a canonical 43-character base64url encoding of 32 random bytes. Returned only once on original creation. Never place it in query parameters or logs."
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Original invitation created; random secret returned once only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "actorUserId",
+                    "tenant",
+                    "invitation",
+                    "created",
+                    "invitationToken"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "tenant": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "version",
+                        "generation"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        },
+                        "generation": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        }
+                      }
+                    },
+                    "invitation": {
+                      "$ref": "#/components/schemas/EmployeeInvitation"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "invitationToken": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "minLength": 80,
+                          "maxLength": 80,
+                          "description": "Original UUID.secret; the secret is a canonical 43-character base64url encoding of 32 random bytes. Returned only once on original creation. Never place it in query parameters or logs."
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/auth/employee-invitations/list": {
+      "post": {
+        "operationId": "employeeInvitationList",
+        "summary": "Private employee invitation list",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. ",
+        "x-jwt-scope": "employees.invitations.list",
+        "x-jwt-htu": "/internal/auth/employee-invitations/list",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-OpenDirectory-Owner-Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 16384
+            },
+            "description": "Unchanged original human Bearer JWT. Private proof owner_sha256 binds this exact header; actual company ownership and independent MFA no older than 300 seconds are checked by Identity. Not an API key or app delegation."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "page"
+                ],
+                "properties": {
+                  "page": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "actorUserId",
+                    "tenant",
+                    "page",
+                    "hasMore",
+                    "invitations"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "tenant": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "version",
+                        "generation"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        },
+                        "generation": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        }
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    },
+                    "invitations": {
+                      "type": "array",
+                      "maxItems": 25,
+                      "items": {
+                        "$ref": "#/components/schemas/EmployeeInvitation"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/auth/employee-invitations/get": {
+      "post": {
+        "operationId": "employeeInvitationGet",
+        "summary": "Private employee invitation get",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. ",
+        "x-jwt-scope": "employees.invitations.get",
+        "x-jwt-htu": "/internal/auth/employee-invitations/get",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-OpenDirectory-Owner-Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 16384
+            },
+            "description": "Unchanged original human Bearer JWT. Private proof owner_sha256 binds this exact header; actual company ownership and independent MFA no older than 300 seconds are checked by Identity. Not an API key or app delegation."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "actorUserId",
+                    "tenant",
+                    "invitation"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "tenant": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "version",
+                        "generation"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        },
+                        "generation": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        }
+                      }
+                    },
+                    "invitation": {
+                      "$ref": "#/components/schemas/EmployeeInvitation"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/auth/employee-invitations/revoke": {
+      "post": {
+        "operationId": "employeeInvitationRevoke",
+        "summary": "Private employee invitation revoke",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. Retains exact revocation reason/version; replay cannot replace its reason. Completed employees need normal offboarding. A partially activated Identity is cleaned separately by the withdrawal receiver.",
+        "x-jwt-scope": "employees.invitations.revoke",
+        "x-jwt-htu": "/internal/auth/employee-invitations/revoke",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-OpenDirectory-Owner-Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 16384
+            },
+            "description": "Unchanged original human Bearer JWT. Private proof owner_sha256 binds this exact header; actual company ownership and independent MFA no older than 300 seconds are checked by Identity. Not an API key or app delegation."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "revision",
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$",
+                    "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "actorUserId",
+                    "tenant",
+                    "invitation",
+                    "witness"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "tenant": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "version",
+                        "generation"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        },
+                        "generation": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        }
+                      }
+                    },
+                    "invitation": {
+                      "$ref": "#/components/schemas/EmployeeInvitation"
+                    },
+                    "witness": {
+                      "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/auth/employee-invitations/inspect": {
+      "post": {
+        "operationId": "employeeInvitationInspect",
+        "summary": "Private employee invitation inspect",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. Trusted internal result includes the original Witness; a future public recipient facade must redact its Owner/context metadata.",
+        "x-jwt-scope": "employees.invitations.inspect",
+        "x-jwt-htu": "/internal/auth/employee-invitations/inspect",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 80,
+                    "maxLength": 80,
+                    "description": "Original UUID.secret; the secret is a canonical 43-character base64url encoding of 32 random bytes. Returned only once on original creation. Never place it in query parameters or logs."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "invitation",
+                    "witness"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "invitation": {
+                      "$ref": "#/components/schemas/EmployeeInvitation"
+                    },
+                    "witness": {
+                      "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/auth/employee-invitations/credential": {
+      "post": {
+        "operationId": "employeeInvitationCredential",
+        "summary": "Private employee invitation credential",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. A separate original observe assertion binds {witness} only. Password is never forwarded to Identity. Creates one locked ordinary credential and bcrypt history; recovery verifies the original password without replacing it.",
+        "x-jwt-scope": "employees.invitations.credential",
+        "x-jwt-htu": "/internal/auth/employee-invitations/credential",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "token",
+                  "password",
+                  "observationAssertion"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 80,
+                    "maxLength": 80,
+                    "description": "Original UUID.secret; the secret is a canonical 43-character base64url encoding of 32 random bytes. Returned only once on original creation. Never place it in query parameters or logs."
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 72,
+                    "writeOnly": true,
+                    "description": "At least 12 UTF-16 code units and at most 72 UTF-8 bytes; no control characters. The actual local password policy is checked."
+                  },
+                  "observationAssertion": {
+                    "type": "string",
+                    "maxLength": 16384,
+                    "writeOnly": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "invitation",
+                    "witness"
+                  ],
+                  "properties": {
+                    "invitation": {
+                      "$ref": "#/components/schemas/EmployeeInvitation"
+                    },
+                    "witness": {
+                      "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/auth/employee-invitations/activate": {
+      "post": {
+        "operationId": "employeeInvitationActivate",
+        "summary": "Private employee invitation activate",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. Independently confirms the actual Identity receipt and exact unchanged partial identity, then unlocks only the original credential revision.",
+        "x-jwt-scope": "employees.invitations.activate",
+        "x-jwt-htu": "/internal/auth/employee-invitations/activate",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "receipt"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "receipt": {
+                    "$ref": "#/components/schemas/EmployeeAcceptanceReceipt"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "invitation",
+                    "witness",
+                    "replayed"
+                  ],
+                  "properties": {
+                    "invitation": {
+                      "$ref": "#/components/schemas/EmployeeInvitation"
+                    },
+                    "witness": {
+                      "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/auth/employee-invitations/state": {
+      "post": {
+        "operationId": "employeeInvitationState",
+        "summary": "Private employee invitation state",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. ready requires the original accepted invitation and unsuspended credential. Central OAuth token/challenge binding to this security revision remains open.",
+        "x-jwt-scope": "employees.invitations.state",
+        "x-jwt-htu": "/internal/auth/employee-invitations/state",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "invitationId",
+                  "subjectId",
+                  "userId",
+                  "tenantId"
+                ],
+                "properties": {
+                  "invitationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "subjectId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "invitationId",
+                    "subjectId",
+                    "userId",
+                    "tenantId",
+                    "ready",
+                    "securityRevision"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "invitationId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "subjectId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "tenantId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "ready": {
+                      "type": "boolean"
+                    },
+                    "securityRevision": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/auth/employee-invitations/identity-source": {
+      "post": {
+        "operationId": "employeeInvitationCredentialSource",
+        "summary": "Private employee invitation credentialSource",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. Delegated read-only receiving path: verifies the ORIGINAL complete operation and Identity /complete path, with the same original body/assertion.",
+        "x-jwt-scope": "employees.invitations.complete",
+        "x-jwt-htu": "/internal/identity/employee-invitations/complete",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "witness"
+                ],
+                "properties": {
+                  "witness": {
+                    "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "witness",
+                    "status",
+                    "valid"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "witness": {
+                      "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                    },
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "credential_pending",
+                        "accepted",
+                        "revoked"
+                      ]
+                    },
+                    "valid": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/auth/employee-invitations/revoked-source": {
+      "post": {
+        "operationId": "employeeInvitationRevokedSource",
+        "summary": "Private employee invitation revokedSource",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. Delegated read-only receiving path: verifies the ORIGINAL withdraw operation and Identity /withdraw path. Requires actual retained revocation and a protected original credential.",
+        "x-jwt-scope": "employees.invitations.withdraw",
+        "x-jwt-htu": "/internal/identity/employee-invitations/withdraw",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "witness"
+                ],
+                "properties": {
+                  "witness": {
+                    "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "witness",
+                    "revoked"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "witness": {
+                      "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                    },
+                    "revoked": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/identity/employee-invitations/observe": {
+      "post": {
+        "operationId": "employeeInvitationObserve",
+        "summary": "Private employee invitation observe",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. ",
+        "x-jwt-scope": "employees.invitations.observe",
+        "x-jwt-htu": "/internal/identity/employee-invitations/observe",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "witness"
+                ],
+                "properties": {
+                  "witness": {
+                    "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "witness",
+                    "eligible",
+                    "validUntil"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "witness": {
+                      "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                    },
+                    "eligible": {
+                      "type": "boolean"
+                    },
+                    "validUntil": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/identity/employee-invitations/complete": {
+      "post": {
+        "operationId": "employeeInvitationComplete",
+        "summary": "Private employee invitation complete",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. Actual Auth callback required. Canonical user status, exact credential-subject link, original certificate, audit and pending outbox commit together. Replay preserves later edits and returns active=false when the original partial state changed.",
+        "x-jwt-scope": "employees.invitations.complete",
+        "x-jwt-htu": "/internal/identity/employee-invitations/complete",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "witness"
+                ],
+                "properties": {
+                  "witness": {
+                    "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "receipt",
+                    "active",
+                    "replayed"
+                  ],
+                  "properties": {
+                    "receipt": {
+                      "$ref": "#/components/schemas/EmployeeAcceptanceReceipt"
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/identity/employee-invitations/accepted-source": {
+      "post": {
+        "operationId": "employeeInvitationAcceptedSource",
+        "summary": "Private employee invitation acceptedSource",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. Read only. Validates the ORIGINAL Auth activate operation/path on this explicitly delegated callback path; checks the retained certificate, unchanged original user/link and current owner source.",
+        "x-jwt-scope": "employees.invitations.activate",
+        "x-jwt-htu": "/internal/auth/employee-invitations/activate",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "receipt"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "receipt": {
+                    "$ref": "#/components/schemas/EmployeeAcceptanceReceipt"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "employeeInvitationProtocol",
+                    "receipt",
+                    "active"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "employeeInvitationProtocol": {
+                      "const": 1
+                    },
+                    "receipt": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/EmployeeAcceptanceReceipt"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "active": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/identity/employee-invitations/withdraw": {
+      "post": {
+        "operationId": "employeeInvitationWithdraw",
+        "summary": "Private employee invitation withdraw",
+        "description": "Internal enrollment receiving only; no public OAuth invitation facade, UI/CLI or complete first MFA browser login is provided. The fixed issuer RS256 workload proof binds purpose, audience, token type, exact POST operation/path, canonical body hash, UUID JTI and at most 30 seconds. Query selectors and X-API-Key are forbidden. Original owner/tenant/target and actual independent Auth/Identity callbacks are checked. Identity and Auth have separate transactions; original receipts and partial states are retained. No manufacturer account or mail provisioning. Requires actual negative Auth callback. Disables/unlinks only the original unchanged partial enrollment. An automatic parent suspension needs exact canonical tenant/audit evidence; independent later edits require review. Retains original subject-tenant binding. Credential namespace reuse is not implemented.",
+        "x-jwt-scope": "employees.invitations.withdraw",
+        "x-jwt-htu": "/internal/identity/employee-invitations/withdraw",
+        "security": [
+          {
+            "employeeInvitationWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "witness"
+                ],
+                "properties": {
+                  "witness": {
+                    "$ref": "#/components/schemas/EmployeeInvitationWitness"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual bounded original receiving result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "invitationId",
+                    "withdrawn",
+                    "changed",
+                    "receipt"
+                  ],
+                  "properties": {
+                    "invitationId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "withdrawn": {
+                      "type": "boolean"
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    },
+                    "receipt": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/EmployeeWithdrawalReceipt"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/employee-invitations": {
+      "post": {
+        "operationId": "readOriginalEmployeeInvitationAuthority",
+        "summary": "Read actual own human invitation authority and optional original recipient",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Original current human Bearer, actual own company ownership and independent MFA at most 300 seconds old. No global role shortcut, caller tenant or API key. POST body has exactly userId, either null for owner namespace or the own canonical target UUID.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId"
+                ],
+                "properties": {
+                  "userId": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current own original authority, without credentials or invitation secret",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeInvitationAuthority"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields and canonical bounded values required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private proof, possession or credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own original authority required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original own resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Original intent, canonical state or later authorized edit conflicts; review before recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original owner or recipient version changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Independently verified fresh Owner MFA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded invitation capacity or receiver admission limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Actual source, original evidence or receiving outcome unavailable/unconfirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -34304,6 +38354,12 @@
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "description": "Private original issuer workload for identity-company-app-tenant-request; not an ordinary API access token."
+      },
+      "employeeInvitationWorkload": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Private issuer workload: RS256, typ od-employee-invitation+jwt, audience opendirectory-employee-invitations, purpose employee-invitation-receiving, fixed employees.invitations.OPERATION scope, exact POST/path/body and at most 30 seconds. Ordinary API user/app tokens are rejected. Owner operations additionally bind the separate original human Bearer header."
       }
     },
     "schemas": {
@@ -48424,6 +52480,662 @@
           },
           "active": {
             "type": "boolean"
+          }
+        }
+      },
+      "EmployeeInvitationCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "userId",
+          "userRevision",
+          "loginName",
+          "durationHours",
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+          },
+          "loginName": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 254,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._@+-]*$"
+          },
+          "durationHours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 72
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "confirm": {
+            "const": true
+          }
+        }
+      },
+      "EmployeeInvitationAuthority": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "employeeInvitationProtocol",
+          "issuer",
+          "subject",
+          "tokenId",
+          "expiresAt",
+          "context",
+          "tenant",
+          "actorUserId",
+          "permissions",
+          "validUntil",
+          "consoleClientId",
+          "organizationName",
+          "target"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "employeeInvitationProtocol": {
+            "const": 1
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "tokenId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "integer"
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "userId",
+              "revision",
+              "linkRevision",
+              "rolesRevision"
+            ],
+            "properties": {
+              "userId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              },
+              "linkRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              },
+              "rolesRevision": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              }
+            }
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "permissions": {
+            "const": [
+              "employees.invitations.read",
+              "employees.invitations.create",
+              "employees.invitations.revoke"
+            ]
+          },
+          "validUntil": {
+            "type": "integer"
+          },
+          "consoleClientId": {
+            "type": "string"
+          },
+          "organizationName": {
+            "type": "string"
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "revision",
+                  "username",
+                  "email",
+                  "enabled",
+                  "unlinked",
+                  "ordinary",
+                  "tenantGeneration"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$",
+                    "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                  },
+                  "username": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "unlinked": {
+                    "type": "boolean"
+                  },
+                  "ordinary": {
+                    "type": "boolean"
+                  },
+                  "tenantGeneration": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$",
+                    "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "EmployeeInvitation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "tenantId",
+          "userId",
+          "loginName",
+          "organizationName",
+          "status",
+          "revision",
+          "createdAt",
+          "expiresAt",
+          "credentialCreated",
+          "identityConfirmed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "loginName": {
+            "type": "string"
+          },
+          "organizationName": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "credential_pending",
+              "accepted",
+              "revoked"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "credentialCreated": {
+            "type": "boolean"
+          },
+          "identityConfirmed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EmployeeInvitationWitness": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "tenant",
+          "subjectId",
+          "request",
+          "source",
+          "createdAt",
+          "expiresAt",
+          "creationEventId",
+          "credential"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              }
+            }
+          },
+          "subjectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "request": {
+            "$ref": "#/components/schemas/EmployeeInvitationCreate"
+          },
+          "source": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmployeeInvitationAuthority"
+              },
+              {
+                "properties": {
+                  "target": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "revision",
+                      "username",
+                      "email",
+                      "enabled",
+                      "unlinked",
+                      "ordinary",
+                      "tenantGeneration"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                      },
+                      "username": {
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": "string"
+                      },
+                      "enabled": {
+                        "const": false
+                      },
+                      "unlinked": {
+                        "const": true
+                      },
+                      "ordinary": {
+                        "const": true
+                      },
+                      "tenantGeneration": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "creationEventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "credential": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "eventId",
+                  "revision"
+                ],
+                "properties": {
+                  "eventId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$",
+                    "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "EmployeeAcceptanceReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "employeeInvitationProtocol",
+          "invitationId",
+          "subjectId",
+          "userId",
+          "tenant",
+          "linkRevision",
+          "acceptanceEventId",
+          "confirmed"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "employeeInvitationProtocol": {
+            "const": 1
+          },
+          "invitationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "subjectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              }
+            }
+          },
+          "linkRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+          },
+          "acceptanceEventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "confirmed": {
+            "const": true
+          }
+        }
+      },
+      "EmployeeWithdrawalReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "employeeInvitationProtocol",
+          "invitationId",
+          "subjectId",
+          "userId",
+          "tenant",
+          "linkRevision",
+          "acceptanceEventId",
+          "confirmed",
+          "withdrawn",
+          "withdrawalEventId"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "employeeInvitationProtocol": {
+            "const": 1
+          },
+          "invitationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "subjectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+              }
+            }
+          },
+          "linkRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
+          },
+          "acceptanceEventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "confirmed": {
+            "const": true
+          },
+          "withdrawn": {
+            "const": true
+          },
+          "withdrawalEventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          }
+        }
+      },
+      "EmployeeBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "issuer",
+          "invitationId",
+          "subjectId",
+          "userId",
+          "tenantId",
+          "acceptanceEventId",
+          "linkRevision"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "invitationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "subjectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "acceptanceEventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "linkRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT, at most 9223372036854775807."
           }
         }
       }

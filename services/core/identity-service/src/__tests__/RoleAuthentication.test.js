@@ -81,7 +81,7 @@ test.each(['license-review-administrator','license-reviewer'])('license review w
 test('aggregation uses every live canonical role and its durable policy version, not selected token scopes', async () => {
   const grants = ['license-manager','directory-reader'].map(role => ({ id:crypto.randomUUID(),role,policy_version:'1',activation_version:'1',activation_required:false,max_duration_seconds:28800 }));
   const policies = [{ role:'directory-reader',version:'1',mfa_required:true,max_age_seconds:900 },{ role:'license-manager',version:'2',mfa_required:true,max_age_seconds:300 }];
-  const client = { query: jest.fn(async sql => ({ rows: sql.includes('FROM identity_company_activations') ? [] : sql.includes('FROM identity_role_assignments') ? grants : structuredClone(policies) })) };
+  const client = { query: jest.fn(async sql => ({ rows: (sql.includes('FROM identity_company_activations') || sql.includes('FROM identity_employee_enrollments')) ? [] : sql.includes('FROM identity_role_assignments') ? grants : structuredClone(policies) })) };
   const first = await readRoleState(client,userId); expect(first.authentication).toEqual({ required:true,maxAgeSeconds:300 });
   policies[1].mfa_required = false; policies[1].version = '3';
   const relaxed = await readRoleState(client,userId); expect(relaxed.authentication.maxAgeSeconds).toBe(900);

@@ -226,6 +226,7 @@ END; $$;
 ALTER TABLE identity_company_group_rule_manifest DISABLE TRIGGER company_group_rule_manifest_guard;
 INSERT INTO identity_company_group_rule_manifest SELECT signature,md5(pg_get_functiondef(to_regprocedure(signature))) FROM unnest(ARRAY['identity_company_group_rule_draft_valid(jsonb)','identity_company_group_rule_graph(uuid,uuid,jsonb)','identity_company_group_rule_guard()','identity_company_group_rule_fence()','identity_company_group_rule_receiving()','identity_company_group_rule_manifest_guard()','identity_company_group_rule_wants(identity_company_group_rules,uuid)','identity_company_group_rule_effect_guard()']) signature
  ON CONFLICT(signature) DO UPDATE SET digest=EXCLUDED.digest;
+SET CONSTRAINTS ALL IMMEDIATE;
 ALTER TABLE identity_company_group_rule_manifest ENABLE TRIGGER company_group_rule_manifest_guard;
 REVOKE ALL ON identity_company_group_rule_manifest FROM PUBLIC;
 DO $$ DECLARE relation TEXT;hook RECORD;BEGIN

@@ -4,15 +4,15 @@ const {randomUUID,generateKeyPairSync}=require('node:crypto');const {once}=requi
 const express=require('express');const jwt=require('jsonwebtoken');const {Pool}=require('pg');
 const {activeCompany}=require('../../../../../scripts/lib/company-owner-fixture.cjs');const {DirectoryCreator}=require('../../../identity-service/src/DirectoryCreator');
 const {AuthorizationState}=require('../../../identity-service/src/AuthorizationState');const {EmployeeInvitationAuthority}=require('../../../identity-service/src/EmployeeInvitationAuthority');
-const {EmployeeInvitationObserver}=require('../../../identity-service/src/EmployeeInvitationObserver');const {invitationRequest}=require('../../../identity-service/src/EmployeeInvitationRequest');
+const {invitationRequest}=require('../../../identity-service/src/EmployeeInvitationRequest');const {employeeEnrollmentRoutes}=require('../../../identity-service/src/EmployeeEnrollmentRoutes');const {EmployeeCredentialSource}=require('../../../identity-service/src/EmployeeCredentialSource');
 const {startAuthenticationService}=require('./fixtures/server.cjs');const contract=require('../../../../../packages/employee-invitation-contract');
 const administration=new Pool({connectionString:process.env.AUTH_TEST_DATABASE_URL,max:1});const issuer='https://employee.http.native';
 const {privateKey,publicKey}=generateKeyPairSync('rsa',{modulusLength:2048});const signingKey=privateKey.export({type:'pkcs8',format:'pem'});
-let authPool,identityPool,identityServer,service,employee,owner,authorization,authSchema,identitySchema,environment,databaseUrl,identityBodies;
+let authPool,identityPool,identityServer,service,employee,owner,authorization,authSchema,identitySchema,environment,databaseUrl,identityBodies,identityOrigin;
 const route=contract.AUTH_BASE;
 function signed(operation,body,{ownerAuthorization=null,extra={},type=contract.TYPE,htu}={}){const now=Math.floor(Date.now()/1000);
  return jwt.sign({iss:issuer,sub:'oauth-provider',aud:contract.AUDIENCE,actor_type:'workload',token_use:contract.PURPOSE,scope:'employees.invitations.'+operation,
-  htm:'POST',htu:htu||(['observe','complete'].includes(operation)?contract.IDENTITY_BASE:route)+'/'+operation,
+  htm:'POST',htu:htu||(['observe','complete','withdraw'].includes(operation)?contract.IDENTITY_BASE:route)+'/'+operation,
   body_sha256:contract.digest(body),owner_sha256:ownerAuthorization?contract.digest(ownerAuthorization):null,jti:randomUUID(),iat:now,exp:now+30,...extra},signingKey,{algorithm:'RS256',keyid:'employee-http-key',header:{typ:type}});
 }
 async function call(operation,body,options={}){const token=options.token||signed(operation,body,{ownerAuthorization:options.ownerAuthorization});
@@ -28,14 +28,42 @@ beforeEach(async()=>{
  owner=await activeCompany(database,identitySchema,issuer);authorization='Bearer '+jwt.sign(owner.user,signingKey,{algorithm:'RS256',keyid:'employee-http-key'});
  const revalidate=async(_authorization,user)=>(await new AuthorizationState(database).state(issuer,user.sub)).tenant;
  employee=await new DirectoryCreator(database,{issuer,revalidate}).user({username:'http-employee',email:randomUUID()+'@example.invalid'},owner.user,authorization);
- const authority=new EmployeeInvitationAuthority(database,{issuer,revalidate});const observer=new EmployeeInvitationObserver(database);
+ const authority=new EmployeeInvitationAuthority(database,{issuer,revalidate});
  const app=express();identityBodies=[];app.use(express.json({limit:'32kb'}));
  app.get('/jwks',(_req,res)=>res.json({keys:[{...publicKey.export({format:'jwk'}),kid:'employee-http-key',alg:'RS256',use:'sig'}]}));
  app.post(contract.SOURCE_PATH,async(req,res)=>{try{const user=jwt.verify(req.headers.authorization?.slice(7),publicKey,{issuer,algorithms:['RS256']});identityBodies.push(req.body);res.json(await authority.read(user,req.headers.authorization,req.body));}catch(error){res.status(error.status||401).json({error:error.code||'source_rejected'});}});
- identityServer=app.listen(0,'127.0.0.1');await once(identityServer,'listening');const origin='http://127.0.0.1:'+identityServer.address().port;
- app.post(contract.IDENTITY_BASE+'/observe',invitationRequest({issuer,jwksUri:origin+'/jwks'})('observe',contract.IDENTITY_BASE+'/observe'),async(req,res)=>{try{identityBodies.push(req.body);res.json(await observer.read(req.body,req.employeeInvitationProof));}catch(error){res.status(error.status||503).json({error:error.code||'observation_unavailable'});}});
+ identityServer=app.listen(0,'127.0.0.1');await once(identityServer,'listening');const origin='http://127.0.0.1:'+identityServer.address().port;identityOrigin=origin;
  environment={OIDC_ISSUER:issuer,JWKS_URI:origin+'/jwks',IDENTITY_SERVICE_URL:origin};databaseUrl=new URL(process.env.AUTH_TEST_DATABASE_URL);databaseUrl.searchParams.set('options','-c search_path='+authSchema+',public');
  service=await startAuthenticationService(databaseUrl.href,false,environment);
+ app.use((req,_res,next)=>{identityBodies.push(req.body);next();});
+ app.use(employeeEnrollmentRoutes(database,{verify:invitationRequest({issuer,jwksUri:origin+'/jwks'}),credentials:{read:(...args)=>new EmployeeCredentialSource({endpoint:service.url}).read(...args)}}));
+});
+async function identityCall(operation,body,{token=signed(operation,body),path=operation}={}){
+ const response=await fetch(identityOrigin+contract.IDENTITY_BASE+'/'+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});
+ return{status:response.status,body:await response.json(),cache:response.headers.get('cache-control')};
+}
+async function pendingCredential(){const created=await create();const inspection=await call('inspect',{token:created.invitationToken});assert.equal(inspection.status,200);
+ const input={token:created.invitationToken,password:'Actual-HTTP-Employee-Password-321!',observationAssertion:signed('observe',{witness:inspection.body.witness})};const established=await call('credential',input);assert.equal(established.status,200,JSON.stringify(established.body));return{created,established:established.body};}
+test('the shipped signed receivers complete the real Auth-to-Identity-to-Auth activation without a human impersonation',{timeout:45000},async()=>{
+ const {created,established}=await pendingCredential();const input={witness:established.witness};
+ const foreign={witness:{...input.witness,subjectId:randomUUID()}};assert.equal((await identityCall('complete',foreign)).status,409);
+ const completed=await identityCall('complete',input);assert.equal(completed.status,200,JSON.stringify(completed.body));assert.equal(completed.body.active,true);assert.equal(completed.cache,'no-store');
+ assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,true);
+ const activate={id:created.invitation.id,receipt:completed.body.receipt};const activated=await call('activate',activate);assert.equal(activated.status,200,JSON.stringify(activated.body));assert.equal(activated.body.invitation.status,'accepted');
+ assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,false);
+ const state={invitationId:created.invitation.id,subjectId:input.witness.subjectId,userId:employee.id,tenantId:created.tenant.id};assert.equal((await call('state',state)).body.ready,true);
+ const replay=await identityCall('complete',input);assert.equal(replay.status,200);assert.equal(replay.body.replayed,true);assert.deepEqual(replay.body.receipt,completed.body.receipt);
+ assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_employee_enrollment_events')).rows[0].n,'1');
+});
+test('the shipped withdrawal receiver proves actual revocation before disabling and unlinking a partial enrollment',{timeout:45000},async()=>{
+ const {created,established}=await pendingCredential();const input={witness:established.witness};const completed=await identityCall('complete',input);assert.equal(completed.status,200,JSON.stringify(completed.body));
+ assert.equal((await identityCall('withdraw',input)).status,409);assert.equal((await identityCall('complete',input,{token:authorization.slice(7)})).status,401);
+ assert.equal((await identityCall('activate',{id:created.invitation.id,receipt:completed.body.receipt},{token:signed('complete',input),path:'accepted-source'})).status,401);
+ const revoke={id:created.invitation.id,revision:established.invitation.revision,reason:'Actual HTTP partial enrollment needs controlled withdrawal',confirm:true};assert.equal((await call('revoke',revoke,{ownerAuthorization:authorization})).status,200);
+ const withdrawn=await identityCall('withdraw',input);assert.equal(withdrawn.status,200,JSON.stringify(withdrawn.body));assert.equal(withdrawn.body.withdrawn,true);assert.equal(withdrawn.body.changed,true);
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_subject_links WHERE subject=$1',[input.witness.subjectId])).rows[0].n,'0');
+ const activate={id:created.invitation.id,receipt:completed.body.receipt};assert.equal((await call('activate',activate)).status,409);assert.equal((await authPool.query('SELECT is_locked FROM users')).rows[0].is_locked,true);
+ const replay=await identityCall('withdraw',input);assert.equal(replay.status,200);assert.equal(replay.body.changed,false);
 });
 afterEach(async()=>{if(service)await service.stop();if(identityServer)await new Promise(resolve=>identityServer.close(resolve));await authPool.end();await identityPool.end();await administration.query('DROP SCHEMA '+authSchema+' CASCADE');await administration.query('DROP SCHEMA '+identitySchema+' CASCADE');});after(()=>administration.end());
 async function create(){const request={id:randomUUID(),userId:employee.id,userRevision:employee.revision,loginName:'http-'+randomUUID(),durationHours:24,reason:'Explicit invitation through the actual credential service',confirm:true};

@@ -182,7 +182,7 @@ test('every offered dataset executes against real own canonical rows and migrati
   const queued=await automation.enqueue({id:randomUUID(),grantId:permission.id,action,format:'json'},app,appBearer);
   const result=await automation.run({grantId:permission.id},app,appBearer);assert.equal(result.job.status,'succeeded');
   const artifact=await automation.result(queued.job.id,app,appBearer);assert.deepEqual(JSON.parse(artifact.content).rows.map(row=>row.id),[expected]);
-  for(const file of ['048_company_automation.sql','049_company_license_automation.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql','053_company_automation_changes.sql','054_company_app_automation_tenants.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
+  for(const file of ['048_company_automation.sql','049_company_license_automation.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql','053_company_automation_changes.sql','054_company_app_automation_tenants.sql','055_employee_enrollments.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
   assert.equal((await automation.result(queued.job.id,app,appBearer)).sha256,artifact.sha256);
  }
 });

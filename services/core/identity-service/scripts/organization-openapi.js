@@ -250,7 +250,11 @@ function organizationOpenApi() {
   Object.assign(document.paths, companyGroupRules.paths); Object.assign(document.components.schemas, companyGroupRules.components.schemas);
   const companyApps=require('../../oauth-provider/scripts/company-app-openapi').companyAppOpenApi();
   Object.assign(document.paths,companyApps.paths);Object.assign(document.components.schemas,companyApps.components.schemas);Object.assign(document.components.securitySchemes,companyApps.components.securitySchemes);
-  document.info.version = '1.27.0';
+  const employeeInvitations=require('./employee-invitation-openapi').employeeInvitationOpenApi();
+  Object.assign(document.paths,employeeInvitations.paths);Object.assign(document.components.schemas,employeeInvitations.components.schemas);Object.assign(document.components.securitySchemes,employeeInvitations.components.securitySchemes);
+  document.paths['/internal/identity/company-console'].post.summary='Read actual current Owner or retained employee binding for one original company console';
+  document.info.description=document.info.description.replace('employee credential provisioning, ','complete public employee onboarding, ')+' Private original employee invitation, canonical directory activation and partial withdrawal receivers are implemented; public invitation/MFA onboarding and central credential-bound tokens remain open.';
+  document.info.version = '1.28.0';
   return document;
 }
 if (require.main === module) process.stdout.write(JSON.stringify(organizationOpenApi(), null, 2) + '\n');

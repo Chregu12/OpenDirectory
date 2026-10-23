@@ -165,6 +165,7 @@ services:
       - PORT=3001
       - DATABASE_URL=postgres://opendirectory:${DB_PASSWORD}@postgres/identity
       - POLICY_SERVICE_URL=http://policy-service:3004
+      - AUTH_SERVICE_URL=http://auth-service:3002
       - OIDC_TENANT_STATE_URL=http://oauth-provider:3010/oauth/tenant-state
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
     ports:

@@ -73,12 +73,7 @@ app.use(helmet());
 app.use(cors());
 app.use(compression());
 const authorityLimits = authorityAdmission();
-app.post('/internal/identity/employee-invitations/observe',authorityLimits.ingress,express.json({limit:'32kb'}),
- require('./EmployeeInvitationRequest').invitationRequest()('observe','/internal/identity/employee-invitations/observe'),
- asyncRoute(async(req,res)=>{
-  try{res.set('Cache-Control','no-store').json(await new(require('./EmployeeInvitationObserver').EmployeeInvitationObserver)(db).read(req.body,req.employeeInvitationProof));}
-  catch(error){res.set('Cache-Control','no-store').status(error.status||503).json({error:error.code||'employee_invitation_observation_unavailable'});}
- }));
+app.use(require('./EmployeeEnrollmentRoutes').employeeEnrollmentRoutes(db,{ingress:authorityLimits.ingress}));
 const registrationRequest = require('./CompanyRegistrations').registrationRequest();
 for (const operation of ['submit', 'status', 'activate']) app.post('/internal/identity/company-registrations/' + operation,
   authorityLimits.ingress, express.json({ limit: '32kb' }), registrationRequest(operation), authorityLimits.verified, asyncRoute(async (req, res) => {
