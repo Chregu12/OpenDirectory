@@ -6,7 +6,7 @@ OpenDirectory is a self-hosted business-management platform in development. Its 
 
 Implemented slices include company profiles and directory, groups and organizational units, device inventory, immutable blueprints, and source-aware application licensing. See the [implementation status](docs/implementation-status.md) for what works and what remains open.
 
-Own company owners can configure [dynamic and nested group rules](docs/features/company-group-rules.md), preview real canonical results and explicitly reconcile memberships through the UI or CLI. Existing manual origins and independent reviews remain distinct. Unattended group-rule execution is still pending.
+Own company owners can configure [dynamic and nested group rules](docs/features/company-group-rules.md), preview real canonical results and explicitly reconcile memberships through the UI or CLI. Existing manual origins and independent reviews remain distinct. Saved rules also support [explicitly delegated app jobs and schedules](docs/features/company-group-rule-automation.md), with actual app provenance. Immediate source propagation and external events remain open.
 
 **Not production-ready:** OpenDirectory is not yet a complete SaaS platform or Apple Business replacement. Device inventory does not mean MDM enrollment or remote device control. External integrations and unfinished workflows are clearly marked in the documentation.
 
@@ -16,7 +16,7 @@ See the [installation guide](docs/operations/installation.md) for the current lo
 
 The central login supports an [external OIDC adapter and authenticated SAML IdP launches](services/core/oauth-provider/README.md). Both need explicit configuration; SAML currently supports IdP-initiated HTTP-POST. [Apple ADE setup](docs/integrations/apple-automated-device-enrollment.md) is separate: there is no accepted ABM/ASM connector, and unavailable enrollment APIs no longer report demo devices or successful assignments.
 
-App accounts can be created directly in the UI and managed from scripts with the [automation CLI](docs/features/app-accounts-automation.md). Explicit [company app grants and durable jobs](docs/features/company-automation.md) support unattended directory exports and [group license reconciliation](docs/features/company-license-automation.md), with schedules, worker leases, recoverable progress and retained history. Licensing uses existing finite local pools; mail provisioning and manufacturer activation still need provider connectors.
+App accounts can be created directly in the UI and managed from scripts with the [automation CLI](docs/features/app-accounts-automation.md). Explicit [company app grants and durable jobs](docs/features/company-automation.md) support unattended directory exports, [saved group-rule execution](docs/features/company-group-rule-automation.md) and [group license reconciliation](docs/features/company-license-automation.md), with schedules, worker leases, recoverable progress and retained history. Licensing uses existing finite local pools; mail provisioning and manufacturer activation still need provider connectors.
 
 [License groups](docs/features/company-license-groups.md) link ordinary directory groups to finite license pools. UI and script reconciliation allocate one seat per user/pool, retain separate origins and release only the departing group's source.
 

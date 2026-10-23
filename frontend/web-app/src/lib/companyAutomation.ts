@@ -2,12 +2,14 @@ import { z } from 'zod';
 import { api } from './api';
 import { companyUuid as uuid, companyRevision as revision, companyReason, CompanyWire } from './companyAssignmentProtocol';
 const base = '/api/identity/automation';
-export const automationActions = ['directory.users.export', 'directory.groups.export', 'directory.ous.export', 'licenses.groups.reconcile'] as const;
+export const automationActions = ['directory.users.export', 'directory.groups.export', 'directory.ous.export', 'licenses.groups.reconcile', 'directory.groups.reconcile'] as const;
 export const licenseAutomationAction = 'licenses.groups.reconcile';
+export const groupRuleAutomationAction = 'directory.groups.reconcile';
+export const isReconciliationAction = (value: string) => [licenseAutomationAction, groupRuleAutomationAction].includes(value);
 const action = z.enum(automationActions); const timestamp = z.string().datetime({ offset: true });
 const principalSchema = z.object({ kind: z.literal('owner'), userId: uuid, tenantId: uuid }).strict();
 const envelope = { schemaVersion: z.literal(1), companyAutomationProtocol: z.literal(1), principal: principalSchema };
-const grantSchema = z.object({ id: uuid, enrollmentId: uuid, tenantId: uuid, clientId: z.string().min(1).max(255), clientRevision: revision, actions: z.array(action).min(1).max(4),
+const grantSchema = z.object({ id: uuid, enrollmentId: uuid, tenantId: uuid, clientId: z.string().min(1).max(255), clientRevision: revision, actions: z.array(action).min(1).max(5),
   expiresAt: timestamp, status: z.enum(['active', 'revoked']), revision: z.enum(['1', '2']), createdAt: timestamp }).strict()
   .refine(value => new Set(value.actions).size === value.actions.length && (value.status === 'active' ? value.revision === '1' : value.revision === '2'));
 const progressSchema = z.object({ runId: uuid, retryCount: z.number().int().nonnegative(), cycle: z.number().int().min(1).max(5), completed: z.number().int().min(0).max(10000), total: z.number().int().min(0).max(10000), blocked: z.number().int().min(0).max(10000) }).strict().refine(value => value.blocked <= value.completed && value.completed <= value.total);
@@ -16,13 +18,13 @@ const jobSchema = z.object({ id: uuid, grantId: uuid, tenantId: uuid, scheduleId
   availableAt: timestamp, leaseUntil: timestamp.nullable(), errorCode: z.string().nullable(), rowCount: z.number().int().min(0).max(10000).nullable(), artifactSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   createdAt: timestamp, updatedAt: timestamp, ruleId: uuid.optional(), progress: progressSchema.nullable().optional() }).strict().refine(value => (value.status === 'running') === (value.leaseUntil !== null)
     && (['succeeded','partial'].includes(value.status) ? value.rowCount !== null && value.artifactSha256 !== null : value.rowCount === null && value.artifactSha256 === null)
-    && (value.action === licenseAutomationAction ? value.ruleId !== undefined && value.progress !== undefined && value.format === 'json'
+    && (isReconciliationAction(value.action) ? value.ruleId !== undefined && value.progress !== undefined && value.format === 'json'
       && (!value.progress || value.progress.runId === value.id && value.progress.retryCount <= value.retryCount)
       && (!['succeeded','partial'].includes(value.status) || !!value.progress && value.progress.retryCount === value.retryCount && value.progress.completed === value.progress.total && value.rowCount === value.progress.total && (value.status === 'partial') === (value.progress.blocked > 0))
       : value.ruleId === undefined && value.progress === undefined && value.status !== 'partial'));
 const scheduleSchema = z.object({ id: uuid, grantId: uuid, tenantId: uuid, action, format: z.enum(['csv', 'json']), intervalSeconds: z.number().int().min(60).max(2592000),
-  enabled: z.boolean(), nextRunAt: timestamp, revision, createdAt: timestamp, ruleId: uuid.optional() }).strict().refine(value => value.action === licenseAutomationAction ? value.ruleId !== undefined && value.format === 'json' : value.ruleId === undefined);
-const grantsSchema = z.object({ ...envelope, grants: z.array(grantSchema).max(25), page: z.number().int().positive(), limit: z.literal(25), total: z.number().int().nonnegative(), supportedActions: z.array(action).length(4) }).strict();
+  enabled: z.boolean(), nextRunAt: timestamp, revision, createdAt: timestamp, ruleId: uuid.optional() }).strict().refine(value => isReconciliationAction(value.action) ? value.ruleId !== undefined && value.format === 'json' : value.ruleId === undefined);
+const grantsSchema = z.object({ ...envelope, grants: z.array(grantSchema).max(25), page: z.number().int().positive(), limit: z.literal(25), total: z.number().int().nonnegative(), supportedActions: z.array(action).length(5) }).strict();
 const enrollmentSchema = z.object({ ...envelope, id: uuid, clientId: z.string().min(1).max(255), clientRevision: revision, name: z.string().min(1).max(160), expiresAt: timestamp, requestedScope: z.literal('company.automation') }).strict();
 const grantReceipt = z.object({ ...envelope, grant: grantSchema }).strict();
 const jobReceipt = z.object({ ...envelope, job: jobSchema }).strict(); const scheduleReceipt = z.object({ ...envelope, schedule: scheduleSchema }).strict();
@@ -42,6 +44,9 @@ export type AutomationEnrollment = CompanyWire<z.infer<typeof enrollmentSchema>>
 export type AutomationPrincipal = CompanyWire<z.infer<typeof principalSchema>>;
 export type AutomationHistory = CompanyWire<z.infer<typeof historySchema>>;
 export type AutomationLicenseReport = CompanyWire<z.infer<typeof licenseReportSchema>>;
+const groupReportSchema = licenseReportSchema.omit({companyLicenseAutomationProtocol:true,results:true}).extend({companyGroupRuleAutomationProtocol:z.literal(1),
+ results:z.array(z.object({userId:uuid,status:z.enum(['added','retained','manual-retained','removed','awaiting-review','blocked']),code:z.union([z.literal(403),z.literal(404),z.literal(409),z.literal(428)]).nullable()}).strict().refine(row=>row.status==='blocked'?row.code!==null:row.code===null)).max(10000)}).strict();
+export type AutomationGroupReport = CompanyWire<z.infer<typeof groupReportSchema>>;
 function parse<S extends z.ZodTypeAny>(schema: S, value: unknown): CompanyWire<z.infer<S>> { return schema.parse(value); }
 function fail(): never { throw new Error('Automationsstand nicht bestätigt. Freigaben und gespeicherte Jobs neu laden; frühere Schritte können bereits gespeichert sein.'); }
 function checked<T extends { principal: AutomationPrincipal }>(value: T, expected: AutomationPrincipal) {
@@ -52,7 +57,7 @@ export const companyAutomation = {
   async grants(userId: string, number = 1) {
     uuid.parse(userId); const response = await api.get(base + '/grants', { params: { page: number } }); if (response.status !== 200) fail(); const value = parse(grantsSchema, response.data);
     if (value.principal.userId !== userId || value.grants.some(row => row.tenantId !== value.principal.tenantId) || new Set(value.grants.map(row => row.id)).size !== value.grants.length
-      || new Set(value.supportedActions).size !== 4 || value.page !== number || value.grants.length > value.total) fail(); return value;
+      || new Set(value.supportedActions).size !== 5 || value.page !== number || value.grants.length > value.total) fail(); return value;
   },
   async enrollment(id: string, expected: AutomationPrincipal) {
     uuid.parse(id); const response = await api.get(base + '/enrollments/' + id); if (response.status !== 200) fail();
@@ -80,8 +85,8 @@ export const companyAutomation = {
   async queue(grant: AutomationGrant, selectedAction: string, format: 'json' | 'csv', expected: AutomationPrincipal, intervalSeconds?: number, ruleId?: string) {
     if (grant.tenantId !== expected.tenantId || grant.status !== 'active' || !grant.actions.includes(action.parse(selectedAction))) fail();
     const scheduled = intervalSeconds !== undefined; if (scheduled && (!Number.isInteger(intervalSeconds) || intervalSeconds < 60 || intervalSeconds > 2592000)) fail();
-    if (selectedAction === licenseAutomationAction ? !uuid.safeParse(ruleId).success || format !== 'json' : ruleId !== undefined) fail();
-    const id = crypto.randomUUID(); const response = await api.post(base + (scheduled ? '/schedules' : '/jobs'), { id, grantId: grant.id, action: selectedAction, format, ...(selectedAction === licenseAutomationAction ? { ruleId } : {}), ...(scheduled ? { intervalSeconds } : {}) });
+    if (isReconciliationAction(selectedAction) ? !uuid.safeParse(ruleId).success || format !== 'json' : ruleId !== undefined) fail();
+    const id = crypto.randomUUID(); const response = await api.post(base + (scheduled ? '/schedules' : '/jobs'), { id, grantId: grant.id, action: selectedAction, format, ...(isReconciliationAction(selectedAction) ? { ruleId } : {}), ...(scheduled ? { intervalSeconds } : {}) });
     if (response.status !== 201) fail(); const value = scheduled ? checked(parse(scheduleReceipt, response.data), expected).schedule : checked(parse(jobReceipt, response.data), expected).job;
     if (value.id !== id || value.grantId !== grant.id || value.tenantId !== expected.tenantId || value.action !== selectedAction || value.format !== format || value.ruleId !== ruleId || scheduled && 'intervalSeconds' in value && value.intervalSeconds !== intervalSeconds) fail(); return value;
   },
@@ -121,5 +126,13 @@ export const companyAutomation = {
   async history(job: AutomationJob, expected: AutomationPrincipal, number = 1) {
     const response = await api.get(base + '/jobs/' + job.id + '/history', { params: { page: number } }); if (response.status !== 200) fail(); const value = checked(parse(historySchema, response.data), expected);
     if (job.tenantId !== expected.tenantId || value.tenantId !== expected.tenantId || value.jobId !== job.id || value.page !== number || value.events.length > value.total || value.events.some((row, index) => index && BigInt(row.revision) <= BigInt(value.events[index - 1].revision))) fail(); return value;
+  },
+  async groupReport(job: AutomationJob, grant: AutomationGrant, expected: AutomationPrincipal) {
+    if(job.action!==groupRuleAutomationAction||job.grantId!==grant.id||!job.progress)fail();
+    const artifact=await this.artifact(job,expected);if(artifact.contentType!=='application/json')fail();const report=parse(groupReportSchema,JSON.parse(artifact.content));
+    if(report.jobId!==job.id||report.grantId!==grant.id||report.ruleId!==job.ruleId||report.actor.id!==grant.id||report.actor.clientId!==grant.clientId||report.actor.clientRevision!==grant.clientRevision
+      || report.progress.runId!==job.id||report.progress.retryCount!==job.retryCount||Object.keys(report.progress).some(key=>report.progress[key as keyof typeof report.progress]!==job.progress?.[key as keyof typeof report.progress])
+      || report.progress.completed!==report.progress.total||report.results.length!==report.progress.total||report.results.length!==job.rowCount
+      || report.progress.blocked!==report.results.filter(row=>['blocked','awaiting-review'].includes(row.status)).length||report.hasBlocked!==(job.status==='partial')||report.hasBlocked!==(report.progress.blocked>0)||new Set(report.results.map(row=>row.userId)).size!==report.results.length)fail();return report;
   },
 };

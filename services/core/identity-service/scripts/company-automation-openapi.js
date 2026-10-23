@@ -1,5 +1,5 @@
 'use strict';
-const { ACTIONS, SCOPE, LICENSE_ACTION } = require('../../../../packages/company-automation-contract');
+const { ACTIONS, SCOPE, LICENSE_ACTION, GROUP_ACTION, reconciliation } = require('../../../../packages/company-automation-contract');
 function companyAutomationOpenApi() {
   const uuid = { type: 'string', format: 'uuid', pattern: '^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$' };
   const revision = { type: 'string', pattern: '^[1-9][0-9]{0,18}$' }; const date = { type: 'string', format: 'date-time' };
@@ -15,14 +15,14 @@ function companyAutomationOpenApi() {
       attemptCount: { type: 'integer', minimum: 0, maximum: 5 }, retryCount: { type: 'integer', minimum: 0 }, availableAt: date, leaseUntil: nullable(date), errorCode: nullable({ type: 'string' }), rowCount: nullable({ type: 'integer', minimum: 0, maximum: 10000 }), artifactSha256: nullable({ type: 'string', pattern: '^[a-f0-9]{64}$' }), createdAt: date, updatedAt: date }),
     CompanyAutomationSchedule: object({ id: uuid, grantId: uuid, tenantId: uuid, action, format, intervalSeconds: { type: 'integer', minimum: 60, maximum: 2592000 }, enabled: { type: 'boolean' }, nextRunAt: date, revision, createdAt: date }),
   };
-  const exports = { enum: ACTIONS.filter(value => value !== LICENSE_ACTION) };
+  const exports = { enum: ACTIONS.filter(value => !reconciliation(value)) };
   const progress = object({ runId: uuid, retryCount: { type: 'integer', minimum: 0 }, cycle: { type: 'integer', minimum: 1, maximum: 5 }, ...Object.fromEntries(['completed','total','blocked'].map(key => [key, { type: 'integer', minimum: 0, maximum: 10000 }])) });
   schemas.CompanyLicenseAutomationProgress = progress;
   const appActor = object({ kind: { const: 'application' }, id: uuid, clientId: { type: 'string', minLength: 1, maxLength: 255 }, clientRevision: revision });
   schemas.CompanyLicenseAutomationActor = appActor;
   for (const [name, extra] of [['CompanyAutomationJob', { ruleId: uuid, progress: nullable(ref('CompanyLicenseAutomationProgress')) }], ['CompanyAutomationSchedule', { ruleId: uuid }]]) {
     const schema = schemas[name]; Object.assign(schema.properties, extra);
-    schema.allOf = [{ if: { properties: { action: { const: LICENSE_ACTION } }, required: ['action'] },
+    schema.allOf = [{ if: { properties: { action: { enum: [LICENSE_ACTION,GROUP_ACTION] } }, required: ['action'] },
       then: { required: Object.keys(extra), properties: { format: { const: 'json' } } },
       else: { properties: { action: exports, ...(name === 'CompanyAutomationJob' ? { status: { enum: schema.properties.status.enum.filter(value => value !== 'partial') } } : {}) }, not: { anyOf: Object.keys(extra).map(key => ({ required: [key] })) } } }];
   }
@@ -30,6 +30,8 @@ function companyAutomationOpenApi() {
   schemas.CompanyLicenseAutomationStep = object({ schemaVersion: { const: 1 }, companyLicenseAutomationProtocol: { const: 1 }, grantId: uuid, jobId: uuid, ruleId: uuid,
     actor: ref('CompanyLicenseAutomationActor'), progress: ref('CompanyLicenseAutomationProgress'), finished: { type: 'boolean' }, hasBlocked: { type: 'boolean' }, results: { type: 'array', maxItems: 10000, items: memberResult } });
   schemas.CompanyLicenseAutomationStep.allOf = [{ if: { properties: { finished: { const: false } } }, then: { properties: { results: { maxItems: 0 } } } }];
+  schemas.CompanyGroupRuleAutomationStep = object({schemaVersion:{const:1},companyGroupRuleAutomationProtocol:{const:1},grantId:uuid,jobId:uuid,ruleId:uuid,actor:appActor,progress,finished:{type:'boolean'},hasBlocked:{type:'boolean'},results:{type:'array',maxItems:10000,items:{oneOf:[object({userId:uuid,status:{enum:['added','retained','manual-retained','removed','awaiting-review']},code:{type:'null'}}),object({userId:uuid,status:{const:'blocked'},code:{enum:[403,404,409,428]}})]}}});
+  schemas.CompanyGroupRuleAutomationStep.description='Actual app result for one saved own-group rule. The blocked progress count includes waiting independent reviews; their member status remains awaiting-review with code null. Results describe the final captured cycle; earlier immutable cycles and effects remain retained. An unfinished step returns progress and an empty results array.';
   const ids = { type: 'array', maxItems: 10000, uniqueItems: true, items: uuid };
   const membership = object({ userId: uuid, membershipId: uuid, eligibilityRevision: revision, reviewDeadlineAt: nullable(date) });
   const group = object({ schemaVersion: { const: 3 }, groupId: uuid, name: nullable({ type: 'string', maxLength: 255 }), revision, deleted: { type: 'boolean' }, memberIds: ids, inactiveMemberIds: ids,
@@ -69,14 +71,14 @@ function companyAutomationOpenApi() {
   };
   for (const [path, scheduled] of [[basePath+'/jobs',false],[basePath+'/schedules',true]]) {
     const timing = scheduled ? { intervalSeconds: { type: 'integer', minimum: 60, maximum: 2592000 } } : {};
-    paths[path].post.requestBody.content['application/json'].schema = { oneOf: [object({ ...input, action: exports, ...timing }), object({ ...input, action: { const: LICENSE_ACTION }, format: { const: 'json' }, ruleId: uuid, ...timing })] };
+    paths[path].post.requestBody.content['application/json'].schema = { oneOf: [object({ ...input, action: exports, ...timing }), object({ ...input, action: { enum: [LICENSE_ACTION,GROUP_ACTION] }, format: { const: 'json' }, ruleId: uuid, ...timing })] };
   }
   paths[basePath+'/license-source'] = { post: write('readOriginalCompanyLicenseAutomationSource','CompanyLicenseAutomationSource',{ grantId:uuid,jobId:uuid,leaseToken:uuid,groupId:nullable(uuid),userId:nullable(uuid) }) };
   paths[basePath+'/license-source'].post.description = description + ' Private receiver source. Requires the actual running license job, exact grant and current lease. A base lookup has groupId=userId=null; a recipient requires the captured own group. Returns canonical current eligibility and review deadlines without human identity/MFA fields. Source lifetime is at most the original job lease (45 seconds), current app token, grant and membership review deadline. This source is not a reusable bearer.';
   paths['/api/licenses/automation/groups/step'] = { post: write('stepGrantedCompanyLicenseGroupReconciliation','CompanyLicenseAutomationStep',{ grantId:uuid,jobId:uuid,leaseToken:uuid,ruleId:uuid }) };
   paths['/api/licenses/automation/groups/step'].post.description = description + ' Private Policy receiver for the original live app JWT and the exact current running Identity job. Processes at most 25 captured canonical users per step through the existing finite allocator. Immutable cycles/pages and original receipts support recovery after lost acknowledgements. At most five bounded rescans per retry epoch, no invented human authority. Partial results report blocked users; assigned/removed confirm only local group origins, never provider provisioning. No arbitrary pool, group, Blueprint, tenant or URL selector. An unfinished response contains progress and no complete results; the Identity job remains queued. Missing/corrupt evidence fails closed.';
   paths[basePath+'/run'].post.responses[204]={description:'No due job; schedules remain persistent.'};
-  paths[basePath+'/run'].post.description += ' Only the pinned app may execute. Claims use an expiring lease, up to five attempts and bounded exponential backoff; an expired worker cannot acknowledge another claim. Schedules skip missed bursts. Local exports are read-only. Explicitly delegated license reconciliation uses the existing source-aware allocator and durable per-member receipts. Incomplete pages requeue the same job; a completed pass with blocked members is partial, not succeeded. These handlers do not perform external mutations.';
+  paths[basePath+'/run'].post.description += ' Only the pinned app may execute. Claims use an expiring lease, up to five attempts and bounded exponential backoff; an expired worker cannot acknowledge another claim. Schedules skip missed bursts. Local exports are read-only. Explicitly delegated license reconciliation uses the existing source-aware allocator and durable per-member receipts. Incomplete pages requeue the same job; a completed pass with blocked members is partial, not succeeded. Explicit directory.groups.reconcile jobs bind ruleId to the canonical group UUID and change only rule-created membership sources, preserving manual links and independent first reviews. They persist at most 25 member receipts per step, up to five convergence captures per retry epoch. Awaiting independent review is partial. These handlers do not perform external mutations.';
   return { paths, components: { schemas } };
 }
 module.exports = { companyAutomationOpenApi };

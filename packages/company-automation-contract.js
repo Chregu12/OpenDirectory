@@ -3,7 +3,9 @@ const { exact, identifier, text } = require('./company-license-contract');
 const { validRevision } = require('./identity-authorization-contract');
 const SCOPE = 'company.automation';
 const LICENSE_ACTION = 'licenses.groups.reconcile';
-const ACTIONS = Object.freeze(['directory.users.export', 'directory.groups.export', 'directory.ous.export', LICENSE_ACTION]);
+const GROUP_ACTION = 'directory.groups.reconcile';
+const reconciliation = action => [LICENSE_ACTION, GROUP_ACTION].includes(action);
+const ACTIONS = Object.freeze(['directory.users.export', 'directory.groups.export', 'directory.ous.export', LICENSE_ACTION, GROUP_ACTION]);
 const CLIENT_ID = /^(?!\.{1,2}$)[A-Za-z0-9._~-]{1,255}$/;
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 function actions(value) {
@@ -25,9 +27,9 @@ function grantInput(body) {
   return { ...body, actions: actions(body.actions), reason: text(body.reason, 10, 500) };
 }
 function jobInput(body, scheduled = false) {
-  exact(body, ['id', 'grantId', 'action', 'format', ...(body?.action === LICENSE_ACTION ? ['ruleId'] : []), ...(scheduled ? ['intervalSeconds'] : [])]); identifier(body.id); identifier(body.grantId);
+  exact(body, ['id', 'grantId', 'action', 'format', ...(reconciliation(body?.action) ? ['ruleId'] : []), ...(scheduled ? ['intervalSeconds'] : [])]); identifier(body.id); identifier(body.grantId);
   if (!ACTIONS.includes(body.action) || !['csv', 'json'].includes(body.format) || scheduled && (!Number.isInteger(body.intervalSeconds) || body.intervalSeconds < 60 || body.intervalSeconds > 2592000)) fail(400, 'Supported bounded automation job required');
-  if (body.action === LICENSE_ACTION) { identifier(body.ruleId); if (body.format !== 'json') fail(400, 'Structured license reconciliation result required'); }
+  if (reconciliation(body.action)) { identifier(body.ruleId); if (body.format !== 'json') fail(400, 'Structured reconciliation result required'); }
   return { ...body };
 }
-module.exports = { SCOPE, ACTIONS, LICENSE_ACTION, CLIENT_ID, fail, exact, identifier, text, actions, workload, grantInput, jobInput };
+module.exports = { SCOPE, ACTIONS, LICENSE_ACTION, GROUP_ACTION, reconciliation, CLIENT_ID, fail, exact, identifier, text, actions, workload, grantInput, jobInput };

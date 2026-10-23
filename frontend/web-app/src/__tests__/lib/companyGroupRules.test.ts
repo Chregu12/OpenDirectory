@@ -19,3 +19,9 @@ test('reconciliation verifies the complete ordered captured target page and pres
  expect((await companyGroupRules.sync(preview,'Confirm actual reviewed membership'))[0].status).toBe('awaiting-review');
  (api.post as jest.Mock).mockResolvedValue({status:200,data:{...base,groupId:id(3),ruleRevision:'1',observation:preview.observation,results:[],nextCursor:null,hasBlocked:false}});await expect(companyGroupRules.sync(preview,'Confirm actual reviewed membership')).rejects.toThrow();
 });
+test('history distinguishes an original app grant from a missing or substituted human actor',async()=>{
+ const event={id:id(10),kind:'membership',action:'member-add',userId:id(4),membershipId:id(5),ruleRevision:'1',actorUserId:null,application:{grantId:id(6),clientId:'actual-app',clientRevision:'1'},reason:'Actual app membership event',createdAt:rule.createdAt,deliveryStatus:'pending'};
+ const history={...base,groupId:id(3),page:1,limit:25,total:1,events:[event]};(api.get as jest.Mock).mockResolvedValue({status:200,data:history});expect((await companyGroupRules.history(page)).events[0].application.clientId).toBe('actual-app');
+ (api.get as jest.Mock).mockResolvedValue({status:200,data:{...history,events:[{...event,application:undefined}]}});await expect(companyGroupRules.history(page)).rejects.toThrow();
+ (api.get as jest.Mock).mockResolvedValue({status:200,data:{...history,events:[{...event,actorUserId:id(1)}]}});await expect(companyGroupRules.history(page)).rejects.toThrow();
+});

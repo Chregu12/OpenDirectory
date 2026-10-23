@@ -5,7 +5,7 @@ const { v5 } = require('uuid');
 const { CompanyLicenseAuthority } = require('./CompanyLicenseAuthority');
 const { ownerState } = require('./CompanyOwner');
 const { createAccessStateClient } = require('../../../../packages/oidc-access-state');
-const { SCOPE, ACTIONS, LICENSE_ACTION, fail, exact, identifier, text, workload, grantInput, jobInput } = require('../../../../packages/company-automation-contract');
+const { SCOPE, ACTIONS, LICENSE_ACTION, GROUP_ACTION, reconciliation, fail, exact, identifier, text, workload, grantInput, jobInput } = require('../../../../packages/company-automation-contract');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const iso = value => new Date(value).toISOString();
 const base = { schemaVersion: 1, companyAutomationProtocol: 1 };
@@ -15,9 +15,9 @@ const grantView = row => ({ id: row.id, enrollmentId: row.enrollment_id, tenantI
 const jobView = row => ({ id: row.id, grantId: row.grant_id, tenantId: row.tenant_id, scheduleId: row.schedule_id, action: row.action, format: row.format, status: row.status,
   revision: String(row.revision), attemptCount: row.attempt_count, retryCount: row.retry_count, availableAt: iso(row.available_at), leaseUntil: row.lease_until ? iso(row.lease_until) : null,
   errorCode: row.error_code, rowCount: row.row_count, artifactSha256: row.artifact_sha256, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
-  ...(row.action === LICENSE_ACTION ? { ruleId: row.rule_id, progress: row.progress } : {}) });
+  ...(reconciliation(row.action) ? { ruleId: row.rule_id, progress: row.progress } : {}) });
 const scheduleView = row => ({ id: row.id, grantId: row.grant_id, tenantId: row.tenant_id, action: row.action, format: row.format, intervalSeconds: row.interval_seconds,
-  enabled: row.enabled, nextRunAt: iso(row.next_run_at), revision: String(row.revision), createdAt: iso(row.created_at), ...(row.action === LICENSE_ACTION ? { ruleId: row.rule_id } : {}) });
+  enabled: row.enabled, nextRunAt: iso(row.next_run_at), revision: String(row.revision), createdAt: iso(row.created_at), ...(reconciliation(row.action) ? { ruleId: row.rule_id } : {}) });
 function csv(rows, columns) {
   const cell = value => '"' + String(value ?? '').replace(/^(?=\s*[=+@\-\t\r\n])/, "'").replaceAll('"', '""') + '"';
   return [columns.map(cell).join(','), ...rows.map(row => columns.map(column => cell(row[column])).join(','))].join('\r\n') + '\r\n';
@@ -238,7 +238,7 @@ class CompanyAutomation {
     });
   }
   async export(client, permission, action, format) {
-    if (action === LICENSE_ACTION) fail(503, 'License reconciliation requires its own receiving handler');
+    if (reconciliation(action)) fail(503, 'License reconciliation requires its own receiving handler');
     let rows, columns;
     if (action === 'directory.users.export') {
       rows = (await client.query("SELECT id,username,email,display_name,department,title,enabled FROM users WHERE identity_tenant_id('user',id)=$1 ORDER BY id LIMIT 10001", [permission.tenant_id])).rows;
@@ -267,7 +267,7 @@ class CompanyAutomation {
         await this.retained(client, 'schedule', schedule.id);
         if (Number((await client.query("SELECT count(*) AS n FROM identity_automation_jobs WHERE grant_id=$1 AND status IN('queued','running','retry_wait')", [permission.id])).rows[0].n) >= 1000) break;
         const id = v5(iso(schedule.next_run_at), schedule.id);
-        const continuing = schedule.action === LICENSE_ACTION && (await client.query("SELECT EXISTS(SELECT 1 FROM identity_automation_jobs WHERE schedule_id=$1 AND status IN('queued','running','retry_wait')) AS pending", [schedule.id])).rows[0].pending;
+        const continuing = reconciliation(schedule.action) && (await client.query("SELECT EXISTS(SELECT 1 FROM identity_automation_jobs WHERE schedule_id=$1 AND status IN('queued','running','retry_wait')) AS pending", [schedule.id])).rows[0].pending;
         if (!continuing) await client.query("INSERT INTO identity_automation_jobs(id,grant_id,tenant_id,schedule_id,action,format,rule_id,status) VALUES($1,$2,$3,$4,$5,$6,$7,'queued') ON CONFLICT DO NOTHING", [id, permission.id, permission.tenant_id, schedule.id, schedule.action, schedule.format, schedule.rule_id]);
         await client.query("UPDATE identity_automation_schedules SET next_run_at=clock_timestamp()+interval_seconds*interval '1 second',revision=revision+1,updated_at=clock_timestamp() WHERE id=$1", [schedule.id]);
       }
@@ -285,17 +285,17 @@ class CompanyAutomation {
     try {
       return await this.transaction(user, authorization, async (client, actor) => {
         const permission = await this.grant(client, claimed.grant_id, actor);
-        const row = (await client.query('SELECT * FROM identity_automation_jobs WHERE id=$1 FOR UPDATE', [claimed.id])).rows[0];
+        const row = (await client.query('SELECT * FROM identity_automation_jobs WHERE id=$1 FOR NO KEY UPDATE', [claimed.id])).rows[0];
         await this.retained(client, 'job', row.id);
         if (row.status !== 'running' || row.lease_token !== claimed.lease_token || row.lease_until <= new Date()) fail(409, 'Worker lease changed');
-        if (row.action === LICENSE_ACTION) {
-          const outcome = await this.licenseClient.step(row, user, authorization);
+        if (reconciliation(row.action)) {
+          const outcome = row.action === GROUP_ACTION ? await new (require('./CompanyGroupRuleWorker').CompanyGroupRuleWorker)(this).step(row,user,authorization) : await this.licenseClient.step(row, user, authorization);
           const content = outcome.finished ? JSON.stringify(outcome) : null;
           if (content !== null && Buffer.byteLength(content) > 4194304) fail(409, 'Complete license report exceeds artifact limit');
           const finished = (await client.query(`UPDATE identity_automation_jobs SET status=$2,lease_token=NULL,lease_until=NULL,progress=$3,
             attempt_count=CASE WHEN $2='queued' THEN 0 ELSE attempt_count END,available_at=clock_timestamp(),error_code=$4,artifact_content=$5,
             artifact_type=CASE WHEN $5::text IS NULL THEN NULL ELSE 'application/json' END,artifact_sha256=$6,row_count=$7,revision=revision+1,updated_at=clock_timestamp() WHERE id=$1 RETURNING *`,
-          [row.id, outcome.finished ? outcome.hasBlocked ? 'partial' : 'succeeded' : 'queued', outcome.progress, outcome.finished && outcome.hasBlocked ? 'license_members_blocked' : null,
+          [row.id, outcome.finished ? outcome.hasBlocked ? 'partial' : 'succeeded' : 'queued', outcome.progress, outcome.finished && outcome.hasBlocked ? row.action === GROUP_ACTION ? 'group_members_require_attention' : 'license_members_blocked' : null,
             content, content === null ? null : hash(content), content === null ? null : outcome.results.length])).rows[0];
           return { ...base, job: jobView(finished) };
         }
@@ -308,13 +308,13 @@ class CompanyAutomation {
       if ([401, 403].includes(error.status)) throw error;
       return this.transaction(user, authorization, async (client, actor) => {
         await this.grant(client, claimed.grant_id, actor);
-        const row = (await client.query('SELECT * FROM identity_automation_jobs WHERE id=$1 FOR UPDATE', [claimed.id])).rows[0];
+        const row = (await client.query('SELECT * FROM identity_automation_jobs WHERE id=$1 FOR NO KEY UPDATE', [claimed.id])).rows[0];
         if (row.status !== 'running' || row.lease_token !== claimed.lease_token || row.lease_until <= new Date()) fail(409, 'Worker lease changed; inspect durable job');
-        const licensing = claimed.action === LICENSE_ACTION;
+        const licensing = reconciliation(claimed.action);
         const permanent = (licensing ? [400, 404, 409, 412].includes(error.status) : error.status === 409) || claimed.attempt_count >= 5;
         const failed = (await client.query(`UPDATE identity_automation_jobs SET status=$2,lease_token=NULL,lease_until=NULL,error_code=$3,
           available_at=clock_timestamp()+$4*interval '1 second',revision=revision+1,updated_at=clock_timestamp() WHERE id=$1 RETURNING *`, [row.id, permanent ? 'failed' : 'retry_wait',
-          licensing ? permanent ? 'license_reconciliation_blocked' : 'license_step_unconfirmed' : error.status === 409 ? 'export_limit' : 'export_unavailable', Math.min(3600, 30 * 2 ** (claimed.attempt_count - 1))])).rows[0];
+          licensing ? claimed.action === GROUP_ACTION ? permanent ? 'group_reconciliation_blocked' : 'group_step_unconfirmed' : permanent ? 'license_reconciliation_blocked' : 'license_step_unconfirmed' : error.status === 409 ? 'export_limit' : 'export_unavailable', Math.min(3600, 30 * 2 ** (claimed.attempt_count - 1))])).rows[0];
         return { ...base, job: jobView(failed) };
       });
     }

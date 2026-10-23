@@ -100,7 +100,7 @@ class CompanyGroupRules {
    WHERE effect.group_id=$1 AND(effect.tenant_id<>$2 OR box.status IS DISTINCT FROM 'pending' OR box.created_at IS DISTINCT FROM effect.created_at
     OR box.fingerprint IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(effect)::text,'UTF8')),'hex') OR actual.id IS NULL OR actual.tenant_id<>effect.tenant_id OR actual.group_id<>effect.group_id OR actual.action<>effect.action
     OR actual.transaction_id<>effect.transaction_id OR actual.scope_sha256<>effect.group_scope_sha256 OR actual_box.status IS DISTINCT FROM 'pending' OR configured.id IS NULL OR origin.group_id IS DISTINCT FROM effect.group_id OR origin.user_id IS DISTINCT FROM effect.user_id
-    OR actual.actor IS DISTINCT FROM jsonb_build_object('issuer',effect.source#>>'{authority,issuer}','subject',effect.source#>>'{authority,subject}','userId',effect.source#>>'{authority,actorUserId}'))) AS valid`, [groupId, tenantId])).rows[0]?.valid;
+    OR effect.action='member-add' AND origin.application_grant_id::text IS DISTINCT FROM effect.source#>>'{authority,grantId}' OR actual.actor IS DISTINCT FROM identity_company_group_rule_effect_actor(effect.source))) AS valid`, [groupId, tenantId])).rows[0]?.valid;
   if (valid !== true) fail(503, 'Retained original group-rule membership effects unavailable');
  }
  history(groupId, query, user, authorization) {
@@ -108,11 +108,11 @@ class CompanyGroupRules {
   const page = query.page ? Number(query.page) : 1;
   return this.transaction(groupId, user, authorization, async (client, source) => {
    if (!await this.rule(client, groupId, source.tenant.id)) fail(404, 'Group rule not configured'); await this.effectsValid(client, groupId, source.tenant.id);
-   const relation = `FROM(SELECT id,'configuration' AS kind,'configured' AS action,NULL::uuid AS user_id,NULL::uuid AS membership_id,revision AS rule_revision,command#>>'{source,actorUserId}' AS actor_user_id,command#>>'{values,reason}' AS reason,created_at
-     FROM identity_company_group_rule_events WHERE group_id=$1 AND tenant_id=$2 UNION ALL SELECT id,'membership',action,user_id,membership_id,rule_revision,source#>>'{authority,actorUserId}',source->>'reason',created_at FROM identity_company_group_rule_effects WHERE group_id=$1 AND tenant_id=$2) history`;
+   const relation = `FROM(SELECT id,'configuration' AS kind,'configured' AS action,NULL::uuid AS user_id,NULL::uuid AS membership_id,revision AS rule_revision,command#>>'{source,actorUserId}' AS actor_user_id,NULL::jsonb AS application,command#>>'{values,reason}' AS reason,created_at
+     FROM identity_company_group_rule_events WHERE group_id=$1 AND tenant_id=$2 UNION ALL SELECT id,'membership',action,user_id,membership_id,rule_revision,source#>>'{authority,actorUserId}',CASE WHEN source#>>'{authority,kind}'='application' THEN jsonb_build_object('grantId',source#>>'{authority,grantId}','clientId',source#>>'{authority,clientId}','clientRevision',source#>>'{authority,clientRevision}') ELSE NULL END,source->>'reason',created_at FROM identity_company_group_rule_effects WHERE group_id=$1 AND tenant_id=$2) history`;
    const parameters = [groupId, source.tenant.id]; const total = (await client.query('SELECT count(*)::integer AS total ' + relation, parameters)).rows[0].total;
    const rows = (await client.query('SELECT * ' + relation + ' ORDER BY created_at DESC,id DESC LIMIT 25 OFFSET $3', [...parameters, (page-1)*25])).rows;
-   return { ...envelope(source), groupId, page, limit: 25, total, events: rows.map(row => ({ id: row.id, kind: row.kind, action: row.action, userId: row.user_id, membershipId: row.membership_id, ruleRevision: String(row.rule_revision), actorUserId: row.actor_user_id, reason: row.reason, createdAt: row.created_at.toISOString(), deliveryStatus: 'pending' })) };
+   return { ...envelope(source), groupId, page, limit: 25, total, events: rows.map(row => ({ id: row.id, kind: row.kind, action: row.action, userId: row.user_id, membershipId: row.membership_id, ruleRevision: String(row.rule_revision), actorUserId: row.actor_user_id, ...(row.application ? {application:row.application} : {}), reason: row.reason, createdAt: row.created_at.toISOString(), deliveryStatus: 'pending' })) };
   }, { readOnly: true });
  }
  async apply(action, group, userId, row, observation, authority, user, authorization, reason) {

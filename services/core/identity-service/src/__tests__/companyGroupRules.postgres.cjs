@@ -24,10 +24,87 @@ afterEach(async () => { beforeCommit = null; await pool.end(); await administrat
 const group = name => creator.group({ name }, owner.user, bearer);
 const input = (changes = {}) => ({ enabled: true, draft: { dynamic: { all: [{ attribute: 'department', operator: 'equals', value: 'Engineering' }] }, childGroupIds: [], excludedUserIds: [] }, reason: 'Explicit own-company dynamic and nested group configuration', confirm: true, ...changes });
 const save = (collection, values = input(), revision = null, id = randomUUID()) => rules.save(collection.id, values, contract.etag(collection.id, revision), id, owner.user, bearer);
+async function appWorker(grantOwner=owner) {
+ const {CompanyAutomation}=require('../CompanyAutomation');const appBearer='Bearer actual-group-app';
+ const app={iss:issuer,sub:'group-rule-app',client_id:'group-rule-app',client_revision:'1',actor_type:'application',token_use:'access',jti:randomUUID(),exp:Math.floor(Date.now()/1000)+3600,scope:'company.automation',permissions:['company.automation']};
+ const automation=new CompanyAutomation(database,{issuer,authority:rules.authority,revalidate:async authorization=>assert.equal(authorization,appBearer)});
+ const enrollment=await automation.enroll({id:randomUUID(),name:'Actual own group-rule worker'},app,appBearer);
+ const permission=(await automation.approve({id:randomUUID(),enrollmentId:enrollment.id,clientId:app.client_id,clientRevision:'1',actions:['directory.groups.reconcile'],expiresAt:new Date(Date.now()+3600000).toISOString(),reason:'Explicitly delegate actual own saved group-rule reconciliation',confirm:true},grantOwner.user,bearer)).grant;
+ return {automation,app,appBearer,permission,queue:groupId=>automation.enqueue({id:randomUUID(),grantId:permission.id,action:'directory.groups.reconcile',format:'json',ruleId:groupId},app,appBearer),run:()=>automation.run({grantId:permission.id},app,appBearer)};
+}
 async function person(department, title = '') {
  const id = randomUUID(); await pool.query('INSERT INTO users(id,username,email,department,title) VALUES($1,$2,$3,$4,$5)', [id, 'employee-' + id, id + '@test.invalid', department, title]);
  await adoptTenant(database, schema, owner.receipt.tenantId, [{ kind: 'user', resourceId: id }]); return id;
 }
+test('an explicitly delegated real app creates canonical rule memberships after the owner session expires without inventing human authority',async()=>{
+ const parent=await group('App-managed actual group');const userId=await person('Engineering');await save(parent);const worker=await appWorker();const queued=await worker.queue(parent.id);
+ owner.user.auth_time-=301;owner.user.mfa_authorization.authTime-=301;
+ const outcome=await worker.run();assert.equal(outcome.job.status,'succeeded',JSON.stringify(outcome));assert.equal(outcome.job.id,queued.job.id);
+ const artifact=await worker.automation.result(queued.job.id,worker.app,worker.appBearer);const report=JSON.parse(artifact.content);
+ assert.deepEqual(report.results,[{userId,status:'added',code:null}]);assert.equal(report.actor.kind,'application');assert.equal(report.actor.id,worker.permission.id);
+ const origin=(await pool.query('SELECT * FROM identity_membership_origins WHERE group_id=$1 AND user_id=$2',[parent.id,userId])).rows[0];assert.equal(origin.created_by,null);assert.equal(origin.application_grant_id,worker.permission.id);
+ const event=(await pool.query("SELECT actor FROM identity_directory_group_events WHERE group_id=$1 AND action='member-add'",[parent.id])).rows[0];
+ assert.deepEqual(event.actor,{kind:'application',grantId:worker.permission.id,clientId:worker.app.client_id,clientRevision:'1'});
+ const source=(await pool.query('SELECT source FROM identity_company_group_rule_effects WHERE group_id=$1',[parent.id])).rows[0].source;
+ for(const key of ['context','actorUserId','mfa_authorization','auth_time','roles'])assert.equal(Object.hasOwn(source.authority,key),false);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_steps')).rows[0].count,1);
+});
+test('the app removes only obsolete rule sources and cannot address another tenant or bypass a disabled receiving guard',async()=>{
+ let parent=await group('App removal and source fence');const engineer=await person('Engineering');const manual=await person('Operations');parent=await groups.add(parent.id,{userId:manual},groupEtag(parent),owner.user,bearer);
+ await save(parent);const worker=await appWorker();await worker.queue(parent.id);assert.equal((await worker.run()).job.status,'succeeded');
+ await save(parent,input({enabled:false}),'1');await worker.queue(parent.id);const removed=await worker.run();assert.equal(removed.job.status,'succeeded',JSON.stringify(removed));
+ const report=JSON.parse((await worker.automation.result(removed.job.id,worker.app,worker.appBearer)).content);assert.deepEqual(report.results,[{userId:engineer,status:'removed',code:null}]);
+ assert.deepEqual((await pool.query('SELECT user_id FROM group_members WHERE group_id=$1',[parent.id])).rows.map(row=>row.user_id),[manual]);
+ const foreignOwner=await activeCompany(database,schema,issuer);const foreign=await creator.group({name:'Foreign app target'},foreignOwner.user,bearer);await worker.queue(foreign.id);
+ assert.equal((await worker.run()).job.status,'failed');assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[foreign.id])).rows[0].count,0);
+ await worker.queue(parent.id);await pool.query('ALTER TABLE group_members DISABLE TRIGGER identity_directory_group_commit');
+ assert.equal((await worker.run()).job.status,'retry_wait');await pool.query('ALTER TABLE group_members ENABLE TRIGGER identity_directory_group_commit');
+ await assert.rejects(pool.query('TRUNCATE identity_company_group_rule_runs CASCADE'),{code:'42501'});
+});
+test('missing durable step delivery evidence rolls back its membership and leaves the actual job unconfirmed',async()=>{
+ const parent=await group('Suppressed app work receipt');await person('Engineering');await save(parent);const worker=await appWorker();await worker.queue(parent.id);
+ await pool.query(`CREATE FUNCTION fixture_suppress_work_receipt() RETURNS TRIGGER LANGUAGE plpgsql AS $$BEGIN IF NEW.entity='step' THEN RETURN NULL;END IF;RETURN NEW;END;$$;
+  CREATE TRIGGER aaa_fixture_suppress_work_receipt BEFORE INSERT ON identity_company_group_rule_work_outbox FOR EACH ROW EXECUTE FUNCTION fixture_suppress_work_receipt()`);
+ const result=await worker.run();assert.equal(result.job.status,'retry_wait');assert.equal(result.job.artifactSha256,null);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[parent.id])).rows[0].count,0);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_steps')).rows[0].count,0);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_effects')).rows[0].count,0);
+ await pool.query('DROP TRIGGER aaa_fixture_suppress_work_receipt ON identity_company_group_rule_work_outbox');
+ await pool.query(`CREATE FUNCTION fixture_suppress_work_step() RETURNS TRIGGER LANGUAGE plpgsql AS $$BEGIN RETURN NULL;END;$$;
+  CREATE TRIGGER aaa_fixture_suppress_work_step BEFORE INSERT ON identity_company_group_rule_steps FOR EACH ROW EXECUTE FUNCTION fixture_suppress_work_step()`);
+ await worker.queue(parent.id);assert.equal((await worker.run()).job.status,'retry_wait');
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[parent.id])).rows[0].count,0);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_effects')).rows[0].count,0);
+});
+test('an imported mismatched app grant is not an effective membership source or an adoptable rule origin',async()=>{
+ const parent=await group('Original machine provenance');const userId=await person('Engineering');await save(parent);const worker=await appWorker();await worker.queue(parent.id);assert.equal((await worker.run()).job.status,'succeeded');
+ const membership=(await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,userId])).rows[0].membership_id;
+ assert.equal((await pool.query('SELECT identity_membership_application_origin($1) AS valid',[membership])).rows[0].valid,true);
+ const foreignOwner=await activeCompany(database,schema,issuer);const foreign=await appWorker(foreignOwner);
+ await pool.query('ALTER TABLE identity_membership_origins DISABLE TRIGGER identity_membership_evidence_guard');
+ await pool.query('UPDATE identity_membership_origins SET application_grant_id=$1 WHERE membership_id=$2',[foreign.permission.id,membership]);
+ await pool.query('ALTER TABLE identity_membership_origins ENABLE TRIGGER identity_membership_evidence_guard');
+ assert.equal((await pool.query('SELECT identity_membership_review_allowed($1) AS allowed',[membership])).rows[0].allowed,false);
+ await assert.rejects(rules.preview(parent.id,owner.user,bearer),{status:503});
+});
+test('the physical app token deadline rolls back a canonical step even after its last live check',async()=>{
+ const parent=await group('Physical app expiry');await person('Engineering');await save(parent);const worker=await appWorker();await worker.queue(parent.id);
+ worker.app.exp=Math.floor(Date.now()/1000)+3;let waited=false;
+ beforeCommit=async client=>{const scope=(await client.query("SELECT NULLIF(current_setting('opendirectory.company_group_rule_work',true),'')::jsonb AS scope")).rows[0].scope;if(scope?.kind==='step'){waited=true;await client.query('SELECT pg_sleep(3.1)');}};
+ await assert.rejects(worker.run());beforeCommit=null;assert.equal(waited,true);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[parent.id])).rows[0].count,0);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_steps')).rows[0].count,0);
+});
+test('a changed rule reissues its exact old origins in a new captured cycle while preserving original run receipts',async()=>{
+ const parent=await group('Actual rule version reissue');const userId=await person('Engineering');await save(parent);const worker=await appWorker();await worker.queue(parent.id);assert.equal((await worker.run()).job.status,'succeeded');
+ const original=(await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,userId])).rows[0].membership_id;
+ const values=input();values.draft.dynamic.all[0].value='engineering';await save(parent,values,'1');const queued=await worker.queue(parent.id);
+ const first=await worker.run();assert.equal(first.job.status,'queued',JSON.stringify(first));assert.equal(first.job.progress.cycle,2);assert.equal(first.job.progress.completed,0);
+ const second=await worker.run();assert.equal(second.job.status,'succeeded',JSON.stringify(second));const actual=(await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,userId])).rows[0].membership_id;assert.notEqual(actual,original);
+ assert.deepEqual((await pool.query('SELECT cycle FROM identity_company_group_rule_runs WHERE job_id=$1 ORDER BY cycle',[queued.job.id])).rows.map(row=>row.cycle),[1,2]);
+ await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/051_company_group_rule_automation.sql'),'utf8'));await pool.query('SELECT identity_company_group_rule_app_receiving()');
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_steps WHERE run_id IN(SELECT id FROM identity_company_group_rule_runs WHERE job_id=$1)',[queued.job.id])).rows[0].count,2);
+});
 test('actual owner stores a conditional rule and preview evaluates real attributes, canonical child members and exclusions without pretending membership changes', async () => {
  const parent = await group('Parent'); let child = await group('Child'); const engineer = await person('Engineering', 'Developer'); const nested = await person('Operations'); const excluded = await person('Engineering');
  child = await groups.add(child.id, { userId: nested }, groupEtag(child), owner.user, bearer);
@@ -140,6 +217,24 @@ test('a rule-generated canonical membership remains awaiting independent review 
  assert.equal(lease.initial_grace,false);assert.equal(lease.projected_active,false);
  const before=await reviews.get(lease.id,voter);await reviews.decide(lease.id,reviewTag(before),{decision:'retain',reason:'Independent actual reviewed dynamic membership',acknowledgeScope:true},voter,bearer);
  assert.deepEqual((await rules.preview(parent.id,owner.user,bearer)).desired.map(item=>item.userId),[userId]);
+ const appChild=await group('App-governed child');
+ await reviews.create({groupId:appChild.id,intervalSeconds:300,windowSeconds:60,reviewerUserIds:[voter.identity_authorization.userId],reason:'Require actual independent approval for machine-created members',acknowledgeEffects:true},manager,bearer);
+ await save(appChild);const worker=await appWorker();await worker.queue(appChild.id);owner.user.auth_time-=301;owner.user.mfa_authorization.authTime-=301;
+ const first=await worker.run();assert.equal(first.job.status,'partial',JSON.stringify(first));const artifact=JSON.parse((await worker.automation.result(first.job.id,worker.app,worker.appBearer)).content);
+ assert.deepEqual(artifact.results,[{userId,status:'awaiting-review',code:null}]);
+ const appLease=(await pool.query('SELECT lease.id FROM identity_membership_review_leases lease JOIN identity_membership_origins origin ON origin.membership_id=lease.membership_id WHERE origin.group_id=$1 AND origin.user_id=$2',[appChild.id,userId])).rows[0];
+ const pending=await reviews.get(appLease.id,voter);await reviews.decide(appLease.id,reviewTag(pending),{decision:'retain',reason:'Independent review of the actual machine-origin membership',acknowledgeScope:true},voter,bearer);
+ await worker.automation.changeJob(first.job.id,'retry',`"company-automation-job-${first.job.id}-${first.job.revision}"`,worker.app,worker.appBearer);
+ assert.equal((await worker.run()).job.status,'succeeded');
+});
+test('a new worker resumes the next actual page and keeps original receipts rather than repeating canonical adds',async()=>{
+ const parent=await group('Paged machine group');for(let index=0;index<27;index++)await person('Engineering');await save(parent);const worker=await appWorker();const queued=await worker.queue(parent.id);
+ const first=await worker.run();assert.equal(first.job.status,'queued',JSON.stringify(first));assert.equal(first.job.progress.completed,25);
+ const {CompanyAutomation}=require('../CompanyAutomation');const restarted=new CompanyAutomation(database,{issuer,authority:rules.authority,revalidate:worker.automation.revalidate});
+ const second=await restarted.run({grantId:worker.permission.id},worker.app,worker.appBearer);assert.equal(second.job.status,'succeeded',JSON.stringify(second));assert.equal(second.job.progress.completed,27);
+ const report=JSON.parse((await restarted.result(queued.job.id,worker.app,worker.appBearer)).content);assert.equal(report.results.length,27);
+ assert.equal((await pool.query("SELECT count(*)::integer AS count FROM identity_directory_group_events WHERE group_id=$1 AND action='member-add'",[parent.id])).rows[0].count,27);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_steps')).rows[0].count,27);
 });
 test('nested rules use effective canonical child membership and remain ordinary actual memberships in each parent', async () => {
  const child = await group('Dynamic child'); const parent = await group('Nested parent'); const grandparent = await group('Nested grandparent'); const userId = await person('Engineering');

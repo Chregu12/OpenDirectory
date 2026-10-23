@@ -15,7 +15,7 @@ const previewSchema = z.object({ ...envelope, groupId: uuid, groupName: z.string
 const resultSchema = z.object({ userId: uuid, status: z.enum(['added','retained','manual-retained','removed','awaiting-review','blocked']), code: z.union([z.literal(403),z.literal(404),z.literal(409),z.literal(428)]).nullable() }).strict().refine(row => row.status === 'blocked' ? row.code !== null : row.code === null);
 const receiptSchema = z.object({ ...envelope, outcome: z.enum(['applied','already_applied']), rule: ruleSchema }).strict();
 const syncSchema = z.object({ ...envelope, groupId: uuid, ruleRevision: revision, observation: sha, results: z.array(resultSchema).max(25), nextCursor: uuid.nullable(), hasBlocked: z.boolean() }).strict();
-const historySchema = z.object({ ...envelope, groupId: uuid, page: z.number().int().positive(), limit: z.literal(25), total: z.number().int().nonnegative(), events: z.array(z.object({ id: uuid, kind: z.enum(['configuration','membership']), action: z.enum(['configured','member-add','member-remove']), userId: uuid.nullable(), membershipId: uuid.nullable(), ruleRevision: revision, actorUserId: uuid, reason: z.string().min(10).max(500), createdAt: stamp, deliveryStatus: z.literal('pending') }).strict()).max(25) }).strict();
+const historySchema = z.object({ ...envelope, groupId: uuid, page: z.number().int().positive(), limit: z.literal(25), total: z.number().int().nonnegative(), events: z.array(z.object({ id: uuid, kind: z.enum(['configuration','membership']), action: z.enum(['configured','member-add','member-remove']), userId: uuid.nullable(), membershipId: uuid.nullable(), ruleRevision: revision, actorUserId: uuid.nullable(), application: z.object({grantId:uuid,clientId:z.string().min(1).max(255),clientRevision:revision}).strict().optional(), reason: z.string().min(10).max(500), createdAt: stamp, deliveryStatus: z.literal('pending') }).strict()).max(25) }).strict();
 export type CompanyGroupRuleDraft = CompanyWire<z.infer<typeof draftSchema>>;
 export type CompanyGroupRulePage = CompanyWire<z.infer<typeof pageSchema>>;
 export type CompanyGroupRulePreview = CompanyWire<z.infer<typeof previewSchema>>;
@@ -43,7 +43,8 @@ export const companyGroupRules = {
  },
  async history(page: CompanyGroupRulePage, number = 1): Promise<CompanyGroupRuleHistory> {
   const response = await api.get(base(page.groupId) + '/history', { params: { page: number } }); if (response.status !== 200) fail(); const value = historySchema.parse(response.data); checked(value as CompanyGroupRuleHistory, page.groupId, page.actorUserId, page.tenantId);
-  if (value.page !== number || value.events.length > value.total || new Set(value.events.map(row => row.id)).size !== value.events.length) fail(); return value as CompanyGroupRuleHistory;
+  if (value.page !== number || value.events.length > value.total || new Set(value.events.map(row => row.id)).size !== value.events.length
+   || value.events.some(event=>event.actorUserId===null ? !event.application||event.kind!=='membership' : !!event.application)) fail(); return value as CompanyGroupRuleHistory;
  },
  async sync(preview: CompanyGroupRulePreview, reason: string, onPage: (count: number) => void = () => {}): Promise<CompanyGroupRuleResult[]> {
   const targets = Array.from(new Set([...preview.desired.map(row => row.userId), ...preview.existing.filter(row => row.managed).map(row => row.userId)])).sort(); const results: CompanyGroupRuleResult[] = []; let cursor: string | null = null;

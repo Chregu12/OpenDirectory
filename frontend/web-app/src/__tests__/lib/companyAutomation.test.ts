@@ -9,7 +9,7 @@ const job: any = { id: id(5), grantId: id(3), tenantId: id(2), scheduleId: null,
 const envelope = (data: any) => ({ schemaVersion: 1, companyAutomationProtocol: 1, principal, ...data });
 beforeEach(() => { jest.resetAllMocks(); Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: () => id(99) }); });
 test('owner reads actual tenant grants without running a worker or mutation', async () => {
-  (api.get as jest.Mock).mockResolvedValue({ status: 200, data: envelope({ grants: [grant], page: 1, limit: 25, total: 1, supportedActions: ['directory.users.export', 'directory.groups.export', 'directory.ous.export','licenses.groups.reconcile'] }) });
+  (api.get as jest.Mock).mockResolvedValue({ status: 200, data: envelope({ grants: [grant], page: 1, limit: 25, total: 1, supportedActions: ['directory.users.export', 'directory.groups.export', 'directory.ous.export','licenses.groups.reconcile','directory.groups.reconcile'] }) });
   expect((await companyAutomation.grants(id(1))).grants[0].clientId).toBe('worker'); expect(api.post).not.toHaveBeenCalled();
 });
 test('queues a stable captured job without claiming execution or using a human worker', async () => {
@@ -55,4 +55,11 @@ test('a license report binds all progress counters, the actual app and every blo
   report.actor.clientId = 'foreign'; await expect(companyAutomation.licenseReport(current, licensed, principal)).rejects.toThrow();
   report.actor.clientId = 'worker'; report.results[1].code = null; await expect(companyAutomation.licenseReport(current, licensed, principal)).rejects.toThrow();
  } finally { artifact.mockRestore(); }
+});
+test('a machine group report preserves actual app provenance and treats independent pending review as a partial result',async()=>{
+ const progress={runId:job.id,retryCount:0,cycle:1,completed:1,total:1,blocked:1};const grouped={...grant,actions:['directory.groups.reconcile']};
+ const current={...job,action:'directory.groups.reconcile',ruleId:id(7),status:'partial',rowCount:1,progress};
+ const report={schemaVersion:1,companyGroupRuleAutomationProtocol:1,grantId:grant.id,jobId:job.id,ruleId:id(7),actor:{kind:'application',id:grant.id,clientId:'worker',clientRevision:'1'},progress,finished:true,hasBlocked:true,results:[{userId:id(8),status:'awaiting-review',code:null}]};
+ const artifact=jest.spyOn(companyAutomation,'artifact').mockImplementation(async()=>({contentType:'application/json',content:JSON.stringify(report)} as any));
+ try{expect((await companyAutomation.groupReport(current,grouped,principal)).results[0].status).toBe('awaiting-review');await expect(companyAutomation.groupReport({...current,status:'succeeded'},grouped,principal)).rejects.toThrow();report.actor.clientId='foreign';await expect(companyAutomation.groupReport(current,grouped,principal)).rejects.toThrow();}finally{artifact.mockRestore();}
 });

@@ -885,7 +885,21 @@ erDiagram
   identity_company_group_rule_effects ||--|| identity_company_group_rule_effect_outbox : actual_effect_FK
 ```
 
-Alle dargestellten Tabellen gehören Identity. Die Konfiguration speichert keine zweite Membership-Liste. Der aktuelle Gruppenbezug wird über die tatsächliche eigene kanonische Gruppe geprüft; ein FK auf deren löschbare Zeile würde die retained Historie verhindern. Untergruppen-/Ausnahme-UUIDs sind begrenzte, bei der Konfiguration geprüfte Referenzen in JSONB, keine hier behaupteten relationalen FKs. Originalmanifest, Event-/Pending-Fingerprints und physische Commit-Guards sichern den beschriebenen Schreibweg. Konfiguration und einzelne Membership-Effekte committen getrennt; die Ausführung ist derzeit manuell. [Modell und Grenzen](domain-model.md#gruppenregeln-identity-050), [UI/API/CLI](../features/company-group-rules.md).
+Alle dargestellten Tabellen gehören Identity. Die Konfiguration speichert keine zweite Membership-Liste. Der aktuelle Gruppenbezug wird über die tatsächliche eigene kanonische Gruppe geprüft; ein FK auf deren löschbare Zeile würde die retained Historie verhindern. Untergruppen-/Ausnahme-UUIDs sind begrenzte, bei der Konfiguration geprüfte Referenzen in JSONB, keine hier behaupteten relationalen FKs. Originalmanifest, Event-/Pending-Fingerprints und physische Commit-Guards sichern den beschriebenen Schreibweg. Konfiguration und einzelne Membership-Effekte committen getrennt; der ursprüngliche 050-Pfad ist manuell, der folgende 051-Pfad ergänzt App-Jobs. [Modell und Grenzen](domain-model.md#gruppenregeln-identity-050), [UI/API/CLI](../features/company-group-rules.md).
+
+## App-Gruppenregeln: Identity 051
+
+```mermaid
+erDiagram
+  identity_automation_grants o|--o{ identity_membership_origins : optional_application_grant_FK
+  identity_automation_jobs ||--o{ identity_company_group_rule_runs : actual_job_FK
+  identity_automation_grants ||--o{ identity_company_group_rule_runs : actual_grant_FK
+  identity_company_group_rules ||--o{ identity_company_group_rule_runs : actual_group_rule_FK
+  identity_company_group_rule_runs ||--o{ identity_company_group_rule_steps : actual_run_FK
+  identity_company_group_rule_effects o|--o{ identity_company_group_rule_steps : optional_actual_effect_FK
+```
+
+Alle dargestellten Tabellen gehören Identity. Job/Retry-Epoche/Zyklus und Run/User sind eindeutig. Die Work-Outbox ist über Original-Guards und Fingerprints an genau eine tatsächliche Run- oder Step-Zeile derselben Transaktion gebunden; sie hat keinen relationalen FK auf zwei unterschiedliche Tabellen. App-Origins behalten ihren echten Grant-FK und NULL als menschlichen Ersteller. Eine spätere tatsächliche Review-Entscheidung bleibt menschlich und unabhängig. [Teilmodell](domain-model.md#gruppenregeln-identity-050), [ausführbarer Ablauf und Grenzen](../features/company-group-rule-automation.md).
 
 ## App-Lizenzabgleich: Identity 049 und Policy 029
 

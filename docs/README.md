@@ -49,6 +49,7 @@ Welcome to the OpenDirectory documentation. OpenDirectory is a self-hosted, open
 - [Eigene App-Freigaben, Jobs und Zeitpläne](features/company-automation.md)
 - [Automatischer Lizenzgruppenabgleich mit eigener App](features/company-license-automation.md)
 - [Dynamische und verschachtelte Gruppenregeln mit tatsächlichem Abgleich](features/company-group-rules.md)
+- [Unbeaufsichtigter Gruppenregel-Abgleich](features/company-group-rule-automation.md): eigene App-Freigabe, tatsächliche kanonische Memberships, Zeitpläne und unabhängige Reviews.
 - [Vollständiger Umsetzungsauftrag und offener Arbeitsstand](implementation-worklist.md)
 - [Audit & Logging](features/audit-logging.md)
 

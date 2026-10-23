@@ -20,7 +20,7 @@ Die Verknüpfung startet den Abgleich. Bestätigte Mitgliedsänderungen in diese
 
 Der Bestand und die Vergabe sind lokal. Eine erfolgreiche Zuweisung bestätigt keinen Herstellerlizenzkauf, keine Microsoft-365-Freischaltung, kein Postfach und keine App-Installation.
 
-Für [Attribut- und Untergruppenregeln](company-group-rules.md) zuerst die gespeicherte Regelvorschau prüfen und die Mitgliedschaften ausdrücklich abgleichen. Danach diese Pool-Verknüpfung manuell oder über den Lizenz-App-Zeitplan abgleichen. Die derzeit manuelle Gruppenregel-Ausführung und der Lizenzworker sind getrennte Schritte; eine Regeländerung allein entzieht keine bestehende Membership oder Lizenzquelle.
+Für [Attribut- und Untergruppenregeln](company-group-rules.md) zuerst die gespeicherte Regelvorschau prüfen und die Mitgliedschaften ausdrücklich abgleichen. Danach diese Pool-Verknüpfung manuell oder über den Lizenz-App-Zeitplan abgleichen. Die manuelle oder separat genehmigte zeitgesteuerte Gruppenregel-Ausführung und der Lizenzworker sind getrennte Schritte; eine Regeländerung allein entzieht keine bestehende Membership oder Lizenzquelle.
 
 ## Skripte
 

@@ -5,8 +5,10 @@ import CompanyAutomationView from '@/components/views/CompanyAutomationView';
 import { companyAutomation } from '@/lib/companyAutomation';
 import { directoryUsers } from '@/lib/directoryUsers';
 import { companyLicenseGroups } from '@/lib/companyLicenseGroups';
+import { companyGroupRules } from '@/lib/companyGroupRules';
+jest.mock('@/lib/companyGroupRules',()=>({companyGroupRules:{get:jest.fn()}}));
 jest.mock('@/lib/directoryUsers', () => ({ directoryUsers: { access: jest.fn() } }));
-jest.mock('@/lib/companyAutomation', () => ({ automationActions: ['directory.users.export', 'directory.groups.export', 'directory.ous.export','licenses.groups.reconcile'], licenseAutomationAction: 'licenses.groups.reconcile', companyAutomation: { grants: jest.fn(), enrollment: jest.fn(), approve: jest.fn(), jobs: jest.fn(), schedules: jest.fn(), queue: jest.fn(), revoke: jest.fn(), changeJob: jest.fn(), disable: jest.fn(), history: jest.fn(), licenseReport: jest.fn() } }));
+jest.mock('@/lib/companyAutomation', () => ({ automationActions: ['directory.users.export', 'directory.groups.export', 'directory.ous.export','licenses.groups.reconcile','directory.groups.reconcile'], licenseAutomationAction: 'licenses.groups.reconcile', groupRuleAutomationAction:'directory.groups.reconcile', isReconciliationAction:(value:string)=>['licenses.groups.reconcile','directory.groups.reconcile'].includes(value), companyAutomation: { grants: jest.fn(), enrollment: jest.fn(), approve: jest.fn(), jobs: jest.fn(), schedules: jest.fn(), queue: jest.fn(), revoke: jest.fn(), changeJob: jest.fn(), disable: jest.fn(), history: jest.fn(), licenseReport: jest.fn(), groupReport:jest.fn() } }));
 jest.mock('@/lib/companyLicenseGroups', () => ({ companyLicenseGroups: { inspect: jest.fn() } }));
 const id = (n: number) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
 const principal = { kind: 'owner', userId: id(1), tenantId: id(2) };
@@ -59,4 +61,12 @@ test('license write consent states assignment and removal before approval', asyn
  fireEvent.click(screen.getByLabelText('Gruppenlizenzen zuweisen und entziehen')); fireEvent.change(screen.getByLabelText('Automationsfreigabe begründen'), { target: { value: 'Eigene Lizenzen ausdrücklich automatisch abgleichen' } });
  fireEvent.click(screen.getByRole('button', { name: 'Ausgewählte App-Rechte bestätigen' }));
  expect(screen.getByRole('dialog')).toHaveTextContent('Lizenzsitze anhand bestehender Gruppenverknüpfungen zuweisen und entziehen'); expect(companyAutomation.approve).not.toHaveBeenCalled();
+});
+test('group-rule automation requires a checked own saved rule and binds the actual group ID in the schedule',async()=>{
+ const grouped={...grant,actions:['directory.groups.reconcile']};(companyAutomation.grants as jest.Mock).mockResolvedValue({principal,grants:[grouped],page:1,limit:25,total:1});
+ (companyGroupRules.get as jest.Mock).mockResolvedValue({groupId:id(8),tenantId:id(2),rule:{revision:'3',enabled:true}});
+ render(<CompanyAutomationView/>);await ready();fireEvent.change(screen.getByLabelText('Automationsaktion'),{target:{value:'directory.groups.reconcile'}});
+ expect(screen.queryByLabelText('Exportformat')).not.toBeInTheDocument();expect(screen.getByRole('button',{name:'Gruppenregel-Abgleich einreihen'})).toBeDisabled();
+ fireEvent.change(screen.getByLabelText('Gruppenregel-Gruppen-ID'),{target:{value:id(8)}});fireEvent.click(screen.getByRole('button',{name:'Gruppenregel prüfen'}));await screen.findByText(/Gespeicherte Regelversion 3/);
+ expect(companyGroupRules.get).toHaveBeenCalledWith(id(8),id(1));fireEvent.click(screen.getByRole('button',{name:'Zeitplan erstellen'}));await waitFor(()=>expect(companyAutomation.queue).toHaveBeenCalledWith(grouped,'directory.groups.reconcile','json',principal,60,id(8)));
 });

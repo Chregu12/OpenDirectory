@@ -1,6 +1,6 @@
 # Eigene App-Freigaben und dauerhafte Jobs
 
-Stand: 23. Oktober 2026. Die Jobbasis verbindet ein ausdrücklich freigegebenes App-Konto mit dem eigenen Mandanten. Sie speichert Jobs, Worker-Leases, begrenzte Wiederholungen, Zeitpläne und unveränderliche Historie in PostgreSQL. Ausführbar sind eigene Benutzer-/Gruppen-/OU-Exporte und der [automatische Lizenzgruppenabgleich](company-license-automation.md) über den vorhandenen endlichen Allocator. Weitere Schreib- und Provideraktionen gehören zum [Gesamtauftrag](../implementation-worklist.md) und bleiben offen.
+Stand: 23. Oktober 2026. Die Jobbasis verbindet ein ausdrücklich freigegebenes App-Konto mit dem eigenen Mandanten. Sie speichert Jobs, Worker-Leases, begrenzte Wiederholungen, Zeitpläne und unveränderliche Historie in PostgreSQL. Ausführbar sind eigene Benutzer-/Gruppen-/OU-Exporte, [gespeicherte Gruppenregeln](company-group-rule-automation.md) und der [automatische Lizenzgruppenabgleich](company-license-automation.md) über den vorhandenen endlichen Allocator. Weitere Schreib- und Provideraktionen gehören zum [Gesamtauftrag](../implementation-worklist.md) und bleiben offen.
 
 ## App anmelden und ausdrücklich freigeben
 
@@ -38,6 +38,7 @@ Aktuell ausführbare Aktionen:
 | `directory.groups.export` | Eigene Gruppen, Beschreibung, Revision und kanonische eigene Mitglieder-IDs |
 | `directory.ous.export` | Eigene Einheiten, Beschreibung, Parent-ID und Revision |
 | `licenses.groups.reconcile` | Bestehende eigene Gruppen-/Pool-Verknüpfung; lokale Quellen zuweisen/entziehen, Fortschritt und vollständiger JSON-Bericht mit echten Teilresultaten |
+| `directory.groups.reconcile` | Gespeicherte eigene Attribut-/Untergruppenregel; tatsächliche Memberships mit App-Herkunft hinzufügen/entziehen, manuelle Links erhalten und unabhängige Reviews abwarten |
 
 Ein Export umfasst vollständig höchstens 10'000 Zeilen und vier MiB. Überschreitung ist ein sichtbarer Fehler, kein abgeschnittener erfolgreicher Bericht. CSV maskiert Formeleinstiege und zitiert Sonderzeichen. JSON/CSV sind personenbezogene Daten; die Freigabe benennt den Export ausdrücklich. Ergebnisse werden erst nach bestätigtem lokalem Commit angeboten und beim Download gegen ihren SHA-256 geprüft.
 
@@ -71,7 +72,7 @@ Zeitpläne benötigen Intervalle von 60 Sekunden bis 30 Tagen. Nach längerer Un
 
 **App-Freigabe widerrufen** bestätigt die genaue Grant-Version, stoppt zugehörige Zeitpläne und bricht wartende/laufende Jobs in derselben Transaktion ab. Weitere App-Ausführung und App-Downloads sind gesperrt. Bereits heruntergeladene Dateien lassen sich beim Empfänger dadurch nicht zurückholen. Der aktuelle Eigentümer behält Zugriff auf eigene historische Belege. **Zeitplan stoppen** verhindert künftige Einreihungen; bestehende Jobs werden separat behandelt.
 
-Identity-Migration **048** speichert Anmeldungen, Grants, Jobs, Schedules, Originalevents und Pending-Outbox. **049** ergänzt feste Lizenzziele, wiederaufnehmbaren Fortschritt und `partial`; Policy **029** bindet den maschinellen Pfad an den bestehenden Allocator samt ursprünglichen Seiten-/Pending-Belegen. Originale Firmenhoheit, aktuelle App-Autorisierung, Claim-/Grant-Deadline und tatsächliche Effekte werden vor/nach Operationen und durch SQL-Commit-Guards bestätigt. Globale Rollen und frühere menschliche Directory-/Lizenzpfade bleiben unverändert. Ein neuer Automationsscope kann keine kanonischen Benutzer, Gruppen oder fremden Authority-Tabellen nebenbei ändern; die vorhandenen Receiving-Fences werden auf die neuen Tabellen erweitert. Fehlendes Schema, deaktivierte Guards oder abweichende Originalbelege sperren die Aktion.
+Identity-Migration **048** speichert Anmeldungen, Grants, Jobs, Schedules, Originalevents und Pending-Outbox. **049** ergänzt feste Lizenzziele, wiederaufnehmbaren Fortschritt und `partial`; Policy **029** bindet den maschinellen Pfad an den bestehenden Allocator samt ursprünglichen Seiten-/Pending-Belegen. **050–051** ergänzen gespeicherte Gruppenregeln, tatsächliche App-Origins und dauerhafte Originalschritte im kanonischen Gruppen-Kernel. Originale Firmenhoheit, aktuelle App-Autorisierung, Claim-/Grant-Deadline und tatsächliche Effekte werden vor/nach Operationen und durch SQL-Commit-Guards bestätigt. Globale Rollen bleiben unverändert. Ein neuer Automationsscope kann keine kanonischen Benutzer, Gruppen oder fremden Authority-Tabellen nebenbei ändern; die vorhandenen Receiving-Fences werden auf die neuen Tabellen erweitert. Fehlendes Schema, deaktivierte Guards oder abweichende Originalbelege sperren die Aktion.
 
 Artefakte und Metadaten liegen in der eigenen Identity-Datenbank. Ein vollständiger automatischer Retention-/Lösch- und Betriebsprozess gehört weiterhin zum offenen Gesamtauftrag. Hier wurden keine Produktivdaten, externen Postfächer oder Herstellerlizenzen verändert.
 
@@ -94,3 +95,5 @@ TMPDIR=/tmp npm run test:groups:integration --prefix services/core/identity-serv
 Die nativen PostgreSQL-Fälle prüfen echte Owner-Aktivierung und Daten, Fremdmandanten, Widerruf, Generationen, parallele Claims, reale Artefakte aller angebotenen Typen, physische Deadlines, abgebrochene Worker, begrenzte Versuche, historische Wiederaufnahme, Migration-Replay und beschädigte ursprüngliche Belege. Die OU-Ausgabe verwendet den bestehenden Verzeichnisleser und verweigert inkohärente fremde Parent-Bezüge.
 
 Ein echter lokaler Chrome-Durchlauf gegen einen frisch gebauten Produktionsserver verbindet die tatsächliche App-Erstellung und Anmeldung mit Owner-MFA, expliziter UI-Freigabe, dem CLI-Worker, geprüftem eigenem CSV-Download und Widerruf samt Abbruch wartender Jobs. [Testresultate und Grenzen](../testing/test-results.md#22-oktober-2026--eigene-app-freigaben-und-dauerhafte-exportjobs). Provider-, Last-, Restore- und produktive Betriebsabnahme bleiben offen.
+
+Die fünfte Aktion [directory.groups.reconcile](company-group-rule-automation.md) führt gespeicherte eigene Attribut-/Untergruppenregeln mit tatsächlicher App-Herkunft aus. Bestehende Freigaben erhalten sie nicht automatisch. Regelkonfiguration, Lizenzpool-Verknüpfung und Herstellerbereitstellung bleiben gesondert autorisiert.

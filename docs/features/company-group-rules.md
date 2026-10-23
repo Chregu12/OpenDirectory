@@ -1,6 +1,6 @@
 # Dynamische und verschachtelte Gruppenregeln
 
-Stand: 23. Oktober 2026. Der tatsächliche Firmeninhaber kann für eine eigene kanonische Gruppe Attributbedingungen und Untergruppen konfigurieren, deren Ergebnis prüfen und ausdrücklich abgleichen. Das erzeugt echte Mitgliedschaften über den vorhandenen `GroupMutator`. Es gibt kein zweites Verzeichnis und keine ausgedachten Membership-IDs. Die unbeaufsichtigte Ausführung über App-Jobs und externe Änderungsereignisse bleiben Teil des offenen [Gesamtauftrags](../implementation-worklist.md).
+Stand: 23. Oktober 2026. Der tatsächliche Firmeninhaber kann für eine eigene kanonische Gruppe Attributbedingungen und Untergruppen konfigurieren, deren Ergebnis prüfen und ausdrücklich abgleichen. Das erzeugt echte Mitgliedschaften über den vorhandenen `GroupMutator`. Es gibt kein zweites Verzeichnis und keine ausgedachten Membership-IDs. Die [unbeaufsichtigte Ausführung über App-Jobs](company-group-rule-automation.md) ist ebenfalls verfügbar; unmittelbare Quellenpropagation und externe Änderungsereignisse bleiben Teil des offenen [Gesamtauftrags](../implementation-worklist.md).
 
 ## Oberfläche
 
@@ -20,7 +20,7 @@ Die neue Funktion braucht tatsächliche Company-Ownership und ursprüngliche fri
 - Regelmitgliedschaften behalten die tatsächliche serverseitig erzeugte Membership-UUID und den kanonischen Gruppenereignis-FK. Nur diese ursprüngliche Inkarnation darf die Regel später entfernen. Eine manuell entfernte und neu angelegte andere Inkarnation wird nicht übernommen.
 - Eine geänderte Regelversion oder Empfänger-Generation benötigt gegebenenfalls Entfernung und Neuausstellung der alten Regelquelle. Ein historischer Review wird nicht einfach auf eine neue Quelle übertragen.
 - Hat die Zielgruppe eine unabhängige Mitgliedschaftsprüfung, entsteht die wirkliche erste ausstehende Review-Lease ohne anfängliche Freigabe. `awaiting-review` ist kein positiver App-/Lizenzzugriff. Eine übergeordnete Gruppe übernimmt diesen Benutzer erst nach tatsächlicher effektiver Freigabe im Kind.
-- Attributänderungen, Child-Mitgliedschaften und Reviews werden beim nächsten ausdrücklich gestarteten Abgleich neu ausgewertet. Bei mehreren Ebenen zuerst die Kinder, danach die Eltern abgleichen. Konfigurationsänderung, Kind-Entzug und Parent-Entzug sind keine gemeinsame atomare Operation.
+- Attributänderungen, Child-Mitgliedschaften und Reviews werden beim nächsten manuellen oder ausdrücklich genehmigten zeitgesteuerten Abgleich neu ausgewertet. Beim manuellen Abgleich mehrerer Ebenen zuerst die Kinder, danach die Eltern abgleichen; Zeitpläne verwenden getrennte Kinder-/Elternläufe. Konfigurationsänderung, Kind-Entzug und Parent-Entzug sind keine gemeinsame atomare Operation.
 - Ein eigener vorhandener [Lizenzgruppen-Link](company-license-groups.md) kann anschliessend manuell oder über den bereits verfügbaren [Lizenz-App-Worker](company-license-automation.md) abgeglichen werden. Gruppenmaterialisierung und Poolvergabe bleiben getrennte tatsächliche Schritte.
 
 Höchstens acht Bedingungen, 25 unmittelbare Kinder, 16 Verschachtelungslinks und 10'000 gewünschte Benutzer/Abgleichziele sind zulässig. Zyklen und fremde/unowned Referenzen werden abgelehnt. Die bestehende kanonische Gruppe bleibt auf 10'000 physische Mitgliedschaften begrenzt; bestehende manuelle Mitglieder verbrauchen diese Grenze ebenfalls. Ein Abgleich verarbeitet höchstens 25 sortierte Benutzer pro API-Seite. Der gleiche erfasste `observation`-Hash bindet Regelversion, gewünschte IDs und Eligibility-Generationen. Geänderte Quellen stoppen die Fortsetzung.
@@ -58,11 +58,11 @@ node scripts/od.mjs group-rule history GROUP_ID
 
 ## Datenmodell, Installation und API
 
-Identity **001–050**, aktueller Identity-Code, Frontend und CLI koordiniert ausrollen. Das Dockerfile kopiert `packages/company-group-rule-contract.js` im bestehenden Repository-Root-Buildkontext. Keine neue Dependency oder Secret-Art. Die vorhandenen `/api/groups/*`-Proxys reichen den originalen Bearer und die konditionalen Header weiter.
+Identity **001–051**, aktueller Identity-Code, Frontend und CLI koordiniert ausrollen. Das Dockerfile kopiert `packages/company-group-rule-contract.js` im bestehenden Repository-Root-Buildkontext. Keine neue Dependency oder Secret-Art. Die vorhandenen `/api/groups/*`-Proxys reichen den originalen Bearer und die konditionalen Header weiter.
 
 Migration 050 speichert die aktuelle versionierte Konfiguration in `identity_company_group_rules`, ihre ursprünglichen Events/Pending-Fingerprints und die kanonischen Membership-Effekte samt eigenem Pending-Fingerprint. Die Membership-Effekte referenzieren wirkliche `identity_directory_group_events` und `identity_membership_origins`, bleiben unveränderlich und können keine normale manuelle Membership adoptieren. Guards, Originalmanifest, tatsächlicher Owner, kanonische Wirkung und Deadline werden an der physischen Commit-Grenze geprüft. Neue Tabellen übernehmen die bestehenden No-extra-effects-Fences; die Konfiguration kann auch keine früheren oder späteren fremden Canonical-Writes mitnehmen. Retention, Veröffentlichung der Pending-Outbox und vollständiger Audit-/Recovery-Betrieb bleiben offen.
 
-Der [OpenAPI-Vertrag](../api/openapi.yaml) ist Version **1.23.0**:
+Der [OpenAPI-Vertrag](../api/openapi.yaml) ist Version **1.24.0**:
 
 | Methode | Pfad | Wirkung |
 | --- | --- | --- |
@@ -72,4 +72,4 @@ Der [OpenAPI-Vertrag](../api/openapi.yaml) ist Version **1.23.0**:
 | POST | `/api/groups/:id/rule/sync` | Bestätigte Seite mit `observation`, `cursor`, `reason`, `confirm:true` |
 | GET | `/api/groups/:id/rule/history?page=1` | 25 ursprüngliche Konfigurations-/Membership-Belege der noch bestehenden eigenen Gruppe |
 
-Konfiguration und einzelne Mitgliedschaften committen unabhängig. Bei tatsächlich gelöschten Gruppen bleiben die Belege in der Datenbank erhalten; diese Oberfläche/API setzt eine noch bestehende eigene Gruppe voraus. Ein fehlender Receiver oder beschädigter Original-/Pending-Beleg wird nicht durch eine erfolgreiche leere Antwort ersetzt. Die vollautomatische Gruppenregel-Ausführung ist weiterhin offen; dies verkleinert den Gesamtauftrag nicht.
+Konfiguration und einzelne Mitgliedschaften committen unabhängig. Bei tatsächlich gelöschten Gruppen bleiben die Belege in der Datenbank erhalten; diese Oberfläche/API setzt eine noch bestehende eigene Gruppe voraus. Ein fehlender Receiver oder beschädigter Original-/Pending-Beleg wird nicht durch eine erfolgreiche leere Antwort ersetzt. Die unbeaufsichtigte Ausführung verwendet den separat freigegebenen App-/Zeitplanweg. Unmittelbare Quellenpropagation bleibt offen; dies verkleinert den Gesamtauftrag nicht.

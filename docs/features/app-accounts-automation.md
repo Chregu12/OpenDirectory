@@ -72,7 +72,7 @@ Ein dediziertes Konto mit exakt `company.automation` kann sich anmelden; anschli
 
 Die CLI unterstützt auch `group create`, `group member add|remove` und `license-group list|link|sync|unlink`. Die [Lizenzgruppen-Anleitung](company-license-groups.md) beschreibt den vollständigen Ablauf. Normale Gruppen erhalten durch eine ausdrückliche eigene Pool-Verknüpfung eine Lizenzfunktion; die Mitgliedsbefehle gleichen diese Verknüpfungen als tatsächlicher Company-Owner ab. Diese Schreibaktionen verwenden `OPENDIRECTORY_ADMIN_ACCESS_TOKEN` mit aktuellen eigenen Rechten und MFA, keine App-Tokens. Exit-Code 2 meldet blockierte Benutzer; bereits bestätigte Mitgliederänderungen werden bei einem späteren Vergabefehler nicht zurückgerollt.
 
-[Attribut- und Untergruppenregeln](company-group-rules.md) ergänzen diese Gruppenbefehle um `group-rule get|configure|preview|sync|history`. Der derzeitige Regelabgleich braucht denselben ursprünglichen menschlichen Owner-Bearer mit frischer MFA. Die vorhandene App-Lizenzfreigabe berechtigt nicht zum Ändern der Mitgliedschaften oder zum Ausführen dieser Gruppenregeln.
+[Attribut- und Untergruppenregeln](company-group-rules.md) ergänzen diese Gruppenbefehle um `group-rule get|configure|preview|sync|history`. Der derzeitige Regelabgleich braucht denselben ursprünglichen menschlichen Owner-Bearer mit frischer MFA. Die vorhandene App-Lizenzfreigabe berechtigt nicht zum Ändern der Mitgliedschaften. Dafür steht die separat ausdrücklich genehmigte Aktion [directory.groups.reconcile](company-group-rule-automation.md) mit `automation group-sync GRANT_ID GROUP_ID [INTERVAL_SECONDS]` zur Verfügung.
 
 ## E-Mail
 
