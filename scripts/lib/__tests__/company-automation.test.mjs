@@ -96,3 +96,8 @@ test('the actual license-sync CLI pins the rule and a partial worker report exit
   mismatch = true; await assert.rejects(cli('worker', id(1), '--once'), error => error.code === 1 && !error.stdout.includes('succeeded'));
  } finally { await new Promise(resolve => server.close(resolve)); }
 });
+test('the script creates an explicit change subscription without inventing a timer or accepting export monitoring',async()=>{
+ const calls=[];const client=createAutomationClient({request:async(...args)=>{calls.push(args);const body=args[2];return response({schedule:{...body,tenantId:id(4),intervalSeconds:null,lastSourceRevision:null,lastDeadlineRevision:null,enabled:true}},201);}});
+ assert.equal((await client.watch(id(1),'directory.groups.reconcile',id(2))).schedule.onChange,true);assert.equal(calls[0][2].intervalSeconds,undefined);assert.equal(calls[0][2].onChange,true);assert.equal(calls[0][3].administrative,false);
+ await assert.rejects(client.watch(id(1),'directory.users.export',id(2)));assert.equal(calls.length,1);
+});

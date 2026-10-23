@@ -27,8 +27,9 @@ function grantInput(body) {
   return { ...body, actions: actions(body.actions), reason: text(body.reason, 10, 500) };
 }
 function jobInput(body, scheduled = false) {
-  exact(body, ['id', 'grantId', 'action', 'format', ...(reconciliation(body?.action) ? ['ruleId'] : []), ...(scheduled ? ['intervalSeconds'] : [])]); identifier(body.id); identifier(body.grantId);
-  if (!ACTIONS.includes(body.action) || !['csv', 'json'].includes(body.format) || scheduled && (!Number.isInteger(body.intervalSeconds) || body.intervalSeconds < 60 || body.intervalSeconds > 2592000)) fail(400, 'Supported bounded automation job required');
+  exact(body, ['id', 'grantId', 'action', 'format', ...(reconciliation(body?.action) ? ['ruleId'] : []), ...(scheduled ? body?.onChange === true ? ['onChange'] : ['intervalSeconds'] : [])]); identifier(body.id); identifier(body.grantId);
+  if (!ACTIONS.includes(body.action) || !['csv', 'json'].includes(body.format) || scheduled && body.onChange !== true && (!Number.isInteger(body.intervalSeconds) || body.intervalSeconds < 60 || body.intervalSeconds > 2592000)) fail(400, 'Supported bounded automation job required');
+  if (scheduled && body.onChange === true && !reconciliation(body.action)) fail(400, 'Only delegated group reconciliation supports change subscriptions');
   if (reconciliation(body.action)) { identifier(body.ruleId); if (body.format !== 'json') fail(400, 'Structured reconciliation result required'); }
   return { ...body };
 }

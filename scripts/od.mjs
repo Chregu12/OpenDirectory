@@ -28,6 +28,8 @@ const usage = `OpenDirectory app accounts and API automation (Node.js 20+)
   node scripts/od.mjs automation schedule GRANT_ID ACTION INTERVAL_SECONDS [json|csv]
   node scripts/od.mjs automation license-sync GRANT_ID RULE_ID [INTERVAL_SECONDS]
   node scripts/od.mjs automation group-sync GRANT_ID GROUP_ID [INTERVAL_SECONDS]
+  node scripts/od.mjs automation group-watch GRANT_ID GROUP_ID
+  node scripts/od.mjs automation license-watch GRANT_ID RULE_ID
   node scripts/od.mjs automation jobs GRANT_ID
   node scripts/od.mjs automation result JOB_ID
   node scripts/od.mjs automation history JOB_ID
@@ -80,6 +82,7 @@ try {
   else if (command === 'automation' && action === 'schedule' && args.length >= 3 && args.length <= 4) result = await automation.schedule(args[0], args[1], Number(args[2]), args[3]);
   else if (command === 'automation' && action === 'license-sync' && args.length >= 2 && args.length <= 3) result = args.length === 3
     ? await automation.schedule(args[0], 'licenses.groups.reconcile', Number(args[2]), 'json', args[1]) : await automation.enqueue(args[0], 'licenses.groups.reconcile', 'json', args[1]);
+  else if (command === 'automation' && ['group-watch','license-watch'].includes(action) && args.length === 2) result = await automation.watch(args[0],action === 'group-watch' ? 'directory.groups.reconcile' : 'licenses.groups.reconcile',args[1]);
   else if (command === 'automation' && action === 'group-sync' && args.length >= 2 && args.length <= 3) result = args.length === 3
     ? await automation.schedule(args[0], 'directory.groups.reconcile', Number(args[2]), 'json', args[1]) : await automation.enqueue(args[0], 'directory.groups.reconcile', 'json', args[1]);
   else if (command === 'automation' && action === 'jobs' && args.length === 1) result = await automation.jobs(args[0]);

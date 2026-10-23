@@ -2867,7 +2867,7 @@ test('real company automation Owner UI grants an actual app worker, downloads it
   } finally { await adminContext.close(); await ownerContext.close(); }
 });
 
-test('real scheduled app worker assigns and returns a group license through OAuth, Identity, Policy and the Owner UI', { timeout: 360000 }, async () => {
+test('real change-driven app worker assigns, expands and returns a group license through OAuth, Identity, Policy and the Owner UI', { timeout: 360000 }, async () => {
   const ownerUsername = 'company-license-automation-owner';
   const company = await require('../../../../../scripts/lib/company-owner-fixture.cjs').activeCompany(identityDb, identitySchema, logicalIssuer,
     { subject: ownerUsername + '-subject', username: ownerUsername });
@@ -2875,7 +2875,7 @@ test('real scheduled app worker assigns and returns a group license through OAut
   let worker; let workerOutput = ''; let workerErrors = ''; const receiverRejections = []; const originalFetch = global.fetch;
   global.fetch = async (...args) => {
     const response = await originalFetch(...args); const pathname = new URL(String(args[0])).pathname;
-    if (!response.ok && ['/api/licenses/automation/groups/step', '/api/identity/automation/license-source'].includes(pathname)) receiverRejections.push({ pathname, status: response.status, error: (await response.clone().json()).error });
+    if (!response.ok && ['/api/licenses/automation/groups/step', '/api/identity/automation/license-source','/api/licenses/automation/groups/observe','/api/identity/automation/watch-source'].includes(pathname)) receiverRejections.push({ pathname, status: response.status, error: (await response.clone().json()).error });
     return response;
   };
   try {
@@ -2896,6 +2896,8 @@ test('real scheduled app worker assigns and returns a group license through OAut
     };
     let group = await request(identityBase + '/api/groups', 'POST', { name: 'Actual scheduled license group' }, {}, 201);
     group = await request(identityBase + '/api/groups/' + group.value.id + '/members', 'POST', { userId: company.receipt.administratorId }, { 'If-Match': group.etag });
+    let colleague=await request(identityBase+'/api/users','POST',{username:'capacity-colleague',email:'capacity-colleague@example.invalid'}, {},201);colleague=await request(identityBase+'/api/users/'+colleague.value.id,'PUT',{enabled:true},{'If-Match':colleague.etag});
+    group=await request(identityBase+'/api/groups/'+group.value.id+'/members','POST',{userId:colleague.value.id},{'If-Match':group.etag});
     const product = await request(policyBase + '/api/licenses/company/pools', 'POST', { name: 'Actual app-managed pool', vendor: 'Local browser fixture', description: '', totalSeats: 1, reason: 'Create one real local seat for scheduled app reconciliation' }, {}, 201);
     const linked = await request(policyBase + '/api/licenses/company/groups', 'POST', { groupId: group.value.id, poolId: product.value.id, reason: 'Link actual own group to the finite local pool', confirm: true }, { 'Idempotency-Key': randomUUID() }, 201);
     const rule = linked.value.rule;
@@ -2915,36 +2917,33 @@ test('real scheduled app worker assigns and returns a group license through OAut
     assert.equal(await page.getByLabel('Lizenzgruppen-Verknüpfungs-ID', { exact: true }).inputValue(), rule.id);
     await page.getByRole('button', { name: 'Lizenzgruppe prüfen', exact: true }).click(); await page.getByText(/Gruppe: Actual scheduled license group/).waitFor();
     const scheduling = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/automation/schedules' && response.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Zeitplan erstellen', exact: true }).click(); const scheduled = await scheduling;
-    assert.equal(scheduled.status(), 201, await scheduled.text()); const schedule = (await scheduled.json()).schedule; assert.equal(schedule.ruleId, rule.id); assert.equal(schedule.intervalSeconds, 60);
+    await page.getByRole('button', { name: 'Bei Quellenänderungen abgleichen', exact: true }).click(); const scheduled = await scheduling;
+    assert.equal(scheduled.status(), 201, await scheduled.text()); const schedule = (await scheduled.json()).schedule; assert.equal(schedule.ruleId, rule.id); assert.equal(schedule.intervalSeconds, null);assert.equal(schedule.onChange,true);
     worker = spawn(process.execPath, [cliPath, 'automation', 'worker', permission.id], { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
     worker.stdout.on('data', chunk => { workerOutput += chunk; }); worker.stderr.on('data', chunk => { workerErrors += chunk; });
-    const completedJob = async afterId => {
-      const deadline = Date.now() + 100000;
-      while (Date.now() < deadline) {
-        assert.equal(worker.exitCode, null, 'Worker stopped: ' + workerErrors);
-        const rows = (await identityDb.query('SELECT * FROM identity_automation_jobs WHERE schedule_id=$1 ORDER BY created_at', [schedule.id])).rows;
-        const current = rows.find(row => row.id !== afterId);
-        if (current && ['succeeded', 'partial', 'failed', 'retry_wait'].includes(current.status)) { assert.equal(current.status, 'succeeded', JSON.stringify({ status: current.status, errorCode: current.error_code, progress: current.progress, receiverRejections })); return current; }
-        await new Promise(resolve => setTimeout(resolve, 250));
-      }
-      assert.fail('Actual scheduled license job did not complete: ' + workerErrors);
+    const completedJob = async(predicate) => {
+      const deadline=Date.now()+100000;while(Date.now()<deadline){assert.equal(worker.exitCode,null,'Worker stopped: '+workerErrors);
+        const rows=(await identityDb.query('SELECT * FROM identity_automation_jobs WHERE schedule_id=$1 ORDER BY created_at',[schedule.id])).rows;
+        const current=rows.find(predicate);if(current)return current;
+        const failed=rows.find(row=>['failed','retry_wait'].includes(row.status));assert.equal(failed,undefined,JSON.stringify({failed,receiverRejections}));await new Promise(resolve=>setTimeout(resolve,250));
+      }assert.fail('Actual change-driven license job did not complete: '+workerErrors);
     };
-    const first = await completedJob(); assert.equal(first.progress.completed, 1); assert.equal(first.progress.blocked, 0);
-    assert.equal((await policyDb.query('SELECT used_seats FROM license_catalog WHERE id=$1', [product.value.id])).rows[0].used_seats, 1);
-    await page.getByRole('button', { name: 'Automationen neu laden', exact: true }).click(); await page.getByRole('button', { name: 'Lizenzbericht anzeigen', exact: true }).click();
-    const report = page.getByRole('complementary', { name: 'Geprüfter Lizenzbericht', exact: true }); await report.getByText(new RegExp(client.clientId)).waitFor();
-    await report.getByText(company.receipt.administratorId + ' · Zugewiesen', { exact: true }).waitFor();
-    await page.screenshot({ path: '/tmp/od-company-license-automation-assigned.png', fullPage: true });
-    group = await request(identityBase + '/api/groups/' + group.value.id + '/members/' + company.receipt.administratorId, 'DELETE', undefined, { 'If-Match': group.etag });
-    // Wait for the real 60-second schedule; do not modify its persisted clock or impersonate an owner on the worker.
-    const second = await completedJob(first.id); assert.equal(second.progress.completed, 1);
-    assert.equal((await policyDb.query('SELECT used_seats FROM license_catalog WHERE id=$1', [product.value.id])).rows[0].used_seats, 0);
-    assert.equal(JSON.parse(second.artifact_content).results[0].status, 'removed');
-    await page.getByRole('button', { name: 'Automationen neu laden', exact: true }).click();
-    const jobCard = page.locator('article').filter({ hasText: second.id }); await jobCard.getByRole('button', { name: 'Lizenzbericht anzeigen', exact: true }).click();
-    await report.getByText(company.receipt.administratorId + ' · Gruppenquelle nicht mehr zugewiesen', { exact: true }).waitFor();
-    await page.screenshot({ path: '/tmp/od-company-license-automation-returned.png', fullPage: true });
+    const first=await completedJob(row=>row.status==='partial'&&row.progress?.completed===2&&row.progress?.blocked===1);
+    assert.equal((await policyDb.query('SELECT used_seats FROM license_catalog WHERE id=$1',[product.value.id])).rows[0].used_seats,1);
+    const firstReport=JSON.parse(first.artifact_content);const assigned=firstReport.results.find(item=>item.status==='assigned').userId;
+    await page.getByRole('button',{name:'Automationen neu laden',exact:true}).click();await page.locator('article').filter({hasText:first.id}).getByRole('button',{name:'Lizenzbericht anzeigen',exact:true}).click();
+    const report=page.getByRole('complementary',{name:'Geprüfter Lizenzbericht',exact:true});await report.getByText(new RegExp(client.clientId)).waitFor();await report.getByText(assigned+' · Zugewiesen',{exact:true}).waitFor();
+    await page.screenshot({path:'/tmp/od-company-license-change-blocked.png',fullPage:true});
+    const groupRevisionBeforeCapacity=(await identityDb.query('SELECT revision FROM groups WHERE id=$1',[group.value.id])).rows[0].revision;
+    const currentPool=await request(policyBase+'/api/licenses/company/pools/'+product.value.id,'GET');
+    const expanded=await request(policyBase+'/api/licenses/company/pools/'+product.value.id,'PATCH',{name:currentPool.value.name,vendor:currentPool.value.vendor,description:currentPool.value.description,totalSeats:2,reason:'Make a real second local seat available without changing directory membership',confirm:true},{'If-Match':currentPool.etag});
+    const capacity=await completedJob(row=>row.status==='succeeded'&&row.progress?.completed===2&&row.event_source?.policy&&BigInt(row.event_source.policy.poolRevision)>=BigInt(expanded.value.revision));
+    assert.equal((await policyDb.query('SELECT used_seats FROM license_catalog WHERE id=$1',[product.value.id])).rows[0].used_seats,2);assert.equal((await identityDb.query('SELECT revision FROM groups WHERE id=$1',[group.value.id])).rows[0].revision,groupRevisionBeforeCapacity);
+    await page.getByRole('button',{name:'Automationen neu laden',exact:true}).click();await page.locator('article').filter({hasText:capacity.id}).getByRole('button',{name:'Lizenzbericht anzeigen',exact:true}).click();await report.getByText(/0 blockiert/).waitFor();await page.screenshot({path:'/tmp/od-company-license-change-capacity.png',fullPage:true});
+    const removalStarted=Date.now();group=await request(identityBase+'/api/groups/'+group.value.id+'/members/'+company.receipt.administratorId,'DELETE',undefined,{'If-Match':group.etag});
+    const second=await completedJob(row=>row.status==='succeeded'&&JSON.parse(row.artifact_content).results.some(item=>item.userId===company.receipt.administratorId&&item.status==='removed'));
+    assert.ok(Date.now()-removalStarted<60000);assert.equal((await policyDb.query('SELECT used_seats FROM license_catalog WHERE id=$1',[product.value.id])).rows[0].used_seats,1);
+    await page.getByRole('button',{name:'Automationen neu laden',exact:true}).click();await page.locator('article').filter({hasText:second.id}).getByRole('button',{name:'Lizenzbericht anzeigen',exact:true}).click();await report.getByText(company.receipt.administratorId+' · Gruppenquelle nicht mehr zugewiesen',{exact:true}).waitFor();await page.screenshot({path:'/tmp/od-company-license-change-returned.png',fullPage:true});
     await page.getByRole('button', { name: 'Zeitplan stoppen', exact: true }).click(); await page.getByText('Zeitplan gestoppt; bereits erstellte Jobs separat beachten.', { exact: true }).waitFor();
     assert.equal((await identityDb.query('SELECT enabled FROM identity_automation_schedules WHERE id=$1', [schedule.id])).rows[0].enabled, false);
     const lines = workerOutput.trim().split('\n').map(line => JSON.parse(line)); assert.ok(lines.length >= 2);
@@ -2981,7 +2980,13 @@ test('real roleless Owner configures dynamic and nested groups in the UI and rec
   await page.getByRole('button',{name:'Gruppe '+parent.name,exact:true}).click();await panel.getByLabel('Untergruppen auswählen',{exact:true}).selectOption([child.id]);
   await panel.getByLabel('Gruppenregel begründen',{exact:true}).fill('Actual own nested child group with preserved canonical membership review');await save(parent);assert.equal((await reconcile(parent,1)).results[0].status,'added');
   for(const group of[child,parent])assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1 AND user_id=$2',[group.id,company.receipt.administratorId])).rows[0].count,1);
-  await page.getByRole('button',{name:'Gruppe '+child.name,exact:true}).click();await panel.getByLabel('Regel aktiv',{exact:true}).uncheck();await panel.getByLabel('Gruppenregel begründen',{exact:true}).fill('Stop only this dynamic origin and retain all unrelated manual sources');await save(child);assert.equal((await reconcile(child,0)).results[0].status,'removed');
+  await page.getByRole('button',{name:'Gruppe '+child.name,exact:true}).click();await panel.getByLabel('Regel aktiv',{exact:true}).uncheck();await panel.getByLabel('Gruppenregel begründen',{exact:true}).fill('Stop only this dynamic origin and retain all unrelated manual sources');await save(child);
+  assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=ANY($1::uuid[])',[[child.id,parent.id]])).rows[0].count,2);
+  const live=await new(require('../../../identity-service/src/AuthorizationState').AuthorizationState)(identityDb).state(logicalIssuer,username+'-subject');assert.deepEqual(live.memberships,[]);
+  for(const group of [child,parent]){const response=await fetch(identityBase+'/api/groups/'+group.id+'/rule/preview',{headers:{Authorization:'Bearer '+owner.body.access_token}});assert.equal(response.status,200);const preview=await response.json();assert.equal(preview.existing.length,1);assert.equal(preview.existing[0].effective,false);assert.equal(preview.existing[0].validUntil,null);}
+  await page.goto(origin+'/usergroups');await page.getByRole('button',{name:'Gruppe '+parent.name,exact:true}).click();await panel.getByRole('button',{name:'Gespeicherte Regelvorschau prüfen',exact:true}).click();
+  await panel.getByRole('list',{name:'Wirksamkeit gespeicherter Gruppenverknüpfungen',exact:true}).getByText(/Regelquelle · Unwirksam bei Prüfung/).waitFor();await page.screenshot({path:'/tmp/od-company-group-live-source-browser.png',fullPage:true});
+  await page.getByRole('button',{name:'Gruppe '+child.name,exact:true}).click();await panel.getByLabel('Gruppenregel begründen',{exact:true}).fill('Remove the already ineffective saved source through the actual canonical path');assert.equal((await reconcile(child,0)).results[0].status,'removed');
   await page.getByRole('button',{name:'Gruppe '+parent.name,exact:true}).click();await panel.getByLabel('Gruppenregel begründen',{exact:true}).fill('Return the nested origin after the actual child source was removed');assert.equal((await reconcile(parent,0)).results[0].status,'removed');
   for(const group of[child,parent])assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[group.id])).rows[0].count,0);
   await panel.getByRole('button',{name:'Gruppenregel-Historie',exact:true}).click();const history=panel.getByRole('complementary',{name:'Gruppenregel-Historie',exact:true});await history.getByText(/Regelmitglied hinzugefügt/).waitFor();await history.getByText(/Regelmitglied entfernt/).waitFor();
@@ -2999,8 +3004,8 @@ test('real roleless Owner configures dynamic and nested groups in the UI and rec
   await page.getByRole('button',{name:'Ausgewählte App-Rechte bestätigen',exact:true}).click();const dialog=page.getByRole('dialog',{name:'App-Datenzugriff bestätigen',exact:true});await dialog.getByText(/kanonische Mitglieder hinzufügen und entziehen/).waitFor();
   const approving=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/identity/automation/grants'&&response.request().method()==='POST');await dialog.getByRole('button',{name:'Verbindlich bestätigen',exact:true}).click();const approved=await approving;assert.equal(approved.status(),201,await approved.text());const permission=(await approved.json()).grant;assert.deepEqual(permission.actions,['directory.groups.reconcile']);
   await page.getByLabel('Automationsfreigabe auswählen',{exact:true}).selectOption(permission.id);await page.getByLabel('Automationsaktion',{exact:true}).selectOption('directory.groups.reconcile');await page.getByRole('button',{name:'Gruppenregel prüfen',exact:true}).click();await page.getByText(/Gespeicherte Regelversion 3/).waitFor();
-  const scheduling=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/identity/automation/schedules'&&response.request().method()==='POST');await page.getByRole('button',{name:'Zeitplan erstellen',exact:true}).click();const scheduled=await scheduling;assert.equal(scheduled.status(),201,await scheduled.text());const childSchedule=(await scheduled.json()).schedule;assert.equal(childSchedule.ruleId,child.id);assert.equal(childSchedule.intervalSeconds,60);
-  const parentSchedule=JSON.parse((await cli(['automation','group-sync',permission.id,parent.id,'60'])).stdout).schedule;assert.equal(parentSchedule.ruleId,parent.id);
+  const scheduling=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/identity/automation/schedules'&&response.request().method()==='POST');await page.getByRole('button',{name:'Bei Quellenänderungen abgleichen',exact:true}).click();const scheduled=await scheduling;assert.equal(scheduled.status(),201,await scheduled.text());const childSchedule=(await scheduled.json()).schedule;assert.equal(childSchedule.ruleId,child.id);assert.equal(childSchedule.intervalSeconds,null);assert.equal(childSchedule.onChange,true);
+  const parentSchedule=JSON.parse((await cli(['automation','group-watch',permission.id,parent.id])).stdout).schedule;assert.equal(parentSchedule.ruleId,parent.id);
   worker=require('node:child_process').spawn(process.execPath,[cliPath,'automation','worker',permission.id],{env:environment,stdio:['ignore','pipe','pipe']});worker.stdout.on('data',chunk=>{workerOutput+=chunk;});worker.stderr.on('data',chunk=>{workerErrors+=chunk;});
   const waitForState=async count=>{const deadline=Date.now()+100000;while(Date.now()<deadline){if(worker.exitCode!==null)throw new Error('Actual group worker stopped: '+workerErrors);
    const actual=(await identityDb.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=ANY($1::uuid[])',[[child.id,parent.id]])).rows[0].count;
@@ -3008,12 +3013,7 @@ test('real roleless Owner configures dynamic and nested groups in the UI and rec
    if(actual===count&&jobs.length>=(count===2?2:4))return jobs;await new Promise(resolve=>setTimeout(resolve,500));}throw new Error('Actual group schedule did not converge: '+workerErrors);};
   await waitForState(2);for(const group of[child,parent]){const source=(await identityDb.query('SELECT origin.created_by,origin.application_grant_id FROM identity_membership_origins origin JOIN group_members member USING(membership_id) WHERE member.group_id=$1',[group.id])).rows[0];assert.equal(source.created_by,null);assert.equal(source.application_grant_id,permission.id);}
   await configure(false);
-  assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=ANY($1::uuid[])',[[child.id,parent.id]])).rows[0].count,2);
-  const live=await new(require('../../../identity-service/src/AuthorizationState').AuthorizationState)(identityDb).state(logicalIssuer,username+'-subject');assert.deepEqual(live.memberships,[]);
-  for(const group of [child,parent]){const response=await fetch(identityBase+'/api/groups/'+group.id+'/rule/preview',{headers:{Authorization:'Bearer '+owner.body.access_token}});assert.equal(response.status,200);const preview=await response.json();assert.equal(preview.existing.length,1);assert.equal(preview.existing[0].effective,false);assert.equal(preview.existing[0].validUntil,null);}
-  await page.goto(origin+'/usergroups');await page.getByRole('button',{name:'Gruppe '+parent.name,exact:true}).click();await panel.getByRole('button',{name:'Gespeicherte Regelvorschau prüfen',exact:true}).click();
-  await panel.getByRole('list',{name:'Wirksamkeit gespeicherter Gruppenverknüpfungen',exact:true}).getByText(/Regelquelle · Unwirksam bei Prüfung/).waitFor();await page.screenshot({path:'/tmp/od-company-group-live-source-browser.png',fullPage:true});
-  await page.goto(origin+'/automation?groupRule='+child.id);const completed=await waitForState(0);await page.getByRole('button',{name:'Automationen neu laden',exact:true}).click();
+const completed=await waitForState(0);await page.getByRole('button',{name:'Automationen neu laden',exact:true}).click();
   const parentJob=completed.filter(job=>job.rule_id===parent.id).at(-1);const article=page.getByRole('article').filter({hasText:parentJob.id});await article.getByRole('button',{name:'Gruppenbericht anzeigen',exact:true}).click();
   const report=page.getByRole('complementary',{name:'Geprüfter Gruppenbericht',exact:true});await report.getByText(new RegExp(client.clientId)).waitFor();await report.getByText(/Regelmitglied entfernt/).waitFor();await report.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/od-company-group-rule-automation-browser.png',fullPage:true});
   const stopButtons=page.getByRole('button',{name:'Zeitplan stoppen',exact:true});while(await stopButtons.count()){await stopButtons.first().click();await page.getByText('Zeitplan gestoppt; bereits erstellte Jobs separat beachten.',{exact:true}).waitFor();}

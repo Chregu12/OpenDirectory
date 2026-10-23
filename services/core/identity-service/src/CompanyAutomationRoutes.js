@@ -30,6 +30,7 @@ function companyAutomationRoutes(database, options) {
     router.post('/' + name, route(async (req, res) => reply(res, await store.enqueue(req.body, ...credentials(req), scheduled), 201)));
   }
   router.post('/run', route(async (req, res) => { const result = await store.run(req.body, ...credentials(req)); return result ? reply(res, result) : res.status(204).end(); }));
+  router.post('/watch-source', route(async (req, res) => res.json(await store.watchSource(req.body, ...credentials(req)))));
   router.post('/license-source', route(async (req, res) => res.json(await store.licenseSource(req.body, ...credentials(req)))));
   router.get('/jobs/:id/result', route(async (req, res) => { noQuery(req); res.json(await store.result(req.params.id, ...credentials(req))); }));
   router.get('/jobs/:id/history', route(async (req, res) => res.json(await store.history(req.params.id, ...credentials(req), req.query))));

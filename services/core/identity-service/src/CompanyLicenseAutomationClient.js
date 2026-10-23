@@ -6,6 +6,10 @@ class CompanyLicenseAutomationClient {
     this.endpoint = new URL(endpoint); this.fetchImpl = fetchImpl;
     if (!['http:', 'https:'].includes(this.endpoint.protocol) || this.endpoint.pathname !== STEP_PATH || this.endpoint.username || this.endpoint.password || this.endpoint.search || this.endpoint.hash) throw new Error('Pinned license automation receiver required');
   }
+  async observe(plan,user,authorization){
+    const contract=require('../../../../packages/company-automation-change-contract');const endpoint=new URL(this.endpoint);endpoint.pathname=contract.OBSERVE_PATH;
+    return contract.observation(await contract.exchange(endpoint,contract.OBSERVE_PATH,{grantId:plan.grant_id,scheduleId:plan.id,ruleId:plan.rule_id},authorization,this.fetchImpl),plan,user);
+  }
   async step(job, user, authorization) {
     const input = { grantId: job.grant_id, jobId: job.id, leaseToken: job.lease_token, ruleId: job.rule_id };
     const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 15000);

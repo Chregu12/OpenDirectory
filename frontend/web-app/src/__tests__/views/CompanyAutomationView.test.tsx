@@ -70,3 +70,8 @@ test('group-rule automation requires a checked own saved rule and binds the actu
  fireEvent.change(screen.getByLabelText('Gruppenregel-Gruppen-ID'),{target:{value:id(8)}});fireEvent.click(screen.getByRole('button',{name:'Gruppenregel prüfen'}));await screen.findByText(/Gespeicherte Regelversion 3/);
  expect(companyGroupRules.get).toHaveBeenCalledWith(id(8),id(1));fireEvent.click(screen.getByRole('button',{name:'Zeitplan erstellen'}));await waitFor(()=>expect(companyAutomation.queue).toHaveBeenCalledWith(grouped,'directory.groups.reconcile','json',principal,60,id(8)));
 });
+test('owner explicitly enables a checked change subscription without a timer or an implicit execution',async()=>{
+ const grouped={...grant,actions:['directory.groups.reconcile']};(companyAutomation.grants as jest.Mock).mockResolvedValue({principal,grants:[grouped],page:1,limit:25,total:1});(companyGroupRules.get as jest.Mock).mockResolvedValue({groupId:id(8),tenantId:id(2),rule:{revision:'3',enabled:true}});
+ render(<CompanyAutomationView/>);await ready();fireEvent.change(screen.getByLabelText('Automationsaktion'),{target:{value:'directory.groups.reconcile'}});expect(screen.getByRole('button',{name:'Bei Quellenänderungen abgleichen'})).toBeDisabled();
+ fireEvent.change(screen.getByLabelText('Gruppenregel-Gruppen-ID'),{target:{value:id(8)}});fireEvent.click(screen.getByRole('button',{name:'Gruppenregel prüfen'}));await screen.findByText(/Gespeicherte Regelversion 3/);expect(companyAutomation.queue).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Bei Quellenänderungen abgleichen'}));await waitFor(()=>expect(companyAutomation.queue).toHaveBeenCalledWith(grouped,'directory.groups.reconcile','json',principal,undefined,id(8),true));
+});

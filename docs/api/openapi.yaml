@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.25.0",
+    "version": "1.26.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, employee credential provisioning, external legal verification or production SaaS acceptance."
   },
   "security": [
@@ -31868,7 +31868,7 @@
       },
       "post": {
         "operationId": "scheduleCompanyAutomationJob",
-        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery.",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery. Interval schedules remain unchanged. onChange:true is mutually exclusive with intervalSeconds and only supports the two explicit reconciliation actions. At most 25 enabled change subscriptions per grant, one per action/target. A live app worker observes canonical source revisions, review cutoffs and local pool capacity; each changed source admits an ordinary job and its original checkpoint atomically. At most five change jobs admitted per run; coalescing retains changes during unfinished jobs. Unchanged failures are not silently retried as new events. Source observation errors preserve checkpoints, allow independent queued jobs to progress and return 503 instead of idle 204 when no job can run. This is not external webhook delivery or instant cross-service cache invalidation.",
         "security": [
           {
             "bearerAuth": []
@@ -32013,6 +32013,47 @@
                         "type": "integer",
                         "minimum": 60,
                         "maximum": 2592000
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "grantId",
+                      "action",
+                      "format",
+                      "ruleId",
+                      "onChange"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "grantId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "action": {
+                        "enum": [
+                          "licenses.groups.reconcile",
+                          "directory.groups.reconcile"
+                        ]
+                      },
+                      "format": {
+                        "const": "json"
+                      },
+                      "ruleId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "onChange": {
+                        "const": true
                       }
                     }
                   }
@@ -32556,6 +32597,198 @@
                 "properties": {
                   "confirm": {
                     "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/automation/watch-source": {
+      "post": {
+        "operationId": "readOriginalCompanyAutomationWatchSource",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery. Read-only private proof of one current enabled license change subscription. Requires its original app JWT and explicit licenses.groups.reconcile grant; no job lease or human session is invented. No member profiles or pool capacity are returned here. The proof is not a reusable bearer.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationWatchSource"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "grantId",
+                  "scheduleId",
+                  "ruleId"
+                ],
+                "properties": {
+                  "grantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "scheduleId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "ruleId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/licenses/automation/groups/observe": {
+      "post": {
+        "operationId": "observeOriginalCompanyAutomationLocalPool",
+        "description": "Tenant-bound durable app automation. Enrollment requires an issuer-verified, live exact company.automation client-credentials token and grants no tenant access. Only the actual company owner with original fresh MFA (at most 300 seconds) may approve fixed actions for its own tenant for at most 30 days. Each grant pins issuer, client ID and client generation; rotation, revocation, expiration, tenant incarnation or loss of original ownership denies runtime use. Workers use their own current app token, never a retained or fabricated human session. Jobs and schedules require an explicit live grant; no arbitrary scripts or caller tenant selectors. Exported data is personal data covered by the explicit delegation. Immutable events and pending outbox are local evidence, not external delivery. Read-only Policy observation for the original enabled change subscription, revalidated through Identity before and after the retained own-link/pool read. Returns only local canonical capacity and revisions, never manufacturer activation. No tenant/pool/group/URL selectors are accepted.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Actual local commit; a queued job is not completed execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAutomationPoolObservation"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Read durable grant/job state before retrying an uncertain write."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "grantId",
+                  "scheduleId",
+                  "ruleId"
+                ],
+                "properties": {
+                  "grantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "scheduleId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "ruleId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
                   }
                 }
               }
@@ -43857,6 +44090,79 @@
             "type": "string",
             "format": "date-time"
           },
+          "trigger": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "groupId",
+              "sourceRevision",
+              "deadlineRevision"
+            ],
+            "properties": {
+              "kind": {
+                "const": "change"
+              },
+              "groupId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "sourceRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$"
+              },
+              "deadlineRevision": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,18})$"
+              },
+              "poolId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "poolRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$"
+              },
+              "availableSeats": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "poolId"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "poolRevision",
+                    "availableSeats"
+                  ]
+                },
+                "else": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "poolRevision"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "availableSeats"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
           "ruleId": {
             "type": "string",
             "format": "uuid",
@@ -43934,6 +44240,75 @@
                 ]
               }
             }
+          },
+          {
+            "if": {
+              "required": [
+                "trigger"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "licenses.groups.reconcile",
+                    "directory.groups.reconcile"
+                  ]
+                },
+                "scheduleId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "action": {
+                        "const": "licenses.groups.reconcile"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "trigger": {
+                        "required": [
+                          "poolId",
+                          "poolRevision",
+                          "availableSeats"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "properties": {
+                      "trigger": {
+                        "not": {
+                          "anyOf": [
+                            {
+                              "required": [
+                                "poolId"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "poolRevision"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "availableSeats"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
           }
         ]
       },
@@ -43984,9 +44359,16 @@
             ]
           },
           "intervalSeconds": {
-            "type": "integer",
-            "minimum": 60,
-            "maximum": 2592000
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 2592000
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "enabled": {
             "type": "boolean"
@@ -44002,6 +44384,31 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "onChange": {
+            "const": true
+          },
+          "lastSourceRevision": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastDeadlineRevision": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,18})$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "ruleId": {
             "type": "string",
@@ -44049,6 +44456,51 @@
                   {
                     "required": [
                       "ruleId"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "onChange"
+              ]
+            },
+            "then": {
+              "required": [
+                "lastSourceRevision",
+                "lastDeadlineRevision"
+              ],
+              "properties": {
+                "action": {
+                  "enum": [
+                    "licenses.groups.reconcile",
+                    "directory.groups.reconcile"
+                  ]
+                },
+                "intervalSeconds": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "intervalSeconds": {
+                  "type": "integer"
+                }
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "lastSourceRevision"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "lastDeadlineRevision"
                     ]
                   }
                 ]
@@ -45534,6 +45986,185 @@
                 }
               }
             }
+          }
+        }
+      },
+      "CompanyAutomationWatchSource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationChangeProtocol",
+          "grantId",
+          "scheduleId",
+          "ruleId",
+          "scheduleRevision",
+          "tenant",
+          "issuer",
+          "subject",
+          "clientRevision",
+          "tokenIdentifierHash",
+          "validUntil"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationChangeProtocol": {
+            "const": 1
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "scheduleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "ruleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "scheduleRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$"
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$"
+              }
+            }
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "clientRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "tokenIdentifierHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "validUntil": {
+            "type": "integer"
+          }
+        }
+      },
+      "CompanyAutomationPoolObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAutomationChangeProtocol",
+          "allocationMode",
+          "grantId",
+          "scheduleId",
+          "ruleId",
+          "scheduleRevision",
+          "tenantId",
+          "groupId",
+          "poolId",
+          "ruleRevision",
+          "ruleStatus",
+          "poolRevision",
+          "availableSeats",
+          "validUntil",
+          "tokenIdentifierHash"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAutomationChangeProtocol": {
+            "const": 1
+          },
+          "allocationMode": {
+            "const": "local-only"
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "scheduleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "ruleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "scheduleRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "poolId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "ruleRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "ruleStatus": {
+            "enum": [
+              "active",
+              "unlinked"
+            ]
+          },
+          "poolRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "availableSeats": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "validUntil": {
+            "type": "integer"
+          },
+          "tokenIdentifierHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
           }
         }
       },

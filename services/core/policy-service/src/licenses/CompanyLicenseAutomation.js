@@ -7,8 +7,21 @@ const { CompanyLicenses } = require('./CompanyLicenses');
 const { CompanyLicenseGroups } = require('./CompanyLicenseGroups');
 const { CompanyBlueprintAssignments } = require('./CompanyBlueprintAssignments');
 class CompanyLicenseAutomation {
-  constructor(database, { allocator = new LicenseAllocator(database), authority = context => new CompanyLicenseAutomationAuthority(context) } = {}) {
-    Object.assign(this, { database, allocator, authority });
+  constructor(database, { allocator = new LicenseAllocator(database), authority = context => new CompanyLicenseAutomationAuthority(context), watchAuthority = new(require('./CompanyAutomationWatchAuthority').CompanyAutomationWatchAuthority)() } = {}) {
+    Object.assign(this, { database, allocator, authority, watchAuthority });
+  }
+  async observe(input,user,authorization){
+    const contract=require('../../../../../packages/company-automation-change-contract');contract.input(input);workload(user,user?.iss);
+    const original=await this.watchAuthority.read(input,authorization,user);const client=await this.database.getClient();
+    try{
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await client.query("SET LOCAL timezone='UTC';SET LOCAL statement_timeout='5s'");await client.query('SELECT license_company_receiving()');
+      const companies=new CompanyLicenses(this.allocator);const lookup=new CompanyLicenseGroups(companies);const rule=await lookup.rule(client,input.ruleId,original);const pool=await companies.ownPool(client,rule.pool_id,original.tenant.id);
+      const result={schemaVersion:1,companyAutomationChangeProtocol:1,allocationMode:'local-only',grantId:input.grantId,scheduleId:input.scheduleId,scheduleRevision:original.scheduleRevision,
+       ruleId:rule.id,tenantId:original.tenant.id,groupId:rule.group_id,poolId:rule.pool_id,ruleRevision:String(rule.revision),ruleStatus:rule.status,poolRevision:String(pool.business_revision),
+       availableSeats:pool.total_seats-pool.active_seats,validUntil:original.validUntil,tokenIdentifierHash:original.tokenIdentifierHash};
+      if(!isDeepStrictEqual(original,await this.watchAuthority.read(input,authorization,user)))fail(412,'Original change subscription changed');
+      await client.query('COMMIT');if(!isDeepStrictEqual(original,await this.watchAuthority.read(input,authorization,user)))fail(412,'Original change subscription changed');return result;
+    }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}finally{client.release();}
   }
   async current(authority, source, user, authorization) {
     const current = await authority.read(authorization, user);

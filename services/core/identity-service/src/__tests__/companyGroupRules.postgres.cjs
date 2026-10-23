@@ -102,7 +102,7 @@ test('a changed rule reissues its exact old origins in a new captured cycle whil
  const first=await worker.run();assert.equal(first.job.status,'queued',JSON.stringify(first));assert.equal(first.job.progress.cycle,2);assert.equal(first.job.progress.completed,0);
  const second=await worker.run();assert.equal(second.job.status,'succeeded',JSON.stringify(second));const actual=(await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,userId])).rows[0].membership_id;assert.notEqual(actual,original);
  assert.deepEqual((await pool.query('SELECT cycle FROM identity_company_group_rule_runs WHERE job_id=$1 ORDER BY cycle',[queued.job.id])).rows.map(row=>row.cycle),[1,2]);
- await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/051_company_group_rule_automation.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/052_live_company_group_rules.sql'),'utf8'));await pool.query('SELECT identity_company_group_rule_live_receiving()');
+ await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/051_company_group_rule_automation.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/052_live_company_group_rules.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/053_company_automation_changes.sql'),'utf8'));await pool.query('SELECT identity_company_group_rule_live_receiving()');
  assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_steps WHERE run_id IN(SELECT id FROM identity_company_group_rule_runs WHERE job_id=$1)',[queued.job.id])).rows[0].count,2);
 });
 test('actual owner stores a conditional rule and preview evaluates real attributes, canonical child members and exclusions without pretending membership changes', async () => {
@@ -185,7 +185,7 @@ test('rule reconciliation creates actual memberships, preserves manual links and
  const manualReplacement = (await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,managed])).rows[0].membership_id;
  assert.notEqual(manualReplacement,next); await save(parent,input({enabled:false}),'3'); assert.deepEqual(await sync(parent),[]);
  assert.equal((await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,managed])).rows[0].membership_id,manualReplacement);
- for(const file of ['050_company_group_rules.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
+ for(const file of ['050_company_group_rules.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql','053_company_automation_changes.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
  assert.equal((await rules.get(parent.id,owner.user,bearer)).rule.revision,'4'); assert.equal((await rules.history(parent.id,{},owner.user,bearer)).total,7);
 });
 test('a silently suppressed pending effect receipt rolls back the actual canonical membership rather than acknowledging a partial write', async () => {
@@ -308,10 +308,14 @@ test('nested sources inherit the latest valid alternative review deadline and re
  assert.equal(first.memberships[0].reviewDeadlineAt,longer);assert.equal((await snapshot(own)).memberships[0].reviewDeadlineAt,ownDeadline);assert.equal((await snapshot(dynamic)).memberships[0].reviewDeadlineAt,null);
  assert.equal((await rules.preview(parent.id,owner.user,bearer)).existing[0].validUntil,longer);
  const physical=(await pool.query('SELECT revision FROM groups WHERE id=$1',[parent.id])).rows[0].revision;
+ const changeWorker=await appWorker();await changeWorker.automation.enqueue({id:randomUUID(),grantId:changeWorker.permission.id,action:'directory.groups.reconcile',format:'json',ruleId:parent.id,onChange:true},changeWorker.app,changeWorker.appBearer,true);await changedRun(changeWorker);
+ const cutoffBefore=(await pool.query('SELECT identity_automation_change_identity($1,$2) AS source',[child.id,owner.receipt.tenantId])).rows[0].source.deadlineRevision;
  async function advance(timestamp){await pool.query("CREATE OR REPLACE FUNCTION identity_membership_review_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT '"+new Date(Date.parse(timestamp)+1).toISOString()+"'::timestamptz $$");}
  await advance(shorter);const alternate=await snapshot(parent);assert.deepEqual(alternate.memberIds,[userId]);assert.equal(alternate.memberships[0].reviewDeadlineAt,longer);assert.ok(BigInt(alternate.revision)>BigInt(first.revision));assert.deepEqual((await snapshot(own)).memberIds,[]);
  await advance(longer);const expired=await snapshot(parent);assert.deepEqual(expired.memberIds,[]);assert.ok(BigInt(expired.revision)>BigInt(alternate.revision));assert.deepEqual((await snapshot(dynamic)).memberIds,[userId]);
  assert.equal((await pool.query('SELECT revision FROM groups WHERE id=$1',[parent.id])).rows[0].revision,physical);assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE user_id=$1',[userId])).rows[0].count,5);
+ const cutoffAfter=(await pool.query('SELECT identity_automation_change_identity($1,$2) AS source',[child.id,owner.receipt.tenantId])).rows[0].source.deadlineRevision;assert.ok(BigInt(cutoffAfter)>BigInt(cutoffBefore));
+ await changedRun(changeWorker);assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[parent.id])).rows[0].count,0);
 });
 test('bounded live graph resolution never returns a partial positive when traversal is incomplete',async()=>{
  const child=await group('Bounded child');const parent=await group('Bounded parent');const root=await group('Bounded root');const userId=await person('Engineering');await save(child);await save(parent,input({draft:{dynamic:null,childGroupIds:[child.id],excludedUserIds:[]}}));await save(root,input({draft:{dynamic:null,childGroupIds:[parent.id],excludedUserIds:[]}}));await sync(child);await sync(parent);await sync(root);
@@ -320,4 +324,33 @@ test('bounded live graph resolution never returns a partial positive when traver
  assert.equal((await pool.query('SELECT remaining,deadline_at>clock_timestamp() AS allowed FROM identity_membership_rule_resolve($1,ARRAY[]::uuid[],3)',[membership])).rows[0].allowed,true);
  await pool.query("CREATE OR REPLACE FUNCTION identity_company_group_rule_dynamic(setting identity_company_group_rules,target UUID) RETURNS BOOLEAN LANGUAGE sql AS $$ SELECT true $$");
  await assert.rejects(snapshot(root),{code:'42501'});await assert.rejects(new AuthorizationState(database).state(issuer,owner.user.sub),{code:'42501'});
+});
+async function changedRun(worker,limit=8){const results=[];for(let index=0;index<limit;index++){const result=await worker.run();if(!result)return results;results.push(result);}assert.fail('Unchanged source did not converge without another change job');}
+test('an explicitly subscribed real app materializes and removes attribute sources on change before a minute interval and survives human session expiry',async()=>{
+ const parent=await group('Actual change-driven group');const userId=await person('Engineering');await save(parent);const worker=await appWorker();
+ worker.automation.database={...database,transaction:(operation,options)=>database.transaction(async client=>{await client.query("SET LOCAL timezone='Pacific/Honolulu'");return operation(client);},options)};
+ const input={id:randomUUID(),grantId:worker.permission.id,action:'directory.groups.reconcile',format:'json',ruleId:parent.id,onChange:true};
+ const plan=(await worker.automation.enqueue(input,worker.app,worker.appBearer,true)).schedule;assert.equal(plan.onChange,true);assert.equal(plan.intervalSeconds,null);assert.equal(plan.lastSourceRevision,null);
+ const started=Date.now();const first=await worker.run();assert.equal(first.job.status,'succeeded',JSON.stringify(first));assert.equal(first.job.scheduleId,plan.id);assert.equal(first.job.trigger.kind,'change');assert.equal(first.job.trigger.groupId,parent.id);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[parent.id])).rows[0].count,1);await changedRun(worker);
+ const count=(await pool.query('SELECT count(*)::integer AS count FROM identity_automation_jobs WHERE schedule_id=$1',[plan.id])).rows[0].count;assert.equal(await worker.run(),null);
+ await changeDepartment(userId,'Operations');owner.user.auth_time-=301;owner.user.mfa_authorization.authTime-=301;
+ const removed=await worker.run();assert.equal(removed.job.status,'succeeded',JSON.stringify(removed));assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[parent.id])).rows[0].count,0);await changedRun(worker);
+ assert.ok(Date.now()-started<60000);assert.ok((await pool.query('SELECT count(*)::integer AS count FROM identity_automation_jobs WHERE schedule_id=$1',[plan.id])).rows[0].count>count);
+ const retained=(await pool.query('SELECT source_checkpoint,source_job_id FROM identity_automation_schedules WHERE id=$1',[plan.id])).rows[0];const original=(await pool.query('SELECT event_source FROM identity_automation_jobs WHERE id=$1',[retained.source_job_id])).rows[0].event_source;assert.deepEqual(retained.source_checkpoint,original);
+});
+test('concurrent change workers retain one atomic event job per captured subscription revision and do not stack an unfinished job',async()=>{
+ const parent=await group('Concurrent change subscription');await person('Engineering');await save(parent);const worker=await appWorker();
+ const plan=(await worker.automation.enqueue({id:randomUUID(),grantId:worker.permission.id,action:'directory.groups.reconcile',format:'json',ruleId:parent.id,onChange:true},worker.app,worker.appBearer,true)).schedule;
+ const results=await Promise.all([worker.run(),worker.run()]);assert.equal(results.filter(result=>result?.job.status==='succeeded').length,1);
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_automation_jobs WHERE schedule_id=$1',[plan.id])).rows[0].count,1);
+ await changedRun(worker);const stored=(await pool.query('SELECT revision,source_checkpoint FROM identity_automation_schedules WHERE id=$1',[plan.id])).rows[0];assert.ok(BigInt(stored.revision)>1n);assert.equal(await worker.run(),null);
+});
+test('missing original change checkpoint or canonical automation evidence rolls back both dispatch and subscription advancement',async()=>{
+ const parent=await group('Atomic change receipt');await person('Engineering');await save(parent);const worker=await appWorker();
+ const plan=(await worker.automation.enqueue({id:randomUUID(),grantId:worker.permission.id,action:'directory.groups.reconcile',format:'json',ruleId:parent.id,onChange:true},worker.app,worker.appBearer,true)).schedule;
+ await pool.query(`CREATE FUNCTION fixture_omit_change_checkpoint() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN IF NEW.source_checkpoint IS DISTINCT FROM OLD.source_checkpoint THEN RETURN NULL;END IF;RETURN NEW;END;$$;
+  CREATE TRIGGER aaa_fixture_omit_change_checkpoint BEFORE UPDATE ON identity_automation_schedules FOR EACH ROW EXECUTE FUNCTION fixture_omit_change_checkpoint()`);
+ await assert.rejects(worker.run(),{code:'42501'});assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_automation_jobs WHERE schedule_id=$1',[plan.id])).rows[0].count,0);assert.equal((await pool.query('SELECT source_checkpoint FROM identity_automation_schedules WHERE id=$1',[plan.id])).rows[0].source_checkpoint,null);
+ await pool.query('DROP TRIGGER aaa_fixture_omit_change_checkpoint ON identity_automation_schedules');assert.equal((await worker.run()).job.status,'succeeded');
 });

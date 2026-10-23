@@ -164,7 +164,7 @@ test('every offered dataset executes against real own canonical rows and migrati
   const queued=await automation.enqueue({id:randomUUID(),grantId:permission.id,action,format:'json'},app,appBearer);
   const result=await automation.run({grantId:permission.id},app,appBearer);assert.equal(result.job.status,'succeeded');
   const artifact=await automation.result(queued.job.id,app,appBearer);assert.deepEqual(JSON.parse(artifact.content).rows.map(row=>row.id),[expected]);
-  for(const file of ['048_company_automation.sql','049_company_license_automation.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
+  for(const file of ['048_company_automation.sql','049_company_license_automation.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql','053_company_automation_changes.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
   assert.equal((await automation.result(queued.job.id,app,appBearer)).sha256,artifact.sha256);
  }
 });
@@ -204,4 +204,28 @@ test('an abandoned fifth lease becomes a visible failed result instead of an unc
  const expiring={...app,exp:Math.floor(Date.now()/1000)+1};automation.export=async(...args)=>{await new Promise(resolve=>setTimeout(resolve,Math.max(1,expiring.exp*1000-Date.now()+70)));return actualExport(...args);};
  await assert.rejects(automation.run({grantId:permission.id},expiring,appBearer));automation.export=actualExport;
  const result=await automation.run({grantId:permission.id},app,appBearer);assert.equal(result.job.status,'failed');assert.equal(result.job.attemptCount,5);assert.equal(result.job.errorCode,'lease_expired');
+});
+test('a standing license change subscription observes its exact app grant and queues capacity changes without any directory change',async()=>{
+ const {DirectoryCreator}=require('../DirectoryCreator');const revalidate=async(_auth,user)=>(await new AuthorizationState(database).state(issuer,user.sub)).tenant;
+ const collection=await new DirectoryCreator(database,{issuer,revalidate}).group({name:'Actual capacity watch group'},owner.user,bearer);
+ const permission=await grant(['licenses.groups.reconcile']);const ruleId=randomUUID();const poolId=randomUUID();const plan=(await automation.enqueue({id:randomUUID(),grantId:permission.id,action:'licenses.groups.reconcile',format:'json',ruleId,onChange:true},app,appBearer,true)).schedule;
+ const metadata={revision:'1',available:0};const contract=require('../../../../../packages/company-automation-change-contract');
+ automation.licenseClient={observe:async row=>{
+  const context={grantId:row.grant_id,scheduleId:row.id,ruleId:row.rule_id};const source=await automation.watchSource(context,app,appBearer);assert.equal(contract.watch(source,context,app),source);
+  return{schemaVersion:1,companyAutomationChangeProtocol:1,allocationMode:'local-only',...context,scheduleRevision:source.scheduleRevision,tenantId:source.tenant.id,groupId:collection.id,poolId,ruleRevision:'1',ruleStatus:'active',poolRevision:metadata.revision,availableSeats:metadata.available,validUntil:source.validUntil,tokenIdentifierHash:source.tokenIdentifierHash};
+ },step:async row=>({progress:{runId:row.id,retryCount:row.retry_count,cycle:1,completed:0,total:0,blocked:0},finished:true,hasBlocked:false,results:[]})};
+ owner.user.auth_time-=301;owner.user.mfa_authorization.authTime-=301;
+ const first=await automation.run({grantId:permission.id},app,appBearer);assert.equal(first.job.status,'succeeded');assert.equal(first.job.trigger.availableSeats,0);assert.equal(await automation.run({grantId:permission.id},app,appBearer),null);
+ const physical=(await pool.query('SELECT revision FROM groups WHERE id=$1',[collection.id])).rows[0].revision;
+ metadata.revision='2';metadata.available=1;const second=await automation.run({grantId:permission.id},app,appBearer);assert.equal(second.job.status,'succeeded');assert.equal(second.job.trigger.poolRevision,'2');assert.equal(second.job.trigger.availableSeats,1);assert.notEqual(second.job.id,first.job.id);
+ assert.equal((await pool.query('SELECT revision FROM groups WHERE id=$1',[collection.id])).rows[0].revision,physical);assert.equal(second.job.trigger.sourceRevision,first.job.trigger.sourceRevision);assert.equal(await automation.run({grantId:permission.id},app,appBearer),null);
+ await assert.rejects(automation.watchSource({grantId:permission.id,scheduleId:plan.id,ruleId:randomUUID()},app,appBearer),{status:404});
+ await assert.rejects(automation.watchSource({grantId:permission.id,scheduleId:plan.id,ruleId},owner.user,bearer),{status:403});
+});
+test('an unavailable change observation does not acknowledge its checkpoint or prevent a separately queued authorized export',async()=>{
+ const permission=await grant(['licenses.groups.reconcile','directory.users.export']);const ruleId=randomUUID();const plan=(await automation.enqueue({id:randomUUID(),grantId:permission.id,action:'licenses.groups.reconcile',format:'json',ruleId,onChange:true},app,appBearer,true)).schedule;
+ automation.licenseClient={observe:async()=>{throw Object.assign(new Error('Actual source temporarily unavailable'),{status:503});}};
+ const queued=await automation.enqueue({id:randomUUID(),grantId:permission.id,action:'directory.users.export',format:'json'},app,appBearer);
+ const first=await automation.run({grantId:permission.id},app,appBearer);assert.equal(first.job.id,queued.job.id);assert.equal(first.job.status,'succeeded');
+ await assert.rejects(automation.run({grantId:permission.id},app,appBearer),{status:503});assert.equal((await pool.query('SELECT source_checkpoint FROM identity_automation_schedules WHERE id=$1',[plan.id])).rows[0].source_checkpoint,null);
 });

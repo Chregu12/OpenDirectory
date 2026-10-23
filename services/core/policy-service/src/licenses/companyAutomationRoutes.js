@@ -8,6 +8,7 @@ function companyAutomationRoutes(database, options) {
     if (req.method !== 'POST') return res.status(404).json({ error: 'App license operation unavailable' });
     if (req.headers['x-api-key'] !== undefined || Object.keys(req.query).length) return res.status(400).json({ error: 'Exact app license request required' }); next();
   });
+  router.post('/observe', (req,res,next)=>Promise.resolve().then(()=>service.observe(req.body,req.user,req.headers.authorization)).then(value=>res.json(value)).catch(next));
   router.post('/step', (req, res, next) => Promise.resolve().then(() => service.step(req.body, req.user, req.headers.authorization)).then(value => res.json(value)).catch(next));
   router.use((_req, res) => res.status(404).json({ error: 'App license operation unavailable' }));
   router.use((error, _req, res, _next) => {

@@ -25,7 +25,7 @@ function oidcAuth({ skipPaths = [] } = {}) {
       if (payload.token_use !== 'access') return res.status(403).json({ error: 'invalid_token_purpose' });
       await accessState(auth, payload);
       if (payload.actor_type === 'application') {
-        if (req.method !== 'POST' || req.path !== '/api/licenses/automation/groups/step') return res.status(403).json({ error: 'workload_policy_administration_forbidden' });
+        if (req.method !== 'POST' || !['/api/licenses/automation/groups/step','/api/licenses/automation/groups/observe'].includes(req.path)) return res.status(403).json({ error: 'workload_policy_administration_forbidden' });
         workload(payload, ISSUER);
       }
       req.user = payload;

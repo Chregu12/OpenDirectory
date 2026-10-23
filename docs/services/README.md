@@ -71,4 +71,4 @@ For the supported SAML launch flow and external OIDC configuration, see the [OAu
 
 [Own-company license groups](../features/company-license-groups.md) use identity-service canonical group snapshots and policy-service pool links/source-aware allocations. UI and CLI writes retain the original human owner session and current MFA.
 
-Identity 052 evaluates [current group-rule sources](../features/company-group-live-sources.md) for application authority and group-license observations before worker cleanup. Snapshot source revisions differ from physical group ETags; Policy retains its existing lease and hash checks.
+Identity 052 evaluates [current group-rule sources](../features/company-group-live-sources.md) for application authority and group-license observations before worker cleanup. Snapshot source revisions differ from physical group ETags; Policy retains its existing lease and hash checks. Identity 053 adds [source-change subscriptions](../features/company-automation-changes.md); private original-app Identity/Policy observations capture actual local capacity and enqueue existing reconciliation jobs atomically with their checkpoints.

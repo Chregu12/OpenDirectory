@@ -58,11 +58,11 @@ node scripts/od.mjs group-rule history GROUP_ID
 
 ## Datenmodell, Installation und API
 
-Identity **001–052**, aktueller Identity-Code, Frontend und CLI koordiniert ausrollen. Das Dockerfile kopiert `packages/company-group-rule-contract.js` im bestehenden Repository-Root-Buildkontext. Keine neue Dependency oder Secret-Art. Die vorhandenen `/api/groups/*`-Proxys reichen den originalen Bearer und die konditionalen Header weiter.
+Identity **001–053**, aktueller Identity-Code, Frontend und CLI koordiniert ausrollen. Das Dockerfile kopiert `packages/company-group-rule-contract.js` im bestehenden Repository-Root-Buildkontext. Keine neue Dependency oder Secret-Art. Die vorhandenen `/api/groups/*`-Proxys reichen den originalen Bearer und die konditionalen Header weiter.
 
 Migration 050 speichert die aktuelle versionierte Konfiguration in `identity_company_group_rules`, ihre ursprünglichen Events/Pending-Fingerprints und die kanonischen Membership-Effekte samt eigenem Pending-Fingerprint. Die Membership-Effekte referenzieren wirkliche `identity_directory_group_events` und `identity_membership_origins`, bleiben unveränderlich und können keine normale manuelle Membership adoptieren. Guards, Originalmanifest, tatsächlicher Owner, kanonische Wirkung und Deadline werden an der physischen Commit-Grenze geprüft. Neue Tabellen übernehmen die bestehenden No-extra-effects-Fences; die Konfiguration kann auch keine früheren oder späteren fremden Canonical-Writes mitnehmen. Retention, Veröffentlichung der Pending-Outbox und vollständiger Audit-/Recovery-Betrieb bleiben offen.
 
-Der [OpenAPI-Vertrag](../api/openapi.yaml) ist Version **1.25.0**:
+Der [OpenAPI-Vertrag](../api/openapi.yaml) ist Version **1.26.0**:
 
 | Methode | Pfad | Wirkung |
 | --- | --- | --- |
@@ -72,4 +72,4 @@ Der [OpenAPI-Vertrag](../api/openapi.yaml) ist Version **1.25.0**:
 | POST | `/api/groups/:id/rule/sync` | Bestätigte Seite mit `observation`, `cursor`, `reason`, `confirm:true` |
 | GET | `/api/groups/:id/rule/history?page=1` | 25 ursprüngliche Konfigurations-/Membership-Belege der noch bestehenden eigenen Gruppe |
 
-Konfiguration und einzelne Mitgliedschaften committen unabhängig. Bei tatsächlich gelöschten Gruppen bleiben die Belege in der Datenbank erhalten; diese Oberfläche/API setzt eine noch bestehende eigene Gruppe voraus. Ein fehlender Receiver oder beschädigter Original-/Pending-Beleg wird nicht durch eine erfolgreiche leere Antwort ersetzt. Die unbeaufsichtigte Ausführung verwendet den separat freigegebenen App-/Zeitplanweg. Die aktuelle Identity-Quellenprüfung und vererbte Fristen sind vorhanden. Ereigniszustellung und dienstübergreifende Cache-Invalidierung bleiben offen; dies verkleinert den Gesamtauftrag nicht.
+Konfiguration und einzelne Mitgliedschaften committen unabhängig. Bei tatsächlich gelöschten Gruppen bleiben die Belege in der Datenbank erhalten; diese Oberfläche/API setzt eine noch bestehende eigene Gruppe voraus. Ein fehlender Receiver oder beschädigter Original-/Pending-Beleg wird nicht durch eine erfolgreiche leere Antwort ersetzt. Die unbeaufsichtigte Ausführung verwendet den separat freigegebenen App-/Zeitplanweg, auch mit [Beobachtung tatsächlicher Quellenänderungen](company-automation-changes.md). Die aktuelle Identity-Quellenprüfung und vererbte Fristen sind vorhanden. Ereigniszustellung und dienstübergreifende Cache-Invalidierung bleiben offen; dies verkleinert den Gesamtauftrag nicht.

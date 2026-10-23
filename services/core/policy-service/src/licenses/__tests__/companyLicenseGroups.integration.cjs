@@ -223,3 +223,16 @@ test('an effect whose deadline passes before physical COMMIT rolls back the sour
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM company_license_group_effects')).rows[0].n,0);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM company_blueprint_user_assignments WHERE status='active'")).rows[0].n,0);
 });
+test('change observation reads a real local pool and its retained link without a job lease or writes and reflects actual capacity revisions',async()=>{
+ const {CompanyLicenseAutomation}=require('../CompanyLicenseAutomation');const contract=require('../../../../../../packages/company-automation-change-contract');
+ const product=await catalog(1);const userId=randomUUID();const rule=await link(product.id,[userId]);const now=Math.floor(Date.now()/1000);
+ const app={actor_type:'application',token_use:'access',iss:source.issuer,sub:'capacity-reader',client_id:'capacity-reader',client_revision:'1',jti:randomUUID(),exp:now+3600,scope:'company.automation',permissions:['company.automation']};
+ const input={grantId:randomUUID(),scheduleId:randomUUID(),ruleId:rule.id};const proof={schemaVersion:1,companyAutomationChangeProtocol:1,...input,scheduleRevision:'1',tenant:source.tenant,issuer:app.iss,subject:app.sub,clientRevision:'1',tokenIdentifierHash:contract.tokenHash(app),validUntil:now+300};
+ const observer=new CompanyLicenseAutomation(database,{allocator:companies.allocator,watchAuthority:{read:async()=>structuredClone(proof)}});
+ const before=(await pool.query('SELECT count(*)::integer AS count FROM license_company_events')).rows[0].count;
+ const first=await observer.observe(input,app,'Bearer capacity-reader');assert.equal(first.availableSeats,1);assert.equal(first.groupId,rule.groupId);assert.equal(first.allocationMode,'local-only');
+ assert.equal((await pool.query('SELECT count(*)::integer AS count FROM license_company_events')).rows[0].count,before);
+ await service.sync(rule.id,{groupRevision:'1',cursor:null,reason,confirm:true},user,bearer);const occupied=await observer.observe(input,app,'Bearer capacity-reader');assert.equal(occupied.availableSeats,0);assert.ok(BigInt(occupied.poolRevision)>BigInt(first.poolRevision));
+ members.get(rule.groupId).delete(userId);await service.sync(rule.id,{groupRevision:'1',cursor:null,reason,confirm:true},user,bearer);const returned=await observer.observe(input,app,'Bearer capacity-reader');assert.equal(returned.availableSeats,1);assert.ok(BigInt(returned.poolRevision)>BigInt(occupied.poolRevision));
+ proof.scheduleRevision='2';let checks=0;const withdrawn=new CompanyLicenseAutomation(database,{allocator:companies.allocator,watchAuthority:{read:async()=>({...proof,scheduleRevision:++checks===1?'2':'3'})}});await assert.rejects(withdrawn.observe(input,app,'Bearer capacity-reader'),{status:412});
+});

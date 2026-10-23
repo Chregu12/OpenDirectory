@@ -15,9 +15,9 @@ const grantView = row => ({ id: row.id, enrollmentId: row.enrollment_id, tenantI
 const jobView = row => ({ id: row.id, grantId: row.grant_id, tenantId: row.tenant_id, scheduleId: row.schedule_id, action: row.action, format: row.format, status: row.status,
   revision: String(row.revision), attemptCount: row.attempt_count, retryCount: row.retry_count, availableAt: iso(row.available_at), leaseUntil: row.lease_until ? iso(row.lease_until) : null,
   errorCode: row.error_code, rowCount: row.row_count, artifactSha256: row.artifact_sha256, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
-  ...(reconciliation(row.action) ? { ruleId: row.rule_id, progress: row.progress } : {}) });
+  ...(reconciliation(row.action) ? { ruleId: row.rule_id, progress: row.progress } : {}), ...(row.event_source ? {trigger:{kind:'change',groupId:row.event_source.identity.groupId,sourceRevision:row.event_source.identity.revision,deadlineRevision:row.event_source.identity.deadlineRevision,...(row.event_source.policy?{poolId:row.event_source.policy.poolId,poolRevision:row.event_source.policy.poolRevision,availableSeats:row.event_source.policy.availableSeats}:{})}} : {}) });
 const scheduleView = row => ({ id: row.id, grantId: row.grant_id, tenantId: row.tenant_id, action: row.action, format: row.format, intervalSeconds: row.interval_seconds,
-  enabled: row.enabled, nextRunAt: iso(row.next_run_at), revision: String(row.revision), createdAt: iso(row.created_at), ...(reconciliation(row.action) ? { ruleId: row.rule_id } : {}) });
+  enabled: row.enabled, nextRunAt: iso(row.next_run_at), revision: String(row.revision), createdAt: iso(row.created_at), ...(reconciliation(row.action) ? { ruleId: row.rule_id } : {}), ...(row.on_change ? {onChange:true,lastSourceRevision:row.source_checkpoint?.identity.revision||null,lastDeadlineRevision:row.source_checkpoint?.identity.deadlineRevision??null} : {}) });
 function csv(rows, columns) {
   const cell = value => '"' + String(value ?? '').replace(/^(?=\s*[=+@\-\t\r\n])/, "'").replaceAll('"', '""') + '"';
   return [columns.map(cell).join(','), ...rows.map(row => columns.map(column => cell(row[column])).join(','))].join('\r\n') + '\r\n';
@@ -85,6 +85,17 @@ class CompanyAutomation {
       const row = (await client.query('SELECT * FROM identity_automation_enrollments WHERE id=$1 AND expires_at>clock_timestamp()', [id])).rows[0];
       if (!row) fail(404, 'Current enrollment not found'); return this.enrollmentView(row);
     }, { ownerOnly: true, readOnly: true });
+  }
+  async watchSource(body,user,authorization){
+    const contract=require('../../../../packages/company-automation-change-contract');contract.input(body);workload(user,this.issuer);
+    return this.transaction(user,authorization,async(client,actor)=>{
+      const permission=await this.grant(client,body.grantId,actor,{lock:''});
+      if(!permission.actions.includes(LICENSE_ACTION))fail(403,'License change observation not delegated');
+      const plan=(await client.query("SELECT * FROM identity_automation_schedules WHERE id=$1 AND grant_id=$2 AND enabled AND on_change AND action=$3 AND rule_id=$4",[body.scheduleId,permission.id,LICENSE_ACTION,body.ruleId])).rows[0];
+      if(!plan)fail(404,'Current own license change subscription required');await this.retained(client,'schedule',plan.id);
+      return{schemaVersion:1,companyAutomationChangeProtocol:1,grantId:permission.id,scheduleId:plan.id,scheduleRevision:String(plan.revision),ruleId:plan.rule_id,tenant:permission.approval.tenant,
+       issuer:actor.issuer,subject:actor.clientId,clientRevision:actor.clientRevision,tokenIdentifierHash:contract.tokenHash(user),validUntil:Math.min(user.exp,Math.floor(permission.expires_at.getTime()/1000))};
+    },{readOnly:true});
   }
   async licenseSource(body, user, authorization) {
     exact(body, ['grantId', 'jobId', 'leaseToken', 'groupId', 'userId']);
@@ -168,16 +179,17 @@ class CompanyAutomation {
       const table = scheduled ? 'identity_automation_schedules' : 'identity_automation_jobs';
       const previous = (await client.query('SELECT * FROM ' + table + ' WHERE id=$1', [input.id])).rows[0];
       if (previous) {
-        if (previous.grant_id !== input.grantId || previous.action !== input.action || previous.format !== input.format || previous.rule_id !== (input.ruleId || null) || scheduled && previous.interval_seconds !== input.intervalSeconds) fail(409, 'Original job key changed');
+        if (previous.grant_id !== input.grantId || previous.action !== input.action || previous.format !== input.format || previous.rule_id !== (input.ruleId || null) || scheduled && (previous.interval_seconds !== (input.onChange ? null : input.intervalSeconds) || previous.on_change !== !!input.onChange)) fail(409, 'Original job key changed');
         return { ...base, [scheduled ? 'schedule' : 'job']: scheduled ? scheduleView(previous) : jobView(previous) };
       }
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['automation-quota:' + input.grantId]);
       const count = Number((await client.query('SELECT count(*) AS n FROM ' + table + (scheduled ? ' WHERE grant_id=$1 AND enabled' : " WHERE grant_id=$1 AND status IN('queued','retry_wait','running')"), [input.grantId])).rows[0].n);
       if (count >= (scheduled ? 100 : 1000)) fail(429, 'Automation pending capacity reached');
+      if(scheduled&&input.onChange&&Number((await client.query('SELECT count(*) AS n FROM identity_automation_schedules WHERE grant_id=$1 AND enabled AND on_change',[input.grantId])).rows[0].n)>=25)fail(429,'At most 25 active change subscriptions per grant');
       const row = (await client.query(scheduled
-        ? `INSERT INTO identity_automation_schedules(id,grant_id,tenant_id,action,format,rule_id,interval_seconds) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`
+        ? `INSERT INTO identity_automation_schedules(id,grant_id,tenant_id,action,format,rule_id,interval_seconds,on_change) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`
         : `INSERT INTO identity_automation_jobs(id,grant_id,tenant_id,action,format,rule_id,status) VALUES($1,$2,$3,$4,$5,$6,'queued') RETURNING *`,
-      [input.id, input.grantId, permission.tenant_id, input.action, input.format, input.ruleId || null, ...(scheduled ? [input.intervalSeconds] : [])])).rows[0];
+      [input.id, input.grantId, permission.tenant_id, input.action, input.format, input.ruleId || null, ...(scheduled ? [input.onChange ? null : input.intervalSeconds,!!input.onChange] : [])])).rows[0];
       return { ...base, [scheduled ? 'schedule' : 'job']: scheduled ? scheduleView(row) : jobView(row) };
     });
   }
@@ -259,10 +271,12 @@ class CompanyAutomation {
   }
   async run(body, user, authorization) {
     exact(body, ['grantId']); identifier(body.grantId); workload(user, this.issuer);
+    const changes=new(require('./CompanyAutomationChanges').CompanyAutomationChanges)(this);const collected=await changes.collect(body.grantId,user,authorization);
     const claimed = await this.transaction(user, authorization, async (client, actor) => {
       const permission = await this.grant(client, body.grantId, actor);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['automation-quota:' + permission.id]);
-      const schedules = (await client.query('SELECT * FROM identity_automation_schedules WHERE grant_id=$1 AND enabled AND next_run_at<=clock_timestamp() ORDER BY next_run_at,id FOR UPDATE SKIP LOCKED LIMIT 10', [permission.id])).rows;
+      await changes.dispatch(client,permission,collected);
+      const schedules = (await client.query('SELECT * FROM identity_automation_schedules WHERE grant_id=$1 AND enabled AND NOT on_change AND next_run_at<=clock_timestamp() ORDER BY next_run_at,id FOR UPDATE SKIP LOCKED LIMIT 10', [permission.id])).rows;
       for (const schedule of schedules) {
         await this.retained(client, 'schedule', schedule.id);
         if (Number((await client.query("SELECT count(*) AS n FROM identity_automation_jobs WHERE grant_id=$1 AND status IN('queued','running','retry_wait')", [permission.id])).rows[0].n) >= 1000) break;
@@ -280,7 +294,7 @@ class CompanyAutomation {
         lease_until=LEAST(clock_timestamp()+interval '45 seconds',to_timestamp($3),$4::timestamptz),revision=revision+1,error_code=NULL,updated_at=clock_timestamp() WHERE id=$1 RETURNING *`,
       [candidate.id, randomUUID(), user.exp, permission.expires_at])).rows[0];
     });
-    if (!claimed) return null;
+    if (!claimed){if(collected.errors.length)fail(503,'Change sources unavailable; checkpoints retained for '+collected.errors.map(item=>item.scheduleId).join(','));return null;}
     if (claimed.companyAutomationProtocol === 1) return claimed;
     try {
       return await this.transaction(user, authorization, async (client, actor) => {

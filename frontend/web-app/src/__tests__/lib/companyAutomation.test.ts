@@ -63,3 +63,16 @@ test('a machine group report preserves actual app provenance and treats independ
  const artifact=jest.spyOn(companyAutomation,'artifact').mockImplementation(async()=>({contentType:'application/json',content:JSON.stringify(report)} as any));
  try{expect((await companyAutomation.groupReport(current,grouped,principal)).results[0].status).toBe('awaiting-review');await expect(companyAutomation.groupReport({...current,status:'succeeded'},grouped,principal)).rejects.toThrow();report.actor.clientId='foreign';await expect(companyAutomation.groupReport(current,grouped,principal)).rejects.toThrow();}finally{artifact.mockRestore();}
 });
+test('change subscriptions are explicit, interval-free and bound to the delegated own target',async()=>{
+ const grouped={...grant,actions:['directory.groups.reconcile']};
+ (api.post as jest.Mock).mockImplementation(async(_url,body)=>({status:201,data:envelope({schedule:{id:body.id,grantId:grant.id,tenantId:grant.tenantId,action:body.action,format:'json',ruleId:body.ruleId,intervalSeconds:null,onChange:true,lastSourceRevision:null,lastDeadlineRevision:null,enabled:true,nextRunAt:stamp,revision:'1',createdAt:stamp}})}));
+ const scheduled=await companyAutomation.queue(grouped,'directory.groups.reconcile','json',principal,undefined,id(7),true);
+ expect('onChange' in scheduled&&scheduled.onChange).toBe(true);
+ expect(api.post).toHaveBeenCalledWith('/api/identity/automation/schedules',{id:id(99),grantId:grant.id,action:'directory.groups.reconcile',format:'json',ruleId:id(7),onChange:true});
+ await expect(companyAutomation.queue(grouped,'directory.groups.reconcile','json',principal,60,id(7),true)).rejects.toThrow();
+ await expect(companyAutomation.queue(grant,'directory.users.export','json',principal,undefined,undefined,true)).rejects.toThrow();
+});
+test('a fabricated change trigger cannot be attached to an ordinary export or substituted pool',async()=>{
+ const changed={...job,trigger:{kind:'change',groupId:id(8),sourceRevision:'2',deadlineRevision:'0'}};
+ (api.get as jest.Mock).mockResolvedValue({status:200,data:envelope({grantId:grant.id,tenantId:grant.tenantId,page:1,limit:25,total:1,jobs:[changed]})});await expect(companyAutomation.jobs(grant,principal)).rejects.toThrow();
+});

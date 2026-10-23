@@ -95,12 +95,15 @@ app.post('/internal/identity/application-target', authorityLimits.ingress, expre
   try { res.json(await authorizationState.target(req.body.targetType, req.body.targetId, req.body.actorUserId)); }
   catch { res.status(503).json({ error: 'identity_authority_unavailable' }); }
 }));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 }));
+const automationLimits=require('../../../../packages/company-automation-admission').automationAdmission(rateLimit,{issuer:process.env.OIDC_ISSUER||'http://localhost:3001',paths:['/api/identity/automation/run','/api/identity/automation/watch-source','/api/identity/automation/license-source']});
+app.use(automationLimits.ingress);
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1000, skip:automationLimits.matches }));
 app.use(express.json({ limit: '10mb' }));
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 //
 app.use(oidcAuth({ skipPaths: ['/health'] }));
+app.use(automationLimits.verified);
 app.use('/api', asyncRoute(async (req, _res, next) => {
   const path = req.path.replace(/\/$/, '');
   if (req.method === 'GET' && path === '/identity/access' || /^\/identity\/organization(?:\/delegations(?:\/[a-f0-9-]{36}\/revoke)?)?$/.test(path)) {
