@@ -236,7 +236,7 @@ class BrowserAuth {
       const result = await this.json('/oauth/employee-invitations/owner/' + operation, { method: 'POST', headers: { Authorization: authorization, 'Content-Type': 'application/json' }, body: JSON.stringify(input) }, 32768,
         (status, data) => [400, 401, 403, 404, 409, 412, 428, 429].includes(status) && errors.has(data?.error)
           ? new BrowserAuthError(status, data.error === 'employee_invitation_rejected' ? 'employee_invitation_changed' : data.error)
-          : new BrowserAuthError(status === 429 ? 429 : 503, status === 429 ? 'employee_invitation_rate_limited' : 'employee_invitation_owner_unavailable'), 10000);
+          : new BrowserAuthError(status === 429 ? 429 : 503, status === 429 ? 'employee_invitation_rate_limited' : 'employee_invitation_owner_unavailable'), 30000);
       const validView = value => !!value && !Array.isArray(value) && Object.keys(value).length === 11
         && ['id', 'tenantId', 'userId'].every(field => typeof value[field] === 'string') && typeof value.loginName === 'string' && typeof value.organizationName === 'string'
         && ['pending', 'credential_pending', 'accepted', 'revoked'].includes(value.status) && typeof value.revision === 'string' && /^[1-9][0-9]{0,18}$/.test(value.revision)
@@ -244,8 +244,9 @@ class BrowserAuth {
         && typeof value.credentialCreated === 'boolean' && typeof value.identityConfirmed === 'boolean' && value.identityConfirmed === (value.status === 'accepted');
       const exact = fields => !!result && !Array.isArray(result) && Object.keys(result).length === fields.length && fields.every(field => Object.hasOwn(result, field));
       if (operation === 'create') {
-        if (!exact(['schemaVersion', 'employeeInvitationProtocol', 'invitation', 'created', 'invitationToken']) || result.schemaVersion !== 1 || result.employeeInvitationProtocol !== 1
-          || !validView(result.invitation) || typeof result.created !== 'boolean' || (result.created ? typeof result.invitationToken !== 'string' : result.invitationToken !== null)) throw new BrowserAuthError(503, 'employee_invitation_owner_unavailable');
+        if (!exact(['schemaVersion', 'employeeInvitationProtocol', 'invitation', 'created', 'invitationToken', 'mailStatus']) || result.schemaVersion !== 1 || result.employeeInvitationProtocol !== 1
+          || !validView(result.invitation) || typeof result.created !== 'boolean' || !['sent', 'failed', 'not_configured', 'not_sent'].includes(result.mailStatus)
+          || (result.created ? typeof result.invitationToken !== 'string' : result.invitationToken !== null) || (result.created ? result.mailStatus === 'not_sent' : result.mailStatus !== 'not_sent')) throw new BrowserAuthError(503, 'employee_invitation_owner_unavailable');
       } else if (operation === 'list') {
         if (!exact(['schemaVersion', 'employeeInvitationProtocol', 'page', 'hasMore', 'invitations']) || result.schemaVersion !== 1 || result.employeeInvitationProtocol !== 1
           || result.page !== input.page || typeof result.hasMore !== 'boolean' || !Array.isArray(result.invitations) || result.invitations.length > 25 || result.invitations.some(value => !validView(value))) throw new BrowserAuthError(503, 'employee_invitation_owner_unavailable');

@@ -43,9 +43,9 @@ function sameOriginal(first, next) {
 class EmployeeInvitationGateway {
   constructor({ signingKeys, issuer, authEndpoint = process.env.OAUTH_EMPLOYEE_INVITATION_AUTH_URL || process.env.AUTH_SERVICE_URL || 'http://auth-service:3002',
     identityEndpoint = process.env.OAUTH_EMPLOYEE_INVITATION_IDENTITY_URL || process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001',
-    fetchImpl = (...args) => global.fetch(...args) } = {}) {
+    fetchImpl = (...args) => global.fetch(...args), mailer = new (require('./EmployeeInvitationMailer').EmployeeInvitationMailer)() } = {}) {
     this.keys = signingKeys; this.issuer = issuer; this.auth = pinnedOrigin(authEndpoint, 'http://auth-service:3002');
-    this.identity = pinnedOrigin(identityEndpoint, 'http://identity-service:3001'); this.fetch = fetchImpl;
+    this.identity = pinnedOrigin(identityEndpoint, 'http://identity-service:3001'); this.fetch = fetchImpl; this.mailer = mailer;
   }
   assertion(operation, path, body, ownerAuthorization = null) {
     return jwt.sign({ iss: this.issuer, sub: 'oauth-provider', aud: contract.AUDIENCE, token_use: contract.PURPOSE, actor_type: 'workload',
@@ -53,7 +53,8 @@ class EmployeeInvitationGateway {
     this.keys.privateKey, { algorithm: 'RS256', keyid: this.keys.kid, header: { typ: contract.TYPE }, expiresIn: 30 });
   }
   async request(receiver, operation, path, body, ownerAuthorization = null) {
-    const assertion = this.assertion(operation, path, body, ownerAuthorization); const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 4000);
+    // Invitation creation may also wait for the optional bounded Graph token and mail calls.
+    const assertion = this.assertion(operation, path, body, ownerAuthorization); const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), operation === 'create' ? 25000 : 4000);
     try {
       const headers = { Authorization: 'Bearer ' + assertion, 'Content-Type': 'application/json', ...(ownerAuthorization ? { 'X-OpenDirectory-Owner-Authorization': ownerAuthorization } : {}) };
       const response = await this.fetch(new URL(path, receiver), { method: 'POST', headers,
@@ -101,12 +102,14 @@ class EmployeeInvitationGateway {
     if (value?.schemaVersion !== 1 || value.employeeInvitationProtocol !== 1 || value.actorUserId !== expectedActorUserId || !validTenantContext(value.tenant)) fail(503, 'employee_invitation_unavailable');
     let invitation;
     if (operation === 'create') {
-      contract.exact(value, [...baseFields, 'invitation', 'created', 'invitationToken']);
+      contract.exact(value, [...baseFields, 'invitation', 'created', 'invitationToken', 'deliveryAddress']);
       invitation = value.invitation;
-      if (typeof value.created !== 'boolean' || value.created && typeof value.invitationToken !== 'string' || !value.created && value.invitationToken !== null) fail(503, 'employee_invitation_unavailable');
+      if (typeof value.created !== 'boolean' || typeof value.deliveryAddress !== 'string' || value.deliveryAddress.length > 254
+        || value.created && typeof value.invitationToken !== 'string' || !value.created && value.invitationToken !== null) fail(503, 'employee_invitation_unavailable');
       if (value.invitationToken !== null) contract.parseToken(value.invitationToken);
       this.validManagementInvitation(invitation, value.tenant);
-      return { schemaVersion: 1, employeeInvitationProtocol: 1, invitation, created: value.created, invitationToken: value.invitationToken };
+      const mail = value.created ? await this.mailer.send({ invitation, invitationToken: value.invitationToken, recipientEmail: value.deliveryAddress }) : { status: 'not_sent' };
+      return { schemaVersion: 1, employeeInvitationProtocol: 1, invitation, created: value.created, invitationToken: value.invitationToken, mailStatus: mail.status };
     }
     if (operation === 'list') {
       contract.exact(value, [...baseFields, 'page', 'hasMore', 'invitations']);

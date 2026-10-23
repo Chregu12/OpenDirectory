@@ -2,12 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { DirectoryUser, directoryUsers } from '@/lib/directoryUsers';
+import { DirectoryGroup, directoryGroups } from '@/lib/directoryGroups';
 import { useIdentityAccess } from '@/hooks/useIdentityAccess';
 import { employeeInvitationManagement, employeeInvitationManagementError, EmployeeInvitationRecord, EmployeeInvitationTarget } from '@/lib/employeeInvitationManagement';
 
 export default function EmployeeInvitationManager() {
   const { access, unavailable, reload: reloadAccess } = useIdentityAccess();
   const [users, setUsers] = useState<DirectoryUser[]>([]); const [usersPage, setUsersPage] = useState(1); const [usersHasMore, setUsersHasMore] = useState(false); const [search, setSearch] = useState('');
+  const [groups, setGroups] = useState<DirectoryGroup[]>([]); const [groupsLoading, setGroupsLoading] = useState(false); const [groupIds, setGroupIds] = useState<string[]>([]); const [groupSearch, setGroupSearch] = useState(''); const [groupError, setGroupError] = useState('');
   const [userBusy, setUserBusy] = useState(false); const [targetBusy, setTargetBusy] = useState(false); const [target, setTarget] = useState<EmployeeInvitationTarget | null>(null);
   const [invitations, setInvitations] = useState<EmployeeInvitationRecord[]>([]); const [invitationPage, setInvitationPage] = useState(1); const [invitationHasMore, setInvitationHasMore] = useState(false);
   const [loginName, setLoginName] = useState(''); const [durationHours, setDurationHours] = useState(72); const [reason, setReason] = useState(''); const [confirmed, setConfirmed] = useState(false);
@@ -26,6 +28,15 @@ export default function EmployeeInvitationManager() {
     return () => { active = false; controller.abort(); };
   }, [owner, usersPage, search]);
 
+  useEffect(() => {
+    if (!owner) { setGroups([]); return; }
+    let active = true; setGroupError(''); setGroupsLoading(true);
+    directoryGroups.list().then(result => { if (active) setGroups(result.groups); })
+      .catch(() => { if (active) setGroupError('Eigene Gruppen konnten nicht vollständig geladen werden.'); })
+      .finally(() => { if (active) setGroupsLoading(false); });
+    return () => { active = false; };
+  }, [owner]);
+
   async function loadInvitations(page = invitationPage, force = false) {
     if (!owner || busy && !force) return;
     setBusy(true); setError('');
@@ -38,7 +49,7 @@ export default function EmployeeInvitationManager() {
   async function selectUser(user: DirectoryUser) {
     if (!access?.userId || targetBusy || user.enabled) return;
     setTarget(null); setInviteLink(''); setError(''); setNotice(''); setTargetBusy(true);
-    try { const result = await employeeInvitationManagement.target(user.id, access.userId); setTarget(result); setLoginName(result.username); setReason(''); setConfirmed(false); setInvitationId(crypto.randomUUID()); }
+    try { const result = await employeeInvitationManagement.target(user.id, access.userId); setTarget(result); setLoginName(result.username); setReason(''); setConfirmed(false); setGroupIds([]); setInvitationId(crypto.randomUUID()); }
     catch (failure: any) { setError(failure?.response ? employeeInvitationManagementError(failure) : failure.message || 'Einladungsziel nicht bestätigt.'); }
     finally { setTargetBusy(false); }
   }
@@ -47,15 +58,38 @@ export default function EmployeeInvitationManager() {
     event.preventDefault();
     if (!target || !invitationId || !confirmed || reason.trim().length < 10 || busy || targetBusy) return;
     setBusy(true); setError(''); setNotice(''); setInviteLink('');
+    const added: Array<{ id: string; group: DirectoryGroup }> = []; let pendingReviews = 0; let invitationAttempted = false; let groupMutationUncertain = false;
     try {
+      for (const id of groupIds) {
+        const current = await directoryGroups.get(id);
+        if (current.members.includes(target.id)) continue;
+        groupMutationUncertain = true; const updated = await directoryGroups.add(current, target.id); groupMutationUncertain = false; added.push({ id, group: updated });
+        if (updated.membershipReview?.effective === false) pendingReviews++;
+      }
+      invitationAttempted = true;
       const result = await employeeInvitationManagement.create({ id: invitationId, userId: target.id, userRevision: target.revision,
         loginName: loginName.trim(), durationHours, reason: reason.trim(), confirm: true });
       if (result.created && result.invitationToken) {
         const url = new URL('/employees/accept', window.location.origin); url.hash = result.invitationToken; setInviteLink(url.href);
-        setNotice('Einladung erstellt. Der Link wird nur einmal angezeigt. Teile ihn vertraulich mit der eingeladenen Person.');
+        const delivery = result.mailStatus === 'sent' ? 'Der Einladungslink wurde per Microsoft Graph an die hinterlegte Adresse gesendet.'
+          : 'Graph-Mail wurde nicht zugestellt; teile den Einmal-Link vertraulich mit der eingeladenen Person.';
+        setNotice(`Einladung erstellt. ${delivery}${groupIds.length ? ` ${groupIds.length} Gruppen wurden vorgemerkt.` : ''}${pendingReviews ? ` ${pendingReviews} Gruppenmitgliedschaft(en) warten auf eine unabhängige Prüfung.` : ''}`);
       } else setNotice('Diese Einladung wurde bereits erstellt. Das Original-Token wird aus Sicherheitsgründen nicht erneut ausgegeben. Widerrufe sie und erstelle bei Bedarf eine neue Einladung.');
-      setInvitationId(''); setTarget(null); setConfirmed(false); setReason(''); await loadInvitations(1, true);
-    } catch (failure) { setError(employeeInvitationManagementError(failure)); }
+      setInvitationId(''); setTarget(null); setConfirmed(false); setReason(''); setGroupIds([]); await loadInvitations(1, true);
+    } catch (failure) {
+      const status = failure?.response?.status;
+      const invitationRejected = invitationAttempted && [400, 401, 403, 404, 409, 412, 428, 429].includes(status);
+      let rolledBack = false;
+      if (!groupMutationUncertain && (!invitationAttempted || invitationRejected)) {
+        rolledBack = true;
+        for (const item of added.reverse()) {
+          try { const current = await directoryGroups.get(item.id); if (current.members.includes(target.id)) await directoryGroups.removeMember(current, target.id); }
+          catch { rolledBack = false; }
+        }
+      }
+      const uncertain = groupMutationUncertain || invitationAttempted && !invitationRejected;
+      setError(`${employeeInvitationManagementError(failure)}${uncertain ? ' Gruppen- oder Einladungsergebnis ist unklar. Mitgliedschaften und Einladungsstatus prüfen, bevor du es erneut versuchst.' : added.length ? rolledBack ? ' Die bestätigten Gruppenänderungen wurden zurückgenommen.' : ' Mindestens eine Gruppenänderung blieb bestehen; Gruppenmitgliedschaften bitte prüfen.' : ''}`);
+    }
     finally { setBusy(false); }
   }
 
@@ -98,9 +132,18 @@ export default function EmployeeInvitationManager() {
         {target && <form className="space-y-3" onSubmit={event => void createInvitation(event)}>
           <p>Ausgewählt: <strong>{target.username}</strong> · Version {target.revision}</p>
           <label className="block">Anmeldename<input className="block border rounded p-2 w-full" required minLength={3} maxLength={254} value={loginName} onChange={event => setLoginName(event.target.value)} /></label>
+          <fieldset className="space-y-2"><legend className="font-medium">Gruppen für den Eintritt (optional)</legend>
+            <p className="text-sm text-gray-600">Die ausgewählten Gruppen werden vor der Einladung mit dem deaktivierten Verzeichniseintrag verknüpft. Gruppenrichtlinien können Apps freigeben; verknüpfte Lizenzgruppen vergeben Plätze aus ihrem Pool, sobald das Konto aktiv ist und der Lizenzabgleich läuft.</p>
+            <label className="block">Gruppen suchen<input className="block border rounded p-2 w-full" value={groupSearch} onChange={event => setGroupSearch(event.target.value)} /></label>
+            {groupsLoading && <p role="status">Eigene Gruppen werden geladen …</p>}
+            {groupError && <p role="alert" className="text-amber-700">{groupError}</p>}
+            {!groupError && groups.filter(group => group.name.toLocaleLowerCase().includes(groupSearch.trim().toLocaleLowerCase())).slice(0, 100).map(group => <label key={group.id} className="flex gap-2 items-start"><input type="checkbox" checked={groupIds.includes(group.id)} onChange={event => setGroupIds(current => event.target.checked ? [...current, group.id] : current.filter(id => id !== group.id))} disabled={busy} /><span>{group.name}{group.members.includes(target.id) ? ' · bereits Mitglied' : ''}</span></label>)}
+            {!groupError && groups.filter(group => group.name.toLocaleLowerCase().includes(groupSearch.trim().toLocaleLowerCase())).length > 100 && <p className="text-sm text-gray-600">Bitte die Suche weiter eingrenzen (maximal 100 Treffer werden angezeigt).</p>}
+            {!groupsLoading && !groupError && groups.length === 0 && <p>Keine eigenen Gruppen verfügbar.</p>}
+          </fieldset>
           <label className="block">Gültigkeit<select className="block border rounded p-2 w-full" value={durationHours} onChange={event => setDurationHours(Number(event.target.value))}>{[1, 4, 12, 24, 48, 72].map(value => <option key={value} value={value}>{value} Stunden</option>)}</select></label>
           <label className="block">Grund<input className="block border rounded p-2 w-full" minLength={10} maxLength={500} required value={reason} onChange={event => setReason(event.target.value)} /></label>
-          <label className="flex gap-3"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} disabled={busy} /><span>Ich bestätige, dass ich diese Einladung für den ausgewählten eigenen Verzeichniseintrag erstellen möchte.</span></label>
+          <label className="flex gap-3"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} disabled={busy} /><span>Ich bestätige die Einladung und die ausgewählten Gruppenmitgliedschaften für den Eintrag.</span></label>
           <div className="flex gap-2"><button className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50" disabled={busy || !confirmed || reason.trim().length < 10}>{busy ? 'Wird erstellt …' : 'Einladung erstellen'}</button><button type="button" className="border rounded px-4 py-2" disabled={busy} onClick={() => { setTarget(null); setInvitationId(''); }}>Abbrechen</button></div>
         </form>}
       </div>
@@ -112,6 +155,6 @@ export default function EmployeeInvitationManager() {
     </section>
 
     {revokeTarget && <section className="bg-red-50 border border-red-300 rounded-lg p-4 space-y-3"><h2 className="font-semibold">Einladung widerrufen: {revokeTarget.loginName}</h2><form className="space-y-3" onSubmit={event => void revokeInvitation(event)}><label className="block">Grund<input className="block border rounded p-2 w-full" required minLength={10} maxLength={500} value={revokeReason} onChange={event => setRevokeReason(event.target.value)} /></label><label className="flex gap-3"><input type="checkbox" checked={revokeConfirmed} onChange={event => setRevokeConfirmed(event.target.checked)} /><span>Ich bestätige den Widerruf dieser Einladung. Eine unveränderte Teilaufnahme wird zurückgenommen.</span></label><div className="flex gap-2"><button className="bg-red-700 text-white rounded px-4 py-2" disabled={busy || !revokeConfirmed || revokeReason.trim().length < 10}>Einladung widerrufen</button><button type="button" className="border rounded px-4 py-2" disabled={busy} onClick={() => setRevokeTarget(null)}>Abbrechen</button></div></form></section>}
-    <p className="text-sm text-gray-600">Einladungslinks werden nicht automatisch per E-Mail verschickt. Eine Mail-/Graph-Zustellung und automatische Gruppen-/Lizenzzuweisung sind separate, noch nicht verbundene Abläufe.</p>
+    <p className="text-sm text-gray-600">Graph akzeptiert die E-Mail asynchron. Den Einmal-Link kannst du zusätzlich kopieren. Bei Gruppen mit unabhängiger Mitgliedschaftsprüfung werden App-Zugriffe und Lizenzplätze erst nach deren Freigabe wirksam.</p>
   </main>;
 }

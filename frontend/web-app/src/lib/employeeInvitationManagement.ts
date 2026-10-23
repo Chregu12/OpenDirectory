@@ -51,8 +51,9 @@ export const employeeInvitationManagement = {
   async create(input: { id: string; userId: string; userRevision: string; loginName: string; durationHours: number; reason: string; confirm: true }) {
     const { data } = await ownerPost<any>('create', input);
     if (data?.schemaVersion !== 1 || data?.employeeInvitationProtocol !== 1 || !validRecord(data.invitation) || typeof data.created !== 'boolean'
-      || (data.created ? typeof data.invitationToken !== 'string' || !/^[a-f0-9-]{36}\.[A-Za-z0-9_-]{43}$/.test(data.invitationToken) : data.invitationToken !== null)) throw new Error('Einladungsergebnis nicht bestätigt.');
-    return data as { schemaVersion: 1; employeeInvitationProtocol: 1; invitation: EmployeeInvitationRecord; created: boolean; invitationToken: string | null };
+      || !['sent', 'failed', 'not_configured', 'not_sent'].includes(data.mailStatus)
+      || (data.created ? typeof data.invitationToken !== 'string' || !/^[a-f0-9-]{36}\.[A-Za-z0-9_-]{43}$/.test(data.invitationToken) || data.mailStatus === 'not_sent' : data.invitationToken !== null || data.mailStatus !== 'not_sent')) throw new Error('Einladungsergebnis nicht bestätigt.');
+    return data as { schemaVersion: 1; employeeInvitationProtocol: 1; invitation: EmployeeInvitationRecord; created: boolean; invitationToken: string | null; mailStatus: 'sent' | 'failed' | 'not_configured' | 'not_sent' };
   },
   async revoke(input: { id: string; revision: string; reason: string; confirm: true }) {
     const { data } = await ownerPost<any>('revoke', input);

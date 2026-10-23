@@ -45,7 +45,7 @@ class EmployeeInvitations{
   const result=await this.transaction(async(client,admit)=>{
    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['employee-invitation:'+source.tenant.id]);
    const previous=(await client.query("SELECT * FROM auth_employee_invitations WHERE id=$1 AND tenant->>'id'=$2 FOR UPDATE",[input.id,source.tenant.id])).rows[0];
-   if(previous){const row=await this.row(client,input.id,source.tenant.id);if(!isDeepStrictEqual(row.request,input))contract.fail(409,'original_employee_invitation_request_changed');return{invitation:view(row),created:false,invitationToken:null};}
+   if(previous){const row=await this.row(client,input.id,source.tenant.id);if(!isDeepStrictEqual(row.request,input))contract.fail(409,'original_employee_invitation_request_changed');return{invitation:view(row),created:false,invitationToken:null,deliveryAddress:row.grant_source.target.email};}
    const recipient=await this.authority.owner(authorization,input.userId);
    if(!sameContext(source.context,recipient.context)||!sameTenantContext(source.tenant,recipient.tenant))contract.fail(412,'employee_invitation_owner_changed');source=recipient;
    if(!source.target||source.target.id!==input.userId||source.target.revision!==input.userRevision)contract.fail(412,'employee_invitation_recipient_changed');
@@ -57,7 +57,7 @@ class EmployeeInvitations{
    await client.query(`WITH original_time AS(SELECT clock_timestamp() AS value)
     INSERT INTO auth_employee_invitations(id,tenant,target_id,subject_id,login_name,token_hash,request,grant_source,status,created_at,expires_at,creation_event_id,event_id)
     SELECT $1,$2,$3,$4,$5,$6,$7,$8,'pending',value,value+$9*interval '1 hour',$10,$10 FROM original_time`,[input.id,source.tenant,input.userId,randomUUID(),input.loginName,parsed.tokenHash,input,source,input.durationHours,scope.eventId]);
-   return{invitation:view(await this.row(client,input.id,source.tenant.id)),created:true,invitationToken:token};
+   return{invitation:view(await this.row(client,input.id,source.tenant.id)),created:true,invitationToken:token,deliveryAddress:source.target.email};
   },{proof:original,verify:()=>verify()});
   await verify();return{schemaVersion:1,employeeInvitationProtocol:1,actorUserId:source.actorUserId,tenant:source.tenant,...result};
  }

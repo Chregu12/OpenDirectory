@@ -253,8 +253,8 @@ function organizationOpenApi() {
   const employeeInvitations=require('./employee-invitation-openapi').employeeInvitationOpenApi();
   Object.assign(document.paths,employeeInvitations.paths);Object.assign(document.components.schemas,employeeInvitations.components.schemas);Object.assign(document.components.securitySchemes,employeeInvitations.components.securitySchemes);
   document.paths['/internal/identity/company-console'].post.summary='Read actual current Owner or retained employee binding for one original company console';
-  document.info.description+=' Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. First MFA enrollment remains subject to the user being assigned to an MFA-required application. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision.';
-  document.info.version = '1.30.0';
+  document.info.description+=' Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision.';
+  document.info.version = '1.31.0';
   return document;
 }
 if (require.main === module) process.stdout.write(JSON.stringify(organizationOpenApi(), null, 2) + '\n');

@@ -2,7 +2,21 @@
 
 The central login exposes OIDC discovery at `/.well-known/openid-configuration`, authorization at `/oauth/authorize` and tokens at `/oauth/token`. Existing identity eligibility, application assignments, sessions and local MFA checks apply to external OIDC logins too.
 
-Local passwords are checked through the [persistent authentication credential service](../authentication-service/README.md), configured with `AUTH_SERVICE_URL` (Compose: `http://auth-service:3002`). That service's alternate OIDC issuer is retired with HTTP 410. OAuth carries the security revision captured by the original successful password check into a fixed `credential_authorization` token claim. Current token validation and refresh compare it with the private Auth reader and canonical Identity state; password resets, suspensions and credential MFA changes invalidate old access. MFA enrollment and recovery challenges retain the same credential binding. Credential verification alone still does not grant a canonical Identity subject link, tenant access or application assignment. Public employee invite management and recipient activation are available; automatic mail, app/group/license assignment, owner CLI and a complete first MFA browser sign-in remain open.
+Local passwords are checked through the [persistent authentication credential service](../authentication-service/README.md), configured with `AUTH_SERVICE_URL` (Compose: `http://auth-service:3002`). That service's alternate OIDC issuer is retired with HTTP 410. OAuth carries the security revision captured by the original successful password check into a fixed `credential_authorization` token claim. Current token validation and refresh compare it with the private Auth reader and canonical Identity state; password resets, suspensions and credential MFA changes invalidate old access. MFA enrollment and recovery challenges retain the same credential binding. Credential verification alone still does not grant a canonical Identity subject link, tenant access or application assignment. Employee invitations support configured Microsoft Graph email delivery, existing group membership assignment, and app-bound MFA setup on first browser login. Vendor license fulfillment, mailbox creation, owner CLI and complete SCIM lifecycle remain separate work.
+
+### Invitation mail via Microsoft Graph
+
+To send the one-time employee invitation automatically, set these secrets in the OAuth provider environment:
+
+```sh
+OAUTH_EMPLOYEE_INVITATION_GRAPH_TENANT_ID=<entra-tenant-uuid>
+OAUTH_EMPLOYEE_INVITATION_GRAPH_CLIENT_ID=<dedicated-graph-app-uuid>
+OAUTH_EMPLOYEE_INVITATION_GRAPH_CLIENT_SECRET=<protected-client-secret>
+OAUTH_EMPLOYEE_INVITATION_GRAPH_SENDER=onboarding@example.com
+OAUTH_EMPLOYEE_INVITATION_PUBLIC_URL=https://portal.example.com
+```
+
+The Graph app needs the application permission `Mail.Send`, tenant admin consent, and an existing mailbox for the configured sender. Restrict its Exchange mailbox access to that sender where your Exchange policy supports it. The recipient address is taken from the exact original Identity target. OAuth sends only a link containing the invitation secret in the URL fragment; the password is never mailed. A Graph `202 Accepted` reports an accepted send request, not final delivery. On missing configuration or Graph failure, the owner still receives the one-time link for secure manual delivery. Use a dedicated least-privilege mail app and rotate its secret through your secret manager.
 
 ## External OIDC adapter
 
@@ -84,7 +98,7 @@ Run `npm test -- --runInBand` here. Adapter tests run a real local discovery/tok
 
 Use **App-Konto erstellen** in the OAuth/OIDC UI for a confidential workload with no redirects or default scopes. The [app-account automation guide](../../../docs/features/app-accounts-automation.md) describes the shipped `scripts/od.mjs` CLI, protected secrets, separate activation and existing permission boundaries. No additional mail-provider connection or tenant-wide automation permission is implicit in app registration.
 
-The dedicated `company.automation` client-credentials scope supports [explicit company app grants and durable jobs](../../../docs/features/company-automation.md). Its JWT contains only that workload permission; an actual company owner separately approves fixed export, [saved group-rule](../../../docs/features/company-group-rule-automation.md) and/or [group license reconciliation](../../../docs/features/company-license-automation.md) actions for the exact client generation. OAuth migrations 001–015, Identity 001–055, Policy 001–029 and current receivers/frontend/CLI are required for the current automation catalog. Group-rule grants change only configured canonical membership sources and retain independent first reviews. The worker uses its own credentials without a retained human session. Client rotation or disablement invalidates the previous generation. Local group-seat assignment and removal do not provision vendor licenses or mailboxes; mail provisioning remains open.
+The dedicated `company.automation` client-credentials scope supports [explicit company app grants and durable jobs](../../../docs/features/company-automation.md). Its JWT contains only that workload permission; an actual company owner separately approves fixed export, [saved group-rule](../../../docs/features/company-group-rule-automation.md) and/or [group license reconciliation](../../../docs/features/company-license-automation.md) actions for the exact client generation. OAuth migrations 001–015, Identity 001–055, Policy 001–029 and current receivers/frontend/CLI are required for the current automation catalog. Group-rule grants change only configured canonical membership sources and retain independent first reviews. The worker uses its own credentials without a retained human session. Client rotation or disablement invalidates the previous generation. Local group-seat assignment and removal do not provision vendor licenses or create mailboxes; invitation email delivery is configured separately above.
 
 ## Own-company app registry
 

@@ -52,12 +52,12 @@ export default function EmployeeInvitationAcceptancePage() {
     finally { if (generation.current === epoch) { setBusy(false); setPassword(''); setConfirmation(''); } }
   }
 
-  const enrollmentLink = accepted ? `/auth/mfa-enroll?username=${encodeURIComponent(accepted.loginName)}` : preview ? `/auth/mfa-enroll?username=${encodeURIComponent(preview.loginName)}` : '/auth/mfa-enroll';
+  const enrollmentLink = '/login';
   const complete = !!accepted || preview?.status === 'accepted';
 
   return <main className="min-h-screen bg-gray-50 text-gray-900 px-4 py-10"><section className="max-w-2xl mx-auto space-y-6">
     <header className="space-y-3"><a href="/login" className="text-blue-700 underline">Zur Anmeldung</a><h1 className="text-3xl font-semibold">Mitarbeitereinladung annehmen</h1>
-      <p>Prüfe deine Einladung und lege ein eigenes Passwort fest. Nach der Aktivierung muss vor der ersten Anmeldung OpenDirectory-MFA eingerichtet werden.</p>
+      <p>Prüfe deine Einladung und lege ein eigenes Passwort fest. Die erste Anmeldung führt dich durch die OpenDirectory-MFA-Einrichtung, falls deine App sie verlangt.</p>
       <p>Der Einladungslink ist vertraulich. Das Token wird nur im Arbeitsspeicher dieser Seite verwendet und nicht im Browser-Verlauf, in der URL oder im Sitzungsspeicher abgelegt.</p></header>
     {error && <p role="alert" className="border border-red-400 rounded p-4">{error}</p>}
     {enabled === null && !error && <p role="status">Einladungsdienst wird geprüft …</p>}
@@ -70,7 +70,7 @@ export default function EmployeeInvitationAcceptancePage() {
     {preview && <section className="bg-white border rounded-xl p-6 space-y-4" aria-live="polite">
       <h2 className="text-xl font-semibold">{complete ? 'Konto aktiviert' : 'Einladung geprüft'}</h2>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2"><dt>Organisation</dt><dd>{preview.organizationName}</dd><dt>Benutzername</dt><dd>{preview.loginName}</dd><dt>Einladung gültig bis</dt><dd><time dateTime={preview.expiresAt}>{new Date(preview.expiresAt).toLocaleString('de-CH')}</time></dd></dl>
-      {complete ? <><p>Dein Zugang wurde aktiviert. Richte jetzt OpenDirectory-MFA ein, bevor du dich zum ersten Mal anmeldest.</p><a className="inline-block bg-blue-600 text-white rounded px-4 py-2" href={enrollmentLink}>OpenDirectory-MFA einrichten</a></>
+      {complete ? <><p>Dein Zugang wurde aktiviert. Melde dich jetzt mit der dir zugewiesenen App und deinem neuen Passwort an. Falls diese App MFA verlangt, richtest du den Faktor direkt auf der Anmeldeseite ein und setzt die Anmeldung danach fort.</p><a className="inline-block bg-blue-600 text-white rounded px-4 py-2" href={enrollmentLink}>Mit OpenDirectory anmelden</a></>
         : <form className="space-y-4" onSubmit={event => { event.preventDefault(); void accept(); }}>
           <p>Lege ein Passwort mit mindestens 12 Zeichen fest. Bei einem abgebrochenen Abschluss kannst du denselben Link und dasselbe Passwort erneut verwenden.</p>
           <label className="block" htmlFor="employee-password">Neues Passwort<input id="employee-password" className="block border rounded p-2 w-full" type="password" autoComplete="new-password" minLength={12} maxLength={72} required value={password} onChange={event => setPassword(event.target.value)} disabled={busy} /></label>

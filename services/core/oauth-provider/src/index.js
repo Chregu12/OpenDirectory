@@ -481,14 +481,64 @@ app.get('/oauth/authorize', protocol((req, res) => {
     <div class="error" id="errBox"></div>
     <button type="submit" id="submitBtn">Anmelden</button>
   </form>
+  <section id="mfaSetup" hidden style="margin-top:24px;border-top:1px solid #334155;padding-top:20px;color:#cbd5e1">
+    <h2 style="color:#fff;font-size:16px">OpenDirectory-MFA erstmals einrichten</h2>
+    <p style="font-size:13px;margin-top:8px">Diese App verlangt MFA. Richte den Faktor hier ein und melde dich danach mit einem neuen Einmalcode an.</p>
+    <button type="button" id="startEnrollment">Faktor sicher vorbereiten</button>
+    <div id="enrollmentSetup" hidden style="margin-top:16px">
+      <p style="font-size:13px">Diesen Schlüssel im Authenticator erfassen (SHA-1, sechs Stellen, 30 Sekunden):</p>
+      <code id="enrollmentSecret" style="display:block;overflow-wrap:anywhere;background:#0f172a;padding:12px;margin-top:8px"></code>
+      <a id="enrollmentUri" style="display:block;color:#93c5fd;margin-top:8px;font-size:12px">Authenticator-Link öffnen</a>
+      <label>Einmalcode des neuen Authenticators</label>
+      <input id="enrollmentCode" type="text" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6">
+      <button type="button" id="confirmEnrollment">Faktor bestätigen</button>
+    </div>
+  </section>
 </div>
 <script>
   const f=document.getElementById('loginForm');
   const err=document.getElementById('errBox');
   const btn=document.getElementById('submitBtn');
+  const setup=document.getElementById('mfaSetup');
+  const setupDetails=document.getElementById('enrollmentSetup');
+  const startEnrollment=document.getElementById('startEnrollment');
+  const confirmEnrollment=document.getElementById('confirmEnrollment');
+  const enrollmentCode=document.getElementById('enrollmentCode');
+  let enrollmentChallenge='';let uncertainStart=false;let uncertainConfirmation=false;
+  const showError=value=>{err.textContent=value;err.classList.add('visible');};
+  const jsonPost=async(path,body)=>{const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-OD-Auth-Flow':'1'},body:JSON.stringify(body),cache:'no-store',credentials:'same-origin',redirect:'error'});let value;try{value=await response.json();}catch{throw Object.assign(new Error('invalid_response'),{status:response.status});}if(!response.ok)throw Object.assign(new Error(value.error||'login_failed'),{status:response.status});return value;};
+  const credentials=()=>({username:f.elements.username.value,password:f.elements.password.value,mfaCode:f.elements.mfaCode.value});
+  const messages={invalid_credentials:'Benutzername oder Passwort ist ungültig.',mfa_required:'Der Passwortanbieter verlangt zusätzlich seinen MFA-Code.',invalid_otp:'Der Einmalcode ist ungültig.',application_not_assigned:'Dieses Konto ist dieser Anwendung nicht zugewiesen. Bitte den Firmeninhaber um eine passende Gruppenzuweisung.',mfa_enrollment_required:'Diese App verlangt einen OpenDirectory-Faktor. Richte ihn unten ein.',invalid_enrollment_challenge:'Die Einrichtung ist abgelaufen. Bitte Anmeldung prüfen und bewusst neu beginnen.',enrollment_authorization_changed:'App-Zuweisung oder MFA-Richtlinie hat sich geändert. Bitte neu anmelden.'};
+  f.addEventListener('submit',async event=>{
+    event.preventDefault();err.classList.remove('visible');btn.disabled=true;
+    try{const result=await jsonPost('/oauth/authorize/login',{...Object.fromEntries(new FormData(f).entries())});if(typeof result.redirect==='string'){location.assign(result.redirect);return;}
+      if(result.error==='mfa_enrollment_required'){setup.hidden=false;setupDetails.hidden=true;enrollmentChallenge='';uncertainStart=false;uncertainConfirmation=false;startEnrollment.textContent='Faktor sicher vorbereiten';confirmEnrollment.hidden=false;showError(messages[result.error]);startEnrollment.focus();}
+      else showError(messages[result.error]||'Anmeldung nicht bestätigt. Bitte Eingaben prüfen und erneut versuchen.');
+    }catch{showError('Anmeldedienst nicht verfügbar. Ausgang prüfen, bevor du es erneut versuchst.');}finally{btn.disabled=false;}
+  });
+  startEnrollment.addEventListener('click',async()=>{
+    if(uncertainStart&&!confirm('Der vorherige Start könnte bereits erfolgt sein. Hast du zuerst mit dem neuen Code die normale Anmeldung geprüft? Nur wenn sie weiterhin MFA verlangt, bestätige den neuen Faktorstart.'))return;
+    startEnrollment.disabled=true;err.classList.remove('visible');
+    try{const data=await jsonPost('/oauth/mfa/enrollment/start',{clientId:f.elements.client_id.value,...credentials()});
+      if(typeof data.challenge!=='string'||typeof data.secret!=='string'||typeof data.otpauthUri!=='string'||!/^otpauth:\/\/totp\/OpenDirectory:/.test(data.otpauthUri))throw new Error('invalid_setup');
+      enrollmentChallenge=data.challenge;uncertainStart=false;uncertainConfirmation=false;startEnrollment.textContent='Faktor sicher vorbereiten';confirmEnrollment.hidden=false;document.getElementById('enrollmentSecret').textContent=data.secret;const uri=document.getElementById('enrollmentUri');uri.href=data.otpauthUri;setupDetails.hidden=false;enrollmentCode.focus();
+    }catch(failure){if(!failure.status||failure.status>=500||failure.message==='invalid_setup'){uncertainStart=true;showError('Der MFA-Start ist nicht eindeutig bestätigt. Prüfe zuerst die normale Anmeldung. Nur wenn sie weiterhin MFA verlangt, starte nach bewusster Bestätigung neu.');}else showError(messages[failure.message]||'MFA-Ersteinrichtung abgelehnt. App-Zuweisung, Passwort und Passwortanbieter-MFA prüfen.');}
+    finally{startEnrollment.disabled=false;}
+  });
+  confirmEnrollment.addEventListener('click',async()=>{
+    if(uncertainConfirmation){showError('Prüfe zuerst die normale Anmeldung mit einem aktuellen Authenticator-Code.');return;}
+    if(!enrollmentChallenge||! /^[0-9]{6}$/.test(enrollmentCode.value)){showError('Sechsstelligen Einmalcode eingeben.');return;}
+    confirmEnrollment.disabled=true;err.classList.remove('visible');
+    try{const data=await jsonPost('/oauth/mfa/enrollment/confirm',{challenge:enrollmentChallenge,code:enrollmentCode.value});
+      if(data.enabled!==true||data.reauthenticationRequired!==true)throw new Error('invalid_confirmation');
+      enrollmentChallenge='';setupDetails.hidden=true;document.getElementById('enrollmentSecret').textContent='';document.getElementById('enrollmentUri').removeAttribute('href');enrollmentCode.value='';f.elements.otpCode.value='';
+      showError('MFA ist eingerichtet. Jetzt einen neuen Authenticator-Code eingeben und erneut „Anmelden“ wählen.');f.elements.otpCode.focus();
+    }catch(failure){if(!failure.status||failure.status>=500){uncertainConfirmation=true;confirmEnrollment.hidden=true;showError('Der Abschluss ist nicht eindeutig bestätigt. Prüfe zuerst die normale Anmeldung mit einem aktuellen Authenticator-Code.');}else showError(messages[failure.message]||'Faktorbestätigung abgelehnt. Einen aktuellen Code eingeben und erneut bestätigen.');}
+    finally{confirmEnrollment.disabled=false;}
+  });
   // Check for error param in URL
   const urlErr=new URLSearchParams(location.search).get('error');
-  if(urlErr){err.textContent=decodeURIComponent(urlErr);err.classList.add('visible');}
+  if(urlErr){showError(decodeURIComponent(urlErr));}
 </script>
 </body>
 </html>`);
@@ -563,6 +613,7 @@ async function authorizeUser(req, res, client, authenticatedUser, primaryMethod 
   const redirectUrl = new URL(redirect_uri);
   redirectUrl.searchParams.set('code', code);
   if (state) redirectUrl.searchParams.set('state', state);
+  if (req.get('x-od-auth-flow') === '1') return res.set('Cache-Control', 'no-store').json({ redirect: redirectUrl.toString() });
   res.redirect(redirectUrl.toString());
 }
 
