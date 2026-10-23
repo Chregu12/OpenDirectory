@@ -159,6 +159,10 @@ Der [Lizenzgruppenweg](../features/company-license-groups.md) benötigt aktuelle
 
 Unter Verzeichnisgruppen den Pool ausdrücklich verknüpfen. UI und die CLI-Mitgliedsbefehle starten den manuellen Abgleich mit ursprünglichem menschlichem Bearer/MFA. Für unbeaufsichtigten Betrieb [eine eigene App ausdrücklich freigeben](../features/company-license-automation.md), die Verknüpfung unter Automationen prüfen und einen Zeitplan speichern. Bei Timeout oder Teilfehler tatsächlichen Stand prüfen; frühere Benutzer können bereits gespeichert sein. Kein Produktivrollout oder Herstellerzugriff wird hier ausgeführt.
 
+## Dynamische und verschachtelte Gruppenregeln
+
+Für [dynamische und verschachtelte Gruppenregeln](../features/company-group-rules.md) zusätzlich Identity **050** und aktuelles Frontend/CLI ausrollen. Als tatsächlicher Firmeninhaber mit frischer MFA Konfiguration speichern, gespeicherte Vorschau prüfen und den kanonischen Mitgliederabgleich gesondert bestätigen. Konfiguration allein ändert keine Mitgliedschaft. Der bereits verfügbare Lizenz-App-Worker verarbeitet danach die tatsächlichen Gruppenquellen; ein unbeaufsichtigter Gruppenregel-Worker ist noch offen.
+
 ## App-Freigaben und dauerhafte Exportjobs
 
 Der [Firmen-Automationsweg](../features/company-automation.md) benötigt Identity **001–049**, Policy **001–029**, aktuellen OAuth-Code mit dem festen Scope `company.automation` und das aktuelle Frontend. Beide Dockerfiles kopieren die gemeinsamen Verträge; bestehender Root-Buildkontext und `/api/identity/*`-Proxy bleiben bestehen. Identity benötigt `POLICY_SERVICE_URL`, Policy `IDENTITY_SERVICE_URL` zum tatsächlichen anderen Service. Beide behalten die gültige Issuer-/JWKS-/Access-State-Konfiguration. Keine neue Runtime-Dependency oder Datenbank.

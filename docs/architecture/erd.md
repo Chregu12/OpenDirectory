@@ -872,6 +872,21 @@ erDiagram
 
 Die Zuweisungs-/Operations-/Event-/Outbox-Tabellen und V2-Workflowtabellen gehören Policy. Tenant/User-IDs bleiben kanonische Identity-IDs ohne Cross-DB-FKs. Eine effektive Seat-Zuordnung liegt weiterhin in `license_assignments`; mehrere manuelle/Blueprint-Quellen teilen diesen einen Sitz. Das Workflow-JSON hält ein vollständiges unveränderliches Quellen-/Binding-Manifest, einschliesslich app-freier Blueprints. Getrennte Datenbanktransaktionen von Identity und Policy werden nicht als atomar dargestellt. [Verhalten und Grenzen](../features/company-blueprint-assignments.md).
 
+## Gruppenregeln: Identity 050
+
+```mermaid
+erDiagram
+  identity_tenants ||--o{ identity_company_group_rules : actual_tenant_FK
+  identity_company_group_rules ||--|{ identity_company_group_rule_events : configuration_FK
+  identity_company_group_rule_events ||--|| identity_company_group_rule_outbox : original_event_FK
+  identity_company_group_rules ||--o{ identity_company_group_rule_effects : actual_rule_FK
+  identity_directory_group_events ||--o| identity_company_group_rule_effects : actual_event_PK_FK
+  identity_membership_origins ||--o{ identity_company_group_rule_effects : original_membership_FK
+  identity_company_group_rule_effects ||--|| identity_company_group_rule_effect_outbox : actual_effect_FK
+```
+
+Alle dargestellten Tabellen gehören Identity. Die Konfiguration speichert keine zweite Membership-Liste. Der aktuelle Gruppenbezug wird über die tatsächliche eigene kanonische Gruppe geprüft; ein FK auf deren löschbare Zeile würde die retained Historie verhindern. Untergruppen-/Ausnahme-UUIDs sind begrenzte, bei der Konfiguration geprüfte Referenzen in JSONB, keine hier behaupteten relationalen FKs. Originalmanifest, Event-/Pending-Fingerprints und physische Commit-Guards sichern den beschriebenen Schreibweg. Konfiguration und einzelne Membership-Effekte committen getrennt; die Ausführung ist derzeit manuell. [Modell und Grenzen](domain-model.md#gruppenregeln-identity-050), [UI/API/CLI](../features/company-group-rules.md).
+
 ## App-Lizenzabgleich: Identity 049 und Policy 029
 
 ```mermaid

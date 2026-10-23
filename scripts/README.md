@@ -4,6 +4,7 @@
 
 - `app create`, `app enable`, `app disable`, `app rotate`: use an authorized human administrator access token and the existing OAuth registry.
 - `automation enroll|approve|grants|queue|schedule|license-sync|jobs|history|result|revoke|worker`: explicit own-company app grants, persistent export jobs and [scheduled group license reconciliation](../docs/features/company-license-automation.md). [Setup and worker lifecycle](../docs/features/company-automation.md).
+- `group-rule get|configure|preview|sync|history`: explicit own-owner configuration and canonical reconciliation of [dynamic/nested groups](../docs/features/company-group-rules.md), preserving manual memberships and independent review. This command family requires the original human token/MFA; an unattended group-rule app handler remains open.
 - `check`: authenticate an app and confirm its own active identity.
 - `group create`, `group member add|remove`: ordinary groups and versioned memberships with the original authorized human token.
 - `license-group list|link|sync|unlink`: own pool links and bounded per-user allocation; see [license groups](../docs/features/company-license-groups.md). Membership commands reconcile linked pools for actual company owners. Exit 2 reports blocked users; exit 1 may follow committed earlier steps.

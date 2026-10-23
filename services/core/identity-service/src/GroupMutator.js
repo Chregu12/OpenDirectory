@@ -27,8 +27,8 @@ function groupFields(body){
 }
 
 class GroupMutator{
- constructor(database,{issuer=process.env.OIDC_ISSUER||'http://localhost:3001',revalidate=createTenantStateClient(),revalidateAccess,newOperationId=()=>crypto.randomUUID()}={}){
-  this.database=database;this.issuer=issuer;this.revalidate=revalidate;this.revalidateAccess=revalidateAccess;this.newOperationId=newOperationId;
+ constructor(database,{issuer=process.env.OIDC_ISSUER||'http://localhost:3001',revalidate=createTenantStateClient(),revalidateAccess,newOperationId=()=>crypto.randomUUID(),afterMutation=null}={}){
+  this.database=database;this.issuer=issuer;this.revalidate=revalidate;this.revalidateAccess=revalidateAccess;this.newOperationId=newOperationId;this.afterMutation=afterMutation;
  }
  async mutate(action,groupId,memberId,changes,expected,user,authorization){
   groupId=identifier(groupId);if(memberId!==null)memberId=identifier(memberId);validateGroupEtag(expected);
@@ -72,12 +72,19 @@ class GroupMutator{
    if(action==='update')await client.query('UPDATE groups SET name=$2,description=$3 WHERE id=$1',[groupId,proof.target.expectedValues.name,proof.target.expectedValues.description]);
    else if(action==='delete')await client.query('DELETE FROM groups WHERE id=$1',[groupId]);
    else if(action==='member-remove')await client.query('DELETE FROM group_members WHERE group_id=$1 AND membership_id=$2 AND user_id=$3',[groupId,member.id,memberId]);
-   else membershipReview=await new GroupMembershipReviews(bound,{revalidate:this.revalidateAccess}).add(groupId,memberId,user,authorization);
+   else membershipReview=await new GroupMembershipReviews(bound,{revalidate:this.revalidateAccess,validateAdd:async()=>{
+    const timeout=(await client.query("SELECT current_setting('statement_timeout') AS value")).rows[0].value;
+    const current=await new AuthorizationState({transaction:callback=>callback(client)}).state(user.iss,user.sub);
+    await client.query("SELECT set_config('statement_timeout',$1,true)",[timeout]);
+    if(!current.active||!sameContext(current.context,user.identity_authorization)||!sameTenantContext(current.tenant,tenant)||!acceptsRoleAuthentication(current.authentication,user))reject(401,'Original group operator authority changed');
+    await requireDirectoryPermissions(client,user,[permission]);
+   }}).add(groupId,memberId,user,authorization);
    await client.query('SELECT identity_directory_group_finish()');
    const receipt=await client.query(`SELECT id FROM identity_directory_group_events WHERE id=$1 AND tenant_id=$2 AND group_id=$3 AND action=$4
     AND scope_sha256=encode(sha256(convert_to($5::jsonb::text,'UTF8')),'hex')
     AND EXISTS(SELECT 1 FROM identity_directory_group_outbox outbox WHERE outbox.id=identity_directory_group_events.id AND outbox.tenant_id=identity_directory_group_events.tenant_id)`,[operationId,tenant.id,groupId,action,JSON.stringify(proof)]);
    if(receipt.rows.length!==1)reject(503,'Tenant-bound group mutation receipt unavailable');
+   if(this.afterMutation)await this.afterMutation(client,{operationId,action,proof});
    const result=action==='delete'?null:(await new DirectoryReader(bound,{issuer:this.issuer,revalidate:this.revalidate}).readGroups(client,tenant.id,groupId))[0];
    if(action!=='delete'&&!result)reject(503,'Group mutation readback unavailable');
    if(!sameTenantContext(tenant,await this.revalidate(authorization,user)))reject(401,'Tenant authority changed');

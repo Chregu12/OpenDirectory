@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createClient } from './lib/opendirectory-client.mjs';
 import { createGroupClient } from './lib/license-groups.mjs';
 import { createAutomationClient, runAutomationWorker } from './lib/company-automation.mjs';
+import { createGroupRuleClient } from './lib/company-group-rules.mjs';
 
 const usage = `OpenDirectory app accounts and API automation (Node.js 20+)
 
@@ -12,6 +13,10 @@ const usage = `OpenDirectory app accounts and API automation (Node.js 20+)
   node scripts/od.mjs app rotate CLIENT_ID
   node scripts/od.mjs group create "Name"
   node scripts/od.mjs group member add|remove GROUP_ID USER_ID
+  node scripts/od.mjs group-rule get|preview GROUP_ID
+  node scripts/od.mjs group-rule configure GROUP_ID rule.json
+  node scripts/od.mjs group-rule sync GROUP_ID "Reason (10–500 characters)"
+  node scripts/od.mjs group-rule history GROUP_ID [PAGE]
   node scripts/od.mjs license-group list [GROUP_ID]
   node scripts/od.mjs license-group link GROUP_ID POOL_ID "Reason (10–500 characters)"
   node scripts/od.mjs license-group sync RULE_ID "Reason (10–500 characters)"
@@ -50,11 +55,19 @@ try {
   let result;
   const groups = createGroupClient(client);
   const automation = createAutomationClient(client);
+  const groupRules = createGroupRuleClient(client);
   if (command === 'app' && action === 'create' && args.length >= 1 && args.length <= 2) result = await client.createApp(args[0], (args[1] || '').split(/\s+/).filter(Boolean));
   else if (command === 'app' && ['enable', 'disable'].includes(action) && args.length === 1) result = await client.enableApp(args[0], action === 'enable');
   else if (command === 'app' && action === 'rotate' && args.length === 1) result = await client.rotateApp(args[0]);
   else if (command === 'group' && action === 'create' && args.length === 1) result = await groups.create(args[0]);
   else if (command === 'group' && action === 'member' && args.length === 3) result = await groups.member(args[0], args[1], args[2]);
+  else if (command === 'group-rule' && ['get','preview'].includes(action) && args.length === 1) result = await groupRules[action](args[0]);
+  else if (command === 'group-rule' && action === 'configure' && args.length === 2) {
+    const file = await readFile(args[1]); if (file.length > 1048576) throw new Error('Group rule input exceeds one MiB'); let input;
+    try { input = JSON.parse(file.toString('utf8')); } catch { throw new Error('A valid group rule JSON object is required'); } result = await groupRules.configure(args[0], input);
+  }
+  else if (command === 'group-rule' && action === 'sync' && args.length === 2) { result = await groupRules.sync(...args); if (result.hasBlocked || result.requiresReview) process.exitCode = 2; }
+  else if (command === 'group-rule' && action === 'history' && args.length >= 1 && args.length <= 2) result = await groupRules.history(args[0], Number(args[1] || 1));
   else if (command === 'license-group' && action === 'list' && args.length <= 1) result = await groups.list(args[0]);
   else if (command === 'license-group' && action === 'link' && args.length === 3) result = await groups.linkPool(...args);
   else if (command === 'license-group' && action === 'sync' && args.length === 2) result = await groups.sync(...args);

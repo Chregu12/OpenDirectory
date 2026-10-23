@@ -46,6 +46,9 @@ const ROLE_PERMISSIONS = {
 };
 const ALL_PERMISSIONS = [...new Set([...Object.values(ROLE_PERMISSIONS).flat(), 'users.delete', 'identities.links.manage', 'organization.read', 'organization.manage', 'organization.delegations.manage'])];
 const ROUTES = [
+  ['GET', /^\/groups\/[a-f0-9-]{36}\/rule(?:\/(?:preview|history))?\/?$/, []],
+  ['PUT', /^\/groups\/[a-f0-9-]{36}\/rule\/?$/, []],
+  ['POST', /^\/groups\/[a-f0-9-]{36}\/rule\/sync\/?$/, []],
   ['GET', /^\/users\/[a-f0-9-]{36}\/company-offboarding-groups(?:\/history)?$/, []],
   ['POST', /^\/users\/[a-f0-9-]{36}\/company-offboarding-groups$/, []],
   ['GET', /^\/users\/[a-f0-9-]{36}\/company-offboarding-access(?:\/(?:capabilities|history))?$/, []],

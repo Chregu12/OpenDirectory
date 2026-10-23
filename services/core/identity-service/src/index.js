@@ -458,6 +458,7 @@ function groupMutationFields(req,res,empty=false){if(Object.keys(req.query).leng
 // ==================
 // Groups API
 // ==================
+app.use('/api/groups/:id/rule', require('./CompanyGroupRuleRoutes').companyGroupRuleRoutes(db));
 app.get('/api/groups', asyncRoute(async (req, res) => {
   res.set('Cache-Control','no-store').json(await directoryReader.groups(req.query,req.user,req.headers.authorization));
 }));

@@ -15,6 +15,7 @@ COPY packages/device-inventory-contract/ /packages/device-inventory-contract/
 COPY packages/company-license-contract/ /packages/company-license-contract/
 COPY packages/company-automation-contract.js /packages/company-automation-contract.js
 COPY packages/company-license-automation-contract.js /packages/company-license-automation-contract.js
+COPY packages/company-group-rule-contract.js /packages/company-group-rule-contract.js
 COPY packages/company-blueprint-contract/ /packages/company-blueprint-contract/
 COPY packages/company-blueprint-assignment-contract/ /packages/company-blueprint-assignment-contract/
 COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-contract.js

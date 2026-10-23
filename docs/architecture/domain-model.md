@@ -1,5 +1,15 @@
 # Implementiertes Teilmodell: Organisationsprofil
 
+## Gruppenregeln: Identity 050
+
+`identity_company_group_rules` hält je kanonischer Gruppe höchstens eine versionierte eigene Konfiguration mit typisierten Attributbedingungen, eigenen Untergruppen und Ausnahmen. Der vorhandene unveränderliche Tenant-Namespace bleibt die Gruppen-/Benutzerhoheit. Die Gruppen-ID hat bewusst keinen FK auf die löschbare `groups`-Zeile; die Konfigurationshistorie bleibt nach deren Retirement erhalten. Tenant-FKs und die tatsächliche Owner-Quelle werden geprüft.
+
+`identity_company_group_rule_events` hält jede ursprüngliche bestätigte Konfiguration und ihren vollständigen Ergebnisstand. Die zugehörige `identity_company_group_rule_outbox` bindet den SHA-256-Fingerprint der Originalzeile. `identity_company_group_rule_manifest` schützt die erwarteten Receiving-Funktionen. Fehlende oder abweichende Belege führen zur Ablehnung, nicht zu einer neuen leeren Historie.
+
+Mitglieder liegen ausschliesslich in den vorhandenen `group_members`. `identity_company_group_rule_effects` referenziert die wirkliche `identity_directory_group_events`-UUID und die ursprüngliche `identity_membership_origins`-UUID; `identity_company_group_rule_effect_outbox` ist der zwingende Pending-/Fingerprint-Beleg derselben Transaktion. Eine alte Membership-Inkarnation kann keine später manuell neu angelegte Verknüpfung zum Regelmitglied machen. Bestehende unabhängige Gruppenreviews bleiben erforderlich.
+
+Konfigurations- und einzelne Membership-Commits sind getrennt. Der derzeitige UI-/CLI-Abgleich ist ausdrücklich manuell; Attributänderung oder Regel-Deaktivierung entzieht bis zum nächsten Abgleich keine bestehende Membership. Unbeaufsichtigte Ausführung, unmittelbare Quellenpropagation und externe Ereignisse bleiben offen. [Vertrag](../features/company-group-rules.md), [ERD](erd.md#gruppenregeln-identity-050).
+
 
 ## Eigene Blueprint-Aggregate: Policy 025
 

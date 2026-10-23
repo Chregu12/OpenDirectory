@@ -7,6 +7,7 @@ import {directoryError,DirectoryAccess} from '@/lib/directoryUsers';
 import {ensureSession} from '@/lib/auth';
 import {DirectoryConfirmation} from './UserDetailPanel';
 import CompanyLicenseGroupsPanel from './CompanyLicenseGroupsPanel';
+import CompanyGroupRulesPanel from './CompanyGroupRulesPanel';
 import {companyLicenseGroups} from '@/lib/companyLicenseGroups';
 
 type Editor='create'|'edit'|'member'|null;
@@ -69,7 +70,7 @@ export default function UserGroupsView(){
    <button className={control} disabled={loading||busy||!!editor||!!confirmation} onClick={()=>void load()}>Gruppen neu laden</button>
    {can('groups.create')&&<button className={control} disabled={!canCreate||loading||busy} onClick={()=>open('create')}>Gruppe erstellen</button>}
   </div></header>
-  <p className="text-sm">Unterstützt werden flache kanonische Verzeichnisgruppen. Verschachtelte oder dynamische Gruppen und AD-Verteiler werden hier nicht vorgetäuscht. Verknüpfung bedeutet nicht automatisch wirksamen App- oder Lizenzzugriff.</p>
+  <p className="text-sm">Kanonische Verzeichnisgruppen und ausdrücklich konfigurierte Attribut-/Untergruppenregeln. Verknüpfung bedeutet nicht automatisch wirksamen App- oder Lizenzzugriff.</p>
   {!loading&&bound&&!canMutate&&(can('groups.update')||can('groups.delete')||can('groups.members.manage'))&&<p role="status" className="rounded border border-amber-500/40 p-3">Mandantengebundene Änderungen an bestehenden Gruppen sind auf diesem Server noch nicht bestätigt. Die Schreibaktionen bleiben gesperrt.</p>}
   {loading&&<p role="status">Gruppen werden geprüft …</p>}{error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {!loading&&access&&!can('groups.read')&&<p>Keine Berechtigung zum Lesen der Gruppenliste.</p>}
@@ -82,6 +83,7 @@ export default function UserGroupsView(){
     <h3 className="font-semibold">Verknüpfte Benutzer-IDs</h3>{!selected.members.length?<p>Keine Benutzer verknüpft.</p>:<ul className="space-y-2">{selected.members.map(userId=><li key={userId} className="flex flex-wrap items-center justify-between gap-2"><span className="break-all">{userId}</span>{can('groups.members.manage')&&<button className={control} disabled={!canMutate||busy} aria-label={'Verknüpfung '+userId+' entfernen'} onClick={()=>{setOperationError('');setConfirmation({kind:'remove',group:selected,userId});}}>Verknüpfung entfernen</button>}</li>)}</ul>}
     <p className="text-sm">Angezeigt werden kanonische Verknüpfungen, keine behaupteten effektiven Berechtigungen. Unabhängige Freigaben und Fristen findest du unter <a className="underline" href="/roles">Rollen &amp; Rechte</a>. Benutzerprofile werden für diese Ansicht nicht abgerufen.</p>
     {access?.companyOwner && access.userId && <CompanyLicenseGroupsPanel group={selected} actorUserId={access.userId}/>}
+    {access?.companyOwner && access.userId && <CompanyGroupRulesPanel group={selected} groups={groups} actorUserId={access.userId} onChanged={update}/>}
    </article>:<p>Wähle eine kanonische Gruppe.</p>}
   </div>}
   {!loading&&!can('groups.read')&&selected&&<p role="status">Bestätigte Gruppe: {selected.name} · {selected.id}</p>}

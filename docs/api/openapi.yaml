@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.22.0",
+    "version": "1.23.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, employee credential provisioning, external legal verification or production SaaS acceptance."
   },
   "security": [
@@ -32780,6 +32780,404 @@
           }
         }
       }
+    },
+    "/api/groups/{id}/rule": {
+      "get": {
+        "operationId": "readOwnCompanyGroupRule",
+        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended rule execution and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual current own state or retained original receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyGroupRulePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          }
+        }
+      },
+      "put": {
+        "operationId": "configureOwnCompanyGroupRule",
+        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended rule execution and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact captured group-rule UUID/revision, or absent for initial creation."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual current own state or retained original receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyGroupRuleReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "draft",
+                  "enabled",
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "draft": {
+                    "$ref": "#/components/schemas/CompanyGroupRuleDraft"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/{id}/rule/preview": {
+      "get": {
+        "operationId": "previewOwnCompanyGroupRule",
+        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended rule execution and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual current own state or retained original receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyGroupRulePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          }
+        }
+      }
+    },
+    "/api/groups/{id}/rule/sync": {
+      "post": {
+        "operationId": "reconcileOwnCompanyGroupRule",
+        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended rule execution and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects. At most 25 sorted captured targets per page and 10000 overall. Keep the exact observation and follow nextCursor. Direct manual memberships are preserved. Only actual rule-created membership UUIDs can be removed. A changed rule version or recipient generation requires removal/reissue; no silent review renewal. No atomic transaction over all members and no automatic uncertain write retry.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual current own state or retained original receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyGroupRuleSync"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "observation",
+                  "cursor",
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "observation": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "cursor": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/{id}/rule/history": {
+      "get": {
+        "operationId": "readOwnCompanyGroupRuleHistory",
+        "description": "Actual own-company owner and original canonical human bearer with fresh verified MFA at most 300 seconds. No tenant selectors, API keys, global role shortcut or machine impersonation. Typed literal case-insensitive AND predicates; OR effective canonical child groups; exclusions apply only to the rule source. Edges must be own, acyclic and at most 16 links deep. One standing versioned configuration per own canonical group. Saving configures; explicit sync creates real canonical memberships with original GroupMutator evidence and pending fingerprints. Independent initial group reviews remain pending and nested parents use only effective child members. Unattended rule execution and event dispatch remain open. Local group changes do not confirm manufacturer licenses, mailboxes or device effects.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999999,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual current own state or retained original receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyGroupRuleHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Earlier confirmed member transactions remain committed; inspect current own state and retained history before another explicit attempt."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -44934,6 +45332,629 @@
                 "createdAt": {
                   "type": "string",
                   "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CompanyGroupRuleDraft": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dynamic",
+          "childGroupIds",
+          "excludedUserIds"
+        ],
+        "properties": {
+          "dynamic": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "all"
+                ],
+                "properties": {
+                  "all": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "attribute",
+                        "operator",
+                        "value"
+                      ],
+                      "properties": {
+                        "attribute": {
+                          "enum": [
+                            "department",
+                            "title",
+                            "email",
+                            "username",
+                            "displayName"
+                          ]
+                        },
+                        "operator": {
+                          "enum": [
+                            "equals",
+                            "startsWith",
+                            "endsWith"
+                          ]
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        }
+                      }
+                    },
+                    "minItems": 1,
+                    "uniqueItems": true
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "childGroupIds": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            },
+            "uniqueItems": true
+          },
+          "excludedUserIds": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            },
+            "uniqueItems": true
+          }
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "dynamic": {
+                "type": "object"
+              }
+            }
+          },
+          {
+            "properties": {
+              "childGroupIds": {
+                "minItems": 1
+              }
+            }
+          }
+        ]
+      },
+      "CompanyGroupRule": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "groupId",
+          "tenantId",
+          "revision",
+          "enabled",
+          "draft",
+          "createdBy",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/CompanyGroupRuleDraft"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CompanyGroupRulePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyGroupRuleProtocol",
+          "actorUserId",
+          "tenantId",
+          "groupId",
+          "rule",
+          "etag",
+          "executionMode"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyGroupRuleProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CompanyGroupRule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "etag": {
+            "type": "string"
+          },
+          "executionMode": {
+            "const": "manual"
+          }
+        }
+      },
+      "CompanyGroupRuleReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyGroupRuleProtocol",
+          "actorUserId",
+          "tenantId",
+          "outcome",
+          "rule"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyGroupRuleProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "outcome": {
+            "enum": [
+              "applied",
+              "already_applied"
+            ]
+          },
+          "rule": {
+            "$ref": "#/components/schemas/CompanyGroupRule"
+          }
+        }
+      },
+      "CompanyGroupRulePreview": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyGroupRuleProtocol",
+          "actorUserId",
+          "tenantId",
+          "groupId",
+          "groupName",
+          "groupRevision",
+          "ruleRevision",
+          "enabled",
+          "observation",
+          "executionMode",
+          "desired",
+          "existing",
+          "additions"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyGroupRuleProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "groupName": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "groupRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "ruleRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "observation": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "executionMode": {
+            "const": "manual"
+          },
+          "desired": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "userId",
+                "eligibilityRevision"
+              ],
+              "properties": {
+                "userId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "eligibilityRevision": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,18}$"
+                }
+              }
+            }
+          },
+          "existing": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "userId",
+                "membershipId",
+                "managed"
+              ],
+              "properties": {
+                "userId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "membershipId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "managed": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "additions": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          }
+        }
+      },
+      "CompanyGroupRuleSync": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyGroupRuleProtocol",
+          "actorUserId",
+          "tenantId",
+          "groupId",
+          "ruleRevision",
+          "observation",
+          "results",
+          "nextCursor",
+          "hasBlocked"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyGroupRuleProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "ruleRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "observation": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "results": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "userId",
+                    "status",
+                    "code"
+                  ],
+                  "properties": {
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "status": {
+                      "enum": [
+                        "added",
+                        "retained",
+                        "manual-retained",
+                        "removed",
+                        "awaiting-review"
+                      ]
+                    },
+                    "code": {
+                      "type": "null"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "userId",
+                    "status",
+                    "code"
+                  ],
+                  "properties": {
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "status": {
+                      "const": "blocked"
+                    },
+                    "code": {
+                      "enum": [
+                        403,
+                        404,
+                        409,
+                        428
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "nextCursor": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasBlocked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CompanyGroupRuleHistory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyGroupRuleProtocol",
+          "actorUserId",
+          "tenantId",
+          "groupId",
+          "page",
+          "limit",
+          "total",
+          "events"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyGroupRuleProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999
+          },
+          "limit": {
+            "const": 25
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "kind",
+                "action",
+                "userId",
+                "membershipId",
+                "ruleRevision",
+                "actorUserId",
+                "reason",
+                "createdAt",
+                "deliveryStatus"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "kind": {
+                  "enum": [
+                    "configuration",
+                    "membership"
+                  ]
+                },
+                "action": {
+                  "enum": [
+                    "configured",
+                    "member-add",
+                    "member-remove"
+                  ]
+                },
+                "userId": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "membershipId": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ruleRevision": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,18}$"
+                },
+                "actorUserId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 10,
+                  "maxLength": 500
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "deliveryStatus": {
+                  "const": "pending"
                 }
               }
             }

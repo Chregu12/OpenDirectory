@@ -156,7 +156,7 @@ before(async () => {
     const chunks = []; for await (const chunk of request) chunks.push(chunk);
     const credentials = JSON.parse(Buffer.concat(chunks)); credentialAttempts++;
     response.setHeader('Content-Type', 'application/json');
-    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner','company-license-automation-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
+    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner','company-license-automation-owner','company-group-rules-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
       response.statusCode = 401; return response.end('{"success":false}');
     }
     const actor = actors.get(credentials.username);
@@ -2951,4 +2951,41 @@ test('real scheduled app worker assigns and returns a group license through OAut
     for (const line of lines) { assert.equal(line.principal.kind, 'application'); assert.equal(line.principal.clientId, client.clientId); assert.equal(Object.hasOwn(line.principal, 'userId'), false); }
     assert.equal(workerOutput.includes(client.clientSecret), false); assert.equal(workerOutput.includes(owner.body.access_token), false);
   } finally { global.fetch = originalFetch; await stop(worker); await adminContext.close(); await ownerContext.close(); }
+});
+
+test('real roleless Owner configures dynamic and nested groups in the UI and reconciles actual membership sources and history', { timeout: 240000 }, async () => {
+ const username='company-group-rules-owner'; const company=await require('../../../../../scripts/lib/company-owner-fixture.cjs').activeCompany(identityDb,identitySchema,logicalIssuer,{subject:username+'-subject',username});
+ const activeContext=await context();const page=await activeContext.newPage();
+ try {
+  await reviewFirstFactor(page,username);await login(page,username);const owner=await mediated(page);assert.equal(owner.status,200);
+  const claims=JSON.parse(Buffer.from(owner.body.access_token.split('.')[1],'base64url'));assert.deepEqual(claims.roles,[]);
+  const create=async name=>{const response=await fetch(identityBase+'/api/groups',{method:'POST',headers:{Authorization:'Bearer '+owner.body.access_token,'Content-Type':'application/json'},body:JSON.stringify({name})});assert.equal(response.status,201,await response.clone().text());return response.json();};
+  const child=await create('Actual dynamic browser child');const parent=await create('Actual nested browser parent');
+  await page.setViewportSize({width:1440,height:1100});await page.goto(origin+'/usergroups');await page.getByRole('button',{name:'Gruppe '+child.name,exact:true}).click();
+  const panel=page.getByRole('region',{name:'Dynamische und verschachtelte Gruppenregeln',exact:true});
+  const save=async group=>{
+   await panel.getByRole('button',{name:'Gruppenregel speichern',exact:true}).click();const confirmation=panel.getByRole('dialog',{name:'Gruppenregel bestätigen',exact:true});
+   const pending=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/groups/'+group.id+'/rule'&&response.request().method()==='PUT');await confirmation.getByRole('button',{name:'Verbindlich bestätigen',exact:true}).click();const response=await pending;assert.equal(response.status(),200,await response.text());
+   await panel.getByText('Regelkonfiguration gespeichert. Vorschau prüfen und Mitglieder abgleichen.',{exact:true}).waitFor();
+  };
+  const reconcile=async(group,count)=>{
+   await panel.getByRole('button',{name:'Gespeicherte Regelvorschau prüfen',exact:true}).click();await panel.getByText(new RegExp('^'+count+' gewünschte Mitglieder')).waitFor();
+   await panel.getByRole('button',{name:'Regelmitglieder abgleichen',exact:true}).click();const confirmation=panel.getByRole('dialog',{name:'Gruppenabgleich bestätigen',exact:true});
+   const pending=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/groups/'+group.id+'/rule/sync'&&response.request().method()==='POST');await confirmation.getByRole('button',{name:'Verbindlich bestätigen',exact:true}).click();const response=await pending;assert.equal(response.status(),200,await response.text());
+   await panel.getByRole('status').filter({hasText:'Abgleich bestätigt.'}).waitFor();return response.json();
+  };
+  await panel.getByLabel('Attributbedingungen verwenden',{exact:true}).check();await panel.getByLabel('Attribut 1',{exact:true}).selectOption('username');await panel.getByLabel('Bedingungswert 1',{exact:true}).fill(username);
+  await panel.getByLabel('Gruppenregel begründen',{exact:true}).fill('Actual own canonical username predicate with explicit membership reconciliation');await save(child);
+  assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[child.id])).rows[0].count,0);
+  assert.equal((await reconcile(child,1)).results[0].status,'added');
+  await page.getByRole('button',{name:'Gruppe '+parent.name,exact:true}).click();await panel.getByLabel('Untergruppen auswählen',{exact:true}).selectOption([child.id]);
+  await panel.getByLabel('Gruppenregel begründen',{exact:true}).fill('Actual own nested child group with preserved canonical membership review');await save(parent);assert.equal((await reconcile(parent,1)).results[0].status,'added');
+  for(const group of[child,parent])assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1 AND user_id=$2',[group.id,company.receipt.administratorId])).rows[0].count,1);
+  await page.getByRole('button',{name:'Gruppe '+child.name,exact:true}).click();await panel.getByLabel('Regel aktiv',{exact:true}).uncheck();await panel.getByLabel('Gruppenregel begründen',{exact:true}).fill('Stop only this dynamic origin and retain all unrelated manual sources');await save(child);assert.equal((await reconcile(child,0)).results[0].status,'removed');
+  await page.getByRole('button',{name:'Gruppe '+parent.name,exact:true}).click();await panel.getByLabel('Gruppenregel begründen',{exact:true}).fill('Return the nested origin after the actual child source was removed');assert.equal((await reconcile(parent,0)).results[0].status,'removed');
+  for(const group of[child,parent])assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM group_members WHERE group_id=$1',[group.id])).rows[0].count,0);
+  await panel.getByRole('button',{name:'Gruppenregel-Historie',exact:true}).click();const history=panel.getByRole('complementary',{name:'Gruppenregel-Historie',exact:true});await history.getByText(/Regelmitglied hinzugefügt/).waitFor();await history.getByText(/Regelmitglied entfernt/).waitFor();
+  assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_effects WHERE group_id=ANY($1::uuid[])',[[child.id,parent.id]])).rows[0].count,4);
+  await page.screenshot({path:'/tmp/od-company-group-rules-browser.png',fullPage:true});
+ } finally {await activeContext.close();}
 });

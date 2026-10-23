@@ -17,7 +17,7 @@ function reviewError(error) {
   if (['40001', '23505'].includes(error.code)) fail(412, 'company_review_changed');
   if (error.code === '23503') fail(404, 'registration_not_found');
   if (error.code === '23514') fail(400, 'invalid_company_review');
-  if (error.code === '42501') fail(503, 'company_review_unavailable');
+  if (['42501', '55006'].includes(error.code)) fail(503, 'company_review_unavailable');
   throw error;
 }
 class CompanyRegistrationReviews {

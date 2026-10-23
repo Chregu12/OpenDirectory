@@ -6,6 +6,8 @@ OpenDirectory is a self-hosted business-management platform in development. Its 
 
 Implemented slices include company profiles and directory, groups and organizational units, device inventory, immutable blueprints, and source-aware application licensing. See the [implementation status](docs/implementation-status.md) for what works and what remains open.
 
+Own company owners can configure [dynamic and nested group rules](docs/features/company-group-rules.md), preview real canonical results and explicitly reconcile memberships through the UI or CLI. Existing manual origins and independent reviews remain distinct. Unattended group-rule execution is still pending.
+
 **Not production-ready:** OpenDirectory is not yet a complete SaaS platform or Apple Business replacement. Device inventory does not mean MDM enrollment or remote device control. External integrations and unfinished workflows are clearly marked in the documentation.
 
 ## Get started
