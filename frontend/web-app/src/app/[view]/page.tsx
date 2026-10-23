@@ -9,6 +9,7 @@ import UnifiLayout from '@/components/layout/UnifiLayout';
 import CompanyRegistrationReviewsView from '@/components/views/CompanyRegistrationReviewsView';
 import CompanyOffboardingAccessView from '@/components/views/CompanyOffboardingAccessView';
 import DeviceReturnsView from '@/components/views/DeviceReturnsView';
+import CompanyAppsView from '@/components/views/CompanyAppsView';
 
 // ─── Views ────────────────────────────────────────────────────────────────────
 import DashboardView from '@/components/views/DashboardView';
@@ -115,7 +116,7 @@ const VALID_VIEWS = new Set([
   // Advanced infrastructure views
   'trusts', 'kerberos', 'replication',
   // Automation
-  'automation',
+  'automation', 'company-apps',
   // Graph Explorer + Policy Simulator
   'graph', 'simulator',
   // ABM×UniFi new views
@@ -270,6 +271,7 @@ export default function ViewPage() {
         case 'printers':          return <PrintersView />;
         case 'policies':          return <PolicyView />;
         case 'automation':        return <AutomationView />;
+        case 'company-apps':      return <CompanyAppsView />;
         case 'identity':          return <IdentityProviderView />;
         case 'enrollment':        return <EnrollmentHubView />;
         case 'permissions':       return <PermissionsView />;

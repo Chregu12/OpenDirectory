@@ -62,6 +62,12 @@ class IdentityAuthority {
   }
 
   async context(subject) { return (await this.state(subject)).context; }
+  async companyAppTenant(clientId,tenant){
+    const contract=require('../../../../packages/company-app-contract');
+    if(this.demo||!validTenantContext(tenant))throw new IdentityAuthorityError(503,'company_app_tenant_authority_unavailable');
+    const value=await this.request(contract.TENANT_PATH,contract.TENANT_PURPOSE,'identity.company-app-tenant.read',{clientId,tenant},{app_client_id:clientId,app_tenant:tenant});
+    if(!value||Object.keys(value).length!==5||value.schemaVersion!==1||value.companyAppProtocol!==1||value.clientId!==clientId||!require('../../../../packages/tenant-authorization-contract').sameTenantContext(value.tenant,tenant)||typeof value.active!=='boolean')throw new IdentityAuthorityError(503,'company_app_tenant_authority_unavailable');return value.active;
+  }
   async companyConsole(clientId, userId) {
     if (!validUuid(userId) || typeof clientId !== 'string' || !/^[A-Za-z0-9._~-]{1,255}$/.test(clientId)) throw new IdentityAuthorityError(400, 'invalid_company_console_target');
     const value = await this.request(COMPANY_CONSOLE_PATH, COMPANY_CONSOLE_PURPOSE, 'identity.company-console.read', { clientId, userId }, { console_client_id: clientId, console_user_id: userId });

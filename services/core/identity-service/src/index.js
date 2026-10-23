@@ -95,6 +95,9 @@ app.post('/internal/identity/application-target', authorityLimits.ingress, expre
   try { res.json(await authorizationState.target(req.body.targetType, req.body.targetId, req.body.actorUserId)); }
   catch { res.status(503).json({ error: 'identity_authority_unavailable' }); }
 }));
+app.post('/internal/identity/company-app-tenant',authorityLimits.ingress,express.json({limit:'4kb'}),authorizationRequest({companyAppTenant:true}),authorityLimits.verified,asyncRoute(async(req,res)=>{
+  res.set('Cache-Control','no-store').json(await authorizationState.companyAppTenant(req.body.clientId,req.body.tenant));
+}));
 const automationLimits=require('../../../../packages/company-automation-admission').automationAdmission(rateLimit,{issuer:process.env.OIDC_ISSUER||'http://localhost:3001',paths:['/api/identity/automation/run','/api/identity/automation/watch-source','/api/identity/automation/license-source']});
 app.use(automationLimits.ingress);
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1000, skip:automationLimits.matches }));
@@ -136,6 +139,11 @@ app.get('/api/identity/company-license-groups/:id/snapshot', asyncRoute(async (r
   const snapshot = await new GroupSnapshotStore(snapshotDatabase(req, 'groups.read', { kind: 'group', write: true, companyGroup: true })).snapshot(req.params.id, { issuer: req.user.iss, subject: req.user.sub });
   await companyLicenseAuthority.read(req.user, req.headers.authorization);
   res.json(snapshot);
+}));
+app.get('/api/identity/company-apps',asyncRoute(async(req,res)=>{
+  res.set('Cache-Control','no-store');
+  if(req.method!=='GET'||Object.keys(req.query).length||req.headers['x-api-key']!==undefined||Array.isArray(req.body)||Object.keys(req.body||{}).length||Number(req.headers['content-length']||0)||req.headers['transfer-encoding'])return res.status(400).json({error:'exact_company_app_source_required'});
+  res.json(await new(require('./CompanyAppAuthority').CompanyAppAuthority)(db).read(req.user,req.headers.authorization));
 }));
 app.use('/api/identity/automation', require('./CompanyAutomationRoutes').companyAutomationRoutes(db));
 app.use('/api', requireIdentityAccess);

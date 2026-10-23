@@ -4,6 +4,7 @@ import { createClient } from './lib/opendirectory-client.mjs';
 import { createGroupClient } from './lib/license-groups.mjs';
 import { createAutomationClient, runAutomationWorker } from './lib/company-automation.mjs';
 import { createGroupRuleClient } from './lib/company-group-rules.mjs';
+import { createCompanyAppClient } from './lib/company-apps.mjs';
 
 const usage = `OpenDirectory app accounts and API automation (Node.js 20+)
 
@@ -11,6 +12,13 @@ const usage = `OpenDirectory app accounts and API automation (Node.js 20+)
   node scripts/od.mjs app enable CLIENT_ID
   node scripts/od.mjs app disable CLIENT_ID
   node scripts/od.mjs app rotate CLIENT_ID
+  node scripts/od.mjs company-app list [PAGE] [active|deleted]
+  node scripts/od.mjs company-app create REQUEST_UUID "Name" "Reason" [none|company-automation]
+  node scripts/od.mjs company-app get CLIENT_ID
+  node scripts/od.mjs company-app enable|disable|rotate|delete CLIENT_ID "Reason"
+  node scripts/od.mjs company-app rename CLIENT_ID "Name" "Reason"
+  node scripts/od.mjs company-app purpose CLIENT_ID none|company-automation "Reason"
+  node scripts/od.mjs company-app history CLIENT_ID [PAGE]
   node scripts/od.mjs group create "Name"
   node scripts/od.mjs group member add|remove GROUP_ID USER_ID
   node scripts/od.mjs group-rule get|preview GROUP_ID
@@ -59,9 +67,17 @@ try {
   const groups = createGroupClient(client);
   const automation = createAutomationClient(client);
   const groupRules = createGroupRuleClient(client);
+  const companyApps = createCompanyAppClient(client);
   if (command === 'app' && action === 'create' && args.length >= 1 && args.length <= 2) result = await client.createApp(args[0], (args[1] || '').split(/\s+/).filter(Boolean));
   else if (command === 'app' && ['enable', 'disable'].includes(action) && args.length === 1) result = await client.enableApp(args[0], action === 'enable');
   else if (command === 'app' && action === 'rotate' && args.length === 1) result = await client.rotateApp(args[0]);
+  else if(command==='company-app'&&action==='list'&&args.length<=2)result=await companyApps.list(Number(args[0]||1),args[1]||'active');
+  else if(command==='company-app'&&action==='create'&&args.length>=3&&args.length<=4)result=await companyApps.create(...args);
+  else if(command==='company-app'&&action==='get'&&args.length===1)result=await companyApps.get(args[0]);
+  else if(command==='company-app'&&['enable','disable'].includes(action)&&args.length===2)result=await companyApps.update(args[0],{enabled:action==='enable'},args[1]);
+  else if(command==='company-app'&&['rotate','delete'].includes(action)&&args.length===2)result=await companyApps[action==='rotate'?'rotate':'remove'](...args);
+  else if(command==='company-app'&&['rename','purpose'].includes(action)&&args.length===3)result=await companyApps.update(args[0],{[action==='rename'?'name':'purpose']:args[1]},args[2]);
+  else if(command==='company-app'&&action==='history'&&args.length>=1&&args.length<=2)result=await companyApps.history(args[0],Number(args[1]||1));
   else if (command === 'group' && action === 'create' && args.length === 1) result = await groups.create(args[0]);
   else if (command === 'group' && action === 'member' && args.length === 3) result = await groups.member(args[0], args[1], args[2]);
   else if (command === 'group-rule' && ['get','preview'].includes(action) && args.length === 1) result = await groupRules[action](args[0]);

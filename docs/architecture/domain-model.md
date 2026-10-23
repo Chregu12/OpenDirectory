@@ -1,5 +1,13 @@
 # Implementiertes Teilmodell: Organisationsprofil
 
+## Firmen-App-Konten: OAuth 014 und Identity 054
+
+Die vorhandenen `oauth_clients` halten `company_tenant` als ursprüngliche eigene Tenant-ID samt bestätigter Version/Generation, `company_request` als unveränderliche Create-Absicht und `company_event_id` als tatsächlichen FK auf das vorhandene Client-Audit. Die Tenant-ID kann nicht wechseln; Version/Generation werden nur bei ausdrücklich autorisierter Bearbeitung erneuert. Globale NULL-Clients werden nicht adoptiert. Dieselbe kanonische Revision und Secret-Hashverwaltung gelten für alle Prozesse; es gibt keine zweite Clientdatenbank.
+
+Das bestehende `oauth_client_audit` erhält für Firmenereignisse eine eindeutige Event-UUID und physische Transaktion. Jeder Snapshot enthält den tatsächlichen Clientstand ohne Secret/Hash, ursprüngliche Identity-Hoheit und Grund. `oauth_company_app_outbox.id` referenziert genau diese UUID und hält den SHA-256-Fingerprint desselben Auditdatensatzes als zwingenden Pending-Beleg. Ein Manifest prüft Originalfunktionen und Trigger; fehlende Belege, abgelaufene physische Frist oder unzulässige Namespace-/Scopeänderung verhindern den Commit. Create-Recovery liest nur das ursprüngliche Konto, nie ein früheres Secret.
+
+Identity speichert die originale `company_tenant`-Bindung am bestehenden `identity_automation_enrollments`. Eine Owner-Freigabe muss exakt denselben tatsächlichen Tenantstand verwenden. Maschinen erhalten keine menschliche Identität: Ihr JWT nennt nur die tatsächliche eigene Appbindung, die OAuth am originalen Register und aktuellen Identity-Tenant prüft. Private Issuer-Abfragen sind eng signierte Read-only-Workloads, keine Cross-DB-FKs oder gemeinsame Transaktion. [API, UI, CLI und Rollout](../features/company-apps.md).
+
 ## Gruppenregeln: Identity 050
 
 `identity_company_group_rules` hält je kanonischer Gruppe höchstens eine versionierte eigene Konfiguration mit typisierten Attributbedingungen, eigenen Untergruppen und Ausnahmen. Der vorhandene unveränderliche Tenant-Namespace bleibt die Gruppen-/Benutzerhoheit. Die Gruppen-ID hat bewusst keinen FK auf die löschbare `groups`-Zeile; die Konfigurationshistorie bleibt nach deren Retirement erhalten. Tenant-FKs und die tatsächliche Owner-Quelle werden geprüft.

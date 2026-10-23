@@ -934,3 +934,31 @@ erDiagram
 ```
 
 Beide vorhandenen Tabellen gehören Identity; keine neue Tabelle oder Cross-DB-Relation. Der letzte tatsächliche Änderungsjob und sein Quellencheckpoint werden gemeinsam mit ursprünglichen Events/Pending-Outbox gespeichert. Nur aktive Änderungsbeobachtungen haben einen eindeutigen `(grant_id,action,rule_id)`-Index. Die darin enthaltene lokale Policy-Poolbeobachtung ist separat live geprüfte fremde Hoheit, kein FK auf den Pool. [Modell](domain-model.md#quellenabhängige-app-jobs-identity-053), [Ablauf und Grenzen](../features/company-automation-changes.md).
+
+## Eigene Firmen-Apps: OAuth 014 und Identity 054
+
+```mermaid
+erDiagram
+  oauth_clients ||--o{ oauth_client_audit : actual_client_id_FK
+  oauth_client_audit o|--o| oauth_clients : optional_current_company_event_FK
+  oauth_client_audit ||--o| oauth_company_app_outbox : unique_company_event_id_FK
+  oauth_clients {
+    jsonb company_tenant_nullable
+    jsonb company_request_nullable_immutable
+    uuid company_event_id_nullable_FK
+  }
+  oauth_client_audit {
+    uuid company_event_id_nullable_unique
+    bigint company_transaction_nullable
+  }
+  oauth_company_app_outbox {
+    uuid id_PK_FK
+    text fingerprint
+    text status_pending
+  }
+  identity_automation_enrollments {
+    jsonb company_tenant_nullable_immutable
+  }
+```
+
+Die drei OAuth-Tabellen gehören derselben tatsächlichen Clientdatenbank; das Manifest prüft Funktionen/Trigger. Globale NULL-Clients und deren Audit bleiben bestehen. Die Tenantbindung und der ursprüngliche Auftrag sind keine zweite Client-/Secret-Datenbank. Die Identity-Anmeldung speichert eine separat live geprüfte fremde Appbindung, keinen Cross-DB-FK. Ein Firmen-Grant darf nur für deren Originaltenant entstehen. [Teilmodell](domain-model.md#firmen-app-konten-oauth-014-und-identity-054), [ausführbarer Weg und Grenzen](../features/company-apps.md).

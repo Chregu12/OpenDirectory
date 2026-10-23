@@ -4,6 +4,7 @@ const { randomUUID, randomBytes } = require('node:crypto');
 const { hashSecret, secretMatches } = require('./clientSecrets');
 const { validRevision, validContext } = require('../../../../packages/identity-authorization-contract');
 const { freshMfa, acceptsAuthentication } = require('./applicationAuthentication');
+const {validTenantContext,sameTenantContext}=require('../../../../packages/tenant-authorization-contract');
 const GRANTS = Object.freeze(['authorization_code', 'refresh_token', 'client_credentials', 'urn:ietf:params:oauth:grant-type:device_code']);
 const SAFE_SCOPES = Object.freeze(['openid', 'profile', 'email', 'groups', 'offline_access', 'sessions.self.read', 'sessions.self.revoke']);
 const PERMISSIONS = Object.freeze(['applications.read', 'applications.create', 'applications.update', 'applications.delete', 'applications.credentials.rotate']);
@@ -53,18 +54,26 @@ function mapRow(row) {
   const client = { clientId: row.id, name: row.name, clientSecretHash: row.secret_hash, publicClient: row.token_endpoint_auth_method === 'none',
     redirectUris: row.redirect_uris, grantTypes: row.grants, scopes: row.scopes, version: String(row.revision), enabled: row.enabled,
     mfaRequired: row.mfa_required, mfaMaxAgeSeconds: row.mfa_max_age_seconds,
-    deletedAt: row.deleted_at ? new Date(row.deleted_at).toISOString() : null, createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString() };
+    deletedAt: row.deleted_at ? new Date(row.deleted_at).toISOString() : null, createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(),
+    ...(row.company_tenant?{companyTenant:row.company_tenant,companyRequest:row.company_request,companyEvent:row.company_event_id}:{}) };
   if (!validClient(client) || !['none', 'client_secret_post'].includes(row.token_endpoint_auth_method)) fail(503, 'invalid_client_record');
+  if(row.company_tenant&&(!validTenantContext(row.company_tenant)||row.company_valid!==true))fail(503,'company_app_receipt_unavailable');
   return client;
 }
 function repository(connection) {
   return {
-    get: async (id, lock = false) => mapRow((await connection.query('SELECT * FROM oauth_clients WHERE id=$1' + (lock ? ' FOR UPDATE' : ''), [id])).rows[0]),
-    list: async (limit = 101) => (await connection.query('SELECT * FROM oauth_clients WHERE deleted_at IS NULL ORDER BY created_at,id LIMIT $1', [limit])).rows.map(mapRow),
-    insert: client => connection.query(`INSERT INTO oauth_clients(id,name,secret_hash,redirect_uris,grants,scopes,token_endpoint_auth_method,enabled,mfa_required,mfa_max_age_seconds)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [client.clientId, client.name, client.clientSecretHash, JSON.stringify(client.redirectUris), JSON.stringify(client.grantTypes), JSON.stringify(client.scopes), client.publicClient ? 'none' : 'client_secret_post', client.enabled, client.mfaRequired, client.mfaMaxAgeSeconds]),
-    update: client => connection.query(`UPDATE oauth_clients SET name=$2,secret_hash=$3,redirect_uris=$4,grants=$5,scopes=$6,enabled=$7,revision=$8,deleted_at=$9,mfa_required=$10,mfa_max_age_seconds=$11 WHERE id=$1`,
-      [client.clientId, client.name, client.clientSecretHash, JSON.stringify(client.redirectUris), JSON.stringify(client.grantTypes), JSON.stringify(client.scopes), client.enabled, client.version, client.deletedAt, client.mfaRequired, client.mfaMaxAgeSeconds]),
+    get: async (id, lock = false) => mapRow((await connection.query('SELECT *,CASE WHEN company_tenant IS NULL THEN true ELSE oauth_company_app_record_valid(id) END AS company_valid FROM oauth_clients WHERE id=$1' + (lock ? ' FOR UPDATE' : ''), [id])).rows[0]),
+    list: async (limit = 101) => (await connection.query('SELECT * FROM oauth_clients WHERE deleted_at IS NULL AND company_tenant IS NULL ORDER BY created_at,id LIMIT $1', [limit])).rows.map(mapRow),
+    companyList:async(tenant,page,status)=>(await connection.query('SELECT *,oauth_company_app_record_valid(id) AS company_valid FROM oauth_clients WHERE company_tenant->>\'id\'=$1 AND (deleted_at IS NOT NULL)=$3 ORDER BY created_at DESC,id LIMIT 26 OFFSET $2',[tenant,(page-1)*25,status==='deleted'])).rows.map(mapRow),
+    companyGet:async(id,tenant,lock=false)=>mapRow((await connection.query('SELECT *,oauth_company_app_record_valid(id) AS company_valid FROM oauth_clients WHERE id=$1 AND company_tenant->>\'id\'=$2'+(lock?' FOR UPDATE':''),[id,tenant])).rows[0]),
+    companyCount:async tenant=>Number((await connection.query("SELECT count(*) AS n FROM oauth_clients WHERE company_tenant->>'id'=$1 AND deleted_at IS NULL",[tenant])).rows[0].n),
+    companyLock:tenant=>connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['company-app-quota:'+tenant]),
+    companyHistory:async(id,page)=>(await connection.query(`SELECT audit.*,EXISTS(SELECT 1 FROM oauth_company_app_outbox box WHERE box.id=audit.company_event_id AND box.fingerprint=encode(sha256(convert_to(to_jsonb(audit)::text,'UTF8')),'hex')) AS valid
+      FROM oauth_client_audit audit WHERE client_id=$1 AND company_event_id IS NOT NULL ORDER BY revision DESC LIMIT 26 OFFSET $2`,[id,(page-1)*25])).rows,
+    insert: client => connection.query(`INSERT INTO oauth_clients(id,name,secret_hash,redirect_uris,grants,scopes,token_endpoint_auth_method,enabled,mfa_required,mfa_max_age_seconds,company_tenant,company_request)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [client.clientId, client.name, client.clientSecretHash, JSON.stringify(client.redirectUris), JSON.stringify(client.grantTypes), JSON.stringify(client.scopes), client.publicClient ? 'none' : 'client_secret_post', client.enabled, client.mfaRequired, client.mfaMaxAgeSeconds,client.companyTenant||null,client.companyRequest||null]),
+    update: client => connection.query(`UPDATE oauth_clients SET name=$2,secret_hash=$3,redirect_uris=$4,grants=$5,scopes=$6,enabled=$7,revision=$8,deleted_at=$9,mfa_required=$10,mfa_max_age_seconds=$11,company_tenant=$12 WHERE id=$1`,
+      [client.clientId, client.name, client.clientSecretHash, JSON.stringify(client.redirectUris), JSON.stringify(client.grantTypes), JSON.stringify(client.scopes), client.enabled, client.version, client.deletedAt, client.mfaRequired, client.mfaMaxAgeSeconds,client.companyTenant||null]),
     initialized: async () => (await connection.query('SELECT initialized FROM oauth_client_registry WHERE singleton=TRUE FOR UPDATE')).rows[0]?.initialized,
     initialize: () => connection.query('UPDATE oauth_client_registry SET initialized=TRUE WHERE singleton=TRUE AND NOT initialized'),
     audit: (client, action, actor, details = {}) => connection.query(`INSERT INTO oauth_client_audit(client_id,revision,action,actor_issuer,actor_subject,actor_user_id,actor_type,details)
@@ -83,9 +92,9 @@ function memoryRepository(state) {
   };
 }
 class ClientRegistry {
-  constructor(database, { demo = false, production = process.env.NODE_ENV === 'production', seeds = [] } = {}) {
+  constructor(database, { demo = false, production = process.env.NODE_ENV === 'production', seeds = [], companyTenantActive=async()=>{fail(503,'company_app_tenant_authority_unavailable');} } = {}) {
     if (demo && production) throw new Error('In-memory clients are forbidden in production');
-    this.database = database; this.demo = demo; this.queue = Promise.resolve(); this.memory = { clients: new Map(), initialized: false, audit: [] };
+    this.database = database; this.demo = demo; this.companyTenantActive=companyTenantActive;this.queue = Promise.resolve(); this.memory = { clients: new Map(), initialized: false, audit: [] };
     if (demo) for (const seed of seeds) { const client = this.seed(seed); this.memory.clients.set(client.clientId, client); }
   }
   seed(seed) {
@@ -94,7 +103,8 @@ class ClientRegistry {
     const client = { ...seed, publicClient: seed.publicClient ?? !seed.clientSecretHash, enabled: seed.enabled ?? true, version: '1', mfaRequired: false, mfaMaxAgeSeconds: 3600, deletedAt: null, createdAt: now, updatedAt: now };
     if (!validClient(client)) fail(503, 'invalid_client_record'); return client;
   }
-  async transaction(operation) {
+  async transaction(operation,{companySource,verify,action,reason}={}) {
+    if(companySource&&this.demo)fail(503,'canonical_company_app_storage_required');
     if (this.demo) {
       const run = async () => { const state = structuredClone(this.memory); const result = await operation(memoryRepository(state)); this.memory = state; return result; };
       const pending = this.queue.then(run, run); this.queue = pending.catch(() => {}); return pending;
@@ -104,10 +114,12 @@ class ClientRegistry {
       if (!this.database.isAvailable()) fail(503, 'client_authority_unavailable');
       connection = await this.database.pool.connect(); await connection.query('BEGIN');
       await connection.query("SET LOCAL statement_timeout='1500ms'"); await connection.query("SET LOCAL lock_timeout='1000ms'");
-      const result = await operation(repository(connection)); await connection.query('COMMIT'); return result;
+      if(companySource){await connection.query("SET LOCAL timezone='UTC'");await connection.query('SELECT oauth_company_app_receiving()');await connection.query("SELECT set_config('opendirectory.company_apps',$1,true)",[JSON.stringify({source:companySource,action,reason})]);}
+      const result = await operation(repository(connection));if(companySource)await verify();await connection.query('COMMIT'); return result;
     } catch (error) {
       if (connection) await connection.query('ROLLBACK').catch(() => {});
       if (error instanceof ClientError) throw error;
+      if(companySource&&error.status)throw error;
       throw new ClientError(error.code === '23505' ? 409 : 503, error.code === '23505' ? 'client_exists' : 'client_authority_unavailable');
     } finally { connection?.release(); }
   }
@@ -132,14 +144,15 @@ class ClientRegistry {
     return client && !client.deletedAt ? client : null;
   }
   async licenseSource(id,actor){
-    this.actor(actor,'applications.licensesources.discover');if(id==='.'||id==='..')fail(400,'source_client_id_required');const client=await this.get(id);if(!client)fail(404,'source_client_not_found');
+    this.actor(actor,'applications.licensesources.discover');if(id==='.'||id==='..')fail(400,'source_client_id_required');const client=await this.get(id);if(!client||client.companyTenant)fail(404,'source_client_not_found');
     return{schemaVersion:1,clientId:client.clientId,revision:client.version,enabled:client.enabled,
       canReadGroupSources:client.enabled&&!client.publicClient&&JSON.stringify(client.grantTypes)===JSON.stringify(['client_credentials'])&&JSON.stringify(client.scopes)===JSON.stringify(['licenses.groups.derive'])};
   }
-  async current(client) { const latest = await this.get(client.clientId); return !!latest?.enabled && latest.version === client.version; }
+  async current(client) { const latest = await this.get(client.clientId); return !!latest?.enabled && latest.version === client.version&&(!latest.companyTenant||await this.companyTenantActive(latest.clientId,latest.companyTenant)); }
   async active(payload) {
     if (typeof payload?.client_id !== 'string' || !validRevision(payload.client_revision)) return false;
-    const client = await this.get(payload.client_id); return !!client?.enabled && client.version === payload.client_revision && acceptsAuthentication(client, payload);
+    const client = await this.get(payload.client_id); return !!client?.enabled && client.version === payload.client_revision && acceptsAuthentication(client, payload)
+      &&(client.companyTenant?sameTenantContext(client.companyTenant,payload.company_tenant)&&await this.companyTenantActive(client.clientId,client.companyTenant):payload.company_tenant===undefined);
   }
   authenticated(client, secret, confidential = false) {
     return !!client?.enabled && (client.publicClient ? !confidential && secret === undefined : secretMatches(client.clientSecretHash, secret));
@@ -149,6 +162,7 @@ class ClientRegistry {
   }
   async list(actor) { this.actor(actor, 'applications.read'); const clients = await this.transaction(source => source.list()); return { clients: clients.slice(0, 100).map(publicClient), truncated: clients.length > 100 }; }
   allowed(actor, before, after) {
+    if(before?.companyTenant||after?.companyTenant)fail(404,'client_not_found');
     if (!administrator(actor) && (protectedClient(after) || (before && protectedClient(before)))) fail(403, 'protected_client');
   }
   metadata(input, before) {
@@ -172,7 +186,7 @@ class ClientRegistry {
     if (!match) fail(428, 'client_version_required');
     let secret;
     const stored = await this.transaction(async source => {
-      const before = await source.get(id, true); if (!before || before.deletedAt) fail(404, 'client_not_found');
+      const before = await source.get(id, true); if (!before || before.deletedAt || before.companyTenant) fail(404, 'client_not_found');
       if (match !== etag(before)) fail(412, 'client_version_conflict');
       const client = action === 'updated' ? this.metadata(input, before) : { ...before };
       this.allowed(actor, before, client);
@@ -191,7 +205,7 @@ class ClientRegistry {
   }
   async authentication(id, actor) {
     this.actor(actor, 'applications.authentication.read'); const client = await this.get(id);
-    if (!client) fail(404, 'client_not_found'); return this.authenticationView(client, actor);
+    if (!client || client.companyTenant) fail(404, 'client_not_found'); return this.authenticationView(client, actor);
   }
   async setAuthentication(id, match, input, actor) {
     this.actor(actor, 'applications.authentication.manage');
@@ -202,7 +216,7 @@ class ClientRegistry {
       || !Number.isInteger(input.maxAgeSeconds) || input.maxAgeSeconds < 300 || input.maxAgeSeconds > 86400
       || typeof input.reason !== 'string' || input.reason.trim().length < 10 || input.reason.trim().length > 500 || /[\u0000-\u001f\u007f]/.test(input.reason)) fail(400, 'invalid_authentication_policy');
     return this.transaction(async source => {
-      const before = await source.get(id, true); if (!before || before.deletedAt) fail(404, 'client_not_found');
+      const before = await source.get(id, true); if (!before || before.deletedAt || before.companyTenant) fail(404, 'client_not_found');
       if (match !== etag(before)) fail(412, 'client_version_conflict'); this.allowed(actor, before, before);
       if (!freshMfa(actor)) fail(428, 'fresh_mfa_required');
       const client = { ...before, mfaRequired: input.required, mfaMaxAgeSeconds: input.maxAgeSeconds, version: String(BigInt(before.version) + 1n), updatedAt: new Date().toISOString() };

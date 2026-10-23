@@ -58,11 +58,11 @@ node scripts/od.mjs group-rule history GROUP_ID
 
 ## Datenmodell, Installation und API
 
-Identity **001–053**, aktueller Identity-Code, Frontend und CLI koordiniert ausrollen. Das Dockerfile kopiert `packages/company-group-rule-contract.js` im bestehenden Repository-Root-Buildkontext. Keine neue Dependency oder Secret-Art. Die vorhandenen `/api/groups/*`-Proxys reichen den originalen Bearer und die konditionalen Header weiter.
+Identity **001–054**, aktueller Identity-Code, Frontend und CLI koordiniert ausrollen. Das Dockerfile kopiert `packages/company-group-rule-contract.js` im bestehenden Repository-Root-Buildkontext. Keine neue Dependency oder Secret-Art. Die vorhandenen `/api/groups/*`-Proxys reichen den originalen Bearer und die konditionalen Header weiter.
 
 Migration 050 speichert die aktuelle versionierte Konfiguration in `identity_company_group_rules`, ihre ursprünglichen Events/Pending-Fingerprints und die kanonischen Membership-Effekte samt eigenem Pending-Fingerprint. Die Membership-Effekte referenzieren wirkliche `identity_directory_group_events` und `identity_membership_origins`, bleiben unveränderlich und können keine normale manuelle Membership adoptieren. Guards, Originalmanifest, tatsächlicher Owner, kanonische Wirkung und Deadline werden an der physischen Commit-Grenze geprüft. Neue Tabellen übernehmen die bestehenden No-extra-effects-Fences; die Konfiguration kann auch keine früheren oder späteren fremden Canonical-Writes mitnehmen. Retention, Veröffentlichung der Pending-Outbox und vollständiger Audit-/Recovery-Betrieb bleiben offen.
 
-Der [OpenAPI-Vertrag](../api/openapi.yaml) ist Version **1.26.0**:
+Der [OpenAPI-Vertrag](../api/openapi.yaml) ist Version **1.27.0**:
 
 | Methode | Pfad | Wirkung |
 | --- | --- | --- |

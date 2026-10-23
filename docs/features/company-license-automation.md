@@ -10,7 +10,7 @@ Stand: 23. Oktober 2026. Eine ausdrücklich freigegebene App kann bestehende eig
 4. Einen Lizenzabgleich einreihen oder einen Zeitplan erstellen. Die Oberfläche schlägt eine Minute vor. Alternativ **Bei Quellenänderungen abgleichen** wählen: Der [quellenabhängige Modus](company-automation-changes.md) erfasst auch freien Bestand ohne eine Gruppenänderung. Ein aktiver Zeitplan braucht einen laufenden App-Worker auf dem eigenen Runner.
 5. Nach Ausführung neu laden. Fortschritt und blockierte Mitglieder werden angezeigt. Der geprüfte JSON-Lizenzbericht nennt die ausführende App und jedes bestätigte lokale Einzelresultat. Bei vollem Pool ist der Job **teilweise abgeschlossen**, nicht erfolgreich abgeschlossen.
 
-Die App darf bestehende Verknüpfungen abgleichen. Diese Freigabe erlaubt weder Poolkäufe/-änderungen, neue Links oder Gruppenänderungen noch allgemeine Blueprint-, Rollen-, Benutzer- oder Policy-Verwaltung. Die OAuth-App-Registerverwaltung bleibt gesondert berechtigt; eigene tenantgebundene Registerverwaltung ist weiterhin offen.
+Die App darf bestehende Verknüpfungen abgleichen. Diese Freigabe erlaubt weder Poolkäufe/-änderungen, neue Links oder Gruppenänderungen noch allgemeine Blueprint-, Rollen-, Benutzer- oder Policy-Verwaltung. Die [eigene App-Kontoverwaltung](company-apps.md) bleibt von der konkreten Lizenzdelegation getrennt. Weitere eigene App-Typen/Scopes und delegierte Firmenrollen bleiben offen.
 
 ## CLI und Zeitpläne
 
@@ -56,11 +56,11 @@ Identity und Policy bleiben getrennte Datenbanken. Quellen werden vor/nach den O
 
 ## Installation und API
 
-Identity **001–053**, Policy **001–029**, aktueller OAuth-Code, Frontend und CLI koordiniert aktualisieren. Identity braucht den tatsächlichen `POLICY_SERVICE_URL`, Policy den tatsächlichen `IDENTITY_SERVICE_URL`; beide behalten den konfigurierten Issuer/JWKS/live Access-State. Die beiden internen Ursprünge gehören in geschützte Betreiberkonfiguration, nicht in Jobdaten. Docker-Buildkontext bleibt die Repository-Wurzel; beide Services kopieren die gemeinsamen Verträge. Keine neue Dependency oder zusätzliche Art von Service-Secret.
+Identity **001–054**, Policy **001–029**, aktueller OAuth-Code, Frontend und CLI koordiniert aktualisieren. Identity braucht den tatsächlichen `POLICY_SERVICE_URL`, Policy den tatsächlichen `IDENTITY_SERVICE_URL`; beide behalten den konfigurierten Issuer/JWKS/live Access-State. Die beiden internen Ursprünge gehören in geschützte Betreiberkonfiguration, nicht in Jobdaten. Docker-Buildkontext bleibt die Repository-Wurzel; beide Services kopieren die gemeinsamen Verträge. Keine neue Dependency oder zusätzliche Art von Service-Secret.
 
-Migration 049 erweitert den ursprünglichen Automationsreceiver und dessen Manifest. Bei einer vollständigen Migration-Wiederholung nach 048 auch 049, 051/052 und zuletzt 053 anwenden. Alte Originalereignisse werden durch die Snapshot-Kompatibilität gelesen, nicht umgeschrieben. Policy 029 erweitert den bestehenden source-aware Blueprint-/Allocator-Kernel um den engen maschinellen Pfad, echte App-Provenienz und die dauerhaften Abgleichseiten. Zeitzonenwechsel verändern die Bedeutung historischer Zeitpunkte nicht.
+Migration 049 erweitert den ursprünglichen Automationsreceiver und dessen Manifest. Bei einer vollständigen Migration-Wiederholung nach 048 auch 049, 051/052 und zuletzt 053/054 anwenden. Alte Originalereignisse werden durch die Snapshot-Kompatibilität gelesen, nicht umgeschrieben. Policy 029 erweitert den bestehenden source-aware Blueprint-/Allocator-Kernel um den engen maschinellen Pfad, echte App-Provenienz und die dauerhaften Abgleichseiten. Zeitzonenwechsel verändern die Bedeutung historischer Zeitpunkte nicht.
 
-Der [OpenAPI-Vertrag](../api/openapi.yaml) dokumentiert Version 1.26.0:
+Der [OpenAPI-Vertrag](../api/openapi.yaml) dokumentiert Version 1.27.0:
 
 | Methode | Pfad | Tatsächlicher Zweck |
 | --- | --- | --- |

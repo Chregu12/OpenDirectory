@@ -14,6 +14,7 @@ COPY packages/company-registration-contract/ /packages/company-registration-cont
 COPY packages/device-inventory-contract/ /packages/device-inventory-contract/
 COPY packages/company-license-contract/ /packages/company-license-contract/
 COPY packages/company-automation-contract.js /packages/company-automation-contract.js
+COPY packages/company-app-contract.js /packages/company-app-contract.js
 COPY packages/company-automation-change-contract.js /packages/company-automation-change-contract.js
 COPY packages/company-automation-admission.js /packages/company-automation-admission.js
 COPY packages/company-license-automation-contract.js /packages/company-license-automation-contract.js

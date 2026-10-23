@@ -535,6 +535,9 @@ class APIGateway {
 
     // Identity and Policy services from core
     if (enabledModules.includes('identity-service')) {
+      const companyAppTarget=process.env.OAUTH_PROVIDER_URL||'http://oauth-provider:3010';
+      this.app.use('/api/clients/company',createProxyMiddleware({target:companyAppTarget,changeOrigin:true}));
+      this.services.set('company-apps',{name:'company-apps',target:companyAppTarget,pathPrefix:'/api/clients/company',status:'active',lastCheck:new Date().toISOString()});
       const membershipReviewTarget=process.env.IDENTITY_SERVICE_URL||'http://identity-service:3001';
       this.app.use('/api/identity/license-sources',createProxyMiddleware({target:membershipReviewTarget,changeOrigin:true}));
       this.services.set('license-source-grants',{name:'license-source-grants',target:membershipReviewTarget,pathPrefix:'/api/identity/license-sources',status:'active',lastCheck:new Date().toISOString()});

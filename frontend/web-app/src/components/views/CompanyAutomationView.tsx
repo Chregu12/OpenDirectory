@@ -64,7 +64,7 @@ export default function CompanyAutomationView() {
   const validRule = !!rule && rule.rule.id === ruleId.trim() && rule.rule.tenantId === principal?.tenantId;
   return <section className="h-full overflow-auto p-6 space-y-5" style={{ colorScheme: 'dark' }} aria-label="Firmenautomationen">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-semibold">Automationen</h1><p>App-Freigaben, dauerhafte Jobs und Zeitpläne des eigenen Unternehmens.</p></div><button className={button} disabled={busy} onClick={() => setReload(value => value + 1)}>Automationen neu laden</button></header>
-    <p>Ein App-Konto meldet sich über <code>node scripts/od.mjs automation enroll "Name"</code> an. Du genehmigst konkrete Aktionen und eine Laufzeit. Der Lizenzabgleich darf eigene Pool-Sitze anhand bestehender Gruppenverknüpfungen zuweisen und entziehen; Herstellerfreischaltung und Mailbereitstellung sind separate Schritte.</p>
+    <p><a className="underline" href="/company-apps">Eigene Firmen-App erstellen oder verwalten</a>. Ein App-Konto meldet sich über <code>node scripts/od.mjs automation enroll "Name"</code> an. Du genehmigst konkrete Aktionen und eine Laufzeit. Der Lizenzabgleich darf eigene Pool-Sitze anhand bestehender Gruppenverknüpfungen zuweisen und entziehen; Herstellerfreischaltung und Mailbereitstellung sind separate Schritte.</p>
     {loading && <p role="status">Eigene Automationsrechte werden geprüft …</p>}{error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {principal && <>
       <section className="space-y-3 rounded border border-white/20 p-4" aria-label="App-Automation freigeben"><h2 className="font-semibold">App-Automation freigeben</h2>

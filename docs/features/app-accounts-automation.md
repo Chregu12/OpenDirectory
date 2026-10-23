@@ -1,8 +1,12 @@
 # App-Konten und Skript-Automationen
 
-Stand: 22. Oktober 2026. App-Konten verwenden das bestehende persistente OAuth-Register. Es gibt keine zweite Kontodatenbank und keine pauschale Übernahme von Benutzerrollen.
+Stand: 23. Oktober 2026. App-Konten verwenden das bestehende persistente OAuth-Register. Es gibt keine zweite Kontodatenbank und keine pauschale Übernahme von Benutzerrollen.
 
-## App-Konto anlegen
+## Eigenes Firmen-App-Konto anlegen
+
+Als tatsächlicher Firmeninhaber unter **Firmen-Apps** oder mit `company-app` ein eigenes gebundenes Konto erstellen, getrennt aktivieren und dessen Zweck bestätigen. Dieser [eigene Registerweg](company-apps.md) benötigt frische MFA, keine globale Anwendungsrolle. Erstellung/Rotation zeigen das Secret einmal; bekannte fremde IDs und globale Verwaltungswege umgehen den Namespace nicht. Ein Create-Replay mit derselben ursprünglichen UUID erzeugt kein zweites Konto und gibt kein früheres Secret zurück.
+
+## Globales App-Konto anlegen
 
 In **Identity Provider → OAuth2/OIDC → App-Konto erstellen** genügt zunächst ein Name. Das Konto verwendet `client_credentials`, braucht keine Redirect-URL und erhält keine voreingestellten Login- oder Administrations-Scopes. Das Secret wird einmal angezeigt. Danach das Konto separat aktivieren und das Secret im verwendeten Secret-Store hinterlegen.
 
@@ -66,7 +70,7 @@ Rotation, Deaktivierung und Konfigurationsänderungen invalidieren die vorherige
 
 ## Eigene App-Freigaben und dauerhafte Jobs
 
-Ein dediziertes Konto mit exakt `company.automation` kann sich anmelden; anschliessend genehmigt der tatsächliche Firmeninhaber konkrete eigene Export- und/oder [Lizenzgruppenaktionen](company-license-automation.md) und höchstens 30 Tage Laufzeit. Der App-Worker verwendet seine eigenen Client-Credentials ohne offene menschliche Sitzung. Jobs, Zeitpläne, Leases, Backoff, begrenzte Versuche, Historie und geprüfte JSON-/CSV-Artefakte sind persistent. Lizenzjobs behalten Fortschritt, echte Einzelresultate und den Status `partial` bei blockierten Mitgliedern. [Einrichtung und tatsächlicher Umfang](company-automation.md). Der Scope allein gewährt keinen Tenant-Zugriff. Tenantgebundene App-Registerverwaltung und Provider-Aktionen bleiben weitere Schritte des vollständigen Auftrags.
+Ein dediziertes Konto mit exakt `company.automation` kann sich anmelden; anschliessend genehmigt der tatsächliche Firmeninhaber konkrete eigene Export- und/oder [Lizenzgruppenaktionen](company-license-automation.md) und höchstens 30 Tage Laufzeit. Der App-Worker verwendet seine eigenen Client-Credentials ohne offene menschliche Sitzung. Jobs, Zeitpläne, Leases, Backoff, begrenzte Versuche, Historie und geprüfte JSON-/CSV-Artefakte sind persistent. Lizenzjobs behalten Fortschritt, echte Einzelresultate und den Status `partial` bei blockierten Mitgliedern. [Einrichtung und tatsächlicher Umfang](company-automation.md). Der Scope allein gewährt keinen Tenant-Zugriff. [Tenantgebundene vertrauliche App-Konten](company-apps.md) sind umgesetzt. Weitere eigene App-Typen/Scopes, delegierte Firmenrollen und Provider-Aktionen bleiben Teil des vollständigen Auftrags.
 
 ## Gruppen und Lizenzpools
 

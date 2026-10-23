@@ -1,0 +1,13 @@
+'use strict';
+const http=require('node:http');const {randomUUID}=require('node:crypto');const {CompanyApps}=require('../CompanyApps');const contract=require('../../../../../packages/company-app-contract');
+let server;let app;let user;let proof;let status;let body;let calls;
+beforeEach(async()=>{const now=Math.floor(Date.now()/1000);user={actor_type:'user',iss:'https://company-app-transport.test',sub:'actual-owner',jti:randomUUID(),exp:now+600,auth_time:now,identity_authorization:{userId:randomUUID(),revision:'1',linkRevision:'1',rolesRevision:'a'.repeat(64)}};
+ proof={schemaVersion:1,companyAppProtocol:1,issuer:user.iss,subject:user.sub,tokenId:user.jti,expiresAt:user.exp,context:user.identity_authorization,tenant:{id:randomUUID(),version:'1',generation:'2'},actorUserId:user.identity_authorization.userId,permissions:[...contract.PERMISSIONS],validUntil:now+300};status=200;body=()=>proof;calls=0;
+ server=http.createServer((req,res)=>{calls++;expect(req.method).toBe('GET');expect(req.url).toBe(contract.SOURCE_PATH);expect(req.headers.authorization).toBe('Bearer original');res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(body()));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));app=new CompanyApps({}, {endpoint:'http://127.0.0.1:'+server.address().port+contract.SOURCE_PATH});
+});
+afterEach(async()=>new Promise(resolve=>server.close(resolve)));
+test('the actual pinned transport preserves original human token and validates exact returned owner evidence',async()=>{expect(await app.authority(user,'Bearer original')).toEqual(proof);expect(calls).toBe(1);});
+test.each([{subject:'foreign-owner'},{tokenId:'foreign-token'},{actorUserId:'foreign-user'},{permissions:['applications.create']},{validUntil:1},{validUntil:9999999999},{extra:true}])('substituted, expired or widened private authority cannot authorize writes: %j',async change=>{body=()=>({...proof,...change});await expect(app.authority(user,'Bearer original')).rejects.toMatchObject({status:503});});
+test.each([401,403,428,503])('a private source rejection %i cannot become an empty or successful register',async rejected=>{status=rejected;await expect(app.authority(user,'Bearer original')).rejects.toMatchObject({status:rejected});});
+test('a machine token cannot initiate human app management or be forwarded as a human source',async()=>{await expect(app.authority({...user,actor_type:'application'},'Bearer original')).rejects.toMatchObject({status:403});expect(calls).toBe(0);});
+test('an oversized response cannot be interpreted as a permissive private source',async()=>{body=()=>({...proof,padding:'x'.repeat(9000)});await expect(app.authority(user,'Bearer original')).rejects.toMatchObject({status:503});});

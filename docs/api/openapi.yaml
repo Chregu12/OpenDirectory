@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.26.0",
+    "version": "1.27.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, employee credential provisioning, external legal verification or production SaaS acceptance."
   },
   "security": [
@@ -33418,6 +33418,865 @@
           }
         }
       }
+    },
+    "/api/clients/company": {
+      "get": {
+        "operationId": "listOwnCompanyApps",
+        "description": "Own-company confidential app accounts in the existing canonical OAuth registry. Actual active company ownership, original current human bearer and independent verified MFA no older than 300 seconds are required for reads and writes. Global roles do not replace ownership. Namespace comes exclusively from the private Identity source, never caller tenant/owner selectors. Company clients support only client_credentials, no redirects, and purpose none or company-automation. The latter allows only an app enrollment; concrete directory/group/license actions still need explicit owner delegation. No Graph, mailbox or manufacturer permissions. Generic client-management routes cannot administer company-owned clients. Every mutation increments the original generation and atomically retains its original event and pending receipt. App tokens carry their actual company tenant and require the live original tenant generation. No silent rebinding after pause/re-enable, client rotation or purpose change.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999999,
+              "default": 1
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "active",
+                "deleted"
+              ],
+              "default": "active"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual original own-company state; no provider effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAppPage"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          }
+        }
+      },
+      "post": {
+        "operationId": "createOwnCompanyApp",
+        "description": "Own-company confidential app accounts in the existing canonical OAuth registry. Actual active company ownership, original current human bearer and independent verified MFA no older than 300 seconds are required for reads and writes. Global roles do not replace ownership. Namespace comes exclusively from the private Identity source, never caller tenant/owner selectors. Company clients support only client_credentials, no redirects, and purpose none or company-automation. The latter allows only an app enrollment; concrete directory/group/license actions still need explicit owner delegation. No Graph, mailbox or manufacturer permissions. Generic client-management routes cannot administer company-owned clients. Every mutation increments the original generation and atomically retains its original event and pending receipt. App tokens carry their actual company tenant and require the live original tenant generation. No silent rebinding after pause/re-enable, client rotation or purpose change. requestId is the actual immutable client UUID. Reusing exactly the original request returns created=false and clientSecret=null, never the original secret or another client. Creation starts disabled. Up to 100 non-deleted own clients; archived originals remain retained. Changed intent under the same UUID is rejected. Lost post-commit authority returns no credential even if the original client exists.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "requestId",
+                  "name",
+                  "purpose",
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "requestId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "purpose": {
+                    "enum": [
+                      "none",
+                      "company-automation"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Actual original own-company state; no provider effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAppCreation"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          }
+        }
+      }
+    },
+    "/api/clients/company/{id}": {
+      "get": {
+        "operationId": "readOwnCompanyApp",
+        "description": "Own-company confidential app accounts in the existing canonical OAuth registry. Actual active company ownership, original current human bearer and independent verified MFA no older than 300 seconds are required for reads and writes. Global roles do not replace ownership. Namespace comes exclusively from the private Identity source, never caller tenant/owner selectors. Company clients support only client_credentials, no redirects, and purpose none or company-automation. The latter allows only an app enrollment; concrete directory/group/license actions still need explicit owner delegation. No Graph, mailbox or manufacturer permissions. Generic client-management routes cannot administer company-owned clients. Every mutation increments the original generation and atomically retains its original event and pending receipt. App tokens carry their actual company tenant and require the live original tenant generation. No silent rebinding after pause/re-enable, client rotation or purpose change.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual original own-company state; no provider effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAppReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateOwnCompanyApp",
+        "description": "Own-company confidential app accounts in the existing canonical OAuth registry. Actual active company ownership, original current human bearer and independent verified MFA no older than 300 seconds are required for reads and writes. Global roles do not replace ownership. Namespace comes exclusively from the private Identity source, never caller tenant/owner selectors. Company clients support only client_credentials, no redirects, and purpose none or company-automation. The latter allows only an app enrollment; concrete directory/group/license actions still need explicit owner delegation. No Graph, mailbox or manufacturer permissions. Generic client-management routes cannot administer company-owned clients. Every mutation increments the original generation and atomically retains its original event and pending receipt. App tokens carry their actual company tenant and require the live original tenant generation. No silent rebinding after pause/re-enable, client rotation or purpose change.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact original quoted od-client:CLIENT_ID:REVISION ETag. No wildcard or automatic retry."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "enabled",
+                  "purpose",
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "none",
+                      "company-automation"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual original own-company state; no provider effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAppReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          }
+        }
+      },
+      "delete": {
+        "operationId": "retireOwnCompanyApp",
+        "description": "Own-company confidential app accounts in the existing canonical OAuth registry. Actual active company ownership, original current human bearer and independent verified MFA no older than 300 seconds are required for reads and writes. Global roles do not replace ownership. Namespace comes exclusively from the private Identity source, never caller tenant/owner selectors. Company clients support only client_credentials, no redirects, and purpose none or company-automation. The latter allows only an app enrollment; concrete directory/group/license actions still need explicit owner delegation. No Graph, mailbox or manufacturer permissions. Generic client-management routes cannot administer company-owned clients. Every mutation increments the original generation and atomically retains its original event and pending receipt. App tokens carry their actual company tenant and require the live original tenant generation. No silent rebinding after pause/re-enable, client rotation or purpose change.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact original quoted od-client:CLIENT_ID:REVISION ETag. No wildcard or automatic retry."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual original own-company state; no provider effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAppReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          }
+        }
+      }
+    },
+    "/api/clients/company/{id}/rotate-secret": {
+      "post": {
+        "operationId": "rotateOwnCompanyAppSecret",
+        "description": "Own-company confidential app accounts in the existing canonical OAuth registry. Actual active company ownership, original current human bearer and independent verified MFA no older than 300 seconds are required for reads and writes. Global roles do not replace ownership. Namespace comes exclusively from the private Identity source, never caller tenant/owner selectors. Company clients support only client_credentials, no redirects, and purpose none or company-automation. The latter allows only an app enrollment; concrete directory/group/license actions still need explicit owner delegation. No Graph, mailbox or manufacturer permissions. Generic client-management routes cannot administer company-owned clients. Every mutation increments the original generation and atomically retains its original event and pending receipt. App tokens carry their actual company tenant and require the live original tenant generation. No silent rebinding after pause/re-enable, client rotation or purpose change.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact original quoted od-client:CLIENT_ID:REVISION ETag. No wildcard or automatic retry."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual original own-company state; no provider effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAppCredential"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          }
+        }
+      }
+    },
+    "/api/clients/company/{id}/history": {
+      "get": {
+        "operationId": "readOwnCompanyAppHistory",
+        "description": "Own-company confidential app accounts in the existing canonical OAuth registry. Actual active company ownership, original current human bearer and independent verified MFA no older than 300 seconds are required for reads and writes. Global roles do not replace ownership. Namespace comes exclusively from the private Identity source, never caller tenant/owner selectors. Company clients support only client_credentials, no redirects, and purpose none or company-automation. The latter allows only an app enrollment; concrete directory/group/license actions still need explicit owner delegation. No Graph, mailbox or manufacturer permissions. Generic client-management routes cannot administer company-owned clients. Every mutation increments the original generation and atomically retains its original event and pending receipt. App tokens carry their actual company tenant and require the live original tenant generation. No silent rebinding after pause/re-enable, client rotation or purpose change.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999999,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual original own-company state; no provider effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAppHistory"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          }
+        }
+      }
+    },
+    "/api/identity/company-apps": {
+      "get": {
+        "operationId": "readOriginalCompanyAppAuthority",
+        "description": "Private exact GET with original human bearer, no query, body or API key. Returns only the current actual owner source for the OAuth receiver. Fresh verified MFA and unchanged canonical home/context are mandatory; no global administrator shortcut. This proof is not a reusable bearer and contains no credential.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Actual original own-company state; no provider effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAppAuthority"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          }
+        }
+      }
+    },
+    "/internal/identity/company-app-tenant": {
+      "post": {
+        "operationId": "verifyOriginalCompanyAppTenant",
+        "description": "Private issuer-signed RS256 workload, purpose identity-company-app-tenant-request, at most 30 seconds, exact audience/path/method and body-bound app_client_id/app_tenant. Reads only current canonical tenant eligibility and generation. No human session, roles, generic API token or caller-selected public tenant authority. An unavailable receiver is not active=true.",
+        "security": [
+          {
+            "companyAppTenantWorkload": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "clientId",
+                  "tenant"
+                ],
+                "properties": {
+                  "clientId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "tenant": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "version",
+                      "generation"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "version": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+                      },
+                      "generation": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual original own-company state; no provider effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyAppTenantState"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "401": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "403": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "404": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "409": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "412": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "428": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "429": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          },
+          "503": {
+            "description": "Rejected or unconfirmed. Reconcile the original request/current registry before retrying. A lost credential cannot be read again; rotate under a new confirmed version."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -33439,6 +34298,12 @@
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "description": "Private issuer RS256 identity-authority workload with separate identity-company-console-request purpose, identity.company-console.read scope, POST/path/client/user binding and at most 30 seconds. Human/API bearers and ordinary state-read assertions are rejected."
+      },
+      "companyAppTenantWorkload": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Private original issuer workload for identity-company-app-tenant-request; not an ordinary API access token."
       }
     },
     "schemas": {
@@ -43867,6 +44732,30 @@
           },
           "requestedScope": {
             "const": "company.automation"
+          },
+          "companyTenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$"
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$"
+              }
+            }
           }
         }
       },
@@ -46864,6 +47753,677 @@
                 }
               ]
             }
+          }
+        }
+      },
+      "CompanyApp": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "clientId",
+          "name",
+          "enabled",
+          "version",
+          "purpose",
+          "tenant",
+          "createdAt",
+          "updatedAt",
+          "deletedAt"
+        ],
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+          },
+          "purpose": {
+            "enum": [
+              "none",
+              "company-automation"
+            ]
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              }
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deletedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "deletedAt": {
+                  "type": "string"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "enabled": {
+                  "const": false
+                }
+              }
+            }
+          }
+        ]
+      },
+      "CompanyAppReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAppProtocol",
+          "actorUserId",
+          "tenant",
+          "client"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAppProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              }
+            }
+          },
+          "client": {
+            "$ref": "#/components/schemas/CompanyApp"
+          }
+        }
+      },
+      "CompanyAppCredential": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAppProtocol",
+          "actorUserId",
+          "tenant",
+          "client",
+          "clientSecret"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAppProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              }
+            }
+          },
+          "client": {
+            "$ref": "#/components/schemas/CompanyApp"
+          },
+          "clientSecret": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          }
+        }
+      },
+      "CompanyAppCreation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAppProtocol",
+          "actorUserId",
+          "tenant",
+          "client",
+          "clientSecret",
+          "created"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAppProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              }
+            }
+          },
+          "client": {
+            "$ref": "#/components/schemas/CompanyApp"
+          },
+          "clientSecret": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{43}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created": {
+            "type": "boolean"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "created": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "clientSecret": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{43}$"
+                },
+                "client": {
+                  "properties": {
+                    "version": {
+                      "const": "1"
+                    },
+                    "enabled": {
+                      "const": false
+                    },
+                    "deletedAt": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "clientSecret": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "CompanyAppPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAppProtocol",
+          "actorUserId",
+          "tenant",
+          "page",
+          "status",
+          "hasMore",
+          "clients"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAppProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              }
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999
+          },
+          "status": {
+            "enum": [
+              "active",
+              "deleted"
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "clients": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/CompanyApp"
+            }
+          }
+        }
+      },
+      "CompanyAppHistory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAppProtocol",
+          "actorUserId",
+          "tenant",
+          "clientId",
+          "page",
+          "hasMore",
+          "events"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAppProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              }
+            }
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "revision",
+                "action",
+                "actorUserId",
+                "reason",
+                "createdAt"
+              ],
+              "properties": {
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,18}$",
+                  "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+                },
+                "action": {
+                  "enum": [
+                    "created",
+                    "updated",
+                    "rotated",
+                    "deleted"
+                  ]
+                },
+                "actorUserId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 10,
+                  "maxLength": 500
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CompanyAppAuthority": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAppProtocol",
+          "issuer",
+          "subject",
+          "tokenId",
+          "expiresAt",
+          "context",
+          "tenant",
+          "actorUserId",
+          "permissions",
+          "validUntil"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAppProtocol": {
+            "const": 1
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "tokenId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "integer"
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "userId",
+              "revision",
+              "linkRevision",
+              "rolesRevision"
+            ],
+            "properties": {
+              "userId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              },
+              "linkRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              },
+              "rolesRevision": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              }
+            }
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "permissions": {
+            "const": [
+              "company.apps.read",
+              "company.apps.create",
+              "company.apps.update",
+              "company.apps.credentials.rotate",
+              "company.apps.delete"
+            ]
+          },
+          "validUntil": {
+            "type": "integer"
+          }
+        }
+      },
+      "CompanyAppTenantState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "companyAppProtocol",
+          "clientId",
+          "tenant",
+          "active"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "companyAppProtocol": {
+            "const": 1
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT, at most 9223372036854775807; never rounded to a JSON number."
+              }
+            }
+          },
+          "active": {
+            "type": "boolean"
           }
         }
       }

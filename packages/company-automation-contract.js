@@ -1,6 +1,7 @@
 'use strict';
 const { exact, identifier, text } = require('./company-license-contract');
 const { validRevision } = require('./identity-authorization-contract');
+const {validTenantContext}=require('./tenant-authorization-contract');
 const SCOPE = 'company.automation';
 const LICENSE_ACTION = 'licenses.groups.reconcile';
 const GROUP_ACTION = 'directory.groups.reconcile';
@@ -16,7 +17,8 @@ function workload(user, issuer, now = Date.now()) {
   if (user?.actor_type !== 'application' || user.token_use !== 'access' || user.iss !== issuer || typeof user.client_id !== 'string' || !CLIENT_ID.test(user.client_id) || user.sub !== user.client_id
     || !validRevision(user.client_revision) || user.scope !== SCOPE || JSON.stringify(user.permissions) !== JSON.stringify([SCOPE]) || user.roles !== undefined || user.realm_access !== undefined
     || user.identity_authorization !== undefined || typeof user.jti !== 'string' || !user.jti || !Number.isSafeInteger(user.exp) || user.exp * 1000 <= now) fail(403, 'Dedicated current company automation app required');
-  return { kind: 'application', issuer: user.iss, clientId: user.client_id, clientRevision: user.client_revision, tokenId: user.jti, validUntil: user.exp };
+  if(user.company_tenant!==undefined&&!validTenantContext(user.company_tenant))fail(403,'Original company app tenant required');
+  return { kind: 'application', issuer: user.iss, clientId: user.client_id, clientRevision: user.client_revision, tokenId: user.jti, validUntil: user.exp,...(user.company_tenant?{companyTenant:user.company_tenant}:{}) };
 }
 function grantInput(body) {
   exact(body, ['id', 'enrollmentId', 'clientId', 'clientRevision', 'actions', 'expiresAt', 'reason', 'confirm']);

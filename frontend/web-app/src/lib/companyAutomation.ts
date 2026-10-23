@@ -28,7 +28,7 @@ const jobSchema = z.object({ id: uuid, grantId: uuid, tenantId: uuid, scheduleId
 const scheduleSchema = z.object({ id: uuid, grantId: uuid, tenantId: uuid, action, format: z.enum(['csv', 'json']), intervalSeconds: z.number().int().min(60).max(2592000).nullable(),onChange:z.literal(true).optional(),lastSourceRevision:revision.nullable().optional(),lastDeadlineRevision:counter.nullable().optional(),
   enabled: z.boolean(), nextRunAt: timestamp, revision, createdAt: timestamp, ruleId: uuid.optional() }).strict().refine(value => (value.onChange ? isReconciliationAction(value.action)&&value.intervalSeconds===null&&value.lastSourceRevision!==undefined&&value.lastDeadlineRevision!==undefined : value.intervalSeconds!==null&&value.lastSourceRevision===undefined&&value.lastDeadlineRevision===undefined) && (isReconciliationAction(value.action) ? value.ruleId !== undefined && value.format === 'json' : value.ruleId === undefined));
 const grantsSchema = z.object({ ...envelope, grants: z.array(grantSchema).max(25), page: z.number().int().positive(), limit: z.literal(25), total: z.number().int().nonnegative(), supportedActions: z.array(action).length(5) }).strict();
-const enrollmentSchema = z.object({ ...envelope, id: uuid, clientId: z.string().min(1).max(255), clientRevision: revision, name: z.string().min(1).max(160), expiresAt: timestamp, requestedScope: z.literal('company.automation') }).strict();
+const enrollmentSchema = z.object({ ...envelope, id: uuid, clientId: z.string().min(1).max(255), clientRevision: revision, name: z.string().min(1).max(160), expiresAt: timestamp, requestedScope: z.literal('company.automation'),companyTenant:z.object({id:uuid,version:revision,generation:revision}).strict().optional() }).strict().refine(row=>!row.companyTenant||row.companyTenant.id===row.principal.tenantId);
 const grantReceipt = z.object({ ...envelope, grant: grantSchema }).strict();
 const jobReceipt = z.object({ ...envelope, job: jobSchema }).strict(); const scheduleReceipt = z.object({ ...envelope, schedule: scheduleSchema }).strict();
 const page = { ...envelope, grantId: uuid, tenantId: uuid, page: z.number().int().positive(), limit: z.literal(25), total: z.number().int().nonnegative() };
@@ -43,7 +43,7 @@ const licenseReportSchema = z.object({ schemaVersion: z.literal(1), companyLicen
 export type AutomationGrant = CompanyWire<z.infer<typeof grantSchema>>;
 export type AutomationJob = Omit<CompanyWire<z.infer<typeof jobSchema>>, 'ruleId' | 'progress'> & { ruleId?: string; progress?: CompanyWire<z.infer<typeof progressSchema>> | null };
 export type AutomationSchedule = Omit<CompanyWire<z.infer<typeof scheduleSchema>>, 'ruleId'> & { ruleId?: string };
-export type AutomationEnrollment = CompanyWire<z.infer<typeof enrollmentSchema>>;
+export type AutomationEnrollment = Omit<CompanyWire<z.infer<typeof enrollmentSchema>>, 'companyTenant'> & { companyTenant?: { id: string; version: string; generation: string } };
 export type AutomationPrincipal = CompanyWire<z.infer<typeof principalSchema>>;
 export type AutomationHistory = CompanyWire<z.infer<typeof historySchema>>;
 export type AutomationLicenseReport = CompanyWire<z.infer<typeof licenseReportSchema>>;

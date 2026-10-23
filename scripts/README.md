@@ -2,7 +2,8 @@
 
 `node scripts/od.mjs --help` starts the dependency-free app-account and API automation CLI (Node.js 20+).
 
-- `app create`, `app enable`, `app disable`, `app rotate`: use an authorized human administrator access token and the existing OAuth registry.
+- `company-app list|get|create|enable|disable|rename|purpose|rotate|delete|history`: own [tenant-bound app accounts](../docs/features/company-apps.md) with original Owner/MFA, fixed supported purposes, conditional versions and creation recovery by request UUID. `list PAGE deleted` includes retained archived accounts.
+- `app create`, `app enable`, `app disable`, `app rotate`: the separate global registry requires its existing application administration permissions; it does not manage company-owned clients.
 - `automation enroll|approve|grants|queue|schedule|license-sync|group-sync|group-watch|license-watch|jobs|history|result|revoke|worker`: explicit own-company app grants, persistent export jobs and [scheduled group license reconciliation](../docs/features/company-license-automation.md). [Setup and worker lifecycle](../docs/features/company-automation.md).
 - `group-rule get|configure|preview|sync|history`: explicit own-owner configuration and canonical reconciliation of [dynamic/nested groups](../docs/features/company-group-rules.md), preserving manual memberships and independent review. This command family requires the original human token/MFA. Unattended execution uses the separately granted [group-rule app action](../docs/features/company-group-rule-automation.md) through `automation group-sync`.
 - `check`: authenticate an app and confirm its own active identity.

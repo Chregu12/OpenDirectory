@@ -102,7 +102,7 @@ test('a changed rule reissues its exact old origins in a new captured cycle whil
  const first=await worker.run();assert.equal(first.job.status,'queued',JSON.stringify(first));assert.equal(first.job.progress.cycle,2);assert.equal(first.job.progress.completed,0);
  const second=await worker.run();assert.equal(second.job.status,'succeeded',JSON.stringify(second));const actual=(await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,userId])).rows[0].membership_id;assert.notEqual(actual,original);
  assert.deepEqual((await pool.query('SELECT cycle FROM identity_company_group_rule_runs WHERE job_id=$1 ORDER BY cycle',[queued.job.id])).rows.map(row=>row.cycle),[1,2]);
- await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/051_company_group_rule_automation.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/052_live_company_group_rules.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/053_company_automation_changes.sql'),'utf8'));await pool.query('SELECT identity_company_group_rule_live_receiving()');
+ await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/051_company_group_rule_automation.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/052_live_company_group_rules.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/053_company_automation_changes.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/054_company_app_automation_tenants.sql'),'utf8'));await pool.query('SELECT identity_company_group_rule_live_receiving()');
  assert.equal((await pool.query('SELECT count(*)::integer AS count FROM identity_company_group_rule_steps WHERE run_id IN(SELECT id FROM identity_company_group_rule_runs WHERE job_id=$1)',[queued.job.id])).rows[0].count,2);
 });
 test('actual owner stores a conditional rule and preview evaluates real attributes, canonical child members and exclusions without pretending membership changes', async () => {
@@ -185,7 +185,7 @@ test('rule reconciliation creates actual memberships, preserves manual links and
  const manualReplacement = (await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,managed])).rows[0].membership_id;
  assert.notEqual(manualReplacement,next); await save(parent,input({enabled:false}),'3'); assert.deepEqual(await sync(parent),[]);
  assert.equal((await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[parent.id,managed])).rows[0].membership_id,manualReplacement);
- for(const file of ['050_company_group_rules.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql','053_company_automation_changes.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
+ for(const file of ['050_company_group_rules.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql','053_company_automation_changes.sql','054_company_app_automation_tenants.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
  assert.equal((await rules.get(parent.id,owner.user,bearer)).rule.revision,'4'); assert.equal((await rules.history(parent.id,{},owner.user,bearer)).total,7);
 });
 test('a silently suppressed pending effect receipt rolls back the actual canonical membership rather than acknowledging a partial write', async () => {

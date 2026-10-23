@@ -23,7 +23,7 @@ function assignment(row) {
 const SELECT = "SELECT *,CASE WHEN revoked_at IS NOT NULL THEN 'revoked' WHEN expires_at<=clock_timestamp() THEN 'expired' ELSE 'active' END AS status FROM oauth_application_assignments";
 function source(connection) {
   return {
-    client: async id => mapRow((await connection.query('SELECT * FROM oauth_clients WHERE id=$1 FOR UPDATE', [id])).rows[0]),
+    client: async id => mapRow((await connection.query('SELECT * FROM oauth_clients WHERE id=$1 AND company_tenant IS NULL FOR UPDATE', [id])).rows[0]),
     get: async id => (await connection.query(SELECT + ' WHERE id=$1', [id])).rows[0],
     list: async id => (await connection.query(SELECT + ' WHERE client_id=$1 ORDER BY (revoked_at IS NULL AND expires_at>clock_timestamp()) DESC,created_at DESC,id LIMIT 101', [id])).rows,
     effective: async (id, userId, groupIds) => (await connection.query(`SELECT id,target_type,target_id FROM oauth_application_assignments WHERE client_id=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp()

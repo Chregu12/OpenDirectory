@@ -6,14 +6,15 @@ const { PATH, TARGET_PATH, TARGET_PURPOSE, COMPANY_CONSOLE_PATH, COMPANY_CONSOLE
 const { ownerState } = require('./CompanyOwner');
 const { createHash } = require('node:crypto');
 const { validTenantContext } = require('../../../../packages/tenant-authorization-contract');
+const {TENANT_PATH,TENANT_PURPOSE}=require('../../../../packages/company-app-contract');
 
-function authorizationRequest({ issuer = process.env.OIDC_ISSUER || 'http://localhost:3001', jwksUri = process.env.JWKS_URI || 'http://localhost:3001/jwks', target = false, companyConsole = false } = {}) {
+function authorizationRequest({ issuer = process.env.OIDC_ISSUER || 'http://localhost:3001', jwksUri = process.env.JWKS_URI || 'http://localhost:3001/jwks', target = false, companyConsole = false, companyAppTenant=false } = {}) {
   let jwks;
-  const path = companyConsole ? COMPANY_CONSOLE_PATH : target ? TARGET_PATH : PATH; const purpose = companyConsole ? COMPANY_CONSOLE_PURPOSE : target ? TARGET_PURPOSE : PURPOSE;
-  const scope = companyConsole ? 'identity.company-console.read' : target ? 'identity.application-target.read' : 'identity.authorization.read';
+  const path = companyAppTenant?TENANT_PATH:companyConsole ? COMPANY_CONSOLE_PATH : target ? TARGET_PATH : PATH; const purpose = companyAppTenant?TENANT_PURPOSE:companyConsole ? COMPANY_CONSOLE_PURPOSE : target ? TARGET_PURPOSE : PURPOSE;
+  const scope = companyAppTenant?'identity.company-app-tenant.read':companyConsole ? 'identity.company-console.read' : target ? 'identity.application-target.read' : 'identity.authorization.read';
   return async (req, res, next) => {
     res.set('Cache-Control', 'no-store');
-    const validBody = companyConsole ? req.body && Object.keys(req.body).length === 2 && validUuid(req.body.userId) && typeof req.body.clientId === 'string' && /^[A-Za-z0-9._~-]{1,255}$/.test(req.body.clientId)
+    const validBody = companyAppTenant?req.body&&Object.keys(req.body).length===2&&validTenantContext(req.body.tenant)&&typeof req.body.clientId==='string'&&/^[A-Za-z0-9._~-]{1,255}$/.test(req.body.clientId):companyConsole ? req.body && Object.keys(req.body).length === 2 && validUuid(req.body.userId) && typeof req.body.clientId === 'string' && /^[A-Za-z0-9._~-]{1,255}$/.test(req.body.clientId)
       : target ? req.body && Object.keys(req.body).length === 3 && ['user','group'].includes(req.body.targetType)
       && validUuid(req.body.targetId) && validUuid(req.body.actorUserId)
       : typeof req.body?.subject === 'string' && !!req.body.subject.trim() && req.body.subject.length <= 255 && Object.keys(req.body).length === 1;
@@ -28,7 +29,7 @@ function authorizationRequest({ issuer = process.env.OIDC_ISSUER || 'http://loca
         || typeof protectedHeader.kid !== 'string' || !protectedHeader.kid || protectedHeader.kid.length > 128
         || payload.aud !== AUDIENCE || payload.sub !== 'oauth-provider' || payload.actor_type !== 'workload' || payload.token_use !== purpose
         || payload.scope !== scope || payload.htm !== 'POST' || payload.htu !== path
-        || (companyConsole ? payload.console_client_id !== req.body.clientId || payload.console_user_id !== req.body.userId : target ? payload.target_type !== req.body.targetType || payload.target_id !== req.body.targetId || payload.actor_user_id !== req.body.actorUserId : payload.request_subject !== req.body.subject)
+        || (companyAppTenant?payload.app_client_id!==req.body.clientId||!require('../../../../packages/tenant-authorization-contract').sameTenantContext(payload.app_tenant,req.body.tenant):companyConsole ? payload.console_client_id !== req.body.clientId || payload.console_user_id !== req.body.userId : target ? payload.target_type !== req.body.targetType || payload.target_id !== req.body.targetId || payload.actor_user_id !== req.body.actorUserId : payload.request_subject !== req.body.subject)
         || !Number.isInteger(payload.iat) || payload.iat > now + 5 || !Number.isInteger(payload.exp) || payload.exp <= payload.iat || payload.exp - payload.iat > 30
         || typeof payload.jti !== 'string' || payload.jti.length !== 36 || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(payload.jti)) return res.status(401).json({ error: 'invalid_authority_request' });
       req.authorityIssuer = payload.iss;
@@ -43,6 +44,14 @@ function authorizationRequest({ issuer = process.env.OIDC_ISSUER || 'http://loca
 
 class AuthorizationState {
   constructor(database) { this.database = database; }
+  async companyAppTenant(clientId,tenant){
+    if(!validTenantContext(tenant))throw new Error('Exact company app tenant required');
+    return this.database.transaction(async client=>{
+      await client.query('SELECT identity_company_activation_receiving()');
+      const row=(await client.query('SELECT enabled AND version=$2 AND generation=$3 AS active FROM identity_tenants WHERE id=$1',[tenant.id,tenant.version,tenant.generation])).rows[0];
+      return{schemaVersion:1,companyAppProtocol:1,clientId,tenant,active:row?.active===true};
+    },{readOnly:true});
+  }
   async companyConsole(issuer, clientId, userId) {
     return this.database.transaction(async client => {
       const owner = await ownerState(client, userId); const active = !!owner?.active && owner.issuer === issuer && owner.console_client_id === clientId;

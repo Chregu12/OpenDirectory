@@ -242,7 +242,7 @@ const updateRings = new Map([
 const { configuredWebClient, assertWebClient } = require('./webClient');
 const webClient = configuredWebClient();
 if (webClient) clientSeeds.push(webClient);
-const clientRegistry = new ClientRegistry(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true', seeds: clientSeeds });
+const clientRegistry = new ClientRegistry(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true', seeds: clientSeeds,companyTenantActive:(id,tenant)=>identityAuthority.companyAppTenant(id,tenant) });
 const applicationAccess = new ApplicationAccess(db, { identity: identityAuthority, demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
 const mfaAuthority = new MfaAuthority(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
 const mfaRecovery = new MfaRecovery({ mfa: mfaAuthority, identity: identityAuthority, issuer: ISSUER });
@@ -356,7 +356,7 @@ function signToken(payload, expiresIn) {
 }
 
 async function issueSession(payload, principalType, withRefresh = false, client) {
-  const bound = { ...payload, client_revision: client.version, sid: uuidv4(), actor_type: principalType, auth_time: Number.isInteger(payload.auth_time) ? payload.auth_time : Math.floor(Date.now() / 1000) };
+  const bound = { ...payload, client_revision: client.version, sid: uuidv4(), actor_type: principalType, ...(client.companyTenant?{company_tenant:client.companyTenant}:{}),auth_time: Number.isInteger(payload.auth_time) ? payload.auth_time : Math.floor(Date.now() / 1000) };
   const state = await identityAuthority.verifiedState(bound);
   if (!state) throw new IdentityAuthorityError(403, 'identity_not_eligible');
   if (principalType === 'user' && !await mfaAuthority.matches(bound)) throw new MfaError(400, 'invalid_grant');
@@ -1017,6 +1017,8 @@ require('./samlRoutes').mountSaml(app, { issuer: ISSUER, adminAuth, protocol, cl
 // ─── OAuth2 Client Management API (full CRUD) ─────────────────────────────────────
 
 app.use('/api/clients', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+const companyApps=new(require('./CompanyApps').CompanyApps)(clientRegistry);
+app.use('/api/clients/company',require('./companyAppRoutes').companyAppRoutes({store:companyApps,authenticate:adminAuth}));
 app.get('/api/license-source-clients/:id',adminAuth,protocol(async(req,res)=>{
  if(Object.keys(req.query).length)return res.status(400).json({error:'exact_source_client_required'});return res.json(await clientRegistry.licenseSource(req.params.id,req.user));
 },false));
@@ -1099,7 +1101,7 @@ app.get('/api/clients/access', adminAuth, (req, res) => res.set('Cache-Control',
 app.get('/api/clients', ...clientRoute('applications.read', req => clientRegistry.list(req.user)));
 app.get('/api/clients/:id', ...clientRoute('applications.read', async req => {
   clientRegistry.actor(req.user, 'applications.read'); const client = await clientRegistry.get(req.params.id);
-  if (!client) throw Object.assign(new Error('client_not_found'), { status: 404, code: 'client_not_found' });
+  if (!client || client.companyTenant) throw Object.assign(new Error('client_not_found'), { status: 404, code: 'client_not_found' });
   return publicClient(client);
 }));
 app.post('/api/clients', ...clientRoute('applications.create', async (req, res) => { const result = await clientRegistry.create(req.body, req.user); res.status(201); return result; }));

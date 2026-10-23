@@ -154,6 +154,12 @@ test.each([['put','/api/users/11111111-1111-4111-8111-111111111111'],['delete','
  const credential=token({roles:['user-lifecycle-operator']});const version='"user-11111111-1111-4111-8111-111111111111-7"';const result=await request(gateway.app)[method](route).set('Authorization','Bearer '+credential).set('If-Match',version);
  expect(result.status).toBe(200);expect(result.body).toMatchObject({target:'http://identity-service:3001',originalUrl:route,authorization:'Bearer '+credential,ifMatch:version});
 });
+test('a roleless issuer-signed caller reaches only the dedicated company app receiver with its original bearer and precondition',async()=>{
+ const credential=token({roles:[],permissions:[]});const route='/api/clients/company/11111111-1111-4111-8111-111111111111';const version='"od-client:11111111-1111-4111-8111-111111111111:7"';
+ const result=await request(gateway.app).put(route).set('Authorization','Bearer '+credential).set('If-Match',version).send({name:'Actual own app',enabled:false,purpose:'none',reason:'Original conditional app update',confirm:true});
+ expect(result.status).toBe(200);expect(result.body).toMatchObject({target:'http://oauth-provider:3010',originalUrl:route,authorization:'Bearer '+credential,ifMatch:version});
+ expect((await request(gateway.app).get('/api/clients').set('Authorization','Bearer '+credential)).status).toBe(403);
+});
 test('allowed browser origins can send strong user preconditions and read returned ETags',async()=>{
  const preflight=await request(gateway.app).options('/api/users/11111111-1111-4111-8111-111111111111').set('Origin','http://localhost:3000').set('Access-Control-Request-Method','PUT').set('Access-Control-Request-Headers','authorization,content-type,if-match');expect(preflight.status).toBe(204);expect(preflight.headers['access-control-allow-headers'].toLowerCase()).toContain('if-match');
  const response=await request(gateway.app).get('/api/users').set('Origin','http://localhost:3000').set('Authorization','Bearer '+token());expect(response.status).toBe(200);expect(response.headers['access-control-expose-headers'].toLowerCase()).toContain('etag');

@@ -148,3 +148,5 @@ When adding new services:
 
 Part of the OpenDirectory UEM Platform - Enterprise-grade endpoint management solution.
 Identity 052 adds [live group-rule source checks](../docs/features/company-group-live-sources.md), inherited review deadlines and monotonic source observations. Identity 053 adds [source-change subscriptions](../docs/features/company-automation-changes.md) for actual saved rules and local pool capacity. Physical group cleanup and seat reconciliation remain separate existing jobs; cross-service cached invalidation, generic event delivery and provider effects remain open.
+
+OAuth 014 and Identity 054 add [own-company app accounts](../docs/features/company-apps.md) in the existing client registry: fixed tenant ownership, one-time credentials, separate activation, conditional updates/rotation/retirement, retained audit/pending receipts and machine tenant-generation checks. Own-company accounts support only the documented confidential purposes; additional app types/scopes, delegated roles and providers remain open.

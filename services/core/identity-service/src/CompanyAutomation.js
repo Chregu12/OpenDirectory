@@ -56,6 +56,7 @@ class CompanyAutomation {
     const row = (await client.query(`SELECT permission.*,identity_automation_grant_live(permission.id) AS live FROM identity_automation_grants permission WHERE id=$1${lock ? ' FOR ' + lock : ''}`, [id])).rows[0];
     if (!row || (actor.kind === 'owner' ? row.tenant_id !== actor.source.tenant.id : row.issuer !== actor.issuer || row.client_id !== actor.clientId || String(row.client_revision) !== actor.clientRevision)) fail(404, 'Own automation grant not found');
     await this.retained(client, 'grant', id);
+    if(actor.companyTenant&&!require('../../../../packages/tenant-authorization-contract').sameTenantContext(actor.companyTenant,row.approval.tenant))fail(404,'Own company app grant not found');
     if (live && row.live !== true) fail(403, 'Automation grant revoked, expired or original company authority changed'); return row;
   }
   async retained(client, entity, id) {
@@ -75,15 +76,15 @@ class CompanyAutomation {
       }
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['automation-enrollment:' + actor.issuer + ':' + actor.clientId]);
       if (Number((await client.query('SELECT count(*) AS n FROM identity_automation_enrollments WHERE issuer=$1 AND client_id=$2 AND expires_at>clock_timestamp()', [actor.issuer, actor.clientId])).rows[0].n) >= 10) fail(429, 'Too many pending enrollments');
-      const row = (await client.query("INSERT INTO identity_automation_enrollments(id,issuer,client_id,client_revision,name,expires_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()+interval '5 minutes') RETURNING *", [body.id, actor.issuer, actor.clientId, actor.clientRevision, name])).rows[0];
+      const row = (await client.query("INSERT INTO identity_automation_enrollments(id,issuer,client_id,client_revision,name,expires_at,company_tenant) VALUES($1,$2,$3,$4,$5,clock_timestamp()+interval '5 minutes',$6) RETURNING *", [body.id, actor.issuer, actor.clientId, actor.clientRevision, name,actor.companyTenant||null])).rows[0];
       return this.enrollmentView(row);
     });
   }
-  enrollmentView(row) { return { ...base, id: row.id, clientId: row.client_id, clientRevision: String(row.client_revision), name: row.name, expiresAt: iso(row.expires_at), requestedScope: SCOPE }; }
+  enrollmentView(row) { return { ...base, id: row.id, clientId: row.client_id, clientRevision: String(row.client_revision), name: row.name, expiresAt: iso(row.expires_at), requestedScope: SCOPE,...(row.company_tenant?{companyTenant:row.company_tenant}:{}) }; }
   async enrollment(id, user, authorization) {
-    identifier(id); return this.transaction(user, authorization, async client => {
+    identifier(id); return this.transaction(user, authorization, async (client,actor) => {
       const row = (await client.query('SELECT * FROM identity_automation_enrollments WHERE id=$1 AND expires_at>clock_timestamp()', [id])).rows[0];
-      if (!row) fail(404, 'Current enrollment not found'); return this.enrollmentView(row);
+      if (!row||row.company_tenant&&!require('../../../../packages/tenant-authorization-contract').sameTenantContext(row.company_tenant,actor.source.tenant)) fail(404, 'Current enrollment not found'); return this.enrollmentView(row);
     }, { ownerOnly: true, readOnly: true });
   }
   async watchSource(body,user,authorization){
@@ -139,6 +140,8 @@ class CompanyAutomation {
           || String(existing.client_revision) !== input.clientRevision || !isDeepStrictEqual(existing.actions, input.actions) || iso(existing.expires_at) !== input.expiresAt || existing.reason !== input.reason) fail(409, 'Original approval key changed');
         return { ...base, grant: grantView(existing) };
       }
+      const enrollment=(await client.query('SELECT company_tenant FROM identity_automation_enrollments WHERE id=$1',[input.enrollmentId])).rows[0];
+      if(!enrollment||enrollment.company_tenant&&!require('../../../../packages/tenant-authorization-contract').sameTenantContext(enrollment.company_tenant,actor.source.tenant))fail(404,'Own current app enrollment required');
       const row = (await client.query(`INSERT INTO identity_automation_grants(id,enrollment_id,tenant_id,issuer,client_id,client_revision,actions,created_by,approval,reason,expires_at,status)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'active') RETURNING *`, [input.id, input.enrollmentId, actor.source.tenant.id, actor.source.issuer, input.clientId,
         input.clientRevision, input.actions, actor.source.actorUserId, actor.source, input.reason, input.expiresAt])).rows[0];

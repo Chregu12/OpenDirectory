@@ -322,6 +322,7 @@ class RoutingMiddleware {
         port: 3001,
         description: 'Identity Management'
       },
+      '/api/clients/company':{service:'oauth-provider',port:3010,description:'Own Company OAuth App Registry'},
       '/api/identity/membership-reviews':{service:'identity-service',port:3001,description:'Independent Canonical Group Membership Reviews'},
       '/api/identity/license-sources':{service:'identity-service',port:3001,description:'Canonical Scoped License Source Consents'},
       '/api/license-groups': {

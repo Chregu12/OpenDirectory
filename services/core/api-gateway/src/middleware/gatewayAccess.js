@@ -45,7 +45,7 @@ function gatewayAccess(resolveProxy) {
     }
     if (/^\/api\/(?:gateway|admin|services|config\/modules)(?:\/|$)/.test(req.path) || req.path.startsWith('/health')) return res.status(404).json({ error: 'Gateway operation not found' });
     const proxy = resolveProxy(req.path);
-    if (DELEGATED.test(req.path)) return next();
+    if (DELEGATED.test(req.path)||/^\/api\/clients\/company(?:\/|$)/.test(req.path)) return next();
     const permission = proxy ? `gateway.proxies.${proxy.name}.access` : null;
     if (!proxy && !roles(req.user).includes('admin')) return res.status(403).json({ error: 'Unregistered backend operation denied' });
     if (!roles(req.user).includes('admin') && !(permission && Array.isArray(req.user?.permissions) && req.user.permissions.includes(permission))) return res.status(403).json({ error: 'forbidden', permission });

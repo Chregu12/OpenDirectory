@@ -75,6 +75,7 @@ export const NAV_ITEMS: NavEntry[] = [
   { id: 'gpo',               label: 'Group Policy',        icon: DocumentCheckIcon },
   { id: 'policies',          label: 'Policies',            icon: DocumentIcon },
   { id: 'automation',        label: 'Automation',          icon: BoltIcon },
+  { id: 'company-apps',      label: 'Firmen-Apps',         icon: KeyIcon },
   { id: 'audit',             label: 'Audit Log',           icon: MagnifyingGlassIcon },
   { id: 'monitoring',        label: 'Monitoring',          icon: ChartBarIcon },
   { id: 'alerting',          label: 'Alerts',              icon: BellIcon },

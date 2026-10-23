@@ -35,8 +35,8 @@ Kinder und Eltern besitzen getrennte Ziele und Zeitpläne. Läuft ein Parent vor
 
 ## Installation und Datenhoheit
 
-Identity **001–053**, aktueller Identity-Code, Frontend und CLI koordiniert ausrollen; OAuth behält den vorhandenen festen Scope. Keine neue Dependency, Datenbank oder Secret-Art. Nach erneutem Anwenden von 048/049/050 anschliessend auch 051/052 und zuletzt 053 anwenden, damit die geschützten Receiver und Manifeste den aktuellen Stand besitzen.
+Identity **001–054**, aktueller Identity-Code, Frontend und CLI koordiniert ausrollen; OAuth behält den vorhandenen festen Scope. Keine neue Dependency, Datenbank oder Secret-Art. Nach erneutem Anwenden von 048/049/050 anschliessend auch 051/052/053 und zuletzt 054 anwenden, damit die geschützten Receiver und Manifeste den aktuellen Stand besitzen.
 
 Identity 051 ergänzt `identity_company_group_rule_runs`, `identity_company_group_rule_steps`, `identity_company_group_rule_work_outbox` und ein geschütztes Empfangsmanifest. Die Tabellen referenzieren tatsächliche Identity-Jobs, Freigaben, Regeln und kanonische Effekte; es gibt keine zweite Membership-Datenbank. Originalquellen enthalten keinen Bearer. Update/Delete/Truncate von gespeicherten Arbeitsbelegen sind gesperrt. Keine Pending-Outbox-Zustellung oder produktive Retention-Abnahme wird damit behauptet.
 
-Der [OpenAPI-Vertrag](../api/openapi.yaml) **1.26.0** dokumentiert die fünfte explizite Aktion, feste Gruppen-UUID, Seitenfortschritt und den Gruppenbericht. Ausführung erfolgt über das bestehende authentifizierte `/api/identity/automation/run`; die manuellen Gruppenregel-Endpunkte bleiben dem tatsächlichen menschlichen Owner vorbehalten. Der [Gesamtauftrag](../implementation-worklist.md) bleibt offen.
+Der [OpenAPI-Vertrag](../api/openapi.yaml) **1.27.0** dokumentiert die fünfte explizite Aktion, feste Gruppen-UUID, Seitenfortschritt und den Gruppenbericht. Ausführung erfolgt über das bestehende authentifizierte `/api/identity/automation/run`; die manuellen Gruppenregel-Endpunkte bleiben dem tatsächlichen menschlichen Owner vorbehalten. Der [Gesamtauftrag](../implementation-worklist.md) bleibt offen.

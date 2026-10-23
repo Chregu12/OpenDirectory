@@ -25,6 +25,24 @@ async function grant(actions=['directory.users.export']){
  const result=await automation.approve(input,owner.user,bearer);return{...result.grant,input};
 }
 const enqueue=permission=>automation.enqueue({id:randomUUID(),grantId:permission.id,action:permission.actions[0],format:'json'},app,appBearer);
+test('a company-owned app enrollment is bound to its real original tenant and cannot be approved by a foreign actual owner',async()=>{
+ const tenant=(await new AuthorizationState(database).state(issuer,owner.user.sub)).tenant;app.company_tenant=tenant;
+ const enrollment=await automation.enroll({id:randomUUID(),name:'Tenant-owned automation application'},app,appBearer);assert.deepEqual(enrollment.companyTenant,tenant);
+ const other=await activeCompany(database,schema,issuer);await assert.rejects(automation.enrollment(enrollment.id,other.user,bearer),{status:404});
+ const input={id:randomUUID(),enrollmentId:enrollment.id,clientId:app.client_id,clientRevision:'1',actions:['directory.users.export'],expiresAt:new Date(Date.now()+3600000).toISOString(),reason:'Explicit app approval for the actual namespace',confirm:true};
+ await assert.rejects(automation.approve(input,other.user,bearer),{status:404});
+ await assert.rejects(automation.transaction(other.user,bearer,(client,actor)=>client.query(`INSERT INTO identity_automation_grants(id,enrollment_id,tenant_id,issuer,client_id,client_revision,actions,created_by,approval,reason,expires_at,status)
+  VALUES($1,$2,$3,$4,$5,1,$6,$7,$8,$9,$10,'active')`,[input.id,input.enrollmentId,actor.source.tenant.id,issuer,app.client_id,input.actions,actor.source.actorUserId,actor.source,input.reason,input.expiresAt]),{ownerOnly:true}),{code:'42501'});
+ assert.equal((await pool.query('SELECT count(*) AS n FROM identity_automation_grants')).rows[0].n,'0');
+ const approved=await automation.approve(input,owner.user,bearer);await enqueue(approved.grant);owner.user.auth_time-=301;owner.user.mfa_authorization.authTime-=301;
+ assert.equal((await automation.run({grantId:approved.grant.id},app,appBearer)).job.status,'succeeded');
+ const substituted={...app,company_tenant:(await new AuthorizationState(database).state(issuer,other.user.sub)).tenant};await assert.rejects(automation.run({grantId:approved.grant.id},substituted,appBearer),{status:404});
+});
+test('actual roleless company app authority is a read-only original human source and requires fresh independent MFA',async()=>{
+ const authority=new(require('../CompanyAppAuthority').CompanyAppAuthority)(database,{issuer,revalidate:async(_authorization,user)=>(await new AuthorizationState(database).state(issuer,user.sub)).tenant});
+ const source=await authority.read(owner.user,bearer);assert.equal(Object.keys(source).length,11);assert.deepEqual(source.permissions,require('../../../../../packages/company-app-contract').PERMISSIONS);assert.equal(source.actorUserId,owner.receipt.administratorId);
+ owner.user.auth_time-=301;owner.user.mfa_authorization.authTime-=301;await assert.rejects(authority.read(owner.user,bearer),{status:428});
+});
 test('parallel self-enrollment cannot exceed the actual pending enrollment limit',async()=>{
  const results=await Promise.allSettled(Array.from({length:11},()=>automation.enroll({id:randomUUID(),name:'Concurrent actual app enrollment'},app,appBearer)));
  assert.equal(results.filter(result=>result.status==='fulfilled').length,10);
@@ -164,7 +182,7 @@ test('every offered dataset executes against real own canonical rows and migrati
   const queued=await automation.enqueue({id:randomUUID(),grantId:permission.id,action,format:'json'},app,appBearer);
   const result=await automation.run({grantId:permission.id},app,appBearer);assert.equal(result.job.status,'succeeded');
   const artifact=await automation.result(queued.job.id,app,appBearer);assert.deepEqual(JSON.parse(artifact.content).rows.map(row=>row.id),[expected]);
-  for(const file of ['048_company_automation.sql','049_company_license_automation.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql','053_company_automation_changes.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
+  for(const file of ['048_company_automation.sql','049_company_license_automation.sql','051_company_group_rule_automation.sql','052_live_company_group_rules.sql','053_company_automation_changes.sql','054_company_app_automation_tenants.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
   assert.equal((await automation.result(queued.job.id,app,appBearer)).sha256,artifact.sha256);
  }
 });

@@ -15,6 +15,7 @@ function companyAutomationOpenApi() {
       attemptCount: { type: 'integer', minimum: 0, maximum: 5 }, retryCount: { type: 'integer', minimum: 0 }, availableAt: date, leaseUntil: nullable(date), errorCode: nullable({ type: 'string' }), rowCount: nullable({ type: 'integer', minimum: 0, maximum: 10000 }), artifactSha256: nullable({ type: 'string', pattern: '^[a-f0-9]{64}$' }), createdAt: date, updatedAt: date }),
     CompanyAutomationSchedule: object({ id: uuid, grantId: uuid, tenantId: uuid, action, format, intervalSeconds: { type: 'integer', minimum: 60, maximum: 2592000 }, enabled: { type: 'boolean' }, nextRunAt: date, revision, createdAt: date }),
   };
+  schemas.CompanyAutomationEnrollment.properties.companyTenant=object({id:uuid,version:revision,generation:revision});
   const counter={type:'string',pattern:'^(0|[1-9][0-9]{0,18})$'};
   schemas.CompanyAutomationJob.properties.trigger=object({kind:{const:'change'},groupId:uuid,sourceRevision:revision,deadlineRevision:counter});
   const trigger=schemas.CompanyAutomationJob.properties.trigger;Object.assign(trigger.properties,{poolId:uuid,poolRevision:revision,availableSeats:{type:'integer',minimum:0,maximum:10000}});
