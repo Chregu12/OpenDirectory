@@ -13,8 +13,8 @@ const config = require('../utils/config');
  * userRepository (IUserRepository / PostgresUserRepository).  A db connection is
  * accepted for audit-log queries only — never for direct users-table access.
  *
- * Falls back to an in-memory store when the repository is unavailable so the
- * service stays operational without a database.
+ * Without an injected repository, supports an in-memory store. A configured
+ * repository remains authoritative on lookup misses and storage failures.
  */
 class UserService {
   /**
@@ -215,6 +215,7 @@ class UserService {
         return this._toPublic(aggregate);
       } catch (err) {
         this._logger.warn('UserService.getUserById: repository query failed', { error: err.message });
+        throw Object.assign(new Error('Credential storage unavailable'),{status:503});
       }
     }
 
@@ -233,6 +234,7 @@ class UserService {
         return this._toPublic(aggregate);
       } catch (err) {
         this._logger.warn('UserService.getUserByUsername: repository query failed', { error: err.message });
+        throw Object.assign(new Error('Credential storage unavailable'),{status:503});
       }
     }
 
@@ -252,6 +254,7 @@ class UserService {
         return this._toPublic(aggregate);
       } catch (err) {
         this._logger.warn('UserService.getUserByEmail: repository query failed', { error: err.message });
+        throw Object.assign(new Error('Credential storage unavailable'),{status:503});
       }
     }
 
@@ -291,6 +294,7 @@ class UserService {
           locked: safe.isLocked !== undefined ? safe.isLocked : aggregate.locked,
           lockUntil: safe.lockedUntil !== undefined ? safe.lockedUntil : aggregate.lockUntil,
           loginAttempts: aggregate.loginAttempts,
+          recordRevision: aggregate.recordRevision,
           createdAt: json.createdAt,
           updatedAt: new Date(),
         });
@@ -379,6 +383,7 @@ class UserService {
         };
       } catch (err) {
         this._logger.warn('UserService.listUsers: repository query failed', { error: err.message });
+        throw Object.assign(new Error('Credential storage unavailable'),{status:503});
       }
     }
 
@@ -406,7 +411,7 @@ class UserService {
   /**
    * Change a user's password.  Loads aggregate, calls changePassword(), saves.
    */
-  async changePassword(id, newPassword) {
+  async changePassword(id, newPassword, currentPassword) {
     if (!id) throw new Error('User ID required');
     if (!newPassword) throw new Error('New password required');
 
@@ -416,6 +421,7 @@ class UserService {
       try {
         const aggregate = await this._userRepository.findById(id);
         if (!aggregate) throw new Error('User not found');
+        if(currentPassword!==undefined&&!await require('../utils/passwordHash').verifyPasswordAnyFormat(currentPassword,aggregate.passwordHash))throw Object.assign(new Error('Current password is incorrect'),{status:401});
         aggregate.changePassword(hash);
         await this._userRepository.save(aggregate);
         return true;
@@ -428,6 +434,7 @@ class UserService {
     // In-memory fallback
     const user = this._users.get(id);
     if (!user) throw new Error('User not found');
+    if(currentPassword!==undefined&&!await require('../utils/passwordHash').verifyPasswordAnyFormat(currentPassword,user.password_hash))throw Object.assign(new Error('Current password is incorrect'),{status:401});
     user.password_hash = hash;
     user.password_changed_at = new Date().toISOString();
     user.updated_at = new Date().toISOString();
@@ -468,8 +475,7 @@ class UserService {
         hash = aggregate ? aggregate.passwordHash : null;
       } catch (err) {
         this._logger.warn('UserService.verifyCurrentPassword: repository query failed', { error: err.message });
-        const user = this._users.get(userId);
-        hash = user ? user.password_hash : null;
+        throw Object.assign(new Error('Credential storage unavailable'),{status:503});
       }
     } else {
       const user = this._users.get(userId);
@@ -515,6 +521,7 @@ class UserService {
           locked: true,
           lockUntil: lockedUntil,
           loginAttempts: aggregate.loginAttempts,
+          recordRevision: aggregate.recordRevision,
           createdAt: json.createdAt,
           updatedAt: new Date(),
         });

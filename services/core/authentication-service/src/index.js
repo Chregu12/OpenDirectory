@@ -14,8 +14,7 @@ const SessionManager = require('./services/sessionManager');
 const UserService = require('./services/userService');
 const AuditService = require('./services/auditService');
 
-const { createProvider } = require('./oidc/provider');
-const { buildInteractionsRouter } = require('./oidc/interactions');
+const {localAuthentication}=require('./localAuthentication');
 
 // ─── DDD Infrastructure ────────────────────────────────────────────────────────
 const PostgresUserRepository = require('./infrastructure/repositories/PostgresUserRepository');
@@ -91,9 +90,6 @@ class UnifiedAuthenticationService {
     });
     this.auditService = new AuditService();
 
-    // OIDC provider is initialized asynchronously in start()
-    this.oidcProvider = null;
-
     this.initializeMiddleware();
     this.initializePassport();
     this.initializeRoutes();
@@ -161,12 +157,8 @@ class UnifiedAuthenticationService {
     this.app.use(express.urlencoded({ extended: true }));
 
     // Session management with Redis
-    const RedisClient = require('ioredis');
-    const redisClient = new RedisClient({
-      host: config.redis.host,
-      port: config.redis.port,
-      password: config.redis.password,
-    });
+    const redisClient = require('./utils/redisClient').redisClient();
+    this.redisClient=redisClient;
 
     this.app.use(session({
       store: new RedisStore({ client: redisClient }),
@@ -202,61 +194,7 @@ class UnifiedAuthenticationService {
       usernameField: 'username',
       passwordField: 'password',
       passReqToCallback: true
-    }, async (req, username, password, done) => {
-      try {
-        // Prefer DDD AuthApplicationService; fall back to legacy manager.
-        let user;
-        try {
-          const result = await this.authAppService.login({
-            username,
-            password,
-            ip: req.ip,
-            userAgent: req.headers['user-agent'],
-          });
-          user = result ? result.user : null;
-        } catch (appServiceErr) {
-          // AuthApplicationService throws { status: 403 } when it found the
-          // user in Postgres AND that account is locked — an authoritative
-          // state that must never be bypassed by falling back to the legacy
-          // manager.
-          //
-          // Every other case — 401 (no such user in Postgres, or a wrong
-          // password for one that IS there), or any infrastructure error —
-          // falls back to the legacy authManager. This matters for accounts
-          // that only exist in the legacy/LDAP-backed store and have never
-          // been migrated into Postgres: AuthApplicationService.login()
-          // throws 401 the moment userRepository.findByUsername() comes back
-          // empty, which is *every* login attempt when Postgres doesn't
-          // (yet) have the user — that must not be treated as a final
-          // "invalid credentials" verdict, only as "the DDD path doesn't
-          // know this user; ask the legacy path." Previously this branch
-          // took the 401 as authoritative too, which made the legacy
-          // fallback unreachable for any account not already migrated.
-          if (appServiceErr.status === 403) {
-            user = null;
-          } else {
-            logger.warn('AuthApplicationService.login failed, falling back to legacy:', appServiceErr.message);
-            user = await this.authManager.authenticateLocal(username, password);
-          }
-        }
-
-        if (!user) {
-          return done(null, false, { message: 'Invalid credentials' });
-        }
-
-        // Zero-Trust verification
-        const trustScore = await this.zeroTrust.evaluateTrust(req, user);
-        if (trustScore < config.zeroTrust.minTrustScore) {
-          await this.auditService.logFailedAuth(username, req, 'Low trust score');
-          return done(null, false, { message: 'Additional verification required' });
-        }
-
-        return done(null, user);
-      } catch (error) {
-        logger.error('Local auth error:', error);
-        return done(error);
-      }
-    }));
+    }, localAuthentication(this)));
 
     // JWT strategy
     passport.use('jwt', new JwtStrategy({
@@ -326,34 +264,16 @@ class UnifiedAuthenticationService {
     });
   }
 
-  /**
-   * Mount OIDC-related middleware and endpoints.
-   * Called after the provider has been instantiated in start().
-   * @param {import('node-oidc-provider').Provider} oidcProvider
-   */
-  mountOidcRoutes(oidcProvider) {
-    // Interactions router MUST be mounted before the provider callback
-    // so that /interaction/* routes are handled by Express, not the provider.
-    const interactionsRouter = buildInteractionsRouter(oidcProvider, {
-      authManager: this.authManager,
-      userService: this.userService,
-      auditService: this.auditService,
-    });
-    this.app.use(interactionsRouter);
-
-    // Mount the OIDC provider — this registers all standard endpoints:
-    //   /authorize, /token, /userinfo, /jwks,
-    //   /.well-known/openid-configuration, /end_session, /introspect, /revoke
-    this.app.use(oidcProvider.callback());
-
-    logger.info('OIDC provider mounted (issuer: ' + oidcProvider.issuer + ')');
-  }
-
   initializeRoutes() {
+    this.app.use(/^\/(?:\.well-known\/openid-configuration|authorize|auth|token|userinfo|me|jwks|end_session|session\/end|introspect|revoke|interaction)(?=\/|$)/,(_req,res)=>{
+      res.set('Cache-Control','no-store').status(410).json({error:'legacy_oidc_retired',message:'Use the configured central oauth-provider issuer.'});
+    });
     // Health check
-    this.app.get('/health', (req, res) => {
-      res.json({
-        status: 'healthy',
+    this.app.get('/health', async (req, res) => {
+      const db=require('./db');let ready=db.isAvailable();
+      try{if(ready)await db.query('SELECT record_revision,is_locked FROM users LIMIT 0');}catch{ready=false;}
+      res.status(ready?200:503).json({
+        status: ready?'healthy':'unavailable',
         service: 'authentication-service',
         uptime: process.uptime(),
         timestamp: new Date().toISOString()
@@ -376,7 +296,7 @@ class UnifiedAuthenticationService {
     };
 
     // NOTE: /api/auth/login is kept for backwards-compatible direct API access.
-    //       New clients should use the OIDC /authorize flow instead.
+    //       New clients use the central oauth-provider /oauth/authorize flow.
 
     // Core auth routes (login, logout, refresh, validate)
     this.app.use(createAuthRoutes(services));
@@ -445,46 +365,24 @@ class UnifiedAuthenticationService {
     });
   }
 
-  async start(port = process.env.PORT || 3001) {
-    // Initialize the audit/password-history Postgres pool. db.initDb() is
-    // fully self-contained: it catches its own connection errors, logs a
-    // warning, and leaves db.isAvailable() === false rather than throwing —
-    // so this is safe to call unconditionally, including in environments
-    // with no database configured. Without this call, db.isAvailable()
-    // stayed false forever and the password-history check in routes/users.js
-    // (checkPasswordHistory/recordPasswordHash) was permanently dead code.
+  async start(port = process.env.PORT || 3002) {
     const db = require('./db');
-    try {
-      await db.initDb();
-    } catch (err) {
-      // initDb() already swallows connection errors internally; this catch
-      // is an extra safety net only, so a DB outage can never block startup.
-      logger.warn('db.initDb() failed unexpectedly, continuing without password-history support:', err.message);
-    }
-
-    // Initialize the OIDC provider before accepting connections
-    const issuer = process.env.ISSUER_URL || `http://localhost:${port}`;
-    try {
-      this.oidcProvider = await createProvider(issuer);
-      this.mountOidcRoutes(this.oidcProvider);
-      logger.info(`OIDC issuer: ${issuer}`);
-    } catch (err) {
-      logger.error('Failed to initialize OIDC provider:', err);
-      throw err;
-    }
+    await db.initDb();
 
     this.server = this.app.listen(port, () => {
       logger.info(`Unified Authentication Service started on port ${port}`);
       logger.info(`Health check: http://localhost:${port}/health`);
-      logger.info(`OIDC discovery: ${issuer}/.well-known/openid-configuration`);
-      logger.info(`Auth providers: Local, LDAP, JWT, SSO, OIDC`);
+      logger.info('Credential providers: Local, LDAP; OIDC/SAML use the central oauth-provider');
       logger.info(`Zero-Trust: ${config.zeroTrust.enabled ? 'Enabled' : 'Disabled'}`);
       logger.info(`MFA: ${config.mfa.enabled ? 'Enabled' : 'Disabled'}`);
     });
   }
 
-  stop() {
-    if (this.server) this.server.close(() => logger.info('Authentication service stopped'));
+  async stop() {
+    if(this.server)await new Promise((resolve,reject)=>this.server.close(error=>error?reject(error):resolve()));
+    await Promise.allSettled([this.redisClient,this.tokenService._redisClient,this.sessionManager._redisClient].filter(Boolean).map(client=>client.quit()));
+    await require('./db').close();
+    logger.info('Authentication service stopped');
   }
 }
 
@@ -496,10 +394,10 @@ authService.start().catch((err) => {
   process.exit(1);
 });
 
-function shutdown(signal) {
+async function shutdown(signal) {
   logger.info(`Received ${signal}, shutting down gracefully`);
-  authService.stop();
-  setTimeout(() => { logger.error('Forced shutdown after timeout'); process.exit(1); }, 10000);
+  const timer=setTimeout(() => { logger.error('Forced shutdown after timeout'); process.exit(1); }, 10000);
+  try{await authService.stop();clearTimeout(timer);}catch{logger.error('Authentication shutdown failed');process.exit(1);}
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

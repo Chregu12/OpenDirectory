@@ -226,7 +226,7 @@ function createUserRoutes(services) {
         return res.status(400).json({ error: 'Dieses Passwort wurde bereits verwendet. Bitte wählen Sie ein anderes.' });
       }
 
-      await userService.changePassword(userId, newPassword);
+      await userService.changePassword(userId, newPassword,currentPassword);
       recordPasswordHash(userId, newPassword).catch(() => {});
       await sessionManager.revokeAllUserSessions(userId);
       await auditService.logSecurityEvent('password_changed', userId, req);
@@ -251,6 +251,7 @@ function createUserRoutes(services) {
       });
     } catch (error) {
       logger.error('Change password error:', error);
+      if(error.status===401||error.status===409)return res.status(error.status).json({error:error.status===401?'Current password is incorrect':'Credential record changed; reload before retrying'});
       res.status(500).json({ error: 'Failed to change password' });
     }
   });

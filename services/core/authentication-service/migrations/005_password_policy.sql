@@ -44,4 +44,13 @@ CREATE TABLE IF NOT EXISTS password_history (
   PRIMARY KEY (user_id, password_hash)
 );
 
+-- Preserve the actual timestamps from the earlier 002 history schema.
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='password_history' AND column_name='changed_at') THEN
+  ALTER TABLE password_history ADD COLUMN changed_at TIMESTAMPTZ;
+  UPDATE password_history SET changed_at=created_at;
+  ALTER TABLE password_history ALTER COLUMN changed_at SET DEFAULT NOW();
+ END IF;
+END; $$;
+
 CREATE INDEX IF NOT EXISTS idx_password_history_user_time ON password_history(user_id, changed_at DESC);

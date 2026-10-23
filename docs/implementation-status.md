@@ -23,6 +23,8 @@ Statuswerte: `Not Started`, `In Progress`, `Implemented`, `Tested`, `Blocked`, `
 
 Die Tabelle ist keine vollständige Security- oder Code-Audit-Abnahme. Bestehende Prototypmodule werden nicht allein wegen einer Datei oder eines Menüeintrags als implementierte Business Capability gezählt.
 
+Als Voraussetzung der Mitarbeiteraufnahme ist die [persistente Credential-Grundlage](../services/core/authentication-service/README.md) gegen tatsächlichen PostgreSQL-/Redis-Kaltstart, Neustart und den unveränderten OAuth-Passwortadapter geprüft. Dies behebt die vorher nicht zusammenpassende Auth-Migration/Repository-Abbildung sowie ignorierte Sperren und veraltete Schreibstände. Einladungen, gekoppelte Subject-Verknüpfung, erste Pflicht-MFA und SCIM bleiben offen; BR-002/WF-002 werden dadurch nicht abgeschlossen.
+
 **Konkrete offene Produktgrenzen:** `device-service/src/services/remoteActionService.js` enthält noch Legacy-Remote-Aktionen mit lokalen Zustandsänderungen vor externem Ergebnis und Best-Effort-MDM-Push. Der neue normale `inventoryServer.js`-Einstieg und `/devices` führen diese nicht aus: Unsupported statt behaupteter Remote-Erfolge. Die alten Dateien bleiben historische Quelldaten, kein freigegebener produktiver Einstieg. Tatsächliche Provider-Auftrags-/Ausführungszustände, sichere Enrollments und Migration vorhandener Gerätedaten bleiben offen. Der vorhandene Setup-Wizard mit Beispiel-Enrollment-Kommandos ist kein eigener belegter Betriebsprozess.
 
 ## Vertikale Lieferungen

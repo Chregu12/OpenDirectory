@@ -18,6 +18,7 @@ function createAuthRoutes(services) {
       const strategy = provider === 'ldap' ? 'ldap' : 'local';
 
       passport.authenticate(strategy, async (err, user, info) => {
+        try {
         if (err) {
           return next(err);
         }
@@ -103,6 +104,7 @@ function createAuthRoutes(services) {
             expiresAt: session.expiresAt
           }
         });
+        } catch(error) { next(error); }
       })(req, res, next);
     } catch (error) {
       logger.error('Login error:', error);

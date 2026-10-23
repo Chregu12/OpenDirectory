@@ -70,18 +70,6 @@
 
 // ─── Mock all external / missing dependencies BEFORE any require ───────────────
 
-// Mock oidc-provider (ESM-only package — must be mocked before any require)
-jest.mock('../oidc/provider', () => ({
-  createProvider: jest.fn().mockResolvedValue({
-    callback: () => (req, res, next) => next(),
-    interactionDetails: jest.fn(),
-    interactionFinished: jest.fn(),
-  }),
-}));
-jest.mock('../oidc/interactions', () => ({
-  buildInteractionsRouter: jest.fn().mockReturnValue(require('express').Router()),
-}));
-
 // Mock pg
 jest.mock('pg', () => ({
   Pool: jest.fn().mockImplementation(() => ({
@@ -434,8 +422,6 @@ describe('Authentication Service - E2E API Tests', () => {
     });
 
     it('returns 401 for invalid credentials', async () => {
-      // authenticateLocal returns null → invalid credentials
-      const { default: AuthManager } = { default: require('../services/authenticationManager') };
       const res = await request(app)
         .post('/api/auth/login')
         .send({ username: 'wronguser', password: 'wrongpass' });
@@ -452,17 +438,15 @@ describe('Authentication Service - E2E API Tests', () => {
     });
 
     it('returns 200 with success for valid credentials (mocked)', async () => {
-      // Make authenticateLocal return a valid user - use the service's own authManager instance
-      service.authManager.authenticateLocal.mockResolvedValueOnce({
+      const original=jest.spyOn(service.authAppService,'login').mockResolvedValueOnce({user:{
         id: 'user-123',
         username: 'admin',
         email: 'admin@example.com',
         roles: ['admin'],
         permissions: ['*'],
         mfaEnabled: false,
-      });
-
-      const res = await request(app)
+      }});
+      try{const res = await request(app)
         .post('/api/auth/login')
         .send({ username: 'admin', password: 'AdminPass123!' });
       expect(res.status).toBe(200);
@@ -470,6 +454,14 @@ describe('Authentication Service - E2E API Tests', () => {
       expect(res.body).toHaveProperty('user');
       expect(res.body).toHaveProperty('tokens');
       expect(res.body.tokens).toHaveProperty('accessToken');
+      }finally{original.mockRestore();}
+    });
+
+    it('does not replace canonical credential rejection with a legacy administrator fixture',async()=>{
+      service.authManager.authenticateLocal.mockReset();service.authManager.authenticateLocal.mockResolvedValueOnce({id:'unrelated-legacy-admin',roles:['admin']});
+      const res=await request(app).post('/api/auth/login').send({username:'missing-canonical-user',password:'Actual-disposable-password-321!'});
+      expect(res.status).toBe(401);expect(res.body.tokens).toBeUndefined();expect(service.authManager.authenticateLocal).not.toHaveBeenCalled();
+      service.authManager.authenticateLocal.mockReset();
     });
   });
 

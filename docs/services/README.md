@@ -6,7 +6,7 @@ OpenDirectory consists of approximately 30 microservices across three layers. Se
 
 | Service | Port | Database | Description |
 |---|---|---|---|
-| authentication-service | 3001 | PostgreSQL (auth) | User auth, MFA, SSO, sessions, password management |
+| authentication-service | 3002 | PostgreSQL (auth) | [Persistent credential provider](../../services/core/authentication-service/README.md); canonical OIDC/SAML live in oauth-provider |
 | enterprise-directory | 3000 | MongoDB | AD-compatible directory, GPO, OU hierarchy, audit |
 | device-service | 3003 | PostgreSQL (devices) | MDM, device lifecycle, compliance, remote actions |
 | policy-service | 3004 | PostgreSQL (policies) | Policy engine, RSoP, templates, blueprints |

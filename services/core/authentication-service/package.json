@@ -7,6 +7,7 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest",
+    "test:credentials:integration": "node scripts/test-postgres.js",
     "lint": "eslint src/"
   },
   "dependencies": {

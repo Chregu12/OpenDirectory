@@ -2,6 +2,8 @@
 
 The central login exposes OIDC discovery at `/.well-known/openid-configuration`, authorization at `/oauth/authorize` and tokens at `/oauth/token`. Existing identity eligibility, application assignments, sessions and local MFA checks apply to external OIDC logins too.
 
+Local passwords are checked through the [persistent authentication credential service](../authentication-service/README.md), configured with `AUTH_SERVICE_URL` (Compose: `http://auth-service:3002`). That service's alternate OIDC issuer is retired with HTTP 410. Credential verification alone does not grant a canonical Identity subject link, tenant access, application assignment or OAuth MFA. Employee invitation/onboarding remains separate work.
+
 ## External OIDC adapter
 
 Set `OAUTH_OIDC_CONFIG_FILE` to an absolute path to a JSON file owned by the service user or root, with mode `0600`. Configuration is loaded on startup:

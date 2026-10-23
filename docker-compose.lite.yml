@@ -195,7 +195,6 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
       - LDAP_URL=ldap://lldap:3890
-      - ISSUER_URL=${AUTH_ISSUER_URL:-http://auth-service:3002}
     ports:
       - "3002:3002"
     networks:

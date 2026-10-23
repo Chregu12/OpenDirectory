@@ -2,7 +2,7 @@
 
 Consolidated service architecture for the OpenDirectory Universal Endpoint Management platform.
 
-Current integration boundaries: [central OIDC adapter and SAML IdP launches](core/oauth-provider/README.md), [Apple MDM/ADE status](core/apple-mdm/README.md). Legacy authentication-service SSO callbacks are retired; ABM/ASM enrollment is not connected.
+Current integration boundaries: [central OIDC adapter and SAML IdP launches](core/oauth-provider/README.md), [persistent credential provider](core/authentication-service/README.md), [Apple MDM/ADE status](core/apple-mdm/README.md). Legacy authentication-service OIDC/SSO entry points are retired; ABM/ASM enrollment is not connected.
 
 ## 📁 Service Organization
 
@@ -28,7 +28,7 @@ Core infrastructure services that provide the foundation:
 
 ### Core Services (`/core`)
 Essential platform services including:
-- **auth-service** - Authentication and authorization
+- **authentication-service** - Persistent password credential provider on port 3002
 - **device-service** - Device management core
 - **policy-service** - Policy engine core
 - **identity-service** - Identity management

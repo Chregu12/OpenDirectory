@@ -6,7 +6,7 @@ const config = {
   environment: process.env.NODE_ENV || 'development',
 
   server: {
-    port: parseInt(process.env.PORT, 10) || 3001,
+    port: parseInt(process.env.PORT, 10) || 3002,
     host: process.env.HOST || '0.0.0.0',
   },
 
@@ -27,6 +27,7 @@ const config = {
   },
 
   redis: {
+    url: process.env.REDIS_URL,
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT, 10) || 6379,
     password: process.env.REDIS_PASSWORD || undefined,
@@ -95,5 +96,10 @@ const config = {
     from: process.env.EMAIL_FROM || 'noreply@opendirectory.local',
   },
 };
+
+if(config.environment==='production'&&(!process.env.JWT_SECRET||process.env.JWT_SECRET.trim().length<32||config.jwt.secret==='changeme-jwt-secret-at-least-32-chars!!'))throw new Error('Production JWT_SECRET with at least 32 characters required');
+if(process.env.SESSION_SECRET){
+  if(config.environment==='production'&&(process.env.SESSION_SECRET.trim().length<32||process.env.SESSION_SECRET==='changeme-session-secret-32-chars!!'))throw new Error('Production SESSION_SECRET must contain at least 32 characters');
+}else config.session.secret=require('node:crypto').createHmac('sha256',config.jwt.secret).update('OpenDirectory/auth-service/http-session/v1').digest('hex');
 
 module.exports = config;

@@ -1,13 +1,13 @@
 const { Pool } = require('pg');
-const fs = require('fs');
-const path = require('path');
+const {runMigrations}=require('./runMigrations');
+const databaseUrl=process.env.AUTH_DATABASE_URL||process.env.DATABASE_URL;
 
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
+  ...(databaseUrl?{connectionString:databaseUrl}:{host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || process.env.POSTGRES_DB || 'auth',
   user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
-  password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || '',
+  password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || ''}),
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
@@ -16,30 +16,16 @@ const pool = new Pool({
 let dbAvailable = false;
 
 async function initDb() {
+  dbAvailable=false;
   try {
-    await pool.query('SELECT 1');
+    const count=await runMigrations(pool);
     dbAvailable = true;
-    await runMigrations();
-    console.log('[auth-db] PostgreSQL connected');
+    console.log('[auth-db] PostgreSQL connected; '+count+' migrations applied');
   } catch (err) {
     console.warn('[auth-db] PostgreSQL not available:', err.message);
     dbAvailable = false;
+    throw Object.assign(new Error('Authentication database initialization failed'),{cause:err,status:503});
   }
-}
-
-async function runMigrations() {
-  const migrationsDir = path.join(__dirname, '..', 'migrations');
-  if (!fs.existsSync(migrationsDir)) return;
-  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
-  for (const file of files) {
-    try {
-      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-      await pool.query(sql);
-    } catch (err) {
-      console.error(`[auth-db] Migration ${file}:`, err.message);
-    }
-  }
-  console.log(`[auth-db] ${files.length} migration(s) applied`);
 }
 
 async function logAuditEvent({ eventType, actor, target, message, severity = 'info', ipAddress, metadata = {} }) {
@@ -78,9 +64,10 @@ async function getRecentEvents(limit = 20) {
 const inMemoryAuditLog = [];
 
 function isAvailable() { return dbAvailable; }
+async function close(){dbAvailable=false;await pool.end();}
 
 async function query(sql, params) {
   return pool.query(sql, params);
 }
 
-module.exports = { initDb, logAuditEvent, getRecentEvents, isAvailable, query };
+module.exports = { initDb, logAuditEvent, getRecentEvents, isAvailable, query, close };

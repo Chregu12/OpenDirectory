@@ -91,11 +91,11 @@ class AuthenticationManager {
       try {
         aggregate = await this._userRepository.findByUsername(username);
       } catch (err) {
-        this._logger.warn('AuthenticationManager.authenticateLocal: repository query failed, falling back to memory', { error: err.message });
+        throw Object.assign(new Error('Credential storage unavailable'),{status:503});
       }
     }
 
-    if (!aggregate) {
+    if (!aggregate && !this._userRepository) {
       // In-memory fallback
       const row = this._users.get(username.toLowerCase()) || null;
       if (!row) {
@@ -105,6 +105,7 @@ class AuthenticationManager {
       }
       aggregate = row;
     }
+    if(!aggregate)return null;
 
     // Get password hash — aggregate vs plain object
     const hash = (typeof aggregate.passwordHash !== 'undefined')
@@ -247,6 +248,7 @@ class AuthenticationManager {
             locked: aggregate.locked,
             lockUntil: aggregate.lockUntil,
             loginAttempts: aggregate.loginAttempts,
+            recordRevision: aggregate.recordRevision,
             createdAt: aggregate.toJSON().createdAt,
             updatedAt: new Date(),
           });
@@ -266,7 +268,7 @@ class AuthenticationManager {
         await this._userRepository.save(newAggregate);
         return this._aggregateToPublic(newAggregate);
       } catch (err) {
-        this._logger.warn('AuthenticationManager._upsertSSOUser: repository failed, using memory fallback', { error: err.message });
+        throw Object.assign(new Error('Credential storage unavailable'),{status:503});
       }
     }
 

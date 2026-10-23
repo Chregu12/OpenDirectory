@@ -33,16 +33,12 @@ class TokenService {
 
   async _initRedis() {
     try {
-      const Redis = require('ioredis');
-      this._redisClient = new Redis({
-        host: config.redis.host,
-        port: config.redis.port,
-        password: config.redis.password,
-        db: config.redis.db || 0,
+      this._redisClient = require('../utils/redisClient').redisClient({
         lazyConnect: true,
         enableOfflineQueue: false,
       });
 
+      await this._redisClient.connect();
       await this._redisClient.ping();
       logger.info('TokenService: Redis backend connected');
     } catch (err) {

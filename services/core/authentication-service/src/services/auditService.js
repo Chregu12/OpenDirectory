@@ -59,13 +59,12 @@ class AuditService {
 
     logger.info(`audit: ${eventType}`, { userId, ip: event.ip_address, ...metadata });
 
-    if (this._dbAvailable && this._db) {
+    if (this._db && (typeof this._db.isAvailable==='function'?this._db.isAvailable():this._dbAvailable)) {
       try {
-        await this._db.query(
-          `INSERT INTO audit_events (id, event_type, user_id, username, ip_address, user_agent, metadata, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        const result=await this._db.query(
+          `INSERT INTO audit_events (event_type, user_id, username, ip_address, user_agent, metadata, created_at, message)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
           [
-            event.id,
             event.event_type,
             event.user_id,
             event.username,
@@ -73,14 +72,17 @@ class AuditService {
             event.user_agent,
             JSON.stringify(event.metadata),
             event.created_at,
+            event.event_type,
           ]
         );
+        event.id=String(result.rows[0].id);
         return event;
       } catch (err) {
-        logger.warn('AuditService: db write failed, buffering in memory', { error: err.message });
-        this._dbAvailable = false;
+        logger.warn('AuditService: db write failed', { error: err.message });
+        throw Object.assign(new Error('Authentication audit unavailable'),{status:503});
       }
     }
+    if(process.env.NODE_ENV==='production')throw Object.assign(new Error('Authentication audit unavailable'),{status:503});
 
     // In-memory fallback — keep last 10 000 events
     this._inMemory.push(event);
@@ -150,7 +152,7 @@ class AuditService {
   }
 
   async _queryEvents({ userId, eventType, eventTypes, startDate, endDate, limit = 100 }) {
-    if (this._dbAvailable && this._db) {
+    if (this._db && (typeof this._db.isAvailable==='function'?this._db.isAvailable():this._dbAvailable)) {
       try {
         const conditions = [];
         const params = [];
@@ -187,9 +189,11 @@ class AuditService {
         );
         return rows;
       } catch (err) {
-        logger.warn('AuditService: query error, falling back to in-memory', { error: err.message });
+        logger.warn('AuditService: query unavailable', { error: err.message });
+        throw Object.assign(new Error('Authentication audit unavailable'),{status:503});
       }
     }
+    if(process.env.NODE_ENV==='production')throw Object.assign(new Error('Authentication audit unavailable'),{status:503});
 
     // In-memory fallback
     let results = [...this._inMemory];
