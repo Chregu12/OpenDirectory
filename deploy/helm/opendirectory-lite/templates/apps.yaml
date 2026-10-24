@@ -1,6 +1,12 @@
 {{- $root := . -}}
 {{- range $name, $app := .Values.apps }}
 {{- if $app.enabled }}
+{{- $usesDatabasePassword := false -}}
+{{- range $key, $reference := $app.secretEnv -}}
+{{- if $reference.database -}}
+{{- $usesDatabasePassword = true -}}
+{{- end -}}
+{{- end -}}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -9,6 +15,9 @@ metadata:
   labels:
     {{- include "opendirectory-lite.labels" $root | nindent 4 }}
     app.kubernetes.io/component: {{ $name }}
+    {{- if and $usesDatabasePassword $root.Values.externalSecrets.enabled $root.Values.externalSecrets.databasePasswordRotation.enabled }}
+    opendirectory.heusser.local/uses-database-password: "true"
+    {{- end }}
 spec:
   replicas: {{ $app.replicas | default 1 }}
   selector:
@@ -20,10 +29,41 @@ spec:
       labels:
         app.kubernetes.io/instance: {{ $root.Release.Name }}
         app.kubernetes.io/component: {{ $name }}
+        {{- if and $usesDatabasePassword $root.Values.externalSecrets.enabled $root.Values.externalSecrets.databasePasswordRotation.enabled }}
+        opendirectory.heusser.local/uses-database-password: "true"
+        {{- end }}
     spec:
       {{- with $root.Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $app.mountFiles }}
+      initContainers:
+        - name: prepare-credentials
+          image: {{ $root.Values.externalSecrets.filesInitImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              for file in /source/*; do
+                [ -f "$file" ] || continue
+                cp "$file" "/credentials/${file##*/}"
+              done
+              chmod 0600 /credentials/*
+              chown {{ $app.mountFilesUID | default 1000 }}:{{ $app.mountFilesUID | default 1000 }} /credentials/*
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN"]
+          volumeMounts:
+            - name: credentials-source
+              mountPath: /source
+              readOnly: true
+            - name: credentials
+              mountPath: /credentials
       {{- end }}
       containers:
         - name: {{ $name }}
@@ -50,10 +90,14 @@ spec:
               value: {{ tpl (toString $value) $root | quote }}
             {{- end }}
             {{- range $key, $reference := $app.secretEnv }}
+            {{- $secretName := $root.Values.secrets.runtimeName }}
+            {{- if and $reference.database $root.Values.externalSecrets.enabled $root.Values.externalSecrets.databasePasswordRotation.enabled }}
+            {{- $secretName = $root.Values.secrets.databaseName }}
+            {{- end }}
             - name: {{ $key }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ $root.Values.secrets.runtimeName }}
+                  name: {{ $secretName }}
                   key: {{ $reference.key }}
                   optional: {{ $reference.optional | default false }}
             {{- end }}
@@ -86,10 +130,12 @@ spec:
           {{- end }}
       {{- if $app.mountFiles }}
       volumes:
-        - name: credentials
+        - name: credentials-source
           secret:
             secretName: {{ $root.Values.secrets.filesName }}
-            defaultMode: 0444
+            defaultMode: 0400
+        - name: credentials
+          emptyDir: {}
       {{- end }}
 {{- if $app.port }}
 ---

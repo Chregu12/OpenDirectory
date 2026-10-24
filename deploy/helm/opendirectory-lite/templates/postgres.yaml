@@ -52,14 +52,19 @@ spec:
               containerPort: 5432
           env:
             - name: POSTGRES_USER
-              value: opendirectory
+              value: bao_rotator
             - name: POSTGRES_DB
               value: postgres
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
+                  name: {{ .Values.secrets.postgresAdminName }}
+                  key: postgres-admin-password
+            - name: APP_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
                   name: {{ .Values.secrets.runtimeName }}
-                  key: postgres-password
+                  key: postgres-app-initial-password
           readinessProbe:
             exec:
               command: [sh, -c, 'pg_isready -U "$POSTGRES_USER"']

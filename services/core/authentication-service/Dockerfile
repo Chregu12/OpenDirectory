@@ -1,12 +1,15 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init libstdc++ \
+    && apk add --no-cache --virtual .build-deps python3 make g++
 
 WORKDIR /app
 
 COPY services/core/authentication-service/package*.json ./
 
-RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
+RUN npm install --only=production --legacy-peer-deps \
+    && npm cache clean --force \
+    && apk del .build-deps
 
 COPY services/core/authentication-service/ ./
 COPY packages/employee-invitation-contract.js /packages/employee-invitation-contract.js

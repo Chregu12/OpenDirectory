@@ -15,7 +15,7 @@ const syncSchema = receiptSchema.extend({ groupRevision: companyRevision.nullabl
 export type CompanyLicenseGroup = Required<z.infer<typeof ruleSchema>>;
 export type LicenseGroupContext = { actorUserId: string; tenantId: string };
 export type LicenseGroupResult = Required<z.infer<typeof rowSchema>>;
-function parse<S extends z.ZodTypeAny>(schema: S, value: unknown): CompanyWire<z.infer<S>> { return schema.parse(value); }
+function parse<S extends z.ZodType>(schema: S, value: unknown): CompanyWire<z.output<S>> { return schema.parse(value) as unknown as CompanyWire<z.output<S>>; }
 function reject(): never { throw new Error('Lizenzgruppen-Ergebnis nicht bestätigt. Gruppen-, Pool- und Zuweisungsstand prüfen; frühere Mitglieder können bereits verarbeitet sein.'); }
 function checked<T extends LicenseGroupContext>(result: T, expected: LicenseGroupContext) { if (result.actorUserId !== expected.actorUserId || result.tenantId !== expected.tenantId) reject(); return result; }
 function sameRule(left: CompanyLicenseGroup, right: CompanyLicenseGroup) { if (['id', 'tenantId', 'groupId', 'poolId', 'blueprintId', 'revision', 'status'].some(key => left[key as keyof CompanyLicenseGroup] !== right[key as keyof CompanyLicenseGroup])) reject(); }

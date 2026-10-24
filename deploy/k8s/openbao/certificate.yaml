@@ -1,0 +1,32 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-server
+  namespace: openbao
+spec:
+  secretName: openbao-server-tls
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    rotationPolicy: Always
+  issuerRef:
+    name: homelab-ca-issuer
+    kind: ClusterIssuer
+  dnsNames:
+    - openbao
+    - openbao.openbao
+    - openbao.openbao.svc
+    - openbao.openbao.svc.cluster.local
+    - openbao-active
+    - openbao-active.openbao
+    - openbao-active.openbao.svc
+    - openbao-active.openbao.svc.cluster.local
+    - openbao-0.openbao-internal
+    - openbao-0.openbao-internal.openbao.svc
+    - openbao-0.openbao-internal.openbao.svc.cluster.local
+    - openbao-1.openbao-internal
+    - openbao-1.openbao-internal.openbao.svc
+    - openbao-1.openbao-internal.openbao.svc.cluster.local
+    - openbao-2.openbao-internal
+    - openbao-2.openbao-internal.openbao.svc
+    - openbao-2.openbao-internal.openbao.svc.cluster.local

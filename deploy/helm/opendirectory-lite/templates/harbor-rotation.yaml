@@ -1,0 +1,152 @@
+{{- $rotation := .Values.externalSecrets.harborRotation }}
+{{- if $rotation.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: opendirectory-harbor-rotator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opendirectory-lite.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opendirectory-harbor-rotator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opendirectory-lite.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["harbor-opendirectory"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opendirectory-harbor-rotator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opendirectory-lite.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: opendirectory-harbor-rotator
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: opendirectory-harbor-rotator
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-harbor-rotation" .Release.Name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opendirectory-lite.labels" . | nindent 4 }}
+data:
+  rotate-harbor-robot.py: |-
+{{ .Files.Get "files/rotate-harbor-robot.py" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ printf "%s-harbor-rotation" .Release.Name | trunc 52 | trimSuffix "-" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opendirectory-lite.labels" . | nindent 4 }}
+spec:
+  schedule: {{ $rotation.schedule | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          serviceAccountName: opendirectory-harbor-rotator
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: rotate
+              image: {{ $rotation.image | quote }}
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/app/rotate-harbor-robot.py"]
+              env:
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                - name: OPENBAO_ADDR
+                  value: https://openbao-active.openbao.svc.cluster.local:8200
+                - name: OPENBAO_ROLE
+                  value: opendirectory-harbor-rotator
+                - name: OPENBAO_SECRET_PATH
+                  value: opendirectory/harbor/pull
+                - name: OPENBAO_CA_FILE
+                  value: /etc/openbao-ca/ca.crt
+                - name: HARBOR_API_URL
+                  value: https://harbor.heusser.local
+                - name: HARBOR_REGISTRY
+                  value: harbor.heusser.local
+                - name: HARBOR_PROJECT
+                  value: opendirectory
+                - name: KUBERNETES_NAMESPACE
+                  value: {{ .Release.Namespace | quote }}
+                - name: HARBOR_API_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: harbor-rotation-api
+                      key: username
+                - name: HARBOR_API_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: harbor-rotation-api
+                      key: password
+              volumeMounts:
+                - name: script
+                  mountPath: /app
+                  readOnly: true
+                - name: openbao-ca
+                  mountPath: /etc/openbao-ca
+                  readOnly: true
+                - name: openbao-auth
+                  mountPath: /var/run/secrets/openbao
+                  readOnly: true
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi
+          volumes:
+            - name: script
+              configMap:
+                name: {{ printf "%s-harbor-rotation" .Release.Name | trunc 63 | trimSuffix "-" }}
+                defaultMode: 0444
+            - name: openbao-ca
+              configMap:
+                name: {{ $rotation.caConfigMapName | quote }}
+                items:
+                  - key: ca.crt
+                    path: ca.crt
+            - name: openbao-auth
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: openbao
+                      expirationSeconds: 600
+                      path: token
+{{- end }}

@@ -1,0 +1,52 @@
+# Copy this file to a private values file before enabling ESO.
+# Populate the matching OpenBao KV v2 paths before deploying the app chart.
+externalSecrets:
+  enabled: true
+  refreshInterval: 5m
+  storeName: openbao
+  role: opendirectory-eso
+  serviceAccountName: opendirectory-secret-reader
+  runtime:
+    postgres-app-initial-password: { path: opendirectory/runtime, property: postgres-app-initial-password }
+    redis-password: { path: opendirectory/runtime, property: redis-password }
+    redis-url: { path: opendirectory/runtime, property: redis-url }
+    lldap-jwt-secret: { path: opendirectory/runtime, property: lldap-jwt-secret }
+    lldap-admin-password: { path: opendirectory/runtime, property: lldap-admin-password }
+    jwt-secret: { path: opendirectory/runtime, property: jwt-secret }
+    identity-database-url: { path: opendirectory/runtime, property: identity-database-url }
+    auth-database-url: { path: opendirectory/runtime, property: auth-database-url }
+    policy-database-url: { path: opendirectory/runtime, property: policy-database-url }
+    oauth-database-url: { path: opendirectory/runtime, property: oauth-database-url }
+    api-database-url: { path: opendirectory/runtime, property: api-database-url }
+    license-fulfillment-database-url: { path: opendirectory/runtime, property: license-fulfillment-database-url }
+    license-capacity-database-url: { path: opendirectory/runtime, property: license-capacity-database-url }
+  databasePasswordRotation:
+    # Set true only after configure-postgres-rotation.sh has created the static role.
+    enabled: false
+    reloaderSchedule: "*/5 * * * *"
+  postgresAdmin:
+    enabled: true
+    storeName: openbao-postgres-admin
+    serviceAccountName: opendirectory-postgres-admin-reader
+    role: opendirectory-postgres-admin
+    path: opendirectory/postgres-admin
+    property: postgres-admin-password
+  files:
+    oauth-signing.pem: { path: opendirectory/files, property: oauth-signing.pem }
+    mfa-encryption.key: { path: opendirectory/files, property: mfa-encryption.key }
+    oauth-verification.jwks.json: { path: opendirectory/files, property: oauth-verification.jwks.json }
+    oauth-web-client.secret: { path: opendirectory/files, property: oauth-web-client.secret }
+    browser-cookie.key: { path: opendirectory/files, property: browser-cookie.key }
+    browser-client.secret: { path: opendirectory/files, property: browser-client.secret }
+  harborPullSecret:
+    # Enable only after the Harbor robot credentials exist in OpenBao.
+    enabled: false
+    path: opendirectory/harbor/pull
+    property: dockerconfigjson
+  harborRotation:
+    enabled: false
+    schedule: "0 4 1 * *"
+    storeName: openbao-harbor-rotation-api
+    credentialsPath: opendirectory/harbor/rotation-api
+    image: python:3.13-alpine
+    caConfigMapName: openbao-ca

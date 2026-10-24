@@ -11,6 +11,42 @@ global:
 secrets:
   runtimeName: opendirectory-runtime
   filesName: opendirectory-files
+  databaseName: opendirectory-database
+  postgresAdminName: opendirectory-postgres-admin
+
+externalSecrets:
+  # Enable after OpenBao is initialized and Kubernetes auth has been configured.
+  enabled: false
+  refreshInterval: 5m
+  storeName: openbao
+  role: opendirectory-eso
+  serviceAccountName: opendirectory-secret-reader
+  databasePasswordRotation:
+    # Enable after deploy/k8s/openbao/configure-postgres-rotation.sh succeeds.
+    enabled: false
+    reloaderSchedule: "*/5 * * * *"
+    reloaderImage: python:3.13-alpine
+  postgresAdmin:
+    enabled: true
+    storeName: openbao-postgres-admin
+    serviceAccountName: opendirectory-postgres-admin-reader
+    role: opendirectory-postgres-admin
+    path: opendirectory/postgres-admin
+    property: postgres-admin-password
+  filesInitImage: busybox:1.36.1
+  runtime: {}
+  files: {}
+  harborPullSecret:
+    enabled: false
+    path: opendirectory/harbor/pull
+    property: dockerconfigjson
+  harborRotation:
+    enabled: false
+    schedule: "0 4 1 * *"
+    storeName: openbao-harbor-rotation-api
+    credentialsPath: opendirectory/harbor/rotation-api
+    image: python:3.13-alpine
+    caConfigMapName: openbao-ca
 
 graphMail:
   tenantId: ""
@@ -65,7 +101,7 @@ apps:
       OIDC_TENANT_STATE_URL: "http://{{ .Release.Name }}-oauth-provider:3010/oauth/tenant-state"
       IDENTITY_DEMO_MODE: "false"
     secretEnv:
-      DATABASE_URL: { key: identity-database-url }
+      DATABASE_URL: { key: identity-database-url, database: true }
       REDIS_URL: { key: redis-url }
 
   integration-service:
@@ -87,7 +123,7 @@ apps:
       JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
       LOG_LEVEL: info
     secretEnv:
-      PGPASSWORD: { key: postgres-password }
+      PGPASSWORD: { key: postgres-app-initial-password, database: true }
       LLDAP_ADMIN_PASSWORD: { key: lldap-admin-password }
 
   auth-service:
@@ -103,7 +139,7 @@ apps:
       IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
       LDAP_URL: "ldap://{{ .Release.Name }}-lldap:3890"
     secretEnv:
-      DATABASE_URL: { key: auth-database-url }
+      DATABASE_URL: { key: auth-database-url, database: true }
       REDIS_URL: { key: redis-url }
       JWT_SECRET: { key: jwt-secret }
 
@@ -123,7 +159,7 @@ apps:
       IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
       JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
     secretEnv:
-      DB_PASSWORD: { key: postgres-password }
+      DB_PASSWORD: { key: postgres-app-initial-password, database: true }
 
   policy-service:
     enabled: true
@@ -140,7 +176,7 @@ apps:
       OAUTH_PROVIDER_URL: "http://{{ .Release.Name }}-oauth-provider:3010"
       LICENSE_DEMO_MODE: "false"
     secretEnv:
-      DATABASE_URL: { key: policy-database-url }
+      DATABASE_URL: { key: policy-database-url, database: true }
       REDIS_URL: { key: redis-url }
       LICENSE_GROUP_READ_TOKEN: { key: license-group-read-token, optional: true }
       LICENSE_USER_READ_TOKEN: { key: license-user-read-token, optional: true }
@@ -151,6 +187,7 @@ apps:
     port: 3010
     healthPath: /health
     mountFiles: true
+    mountFilesUID: 1000
     env:
       NODE_ENV: production
       OAUTH_ISSUER: "{{ .Values.global.publicURL }}"
@@ -171,7 +208,7 @@ apps:
       OAUTH_EMPLOYEE_INVITATION_GRAPH_SENDER: "{{ .Values.graphMail.sender }}"
       OAUTH_EMPLOYEE_INVITATION_PUBLIC_URL: "{{ .Values.global.publicURL }}"
     secretEnv:
-      DATABASE_URL: { key: oauth-database-url }
+      DATABASE_URL: { key: oauth-database-url, database: true }
       REDIS_URL: { key: redis-url }
       OAUTH_EMPLOYEE_INVITATION_GRAPH_CLIENT_SECRET: { key: graph-client-secret, optional: true }
 
@@ -194,7 +231,7 @@ apps:
     enabled: true
     image: api-backend
     port: 8080
-    healthPath: /health
+    healthPath: /api/health
     env:
       NODE_ENV: production
       PORT: "8080"
@@ -204,7 +241,7 @@ apps:
       AUTH_SERVICE_URL: "http://{{ .Release.Name }}-auth-service:3002"
       POLICY_SERVICE_URL: "http://{{ .Release.Name }}-policy-service:3004"
     secretEnv:
-      DATABASE_URL: { key: api-database-url }
+      DATABASE_URL: { key: api-database-url, database: true }
       REDIS_URL: { key: redis-url }
       JWT_SECRET: { key: jwt-secret }
 
@@ -220,7 +257,7 @@ apps:
       POLICY_SERVICE_URL: "http://{{ .Release.Name }}-policy-service:3004"
 
   license-fulfillment:
-    enabled: true
+    enabled: false
     image: policy-service
     command: [node, scripts/license-fulfillment-worker.js]
     mountFiles: true
@@ -228,10 +265,10 @@ apps:
       NODE_ENV: production
       LICENSE_FULFILLMENT_CONFIG_FILE: /run/opendirectory/license-fulfillment.json
     secretEnv:
-      DATABASE_URL: { key: license-fulfillment-database-url }
+      DATABASE_URL: { key: license-fulfillment-database-url, database: true }
 
   license-capacity:
-    enabled: true
+    enabled: false
     image: policy-service
     command: [node, scripts/license-capacity-observer.js]
     mountFiles: true
@@ -239,13 +276,14 @@ apps:
       NODE_ENV: production
       LICENSE_CAPACITY_CONFIG_FILE: /run/opendirectory/license-capacity.json
     secretEnv:
-      DATABASE_URL: { key: license-capacity-database-url }
+      DATABASE_URL: { key: license-capacity-database-url, database: true }
 
   web-app:
     enabled: true
     image: web-app
     port: 3000
     mountFiles: true
+    mountFilesUID: 1001
     env:
       NODE_ENV: production
       PORT: "3000"

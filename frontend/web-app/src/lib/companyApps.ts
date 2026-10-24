@@ -15,7 +15,7 @@ export type CompanyAppPrincipal={actorUserId:string;tenantId:string};
 export type CompanyAppHistory=CompanyWire<z.infer<typeof history>>;
 export type CompanyAppInput={name:string;purpose:'none'|'company-automation';reason:string;confirm:true};
 const condition=(row:CompanyApp)=>({headers:{'If-Match':`"od-client:${row.clientId}:${row.version}"`}});
-function parse<S extends z.ZodTypeAny>(schema:S,value:unknown):CompanyWire<z.infer<S>>{return schema.parse(value);}
+function parse<S extends z.ZodType>(schema:S,value:unknown):CompanyWire<z.output<S>>{return schema.parse(value) as unknown as CompanyWire<z.output<S>>;}
 function fail():never{throw new Error('Firmen-App nicht bestätigt. Originalauftrag und Registerstand prüfen; ein verlorenes Secret muss rotiert werden.');}
 function checked<T extends {actorUserId:string;tenant:{id:string}}>(value:T,expected:CompanyAppPrincipal){if(value.actorUserId!==expected.actorUserId||value.tenant.id!==expected.tenantId)fail();return value;}
 function target(row:CompanyApp,expected:CompanyAppPrincipal){uuid.parse(row.clientId);revision.parse(row.version);if(row.tenant.id!==expected.tenantId)fail();return base+'/'+row.clientId;}

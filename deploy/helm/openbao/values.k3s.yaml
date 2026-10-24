@@ -1,0 +1,149 @@
+global:
+  tlsDisable: false
+
+injector:
+  enabled: false
+
+csi:
+  enabled: false
+
+server:
+  enabled: true
+  podManagementPolicy: Parallel
+  extraInitContainers:
+    - name: build-system-ca-bundle
+      image: quay.io/openbao/openbao:2.7.1
+      command: ["/bin/sh", "-ec"]
+      args:
+        - cat /etc/ssl/certs/ca-certificates.crt /homelab-ca/homelab-ca.crt > /trust/ca-certificates.crt
+      volumeMounts:
+        - name: homelab-ca
+          mountPath: /homelab-ca
+          readOnly: true
+        - name: openbao-trust-bundle
+          mountPath: /trust
+    - name: install-bitwarden-plugin
+      image: quay.io/openbao/openbao:2.7.1
+      command: ["/bin/sh", "-ec"]
+      args:
+        - |
+          case "$(uname -m)" in
+            x86_64)
+              asset="openbao-plugin-secrets-bitwarden_0.1.0_linux_amd64"
+              checksum="8d12332d13dbc4adc1a8c3f2d80722ec572b7b87c9150bcdd94a575bafd25cc7"
+              ;;
+            aarch64|arm64)
+              asset="openbao-plugin-secrets-bitwarden_0.1.0_linux_arm64"
+              checksum="e5b9d5f37d3c16cb77d64c8d52e03afe79917be03334e88693736f7598e97bdf"
+              ;;
+            *)
+              echo "Unsupported plugin architecture: $(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+          wget -q -T 30 -O /plugins/openbao-plugin-secrets-bitwarden \
+            "https://github.com/salir-se/openbao-plugin-secrets-bitwarden/releases/download/v0.1.0/${asset}"
+          printf '%s  %s\n' "${checksum}" /plugins/openbao-plugin-secrets-bitwarden | sha256sum -c -
+          chmod 0555 /plugins/openbao-plugin-secrets-bitwarden
+      volumeMounts:
+        - name: openbao-plugin-dir
+          mountPath: /plugins
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  image:
+    tag: 2.7.1
+  serviceAccount:
+    create: true
+    name: openbao
+    serviceDiscovery:
+      enabled: true
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: longhorn
+    accessMode: ReadWriteOnce
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  volumes:
+    - name: openbao-tls
+      secret:
+        secretName: openbao-server-tls
+    - name: homelab-ca
+      configMap:
+        name: openbao-trust-ca
+        items:
+          - key: homelab-ca.crt
+            path: homelab-ca.crt
+    - name: openbao-trust-bundle
+      emptyDir: {}
+    - name: openbao-plugin-dir
+      emptyDir: {}
+  volumeMounts:
+    - name: openbao-tls
+      mountPath: /openbao/tls
+      readOnly: true
+    - name: openbao-trust-bundle
+      mountPath: /openbao/trust
+      readOnly: true
+    - name: openbao-plugin-dir
+      mountPath: /openbao/plugins
+      readOnly: true
+  ha:
+    enabled: true
+    replicas: 3
+    apiAddr: https://openbao-active.openbao.svc.cluster.local:8200
+    disruptionBudget:
+      enabled: true
+      maxUnavailable: 1
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = true
+
+        plugin_directory = "/openbao/plugins"
+        plugin_download_behavior = "continue"
+
+        plugin "secret" "bitwarden" {
+          command = "openbao-plugin-secrets-bitwarden"
+          version = "v0.1.0"
+          env = ["SSL_CERT_FILE=/openbao/trust/ca-certificates.crt"]
+        }
+
+        listener "tcp" {
+          tls_disable = 0
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file = "/openbao/tls/tls.crt"
+          tls_key_file = "/openbao/tls/tls.key"
+        }
+
+        storage "raft" {
+          path = "/openbao/data"
+
+          retry_join {
+            leader_api_addr = "https://openbao-0.openbao-internal.openbao.svc.cluster.local:8200"
+            leader_ca_cert_file = "/openbao/tls/ca.crt"
+          }
+          retry_join {
+            leader_api_addr = "https://openbao-1.openbao-internal.openbao.svc.cluster.local:8200"
+            leader_ca_cert_file = "/openbao/tls/ca.crt"
+          }
+          retry_join {
+            leader_api_addr = "https://openbao-2.openbao-internal.openbao.svc.cluster.local:8200"
+            leader_ca_cert_file = "/openbao/tls/ca.crt"
+          }
+        }
+
+        service_registration "kubernetes" {}
+
+ui:
+  enabled: true
+  activeOpenbaoPodOnly: true
+  serviceType: ClusterIP

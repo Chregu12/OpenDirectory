@@ -123,7 +123,7 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string; icon: React.Componen
   { value: 'schedule',            label: 'Schedule (cron)',              icon: CalendarDaysIcon },
 ];
 
-const TRIGGER_ICONS: Record<TriggerType, React.ComponentType<{ className?: string }>> = {
+const TRIGGER_ICONS: Record<TriggerType, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   device_enrolled:      ComputerDesktopIcon,
   user_created:         UserIcon,
   compliance_violation: ShieldExclamationIcon,

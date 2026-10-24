@@ -33,7 +33,7 @@ export const companyGroupRules = {
  async save(page: CompanyGroupRulePage, draft: CompanyGroupRuleDraft, enabled: boolean, reason: string) {
   const normalized = draftSchema.parse(draft); const body = { draft: { ...normalized, childGroupIds: [...normalized.childGroupIds].sort(), excludedUserIds: [...normalized.excludedUserIds].sort() }, enabled, reason: companyReason(reason), confirm: true };
   const response = await api.put(base(page.groupId), body, { headers: { 'If-Match': page.etag, 'Idempotency-Key': crypto.randomUUID() } }); if (response.status !== 200) fail(); const value = receiptSchema.parse(response.data);
-  checked({ ...value, groupId: value.rule.groupId } as CompanyGroupRulePage, page.groupId, page.actorUserId, page.tenantId);
+  checked({ groupId: value.rule.groupId, actorUserId: value.actorUserId, tenantId: value.tenantId }, page.groupId, page.actorUserId, page.tenantId);
   if (value.rule.tenantId !== page.tenantId || value.rule.enabled !== enabled || JSON.stringify(value.rule.draft) !== JSON.stringify(body.draft) || value.rule.revision !== String(BigInt(page.rule?.revision || '0')+BigInt(1))) fail(); return value;
  },
  async preview(page: CompanyGroupRulePage): Promise<CompanyGroupRulePreview> {
@@ -49,7 +49,7 @@ export const companyGroupRules = {
  async sync(preview: CompanyGroupRulePreview, reason: string, onPage: (count: number) => void = () => {}): Promise<CompanyGroupRuleResult[]> {
   const targets = Array.from(new Set([...preview.desired.map(row => row.userId), ...preview.existing.filter(row => row.managed).map(row => row.userId)])).sort(); const results: CompanyGroupRuleResult[] = []; let cursor: string | null = null;
   for (let number = 0; number < 400; number++) {
-   const response = await api.post(base(preview.groupId) + '/sync', { observation: preview.observation, cursor, reason: companyReason(reason), confirm: true }); if (response.status !== 200) fail(); const value = syncSchema.parse(response.data); checked(value as CompanyGroupRulePreview, preview.groupId, preview.actorUserId, preview.tenantId);
+   const response = await api.post(base(preview.groupId) + '/sync', { observation: preview.observation, cursor, reason: companyReason(reason), confirm: true }); if (response.status !== 200) fail(); const value = syncSchema.parse(response.data); checked(value, preview.groupId, preview.actorUserId, preview.tenantId);
    const selected = targets.slice(results.length, results.length + 25); if (value.ruleRevision !== preview.ruleRevision || value.observation !== preview.observation || value.results.length !== selected.length || value.results.some((row, index) => row.userId !== selected[index])
     || value.hasBlocked !== value.results.some(row => row.status === 'blocked') || value.nextCursor !== (results.length + selected.length < targets.length ? selected.at(-1) : null)) fail();
    results.push(...value.results as CompanyGroupRuleResult[]); onPage(results.length); if (value.nextCursor === null) return results; cursor = value.nextCursor;

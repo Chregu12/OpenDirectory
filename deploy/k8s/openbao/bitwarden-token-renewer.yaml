@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao-bitwarden-token-renewer
+  namespace: openbao
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-bitwarden-token-renewer
+  namespace: openbao
+spec:
+  schedule: "0 4 1,15 * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          serviceAccountName: openbao-bitwarden-token-renewer
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: renewer
+              image: python:3.13-alpine
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/scripts/bitwarden-token-renewer.py"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: openbao-ca
+                  mountPath: /var/run/openbao-ca
+                  readOnly: true
+                - name: openbao-token
+                  mountPath: /var/run/openbao-token
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: openbao-bitwarden-token-renewer
+                defaultMode: 0444
+            - name: openbao-ca
+              configMap:
+                name: openbao-trust-ca
+                items:
+                  - key: homelab-ca.crt
+                    path: homelab-ca.crt
+            - name: openbao-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      path: token
+                      expirationSeconds: 3600
+                      audience: openbao

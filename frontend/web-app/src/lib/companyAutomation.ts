@@ -50,7 +50,7 @@ export type AutomationLicenseReport = CompanyWire<z.infer<typeof licenseReportSc
 const groupReportSchema = licenseReportSchema.omit({companyLicenseAutomationProtocol:true,results:true}).extend({companyGroupRuleAutomationProtocol:z.literal(1),
  results:z.array(z.object({userId:uuid,status:z.enum(['added','retained','manual-retained','removed','awaiting-review','blocked']),code:z.union([z.literal(403),z.literal(404),z.literal(409),z.literal(428)]).nullable()}).strict().refine(row=>row.status==='blocked'?row.code!==null:row.code===null)).max(10000)}).strict();
 export type AutomationGroupReport = CompanyWire<z.infer<typeof groupReportSchema>>;
-function parse<S extends z.ZodTypeAny>(schema: S, value: unknown): CompanyWire<z.infer<S>> { return schema.parse(value); }
+function parse<S extends z.ZodType>(schema: S, value: unknown): CompanyWire<z.output<S>> { return schema.parse(value) as unknown as CompanyWire<z.output<S>>; }
 function fail(): never { throw new Error('Automationsstand nicht bestätigt. Freigaben und gespeicherte Jobs neu laden; frühere Schritte können bereits gespeichert sein.'); }
 function checked<T extends { principal: AutomationPrincipal }>(value: T, expected: AutomationPrincipal) {
   if (value.principal.userId !== expected.userId || value.principal.tenantId !== expected.tenantId) fail(); return value;

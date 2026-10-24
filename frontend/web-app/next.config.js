@@ -1,10 +1,11 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
+
 const nextConfig = {
   reactStrictMode: true,
   distDir: process.env.NEXT_DIST_DIR || '.next',
   typescript: { tsconfigPath: process.env.NEXT_TSCONFIG_PATH || 'tsconfig.json' },
-  eslint: { ignoreDuringBuilds: true },
-  swcMinify: true,
+  turbopack: { root: path.resolve(__dirname, '../..') },
   // All API calls are proxied server-side to the integration service.
   // INTEGRATION_SERVICE_URL is a runtime env var set in the k8s deployment.
   // This way only the frontend is exposed externally - the backend stays internal.
@@ -223,9 +224,6 @@ const nextConfig = {
   env: {
     // Points to the same origin so browser requests go through Next.js rewrites
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
-  },
-  images: {
-    domains: ['localhost'],
   },
 };
 
