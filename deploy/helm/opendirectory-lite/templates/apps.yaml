@@ -67,7 +67,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ $name }}
-          image: "{{ $root.Values.global.image.registry }}/{{ $app.image }}:{{ $root.Values.global.image.tag }}"
+          image: "{{ $root.Values.global.image.registry }}/{{ $app.image }}:{{ $app.imageTag | default $root.Values.global.image.tag }}"
           imagePullPolicy: {{ $app.pullPolicy | default $root.Values.appDefaults.pullPolicy }}
           {{- with $app.command }}
           command:

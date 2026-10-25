@@ -147,24 +147,14 @@ const nextConfig = {
       // narrower /api/pim/elevation/:path* rule MUST precede this broader
       // /api/pim/:path* rule, or it would shadow it.
       { source: '/api/pim/:path*',          destination: `${authServiceUrl}/api/pim/:path*` },
-      // Additional authentication-service routes beyond what api-backend
-      // implements. api-backend (services/platform/api-backend/server.js)
-      // only implements four /api/auth/* routes: login, logout, profile
-      // (GET/PUT), change-password — those MUST keep going to api-backend
-      // (pinned below as literals) since they work there today. Every other
-      // /api/auth/* path — register, refresh, validate, sessions*,
-      // trust-score, verify-device, verify-location, step-up, mfa/*,
-      // reset-password, password-reset/confirm, users* (admin), sso*,
-      // audit/login-history, audit/security-events — is only implemented by
-      // authentication-service (see src/routes/{auth,mfa,sessions,zeroTrust,
-      // users,sso,audit}.js) and was silently 404ing via the api-backend
-      // catch-all. The four literals MUST precede this broad rule, or they'd
-      // be shadowed by it.
+      // The four legacy auth endpoints below still use api-backend. Other
+      // /api/auth/* endpoints use the runtime proxy route at
+      // src/app/api/auth/[...path]/route.ts; a rewrite here would bake the
+      // cluster service URL into the image at build time.
       { source: '/api/auth/login',           destination: `${apiBackendUrl}/api/auth/login` },
       { source: '/api/auth/logout',          destination: `${apiBackendUrl}/api/auth/logout` },
       { source: '/api/auth/profile',         destination: `${apiBackendUrl}/api/auth/profile` },
       { source: '/api/auth/change-password', destination: `${apiBackendUrl}/api/auth/change-password` },
-      { source: '/api/auth/:path*',          destination: `${authServiceUrl}/api/auth/:path*` },
       // Service accounts (SettingsView / service-account management) ->
       // authentication-service (src/routes/serviceAccounts.js). quick-actions
       // already calls this service directly server-to-server; this rule adds
@@ -217,8 +207,8 @@ const nextConfig = {
       // it there) — out of scope for a routing-layer change, and explicitly
       // out of scope for this task (no service files touched). Left as-is
       // rather than blindly rerouted.
-      // Everything else -> api-backend
-      { source: '/api/:path*',              destination: `${apiBackendUrl}/api/:path*` },
+      // Unmatched /api/* requests use the runtime proxy at
+      // src/app/api/[...path]/route.ts so service URLs come from the pod env.
     ];
   },
   env: {

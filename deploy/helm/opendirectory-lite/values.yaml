@@ -135,6 +135,7 @@ apps:
     env:
       NODE_ENV: production
       PORT: "3002"
+      APP_URL: "{{ .Values.global.publicURL }}"
       OIDC_ISSUER: "{{ .Values.global.publicURL }}"
       JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
       IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
@@ -143,6 +144,12 @@ apps:
       DATABASE_URL: { key: auth-database-url, database: true }
       REDIS_URL: { key: redis-url }
       JWT_SECRET: { key: jwt-secret }
+      SMTP_HOST: { key: smtp-host, optional: true }
+      SMTP_PORT: { key: smtp-port, optional: true }
+      SMTP_SECURE: { key: smtp-secure, optional: true }
+      SMTP_USER: { key: smtp-user, optional: true }
+      SMTP_PASSWORD: { key: smtp-password, optional: true }
+      SMTP_FROM: { key: smtp-from, optional: true }
 
   device-service:
     enabled: true

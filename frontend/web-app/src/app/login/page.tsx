@@ -47,6 +47,7 @@ export default function LoginPage() {
           >
             {loading ? 'Redirecting…' : 'Sign in with OpenDirectory'}
           </button>
+          <a className="block text-sm text-blue-700 underline mt-4" href="/forgot-password">Passwort vergessen?</a>
           <a className="block text-sm text-blue-700 underline mt-5" href="/auth/mfa-recovery">Authenticator verloren? Mit Notfallcode wiederherstellen</a>
           <a className="block text-sm text-blue-700 underline mt-3" href="/auth/mfa-enroll">MFA-pflichtige Anwendung: Faktor erstmals einrichten</a>
           <a className="block text-sm text-blue-700 underline mt-3" href="/register">Unternehmen zur Prüfung anmelden</a>

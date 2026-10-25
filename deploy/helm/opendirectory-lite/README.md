@@ -151,6 +151,8 @@ HARBOR_PASSWORD="$(your-secret-manager get harbor-robot-password)" \
 
 The helper builds the ten application images used by this chart for `linux/amd64`. It does not print or save the robot credentials in the repository.
 
+The web app can use a per-service image tag through `apps.web-app.imageTag`; other applications continue to use `global.image.tag`. Password reset links use `global.publicURL`. To send them, add `smtp-host`, `smtp-port`, `smtp-secure`, `smtp-user`, `smtp-password`, and `smtp-from` to the `opendirectory-runtime` Secret. These SMTP entries are optional, so the chart can install before mail delivery is configured.
+
 Create the namespace-scoped pull Secret from the same Secret Manager values with:
 
 ```sh
