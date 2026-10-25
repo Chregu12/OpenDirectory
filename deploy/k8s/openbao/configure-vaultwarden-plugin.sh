@@ -29,4 +29,13 @@ python3 "${SCRIPT_DIR}/configure-vaultwarden-plugin.py" \
   | bao write bitwarden/config -
 
 unset BITWARDEN_SYNC_TOKEN
-echo "Vaultwarden connection stored in OpenBao. Check it with: bao read bitwarden/status"
+
+bao write bitwarden/roles/opendirectory-postgres \
+  source_path=database/static-creds/opendirectory \
+  cipher_name="OpenDirectory PostgreSQL" \
+  user_field=username \
+  pass_field=password \
+  notes_template="Managed by OpenBao. The value is refreshed when the PostgreSQL credential rotates."
+bao write -f bitwarden/sync/opendirectory-postgres
+
+echo "Vaultwarden connection stored in OpenBao and the current PostgreSQL credential synced. Check it with: bao read bitwarden/status"

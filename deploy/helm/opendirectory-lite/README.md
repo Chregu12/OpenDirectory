@@ -32,21 +32,15 @@ bao operator init -key-shares=5 -key-threshold=3
 
 Use separate port-forwards and the matching DNS name when unsealing `openbao-1` and `openbao-2`. `bao operator unseal` prompts for each share without placing it in shell history.
 
-After initialization and unsealing, authenticate interactively and configure OpenBao. Keep the CLI token in a local file with owner-only permissions. While the initial root token is active, configure Kubernetes auth and the Vaultwarden sync; the configuration helper can use your existing Vaultwarden account and prompts for its master password without echoing it or passing it on the command line. Create an operator token, save it in your existing password manager, and then revoke the initial root token:
+After initialization and unsealing, configure OpenBao from the repository root. The helper below uses `kubectl exec`, prompts for the initial root token without echoing it, and removes its temporary CLI token cache from the OpenBao pod on exit. It then configures Kubernetes auth and the Vaultwarden sync. The existing Vaultwarden account email and master password are requested locally; the password prompt is hidden, and the password is sent through the Kubernetes exec stream directly into OpenBao's encrypted storage. No secret is written to shell history or the repository.
 
 ```sh
 umask 077
-export BAO_TOKEN_PATH="$(mktemp)"
-bao login -no-print
-./deploy/k8s/openbao/configure-kubernetes-auth.sh
-./deploy/k8s/openbao/configure-vaultwarden-plugin.sh
+./deploy/k8s/openbao/connect-vaultwarden-via-kubectl.sh
 ./deploy/k8s/openbao/install-bitwarden-token-renewer.sh
-bao token create -policy=opendirectory-operator -orphan -period=24h
-bao token revoke -self
-bao login -no-print
 ```
 
-The first `bao login` prompts for the initial root token; the final login prompts for the operator token. The Vaultwarden plugin account must use PBKDF2-SHA256 and have no two-step login because the plugin cannot handle MFA. The helper stores the password inside OpenBao's encrypted storage and creates a short-lived, read-only token scoped to OpenDirectory application secrets. A Kubernetes CronJob replaces that token twice monthly. Install or upgrade the OpenDirectory chart with ESO enabled so it creates the required ServiceAccounts, then apply `deploy/k8s/openbao/cluster-secret-store.yaml`. Apply `cluster-secret-store-harbor-rotation.yaml` only after enabling Harbor rotation and creating the `opendirectory-harbor-api-reader` ServiceAccount.
+The helper prompts for the initial root token, the existing Vaultwarden account email, and its master password. The Vaultwarden account must use PBKDF2-SHA256 and have no two-step login because the plugin cannot handle MFA. The plugin creates one personal-vault item for the current OpenDirectory PostgreSQL credential and refreshes it after OpenBao rotates the database password. Its scoped token can read only that database credential. A Kubernetes CronJob replaces the token twice monthly. Use a separate short-lived operator token for later administration; do not keep using the initial root token. Install or upgrade the OpenDirectory chart with ESO enabled so it creates the required ServiceAccounts, then apply `deploy/k8s/openbao/cluster-secret-store.yaml`. Apply `cluster-secret-store-harbor-rotation.yaml` only after enabling Harbor rotation and creating the `opendirectory-harbor-api-reader` ServiceAccount.
 
 To enable ESO, copy [values.openbao.example.yaml](values.openbao.example.yaml) to a private values file and map each required `runtime` and `files` key to an OpenBao KV v2 path and property. The chart creates the `opendirectory-secret-reader` service account; ExternalSecrets reference the separately applied `ClusterSecretStore`. The optional Harbor pull-secret mapping expects a full Docker config JSON value at `secret/opendirectory/harbor/pull`, property `dockerconfigjson`. ESO refreshes the Kubernetes Secret on the configured interval; pods using the secret as an environment variable still need a restart after changes.
 
