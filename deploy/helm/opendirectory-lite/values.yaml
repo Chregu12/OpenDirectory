@@ -200,6 +200,7 @@ apps:
       NODE_ENV: production
       OAUTH_ISSUER: "{{ .Values.global.publicURL }}"
       OAUTH_API_AUDIENCE: opendirectory-api
+      AUTH_SERVICE_URL: "http://{{ .Release.Name }}-auth-service:3002"
       OAUTH_IDENTITY_AUTHORITY_URL: "http://{{ .Release.Name }}-identity-service:3001/internal/identity/authorization-state"
       OAUTH_POLICY_SOURCE_URL: "http://{{ .Release.Name }}-policy-service:3004"
       OAUTH_SIGNING_KEY_FILE: /run/opendirectory/oauth-signing.pem
