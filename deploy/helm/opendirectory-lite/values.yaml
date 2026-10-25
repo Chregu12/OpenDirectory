@@ -1,7 +1,7 @@
 global:
   image:
     registry: harbor.heusser.local/opendirectory
-    tag: "1.0.0"
+    tag: "1.0.1"
     pullPolicy: IfNotPresent
   imagePullSecrets:
     - name: harbor-opendirectory
@@ -125,6 +125,7 @@ apps:
     secretEnv:
       PGPASSWORD: { key: postgres-app-initial-password, database: true }
       LLDAP_ADMIN_PASSWORD: { key: lldap-admin-password }
+      GRAFANA_ADMIN_PASSWORD: { key: grafana-admin-password }
 
   auth-service:
     enabled: true
@@ -232,6 +233,7 @@ apps:
     image: api-backend
     port: 8080
     healthPath: /api/health
+    healthOrigin: "{{ .Values.global.publicURL }}"
     env:
       NODE_ENV: production
       PORT: "8080"
@@ -244,6 +246,7 @@ apps:
       DATABASE_URL: { key: api-database-url, database: true }
       REDIS_URL: { key: redis-url }
       JWT_SECRET: { key: jwt-secret }
+      ADMIN_PASSWORD: { key: api-admin-password }
 
   license-management:
     enabled: true

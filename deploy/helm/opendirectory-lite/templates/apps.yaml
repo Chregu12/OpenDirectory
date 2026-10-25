@@ -108,6 +108,11 @@ spec:
             httpGet:
               path: {{ $app.healthPath }}
               port: http
+              {{- with $app.healthOrigin }}
+              httpHeaders:
+                - name: Origin
+                  value: {{ tpl (toString .) $root | quote }}
+              {{- end }}
             {{- else }}
             tcpSocket:
               port: http

@@ -27,6 +27,8 @@ data = {
     "lldap-jwt-secret": secrets.token_hex(32),
     "lldap-admin-password": secrets.token_hex(32),
     "jwt-secret": secrets.token_hex(32),
+    "api-admin-password": secrets.token_hex(32),
+    "grafana-admin-password": secrets.token_hex(32),
 }
 data.update({f"{db.replace('_', '-')}-database-url": f"postgresql://opendirectory:{app}@{host}/{db}" for db in databases})
 json.dump(data, __import__("sys").stdout)

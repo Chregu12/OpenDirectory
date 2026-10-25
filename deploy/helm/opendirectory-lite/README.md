@@ -94,6 +94,8 @@ The bridge mirrors values after they are written to OpenBao; it does not rotate 
 | `lldap-jwt-secret` | LLDAP signing key |
 | `lldap-admin-password` | LLDAP admin password |
 | `jwt-secret` | API and authentication services |
+| `api-admin-password` | Initial OpenDirectory administrator password for the API backend |
+| `grafana-admin-password` | Integration service credential for its Grafana connector |
 | `identity-database-url` | Identity database connection string |
 | `auth-database-url` | Authentication database connection string |
 | `policy-database-url` | Policy database connection string |
@@ -150,7 +152,7 @@ Authenticate to Harbor through your Secret Manager, then run the build helper. I
 ```sh
 HARBOR_USERNAME="$(your-secret-manager get harbor-robot-username)" \
 HARBOR_PASSWORD="$(your-secret-manager get harbor-robot-password)" \
-./deploy/helm/opendirectory-lite/build-and-push.sh harbor.heusser.local/opendirectory 1.0.0
+./deploy/helm/opendirectory-lite/build-and-push.sh harbor.heusser.local/opendirectory 1.0.1
 ```
 
 The helper builds the ten application images used by this chart for `linux/amd64`. It does not print or save the robot credentials in the repository.

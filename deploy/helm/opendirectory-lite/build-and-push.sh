@@ -21,8 +21,10 @@ printf '%s' "$HARBOR_PASSWORD" | DOCKER_CONFIG="$docker_config" docker login "$r
 
 build_push() {
   local name="$1" dockerfile="$2" context="$3"
+  local image="$registry/$name:$tag"
   DOCKER_CONFIG="$docker_config" docker buildx build --platform "$platform" --file "$dockerfile" \
-    --tag "$registry/$name:$tag" --push "$context"
+    --tag "$image" --load "$context"
+  DOCKER_CONFIG="$docker_config" docker push "$image"
 }
 
 build_push identity-service services/core/identity-service/Dockerfile .

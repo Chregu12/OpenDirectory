@@ -25,6 +25,7 @@ COPY packages/company-license-automation-contract.js /packages/company-license-a
 COPY packages/company-blueprint-contract/ /packages/company-blueprint-contract/
 COPY packages/company-blueprint-assignment-contract/ /packages/company-blueprint-assignment-contract/
 COPY packages/group-license-lease-contract.js /packages/group-license-lease-contract.js
+COPY packages/policy-compilers/ /packages/policy-compilers/
 COPY packages/grpc-event-bus/ /packages/grpc-event-bus/
 RUN cd /packages/grpc-event-bus && npm install --omit=dev --ignore-scripts --no-audit --no-fund
 

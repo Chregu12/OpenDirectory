@@ -13,6 +13,8 @@ externalSecrets:
     lldap-jwt-secret: { path: opendirectory/runtime, property: lldap-jwt-secret }
     lldap-admin-password: { path: opendirectory/runtime, property: lldap-admin-password }
     jwt-secret: { path: opendirectory/runtime, property: jwt-secret }
+    api-admin-password: { path: opendirectory/runtime, property: api-admin-password }
+    grafana-admin-password: { path: opendirectory/runtime, property: grafana-admin-password }
     identity-database-url: { path: opendirectory/runtime, property: identity-database-url }
     auth-database-url: { path: opendirectory/runtime, property: auth-database-url }
     policy-database-url: { path: opendirectory/runtime, property: policy-database-url }
