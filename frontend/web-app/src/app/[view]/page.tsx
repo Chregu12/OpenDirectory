@@ -164,7 +164,7 @@ export default function ViewPage() {
   const activeView = VALID_VIEWS.has(viewParam) ? viewParam : 'dashboard';
 
   const [enabledModules, setEnabledModules] = useState<string[]>(Object.keys(MODULE_NAV_MAP));
-  const [currentUser,    setCurrentUser]    = useState<{ name: string; role: string } | null>(null);
+  const [currentUser,    setCurrentUser]    = useState<{ name: string; username: string; role: string } | null>(null);
   const [authChecked,    setAuthChecked]    = useState(false);
   const [authError, setAuthError] = useState('');
   const [onboarded,      setOnboarded]      = useState(true);
@@ -339,7 +339,7 @@ export default function ViewPage() {
   // Show onboarding wizard overlay when not yet onboarded (except on settings page)
   if (!onboarded && activeView !== 'settings' && activeView !== 'offboarding-access' && activeView !== 'device-returns' && companyOwner === null) return <main className="p-8" role="status">Firmen-Onboarding wird geprüft …</main>;
   if (!onboarded && activeView !== 'settings' && activeView !== 'offboarding-access' && activeView !== 'device-returns' && !companyOwner) {
-    return <OnboardingWizard />;
+    return <OnboardingWizard currentUser={currentUser} />;
   }
 
   return (
