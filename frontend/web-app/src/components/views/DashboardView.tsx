@@ -293,7 +293,6 @@ export default function DashboardView() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [showBackupWizard, setShowBackupWizard] = useState(false);
-  const [usingDemoData, setUsingDemoData] = useState(false);
 
   const [kpi, setKpi] = useState<KpiData>({
     totalUsers: null,
@@ -558,7 +557,6 @@ export default function DashboardView() {
       if (events.length === 0) {
         setActivityError(true);
         setActivityEvents(null);
-        setUsingDemoData(true);
       } else {
         const mapped: ActivityEvent[] = events.slice(0, 8).map((e: any, i: number) => ({
           id: e.id ?? String(i),
@@ -580,7 +578,6 @@ export default function DashboardView() {
       // Try /api/monitoring/alerts as a fallback
       setActivityError(true);
       setActivityEvents(null);
-      setUsingDemoData(true);
     }
 
     // -----------------------------------------------------------------------
@@ -685,12 +682,6 @@ export default function DashboardView() {
 
   return (
     <div className="p-6 space-y-6">
-      {usingDemoData && (
-        <div className="mx-6 mt-4 p-3 bg-yellow-900/50 border border-yellow-600 rounded-lg flex items-center gap-2 text-yellow-300 text-sm">
-          <span className="text-yellow-400">⚠</span>
-          <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
-        </div>
-      )}
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                              */}
       {/* ------------------------------------------------------------------ */}

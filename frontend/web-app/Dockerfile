@@ -8,9 +8,21 @@ WORKDIR /app/frontend/web-app
 ARG INTEGRATION_SERVICE_URL=http://opendirectory-integration-service:3005
 ARG AUTH_SERVICE_URL=http://opendirectory-auth-service:3002
 ARG IDENTITY_SERVICE_URL=http://opendirectory-identity-service:3001
+ARG API_BACKEND_URL=http://opendirectory-api-backend:8080
+ARG DEVICE_SERVICE_URL=http://opendirectory-device-service:3003
+ARG POLICY_SERVICE_URL=http://opendirectory-policy-service:3004
+ARG LICENSE_ADAPTER_URL=http://opendirectory-license-management:3018
+ARG CORE_GATEWAY_URL=http://opendirectory-api-gateway:3000
+ARG OAUTH_PROVIDER_URL=http://opendirectory-oauth-provider:3010
 ENV INTEGRATION_SERVICE_URL=${INTEGRATION_SERVICE_URL}
 ENV AUTH_SERVICE_URL=${AUTH_SERVICE_URL}
 ENV IDENTITY_SERVICE_URL=${IDENTITY_SERVICE_URL}
+ENV API_BACKEND_URL=${API_BACKEND_URL}
+ENV DEVICE_SERVICE_URL=${DEVICE_SERVICE_URL}
+ENV POLICY_SERVICE_URL=${POLICY_SERVICE_URL}
+ENV LICENSE_ADAPTER_URL=${LICENSE_ADAPTER_URL}
+ENV CORE_GATEWAY_URL=${CORE_GATEWAY_URL}
+ENV OAUTH_PROVIDER_URL=${OAUTH_PROVIDER_URL}
 
 # Copy package files
 COPY frontend/web-app/package.json frontend/web-app/package-lock.json ./
