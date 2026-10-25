@@ -90,10 +90,7 @@ export default function OnboardingWizard({ currentUser }: OnboardingWizardProps)
               <p className="mb-4 text-sm text-gray-600">Für die Einrichtung wird dein bereits angemeldetes Konto verwendet. Du musst kein weiteres Konto und kein neues Passwort anlegen.</p>
               <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
                 <p className="font-medium">Angemeldet als</p>
-                <p className="mt-1 break-all">{currentUser?.name || currentUser?.username || 'dein OpenDirectory-Konto'}</p>
-                {currentUser?.name && currentUser?.username && currentUser.name !== currentUser.username && (
-                  <p className="mt-0.5 break-all text-xs text-blue-800">{currentUser.username}</p>
-                )}
+                <p className="mt-1 break-all">{currentUser?.username || currentUser?.name || 'dein OpenDirectory-Konto'}</p>
               </div>
               <div className="mt-6 flex gap-3">
                 <button onClick={() => setStep(1)} className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm text-gray-700 hover:bg-gray-50">Zurück</button>

@@ -2,10 +2,15 @@ FROM node:20-alpine
 
 WORKDIR /app/frontend/web-app
 
-# Integration service URL is used server-side in next.config.js rewrites at build time.
-# It points to the k8s cluster-internal service - never exposed to the browser.
-ARG INTEGRATION_SERVICE_URL=http://integration-service:4000
+# Next.js stores rewrite destinations in the production build manifest, so
+# these URLs must point to the cluster services at image-build time.
+# Override them when building for a differently named Helm release.
+ARG INTEGRATION_SERVICE_URL=http://opendirectory-integration-service:3005
+ARG AUTH_SERVICE_URL=http://opendirectory-auth-service:3002
+ARG IDENTITY_SERVICE_URL=http://opendirectory-identity-service:3001
 ENV INTEGRATION_SERVICE_URL=${INTEGRATION_SERVICE_URL}
+ENV AUTH_SERVICE_URL=${AUTH_SERVICE_URL}
+ENV IDENTITY_SERVICE_URL=${IDENTITY_SERVICE_URL}
 
 # Copy package files
 COPY frontend/web-app/package.json frontend/web-app/package-lock.json ./

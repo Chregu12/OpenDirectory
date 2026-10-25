@@ -7,7 +7,7 @@ const nextConfig = {
   typescript: { tsconfigPath: process.env.NEXT_TSCONFIG_PATH || 'tsconfig.json' },
   turbopack: { root: path.resolve(__dirname, '../..') },
   // All API calls are proxied server-side to the integration service.
-  // INTEGRATION_SERVICE_URL is a runtime env var set in the k8s deployment.
+  // INTEGRATION_SERVICE_URL is a build arg baked into the rewrite manifest.
   // This way only the frontend is exposed externally - the backend stays internal.
   async rewrites() {
     const integrationUrl       = process.env.INTEGRATION_SERVICE_URL        || 'http://integration-service:4000';
