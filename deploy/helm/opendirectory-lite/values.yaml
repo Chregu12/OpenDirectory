@@ -94,7 +94,7 @@ apps:
       PORT: "3001"
       OIDC_ISSUER: "{{ .Values.global.publicURL }}"
       OIDC_AUDIENCE: opendirectory-api
-      JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
+      JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
       AUTH_SERVICE_URL: "http://{{ .Release.Name }}-auth-service:3002"
       POLICY_SERVICE_URL: "http://{{ .Release.Name }}-policy-service:3004"
       OIDC_ACCESS_STATE_URL: "http://{{ .Release.Name }}-oauth-provider:3010/oauth/access-state"
@@ -120,7 +120,7 @@ apps:
       LLDAP_ADMIN_USER: admin
       CORS_ORIGINS: "{{ .Values.global.publicURL }}"
       OIDC_ISSUER: "{{ .Values.global.publicURL }}"
-      JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
+      JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
       LOG_LEVEL: info
     secretEnv:
       PGPASSWORD: { key: postgres-app-initial-password, database: true }
@@ -137,7 +137,7 @@ apps:
       PORT: "3002"
       APP_URL: "{{ .Values.global.publicURL }}"
       OIDC_ISSUER: "{{ .Values.global.publicURL }}"
-      JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
+      JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
       IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
       LDAP_URL: "ldap://{{ .Release.Name }}-lldap:3890"
     secretEnv:
@@ -165,7 +165,7 @@ apps:
       DB_USER: opendirectory
       OIDC_ISSUER: "{{ .Values.global.publicURL }}"
       IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
-      JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
+      JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
     secretEnv:
       DB_PASSWORD: { key: postgres-app-initial-password, database: true }
 
@@ -179,7 +179,7 @@ apps:
       PORT: "3004"
       OIDC_ISSUER: "{{ .Values.global.publicURL }}"
       OIDC_AUDIENCE: opendirectory-api
-      JWKS_URI: "{{ .Values.global.publicURL }}/.well-known/jwks.json"
+      JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
       IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
       OAUTH_PROVIDER_URL: "http://{{ .Release.Name }}-oauth-provider:3010"
       LICENSE_DEMO_MODE: "false"
@@ -229,6 +229,9 @@ apps:
     env:
       NODE_ENV: production
       API_GATEWAY_PORT: "3000"
+      OIDC_ISSUER: "{{ .Values.global.publicURL }}"
+      OIDC_AUDIENCE: opendirectory-api
+      JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
       REDIS_HOST: "{{ .Release.Name }}-redis"
       REDIS_PORT: "6379"
       LOG_LEVEL: info
