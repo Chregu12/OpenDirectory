@@ -1,6 +1,6 @@
 {{- $root := . -}}
-{{- range $name, $app := .Values.apps }}
-{{- if $app.enabled }}
+{{ range $name, $app := .Values.apps }}
+{{ if $app.enabled }}
 {{- $usesDatabasePassword := false -}}
 {{- range $key, $reference := $app.secretEnv -}}
 {{- if $reference.database -}}
@@ -142,7 +142,7 @@ spec:
         - name: credentials
           emptyDir: {}
       {{- end }}
-{{- if $app.port }}
+{{ if $app.port }}
 ---
 apiVersion: v1
 kind: Service
@@ -161,6 +161,6 @@ spec:
       port: {{ $app.port }}
       targetPort: http
       protocol: TCP
-{{- end }}
-{{- end }}
-{{- end }}
+{{ end }}
+{{ end }}
+{{ end }}
