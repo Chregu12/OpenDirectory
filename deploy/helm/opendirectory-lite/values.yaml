@@ -295,6 +295,8 @@ apps:
   web-app:
     enabled: true
     image: web-app
+    imageTag: latest
+    pullPolicy: Always
     port: 3000
     mountFiles: true
     mountFilesUID: 1001
