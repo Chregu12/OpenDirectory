@@ -16,6 +16,7 @@ COPY packages/employee-invitation-contract.js /packages/employee-invitation-cont
 COPY packages/credential-authorization-contract.js /packages/credential-authorization-contract.js
 COPY packages/employee-invitation-request.js /packages/employee-invitation-request.js
 COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
+COPY packages/oidc-access-state.js /packages/oidc-access-state.js
 COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-contract.js
 
 RUN addgroup -S appuser && adduser -S -G appuser appuser

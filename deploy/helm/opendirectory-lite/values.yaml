@@ -130,6 +130,7 @@ apps:
   auth-service:
     enabled: true
     image: auth-service
+    imageTag: "1.0.2"
     port: 3002
     healthPath: /health
     env:
@@ -137,7 +138,9 @@ apps:
       PORT: "3002"
       APP_URL: "{{ .Values.global.publicURL }}"
       OIDC_ISSUER: "{{ .Values.global.publicURL }}"
+      OIDC_AUDIENCE: opendirectory-api
       JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
+      OIDC_ACCESS_STATE_URL: "http://{{ .Release.Name }}-oauth-provider:3010/oauth/access-state"
       IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
       LDAP_URL: "ldap://{{ .Release.Name }}-lldap:3890"
     secretEnv:

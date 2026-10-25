@@ -1,31 +1,68 @@
 'use strict';
 const { Router } = require('express');
+const jwt = require('jsonwebtoken');
+const { createRemoteJWKSet, jwtVerify } = require('jose');
+const { createAccessStateClient } = require('../../../../../packages/oidc-access-state');
 const db = require('../db');
 const logger = require('../utils/logger');
 const { requireBearerAuth, requireAdminBearerAuth } = require('../middleware/bearerAuth');
+
+const ISSUER = process.env.OIDC_ISSUER || 'http://localhost:3001';
+const AUDIENCE = process.env.OIDC_AUDIENCE || 'opendirectory-api';
+const JWKS_URI = process.env.JWKS_URI || 'http://oauth-provider:3010/.well-known/jwks.json';
+const accessState = createAccessStateClient();
+let jwks;
+
+function getJwks() {
+  if (!jwks) jwks = createRemoteJWKSet(new URL(JWKS_URI), { timeoutDuration: 2500, cooldownDuration: 1000, cacheMaxAge: 3600000 });
+  return jwks;
+}
+
+function bearerAuth({ adminOnly = false } = {}) {
+  const legacyAuth = adminOnly ? requireAdminBearerAuth : requireBearerAuth;
+  return async (req, res, next) => {
+    const match = /^Bearer\s+([A-Za-z0-9._~-]{1,16384})$/i.exec(req.headers.authorization || '');
+    const decoded = match && jwt.decode(match[1], { complete: true });
+    if (decoded?.header?.alg === 'HS256') return legacyAuth(req, res, next);
+    if (decoded?.header?.alg !== 'RS256') return res.status(401).json({ error: 'Invalid or expired token' });
+
+    try {
+      const { payload, protectedHeader } = await jwtVerify(match[1], getJwks(), {
+        issuer: ISSUER, audience: AUDIENCE, algorithms: ['RS256'], requiredClaims: ['sub', 'exp', 'iat', 'jti'],
+      });
+      const roles = Array.isArray(payload.roles) ? payload.roles.filter(role => typeof role === 'string') : [];
+      if ((protectedHeader.typ !== undefined && protectedHeader.typ !== 'JWT') || payload.token_use !== 'access' || payload.actor_type !== 'user'
+        || typeof payload.sub !== 'string' || !payload.sub.trim()) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+      await accessState(req.headers.authorization, payload);
+      if (adminOnly && !roles.includes('admin')) return res.status(403).json({ error: 'Admin access required' });
+      req.user = { id: payload.sub, username: payload.preferred_username || payload.name || payload.sub, roles };
+      return next();
+    } catch (error) {
+      const unavailable = error.status === 503 || ['ERR_JWKS_TIMEOUT', 'ERR_JWKS_INVALID', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(error.code)
+        || error instanceof TypeError;
+      return res.status(unavailable ? 503 : 401).json({ error: unavailable ? 'Token verification source unavailable' : 'Invalid or expired token' });
+    }
+  };
+}
 
 /**
  * Directory routes: domain configuration.
  *
  * Restored from the pre-god-file-split implementation (see
  * `git show 1617f2c^:services/core/authentication-service/src/index.js`,
- * domain config ~line 1642) with the same security fix applied throughout
- * this restoration pass: the old inline header-presence check only verified
- * that *some* Authorization header was sent — never that it was a valid
- * token. The route group now sits behind `requireBearerAuth`
- * (src/middleware/bearerAuth.js) — real JWT signature/expiry verification
- * using the same secret as the rest of the service (deliberately not the
- * full passport 'jwt' `requireAuth()` used by the user/session/MFA routes —
- * that strategy additionally round-trips through
- * `userService.getUserById()`, which these routes don't need). An invalid,
- * expired, or missing token is rejected with 401 before any handler runs.
+ * domain config ~line 1642) with verified bearer authentication. Legacy
+ * HS256 tokens use bearerAuth.js; current browser sessions use RS256 OIDC
+ * tokens verified with the OAuth provider's JWKS and active-session check.
+ * Writes require the admin role in either token type. Missing, invalid,
+ * expired, or revoked tokens are rejected before a handler runs.
  *
  * Domain config: DB-first (singleton `domain_config` table — see
  * migrations/008_domain_config.sql), with global.__od_domain_config used as
- * the in-memory fallback/mirror whenever the DB is unavailable, has no row
- * yet, or (as in tests, where `pg` is mocked and every query resolves
- * `{ rows: [] }`) a write never actually lands — matching the pre-split
- * in-memory-only behavior for that case exactly.
+ * the in-memory fallback/mirror whenever the DB is unavailable or has no row.
+ * The routes accept existing HS256 API tokens and current RS256 OIDC access
+ * tokens; OIDC tokens are checked against JWKS and the OAuth session state.
  *
  * Authorization: writing domain config is admin-only —
  * `requireAdminBearerAuth` (src/middleware/bearerAuth.js), which
@@ -57,8 +94,8 @@ const { requireBearerAuth, requireAdminBearerAuth } = require('../middleware/bea
  */
 function createDirectoryRoutes(services) { // eslint-disable-line no-unused-vars -- services kept for signature parity with sibling route modules
   const router = Router();
-  const auth = requireBearerAuth;
-  const admin = requireAdminBearerAuth;
+  const auth = bearerAuth();
+  const admin = bearerAuth({ adminOnly: true });
 
   // ── Domain configuration ────────────────────────────────────────────────
 
