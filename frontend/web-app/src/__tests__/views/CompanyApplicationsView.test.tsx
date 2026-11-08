@@ -288,7 +288,7 @@ test('return action requires explicit UUID preview, displays pool/vendor/version
   expect(screen.queryByLabelText('Mitarbeiter-ID für Lizenzrückgabe')).not.toBeInTheDocument();
   expect((api.get as jest.Mock).mock.calls.some(([url]) => url.includes('/license-returns'))).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Lizenzen eines Mitarbeiters zurückgeben' }));
-  expect(screen.getByText(/Zuerst unter People → Konto sperren/)).toBeInTheDocument();
+  expect(screen.getByText(/Zuerst unter Mitarbeitende → Konto sperren/)).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Mitarbeiter-ID für Lizenzrückgabe'), { target: { value: userId } });
   expect((api.get as jest.Mock).mock.calls.some(([url]) => url.includes('/license-returns'))).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Lizenzrückgabe-Vorschau laden' }));

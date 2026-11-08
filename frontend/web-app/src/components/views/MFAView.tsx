@@ -44,7 +44,7 @@ export default function MFAView() {
   </div>;
   const otp = <label>Neuer OpenDirectory-Einmalcode<input className="block w-full max-w-lg bg-black/20 border p-2 rounded" value={code} onChange={event => setCode(event.target.value)} autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required disabled={busy} /></label>;
 
-  return <section className="p-6 space-y-5 text-white max-w-4xl">
+  return <section className="p-6 space-y-5 max-w-4xl" style={{ color: 'var(--text-primary)' }}>
     <h1 className="text-2xl font-semibold">MFA – eigenes Konto</h1>
     <p>OpenDirectory prüft diesen TOTP-Faktor selbst. Nach der Einrichtung ist er bei jeder neuen Benutzeranmeldung erforderlich. Eine PIM-Aktivierung verlangt Passwort und Einmalcode aus einer höchstens fünf Minuten alten Anmeldung.</p>
     <p>Keine SMS- oder Passkey-Unterstützung in diesem Ausbau. Nach der Einrichtung neu anmelden und eigene Notfallcodes mit Passwort und einem unverbrauchten Einmalcode erzeugen. Diese Codes sicher getrennt aufbewahren; ohne sie gibt es keine Selbstwiederherstellung bei verlorenem Authenticator.</p>

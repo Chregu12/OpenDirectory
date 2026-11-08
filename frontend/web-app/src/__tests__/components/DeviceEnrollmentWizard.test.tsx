@@ -102,8 +102,8 @@ test('changing platforms and finishing never counts a device as enrolled', () =>
 
 test('preserves printer discovery instructions and navigation without submitting inert printer fields', () => {
   const { container } = render(<DeviceEnrollmentWizard onClose={onClose} initialPlatform="printer" />);
-  expect(container.querySelector('pre')).toHaveTextContent(`${window.location.origin}/api/printers/discover`);
-  expect(container.querySelector('pre')).toHaveTextContent('192.168.1.0/24');
+  expect(document.body.querySelector('pre')).toHaveTextContent(`${window.location.origin}/api/printers/discover`);
+  expect(document.body.querySelector('pre')).toHaveTextContent('192.168.1.0/24');
   expect(screen.getByText(/Drucker-Name, IP-Adresse und Protokoll/)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Druckerverwaltung öffnen' })).toHaveAttribute('href', '/printers');
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();

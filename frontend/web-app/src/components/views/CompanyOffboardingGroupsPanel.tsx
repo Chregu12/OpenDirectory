@@ -93,7 +93,7 @@ function BoundGroupsPanel({ context, workflowId, userId, eligibilityRevision }: 
   };
   const parentProof = { 'Vorgangs-ID der Kontosperre': workflowId, 'Benutzer-ID': userId, 'Berechtigungsversion der Kontosperre': eligibilityRevision, 'Ausgeführt von': context.actorUserId, Mandant: context.tenantId };
 
-  return <section aria-label="Gruppenbereinigung beim Austritt" className="rounded border border-white/10 p-4 space-y-4 min-w-0">
+  return <section aria-label="Gruppenbereinigung beim Austritt" className="rounded border border-[var(--border)] p-4 space-y-4 min-w-0">
     <button className="fluent-btn-secondary" aria-expanded={open} aria-controls={contentId} disabled={busy} onClick={() => {
       setOpen(value => !value); setPreview(null); setHistory(null); setConfirmation(null); setError(''); setFormError('');
     }}>Gruppen beim Austritt entfernen</button>

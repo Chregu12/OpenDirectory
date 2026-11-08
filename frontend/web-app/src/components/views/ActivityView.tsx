@@ -1,4 +1,5 @@
 'use client';
+import { api } from '@/lib/api';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowPathIcon,
@@ -31,9 +32,7 @@ export default function ActivityView() {
     setLoading(true);
     setError('');
     try {
-      const r = await fetch('/api/audit/events?limit=100');
-      if (!r.ok) throw new Error('Audit request failed');
-      const data = await r.json();
+      const data = (await api.get('/api/audit/events?limit=100')).data;
       const raw = Array.isArray(data) ? data : (data?.events ?? data?.data);
       if (!Array.isArray(raw) || data?.success === false) throw new Error('Invalid audit events');
       const ids = new Set<string>();

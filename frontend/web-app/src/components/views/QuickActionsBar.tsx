@@ -83,13 +83,13 @@ export default function QuickActionsBar({
         flexWrap: 'wrap',
       }}
     >
-      {unavailable && <p role="alert">Quick actions are unavailable. Refresh to check your permissions again.</p>}
-      {!unavailable && access === null && <p role="status">Checking action permissions…</p>}
+      {unavailable && <p role="alert">Zusätzliche Remote-Aktionen sind nicht eingerichtet oder nicht bestätigt.</p>}
+      {!unavailable && access === null && <p role="status">Aktionsberechtigungen werden geprüft …</p>}
       {identity.unavailable && <p role="alert">Verzeichnisberechtigungen sind nicht verfügbar.</p>}
       {can('devices.enroll') && <ActionButton
         accent
         icon={<PlusIcon style={{ width: 15, height: 15 }} />}
-        label="Enroll Device"
+        label="Gerät registrieren"
         onClick={onEnrollDevice}
       />}
       {(identity.can('users.read') || identity.can('users.create') || identity.can('users.sessions.invalidate')) && <ActionButton
@@ -104,12 +104,12 @@ export default function QuickActionsBar({
       />}
       {can('policies.deploy') && <ActionButton
         icon={<DocumentCheckIcon style={{ width: 15, height: 15 }} />}
-        label="Deploy Policy"
+        label="Richtlinie bereitstellen"
         onClick={onDeployPolicy}
       />}
       {can('compliance.read') && <ActionButton
         icon={<ClipboardDocumentListIcon style={{ width: 15, height: 15 }} />}
-        label="Compliance Snapshot"
+        label="Compliance prüfen"
         onClick={onComplianceSnapshot}
       />}
     </div>

@@ -251,7 +251,7 @@ test('closing the editor aborts pending reads and late source completion cannot 
   await edit(); const pending = deferred<ReturnType<typeof ok>>(); const original = mock.get.getMockImplementation();
   mock.get.mockImplementation((url, options) => url === base + '/capabilities' ? pending.promise : original(url, options));
   reason(); fireEvent.click(screen.getByRole('button', { name: 'Entwurf speichern' })); approve();
-  fireEvent.click(screen.getByRole('button', { name: 'Editor schliessen' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Editor schliessen', hidden: true }));
   expect(screen.queryByRole('region', { name: 'Blueprint-Editor' })).not.toBeInTheDocument();
   await act(async () => { pending.resolve(ok(accessData)); await pending.promise; });
   await screen.findByRole('region', { name: 'Blueprint-Katalog' }); expect(screen.queryByRole('region', { name: 'Bestätigter Änderungsnachweis' })).not.toBeInTheDocument(); expect(mock.put).not.toHaveBeenCalled();

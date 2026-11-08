@@ -243,3 +243,8 @@ test('a 401 history response also discards a deferred detail response from the s
   render(<DeviceInventoryView />); fireEvent.click(await screen.findByRole('button', { name: 'INV-001' })); await screen.findByRole('alert');
   await act(async () => pending.resolve({ status: 200, data: device() })); expect(screen.queryByRole('article', { name: 'Gerätedetails' })).not.toBeInTheDocument(); expect(screen.queryByLabelText('Kanonische Benutzer-ID')).not.toBeInTheDocument();
 });
+test('a canonical device deep link loads that exact device after current inventory authority', async () => {
+  render(<DeviceInventoryView selectedDeviceId={deviceId} />);
+  await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/devices/' + deviceId, expect.objectContaining({ signal: expect.any(AbortSignal) })));
+  expect(api.post).not.toHaveBeenCalled(); expect(api.put).not.toHaveBeenCalled();
+});

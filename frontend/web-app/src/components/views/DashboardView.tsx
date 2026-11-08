@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   UsersIcon,
   ComputerDesktopIcon,
@@ -21,6 +22,7 @@ import {
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import {
+  api,
   lldapApi,
   deviceApi,
   securityApi,
@@ -32,6 +34,7 @@ import {
 } from '@/lib/api';
 import BackupRecoveryWizard from '@/components/setup/BackupRecoveryWizard';
 import toast from 'react-hot-toast';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -207,9 +210,9 @@ function statusLabelColor(status: ServiceStatus): React.CSSProperties {
 
 function SkeletonCard() {
   return (
-    <div className="rounded-xl p-6 animate-pulse" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+    <div className="rounded-xl p-4 animate-pulse" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-xl" style={{ background: 'var(--bg-surface-raised)' }} />
+        <div className="w-9 h-9 rounded-lg" style={{ background: 'var(--bg-surface-raised)' }} />
         <div className="flex-1 space-y-2">
           <div className="h-3 rounded w-1/2" style={{ background: 'var(--bg-surface-raised)' }} />
           <div className="h-7 rounded w-1/3" style={{ background: 'var(--bg-surface-raised)' }} />
@@ -222,7 +225,7 @@ function SkeletonCard() {
 
 function SkeletonPanel({ tall = false }: { tall?: boolean }) {
   return (
-    <div className={`rounded-xl p-6 animate-pulse ${tall ? 'h-80' : 'h-56'}`} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+    <div className={`rounded-xl p-4 animate-pulse ${tall ? 'h-80' : 'h-56'}`} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
       <div className="h-4 rounded w-1/3 mb-4" style={{ background: 'var(--bg-surface-raised)' }} />
       <div className="space-y-3">
         {[...Array(4)].map((_, i) => (
@@ -246,14 +249,14 @@ interface KpiCardProps {
 function KpiCard({ icon, iconBg, label, value, subtitle, footer, alert }: KpiCardProps) {
   return (
     <div
-      className={`rounded-xl p-6 transition-shadow hover:shadow-md ${alert ? 'border-red-200' : ''}`}
+      className={`rounded-xl p-4 transition-shadow hover:shadow-md ${alert ? 'border-red-200' : ''}`}
       style={alert
         ? { background: 'var(--bg-surface)', border: '1px solid #f85149', boxShadow: 'var(--card-shadow)' }
         : { background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }
       }
     >
       <div className="flex items-start gap-4">
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`}>
           {icon}
         </div>
         <div className="min-w-0">
@@ -290,6 +293,7 @@ function ProgressBar({ value, colorClass, height = 'h-2' }: ProgressBarProps) {
 // ---------------------------------------------------------------------------
 
 export default function DashboardView() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [showBackupWizard, setShowBackupWizard] = useState(false);
@@ -324,6 +328,7 @@ export default function DashboardView() {
   const [platformBreakdown, setPlatformBreakdown] = useState<{label:string;count:number;color:string}[]>([]);
 
   const loadData = useCallback(async () => {
+    const configured: string[] | null = await api.get('/api/platform/capabilities').then(response => response.data.configuredServices ?? null).catch(() => null);
     const now = new Date();
 
     // -----------------------------------------------------------------------
@@ -350,17 +355,17 @@ export default function DashboardView() {
       lldapApi.getGroups(),
       deviceApi.getDevices(),
       gatewayApi.getServices(),
-      securityApi.getSecurityAlerts(),
+      configured !== null && !configured.includes('security-scanner') ? Promise.reject(new Error('Security scanner not configured')) : securityApi.getSecurityAlerts(),
       policyApi.getPolicies(),
       healthApi.getDetailedHealth(),
-      prometheusApi.query('100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100)'),
+      prometheusApi.query('100 * (1 - sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes))'),
       configApi.getModules(),
       // Prometheus resources
       prometheusApi.query('100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
-      prometheusApi.query('100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100)'),
+      prometheusApi.query('100 * (1 - sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes))'),
       prometheusApi.query('100 - (sum(node_filesystem_free_bytes{fstype=~"ext4|xfs|btrfs|vfat"}) / sum(node_filesystem_size_bytes{fstype=~"ext4|xfs|btrfs|vfat"}) * 100)'),
       // Activity feed (may 404)
-      fetch('/api/audit/events').then(r => { if (!r.ok) throw new Error('no audit'); return r.json(); }),
+      api.get('/api/auth/audit/login-history?limit=8').then(response => { if (!Array.isArray(response.data?.history)) throw new Error('Unconfirmed login history'); return response.data.history; }),
     ]);
 
     // -----------------------------------------------------------------------
@@ -396,14 +401,14 @@ export default function DashboardView() {
     }
 
     // -----------------------------------------------------------------------
-    // KPI Row 1: Service Health
+    // KPI Row 1: Dienstzustand
     // -----------------------------------------------------------------------
     let healthyServices: number | null = null;
     let totalServices: number | null = null;
     if (gatewayServicesRes.status === 'fulfilled') {
-      const services: any[] = Array.isArray(gatewayServicesRes.value?.data)
+      const services: any[] = (Array.isArray(gatewayServicesRes.value?.data)
         ? gatewayServicesRes.value.data
-        : gatewayServicesRes.value?.data?.services ?? [];
+        : gatewayServicesRes.value?.data?.services ?? []).filter((service: any) => service.status !== 'disabled');
       totalServices = services.length;
       healthyServices = services.filter(
         (s: any) => (s.status ?? '').toLowerCase() === 'healthy'
@@ -526,7 +531,7 @@ export default function DashboardView() {
       { id: 'wazuh',                  label: 'Wazuh Security' },
     ];
 
-    const cards: ServiceCard[] = SERVICE_DEFS.map(({ id, label }) => {
+    const cards: ServiceCard[] = SERVICE_DEFS.filter(({ id }) => svcById[id]?.status !== 'disabled').map(({ id, label }) => {
       if (id === 'gateway') {
         return { id, label, status: gatewayStatus, checkedAt: now };
       }
@@ -552,11 +557,10 @@ export default function DashboardView() {
     // Activity Feed
     // -----------------------------------------------------------------------
     if (auditRes.status === 'fulfilled') {
-      const raw = auditRes.value;
-      const events: any[] = Array.isArray(raw) ? raw : raw?.events ?? raw?.data ?? [];
+      const events: any[] = auditRes.value;
       if (events.length === 0) {
-        setActivityError(true);
-        setActivityEvents(null);
+        setActivityError(false);
+        setActivityEvents([]);
       } else {
         const mapped: ActivityEvent[] = events.slice(0, 8).map((e: any, i: number) => ({
           id: e.id ?? String(i),
@@ -639,7 +643,7 @@ export default function DashboardView() {
   // ---------------------------------------------------------------------------
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="od-dashboard space-y-4">
         {/* Header skeleton */}
         <div className="flex items-center justify-between">
           <div className="space-y-2">
@@ -653,12 +657,12 @@ export default function DashboardView() {
           {[...Array(8)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
         {/* Row 3 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2"><SkeletonPanel tall /></div>
           <div><SkeletonPanel tall /></div>
         </div>
         {/* Row 4 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <SkeletonPanel />
           <SkeletonPanel />
         </div>
@@ -681,36 +685,14 @@ export default function DashboardView() {
       : 0;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="od-dashboard space-y-4">
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                              */}
       {/* ------------------------------------------------------------------ */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Übersicht</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            Echtzeit-Status deiner OpenDirectory-Infrastruktur
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setShowBackupWizard(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg transition-colors"
-          >
-            <SparklesIcon className="w-4 h-4" />
-            Backup Wizard
-          </button>
-          <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-            <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span>Auto-refresh every 30s</span>
-            <span className="mx-1" style={{ color: 'var(--text-muted)' }}>|</span>
-            <span>
-              Last updated{' '}
-              {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-            </span>
-          </div>
-        </div>
-      </div>
+      <PageHeader title="Übersicht" subtitle="Status deiner OpenDirectory-Infrastruktur" icon={ChartBarIcon} actions={<>
+        <button className="fluent-btn-secondary" onClick={() => setShowBackupWizard(true)}><SparklesIcon className="h-4 w-4" />Backup-Assistent</button>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Aktualisierung alle 30 Sekunden · zuletzt {lastRefresh.toLocaleTimeString('de-CH')}</p>
+      </>} />
 
       {/* ------------------------------------------------------------------ */}
       {/* Quick Stats Row (German, simplified)                                */}
@@ -718,24 +700,24 @@ export default function DashboardView() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Geräte gesamt</p>
-          <p className="text-3xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>{kpi.totalDevices ?? '—'}</p>
+          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>{kpi.totalDevices ?? '—'}</p>
           <p className="text-xs text-green-600 mt-1">{kpi.onlineDevices ?? 0} online</p>
         </div>
         <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Compliant %</p>
-          <p className="text-3xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>
+          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>
             {deviceCompliance && deviceCompliance.total > 0 ? `${Math.round((deviceCompliance.compliant / deviceCompliance.total) * 100)}%` : '—'}
           </p>
           <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Konformitatsquote</p>
         </div>
         <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Nutzer aktiv</p>
-          <p className="text-3xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>{kpi.totalUsers ?? '—'}</p>
+          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>{kpi.totalUsers ?? '—'}</p>
           <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{kpi.totalGroups ?? 0} Gruppen</p>
         </div>
         <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Apps verbunden</p>
-          <p className="text-3xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>2</p>
+          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>2</p>
           <p className="text-xs text-blue-600 mt-1">SSO aktiv</p>
         </div>
       </div>
@@ -743,9 +725,9 @@ export default function DashboardView() {
       {/* ------------------------------------------------------------------ */}
       {/* Compliance Donut + Platform bars + Activity feed                    */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Compliance Donut (CSS/SVG) */}
-        <div className="rounded-xl p-6" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Compliance Verteilung</h2>
           {deviceCompliance && deviceCompliance.total > 0 ? (
             <div className="flex flex-col items-center">
@@ -795,7 +777,7 @@ export default function DashboardView() {
         </div>
 
         {/* Platform breakdown bars */}
-        <div className="rounded-xl p-6" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Plattform-Verteilung</h2>
           <div className="space-y-4">
             {platformBreakdown.length > 0 ? platformBreakdown.map(p => {
@@ -814,7 +796,7 @@ export default function DashboardView() {
         </div>
 
         {/* Activity Feed */}
-        <div className="rounded-xl p-6" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Letzte Aktivitäten</h2>
           <div className="space-y-2.5">
             {activityEvents && activityEvents.length > 0 ? (
@@ -841,12 +823,12 @@ export default function DashboardView() {
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'Gerät anmelden', icon: ComputerDesktopIcon, color: 'text-blue-600 bg-blue-50 hover:bg-blue-100 border-blue-200' },
-          { label: 'Nutzer hinzufügen', icon: UsersIcon, color: 'text-green-600 bg-green-50 hover:bg-green-100 border-green-200' },
-          { label: 'App verbinden', icon: SparklesIcon, color: 'text-purple-600 bg-purple-50 hover:bg-purple-100 border-purple-200' },
-          { label: 'Richtlinie erstellen', icon: DocumentTextIcon, color: 'text-orange-600 bg-orange-50 hover:bg-orange-100 border-orange-200' },
+          { label: 'Gerät erfassen', target: '/devices?create=1', icon: ComputerDesktopIcon, color: 'text-blue-600 bg-blue-50 hover:bg-blue-100 border-blue-200' },
+          { label: 'Nutzer hinzufügen', target: '/users?create=1', icon: UsersIcon, color: 'text-green-600 bg-green-50 hover:bg-green-100 border-green-200' },
+          { label: 'App verbinden', target: '/identity', icon: SparklesIcon, color: 'text-purple-600 bg-purple-50 hover:bg-purple-100 border-purple-200' },
+          { label: 'Richtlinien verwalten', target: '/policies', icon: DocumentTextIcon, color: 'text-orange-600 bg-orange-50 hover:bg-orange-100 border-orange-200' },
         ].map(action => (
-          <button key={action.label} onClick={() => toast.success(`${action.label} gestartet`)} className={`flex items-center justify-center gap-2 p-4 border rounded-xl text-sm font-medium transition-colors ${action.color}`}>
+          <button key={action.label} onClick={() => router.push(action.target)} className={`flex items-center justify-center gap-2 p-4 border rounded-xl text-sm font-medium transition-colors ${action.color}`}>
             <action.icon className="w-5 h-5" />
             {action.label}
           </button>
@@ -909,11 +891,11 @@ export default function DashboardView() {
           }
         />
 
-        {/* 3. Service Health */}
+        {/* 3. Dienstzustand */}
         <KpiCard
           icon={<ServerIcon className="w-6 h-6 text-emerald-600" />}
           iconBg="bg-emerald-50"
-          label="Service Health"
+          label="Dienstzustand"
           value={
             kpi.healthyServices !== null && kpi.totalServices !== null
               ? `${kpi.healthyServices} / ${kpi.totalServices}`
@@ -995,17 +977,16 @@ export default function DashboardView() {
           }
         />
 
-        {/* 6. System Uptime */}
+        {/* 6. Gateway-Laufzeit */}
         <KpiCard
           icon={<ClockIcon className="w-6 h-6 text-sky-600" />}
           iconBg="bg-sky-50"
-          label="System Uptime"
+          label="Gateway-Laufzeit"
           value={kpi.uptime ?? '—'}
-          subtitle="Gateway runtime"
+          subtitle="Quelle: API-Gateway"
           footer={
             <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-              <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-              <span>Running stable</span>
+              <span>{kpi.uptime ? 'Laufzeit vom Gateway bestätigt' : 'Laufzeit nicht bestätigt'}</span>
             </div>
           }
         />
@@ -1014,13 +995,13 @@ export default function DashboardView() {
         <KpiCard
           icon={<ChartBarIcon className="w-6 h-6 text-fuchsia-600" />}
           iconBg="bg-fuchsia-50"
-          label="Memory Usage"
+          label="Speicherauslastung"
           value={
             kpi.memoryPercent !== null
               ? <span className={metricTextColor(kpi.memoryPercent)}>{kpi.memoryPercent.toFixed(1)}%</span>
               : '—'
           }
-          subtitle="System memory"
+          subtitle="Prometheus · erfasste Knoten"
           footer={
             kpi.memoryPercent !== null ? (
               <ProgressBar
@@ -1051,15 +1032,15 @@ export default function DashboardView() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Row 3: Service Health Grid + Activity Feed                          */}
+      {/* Row 3: Dienstzustand Grid + Activity Feed                          */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Service Health Grid (2/3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Dienstzustand Grid (2/3) */}
         <div className="lg:col-span-2 rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
             <div>
-              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Service Health</h2>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>All infrastructure services</p>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Dienstzustand</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Quelle: angebundene Integrationen</p>
             </div>
             <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
               <SignalIcon className="w-4 h-4" />
@@ -1069,7 +1050,7 @@ export default function DashboardView() {
               </span>
             </div>
           </div>
-          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             {serviceCards.map((svc) => (
               <div
                 key={svc.id}
@@ -1108,22 +1089,22 @@ export default function DashboardView() {
           </div>
         </div>
 
-        {/* Recent Activity Feed (1/3) */}
+        {/* Letzte Anmeldungen Feed (1/3) */}
         <div className="rounded-xl flex flex-col" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
-            <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Recent Activity</h2>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Audit log & alerts</p>
+            <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Letzte Anmeldungen</h2>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Quelle: eigene Anmeldehistorie</p>
           </div>
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-4 overflow-y-auto">
             {activityError || activityEvents === null ? (
               /* Empty state */
               <div className="flex flex-col items-center justify-center h-full min-h-[160px] text-center px-4">
                 <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: 'var(--bg-surface-raised)' }}>
                   <DocumentTextIcon className="w-6 h-6" style={{ color: 'var(--text-muted)' }} />
                 </div>
-                <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>No activity yet</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{activityError ? 'Anmeldehistorie nicht erreichbar' : 'Anmeldehistorie wird geprüft …'}</p>
                 <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                  Audit log integration coming soon. Events will appear here automatically.
+                  Diese Abfrage betrifft die eigene Anmeldehistorie. Daraus wird kein Gesamtzustand aller Dienste abgeleitet.
                 </p>
               </div>
             ) : (
@@ -1169,7 +1150,7 @@ export default function DashboardView() {
       {/* ------------------------------------------------------------------ */}
       {/* Row 4: System Resources + Device Compliance                         */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* System Resources */}
         <div className="rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -1179,7 +1160,7 @@ export default function DashboardView() {
             </div>
             <CpuChipIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
           </div>
-          <div className="p-6 space-y-5">
+          <div className="p-4 space-y-5">
             {resources.map((metric) => {
               const displayVal = metric.hasData && metric.value !== null
                 ? metric.value
@@ -1237,7 +1218,7 @@ export default function DashboardView() {
             </div>
             <ShieldCheckIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
           </div>
-          <div className="p-6">
+          <div className="p-4">
             {deviceCompliance === null ? (
               <div className="flex flex-col items-center justify-center h-40 text-center">
                 <ComputerDesktopIcon className="w-10 h-10 mb-3" style={{ color: 'var(--text-muted)' }} />

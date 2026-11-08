@@ -109,7 +109,7 @@ function BoundAccessPanel(props: OffboardingAccessBinding) {
     'Berechtigungsversion der Kontosperre': capabilities?.target.eligibilityRevision || props.eligibilityRevision || 'Noch nicht bestätigt' };
   const canRecover = !!attempt && !busy && !readback && !!preview?.canRevoke && preview.kind === attempt.snapshot.kind && history?.kind === attempt.snapshot.kind;
 
-  return <section aria-label="Rollen- und PIM-Bereinigung beim Austritt" className="rounded border border-white/10 p-4 space-y-4 min-w-0">
+  return <section aria-label="Rollen- und PIM-Bereinigung beim Austritt" className="rounded border border-[var(--border)] p-4 space-y-4 min-w-0">
     <button className="fluent-btn-secondary" aria-expanded={open} aria-controls={contentId} disabled={busy} onClick={() => {
       setOpen(value => !value); setCapabilities(null); setPreview(null); setHistory(null); setSelected([]); setConfirmation(null); setConfirmed(false);
       setAttempt(null); setOutcome(null); setError(''); setFormError(''); setReason('');
@@ -130,7 +130,7 @@ function BoundAccessPanel(props: OffboardingAccessBinding) {
         <p>{preview.items.length} angezeigte von {preview.total} nicht widerrufenen Zuweisungen. Auch abgelaufene Einträge sind enthalten; „nicht widerrufen“ bedeutet nicht „aktuell wirksam“.</p>
         {!preview.canRevoke && <p>Nur Lesezugriff. Das separate Verwaltungsrecht für diesen Bereich fehlt.</p>}
         {!preview.items.length && <p>Auf dieser Seite sind keine nicht widerrufenen Zuweisungen vorhanden. Das bestätigt keinen vollständigen Zugriffsverlust.</p>}
-        <ul className="space-y-3">{preview.items.map(item => <li key={item.id} className="break-words rounded border border-white/10 p-3">
+        <ul className="space-y-3">{preview.items.map(item => <li key={item.id} className="break-words rounded border border-[var(--border)] p-3">
           <label className="flex items-start gap-3"><input type="checkbox" aria-label={`Zuweisung auswählen: ${item.role} · ${item.id}`} disabled={busy || !!confirmation || !item.canRevoke} checked={selected.includes(item.id)} onChange={event => setSelected(values => event.target.checked ? [...values, item.id] : values.filter(value => value !== item.id))} /><span>{item.role}</span></label>
           <p>Erstellt: {date(item.createdAt)} · {item.expiresAt === null ? 'Kein Ablaufdatum' : `${Date.parse(item.expiresAt) <= Date.now() ? 'Abgelaufen' : 'Ablauf'}: ${date(item.expiresAt)}`}</p>
           {item.blockedReason && <p>{item.blockedReason === 'protected_role' ? 'Geschützte Rolle – tatsächliche Adminberechtigung erforderlich.' : 'Verwaltungsberechtigung fehlt.'}</p>}

@@ -14,6 +14,7 @@ ARG POLICY_SERVICE_URL=http://opendirectory-policy-service:3004
 ARG LICENSE_ADAPTER_URL=http://opendirectory-license-management:3018
 ARG CORE_GATEWAY_URL=http://opendirectory-api-gateway:3000
 ARG OAUTH_PROVIDER_URL=http://opendirectory-oauth-provider:3010
+ARG APP_STORE_URL=http://opendirectory-app-store:3906
 ENV INTEGRATION_SERVICE_URL=${INTEGRATION_SERVICE_URL}
 ENV AUTH_SERVICE_URL=${AUTH_SERVICE_URL}
 ENV IDENTITY_SERVICE_URL=${IDENTITY_SERVICE_URL}
@@ -23,6 +24,7 @@ ENV POLICY_SERVICE_URL=${POLICY_SERVICE_URL}
 ENV LICENSE_ADAPTER_URL=${LICENSE_ADAPTER_URL}
 ENV CORE_GATEWAY_URL=${CORE_GATEWAY_URL}
 ENV OAUTH_PROVIDER_URL=${OAUTH_PROVIDER_URL}
+ENV APP_STORE_URL=${APP_STORE_URL}
 
 # Copy package files
 COPY frontend/web-app/package.json frontend/web-app/package-lock.json ./

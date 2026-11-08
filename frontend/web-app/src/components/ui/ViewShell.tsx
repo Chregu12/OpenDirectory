@@ -1,5 +1,7 @@
 'use client';
 import React from 'react';
+import { PageHeader } from './PageHeader';
+import { VIEWS } from '@/lib/views';
 import { CommandBar, CommandBarAction } from './CommandBar';
 import { StatCards, StatCard } from './StatCards';
 import { Breadcrumb, BreadcrumbItem } from './Breadcrumb';
@@ -23,13 +25,10 @@ export function ViewShell({
   children, noPadding = false,
 }: ViewShellProps) {
   return (
-    <div style={{ padding: noPadding ? 0 : '24px 28px', minHeight: '100vh', background: 'var(--bg-base)' }}>
+    <div className={noPadding ? "od-view od-view-flush" : "od-view"}>
       {breadcrumbs && <Breadcrumb items={breadcrumbs} />}
-      <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 }}>{title}</h1>
-        {subtitle && <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 3, marginBottom: 0 }}>{subtitle}</p>}
-      </div>
-      {(primaryAction || (actions && actions.length > 0) || onRefresh) && (
+      <PageHeader title={title} subtitle={subtitle} icon={VIEWS.find(view => view.name === title)?.icon} />
+      {(primaryAction || (actions && actions.length > 0) || onRefresh || rightContent) && (
         <CommandBar
           primary={primaryAction}
           actions={actions}

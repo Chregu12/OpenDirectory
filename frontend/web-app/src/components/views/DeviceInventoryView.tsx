@@ -21,7 +21,7 @@ function Pagination({ page, total, label, disabled, onPage }: { page: number; to
   </nav>;
 }
 
-export default function DeviceInventoryView() {
+export default function DeviceInventoryView({ createRequested = false, onCreateHandled, selectedDeviceId }: { selectedDeviceId?: string | null; createRequested?: boolean; onCreateHandled?: () => void } = {}) {
   const client = useRef<DeviceInventoryClient | null>(null);
   const generation = useRef(0);
   const [reload, setReload] = useState(0);
@@ -48,10 +48,18 @@ export default function DeviceInventoryView() {
   const [pending, setPending] = useState<{ device: Device; userId: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [needsMfa, setNeedsMfa] = useState(false);
   const [notice, setNotice] = useState('');
   const canRead = access?.permissions.includes('devices.inventory.read');
   const canCreate = canRead && access?.permissions.includes('devices.inventory.create');
   const canAssign = canRead && access?.permissions.includes('devices.inventory.assign');
+  useEffect(() => {
+    if (createRequested && canCreate && devices) { setCreating(true); onCreateHandled?.(); }
+  }, [createRequested, canCreate, devices, onCreateHandled]);
+
+  useEffect(() => {
+    if (selectedDeviceId && canRead) setSelectedId(selectedDeviceId);
+  }, [selectedDeviceId, canRead]);
 
   const clearSelection = () => {
     setSelectedId(null); setSelected(null); setHistory(null); setHistoryPage(1); setPending(null);
@@ -59,6 +67,7 @@ export default function DeviceInventoryView() {
   };
   const fail = (failure: unknown, expected: number) => {
     if (generation.current !== expected) return;
+    setNeedsMfa((failure as { response?: { status?: number } })?.response?.status === 428);
     generation.current += 1; client.current?.invalidate();
     setAccess(null); setDevices(null); clearSelection(); setCreating(false); setBusy(false); setNotice('');
     setError(deviceInventoryError(failure));
@@ -139,8 +148,8 @@ export default function DeviceInventoryView() {
     primaryAction={canCreate && devices ? { label: 'Gerät erfassen', onClick: () => { setValues({ ...initialValues }); setFormError(''); setCreating(true); setNotice(''); }, disabled: busy } : undefined}
     actions={[{ label: 'Neu laden', onClick: () => { generation.current += 1; client.current?.invalidate(); setReload(value => value + 1); }, disabled: busy }]}>
     <div className="space-y-5" style={{ color: 'var(--text-primary)' }}>
-      <p className="rounded-lg border border-white/10 p-4 text-sm">Nur Inventar · Nicht registriert · Compliance unbekannt. Eine Inventarzuweisung richtet keine Geräteverwaltung ein.</p>
-      {error ? <p role="alert" className="rounded border border-red-500/40 p-4">{error}</p> : !access ? <p role="status">Geräteberechtigungen werden geprüft …</p> : !canRead ? <p role="status">Keine Berechtigung zum Lesen des Geräteinventars.</p> : <>
+      <details className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--border)' }}><summary className="cursor-pointer">Inventar und Geräteverwaltung</summary><p className="mt-2">Nur Inventar · Nicht registriert · Compliance unbekannt. Eine Inventarzuweisung richtet keine Geräteverwaltung ein.</p></details>
+      {error ? <div role="alert" className="rounded border border-red-500/40 p-4 space-y-3"><p>{error}</p>{needsMfa && <div className="flex gap-3"><a className="fluent-btn-secondary" href="/mfa">MFA einrichten</a><a className="fluent-btn-primary" href="/api/auth/oidc/login">Mit MFA neu anmelden</a></div>}</div> : !access ? <p role="status">Geräteberechtigungen werden geprüft …</p> : !canRead ? <p role="status">Keine Berechtigung zum Lesen des Geräteinventars.</p> : <>
         {notice && <p role="status">{notice}</p>}
         <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); clearSelection(); setPage(1); setSearch(searchDraft.trim()); setListVersion(value => value + 1); }}>
           <label className="text-sm">Geräte suchen<input className="mt-1 block rounded border p-2 bg-transparent" maxLength={200} value={searchDraft} disabled={busy} onChange={event => setSearchDraft(event.target.value)} placeholder="Inventarnummer, Seriennummer, Modell" /></label>
@@ -158,7 +167,7 @@ export default function DeviceInventoryView() {
           <Pagination label="Geräteseite" page={devices.page} total={devices.total} disabled={busy} onPage={next => { clearSelection(); setPage(next); }} />
         </section> : <p role="status">Geräte werden geladen …</p>}
         {selectedId && !selected && <p role="status">Gerätedetails werden geladen …</p>}
-        {selected && <article aria-label="Gerätedetails" className="rounded-lg border border-white/10 p-5 space-y-5">
+        {selected && <article aria-label="Gerätedetails" className="rounded-lg border border-[var(--border)] p-5 space-y-5">
           <div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">{selected.assetId}</h2><p>{selected.manufacturer} {selected.model}</p></div><button className="fluent-btn-secondary" disabled={busy} onClick={clearSelection}>Details schließen</button></div>
           <dl className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">{Object.entries({
             'Geräte-ID': selected.id, Seriennummer: selected.serialNumber, Geräteklasse: classLabels[selected.deviceClass],
@@ -167,7 +176,7 @@ export default function DeviceInventoryView() {
             Benutzerzuordnung: selected.assignedUserId || 'Nicht zugewiesen', 'Zuweisungs-ID': selected.assignmentId || '—', Datensatzversion: selected.revision,
             'Erfasst am': selected.createdAt, 'Geändert am': selected.updatedAt, 'Zuletzt gesehen': 'Keine Telemetrie',
           }).map(([label, value]) => <div key={label}><dt className="opacity-70">{label}</dt><dd className="break-words">{value}</dd></div>)}</dl>
-          {canAssign && <section aria-label="Benutzerzuweisung" className="border-t border-white/10 pt-4 space-y-4">
+          {canAssign && <section aria-label="Benutzerzuweisung" className="border-t border-[var(--border)] pt-4 space-y-4">
             <h3 className="font-semibold">Benutzerzuweisung</h3>
             {picker === 'loading' ? <p role="status">Verzeichnisberechtigung wird geprüft …</p> : <>
               {picker === 'directory' && <>
@@ -192,7 +201,7 @@ export default function DeviceInventoryView() {
               </form>
             </>}
           </section>}
-          <section aria-label="Gerätehistorie" className="border-t border-white/10 pt-4 space-y-3">
+          <section aria-label="Gerätehistorie" className="border-t border-[var(--border)] pt-4 space-y-3">
             <h3 className="font-semibold">Gerätehistorie</h3>
             {history ? <><ol className="space-y-4">{history.events.map(event => <li key={event.id} className="text-sm space-y-1">
               <p className="font-medium">{eventLabels[event.type]}</p><p><time dateTime={event.createdAt}>{event.createdAt}</time> · Version {event.after.revision}</p>

@@ -46,17 +46,17 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <section className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-gray-900">Neues Passwort festlegen</h1>
+    <main className="min-h-screen bg-[var(--bg-base)] flex items-center justify-center px-4">
+      <section className="w-full max-w-md rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-8 shadow-sm">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Neues Passwort festlegen</h1>
         {complete ? (
           <div role="status" className="mt-5 space-y-4">
             <p className="text-sm text-green-800">Das Passwort wurde geändert. Melde dich mit dem neuen Passwort an.</p>
-            <a className="inline-block text-sm text-blue-700 underline" href="/login">Zur Anmeldung</a>
+            <a className="inline-block text-sm text-[var(--text-link)] underline" href="/login">Zur Anmeldung</a>
           </div>
         ) : (
           <>
-            <p className="mt-2 text-sm text-gray-600">Der Reset-Link ist eine Stunde gültig.</p>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">Der Reset-Link ist eine Stunde gültig.</p>
             {error && <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
             <form className="mt-6 space-y-4" onSubmit={submit}>
               <label className="block text-sm font-medium text-gray-700" htmlFor="new-password">

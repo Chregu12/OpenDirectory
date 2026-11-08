@@ -1,0 +1,1704 @@
+{
+  "meta": {
+    "date": "2026-11-02",
+    "baseCommit": "05de2fb95021cf798d08f00530ff32ca69c74bdd",
+    "targetVersion": "1.0.16",
+    "status": "deployed-and-http-verified",
+    "nativeBrowser": "Sky Computer Use native pipe startup failed",
+    "liveRole": "admin, companyOwner=false",
+    "liveWrites": "Wegwerfbare eigene Testpools mit direkter Lizenzvergabe/Rücknahme, Katalog-App und Webhook-Metadaten erstellt/bearbeitet/entfernt; keine externen Installationen, E-Mails oder Herstelleraktivierungen.",
+    "routeCount": 59,
+    "frontendTests": {
+      "suites": 135,
+      "tests": 3033,
+      "status": "passed"
+    },
+    "oauthTests": {
+      "suites": 21,
+      "passed": 508
+    },
+    "additionalServiceTests": {
+      "gateway": 197,
+      "authentication": 318,
+      "appStore": 52,
+      "apiBackend": 49
+    },
+    "productionBuild": "passed: linux/amd64",
+    "typecheck": "passed",
+    "helmLint": "passed",
+    "helmRevision": 30,
+    "deliveryEvidence": "portal-delivery.json",
+    "readyWorkloads": 14,
+    "healthyPersistentVolumes": 4,
+    "latestVisualUpdate": {
+      "version": "1.0.13",
+      "helmRevision": 27,
+      "evidence": "compact-delivery.json"
+    }
+  },
+  "routes": [
+    {
+      "route": "/dashboard",
+      "viewId": "dashboard",
+      "name": "Übersicht",
+      "navigationGroup": "Übersicht",
+      "navigation": true,
+      "audience": "Angemeldete Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/DashboardView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/auth/audit/login-history?limit=8",
+        "/api/platform/capabilities"
+      ],
+      "task": "Eigene Firma: freigegebene Aufgaben; admin: Infrastruktur prüfen",
+      "dataSource": "Identity-Zugriff für Aufgaben; eigene Auth-Historie, Integration/Prometheus/Gateway nur im Plattformdashboard",
+      "permission": "Eigene freigegebene Aufgaben; Infrastruktur separat für admin",
+      "scope": "Aufgabenlinks statt unbelegter Firmen-Gesamtzahlen. Plattformkennzahlen nennen Quelle; nicht verbundene Dienste sind kein Ausfall.",
+      "limitations": "Firmenaggregation offener Jobs/Einladungen nicht als neue Datenquelle entwickelt.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/organization",
+      "viewId": "organization",
+      "name": "Organisation",
+      "navigationGroup": "Unternehmen & Personen",
+      "navigation": true,
+      "audience": "Ausdrücklich berechtigte Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/OrganizationView.tsx",
+        "frontend/web-app/src/lib/organizationProfile.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/identity/organization"
+      ],
+      "task": "Firmenprofil, OU-Baum und enge Profildelegationen",
+      "dataSource": "/api/identity/organization; /api/ous; OrganizationUnits/OrganizationDelegations",
+      "permission": "organization.read/manage; ous.* separat; organization.delegations.manage separat",
+      "scope": "Eigener Tenant, versionierte Speicherung, mehrere OU-Beziehungen; OU-only-Berechtigte laden kein Firmenprofil.",
+      "limitations": "Delegation nur Firmenprofil, höchstens acht Stunden; frische MFA; keine Lizenz-/Rollenerbschaft.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/registration-reviews",
+      "viewId": "registration-reviews",
+      "name": "Firmenprüfung",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Ausdrücklich berechtigte Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/CompanyRegistrationReviewsView.tsx",
+        "frontend/web-app/src/lib/companyRegistrationReviews.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/identity/company-registrations"
+      ],
+      "task": "Firmenprüfung im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/users",
+      "viewId": "users",
+      "name": "Mitarbeitende",
+      "navigationGroup": "Unternehmen & Personen",
+      "navigation": true,
+      "audience": "Ausdrücklich berechtigte Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/UsersView.tsx",
+        "frontend/web-app/src/lib/directoryUsers.ts",
+        "frontend/web-app/src/lib/auth.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/auth/oidc/",
+        "/api/auth/oidc/login",
+        "/api/identity/access",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Verzeichniseinträge erstellen, bearbeiten und Kontofreigabe prüfen",
+      "dataSource": "/api/identity/access; /api/users, /api/users/{id}; kanonischer Identity-Service",
+      "permission": "users.read/create/update/status.manage/delete/sessions.invalidate jeweils getrennt",
+      "scope": "Serverpagination; ID-Deep-Link; Erstellen startet gesperrt; Profil und Zugang getrennt; ETag und unbestätigte Writes bleiben erhalten.",
+      "limitations": "Kein automatisches Credential-, MFA-, Gruppen-, Geräte- oder Lizenz-Onboarding; Beziehungen über berechtigte Fachansichten.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/employee-invitations",
+      "viewId": "employee-invitations",
+      "name": "Einladungen",
+      "navigationGroup": "Unternehmen & Personen",
+      "navigation": true,
+      "audience": "Tatsächlicher eigener Firmeninhaber",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/EmployeeInvitationManager.tsx",
+        "frontend/web-app/src/lib/directoryUsers.ts",
+        "frontend/web-app/src/lib/directoryGroups.ts",
+        "frontend/web-app/src/lib/employeeInvitationManagement.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/employee-invitations/manage/",
+        "/api/groups",
+        "/api/groups/",
+        "/api/identity/access",
+        "/api/identity/employee-invitations",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Vorhandenen gesperrten Eintrag einladen; Annahme und Versand prüfen",
+      "dataSource": "employeeInvitationManagement; /api/employee-invitations/manage/*; Auth-/Identity-Vertrag",
+      "permission": "Tatsächlicher eigener Owner; frische MFA für Schreiben",
+      "scope": "Einmal-Link, Annahme, Versandannahme, Ablauf und Widerruf sind getrennt; öffentliche Annahme verwendet gemeinsame Flächen.",
+      "limitations": "Mailannahme beweist keine Zustellung. Kein automatisches Anlegen fremder Konten.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/usergroups",
+      "viewId": "usergroups",
+      "name": "Gruppen",
+      "navigationGroup": "Unternehmen & Personen",
+      "navigation": true,
+      "audience": "Ausdrücklich berechtigte Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/UserGroupsView.tsx",
+        "frontend/web-app/src/lib/directoryGroups.ts",
+        "frontend/web-app/src/lib/directoryUsers.ts",
+        "frontend/web-app/src/lib/auth.ts",
+        "frontend/web-app/src/lib/companyLicenseGroups.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/auth/oidc/",
+        "/api/auth/oidc/login",
+        "/api/groups",
+        "/api/groups/",
+        "/api/identity/access",
+        "/api/licenses/company/groups",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Gruppen, Mitgliedschaften, gespeicherte Regeln und Lizenzverknüpfungen",
+      "dataSource": "/api/groups; /api/groups/{id}/rule; companyLicenseGroups und companyGroupRules",
+      "permission": "groups.* einzeln; Regeln/Lizenzverknüpfungen erfordern echte Owner-Quelle",
+      "scope": "Manuelle Links, Regelspeicherung, Vorschau, ausdrücklicher Abgleich und unabhängige Reviews bleiben getrennt.",
+      "limitations": "Liste begrenzt auf 10000; keine unbelegte effektive Berechtigung aus physischem Link. Benutzerprofile werden nicht ersatzweise geladen.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/permissions",
+      "viewId": "permissions",
+      "name": "Rollen & Rechte",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Ausdrücklich berechtigte Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/RolesView.tsx",
+        "frontend/web-app/src/lib/directoryRoles.ts",
+        "frontend/web-app/src/lib/directoryUsers.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/identity/access",
+        "/api/identity/roles/catalog",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Kanonische Rollen und ausdrückliche Vergaben prüfen",
+      "dataSource": "RolesView; /api/identity/roles/catalog; /api/users/{id}/roles",
+      "permission": "identities.roles.read/manage; keine Selbstvergabe über UI",
+      "scope": "Alte erfundene Alice/Bob-Berechtigungsmatrix durch vorhandene echte Rollenansicht ersetzt.",
+      "limitations": "Befristung, unabhängige Reviews und aktuelle Assurance bleiben unverändert.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/pim",
+      "viewId": "pim",
+      "name": "PIM",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Ausdrücklich berechtigte Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/PIMView.tsx",
+        "frontend/web-app/src/lib/directoryRoles.ts",
+        "frontend/web-app/src/lib/privilegedActivation.ts",
+        "frontend/web-app/src/lib/auth.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/auth/oidc/",
+        "/api/auth/oidc/login",
+        "/api/identity/pim",
+        "/api/identity/roles/catalog",
+        "/api/users/"
+      ],
+      "task": "PIM im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/offboarding-access",
+      "viewId": "offboarding-access",
+      "name": "Offboarding: Rollen & PIM",
+      "navigationGroup": "Unternehmen & Personen",
+      "navigation": true,
+      "audience": "Ausdrücklich berechtigte Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/CompanyOffboardingAccessView.tsx",
+        "frontend/web-app/src/lib/directoryUsers.ts",
+        "frontend/web-app/src/lib/companyOffboardingAccess.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/identity/access",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Rollen-/PIM-Folgeschritte eines bekannten Kontosperrnachweises",
+      "dataSource": "/api/users/{id}/company-offboarding-access; kanonischer Account-Checkpoint",
+      "permission": "identities.roles.* und pim.eligibilities.* separat; Owner allein genügt nicht",
+      "scope": "Konkrete Person/Vorgang; bestätigte, offene und blockierte Schritte; Historie und ursprünglicher Recovery-Weg.",
+      "limitations": "Kein vollständiges JML; Geräte, Gruppen, lokale Lizenzen und externe Anbieter sind getrennte Teilprozesse.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/mfa",
+      "viewId": "mfa",
+      "name": "MFA / 2FA",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Angemeldete Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/MFAView.tsx",
+        "frontend/web-app/src/lib/auth.ts",
+        "frontend/web-app/src/lib/verifiedMfa.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/auth/oidc/",
+        "/api/auth/oidc/login",
+        "/api/mfa",
+        "/api/mfa/confirm",
+        "/api/mfa/disable",
+        "/api/mfa/enroll"
+      ],
+      "task": "MFA / 2FA im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/sspr",
+      "viewId": "sspr",
+      "name": "Passwort zurücksetzen",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Angemeldete Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/SSPRView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/auth/audit/login-history?limit=25",
+        "/api/auth/reset-password"
+      ],
+      "task": "Eigenen Rücksetzlink anfordern, eigene Anmeldehistorie und MFA-Wiederherstellung öffnen",
+      "dataSource": "Authentication-Service: POST /api/auth/reset-password, GET /api/auth/audit/login-history",
+      "permission": "Eigene aktuelle Anmeldung für Historie; öffentlicher nicht aufzählender Reset-Vertrag",
+      "scope": "Echte Daten statt MOCK_REQUESTS/MOCK_STATS; serverseitige Annahme getrennt von Zustellung; SSPR-Stil als gemeinsame Gestaltung.",
+      "limitations": "SMTP/Graph-Versandkonfiguration und eigene MFA getrennt; kein Zustellnachweis aus HTTP 200.",
+      "evidence": "Code, gezielte UI-Tests; reale Historie lesend über HTTPS",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/identity",
+      "viewId": "identity",
+      "name": "Identitätsanbieter",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/IdentityProviderView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "OIDC-/SAML-Metadaten prüfen und reale App-/MFA-Verwaltung öffnen",
+      "dataSource": "OIDC Discovery, /oauth/federation/providers, /saml/metadata; vorhandene AppRegistrationsView",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Keine erfundenen SaaS-Verbindungen oder lokale Sicherheits-Schalter; registrierte Anbieter und erreichbare SAML-Metadaten getrennt von geprüftem Login.",
+      "limitations": "Provider-Secrets serverseitig; keine SP-initiierten SAML-Requests/Single Logout und keine vollständige externe Anbieterabnahme.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/sync",
+      "viewId": "sync",
+      "name": "Verzeichnis-Sync",
+      "navigationGroup": "Automatisierung & Integrationen",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/SyncView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/scim/conflicts",
+        "/api/scim/conflicts/",
+        "/api/scim/connections",
+        "/api/scim/connections/"
+      ],
+      "task": "Verzeichnis-Sync im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/devices",
+      "viewId": "devices",
+      "name": "Geräte",
+      "navigationGroup": "Geräte",
+      "navigation": true,
+      "audience": "Eigener Firmeninhaber oder kanonischer Home-admin",
+      "module": "device-management",
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/DeviceInventoryView.tsx",
+        "frontend/web-app/src/lib/deviceInventory.ts",
+        "frontend/web-app/src/lib/directoryUsers.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/auth/oidc/login",
+        "/api/devices",
+        "/api/devices/",
+        "/api/devices/capabilities",
+        "/api/identity/access",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Inventar erfassen und personell zuweisen",
+      "dataSource": "DeviceInventoryClient; /api/devices/capabilities; /api/devices; DeviceInventoryAuthority",
+      "permission": "Tatsächlicher eigener Owner oder kanonischer Home-admin; Pflicht-MFA maximal 300 Sekunden",
+      "scope": "Inventar, Zuweisung, Enrollment und unbekannte Compliance bleiben getrennt; ID-Deep-Link; Versionsprüfung vor Write.",
+      "limitations": "Live ohne frische MFA korrekt HTTP 428. supportedActions ist leer; kein MDM-/Remote-Erfolg.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/device-returns",
+      "viewId": "device-returns",
+      "name": "Geräterückgaben",
+      "navigationGroup": "Geräte",
+      "navigation": true,
+      "audience": "Eigener Firmeninhaber oder kanonischer Home-admin",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/DeviceReturnsView.tsx",
+        "frontend/web-app/src/lib/directoryUsers.ts",
+        "frontend/web-app/src/lib/deviceReturns.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/devices/returns",
+        "/api/devices/returns/",
+        "/api/devices/returns/capabilities",
+        "/api/devices/users/",
+        "/api/identity/access",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Echte lokale Rückgabeaufträge verfolgen",
+      "dataSource": "/api/devices/returns/*; DeviceReturnClient",
+      "permission": "Bestätigte Owner-/Home-admin-Inventarautorität und frische MFA",
+      "scope": "Eigener Rückgabevorgang mit Historie und Entscheidungen, unabhängig vom aktuellen Inventarstatus.",
+      "limitations": "Keine kosmetische Umbenennung als Rückgabe; keine externe Gerätesperre oder Löschung.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/enrollment",
+      "viewId": "enrollment",
+      "name": "Enrollment",
+      "navigationGroup": "Geräte",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": "quick-actions",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/EnrollmentHubView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Inventarvertrag und tatsächliche Voraussetzungen zur Geräteanbindung prüfen",
+      "dataSource": "Strikter DeviceInventoryClient /api/devices/capabilities",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Eigene Tenant-/MFA-/Capabilities-Prüfung, funktionale Inventar-/Rückgabe-/MFA-Wege.",
+      "limitations": "Aktueller Vertrag inventory-only und keine Remote-Aktionen. Kein bestätigter Agenten- oder MDM-Enrollment-Vertrag.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/blueprints",
+      "viewId": "blueprints",
+      "name": "Plattform-Blueprints",
+      "navigationGroup": "Blueprints",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/BlueprintConfigurationView.tsx",
+        "frontend/web-app/src/lib/policyGovernance.ts",
+        "frontend/web-app/src/lib/blueprintConfiguration.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/blueprints",
+        "/api/blueprints/",
+        "/api/policies",
+        "/api/policies/",
+        "/api/policies/access"
+      ],
+      "task": "Plattform-Blueprints im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/company-blueprints",
+      "viewId": "company-blueprints",
+      "name": "Firmen-Blueprints",
+      "navigationGroup": "Blueprints",
+      "navigation": true,
+      "audience": "Eigener Firmeninhaber oder kanonischer Home-admin",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/CompanyBlueprintsView.tsx",
+        "frontend/web-app/src/lib/companyApplications.ts",
+        "frontend/web-app/src/lib/companyBlueprints.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/company-blueprints",
+        "/api/licenses/company"
+      ],
+      "task": "Entwurf bearbeiten, lokale unveränderliche Version freigeben, zuweisen",
+      "dataSource": "/api/company-blueprints; /api/company-blueprint-assignments; Policy-Service",
+      "permission": "company.blueprints.read/manage/publish über originale eigene Quelle",
+      "scope": "Konfiguration, App-Bezüge, Konflikte, lokale Version und Zuweisung bleiben getrennt; ETags und verlorener ACK werden nicht übergangen.",
+      "limitations": "Lokale Freigabe ist kein Deployment; Vorschau nur im ausgewiesenen Umfang; keine erfundene Prioritätsauflösung.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/printers",
+      "viewId": "printers",
+      "name": "Drucker",
+      "navigationGroup": "Geräte",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": "device-management",
+      "service": "printer-service",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/PrintersView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/network/shares",
+        "/api/printer/print-pools",
+        "/api/printer/scan-destinations"
+      ],
+      "task": "Drucker im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/applications",
+      "viewId": "applications",
+      "name": "Apps & Lizenzen",
+      "navigationGroup": "Apps & Lizenzen",
+      "navigation": true,
+      "audience": "Eigener Firmeninhaber oder kanonischer Home-admin",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/CompanyApplicationsView.tsx",
+        "frontend/web-app/src/lib/companyApplications.ts",
+        "frontend/web-app/src/lib/directoryUsers.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/identity/access",
+        "/api/licenses/company",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Endliche eigene Pools, Quellen und lokale Plätze verwalten; Offboarding fortsetzen",
+      "dataSource": "/api/licenses/company/v2 (primär); /api/licenses/company (bewusste Direktverwaltung); bestehender Allocator",
+      "permission": "company.apps.read/create/assign aus tatsächlicher eigener Authority; MFA, Tenant, Originalbelege",
+      "scope": "Ein gemeinsamer Sitz pro Person/Pool trotz mehrerer Quellen; versionierte Rückgabe; 207/Teilfortschritt/Recovery erhalten.",
+      "limitations": "Kein Herstellerkauf, Cloud-Aktivierung, SSO oder Installation. Teilprozesse sind nicht atomar über Dienste.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/appstore",
+      "viewId": "appstore",
+      "name": "App Store",
+      "navigationGroup": "Apps & Lizenzen",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": "app-store",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/AppStoreView.tsx",
+        "frontend/web-app/src/lib/api.ts",
+        "frontend/web-app/src/lib/auth.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/auth/oidc/",
+        "/api/auth/oidc/login",
+        "/api/store/catalog",
+        "/api/store/catalog/",
+        "/api/store/catalog/sync"
+      ],
+      "task": "Persistenten App-Katalog verwalten und angebotene Paketversionen aus offiziellen Quellen prüfen",
+      "dataSource": "PostgreSQL store_apps; WinGet microsoft/winget-pkgs und Homebrew JSON-API; feste Provider-Hosts",
+      "permission": "Aktuelle menschliche RS256-SSO-Sitzung; Admin für Katalogänderungen",
+      "scope": "Eigene Apps, sichere Paketkennungen, paginierte Suche/Filter und asynchroner Quellenabgleich mit Fortschritt, Zeitstand und Teilfehlern.",
+      "limitations": "Keine automatische Herstelleraktivierung oder Installation ohne bestätigten Geräteagenten. Linux-Version distributionsabhängig. Unauthentifiziertes GitHub-Rate-Limit und Abgleichlimit 100 Apps werden als Fehler/Teilstand sichtbar.",
+      "evidence": "ReleaseSync-/Auth-/UI-Tests; reale Quellen und k3s-Verträge im Releasebericht",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/licenses",
+      "viewId": "licenses",
+      "name": "Lizenzverwaltung",
+      "navigationGroup": "Apps & Lizenzen",
+      "navigation": true,
+      "audience": "Ausdrücklich berechtigte Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/LicenseKioskView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/licenses",
+        "/api/licenses/",
+        "/api/licenses/access",
+        "/api/licenses/groups",
+        "/api/licenses/kiosk",
+        "/api/licenses/requests",
+        "/api/licenses/requests/",
+        "/api/licenses/users",
+        "/api/licenses/users/"
+      ],
+      "task": "Herstellerunabhängige endliche Lizenzpools erstellen und lokale Plätze verteilen/zurücknehmen",
+      "dataSource": "Policy-Service/License-Allocator und PostgreSQL; bestehende /api/licenses-Verträge, kanonische Personenliste",
+      "permission": "Je Vorgang licenses.catalog/assignments/requests.*; separates Recht users.read; serverseitige Identität und Pool-PIM bleiben wirksam",
+      "scope": "Frei wählbarer Hersteller/Produkt, finite Bestände, direkte Verteilung, Quellenanzeige; Spezialverwaltung aufklappbar.",
+      "limitations": "Globale Legacy-Pools sind keine Firmen-V2-Pools. Lokale Vergabe bestätigt keine Herstelleraktivierung; Gruppenquellen bleiben beim Entzug der direkten Quelle bestehen.",
+      "evidence": "Fachtests und gezielte neue Formular-/Quellen-/Fehlerfalltests; k3s-Schreibprüfung siehe Releasebericht",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/monitoring",
+      "viewId": "monitoring",
+      "name": "Monitoring",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": "monitoring-analytics",
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/MonitoringView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Monitoring im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/servicehealth",
+      "viewId": "servicehealth",
+      "name": "Dienstzustand",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/ServiceHealthView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/services"
+      ],
+      "task": "Aktuelle echte Integrations-Dienstzustände prüfen",
+      "dataSource": "Integration-Service /api/services",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Keine zufälligen Verfügbarkeitswerte, Beispielvorfälle oder synthetischen Dienstlisten; disabled von unbekannt und gestört getrennt.",
+      "limitations": "Momentaufnahme der gelisteten Dienstverbindungen; keine historische SLA-/Gesamtplattformabnahme.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/audit",
+      "viewId": "audit",
+      "name": "Audit Log",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/AuditView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/auth/audit/security-events"
+      ],
+      "task": "Bestätigte Authentifizierungsereignisse durchsuchen und exportieren",
+      "dataSource": "Authentication-Service /api/auth/audit/security-events",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Globaler Admin-Vertrag, tatsächliche letzte maximal 100 Ereignisse, filterbarer CSV-Ausschnitt und Details.",
+      "limitations": "Authentifizierungsquelle; keine behauptete dienstübergreifende Integritätskette.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/alerting",
+      "viewId": "alerting",
+      "name": "Benachrichtigungen",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/AlertingView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/prometheus/alerts"
+      ],
+      "task": "Tatsächliche Prometheus-Meldungen lesen und untersuchen",
+      "dataSource": "Prometheus /api/v1/alerts über /api/prometheus/alerts",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Echter Response-Envelope, Fehler werden weitergegeben; keine Browser-Regeln oder simulierte Kanalzustellung.",
+      "limitations": "Quittierung, Silences und Versandkanäle benötigen einen separat angebundenen Alertmanager-Vertrag.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/integrations",
+      "viewId": "integrations",
+      "name": "Integrationen",
+      "navigationGroup": "Automatisierung & Integrationen",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/IntegrationsView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/gateway/",
+        "/api/gateway/access",
+        "/api/gateway/api-keys",
+        "/api/gateway/webhooks",
+        "/api/gateway/webhooks/",
+        "/api/services"
+      ],
+      "task": "Echte Dienste prüfen, OAuth-Apps verwalten und Webhook-Metadaten/Tests/Protokolle verwalten",
+      "dataSource": "Integration-Service /api/services; Gateway /api/gateway/access, webhooks, deliveries und OAuth-Registrierungsclient",
+      "permission": "Aktuelle gateway.status/keys/webhooks.*-Rechte und unabhängige OAuth-App-Rechte; ausgehende Test-Origin im Deployment freigegeben",
+      "scope": "SSPR-Seitenmuster, bestätigte Dienstzustände, Webhook-CRUD, freigegebene manuelle Tests, Fehler statt gesundem Ersatz; alte Schlüssel nur widerrufbar.",
+      "limitations": "Automatische signierte Business-Ereigniszustellung nicht implementiert. Neue globale Master-API-Schlüssel bleiben stillgelegt. Keine freie Browser-Konfiguration geheimer Dienstzugänge.",
+      "evidence": "Gateway- und UI-Tests; reale lesende und wegwerfbare Metadaten-Schreibprüfung siehe Releasebericht",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/backup",
+      "viewId": "backup",
+      "name": "Sicherung & Wiederherstellung",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/BackupView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Sicherung & Wiederherstellung im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/settings",
+      "viewId": "settings",
+      "name": "Einstellungen",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [],
+      "observedRequestPrefixes": [],
+      "task": "Plattformmodule dauerhaft konfigurieren und bestehende Einrichtung öffnen",
+      "dataSource": "Integration-Service /api/config/modules mit PostgreSQL platform_module_settings",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Boolesche Änderung nur für Admin; gespeicherte Antwort bestätigt tatsächlichen Navigationszustand, DB-Fehler liefern 503.",
+      "limitations": "Modulnavigation ist keine Dienstinstallation oder Berechtigungsvergabe; Secrets/MDM-Provider werden nicht als eingerichtet ausgegeben.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/topology",
+      "viewId": "topology",
+      "name": "Netzwerk",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": "network-infrastructure",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/TopologyView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Netzwerk im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/infrastructure",
+      "viewId": "infrastructure",
+      "name": "Infrastruktur",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": "network-infrastructure",
+      "service": "network-infrastructure",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/InfrastructureView.tsx"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Infrastruktur im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/radius",
+      "viewId": "radius",
+      "name": "RADIUS / 802.1X",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": "network-infrastructure",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/RadiusView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/radius/clients",
+        "/api/radius/clients/",
+        "/api/radius/config",
+        "/api/radius/log",
+        "/api/radius/policies",
+        "/api/radius/policies/"
+      ],
+      "task": "RADIUS / 802.1X im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/security",
+      "viewId": "security",
+      "name": "Security",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": "security-suite",
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/SecurityView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Security im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/antivirus",
+      "viewId": "antivirus",
+      "name": "Antivirus",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": "antivirus-protection",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/AntivirusView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Antivirus im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/conditionalaccess",
+      "viewId": "conditionalaccess",
+      "name": "Conditional Access",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": "conditional-access",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/ConditionalAccessView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/conditional-access/events",
+        "/api/conditional-access/locations",
+        "/api/conditional-access/policies",
+        "/api/conditional-access/policies/",
+        "/api/conditional-access/risk-config"
+      ],
+      "task": "Conditional Access im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/certificates",
+      "viewId": "certificates",
+      "name": "Zertifikate / PKI",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": "certificate-authority",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/CertificatesView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/pki/cas",
+        "/api/pki/cas/",
+        "/api/pki/certificates",
+        "/api/pki/certificates/",
+        "/api/pki/certificates/renew-expiring",
+        "/api/pki/crl",
+        "/api/pki/crl/update",
+        "/api/pki/expiry-warnings",
+        "/api/pki/scep"
+      ],
+      "task": "Zertifikate / PKI im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/compliance",
+      "viewId": "compliance",
+      "name": "Compliance",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": "compliance-engine",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/ComplianceView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Compliance im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/scanner",
+      "viewId": "scanner",
+      "name": "Security Scanner",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": "security-scanner",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/SecurityScannerView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Security Scanner im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/secrets",
+      "viewId": "secrets",
+      "name": "Secrets",
+      "navigationGroup": "Administration",
+      "navigation": true,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": "secrets-management",
+      "service": "vault-integration",
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/SecretsView.tsx"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Secrets im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/roadmap",
+      "viewId": "roadmap",
+      "name": "Roadmap & TODO",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/RoadmapView.tsx"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Roadmap & TODO im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/policies",
+      "viewId": "policies",
+      "name": "Richtlinien",
+      "navigationGroup": "Blueprints",
+      "navigation": true,
+      "audience": "Ausdrücklich berechtigte Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+        "frontend/web-app/src/lib/policyGovernance.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/policies",
+        "/api/policies/",
+        "/api/policies/access"
+      ],
+      "task": "Richtlinien im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/company-apps",
+      "viewId": "company-apps",
+      "name": "Firmen-App-Konten",
+      "navigationGroup": "Automatisierung & Integrationen",
+      "navigation": true,
+      "audience": "Tatsächlicher eigener Firmeninhaber",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/CompanyAppsView.tsx",
+        "frontend/web-app/src/lib/directoryUsers.ts",
+        "frontend/web-app/src/lib/companyApps.ts",
+        "frontend/web-app/src/lib/companyAssignmentProtocol.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/clients/company",
+        "/api/identity/access",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Eigene technische App-Konten, Aktivierung, Secret-Generation und Historie",
+      "dataSource": "/api/clients/company; bestehendes OAuth-Client-Register",
+      "permission": "Tatsächlicher eigener Owner mit frischer MFA; globale App-Rolle genügt nicht",
+      "scope": "App-Konto beginnt deaktiviert/ohne Rechte. One-time Secret, Rotation, Generation und Widerruf bleiben erhalten.",
+      "limitations": "Kein SSO-Setup aus Registrierung abgeleitet; kein ungeprüftes Zweit-Secret gespeichert.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/automation",
+      "viewId": "automation",
+      "name": "Automationen",
+      "navigationGroup": "Automatisierung & Integrationen",
+      "navigation": true,
+      "audience": "Tatsächlicher eigener Firmeninhaber",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/CompanyAutomationView.tsx",
+        "frontend/web-app/src/lib/directoryUsers.ts",
+        "frontend/web-app/src/lib/companyAutomation.ts",
+        "frontend/web-app/src/lib/companyGroupRules.ts",
+        "frontend/web-app/src/lib/companyLicenseGroups.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/groups/",
+        "/api/identity/access",
+        "/api/identity/automation",
+        "/api/licenses/company/groups",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Ausdrückliche Freigaben, Jobs, Zeitpläne und konkrete Läufe bearbeiten",
+      "dataSource": "/api/identity/automation; companyAutomation; vorhandener App-Worker",
+      "permission": "Eigener Owner für Freigaben; Worker nur ausdrücklich gewährte Aktion",
+      "scope": "Jobstatus, Aktualisierung, Versuche, Schrittfehler, Teilbericht und sichere Wiederaufnahme beim Lauf.",
+      "limitations": "Aktiver Zeitplan beweist keine Ausführung; lokaler Job beweist keine Herstellerwirkung.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/fleet",
+      "viewId": "fleet",
+      "name": "Erweiterte Geräteansicht",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/DeviceFleetView.tsx"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Bestehenden Deep Link auf das eigene echte Geräteinventar öffnen",
+      "dataSource": "DeviceInventoryView; /api/devices/capabilities, paginierter Bestand",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Legacy-Fleet-Route verwendet denselben strikten Vertrag wie /devices.",
+      "limitations": "Inventar ist keine technische Geräteverwaltung; frische MFA nötig.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/serviceprincipals",
+      "viewId": "serviceprincipals",
+      "name": "Service Principals",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/ServicePrincipalsView.tsx"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Service Principals im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/subscription",
+      "viewId": "subscription",
+      "name": "Abonnement",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/SubscriptionView.tsx"
+      ],
+      "observedRequestPrefixes": [
+        "/api/config/modules"
+      ],
+      "task": "Tatsächlich gespeicherte Modulkonfiguration lesen",
+      "dataSource": "Integration-Service /api/config/modules; PostgreSQL",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Kein erfundener Business-Plan, keine 87/250 Sitze und kein ausgedachtes Verlängerungsdatum.",
+      "limitations": "Kein Billing-Anbieter angebunden; Modulstatus ist kein gekauftes Nutzungsrecht.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/activity",
+      "viewId": "activity",
+      "name": "Aktivitäten",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/ActivityView.tsx"
+      ],
+      "observedRequestPrefixes": [
+        "/api/audit/events?limit=100"
+      ],
+      "task": "Aktivitäten im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/locations",
+      "viewId": "locations",
+      "name": "Standorte",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/LocationsView.tsx"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Standorte im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/roles",
+      "viewId": "roles",
+      "name": "Rollen & Rechte",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Ausdrücklich berechtigte Person",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/RolesView.tsx",
+        "frontend/web-app/src/lib/directoryRoles.ts",
+        "frontend/web-app/src/lib/directoryUsers.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/identity/access",
+        "/api/identity/roles/catalog",
+        "/api/users",
+        "/api/users/"
+      ],
+      "task": "Kanonische Rollen und ausdrückliche Vergaben prüfen",
+      "dataSource": "RolesView; /api/identity/roles/catalog; /api/users/{id}/roles",
+      "permission": "identities.roles.read/manage; keine Selbstvergabe über UI",
+      "scope": "Alte erfundene Alice/Bob-Berechtigungsmatrix durch vorhandene echte Rollenansicht ersetzt.",
+      "limitations": "Befristung, unabhängige Reviews und aktuelle Assurance bleiben unverändert.",
+      "evidence": "Code + vorhandene Fachtests; Live-Nachweise nur wie im Prüfbericht einzeln aufgeführt",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/assignment",
+      "viewId": "assignment",
+      "name": "Zuweisungshistorie",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/AssignmentView.tsx"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Echte eigene Geräte zuweisen und zu Rückgaben/Lizenzquellen navigieren",
+      "dataSource": "DeviceInventoryView, ursprünglicher kanonischer Gerätevertrag",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Keine 2024-Demo-Zuweisungen; echte Inventaransicht und separate Fachwege.",
+      "limitations": "Keine fiktive Gesamttransaktionshistorie über Geräte- und Lizenzdienste.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/appsbooks",
+      "viewId": "appsbooks",
+      "name": "Apps und Bücher",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/AppsBooksView.tsx"
+      ],
+      "observedRequestPrefixes": [
+        "/api/apps?type=vpp"
+      ],
+      "task": "Apps und Bücher im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/gpo",
+      "viewId": "gpo",
+      "name": "Gruppenrichtlinien",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+        "frontend/web-app/src/lib/policyGovernance.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/policies",
+        "/api/policies/",
+        "/api/policies/access"
+      ],
+      "task": "Gruppenrichtlinien im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/ldap-schema",
+      "viewId": "ldap-schema",
+      "name": "LDAP-Schema",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/LDAPSchemaBrowserView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/schema/attribute-types",
+        "/api/schema/object-classes"
+      ],
+      "task": "LDAP-Schema im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/trusts",
+      "viewId": "trusts",
+      "name": "Vertrauensstellungen",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/TrustManagementView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Vertrauensstellungen im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/kerberos",
+      "viewId": "kerberos",
+      "name": "Kerberos",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/KerberosAdminView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Kerberos im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/replication",
+      "viewId": "replication",
+      "name": "Replikation",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/ReplicationView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Replikation im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/graph",
+      "viewId": "graph",
+      "name": "Objektgraph",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/GraphExplorerView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [],
+      "task": "Gespeicherte eigene Gruppen-Mitgliedschaften untersuchen",
+      "dataSource": "Bestehende kanonische directoryGroups-Clients und deren Live-Authority",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Echte eigene Gruppen, 25 angezeigte Gruppen pro Seite, tatsächliche Mitgliedschafts-IDs mit Zielkontext.",
+      "limitations": "Keine abgeleiteten Angriffswege, erfundenen Shadow-Admins, Risiken oder ungeprüfte Rollenvererbung.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/simulator",
+      "viewId": "simulator",
+      "name": "Richtliniensimulation",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/PolicySimulatorView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/policies/access",
+        "/api/policies/simulate"
+      ],
+      "task": "Lokale technische Richtlinienvorschau für ein bekanntes Ziel lesen",
+      "dataSource": "Bestehende /api/policies/access und /api/policies/simulate; Firmenvorschau unter /company-blueprints",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Echter GET mit canonical userId/deviceId und previewOnly=true; tatsächliche Werte und Quellen.",
+      "limitations": "Keine Zukunfts-/Drift-/Geräteausführung aus einem lokalen Vorschauergebnis ableiten.",
+      "evidence": "Code und automatisierte Prüfungen; Live-Umfang separat im aktuellen Releasebericht.",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    },
+    {
+      "route": "/threats",
+      "viewId": "threats",
+      "name": "Bedrohungen",
+      "navigationGroup": "Administration",
+      "navigation": false,
+      "audience": "Plattformadministration bzw. ausdrücklich aufgeführte Fachrolle",
+      "module": null,
+      "service": null,
+      "sourceFiles": [
+        "frontend/web-app/src/components/views/ThreatDashboardView.tsx",
+        "frontend/web-app/src/lib/api.ts"
+      ],
+      "observedRequestPrefixes": [
+        "/api/analytics/anomalies",
+        "/api/analytics/recommendations",
+        "/api/analytics/threats",
+        "/api/analytics/threats/"
+      ],
+      "task": "Bedrohungen im vorhandenen Fachbereich",
+      "dataSource": "Vorhandene Clients und Endpunkte in den aufgeführten Quellen; keine neue Fachdatenquelle",
+      "permission": "Serververtrag des Fachbereichs; Navigation ist keine Berechtigungsvergabe",
+      "scope": "Vorhandene View bleibt als Deep Link erhalten; gemeinsame Tokens/Shell soweit verwendet",
+      "limitations": "Keine neue End-to-End-Abnahme dieses erweiterten Moduls; Konfiguration, Rollen und Providergrenzen separat prüfen",
+      "evidence": "Codeprüfung",
+      "requestEvidence": "Statische Referenzen in den zugeordneten Quelldateien; gemeinsame api.ts enthält keine routenspezifischen Belege. Keine Laufzeitmessung."
+    }
+  ],
+  "priorities": [
+    [
+      "P0",
+      "SSO-Token an alten Profil-/Audit-Endpunkten abgewiesen",
+      "Hoch: tägliche Anmeldung/Profil",
+      "Behoben: gemeinsamer bewährter OIDC-Prüfpfad mit Access-State; Live HTTP 200 und Widerruf 401.",
+      "Code + HTTP"
+    ],
+    [
+      "P0",
+      "Inventar/Lizenzen können ursprünglichen Tokenstatus nicht prüfen",
+      "Hoch: blockierte tägliche Verwaltung",
+      "Korrekte releasegebundene OIDC_ACCESS_STATE_URL. Lizenzzugriffe 200; Inventar erfordert korrekt weiterhin MFA (428).",
+      "Code + HTTP"
+    ],
+    [
+      "P0",
+      "Katalogdienst fehlte im Cluster",
+      "Mittel: vorhandener Dienst, Deployment/DB/PVC",
+      "App-store über Harbor ausgerollt; Auth/Human/Access-State und echte DB-Readiness ergänzt.",
+      "Code + HTTP + k3s"
+    ],
+    [
+      "P1",
+      "Buttons meldeten Start ohne sichtbaren Arbeitsablauf",
+      "Hoch: häufig; falsche Erwartung",
+      "Echte Zielrouten und vorhandener Editor; kein automatischer Write durch URL.",
+      "Komponententest"
+    ],
+    [
+      "P1",
+      "Objektsuche verlor Objekt-ID; Geräte-Fallback auf andere Quelle",
+      "Hoch: falsches Ziel/Scope",
+      "Kanonische Clients, ID-Deep-Link, Request-Generation und getrennte Quellenfehler.",
+      "Code + Komponententest"
+    ],
+    [
+      "P1",
+      "Checkbox-Tastatur und Sortierung unzugänglich",
+      "Hoch: jede Liste",
+      "Echte onChange-Checkboxen, Seitenauswahl, Headerbuttons/aria-sort, explizites Öffnen.",
+      "Tastatur-Komponententests"
+    ],
+    [
+      "P1",
+      "Leere/fehlgeschlagene Abfrage suggerierte normalen Dienstzustand",
+      "Hoch: Fehlentscheidungen",
+      "Positive Scheinmeldung entfernt; eigene Historie/Quelle/Fehler getrennt; Gateway-Laufzeit belegt keine Stabilität.",
+      "Code + Komponententest"
+    ],
+    [
+      "P2",
+      "Doppelte Navigation und Abstände; feste helle 300px-Liste",
+      "Häufig; mittlerer Umbau",
+      "59 Routen in einem Register, sieben Aufgabenbereiche; ungenutzte Sidebar entfernt; Shell besitzt Scroll, ContentPage Abstand; responsive Liste/Detail.",
+      "Code; visueller Effekt Hypothese"
+    ],
+    [
+      "P2",
+      "Parallele Paletten, kleine Bedienelemente und fehlender Dialogfokus",
+      "Häufig; mittlerer Umbau",
+      "Semantische Flächen/Text/Fokus/Spacing; Theme; Headless-UI-Dialoge; Kontrasttoken- und Fokus-Tests.",
+      "Code + Komponententests; keine WCAG-Zertifizierung"
+    ]
+  ],
+  "acceptance": [
+    {
+      "id": 1,
+      "status": "erfüllt",
+      "evidence": "Alle 59 bisherigen View-IDs und Deep Links erhalten; Kernaufgaben über Register und Fachansichten erreichbar. ViewRegistry- und Routingtests."
+    },
+    {
+      "id": 2,
+      "status": "erfüllt",
+      "evidence": "Gemeinsames Register für sichtbaren Namen, Gruppe, Suchwörter, Modul und Dienst; deutsche Titel. NavigationGroups-/GlobalSearch-Tests."
+    },
+    {
+      "id": 3,
+      "status": "erfüllt",
+      "evidence": "Objekttreffer transportieren kanonische ID; UsersView/DeviceInventoryView laden gezielt über ihre bestehenden aktuellen Clients. Keine Registry-Ersatzquelle."
+    },
+    {
+      "id": 4,
+      "status": "teilweise erfüllt",
+      "evidence": "Gemeinsame Nähe-/Abschnittsmuster und Personenidentität; bestehende Gruppen-/Pool-/OU-Beziehungen erhalten. Nicht alle Beziehungen als integrierte Personen-Tabs verfügbar."
+    },
+    {
+      "id": 5,
+      "status": "teilweise erfüllt",
+      "evidence": "Kernformulare, lokale Zustände, Pool-/Job-Kontext und gemeinsame Komponenten verbessert. Gesamte Oberfläche nicht visuell gesichtet."
+    },
+    {
+      "id": 6,
+      "status": "nicht geprüft",
+      "evidence": "Responsive CSS für 320/768/1280/1920 vorbereitet, deutsche Umbrüche und Listenwechsel im Code. Native Browserverbindung ausgefallen; kein realer Reflow-/Zoomnachweis."
+    },
+    {
+      "id": 7,
+      "status": "teilweise erfüllt",
+      "evidence": "Owner-/Profildelegierten-/Reviewer-/Admin-Fixtures prüfen Navigation. Nur eigener realer admin live geprüft; kein neuer realer Owner-/Delegiertenlogin."
+    },
+    {
+      "id": 8,
+      "status": "erfüllt",
+      "evidence": "Gesonderte Kontofreigabe und Credential-/MFA-/Einladungszustände. Bestehende Benutzer-/Einladungstests; Erstellung bleibt gesperrt."
+    },
+    {
+      "id": 9,
+      "status": "erfüllt",
+      "evidence": "Inventarvertrag bleibt inventory-only/not-enrolled/unknown; keine erfundene self-service-Geräteausführung. Inventory- und Katalogtests."
+    },
+    {
+      "id": 10,
+      "status": "erfüllt",
+      "evidence": "Lokale Lizenzverteilung explizit; Provider-/Installationswirkung separat, bestehende API-Verträge und Tests."
+    },
+    {
+      "id": 11,
+      "status": "erfüllt",
+      "evidence": "Bestehende quellenbezogene V2-Pools/Allocator/Pagination erhalten; mehrere Quellen belegen einen gemeinsamen Sitz. CompanyApplications-/Source-Grants-Tests."
+    },
+    {
+      "id": 12,
+      "status": "erfüllt",
+      "evidence": "Gespeicherte Regel, Vorschau, ausdrücklicher Abgleich, Materialisierung und Review bleiben getrennt. Bestehende Regeln-/Live-Source-Tests."
+    },
+    {
+      "id": 13,
+      "status": "erfüllt",
+      "evidence": "Firmenentwurf, lokale unveränderliche Version, Zuweisung und tatsächliche Wirkung bleiben getrennt; vorhandene Konflikt-/Versions-/Lost-ACK-Tests."
+    },
+    {
+      "id": 14,
+      "status": "erfüllt",
+      "evidence": "Vorhandene Offboarding-Kerne mit Konto-/Lizenz-/Gruppen-/Rollen-/Geräte-Teilen erhalten; kein globaler atomarer Erfolgsstatus. Umfang bleibt lokaler Teilprozess."
+    },
+    {
+      "id": 15,
+      "status": "erfüllt",
+      "evidence": "Keine normale Systemmeldung aus leeren oder abgefangenen Requests. Eigene Historie, Fehler und bekannte Integrationen getrennt; Notification-Test und Gateway-Laufzeittext."
+    },
+    {
+      "id": 16,
+      "status": "teilweise erfüllt",
+      "evidence": "JSDOM: Tabellen-Tastatur, Dialogfokus, Escape/Rückkehr; semantische Textkontraste ≥4.5 und Control/Fokus ≥3 berechnet. Kein Screenreader-/Browser-/Touch-/200%-Zoomtest."
+    },
+    {
+      "id": 17,
+      "status": "teilweise erfüllt",
+      "evidence": "Tokens/Shell/ViewShell/ABMShell/CommandBar/DataTable/DetailPanel/Wizard und Kernansichten vereinheitlicht. Erweiterte Legacy-Views enthalten weiterhin lokale Paletten."
+    },
+    {
+      "id": 18,
+      "status": "erfüllt",
+      "evidence": "Bestehende Clients, ETag-/Tenant-/MFA-/Originalproof-/Recovery-Grenzen erhalten; keine Claims als Autorisierungsersatz, keine automatische Schreibwiederholung."
+    },
+    {
+      "id": 19,
+      "status": "erfüllt",
+      "evidence": "Matrix, konkrete HTTP-Nachweise, Dokumentwidersprüche, ungetestete Ansichten und externe Abhängigkeiten ausdrücklich dokumentiert."
+    },
+    {
+      "id": 20,
+      "status": "teilweise erfüllt",
+      "evidence": "SSO und lesende k3s-Prüfung am realen eigenen Konto; Fach-/Rollen-/Fehlerfälle mit klaren Testfixtures. Keine produktiven Testpersonen/Offboardings und keine visuelle Nachher-Abnahme."
+    }
+  ]
+}

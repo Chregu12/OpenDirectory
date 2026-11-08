@@ -1,4 +1,5 @@
 'use client';
+import { api } from '@/lib/api';
 import React, { useState, useEffect } from 'react';
 import {
   PlusIcon,
@@ -31,9 +32,7 @@ export default function AppsBooksView() {
     setLoading(true);
     setError('');
     try {
-      const r = await fetch('/api/apps?type=vpp');
-      if (!r.ok) throw new Error('License request failed');
-      const data = await r.json();
+      const data = (await api.get('/api/apps?type=vpp')).data;
       const raw = Array.isArray(data) ? data : (data?.apps ?? data?.items);
       if (!Array.isArray(raw) || data?.success === false) throw new Error('Invalid license inventory');
       const ids = new Set<string>();

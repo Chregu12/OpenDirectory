@@ -107,7 +107,7 @@ export default function CompanyOffboardingPanel({ context }: { context: Offboard
   const canContinue = job && ready && snapshotReady && job.workflow.phase !== 'completed_local' && !stopped && !newWorkflowRequired
     && (!recoveryId || recoveryId === job.workflow.id) && !previewChanged && (!needsOffboardingPreview(job) || !!resumePreview) && (job.workflow.phase !== 'paused' || !job.workflow.nextAssignments.length || !!job.workflow.reviewAssignments.length);
 
-  return <section id="company-offboarding" aria-label="Mitarbeiter-Offboarding" className="rounded border border-white/10 p-4 space-y-4">
+  return <section id="company-offboarding" aria-label="Mitarbeiter-Offboarding" className="rounded border border-[var(--border)] p-4 space-y-4">
     <button className="fluent-btn-secondary" aria-expanded={open} aria-controls="company-offboarding-content" disabled={busy} onClick={() => setOpen(value => !value)}>Mitarbeiter-Offboarding</button>
     {open && <div id="company-offboarding-content" className="space-y-5">
       <p>Kanonisches Konto sperren und die beim Start erfassten lokalen Lizenzen zurückgeben. Der Vorgang und seine Teilschritte werden dauerhaft gespeichert und können nach erneuter Anmeldung mit frischer MFA fortgesetzt werden.</p>
@@ -150,7 +150,7 @@ export default function CompanyOffboardingPanel({ context }: { context: Offboard
         </li>)}</ul>
         <Pages page={queue.page} total={queue.total} busy={busy} label="Offboarding-Vorgangsseiten" onPage={page => { void run(current => current.list(page), setQueue); }} />
       </section>}
-      {job && <article aria-label="Offboarding-Arbeitsstand" className="space-y-4 border-t border-white/10 pt-4">
+      {job && <article aria-label="Offboarding-Arbeitsstand" className="space-y-4 border-t border-[var(--border)] pt-4">
         <h3 className="font-semibold">{phases[job.workflow.phase]}</h3>
         <p>{job.workflow.totalLicenses === null ? 'Lokale Lizenzzuweisungen noch nicht erfasst.' : `${job.workflow.completedLicenses} von ${job.workflow.totalLicenses} erfassten lokalen Lizenzzuweisungen zurückgegeben.`}</p>
         <p>Kontostatus beim letzten Abruf: {job.currentTarget.deleted ? 'Gelöscht' : job.currentTarget.enabled ? 'Freigegeben' : 'Gesperrt'}.</p>

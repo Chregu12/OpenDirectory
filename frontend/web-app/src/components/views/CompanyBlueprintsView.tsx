@@ -17,7 +17,7 @@ const actions = { created: 'Blueprint erstellen', updated: 'Entwurf speichern', 
 const eventLabels = { 'blueprint.created': 'Blueprint erstellt', 'blueprint.draft.updated': 'Entwurf aktualisiert', 'blueprint.published': 'Version lokal freigegeben', 'blueprint.draft.restored': 'Version als Entwurf wiederhergestellt' };
 const defaults = { screen_lock: { minutes: 5, requirePassword: true }, filevault: { enabled: true }, software_update: { automatic: true, deferralDays: 0 } };
 const emptyDraft = (): CompanyBlueprintDraft => ({ name: '', description: '', platform: 'all', configurations: [], appPoolIds: [] });
-const inputClass = 'mt-1 w-full rounded border border-white/20 bg-transparent p-2';
+const inputClass = 'mt-1 w-full rounded border border-[var(--border-strong)] bg-transparent p-2';
 function Pages({ page, total, label, disabled, onPage }: { page: number; total: number; label: string; disabled: boolean; onPage: (page: number) => void }) {
   return <nav aria-label={label} className="flex flex-wrap items-center gap-4 py-3 text-sm">
     <button className="fluent-btn-secondary" aria-label={'Vorherige ' + label} disabled={disabled || page <= 1} onClick={() => onPage(page - 1)}>Zurück</button>
@@ -147,7 +147,7 @@ export default function CompanyBlueprintsView() {
     primaryAction={access && list && !needsReload ? { label: 'Blueprint erstellen', disabled: blocked, onClick: () => { clearDetail(); setDraft(emptyDraft()); } } : undefined}
     actions={[{ label: 'Aktuellen Stand laden', onClick: reload, disabled: busy || !!confirmation || !!attempt }]}>
     <div className="space-y-5 min-w-0" style={{ color: 'var(--text-primary)' }}>
-      <p className="rounded-lg border border-white/10 p-4 text-sm">Lokale Planung für die eigene Firma. Keine Gerätezuweisung, Installation, Lizenzreservierung oder MDM-Freigabe durch Entwurf oder Freigabe. Eine lokal freigegebene Version ist ein unveränderlicher Plan, keine Bestätigung einer wirksamen Gerätekonfiguration. Erst eine separat bestätigte Mitarbeiterzuweisung belegt echte lokale App-Lizenzen.</p>
+      <p className="rounded-lg border border-[var(--border)] p-4 text-sm">Lokale Planung für die eigene Firma. Keine Gerätezuweisung, Installation, Lizenzreservierung oder MDM-Freigabe durch Entwurf oder Freigabe. Eine lokal freigegebene Version ist ein unveränderlicher Plan, keine Bestätigung einer wirksamen Gerätekonfiguration. Erst eine separat bestätigte Mitarbeiterzuweisung belegt echte lokale App-Lizenzen.</p>
       {error && <p role="alert" className="rounded border border-red-500/40 p-4">{error}</p>}
       {!access && !error && <p role="status">Aktuelle Firmenberechtigung und zusätzliche Anmeldung werden geprüft …</p>}
       {acknowledged && <section aria-label="Bestätigter Änderungsnachweis" className="rounded-lg border border-green-500/30 p-4 space-y-2">
@@ -176,11 +176,11 @@ export default function CompanyBlueprintsView() {
             { key: 'configurationCount', header: 'Konfigurationen' }, { key: 'appCount', header: 'Gewünschte Apps' }]} />
         <Pages page={list.page} total={list.total} label="Blueprint-Seiten" disabled={blocked} onPage={loadList} />
       </section>}
-      {detail && access && <section aria-label="Blueprint-Details" className="rounded-lg border border-white/10 p-5 space-y-4">
+      {detail && access && <section aria-label="Blueprint-Details" className="rounded-lg border border-[var(--border)] p-5 space-y-4">
         <div className="flex flex-wrap justify-between gap-4"><div><h2 className="text-lg font-semibold">{detail.draft.name}</h2><p>Revision {detail.revision} · {detail.publishedVersion === null ? 'Noch keine lokale Freigabe' : `Lokale Version ${detail.publishedVersion}`} · {detail.draftChanged ? 'Entwurf geändert' : 'Entwurf entspricht lokaler Version'}</p></div>
           <button className="fluent-btn-secondary" onClick={reload}>Details schliessen</button></div>
         <DraftContent draft={detail.draft} />
-        <section aria-label="Konfliktprüfung des Entwurfs" className="rounded border border-white/10 p-3 space-y-2">
+        <section aria-label="Konfliktprüfung des Entwurfs" className="rounded border border-[var(--border)] p-3 space-y-2">
           <h3 className="font-semibold">Konfliktprüfung</h3>
           <p>{detail.preview.hasConflicts ? 'Konflikte vorhanden – keine lokale Freigabe möglich.' : 'Keine Konflikte innerhalb dieses Entwurfs.'} Keine Prüfung weiterer Blueprints oder tatsächlicher Geräte.</p>
           {!detail.draft.configurations.length && !detail.draft.appPoolIds.length && <p>Leere Entwürfe können gespeichert werden. Eine lokale Freigabe benötigt mindestens eine Konfiguration oder eine gewünschte Firmen-App.</p>}
@@ -192,7 +192,7 @@ export default function CompanyBlueprintsView() {
         <div className="flex flex-wrap gap-3"><button className="fluent-btn-secondary" disabled={blocked || !!draft} onClick={() => { setDraft(JSON.parse(JSON.stringify(detail.draft))); setReason(''); setFormError(''); setApps(null); }}>Entwurf bearbeiten</button>
           <button className="fluent-btn-primary" disabled={blocked || !!draft || detail.preview.hasConflicts || !detail.draftChanged || !detail.draft.configurations.length && !detail.draft.appPoolIds.length} onClick={() => begin('published')}>Version lokal freigeben</button></div>
       </section>}
-      {draft && access && <section aria-label="Blueprint-Editor" className="rounded-lg border border-white/10 p-5 space-y-5">
+      {draft && access && <section aria-label="Blueprint-Editor" className="rounded-lg border border-[var(--border)] p-5 space-y-5">
         <h2 className="text-lg font-semibold">{detail ? 'Entwurf bearbeiten' : 'Neuer Firmen-Blueprint'}</h2>
         <fieldset disabled={blocked} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2"><div><label htmlFor="company-blueprint-name">Blueprint-Name</label><input id="company-blueprint-name" className={inputClass} maxLength={160} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></div>
@@ -203,7 +203,7 @@ export default function CompanyBlueprintsView() {
           <h3 className="font-semibold">Konfigurationen · {draft.configurations.length} / 25</h3>
           {draft.configurations.map((config, index) => {
             const payload = JSON.parse(config.payloadJson) as Record<string, number | boolean>;
-            return <fieldset className="rounded border border-white/20 p-4 space-y-3" key={config.id}>
+            return <fieldset className="rounded border border-[var(--border-strong)] p-4 space-y-3" key={config.id}>
               <legend className="px-2">Konfiguration {index + 1} · {labels[config.type]}</legend>
               <div><label htmlFor={'config-name-' + config.id}>Konfigurationsname {index + 1}</label><input id={'config-name-' + config.id} className={inputClass} maxLength={160} value={config.name} onChange={event => changeConfig(config.id, { name: event.target.value })} /></div>
               {config.type === 'screen_lock' && <><div><label htmlFor={'config-minutes-' + config.id}>Sperre nach Minuten {index + 1}</label><input id={'config-minutes-' + config.id} className={inputClass} type="number" min={1} max={1440} step={1} value={Number(payload.minutes)} onChange={event => editPayload(config.id, 'minutes', Number(event.target.value))} /></div>
@@ -237,18 +237,18 @@ export default function CompanyBlueprintsView() {
       {access && (draft || detail) && <div><label htmlFor="company-blueprint-reason">Begründung für die Änderung</label><input id="company-blueprint-reason" className={inputClass} minLength={10} maxLength={500} value={reason} disabled={blocked} onChange={event => setReason(event.target.value)} /><p className="mt-1 text-sm opacity-80">10–500 Zeichen, keine Zugangsdaten. Die Begründung bleibt in der Historie erhalten.</p></div>}
       {formError && <p role="alert">{formError}</p>}
       {detail && versions && history && access && <div className="grid gap-5 xl:grid-cols-2">
-        <section aria-label="Lokale Blueprint-Versionen" className="rounded-lg border border-white/10 p-5 space-y-3"><h2 className="text-lg font-semibold">Unveränderliche Versionen</h2>
+        <section aria-label="Lokale Blueprint-Versionen" className="rounded-lg border border-[var(--border)] p-5 space-y-3"><h2 className="text-lg font-semibold">Unveränderliche Versionen</h2>
           {!versions.rows.length && <p>Noch keine Version lokal freigegeben.</p>}
           <ul className="space-y-3">{versions.rows.map(row => <li key={row.version}><button className="text-blue-400 underline" disabled={blocked} onClick={() => { setVersion(null); void run(() => client.current.version(detail.id, row.version), setVersion); }}>Version {row.version} ansehen</button><p className="text-sm">Quellrevision {row.sourceRevision} → Freigaberevision {row.publishedRevision} · {new Date(row.createdAt).toLocaleString('de-CH')}</p></li>)}</ul>
           <Pages page={versions.page} total={versions.total} label="Versionsseiten" disabled={blocked} onPage={page => { setVersion(null); void run(() => client.current.versions(detail.id, page), setVersions); }} />
-          {version && <section aria-label={'Gespeicherte Version ' + version.version} className="border-t border-white/10 pt-3 space-y-3"><h3 className="font-semibold">Version {version.version} · historischer Stand</h3><DraftContent draft={version.draft} />
+          {version && <section aria-label={'Gespeicherte Version ' + version.version} className="border-t border-[var(--border)] pt-3 space-y-3"><h3 className="font-semibold">Version {version.version} · historischer Stand</h3><DraftContent draft={version.draft} />
             <ul>{version.apps.map(app => <li className="break-all text-sm" key={app.id}>{app.name} · {app.vendor} · Pool-Revision {app.revision} · {app.id}</li>)}</ul>
             <p className="text-sm">App-Namen und Pool-Revisionen stammen aus dieser Freigabe, nicht aus aktuellem Lizenzbestand. Wiederherstellen ändert nur den Entwurf. Eine weitere lokale Freigabe erzeugt eine neue Version.</p>
             <button className="fluent-btn-secondary" disabled={blocked || !!draft} onClick={() => begin('restored')}>Als Entwurf wiederherstellen</button>
             <CompanyBlueprintUserAssignmentsPanel key={detail.id + ':' + version.version} context={access} blueprintId={detail.id} version={version} disabled={blocked || !!draft} />
           </section>}
         </section>
-        <section aria-label="Blueprint-Historie" className="rounded-lg border border-white/10 p-5 space-y-3"><h2 className="text-lg font-semibold">Änderungshistorie</h2>
+        <section aria-label="Blueprint-Historie" className="rounded-lg border border-[var(--border)] p-5 space-y-3"><h2 className="text-lg font-semibold">Änderungshistorie</h2>
           {!history.rows.length && <p>Keine Historieneinträge verfügbar.</p>}
           <ol className="space-y-4">{history.rows.map(event => <li key={event.id}><h3 className="font-medium">{eventLabels[event.type]}</h3><p className="text-sm">{new Date(event.createdAt).toLocaleString('de-CH')} · Revision {event.beforeRevision || '—'} → {event.afterRevision}</p><p>{event.reason}</p>
             {event.releasedVersion !== null && <p>Lokale Version {event.releasedVersion}</p>}{event.restoredFrom !== null && <p>Entwurf aus Version {event.restoredFrom}</p>}

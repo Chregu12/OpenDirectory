@@ -49,7 +49,7 @@ export const CHROMIUM_EXECUTABLE_PATH = findChromiumExecutable();
 // Port for the ephemeral `next dev` instance the webServer block below spins
 // up. Chosen to be unlikely to collide with anything else in the container.
 export const E2E_PORT = Number(process.env.E2E_PORT || 3999);
-export const E2E_BASE_URL = `http://127.0.0.1:${E2E_PORT}`;
+export const E2E_BASE_URL = `http://localhost:${E2E_PORT}`;
 
 export default defineConfig({
   testDir: './',
@@ -65,16 +65,7 @@ export default defineConfig({
   use: {
     baseURL: E2E_BASE_URL,
     headless: true,
-    // Viewport width is deliberately kept BELOW Tailwind's `lg` breakpoint
-    // (1024px). The app's sidebar (<aside>) is off-canvas by default
-    // (`-translate-x-full`) and only docks on-screen at `lg:translate-x-0`.
-    // At lg widths that docked, fixed-position sidebar physically overlaps
-    // the DevicesView tab bar (its 240px column sits on top of the "Treiber"
-    // tab at x≈150), so any click on the tab lands on a sidebar item instead
-    // (empirically: it hit "Benutzer" and navigated to the Users view).
-    // Below lg the sidebar is off-canvas, the tab bar is unobstructed, and a
-    // normal (non-forced) click works. 1000px is still a comfortable desktop
-    // width for the drivers table itself.
+    // Individual responsive tests override this default viewport.
     viewport: { width: 1000, height: 900 },
     launchOptions: {
       executablePath: CHROMIUM_EXECUTABLE_PATH,

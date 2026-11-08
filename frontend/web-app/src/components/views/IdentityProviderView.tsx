@@ -1,862 +1,297 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
-import {
-  KeyIcon,
-  GlobeAltIcon,
-  ShieldCheckIcon,
-  PlusIcon,
-  ClipboardDocumentIcon,
-  CheckIcon,
-  ArrowTopRightOnSquareIcon,
-  FingerPrintIcon,
-  LockClosedIcon,
-  UserGroupIcon,
-  Cog6ToothIcon,
-  ExclamationTriangleIcon,
-  CheckCircleIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
-import toast from 'react-hot-toast';
-import AppRegistrationsView from './AppRegistrationsView';
-
-// ─── Types ──────────────────────────────────────────────────────────────────────
-
-type IdpTab = 'overview' | 'apps' | 'oauth' | 'saml' | 'mfa' | 'settings' | 'certificates' | 'kerberos';
-
-interface SaasApp {
-  id: string;
-  name: string;
-  logo: string;
-  protocol: 'oidc' | 'saml' | 'oauth2';
-  status: 'active' | 'inactive' | 'pending';
-  users: number;
-  lastLogin?: string;
-}
-
-// ─── Mock Data ──────────────────────────────────────────────────────────────────
-
-const SAAS_APPS: SaasApp[] = [
-  { id: '1', name: 'GitHub Enterprise',    logo: '🐙', protocol: 'oidc',  status: 'active',   users: 12, lastLogin: '2 min ago' },
-  { id: '2', name: 'Grafana',              logo: '📊', protocol: 'oidc',  status: 'active',   users: 8,  lastLogin: '15 min ago' },
-  { id: '3', name: 'GitLab',              logo: '🦊', protocol: 'saml',  status: 'active',   users: 5,  lastLogin: '1 hr ago' },
-  { id: '4', name: 'Nextcloud',           logo: '☁️', protocol: 'oidc',  status: 'active',   users: 13, lastLogin: '3 hr ago' },
-  { id: '5', name: 'Proxmox VE',         logo: '🖥️', protocol: 'oidc',  status: 'inactive', users: 3,  lastLogin: '2 days ago' },
-  { id: '6', name: 'Mattermost',         logo: '💬', protocol: 'oauth2', status: 'pending',  users: 0 },
-];
-
-// ─── Sub-Components ──────────────────────────────────────────────────────────────
-
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(value).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+"use client";
+import { useCallback, useEffect, useState } from "react";
+import { FingerPrintIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
+import { api } from "@/lib/api";
+import { PageHeader } from "@/components/ui/PageHeader";
+import AppRegistrationsView from "./AppRegistrationsView";
+type Discovery = {
+  issuer: string;
+  authorization_endpoint: string;
+  token_endpoint: string;
+  jwks_uri: string;
+  userinfo_endpoint?: string;
+  scopes_supported?: string[];
+  grant_types_supported?: string[];
+};
+function Endpoint({ label, value }: { label: string; value: string }) {
+  const [notice, setNotice] = useState("");
   return (
-    <button onClick={handleCopy} className="text-[var(--text-muted)] hover:text-[#006FFF] transition-colors ml-2 shrink-0">
-      {copied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <ClipboardDocumentIcon className="w-4 h-4" />}
-    </button>
-  );
-}
-
-function EndpointRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between py-2.5 border-b border-[rgba(255,255,255,0.07)] last:border-0">
-      <span className="text-sm text-[var(--text-muted,#6e7681)] w-44 shrink-0">{label}</span>
-      <div className="flex items-center flex-1 min-w-0">
-        <code className="text-xs text-[#006FFF] bg-[rgba(0,111,255,0.15)] px-2 py-1 rounded truncate flex-1">{value}</code>
-        <CopyButton value={value} />
-      </div>
+    <div className="space-y-2">
+      <dt className="text-sm" style={{ color: "var(--text-muted)" }}>
+        {label}
+      </dt>
+      <dd className="flex flex-wrap gap-3 items-center">
+        <code className="break-all text-sm flex-1 min-w-0">{value}</code>
+        <button
+          className="fluent-btn-secondary"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(value);
+              setNotice("Kopiert.");
+            } catch {
+              setNotice("Kopieren nicht möglich. Adresse manuell auswählen.");
+            }
+          }}
+        >
+          Adresse kopieren
+        </button>
+      </dd>
+      {notice && (
+        <p role="status" className="text-sm">
+          {notice}
+        </p>
+      )}
     </div>
   );
 }
-
-function StatusBadge({ status }: { status: SaasApp['status'] }) {
-  const styles = {
-    active:   'bg-[rgba(63,185,80,0.15)] text-[#3fb950]',
-    inactive: 'bg-[rgba(139,148,158,0.15)] text-[#8b949e]',
-    pending:  'bg-[rgba(210,153,34,0.15)] text-[#d29922]',
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status]}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
+export default function IdentityProviderView() {
+  const [tab, setTab] = useState("overview");
+  const [discovery, setDiscovery] = useState<Discovery | null>(null);
+  const [providers, setProviders] = useState<string[] | null>(null);
+  const [error, setError] = useState("");
+  const [providerError, setProviderError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saml, setSaml] = useState<"unverified" | "configured" | "unavailable">(
+    "unverified",
   );
-}
-
-function ProtocolBadge({ protocol }: { protocol: SaasApp['protocol'] }) {
-  const styles: Record<string, string> = {
-    oidc:   'bg-[rgba(0,111,255,0.15)] text-[#006FFF]',
-    saml:   'bg-[rgba(163,113,247,0.15)] text-[#a371f7]',
-    oauth2: 'bg-[rgba(210,153,34,0.15)] text-[#d29922]',
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${styles[protocol]}`}>
-      {protocol.toUpperCase()}
-    </span>
-  );
-}
-
-// ─── Overview Tab ────────────────────────────────────────────────────────────────
-
-function OverviewTab({ domain }: { domain: string }) {
-  const issuer = `https://${domain}`;
+  const [origin, setOrigin] = useState("");
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    setProviderError("");
+    setOrigin(window.location.origin);
+    await Promise.all([
+      (async () => {
+        try {
+          const data = (await api.get("/.well-known/openid-configuration"))
+            .data;
+          if (
+            data?.issuer !== window.location.origin ||
+            ["authorization_endpoint", "token_endpoint", "jwks_uri"].some(
+              (key) => {
+                try {
+                  return new URL(data[key]).origin !== window.location.origin;
+                } catch {
+                  return true;
+                }
+              },
+            )
+          )
+            throw new Error("Invalid discovery");
+          setDiscovery(data);
+        } catch {
+          setDiscovery(null);
+          setError("OIDC-Metadaten konnten nicht bestätigt werden.");
+        }
+      })(),
+      (async () => {
+        try {
+          const data = (await api.get("/oauth/federation/providers")).data;
+          if (
+            !Array.isArray(data?.providers) ||
+            data.providers.some((value: unknown) => typeof value !== "string")
+          )
+            throw new Error("Invalid providers");
+          setProviders(data.providers);
+        } catch {
+          setProviders(null);
+          setProviderError(
+            "Konfigurierte externe Anmeldeanbieter konnten nicht geladen werden.",
+          );
+        }
+      })(),
+      (async () => {
+        try {
+          const response = await api.get("/saml/metadata", {
+            responseType: "text",
+          });
+          if (
+            response.status !== 200 ||
+            typeof response.data !== "string" ||
+            !response.data.includes("EntityDescriptor")
+          )
+            throw new Error("Invalid metadata");
+          setSaml("configured");
+        } catch {
+          setSaml("unavailable");
+        }
+      })(),
+    ]);
+    setLoading(false);
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
   return (
     <div className="space-y-6">
-      {/* Status banner */}
-      <div className="bg-[rgba(63,185,80,0.15)] border border-[rgba(63,185,80,0.3)] rounded-xl p-4 flex items-start gap-3">
-        <CheckCircleIcon className="w-5 h-5 text-[#3fb950] mt-0.5 shrink-0" />
-        <div>
-          <p className="text-sm font-semibold text-[#3fb950]">Authentifizierung konfigurieren</p>
-          <p className="text-xs text-[#3fb950] mt-0.5">
-            Die zentrale Anmeldung unterstützt OAuth2/OIDC und konfigurierte externe OIDC-Anbieter. SAML unterstützt angemeldete IdP-initiierte Starts zu registrierten Anwendungen; die Verbindung muss mit der jeweiligen Anwendung geprüft werden.
-          </p>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Verbundene Apps',   value: '6',   icon: GlobeAltIcon,    color: 'text-[#006FFF]',   bg: 'bg-[rgba(0,111,255,0.15)]' },
-          { label: 'Aktive Clients',    value: '2',   icon: KeyIcon,         color: 'text-[#a371f7]', bg: 'bg-[rgba(163,113,247,0.15)]' },
-          { label: 'Authentifizierungen heute', value: '143', icon: FingerPrintIcon, color: 'text-[#3fb950]',  bg: 'bg-[rgba(63,185,80,0.15)]' },
-          { label: 'MFA-Nutzer',        value: '11',  icon: ShieldCheckIcon, color: 'text-[#d29922]', bg: 'bg-[rgba(210,153,34,0.15)]' },
-        ].map(s => (
-          <div key={s.label} className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-4 flex items-center gap-3">
-            <div className={`${s.bg} rounded-lg p-2.5`}>
-              <s.icon className={`w-5 h-5 ${s.color}`} />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-[var(--text-primary,#e4e6ea)]">{s.value}</p>
-              <p className="text-xs text-[var(--text-muted,#6e7681)] leading-tight">{s.label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* OIDC Endpoints */}
-      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <GlobeAltIcon className="w-5 h-5 text-[#006FFF]" />
-          <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">OIDC Discovery Endpoints</h3>
-          <span className="ml-auto text-xs text-[var(--text-muted,#6e7681)]">Issuer: <code className="font-mono">{issuer}</code></span>
-        </div>
-        <div>
-          <EndpointRow label="Discovery Document"   value={`${issuer}/.well-known/openid-configuration`} />
-          <EndpointRow label="Authorization"        value={`${issuer}/oauth/authorize`} />
-          <EndpointRow label="Token"                value={`${issuer}/oauth/token`} />
-          <EndpointRow label="UserInfo"             value={`${issuer}/oauth/userinfo`} />
-          <EndpointRow label="JWKS"                 value={`${issuer}/.well-known/jwks.json`} />
-          <EndpointRow label="Introspection"        value={`${issuer}/oauth/introspect`} />
-          <EndpointRow label="Revocation"           value={`${issuer}/oauth/revoke`} />
-          <EndpointRow label="SAML Metadata"        value={`${issuer}/saml/metadata`} />
-          <EndpointRow label="SAML SSO"             value={`${issuer}/saml/sso`} />
-        </div>
-      </div>
-
-      {/* Supported Protocols */}
-      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-5">
-        <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-4">Unterstützte Standards</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <PageHeader
+        title="Identitätsanbieter"
+        subtitle="Zentrale Anmeldung, registrierte Anwendungen und bestätigte Metadaten"
+        icon={FingerPrintIcon}
+        actions={
+          <button
+            className="fluent-btn-secondary"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            <ArrowPathIcon
+              className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+            />
+            Aktualisieren
+          </button>
+        }
+      />
+      <div className="od-tabs-panel">
+        <nav className="od-tabs" aria-label="Identitätsbereiche">
           {[
-            {
-              name: 'OAuth 2.0 / OIDC',
-              color: 'border-[rgba(0,111,255,0.3)] bg-[rgba(0,111,255,0.1)]',
-              icon: '🔑',
-              items: ['Authorization Code Flow', 'PKCE', 'Refresh Tokens', 'Client Credentials', 'Device Flow'],
-            },
-            {
-              name: 'SAML 2.0',
-              color: 'border-[rgba(163,113,247,0.3)] bg-[rgba(163,113,247,0.1)]',
-              icon: '🔐',
-              items: ['SP-initiated SSO', 'IdP-initiated SSO', 'Signed Assertions', 'Encrypted Assertions', 'Single Logout'],
-            },
-            {
-              name: 'Moderne Auth',
-              color: 'border-[rgba(63,185,80,0.3)] bg-[rgba(63,185,80,0.1)]',
-              icon: '🛡️',
-              items: ['TOTP/HOTP MFA', 'WebAuthn (FIDO2)', 'Passkeys', 'Conditional Access', 'Risk-Based Auth'],
-            },
-          ].map(p => (
-            <div key={p.name} className={`rounded-lg border p-4 ${p.color}`}>
-              <p className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-2">{p.icon} {p.name}</p>
-              <ul className="space-y-1">
-                {p.items.map(i => (
-                  <li key={i} className="text-xs text-[var(--text-secondary,#8b949e)] flex items-center gap-1.5">
-                    <CheckIcon className="w-3.5 h-3.5 text-[#3fb950] shrink-0" />
-                    {i}
+            ["overview", "Anmeldung"],
+            ["apps", "Anwendungen"],
+            ["federation", "Externe Anbieter"],
+            ["saml", "SAML 2.0"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              aria-pressed={tab === id}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="p-5 space-y-5">
+          {loading && <p role="status">Anmeldekonfiguration wird geprüft …</p>}
+          {tab === "overview" && (
+            <>
+              {error && <p role="alert">{error}</p>}
+              {discovery && (
+                <section className="space-y-5">
+                  <h2 className="font-semibold">OAuth 2.0 / OpenID Connect</h2>
+                  <dl className="space-y-5">
+                    <Endpoint label="Issuer" value={discovery.issuer} />
+                    <Endpoint
+                      label="Autorisierung"
+                      value={discovery.authorization_endpoint}
+                    />
+                    <Endpoint
+                      label="Token-Endpunkt"
+                      value={discovery.token_endpoint}
+                    />
+                    <Endpoint
+                      label="Öffentliche Signaturschlüssel"
+                      value={discovery.jwks_uri}
+                    />
+                  </dl>
+                  {discovery.scopes_supported && (
+                    <p className="text-sm">
+                      Veröffentlichte Scopes:{" "}
+                      {discovery.scopes_supported.join(", ")}
+                    </p>
+                  )}
+                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                    Metadaten beschreiben das Anmeldeprotokoll. Eine
+                    erfolgreiche Anmeldung an einer bestimmten Anwendung wird
+                    damit nicht bestätigt.
+                  </p>
+                </section>
+              )}
+              <section className="od-panel space-y-3">
+                <h2 className="font-semibold">MFA und Wiederherstellung</h2>
+                <p className="text-sm">
+                  Authenticator, erneute Bestätigung und Notfallcodes werden im
+                  bestehenden geschützten Ablauf verwaltet. Methoden werden erst
+                  nach serverseitiger Bestätigung als eingerichtet angezeigt.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <a className="fluent-btn-primary" href="/mfa">
+                    MFA verwalten
+                  </a>
+                  <a className="fluent-btn-secondary" href="/sspr">
+                    Passwort-Selbsthilfe
+                  </a>
+                </div>
+              </section>
+            </>
+          )}
+          {tab === "apps" && <AppRegistrationsView />}
+          {tab === "federation" && (
+            <section className="space-y-4">
+              <h2 className="font-semibold">
+                Konfigurierte externe OIDC-Anbieter
+              </h2>
+              {providerError && <p role="alert">{providerError}</p>}
+              {providers?.length === 0 && (
+                <p>
+                  Keine externen Anbieter in der bestätigten
+                  Serverkonfiguration.
+                </p>
+              )}
+              <ul className="space-y-3">
+                {providers?.map((provider) => (
+                  <li className="od-panel" key={provider}>
+                    {provider}
+                    <p
+                      className="text-sm mt-2"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      Im Server registriert; externer Login nicht durch diese
+                      Anzeige geprüft.
+                    </p>
                   </li>
                 ))}
               </ul>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Apps Tab ─────────────────────────────────────────────────────────────────────
-
-function AppsTab() {
-  const [showAdd, setShowAdd] = useState(false);
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">Verbundene Anwendungen</h3>
-          <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">SaaS-Apps und interne Dienste, die OpenDirectory als Identity Provider nutzen</p>
-        </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 bg-[#006FFF] text-white text-sm px-3 py-2 rounded-lg hover:bg-[#0056cc] transition-colors"
-        >
-          <PlusIcon className="w-4 h-4" />
-          App verbinden
-        </button>
-      </div>
-
-      {showAdd && (
-        <div className="bg-[rgba(0,111,255,0.1)] border border-[rgba(0,111,255,0.3)] rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">Neue App verbinden</h4>
-            <button onClick={() => setShowAdd(false)} className="text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)]">
-              <XMarkIcon className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { name: 'GitHub',      logo: '🐙' },
-              { name: 'Slack',       logo: '💬' },
-              { name: 'Salesforce',  logo: '☁️' },
-              { name: 'AWS SSO',     logo: '🟠' },
-              { name: 'Datadog',     logo: '🐕' },
-              { name: 'Jira',        logo: '🔵' },
-              { name: 'Confluence',  logo: '📖' },
-              { name: 'Custom App',  logo: '⚙️' },
-            ].map(a => (
-              <button
-                key={a.name}
-                onClick={() => { setShowAdd(false); toast.success(`${a.name} Wizard gestartet`); }}
-                className="flex items-center gap-2 bg-[var(--bg-surface-raised,#1c2128)] border border-[rgba(255,255,255,0.07)] rounded-lg p-3 text-left hover:border-[#006FFF] hover:bg-[rgba(0,111,255,0.1)] transition-colors"
-              >
-                <span className="text-xl">{a.logo}</span>
-                <span className="text-sm font-medium text-[var(--text-secondary,#8b949e)]">{a.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-[rgba(255,255,255,0.07)] bg-[var(--bg-surface-raised,#1c2128)]">
-              <th className="text-left text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wide px-4 py-3">Anwendung</th>
-              <th className="text-left text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wide px-4 py-3">Protokoll</th>
-              <th className="text-left text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wide px-4 py-3">Status</th>
-              <th className="text-left text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wide px-4 py-3">Nutzer</th>
-              <th className="text-left text-xs font-semibold text-[var(--text-muted,#6e7681)] uppercase tracking-wide px-4 py-3">Letzter Login</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[rgba(255,255,255,0.07)]">
-            {SAAS_APPS.map(app => (
-              <tr key={app.id} className="hover:bg-[rgba(255,255,255,0.04)] transition-colors">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xl">{app.logo}</span>
-                    <span className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{app.name}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3"><ProtocolBadge protocol={app.protocol} /></td>
-                <td className="px-4 py-3"><StatusBadge status={app.status} /></td>
-                <td className="px-4 py-3 text-sm text-[var(--text-secondary,#8b949e)]">{app.users}</td>
-                <td className="px-4 py-3 text-sm text-[var(--text-muted,#6e7681)]">{app.lastLogin ?? '—'}</td>
-                <td className="px-4 py-3">
-                  <button className="text-[var(--text-muted)] hover:text-[#006FFF] transition-colors">
-                    <Cog6ToothIcon className="w-4 h-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// ─── OAuth2 Tab ──────────────────────────────────────────────────────────────────
-
-function OAuthTab() {
-  return <AppRegistrationsView />;
-}
-
-// ─── SAML Tab ────────────────────────────────────────────────────────────────────
-
-function SamlTab({ domain }: { domain: string }) {
-  const issuer = `https://${domain}`;
-  return (
-    <div className="space-y-4">
-      <h3 className="text-sm font-semibold">SAML 2.0 Identity Provider</h3>
-      <p>Unterstützt sind angemeldete, IdP-initiierte HTTP-POST-Starts für fest konfigurierte Anwendungen. SP-initiierte AuthnRequests und Single Logout sind noch nicht verfügbar.</p>
-      <p>Eine Konfiguration mit gültigem X.509-Zertifikat und passenden lokalen Anwendungszuweisungen ist erforderlich. Ohne Konfiguration melden die Endpunkte HTTP 503. Diese Ansicht bestätigt keine eingerichtete Verbindung.</p>
-      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-5 space-y-3">
-        <EndpointRow label="Entity ID / Issuer" value={issuer} />
-        <EndpointRow label="Start (POST mit Benutzer-Bearer und appId)" value={`${issuer}/saml/sso`} />
-        <EndpointRow label="Metadata XML" value={`${issuer}/saml/metadata`} />
-        <EndpointRow label="X.509-Zertifikat" value={`${issuer}/saml/certificate`} />
-        <p>NameID: persistenter lokaler Subject-Identifier. Benutzerattribute und Gruppen werden derzeit nicht übertragen.</p>
-        <a href={`${issuer}/saml/metadata`} target="_blank" rel="noreferrer" className="text-[#006FFF]">Metadaten beim Identity Provider öffnen</a>
-      </div>
-    </div>
-  );
-}
-
-// ─── MFA Setup Modal ──────────────────────────────────────────────────────────────
-
-function MfaSetupModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [step, setStep] = useState<'loading'|'show-qr'|'verify'|'done'>('loading');
-  const [qrDataUrl, setQrDataUrl] = useState('');
-  const [secret, setSecret] = useState('');
-  const [code, setCode] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    api.post('/api/auth/mfa/setup')
-      .then(res => {
-        setQrDataUrl(res.data.qrDataUrl);
-        setSecret(res.data.secret);
-        setStep('show-qr');
-      })
-      .catch(() => setError('MFA-Setup fehlgeschlagen'));
-  }, []);
-
-  const verify = async () => {
-    if (code.length !== 6) return setError('6-stelligen Code eingeben');
-    setLoading(true);
-    try {
-      await api.post('/api/auth/mfa/verify-setup', { token: code });
-      setStep('done');
-      setTimeout(() => { onSuccess(); onClose(); }, 1500);
-    } catch (e: any) {
-      setError(e?.response?.data?.error || 'Ungültiger Code');
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm">
-        <h3 className="text-white font-semibold text-lg mb-4">TOTP-MFA einrichten</h3>
-
-        {step === 'loading' && <div className="h-32 bg-gray-700 rounded animate-pulse" />}
-
-        {step === 'show-qr' && (
-          <div className="text-center space-y-4">
-            <p className="text-gray-400 text-sm">Scannen Sie den QR-Code mit Google Authenticator, Authy oder einer kompatiblen App:</p>
-            <img src={qrDataUrl} alt="TOTP QR Code" className="mx-auto rounded-lg w-48 h-48" />
-            <p className="text-gray-500 text-xs break-all">Manuell: {secret}</p>
-            <button onClick={() => setStep('verify')} className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium">Weiter →</button>
-          </div>
-        )}
-
-        {step === 'verify' && (
-          <div className="space-y-4">
-            <p className="text-gray-400 text-sm">Geben Sie den 6-stelligen Code aus Ihrer Authenticator-App ein:</p>
-            <input
-              type="text" inputMode="numeric" maxLength={6} value={code}
-              onChange={e => setCode(e.target.value.replace(/\D/g,''))}
-              placeholder="000000"
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-3 text-white text-center text-2xl tracking-widest"
-              autoFocus
-            />
-            {error && <p className="text-red-400 text-sm">{error}</p>}
-            <button onClick={verify} disabled={loading || code.length !== 6} className="w-full bg-blue-600 disabled:opacity-50 text-white py-2 rounded-lg font-medium">
-              {loading ? 'Überprüfe...' : 'Bestätigen'}
-            </button>
-          </div>
-        )}
-
-        {step === 'done' && (
-          <div className="text-center py-8">
-            <div className="text-green-400 text-4xl mb-3">✓</div>
-            <p className="text-white font-medium">MFA erfolgreich aktiviert</p>
-          </div>
-        )}
-
-        <button onClick={onClose} className="mt-3 w-full text-gray-500 text-sm hover:text-gray-300">Abbrechen</button>
-      </div>
-    </div>
-  );
-}
-
-// ─── MFA Tab ─────────────────────────────────────────────────────────────────────
-
-function MfaTab() {
-  const [fido2, setFido2] = useState(true);
-  const [totp, setTotp] = useState(true);
-  const [conditional, setConditional] = useState(true);
-  const [mfaEnabled, setMfaEnabled] = useState(false);
-  const [showMfaSetup, setShowMfaSetup] = useState(false);
-
-  useEffect(() => {
-    api.get('/api/auth/mfa/status')
-      .then(res => setMfaEnabled(res.data.enabled))
-      .catch(() => {});
-  }, []);
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)]">Multi-Faktor Authentifizierung</h3>
-        <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Konfiguriere MFA-Methoden und Zero-Trust Richtlinien</p>
-      </div>
-
-      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] divide-y divide-[rgba(255,255,255,0.07)]">
-        {/* FIDO2 row */}
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl mt-0.5">🔑</span>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">FIDO2 / Passkeys / WebAuthn</p>
-                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[rgba(63,185,80,0.15)] text-[#3fb950]">Empfohlen</span>
-              </div>
-              <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Hardware-Keys (YubiKey), Windows Hello, Touch ID, Face ID — Phishing-resistent</p>
-            </div>
-          </div>
-          <button
-            onClick={() => { setFido2(!fido2); toast.success(`FIDO2 / Passkeys / WebAuthn ${!fido2 ? 'aktiviert' : 'deaktiviert'}`); }}
-            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${fido2 ? 'bg-blue-600' : 'bg-gray-300'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${fido2 ? 'translate-x-5' : 'translate-x-0'}`} />
-          </button>
-        </div>
-
-        {/* TOTP row — real setup controls */}
-        <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl mt-0.5">📱</span>
-              <div>
-                <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">TOTP / HOTP (Authenticator-App)</p>
-                <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">Google Authenticator, Aegis, Bitwarden Authenticator — zeitbasierte OTPs</p>
-              </div>
-            </div>
-            <button
-              onClick={() => { setTotp(!totp); toast.success(`TOTP / HOTP ${!totp ? 'aktiviert' : 'deaktiviert'}`); }}
-              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${totp ? 'bg-blue-600' : 'bg-gray-300'}`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${totp ? 'translate-x-5' : 'translate-x-0'}`} />
-            </button>
-          </div>
-          <div className="flex items-center justify-between p-4 bg-[rgba(255,255,255,0.04)] rounded-lg border border-[rgba(255,255,255,0.07)]">
-            <div>
-              <p className="text-white font-medium text-sm" style={{ color: '#111827' }}>TOTP Authenticator</p>
-              <p className="text-[var(--text-muted,#6e7681)] text-xs mt-0.5">Google Authenticator, Authy, etc.</p>
-            </div>
-            {mfaEnabled ? (
-              <button
-                onClick={() => api.delete('/api/auth/mfa/disable').then(() => setMfaEnabled(false)).catch(() => {})}
-                className="px-3 py-1.5 bg-red-600/20 border border-red-600 text-red-400 rounded-lg text-xs font-medium"
-              >
-                Deaktivieren
-              </button>
-            ) : (
-              <button
-                onClick={() => setShowMfaSetup(true)}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium"
-              >
-                Einrichten
-              </button>
-            )}
-          </div>
-          {showMfaSetup && <MfaSetupModal onClose={() => setShowMfaSetup(false)} onSuccess={() => setMfaEnabled(true)} />}
-        </div>
-
-        {/* Conditional Access row */}
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl mt-0.5">🛡️</span>
-            <div>
-              <p className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">Conditional Access</p>
-              <p className="text-xs text-[var(--text-muted,#6e7681)] mt-0.5">MFA-Anforderung basierend auf Gerät, Standort, Risikowert und Gruppe</p>
-            </div>
-          </div>
-          <button
-            onClick={() => { setConditional(!conditional); toast.success(`Conditional Access ${!conditional ? 'aktiviert' : 'deaktiviert'}`); }}
-            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${conditional ? 'bg-blue-600' : 'bg-gray-300'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${conditional ? 'translate-x-5' : 'translate-x-0'}`} />
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-[rgba(210,153,34,0.15)] border border-[rgba(210,153,34,0.3)] rounded-xl p-4 flex gap-3">
-        <ExclamationTriangleIcon className="w-5 h-5 text-[#d29922] shrink-0 mt-0.5" />
-        <div className="text-sm">
-          <p className="font-semibold text-[#d29922]">Zero Trust Empfehlung</p>
-          <p className="text-[#d29922] mt-0.5 text-xs">
-            Aktiviere FIDO2 für alle Admin-Accounts. TOTP als Fallback. Conditional Access blockiert unbekannte Geräte aus Hochrisiko-Standorten automatisch.
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-5">
-        <h4 className="text-sm font-semibold text-[var(--text-primary,#e4e6ea)] mb-3">Conditional Access Regeln</h4>
-        <div className="space-y-2">
-          {[
-            { name: 'Admin-Accounts', condition: 'FIDO2 oder TOTP immer', action: 'Erlaubt', color: 'text-[#3fb950]' },
-            { name: 'Unbekanntes Gerät + Risikoland', condition: 'IP-Geolocation in Sperrliste', action: 'Blockiert', color: 'text-red-400' },
-            { name: 'Firmenlaptop + CH/DE/AT', condition: 'Compliance-Score > 80%', action: 'Ohne MFA', color: 'text-[#006FFF]' },
-            { name: 'BYOD-Geräte', condition: 'Alle Standorte', action: 'MFA erforderlich', color: 'text-[#d29922]' },
-          ].map(r => (
-            <div key={r.name} className="flex items-center justify-between py-2 border-b border-[rgba(255,255,255,0.07)] last:border-0">
-              <span className="text-sm font-medium text-[var(--text-primary,#e4e6ea)]">{r.name}</span>
-              <span className="text-xs text-[var(--text-muted,#6e7681)] mx-4 flex-1">{r.condition}</span>
-              <span className={`text-xs font-semibold ${r.color}`}>{r.action}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Certificates Tab ────────────────────────────────────────────────────────────
-
-function CertificatesTab() {
-  const [certs, setCerts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showIssue, setShowIssue] = useState(false);
-  const [form, setForm] = useState({ commonName: '', sans: '', durationDays: 365, type: 'server' });
-  const [issuing, setIssuing] = useState(false);
-  const [newCert, setNewCert] = useState<any>(null);
-
-  useEffect(() => {
-    api.get('/api/ca/certificates')
-      .then(r => setCerts(Array.isArray(r.data) ? r.data : []))
-      .catch(() => setCerts([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const issueCert = async () => {
-    setIssuing(true);
-    try {
-      const res = await api.post('/api/ca/issue', {
-        commonName: form.commonName,
-        sans: form.sans.split(',').map(s => s.trim()).filter(Boolean),
-        durationDays: form.durationDays,
-        type: form.type,
-      });
-      setNewCert(res.data);
-      setCerts(prev => [res.data, ...prev]);
-    } catch (e: any) {
-      alert(e?.response?.data?.error || 'Fehler beim Ausstellen');
-    }
-    setIssuing(false);
-  };
-
-  const revokeCert = async (id: string) => {
-    await api.post(`/api/ca/revoke/${id}`).catch(() => {});
-    setCerts(prev => prev.map(c => c.id === id ? { ...c, revoked: true } : c));
-  };
-
-  const downloadPem = (pem: string, filename: string) => {
-    const blob = new Blob([pem], { type: 'application/x-pem-file' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-white font-semibold">Interne Zertifikatsstelle</h3>
-          <p className="text-gray-400 text-sm mt-0.5">Ausstellen und Verwalten von TLS-Zertifikaten</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => api.get('/api/ca/root').then(r => downloadPem(r.data, 'opendirectory-ca.pem'))} className="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-lg text-sm">Root-CA herunterladen</button>
-          <button onClick={() => setShowIssue(!showIssue)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium">+ Zertifikat ausstellen</button>
-        </div>
-      </div>
-
-      {showIssue && (
-        <div className="bg-gray-800 border border-gray-700 rounded-xl p-5 space-y-4">
-          <h4 className="text-white font-medium text-sm">Neues Zertifikat</h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-gray-400 text-xs">Common Name *</label>
-              <input value={form.commonName} onChange={e => setForm(f => ({...f, commonName: e.target.value}))} placeholder="app.example.local" className="w-full mt-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm" />
-            </div>
-            <div>
-              <label className="text-gray-400 text-xs">SANs (kommagetrennt)</label>
-              <input value={form.sans} onChange={e => setForm(f => ({...f, sans: e.target.value}))} placeholder="app.local,192.168.1.10" className="w-full mt-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm" />
-            </div>
-            <div>
-              <label className="text-gray-400 text-xs">Typ</label>
-              <select value={form.type} onChange={e => setForm(f => ({...f, type: e.target.value}))} className="w-full mt-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm">
-                <option value="server">Server</option>
-                <option value="client">Client</option>
-                <option value="both">Server + Client</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-gray-400 text-xs">Gültigkeit (Tage)</label>
-              <input type="number" value={form.durationDays} onChange={e => setForm(f => ({...f, durationDays: parseInt(e.target.value)}))} className="w-full mt-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm" />
-            </div>
-          </div>
-          <button onClick={issueCert} disabled={issuing || !form.commonName} className="px-4 py-2 bg-blue-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium">{issuing ? 'Ausstellen...' : 'Zertifikat ausstellen'}</button>
-
-          {newCert && (
-            <div className="mt-4 p-4 bg-green-900/30 border border-green-700 rounded-lg">
-              <p className="text-green-400 text-sm font-medium mb-2">&#10003; Zertifikat ausgestellt</p>
-              <div className="flex gap-2">
-                <button onClick={() => downloadPem(newCert.certificate, `${form.commonName}.crt`)} className="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">Zertifikat (.crt)</button>
-                <button onClick={() => downloadPem(newCert.privateKey, `${form.commonName}.key`)} className="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">Privater Schlüssel (.key)</button>
-              </div>
-            </div>
+              <p className="text-sm">
+                Vertrauensbeziehung und vertrauliche Client-Zugänge werden
+                serverseitig konfiguriert. Die zentrale Anmeldeseite bindet den
+                gewählten Anbieter an den begonnenen OAuth-Ablauf.
+              </p>
+            </section>
+          )}
+          {tab === "saml" && (
+            <section className="space-y-5">
+              <h2 className="font-semibold">SAML 2.0</h2>
+              <p>
+                {saml === "configured"
+                  ? "Die öffentlichen SAML-Metadaten sind erreichbar. Die Verbindung mit der Zielanwendung muss separat geprüft werden."
+                  : saml === "unverified"
+                    ? "SAML-Metadaten werden geprüft."
+                    : "SAML-Metadaten sind nicht verfügbar oder nicht konfiguriert. Es wird keine aktive Verbindung behauptet."}
+              </p>
+              <p className="text-sm">
+                Unterstützt sind angemeldete, IdP-initiierte HTTP-POST-Starts
+                für fest konfigurierte Anwendungen. SP-initiierte AuthnRequests
+                und Single Logout sind noch nicht verfügbar. Diese Ansicht
+                bestätigt keine eingerichtete Verbindung.
+              </p>
+              {origin && (
+                <dl className="space-y-5">
+                  <Endpoint
+                    label="Metadata XML"
+                    value={origin + "/saml/metadata"}
+                  />
+                  <Endpoint
+                    label="X.509-Zertifikat"
+                    value={origin + "/saml/certificate"}
+                  />
+                  <Endpoint
+                    label="Geschützter Start (POST mit appId)"
+                    value={origin + "/saml/sso"}
+                  />
+                </dl>
+              )}
+              {origin && (
+                <a
+                  className="fluent-btn-secondary"
+                  href={origin + "/saml/metadata"}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Metadaten beim Identity Provider öffnen
+                </a>
+              )}
+            </section>
           )}
         </div>
-      )}
-
-      {loading ? (
-        <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-12 bg-gray-700 rounded animate-pulse" />)}</div>
-      ) : certs.length === 0 ? (
-        <div className="text-center py-8 text-gray-400 text-sm">Keine Zertifikate ausgestellt</div>
-      ) : (
-        <div className="overflow-hidden border border-gray-700 rounded-xl">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-800/50"><tr className="text-gray-400 text-xs">
-              <th className="px-4 py-3 text-left">Common Name</th>
-              <th className="px-4 py-3 text-left">Typ</th>
-              <th className="px-4 py-3 text-left">Ablauf</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left"></th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-700/50">
-              {certs.map(c => (
-                <tr key={c.id} className="hover:bg-gray-700/30">
-                  <td className="px-4 py-3 text-white font-mono text-xs">{c.common_name}</td>
-                  <td className="px-4 py-3 text-gray-300">{c.type}</td>
-                  <td className="px-4 py-3 text-gray-300">{c.expires_at ? new Date(c.expires_at).toLocaleDateString('de-CH') : '—'}</td>
-                  <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded text-xs font-medium ${c.revoked ? 'bg-red-900/50 text-red-400' : 'bg-green-900/50 text-green-400'}`}>{c.revoked ? 'Widerrufen' : 'Aktiv'}</span></td>
-                  <td className="px-4 py-3">{!c.revoked && <button onClick={() => revokeCert(c.id)} className="text-red-400 hover:text-red-300 text-xs">Widerrufen</button>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Kerberos Tab ────────────────────────────────────────────────────────────────
-
-interface KerbPrincipal {
-  name: string;
-}
-
-function KerberosTab({ domain }: { domain: string }) {
-  const realm = domain.toUpperCase();
-  const [principals, setPrincipals] = useState<KerbPrincipal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [newName, setNewName] = useState('');
-  const [newPass, setNewPass] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [keytab, setKeytab] = useState<string | null>(null);
-
-  const load = () => {
-    setLoading(true);
-    api.get('/api/kerberos/principals')
-      .then(r => setPrincipals((r.data.principals ?? []).map((p: string) => ({ name: p }))))
-      .catch(() => setPrincipals([]))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const createPrincipal = async () => {
-    if (!newName || !newPass) return;
-    setCreating(true);
-    try {
-      await api.post('/api/kerberos/principals', { name: newName, password: newPass });
-      toast.success(`Principal ${newName}@${realm} erstellt`);
-      setNewName(''); setNewPass('');
-      load();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error ?? 'Fehler');
-    }
-    setCreating(false);
-  };
-
-  const deletePrincipal = async (name: string) => {
-    if (!confirm(`Principal ${name} löschen?`)) return;
-    await api.delete(`/api/kerberos/principals/${encodeURIComponent(name.split('@')[0])}`).catch(() => {});
-    setPrincipals(prev => prev.filter(p => p.name !== name));
-  };
-
-  const getKeytab = async (name: string) => {
-    const shortName = name.split('@')[0];
-    try {
-      const r = await api.post(`/api/kerberos/principals/${encodeURIComponent(shortName)}/keytab`);
-      setKeytab(r.data.keytab_path ?? r.data.message ?? 'Keytab generiert');
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error ?? 'Keytab-Fehler');
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-white font-semibold">Kerberos KDC — {realm}</h3>
-          <p className="text-gray-400 text-sm mt-0.5">Principals verwalten, Keytabs generieren, SPNEGO-SSO</p>
-        </div>
       </div>
-
-      {/* Create principal */}
-      <div className="bg-gray-800 border border-gray-700 rounded-xl p-5 space-y-4">
-        <h4 className="text-white text-sm font-medium">Neuer Principal</h4>
-        <div className="flex gap-3">
-          <input
-            value={newName} onChange={e => setNewName(e.target.value)}
-            placeholder="username oder service/host"
-            className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
-          />
-          <input
-            type="password" value={newPass} onChange={e => setNewPass(e.target.value)}
-            placeholder="Passwort"
-            className="w-44 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
-          />
-          <button
-            onClick={createPrincipal} disabled={creating || !newName || !newPass}
-            className="px-4 py-2 bg-blue-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium whitespace-nowrap"
-          >
-            {creating ? 'Erstellen…' : 'Principal erstellen'}
-          </button>
-        </div>
-      </div>
-
-      {keytab && (
-        <div className="bg-green-900/30 border border-green-700 rounded-lg px-4 py-3 text-green-400 text-sm flex items-center justify-between">
-          <span>Keytab: {keytab}</span>
-          <button onClick={() => setKeytab(null)} className="text-green-600 hover:text-green-400"><XMarkIcon className="w-4 h-4" /></button>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-gray-700 rounded animate-pulse" />)}</div>
-      ) : principals.length === 0 ? (
-        <div className="text-center py-8 text-gray-400 text-sm">Keine Principals gefunden (KDC möglicherweise nicht verfügbar)</div>
-      ) : (
-        <div className="overflow-hidden border border-gray-700 rounded-xl">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-800/50">
-              <tr className="text-gray-400 text-xs">
-                <th className="px-4 py-3 text-left">Principal</th>
-                <th className="px-4 py-3 text-left">Realm</th>
-                <th className="px-4 py-3 text-left"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700/50">
-              {principals.map(p => {
-                const short = p.name.split('@')[0];
-                const r = p.name.includes('@') ? p.name.split('@')[1] : realm;
-                return (
-                  <tr key={p.name} className="hover:bg-gray-700/30">
-                    <td className="px-4 py-3 text-white font-mono text-xs">{short}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{r}</td>
-                    <td className="px-4 py-3 flex gap-2 justify-end">
-                      <button onClick={() => getKeytab(p.name)} className="text-blue-400 hover:text-blue-300 text-xs">Keytab</button>
-                      <button onClick={() => deletePrincipal(p.name)} className="text-red-400 hover:text-red-300 text-xs">Löschen</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Main Component ──────────────────────────────────────────────────────────────
-
-export default function IdentityProviderView() {
-  const [activeTab, setActiveTab] = useState<IdpTab>('overview');
-  const domain = process.env.NEXT_PUBLIC_AD_DOMAIN ?? 'opendirectory.local';
-
-  const TABS: { id: IdpTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: 'overview',      label: 'Übersicht',    icon: ShieldCheckIcon },
-    { id: 'apps',          label: 'Apps',          icon: GlobeAltIcon },
-    { id: 'oauth',         label: 'OAuth2/OIDC',   icon: KeyIcon },
-    { id: 'saml',          label: 'SAML 2.0',      icon: LockClosedIcon },
-    { id: 'mfa',           label: 'MFA & Access',  icon: FingerPrintIcon },
-    { id: 'certificates',  label: 'Zertifikate',   icon: ShieldCheckIcon },
-    { id: 'kerberos',      label: 'Kerberos',      icon: KeyIcon },
-    { id: 'settings',      label: 'Einstellungen', icon: Cog6ToothIcon },
-  ];
-
-  return (
-    <div className="p-6 space-y-6" style={{ background: 'var(--bg-base, #0e1115)' }}>
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-9 h-9 bg-[#006FFF] rounded-xl flex items-center justify-center">
-              <ShieldCheckIcon className="w-5 h-5 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-[var(--text-primary,#e4e6ea)]">Identity Provider</h1>
-            <span className="bg-[rgba(0,111,255,0.15)] text-[#006FFF] text-xs px-2.5 py-1 rounded-full font-medium">Im Ausbau</span>
-          </div>
-          <p className="text-sm text-[var(--text-muted,#6e7681)] ml-12">
-            OAuth/OIDC-Registrierungen verwenden die kanonische Anwendungsautorität. Andere Tabs enthalten weiterhin Prototypfunktionen und Beispieldaten.
-          </p>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-[rgba(255,255,255,0.07)]">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === t.id
-                ? 'border-[#006FFF] text-[#006FFF]'
-                : 'border-transparent text-[var(--text-muted,#6e7681)] hover:text-[var(--text-secondary,#8b949e)] hover:border-[rgba(255,255,255,0.07)]'
-            }`}
-          >
-            <t.icon className="w-4 h-4" />
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
-      {activeTab === 'overview'     && <OverviewTab domain={domain} />}
-      {activeTab === 'apps'         && <AppsTab />}
-      {activeTab === 'oauth'        && <OAuthTab />}
-      {activeTab === 'saml'         && <SamlTab domain={domain} />}
-      {activeTab === 'mfa'          && <MfaTab />}
-      {activeTab === 'certificates' && <CertificatesTab />}
-      {activeTab === 'kerberos'     && <KerberosTab domain={domain} />}
-      {activeTab === 'settings'  && (
-        <div className="bg-[var(--bg-surface,#161b22)] rounded-xl border border-[rgba(255,255,255,0.07)] p-8 text-center text-[var(--text-muted,#6e7681)]">
-          <Cog6ToothIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">IdP-Einstellungen (Token-Laufzeiten, Signing-Keys, Session-Policies)</p>
-        </div>
-      )}
     </div>
   );
 }

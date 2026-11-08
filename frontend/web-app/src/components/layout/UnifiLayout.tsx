@@ -1,91 +1,27 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
-import { logout } from '@/lib/auth';
-import { directoryUsers } from '@/lib/directoryUsers';
-import toast, { Toaster } from 'react-hot-toast';
+import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
+import { logout } from "@/lib/auth";
+import { NAVIGATION_GROUPS, VIEW_BY_ID, visibleViews } from "@/lib/views";
 import {
-  HomeIcon,
-  BuildingOfficeIcon,
-  ComputerDesktopIcon,
-  Cog6ToothIcon,
-  ChartBarIcon,
+  MAIN_SECTIONS,
+  sectionFor,
+  MainSectionId,
+} from "@/lib/navigationSections";
+import type { DirectoryAccess } from "@/lib/directoryUsers";
+import GlobalSearch from "./GlobalSearch";
+import { Dialog } from "@headlessui/react";
+import { directoryUsers } from "@/lib/directoryUsers";
+import ThemeSelector from "./ThemeSelector";
+import toast, { Toaster } from "react-hot-toast";
+import {
   BellIcon,
-  MagnifyingGlassIcon,
   Bars3Icon,
   XMarkIcon,
-  UserGroupIcon,
-  WifiIcon,
-  PrinterIcon,
-  DocumentTextIcon,
-  LockClosedIcon,
-  ShieldExclamationIcon,
-  FingerPrintIcon,
-  ArrowDownOnSquareStackIcon,
-  KeyIcon,
-  BugAntIcon,
-  ClipboardDocumentListIcon,
-  ArchiveBoxIcon,
-  ShoppingBagIcon,
-  ClipboardDocumentCheckIcon,
-  CubeIcon,
-  RectangleGroupIcon,
-  MagnifyingGlassCircleIcon,
-  ServerStackIcon,
-  RectangleStackIcon,
-  ArrowPathIcon,
-  PuzzlePieceIcon,
-  FlagIcon,
-  ShieldCheckIcon,
-  TagIcon,
-  DevicePhoneMobileIcon,
-  BellAlertIcon,
-  DocumentCheckIcon,
-  FunnelIcon,
-  SignalIcon,
-  ArrowUturnLeftIcon,
-} from '@heroicons/react/24/outline';
-
-// ─── Search catalog ───────────────────────────────────────────────────────────
-type SearchItem = { id: string; name: string; view: string; type: string };
-
-const SEARCH_ITEMS: SearchItem[] = [
-  { id: 'dashboard',    name: 'Dashboard',           view: 'dashboard',    type: 'Seite' },
-  { id: 'devices',      name: 'Geräte',              view: 'devices',      type: 'Seite' },
-  { id: 'users',        name: 'Benutzer',            view: 'users',        type: 'Seite' },
-  { id: 'employee-invitations', name: 'Mitarbeitereinladungen', view: 'employee-invitations', type: 'Seite' },
-  { id: 'policies',     name: 'Richtlinien',         view: 'policies',     type: 'Seite' },
-  { id: 'applications', name: 'Anwendungen',         view: 'applications', type: 'Seite' },
-  { id: 'security',     name: 'Sicherheit',          view: 'security',     type: 'Seite' },
-  { id: 'identity',     name: 'Identity Provider',   view: 'identity',     type: 'Seite' },
-  { id: 'enrollment',   name: 'Enrollment Hub',      view: 'enrollment',   type: 'Seite' },
-  { id: 'monitoring',   name: 'Monitoring',          view: 'monitoring',   type: 'Seite' },
-  { id: 'secrets',      name: 'Secrets',             view: 'secrets',      type: 'Seite' },
-  { id: 'printers',     name: 'Drucker',             view: 'printers',     type: 'Seite' },
-  { id: 'permissions',  name: 'Berechtigungen',      view: 'permissions',  type: 'Seite' },
-  { id: 'blueprints',   name: 'Blueprints',          view: 'blueprints',   type: 'Seite' },
-  { id: 'company-blueprints', name: 'Firmen-Blueprints', view: 'company-blueprints', type: 'Seite' },
-  { id: 'antivirus',    name: 'Antivirus',           view: 'antivirus',    type: 'Seite' },
-  { id: 'audit',        name: 'Audit Log',           view: 'audit',        type: 'Seite' },
-  { id: 'backup',       name: 'Backup & DR',         view: 'backup',       type: 'Seite' },
-  { id: 'appstore',     name: 'App Store',           view: 'appstore',     type: 'Seite' },
-  { id: 'compliance',    name: 'Compliance',           view: 'compliance',    type: 'Seite' },
-  { id: 'scanner',      name: 'Security Scanner',    view: 'scanner',       type: 'Seite' },
-  { id: 'sync',         name: 'Verzeichnis-Sync',    view: 'sync',          type: 'Seite' },
-  { id: 'integrations', name: 'Integrationen',       view: 'integrations',  type: 'Seite' },
-  { id: 'roadmap',           name: 'Roadmap & TODO',      view: 'roadmap',           type: 'Seite' },
-  { id: 'pim',               name: 'PIM',                 view: 'pim',               type: 'Seite' },
-  { id: 'licenses',          name: 'Lizenz-Kiosk',        view: 'licenses',          type: 'Seite' },
-  { id: 'mfa',               name: 'MFA / 2FA',           view: 'mfa',               type: 'Seite' },
-  { id: 'sspr',              name: 'Passwort-Reset',      view: 'sspr',              type: 'Seite' },
-  { id: 'conditionalaccess', name: 'Conditional Access',  view: 'conditionalaccess', type: 'Seite' },
-  { id: 'alerting',          name: 'Benachrichtigungen',  view: 'alerting',          type: 'Seite' },
-  { id: 'certificates',      name: 'Zertifikate / PKI',   view: 'certificates',      type: 'Seite' },
-  { id: 'radius',            name: 'RADIUS / 802.1X',     view: 'radius',            type: 'Seite' },
-  { id: 'servicehealth',     name: 'Service Health',      view: 'servicehealth',     type: 'Seite' },
-];
+  ChevronDownIcon,
+} from "@heroicons/react/24/outline";
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 interface Notification {
@@ -94,16 +30,16 @@ interface Notification {
   message?: string;
   time: string;
   read: boolean;
-  type: 'enrollment' | 'compliance' | 'pim' | 'security' | 'warning' | 'info';
+  type: "enrollment" | "compliance" | "pim" | "security" | "warning" | "info";
 }
 
-const NOTIF_COLOR: Record<Notification['type'], string> = {
-  enrollment: 'bg-blue-400',
-  compliance: 'bg-orange-400',
-  pim:        'bg-purple-400',
-  security:   'bg-red-500',
-  warning:    'bg-orange-400',
-  info:       'bg-blue-400',
+const NOTIF_COLOR: Record<Notification["type"], string> = {
+  enrollment: "bg-blue-400",
+  compliance: "bg-orange-400",
+  pim: "bg-purple-400",
+  security: "bg-red-500",
+  warning: "bg-orange-400",
+  info: "bg-blue-400",
 };
 
 interface LayoutProps {
@@ -111,73 +47,122 @@ interface LayoutProps {
   activeView: string;
   onViewChange: (view: string) => void;
   enabledModules?: string[];
-  currentUser?: { name: string; role: string } | null;
+  currentUser?: {
+    id?: string;
+    name: string;
+    role: string;
+    roles?: string[];
+  } | null;
 }
-
-type NavItem =
-  | { type: 'item'; id: string; name: string; icon: React.ComponentType<React.SVGProps<SVGSVGElement>> }
-  | { type: 'section'; label: string };
-
-// Nav items that require a specific module to be enabled
-const NAV_REQUIRED_MODULE: Record<string, string> = {
-  monitoring:     'monitoring-analytics',
-  secrets:        'secrets-management',
-  devices:        'device-management',
-  printers:       'device-management',
-  infrastructure: 'network-infrastructure',
-  security:       'security-suite',
-};
 
 // Get user initials from name
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  if (parts.length >= 2)
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();
 }
 
-export default function UnifiLayout({ children, activeView, onViewChange, enabledModules, currentUser }: LayoutProps) {
+export default function UnifiLayout({
+  children,
+  activeView,
+  onViewChange,
+  enabledModules,
+  currentUser,
+}: LayoutProps) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [canReviewCompanies, setCanReviewCompanies] = useState(false);
+  const [accessError, setAccessError] = useState(false);
+  const [access, setAccess] = useState<DirectoryAccess | null>(null);
+  const [configuredServices, setConfiguredServices] = useState<string[] | null>(
+    [],
+  );
   useEffect(() => {
-    let active = true; setCanReviewCompanies(false);
-    const invalid = () => { active = false; setCanReviewCompanies(false); };
-    window.addEventListener('od:session-error', invalid);
-    directoryUsers.access().then(access => { if (active) setCanReviewCompanies(!access.demoMode && access.companyRegistrationReviewProtocol === 1 && access.permissions.includes('company.registrations.review')); }).catch(() => { if (active) setCanReviewCompanies(false); });
-    return () => { active = false; window.removeEventListener('od:session-error', invalid); };
-  }, [currentUser]);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+    let active = true;
+    setAccess(null);
+    setAccessError(false);
+    const invalid = () => {
+      active = false;
+      setAccess(null);
+      setAccessError(true);
+    };
+    const refresh = () =>
+      directoryUsers
+        .access()
+        .then((result) => {
+          if (active) {
+            setAccess(result);
+            setAccessError(false);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setAccess(null);
+            setAccessError(true);
+          }
+        });
+    window.addEventListener("od:session-error", invalid);
+    api
+      .get("/api/platform/capabilities")
+      .then((response) => {
+        if (
+          response.data.configuredServices !== null &&
+          (!Array.isArray(response.data.configuredServices) ||
+            response.data.configuredServices.some(
+              (item: unknown) => typeof item !== "string",
+            ))
+        )
+          throw new Error("Invalid configuration");
+        if (active) setConfiguredServices(response.data.configuredServices);
+      })
+      .catch(() => {
+        if (active) setConfiguredServices([]);
+      });
+    void refresh();
+    const timer = window.setInterval(refresh, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("od:session-error", invalid);
+    };
+  }, [currentUser?.id, currentUser?.role, currentUser?.roles?.join(",")]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationState, setNotificationState] = useState<
+    "loading" | "available" | "failed"
+  >("loading");
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [searchResults, setSearchResults] = useState<SearchItem[]>(SEARCH_ITEMS.filter(i => i.type === 'Seite'));
-  const [searching, setSearching] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   // Load real alerts from backend services
   useEffect(() => {
     if (!currentUser) return;
 
+    let active = true;
     const loadAlerts = async () => {
       const alerts: Notification[] = [];
+      let verifiedHistory = false;
 
       // Fetch escalation alerts from least-privilege service
       try {
-        const res = await api.get('/api/permissions/escalation-alerts');
+        const configured = (await api.get("/api/platform/capabilities")).data
+          .configuredServices;
+        if (configured !== null && !configured.includes("least-privilege"))
+          throw new Error("Extension not configured");
+        const res = await api.get("/api/permissions/escalation-alerts");
         const data = Array.isArray(res.data) ? res.data : [];
         for (const a of data.slice(0, 3)) {
           alerts.push({
             id: `esc-${a.id ?? a.userId}`,
-            title: 'Privilege Escalation',
+            title: "Privilege Escalation",
             message: `Benutzer ${a.user_id ?? a.userId} hat Admin-Rechte auf ${a.admin_count} Ressourcen`,
-            type: 'warning' as const,
-            time: a.detected_at ? new Date(a.detected_at).toLocaleString('de-CH') : 'Gerade eben',
+            type: "warning" as const,
+            time: a.detected_at
+              ? new Date(a.detected_at).toLocaleString("de-CH")
+              : "Gerade eben",
             read: false,
           });
         }
@@ -185,60 +170,60 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
 
       // Fetch recent audit events from auth service
       try {
-        const res = await api.get('/api/audit/events?limit=5');
-        const events = Array.isArray(res.data) ? res.data : [];
-        for (const e of events.filter((ev: any) => ev.severity === 'warning' || ev.event_type === 'login_failed').slice(0, 2)) {
+        const res = await api.get("/api/auth/audit/login-history?limit=5");
+        if (!Array.isArray(res.data.history))
+          throw new Error("Invalid history");
+        const events = res.data.history;
+        verifiedHistory = true;
+        for (const e of events
+          .filter(
+            (ev: any) =>
+              ev.severity === "warning" || ev.event_type === "login_failed",
+          )
+          .slice(0, 2)) {
           alerts.push({
             id: `audit-${e.id}`,
-            title: e.event_type === 'login_failed' ? 'Anmeldung fehlgeschlagen' : 'Sicherheitsereignis',
+            title:
+              e.event_type === "login_failed"
+                ? "Anmeldung fehlgeschlagen"
+                : "Sicherheitsereignis",
             message: e.message,
-            type: 'warning' as const,
-            time: new Date(e.created_at).toLocaleString('de-CH'),
+            type: "warning" as const,
+            time: new Date(e.created_at).toLocaleString("de-CH"),
             read: false,
           });
         }
       } catch {}
 
-      // Show a "system ready" info if no alerts
-      if (alerts.length === 0) {
-        alerts.push({
-          id: 'system-ok',
-          title: 'System betriebsbereit',
-          message: 'Alle Dienste laufen normal.',
-          type: 'info' as const,
-          time: new Date().toLocaleString('de-CH'),
-          read: false,
-        });
+      if (active) {
+        setNotificationState(verifiedHistory ? "available" : "failed");
+        setNotifications((previous) =>
+          alerts.map((alert) => ({
+            ...alert,
+            read: previous.find((item) => item.id === alert.id)?.read ?? false,
+          })),
+        );
       }
-
-      setNotifications(alerts);
     };
 
     loadAlerts();
     const interval = setInterval(loadAlerts, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, [currentUser]);
 
-  // Cmd+K / Ctrl+K → open search; Escape → close overlays
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setSearchOpen(true);
-      }
-      if (e.key === 'Escape') {
-        setSearchOpen(false);
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
         setNotifOpen(false);
         setUserMenuOpen(false);
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
   }, []);
-
-  useEffect(() => {
-    if (searchOpen) setTimeout(() => searchInputRef.current?.focus(), 50);
-  }, [searchOpen]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -246,431 +231,304 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setNotifOpen(false);
       }
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(e.target as Node)
+      ) {
         setUserMenuOpen(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const performSearch = async (query: string) => {
-    if (!query.trim()) {
-      setSearchResults(SEARCH_ITEMS.filter(i => i.type === 'Seite'));
-      return;
-    }
-
-    setSearching(true);
-    const q = query.toLowerCase();
-
-    // Always include matching pages
-    const pageMatches = SEARCH_ITEMS.filter(i => i.type === 'Seite' && i.name.toLowerCase().includes(q));
-
-    // Fetch real users and devices in parallel
-    const [usersRes, devicesRes] = await Promise.allSettled([
-      directoryUsers.access().then(access => access.permissions.includes('users.read') ? directoryUsers.list(1, query.trim()) : { users: [] }),
-      api.get('/api/devices').catch(() => api.get('/api/devices/registry')),
-    ]);
-
-    const dynamicResults: SearchItem[] = [...pageMatches];
-
-    if (usersRes.status === 'fulfilled') {
-      const users = usersRes.value.users;
-      for (const u of users) {
-        const name = u.displayName ?? u.name ?? u.username ?? u.id ?? '';
-        if (name.toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q)) {
-          dynamicResults.push({ id: `user-${u.id ?? u.username}`, name, view: 'users', type: 'user' });
-        }
-      }
-    }
-
-    if (devicesRes.status === 'fulfilled') {
-      const devs = Array.isArray(devicesRes.value?.data) ? devicesRes.value.data
-        : devicesRes.value?.data?.devices ?? devicesRes.value?.data?.data ?? [];
-      for (const d of devs) {
-        const name = d.hostname ?? d.name ?? d.id ?? '';
-        if (name.toLowerCase().includes(q)) {
-          dynamicResults.push({ id: `device-${d.id ?? d.hostname}`, name, view: 'devices', type: 'device' });
-        }
-      }
-    }
-
-    setSearchResults(dynamicResults);
-    setSearching(false);
-  };
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setSearchQuery(val);
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = setTimeout(() => performSearch(val), 300);
-  };
-
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  const markAllRead = () =>
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
 
   const handleLogout = async () => {
     try {
       await logout();
-      router.replace('/login');
+      router.replace("/login");
     } catch {
-      toast.error('Abmeldung nicht bestätigt. Bitte erneut versuchen.');
+      toast.error("Abmeldung nicht bestätigt. Bitte erneut versuchen.");
     }
   };
 
-  // Navigation structure — ABM-style sections
-  const ALL_NAV_ITEMS: NavItem[] = [
-    { type: 'section', label: 'Übersicht' },
-    { type: 'item', id: 'dashboard',      name: 'Dashboard',         icon: HomeIcon },
-    { type: 'item', id: 'organization',   name: 'Organisation',      icon: BuildingOfficeIcon },
-    { type: 'item', id: 'registration-reviews', name: 'Firmenprüfung', icon: DocumentCheckIcon },
+  const navigationItems = React.useMemo(
+    () =>
+      visibleViews({
+        access,
+        roles: currentUser?.roles || (currentUser ? [currentUser.role] : []),
+        platformAdmin: (currentUser?.roles || [currentUser?.role]).includes(
+          "admin",
+        ),
+        enabledModules,
+        configuredServices,
+      }),
+    [access, currentUser, enabledModules, configuredServices],
+  );
+  const navigationActive = VIEW_BY_ID[activeView]?.canonical || activeView;
+  const routeSection = VIEW_BY_ID[navigationActive]
+    ? sectionFor(VIEW_BY_ID[navigationActive])
+    : "home";
+  const [selectedSection, setSelectedSection] =
+    useState<MainSectionId>(routeSection);
+  const lastViewed = useRef<Partial<Record<MainSectionId, string>>>({});
+  useEffect(() => {
+    setSelectedSection(routeSection);
+    lastViewed.current[routeSection] = navigationActive;
+  }, [routeSection, navigationActive]);
+  const sections = MAIN_SECTIONS.map((section) => ({
+    ...section,
+    items: navigationItems.filter((view) => sectionFor(view) === section.id),
+  })).filter((section) => section.items.length > 0);
+  const currentSection =
+    sections.find((section) => section.id === selectedSection) || sections[0];
+  const sectionItems = currentSection?.items || [];
+  const groupLabel = (view: (typeof navigationItems)[number]) =>
+    ["mfa", "sspr"].includes(view.id) ? "Mein Zugang" : view.group;
+  const navigationGroups = [...NAVIGATION_GROUPS, "Mein Zugang"].map(
+    (label) => ({
+      label,
+      items: sectionItems.filter((item) => groupLabel(item) === label),
+    }),
+  );
+  const chooseSection = (section: (typeof sections)[number]) => {
+    setSelectedSection(section.id);
+    setSidebarOpen(false);
+    const remembered = lastViewed.current[section.id];
+    const target =
+      section.items.find((item) => item.id === remembered)?.id ||
+      section.items.find((item) => item.id === section.primary)?.id ||
+      section.items[0].id;
+    if (target !== navigationActive) onViewChange(target);
+  };
 
-    { type: 'section', label: 'Verzeichnis' },
-    { type: 'item', id: 'users',          name: 'Benutzer',          icon: UserGroupIcon },
-    { type: 'item', id: 'employee-invitations', name: 'Mitarbeitereinladungen', icon: UserGroupIcon },
-    { type: 'item', id: 'usergroups',     name: 'Gruppen',           icon: UserGroupIcon },
-    { type: 'item', id: 'permissions',    name: 'Rollen & Rechte',   icon: KeyIcon },
-    { type: 'item', id: 'pim',            name: 'PIM',               icon: ShieldCheckIcon },
-    { type: 'item', id: 'offboarding-access', name: 'Austritt: Rollen & PIM', icon: KeyIcon },
-    { type: 'item', id: 'mfa',            name: 'MFA / 2FA',         icon: DevicePhoneMobileIcon },
-    { type: 'item', id: 'sspr',           name: 'Passwort-Reset',    icon: ArrowUturnLeftIcon },
-    { type: 'item', id: 'identity',       name: 'Identity Provider', icon: FingerPrintIcon },
-    { type: 'item', id: 'enrollment',     name: 'Enrollment',        icon: ArrowDownOnSquareStackIcon },
-    { type: 'item', id: 'sync',           name: 'Verzeichnis-Sync',  icon: ArrowPathIcon },
-
-    { type: 'section', label: 'Geräte' },
-    { type: 'item', id: 'devices',        name: 'Geräte',            icon: ComputerDesktopIcon },
-    { type: 'item', id: 'device-returns', name: 'Geräterückgaben',    icon: ArrowUturnLeftIcon },
-    { type: 'item', id: 'blueprints',     name: 'Blueprints',        icon: RectangleStackIcon },
-    { type: 'item', id: 'company-blueprints', name: 'Firmen-Blueprints', icon: RectangleStackIcon },
-    { type: 'item', id: 'antivirus',      name: 'Antivirus',         icon: BugAntIcon },
-    { type: 'item', id: 'appstore',       name: 'App Store',         icon: ShoppingBagIcon },
-    { type: 'item', id: 'licenses',       name: 'Lizenz-Kiosk',      icon: TagIcon },
-    { type: 'item', id: 'printers',       name: 'Drucker',           icon: PrinterIcon },
-    { type: 'item', id: 'applications',   name: 'Anwendungen',       icon: CubeIcon },
-
-    { type: 'section', label: 'Netzwerk & Infra' },
-    { type: 'item', id: 'topology',            name: 'Netzwerk',           icon: RectangleGroupIcon },
-    { type: 'item', id: 'infrastructure',      name: 'Infrastruktur',      icon: ServerStackIcon },
-    { type: 'item', id: 'radius',              name: 'RADIUS / 802.1X',    icon: WifiIcon },
-    { type: 'item', id: 'monitoring',          name: 'Monitoring',         icon: ChartBarIcon },
-    { type: 'item', id: 'servicehealth',       name: 'Service Health',     icon: SignalIcon },
-    { type: 'item', id: 'alerting',            name: 'Benachrichtigungen', icon: BellAlertIcon },
-
-    { type: 'section', label: 'Sicherheit' },
-    { type: 'item', id: 'security',            name: 'Security',           icon: ShieldExclamationIcon },
-    { type: 'item', id: 'conditionalaccess',   name: 'Conditional Access', icon: FunnelIcon },
-    { type: 'item', id: 'certificates',        name: 'Zertifikate / PKI',  icon: DocumentCheckIcon },
-    { type: 'item', id: 'compliance',          name: 'Compliance',         icon: ClipboardDocumentCheckIcon },
-    { type: 'item', id: 'scanner',             name: 'Security Scanner',   icon: MagnifyingGlassCircleIcon },
-    { type: 'item', id: 'secrets',             name: 'Secrets',            icon: LockClosedIcon },
-
-    { type: 'section', label: 'Betrieb' },
-    { type: 'item', id: 'audit',               name: 'Audit Log',          icon: ClipboardDocumentListIcon },
-    { type: 'item', id: 'backup',              name: 'Backup & DR',        icon: ArchiveBoxIcon },
-    { type: 'item', id: 'integrations',        name: 'Integrationen',      icon: PuzzlePieceIcon },
-    { type: 'item', id: 'roadmap',             name: 'Roadmap & TODO',     icon: FlagIcon },
-    { type: 'item', id: 'settings',            name: 'Einstellungen',      icon: Cog6ToothIcon },
-  ];
-
-  // Hide nav items whose controlling module is disabled
-  const navigationItems = ALL_NAV_ITEMS.filter(item => {
-    if (item.type === 'section') return true;
-    if (item.id === 'registration-reviews') return canReviewCompanies;
-    const required = NAV_REQUIRED_MODULE[item.id];
-    if (!required) return true;
-    if (!enabledModules || enabledModules.length === 0) return true;
-    return enabledModules.includes(required);
-  });
-
-  const userInitials = currentUser?.name ? getInitials(currentUser.name) : 'OD';
+  const userInitials = currentUser?.name ? getInitials(currentUser.name) : "OD";
 
   // Sidebar content — shared between desktop and mobile overlay
-  const SidebarContent = () => (
+  const sidebarContent = (
     <div className="flex flex-col h-full">
-      {/* Org header */}
-      <div
-        style={{
-          height: 'var(--topbar-height)',
-          borderBottom: '1px solid rgba(255,255,255,0.07)',
-          padding: '0 16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            background: '#006FFF',
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-          }}
-        >
-          <span style={{ color: '#ffffff', fontWeight: 700, fontSize: 12 }}>OD</span>
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#e4e6ea', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            OpenDirectory
-          </p>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.2 }}>
-            opendirectory.local
-          </p>
-        </div>
+      <div className="od-section-heading">
+        <h2>{currentSection?.label || "Home"}</h2>
+        <p>
+          {access?.companyOwner
+            ? "Eigene Firma"
+            : (currentUser?.roles || [currentUser?.role]).includes("admin")
+              ? "Plattformverwaltung"
+              : "Persönlicher Arbeitsbereich"}
+        </p>
         <button
           onClick={() => setSidebarOpen(false)}
-          className="lg:hidden ml-auto"
-          style={{ color: 'rgba(255,255,255,0.5)', padding: 4, flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
+          aria-label="Navigation schliessen"
+          className="lg:hidden"
         >
-          <XMarkIcon className="w-5 h-5" />
+          <XMarkIcon className="h-5 w-5" />
         </button>
       </div>
 
       {/* Navigation */}
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-        {navigationItems.map((item, idx) => {
-          if (item.type === 'section') {
-            return (
-              <div
-                key={`section-${idx}`}
+      <nav
+        aria-label="Bereichsnavigation"
+        style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}
+      >
+        {accessError && (
+          <p role="status" className="p-4 text-sm">
+            Aufgabenberechtigungen nicht bestätigt. Wird erneut geprüft.
+          </p>
+        )}
+        {navigationGroups
+          .filter((group) => group.items.length)
+          .map((group) => (
+            <details
+              key={group.label}
+              className="group"
+              open={
+                navigationGroups.filter((item) => item.items.length).length ===
+                  1 || group.items.some((item) => item.id === navigationActive)
+              }
+            >
+              <summary
+                className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between"
                 style={{
-                  padding: '16px 16px 4px 16px',
-                  fontSize: 11,
+                  padding: "8px 12px 4px",
+                  fontSize: 12,
                   fontWeight: 600,
-                  color: 'rgba(255,255,255,0.35)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
+                  color: "var(--text-secondary)",
+                  cursor: "pointer",
                 }}
               >
-                {item.label}
-              </div>
-            );
-          }
-
-          const isActive = activeView === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => { onViewChange(item.id); setSidebarOpen(false); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                width: 'calc(100% - 16px)',
-                margin: '1px 8px',
-                padding: '6px 10px',
-                fontSize: 13,
-                fontWeight: isActive ? 600 : 400,
-                textAlign: 'left',
-                background: isActive ? '#006FFF' : 'transparent',
-                color: isActive ? '#ffffff' : 'rgba(255,255,255,0.6)',
-                border: 'none',
-                borderRadius: 8,
-                cursor: 'pointer',
-                transition: 'background 0.15s, color 0.15s',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-              onMouseEnter={e => {
-                if (!isActive) {
-                  (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)';
-                }
-              }}
-              onMouseLeave={e => {
-                if (!isActive) {
-                  (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-                }
-              }}
-            >
-              <item.icon
-                style={{
-                  width: 16,
-                  height: 16,
-                  flexShrink: 0,
-                  color: isActive ? '#ffffff' : 'rgba(255,255,255,0.5)',
-                }}
-              />
-              {item.name}
-            </button>
-          );
-        })}
+                {group.label}
+                <ChevronDownIcon className="h-4 w-4 transition-transform group-open:rotate-180" />
+              </summary>
+              {group.items.map((item) => {
+                const isActive = navigationActive === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    aria-current={isActive ? "page" : undefined}
+                    onClick={() => {
+                      onViewChange(item.id);
+                      setSidebarOpen(false);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      width: "calc(100% - 16px)",
+                      margin: "1px 8px",
+                      padding: "6px 10px",
+                      fontSize: 13,
+                      fontWeight: isActive ? 600 : 400,
+                      textAlign: "left",
+                      background: isActive ? "var(--accent)" : "transparent",
+                      color: isActive ? "#ffffff" : "var(--text-secondary)",
+                      border: "none",
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      transition: "background 0.15s, color 0.15s",
+                      whiteSpace: "normal",
+                      overflowWrap: "anywhere",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        (
+                          e.currentTarget as HTMLButtonElement
+                        ).style.background = "var(--bg-sidebar-hover)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        (
+                          e.currentTarget as HTMLButtonElement
+                        ).style.background = "transparent";
+                      }
+                    }}
+                  >
+                    <item.icon
+                      style={{
+                        width: 16,
+                        height: 16,
+                        flexShrink: 0,
+                        color: isActive ? "#ffffff" : "var(--text-secondary)",
+                      }}
+                    />
+                    {item.name}
+                  </button>
+                );
+              })}
+            </details>
+          ))}
       </nav>
     </div>
   );
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
+    <div className="od-app-frame">
+      <a href="#main-content" className="od-skip-link">
+        Zum Inhalt springen
+      </a>
       <Toaster
         position="top-right"
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#1D1D1F',
-            color: '#ffffff',
-            borderRadius: '10px',
+            background: "var(--bg-surface-raised)",
+            color: "var(--text-primary)",
+            borderRadius: "10px",
             fontSize: 13,
           },
         }}
       />
 
-      {/* Mobile backdrop */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 lg:hidden"
-          style={{ background: 'rgba(0,0,0,0.4)' }}
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar — desktop: always visible; mobile: slide-in overlay */}
-      <aside
-        className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          bottom: 0,
-          width: 'var(--sidebar-width)',
-          background: '#0a0d10',
-          borderRight: '1px solid rgba(255,255,255,0.07)',
-          zIndex: 50,
-          transition: 'transform 0.3s ease',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <SidebarContent />
-      </aside>
-
-      {/* Main area — offset by sidebar width on desktop.
-          The offset MUST come from the `lg:ml-[...]` class, not an inline
-          style: an inline `marginLeft` always wins over the Tailwind class
-          (inline styles beat class selectors), which pinned the margin to 0
-          at every breakpoint and let the fixed 240px sidebar overlap the
-          content (e.g. the DevicesView tab bar) on lg+ screens. Keep the
-          left margin out of the inline style block entirely. */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          minWidth: 0,
-          height: '100%',
-        }}
-        className="ml-0 lg:ml-[var(--sidebar-width)]"
-      >
-        {/* Top bar */}
-        <header
-          style={{
-            height: 'var(--topbar-height)',
-            background: 'var(--bg-topbar)',
-            borderBottom: '1px solid var(--border)',
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 20px',
-            gap: 12,
-            flexShrink: 0,
-            position: 'sticky',
-            top: 0,
-            zIndex: 30,
-          }}
-        >
-          {/* Hamburger — mobile only */}
+      <header className="od-app-topbar">
+        <div className="od-app-brand">
           <button
             className="lg:hidden"
+            aria-label="Navigation öffnen"
+            aria-expanded={sidebarOpen}
             onClick={() => setSidebarOpen(true)}
-            style={{ color: 'var(--text-secondary)', padding: 4, flexShrink: 0 }}
           >
-            <Bars3Icon className="w-5 h-5" />
+            <Bars3Icon className="h-5 w-5" />
           </button>
-
-          {/* App name — mobile only, desktop has it in sidebar */}
-          <span
-            className="lg:hidden"
-            style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', flexShrink: 0 }}
-          >
-            OpenDirectory
+          <span className="od-brand-mark" aria-hidden="true">
+            OD
           </span>
-
-          {/* Search bar */}
-          <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+          <span>OpenDirectory</span>
+        </div>
+        <nav className="od-main-sections" aria-label="Hauptbereiche">
+          {sections.map((section) => (
             <button
-              onClick={() => setSearchOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                width: '100%',
-                maxWidth: 280,
-                background: 'var(--bg-input)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                padding: '7px 12px',
-                color: 'var(--text-muted)',
-                fontSize: 14,
-                cursor: 'text',
-                textAlign: 'left',
-              }}
+              key={section.id}
+              aria-current={
+                currentSection?.id === section.id ? "true" : undefined
+              }
+              onClick={() => chooseSection(section)}
             >
-              <MagnifyingGlassIcon style={{ width: 15, height: 15, flexShrink: 0 }} />
-              <span style={{ flex: 1, color: 'var(--text-muted)' }}>Search...</span>
-              <kbd
-                style={{
-                  fontSize: 11,
-                  background: 'var(--bg-overlay)',
-                  color: 'var(--text-secondary)',
-                  borderRadius: 4,
-                  padding: '1px 5px',
-                  fontFamily: 'inherit',
-                }}
-              >
-                ⌘K
-              </kbd>
+              {section.label}
             </button>
+          ))}
+        </nav>
+        <div className="od-app-tools">
+          <div className="od-header-search">
+            <GlobalSearch views={navigationItems} />
           </div>
-
           {/* Right actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexShrink: 0,
+            }}
+          >
+            <ThemeSelector />
             {/* Bell */}
-            <div ref={notifRef} style={{ position: 'relative' }}>
+            <div ref={notifRef} style={{ position: "relative" }}>
               <button
-                onClick={() => { setNotifOpen(o => !o); setUserMenuOpen(false); }}
-                style={{
-                  position: 'relative',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 6,
-                  color: 'var(--text-secondary)',
-                  borderRadius: 8,
-                  display: 'flex',
-                  alignItems: 'center',
+                aria-label="Benachrichtigungen"
+                aria-expanded={notifOpen}
+                onClick={() => {
+                  setNotifOpen((o) => !o);
+                  setUserMenuOpen(false);
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                style={{
+                  position: "relative",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 6,
+                  color: "var(--text-secondary)",
+                  borderRadius: 8,
+                  display: "flex",
+                  alignItems: "center",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background =
+                    "var(--bg-surface-raised)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background =
+                    "transparent";
+                }}
               >
                 <BellIcon style={{ width: 20, height: 20 }} />
                 {unreadCount > 0 && (
                   <span
                     style={{
-                      position: 'absolute',
+                      position: "absolute",
                       top: 2,
                       right: 2,
                       width: 16,
                       height: 16,
-                      background: '#FF3B30',
-                      color: 'white',
+                      background: "#FF3B30",
+                      color: "white",
                       fontSize: 10,
                       fontWeight: 600,
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
                     {unreadCount}
@@ -682,48 +540,74 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
               {notifOpen && (
                 <div
                   style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 8px)',
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
                     right: 0,
-                    width: 320,
-                    background: 'var(--bg-surface)',
+                    width: "min(320px, calc(100vw - 32px))",
+                    background: "var(--bg-surface)",
                     borderRadius: 12,
-                    border: '1px solid var(--border-strong)',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                    border: "1px solid var(--border-strong)",
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
                     zIndex: 100,
-                    overflow: 'hidden',
+                    overflow: "hidden",
                   }}
                 >
                   <div
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 16px',
-                      borderBottom: '1px solid var(--border)',
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 16px",
+                      borderBottom: "1px solid var(--border)",
                     }}
                   >
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--text-primary)",
+                      }}
+                    >
                       Benachrichtigungen
                     </span>
                     <button
                       onClick={markAllRead}
-                      style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}
+                      style={{
+                        fontSize: 12,
+                        color: "var(--accent)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                      }}
                     >
                       Alle gelesen
                     </button>
                   </div>
-                  <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-                    {notifications.map(n => (
+                  <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                    {(notificationState !== "available" ||
+                      !notifications.length) && (
+                      <p
+                        role="status"
+                        className="p-4 text-sm"
+                        style={{ color: "var(--text-secondary)" }}
+                      >
+                        {notificationState === "failed"
+                          ? "Anmeldehistorie nicht verfügbar. Der Systemzustand ist damit nicht bestätigt."
+                          : notificationState === "loading"
+                            ? "Anmeldehistorie wird geprüft …"
+                            : "Keine Warnungen in der zuletzt geladenen eigenen Anmeldehistorie."}
+                      </p>
+                    )}
+                    {notifications.map((n) => (
                       <div
                         key={n.id}
                         style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
+                          display: "flex",
+                          alignItems: "flex-start",
                           gap: 10,
-                          padding: '10px 16px',
-                          background: !n.read ? '#EAF4FF40' : 'transparent',
-                          borderBottom: '1px solid var(--apple-gray-1)',
+                          padding: "10px 16px",
+                          background: !n.read ? "#EAF4FF40" : "transparent",
+                          borderBottom: "1px solid var(--apple-gray-1)",
                         }}
                       >
                         <span
@@ -731,21 +615,44 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
                           style={{ flexShrink: 0, marginTop: 5 }}
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.4 }}>{n.title}</p>
+                          <p
+                            style={{
+                              fontSize: 12,
+                              color: "var(--text-primary)",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {n.title}
+                          </p>
                           {n.message && (
-                            <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
+                            <p
+                              style={{
+                                fontSize: 11,
+                                color: "var(--text-secondary)",
+                                marginTop: 2,
+                                lineHeight: 1.4,
+                              }}
+                            >
                               {n.message}
                             </p>
                           )}
-                          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{n.time}</p>
+                          <p
+                            style={{
+                              fontSize: 11,
+                              color: "var(--text-muted)",
+                              marginTop: 2,
+                            }}
+                          >
+                            {n.time}
+                          </p>
                         </div>
                         {!n.read && (
                           <span
                             style={{
                               width: 6,
                               height: 6,
-                              borderRadius: '50%',
-                              background: 'var(--accent)',
+                              borderRadius: "50%",
+                              background: "var(--accent)",
                               flexShrink: 0,
                               marginTop: 5,
                             }}
@@ -759,23 +666,27 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
             </div>
 
             {/* User avatar + dropdown */}
-            <div ref={userMenuRef} style={{ position: 'relative' }}>
+            <div ref={userMenuRef} style={{ position: "relative" }}>
               <button
-                onClick={() => { setUserMenuOpen(o => !o); setNotifOpen(false); }}
+                onClick={() => {
+                  setUserMenuOpen((o) => !o);
+                  setNotifOpen(false);
+                }}
                 aria-label="Benutzermenü"
+                aria-expanded={userMenuOpen}
                 style={{
                   width: 32,
                   height: 32,
-                  borderRadius: '50%',
-                  background: 'var(--accent)',
-                  color: '#ffffff',
+                  borderRadius: "50%",
+                  background: "var(--accent)",
+                  color: "#ffffff",
                   fontSize: 12,
                   fontWeight: 600,
-                  border: 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   flexShrink: 0,
                 }}
               >
@@ -786,41 +697,64 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
               {userMenuOpen && (
                 <div
                   style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 8px)',
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
                     right: 0,
                     width: 200,
-                    background: 'var(--bg-surface)',
+                    background: "var(--bg-surface)",
                     borderRadius: 12,
-                    border: '1px solid var(--border-strong)',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                    border: "1px solid var(--border-strong)",
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
                     zIndex: 100,
-                    overflow: 'hidden',
+                    overflow: "hidden",
                   }}
                 >
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {currentUser?.name ?? '—'}
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      borderBottom: "1px solid var(--border)",
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--text-primary)",
+                      }}
+                    >
+                      {currentUser?.name ?? "—"}
                     </p>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-                      {currentUser?.role ?? ''}
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: "var(--text-secondary)",
+                        marginTop: 2,
+                      }}
+                    >
+                      {currentUser?.role ?? ""}
                     </p>
                   </div>
                   <button
                     onClick={handleLogout}
                     style={{
-                      display: 'block',
-                      width: '100%',
-                      padding: '10px 16px',
+                      display: "block",
+                      width: "100%",
+                      padding: "10px 16px",
                       fontSize: 13,
-                      color: 'var(--danger)',
-                      background: 'none',
-                      border: 'none',
-                      textAlign: 'left',
-                      cursor: 'pointer',
+                      color: "var(--danger)",
+                      background: "none",
+                      border: "none",
+                      textAlign: "left",
+                      cursor: "pointer",
                     }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.background =
+                        "var(--bg-surface-raised)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.background =
+                        "none";
+                    }}
                   >
                     Abmelden
                   </button>
@@ -828,123 +762,44 @@ export default function UnifiLayout({ children, activeView, onViewChange, enable
               )}
             </div>
           </div>
-        </header>
+        </div>
+      </header>
+      <div className="od-app-body">
+        <aside className="od-app-sidebar hidden lg:flex">
+          {sidebarContent}
+        </aside>
+        <Dialog
+          open={sidebarOpen}
+          onClose={setSidebarOpen}
+          className="relative z-[70] lg:hidden"
+        >
+          <div className="fixed inset-0 bg-black/60" aria-hidden="true" />
+          <Dialog.Panel
+            className="fixed inset-y-0 left-0"
+            style={{
+              width: "min(var(--sidebar-width), 90vw)",
+              background: "var(--bg-sidebar)",
+            }}
+          >
+            <Dialog.Title className="sr-only">Hauptnavigation</Dialog.Title>
+            {sidebarContent}
+          </Dialog.Panel>
+        </Dialog>
 
-        {/* Page content */}
-        <main style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-base)' }}>
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="od-main"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            background: "var(--bg-base)",
+          }}
+        >
           {children}
         </main>
       </div>
-
-      {/* ─── Global Search Overlay ──────────────────────────────────────────── */}
-      {searchOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center"
-          style={{ background: 'rgba(0,0,0,0.4)', paddingTop: 96, paddingLeft: 16, paddingRight: 16 }}
-          onClick={() => setSearchOpen(false)}
-        >
-          <div
-            style={{
-              background: 'var(--bg-surface)',
-              borderRadius: 16,
-              border: '1px solid var(--border-strong)',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
-              width: '100%',
-              maxWidth: 520,
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Search input row */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '12px 16px',
-                borderBottom: '1px solid var(--border)',
-              }}
-            >
-              <MagnifyingGlassIcon style={{ width: 18, height: 18, color: 'var(--text-muted)', flexShrink: 0 }} />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Suche nach Seiten, Nutzern, Geräten..."
-                value={searchQuery}
-                onChange={handleSearchChange}
-                style={{
-                  flex: 1,
-                  fontSize: 15,
-                  border: 'none',
-                  outline: 'none',
-                  color: 'var(--text-primary)',
-                  background: 'transparent',
-                }}
-              />
-              <button
-                onClick={() => setSearchOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}
-              >
-                <XMarkIcon style={{ width: 18, height: 18 }} />
-              </button>
-            </div>
-
-            {/* Results */}
-            {searching && (
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '12px 16px' }}>Suche läuft...</p>
-            )}
-            {!searching && searchResults.length > 0 && (
-              <ul style={{ listStyle: 'none', margin: 0, padding: '6px 0', maxHeight: 320, overflowY: 'auto' }}>
-                {searchResults.map(item => (
-                  <li key={item.id}>
-                    <button
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        width: '100%',
-                        padding: '8px 16px',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                      }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface-raised)'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
-                      onClick={() => { onViewChange(item.view); setSearchOpen(false); setSearchQuery(''); }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 11,
-                          background: 'var(--bg-overlay)',
-                          color: 'var(--text-secondary)',
-                          borderRadius: 4,
-                          padding: '2px 6px',
-                          width: 56,
-                          textAlign: 'center',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {item.type}
-                      </span>
-                      <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{item.name}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!searching && searchQuery.trim().length > 0 && searchResults.length === 0 && (
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '12px 16px' }}>
-                Keine Ergebnisse für &ldquo;{searchQuery}&rdquo;
-              </p>
-            )}
-            {!searching && searchQuery.trim().length === 0 && (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 16px' }}>
-                Tippe, um zu suchen. Drücke Escape zum Schliessen.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

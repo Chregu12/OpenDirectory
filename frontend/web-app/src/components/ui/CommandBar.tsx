@@ -34,7 +34,7 @@ export function CommandBar({ primary, actions = [], onRefresh, rightContent, cla
       {actions.map((action, i) => (
         <button
           key={i}
-          className={action.variant === 'danger' ? 'fluent-btn-secondary' : 'fluent-btn-secondary'}
+          className={action.variant === 'primary' ? 'fluent-btn-primary' : action.variant === 'ghost' ? 'fluent-btn-ghost' : 'fluent-btn-secondary'}
           style={action.variant === 'danger' ? { color: 'var(--danger)', borderColor: 'var(--danger)' } : {}}
           onClick={action.onClick}
           disabled={action.disabled}
@@ -44,11 +44,11 @@ export function CommandBar({ primary, actions = [], onRefresh, rightContent, cla
         </button>
       ))}
       {onRefresh && (
-        <button className="fluent-btn-ghost" onClick={onRefresh} title="Refresh">
+        <button className="fluent-btn-ghost" onClick={onRefresh} title="Aktualisieren" aria-label="Aktualisieren">
           <ArrowPathIcon style={{ width: 16, height: 16 }} />
         </button>
       )}
-      {rightContent && <div style={{ marginLeft: 'auto' }}>{rightContent}</div>}
+      {rightContent && <div className="ml-auto min-w-0">{rightContent}</div>}
     </div>
   );
 }

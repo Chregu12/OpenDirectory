@@ -1,8 +1,13 @@
 # Tatsächlicher Implementierungsstand
 
+
+**Portal-Lieferung 1.0.16 (2. November 2026):** Gemeinsamer SSPR-Stil, tatsächliche WinGet-/Homebrew-Katalogquellen, herstellerunabhängige endliche Legacy-Pools mit direkter Quellenvergabe/-rücknahme, nutzbare Gateway-/OAuth-Integrationsbereiche und PostgreSQL-Moduleinstellungen sind über Harbor auf k3s ausgerollt. Dienstzustand, Meldungen, Auth-Audit und Identitätsseiten zeigen bestätigte Quellen statt Demo-/Browser-Erfolgen. 3’033 Frontend-Tests sowie gezielte Backend-/HTTPS-Verträge bestehen. [Aktueller Liefer- und Prüfbericht](ui-redesign/portal-report.html) mit konkreten Provider-, MFA-, Betriebs- und Browsergrenzen; dies setzt keine vollständige Business Capability oder externe Provisionierung auf Done.
+
 Stand: 23. Oktober 2026. Produktziel ist jetzt eine Apple-Business-inspirierte eigenständige SaaS-Plattform; Least Privilege und zentrale Lizenzverteilung bleiben Kernanforderungen. Kein Teil dieses Dokuments erklärt die vollständige Plattform für produktionsfähig.
 
 Statuswerte: `Not Started`, `In Progress`, `Implemented`, `Tested`, `Blocked`, `External Dependency`. Ein Status bezieht sich nur auf die genannte Grenze. Ein getestet implementierter Teil macht die gesamte BR nicht `Tested`.
+
+UI-/UX-Nachtrag vom 2. November 2026: [Umsetzung, Routenmatrix und ehrlicher Prüfstand](ui-redesign/report.html), [maschinenlesbare Capability-Matrix](ui-redesign/capability-routes.json). Dieser Nachtrag ersetzt keine vollständige Produktiv- oder WCAG-Abnahme.
 
 ## Gap Analysis
 
@@ -120,6 +125,17 @@ Historischer Backend-Stand bis Migration 036: 549 Identity-Unit-, 445 native Ide
 Business-Slice 21 — **Tested, begrenzte eigene Blueprint-Verwaltung**: [Firmen-Blueprints](features/company-blueprints.md) verbinden tatsächliche Ownership/Home-Administration und frische MFA mit eigenen Entwürfen, drei sicheren strukturierten Sollschemas, realen gewünschten App-Referenzen, immutable Freigaben und explizitem Restore als Entwurf. Migration 025 hält Originaloperation, Version, Metadaten-Event und Pending-Outbox atomar; historische Recovery überschreibt keinen späteren Kopf. Globale Rollen, Source 036, bestehender Allocator und globale Deployment-Freigaben bleiben unverändert. **6'301 unterschiedliche erfolgreiche Definitionen/Ausführungen** in acht abgegrenzten Gruppen; **457 neue Definitionen**, vollständiger Typecheck und Standard-Produktionsbuild bestanden. Zwei ursprüngliche vollständige Company-Prozesse und zwei neue unabhängige eigene Blueprint-Prozesse bestehen jeweils in frischen echten HTTP-/Produktionsbrowser-Umgebungen unter unveränderten Rate-/MFA-Grenzen; [genaue Belege und R1-Fixture-Grenzen](testing/test-results.md#business-slice-21-eigene-firmen-blueprints-und-immutable-freigaben). Gewünschte Apps sind noch keine Lizenzallokation, lokale Freigabe keine Deployment-Genehmigung. Rollen/Scopes/Delegation, Zielzuweisungen, tatsächliche Blueprint-Lizenzverteilung, Onboarding, Secrets/Provider und Betriebsabnahmen bleiben offen. Der Gesamtauftrag bleibt aktiv.
 
 Für den Organisations-Slice liegen ein [reales Teilmodell](architecture/domain-model.md), [Mermaid-ERD](architecture/erd.md), generierter [OpenAPI-3.1-Vertrag](api/openapi.yaml) und eine [lokale Anleitung](operations/installation.md) vor. Weitere geforderte Artefakte bleiben offen: vollständige FR-/Story-/Acceptance-Traceability, normalisiertes Gesamtmodell, konkrete Connector-Verträge, OpenAPI sämtlicher übriger Capability-APIs, vollständige Security-/Integrationsarchitektur sowie Configuration/Deployment/Monitoring/Backup-Restore-Anleitungen. Keine leeren Dateien werden als erfüllte Deliverables gezählt. Lastziele, WCAG-Ziel, Backup/Restore, produktiver Build und externe MDM-/Marketing-/Billing-Effekte sind nicht abgenommen. Nächste Business-Arbeit: eigene Company-Rollen-/Scope-/Review-/PIM-Governance und verbundene Joiner-/Mover-/Leaver-Prozesse über den jetzt vorhandenen lokalen Account-/Lizenzprozess hinaus; weiterhin vorhandener Allocator, keine globale Rollenabkürzung oder Umdeutung eines Graph-Tenants/Resource-Lease. Gruppen-/Geräte-/Blueprint-Verbindungen, kontrollierte Legacy-/History-Adoption, organisatorische Scopes, primäre Beschäftigung/Legal Entities und die übrigen BRs bleiben offen.
+
+
+## Portal 1.0.18: Routenmetadaten und Prüfungen
+
+Ein Browser-Routentest deckte einen überschriebenen Seitentitel auf. Die dynamischen Next.js-Metadaten liefern nun die tatsächlichen Seitentitel; das Dokument ist als deutsch ausgezeichnet. Helm-Revision 33 verwendet das bestätigte Harbor-Web-Image 1.0.18. [Prüfbericht](ui-redesign/testing-2026-11-02.md) mit isolierten Browserabläufen, Unit- und PostgreSQL-Ergebnissen sowie ihren Grenzen.
+
+## Portal 1.0.17: erhaltene Lizenzen und Navigation
+
+Die kompakte Hauptnavigation bündelt die vorhandenen Ansichten in Home, People, Devices, Apps & Services, Automationen und Administration. Unter `/licenses` lassen sich beliebige erhaltene Lizenzverträge als getrennte lokale Pools mit Hersteller, Kapazität und nicht geheimen Vertrags-/Bestellangaben erfassen und Personen zuweisen. Die Metadaten liegen in Migration 030 als Seitenstruktur am bestehenden Katalog; die Kiosk-API gibt sie nicht aus. Eine lokale Zuweisung bestätigt weder die externe Aktivierung noch Rechte auf beliebig vielen Geräten. Lizenzschlüssel werden nicht gespeichert.
+
+Auf k3s wurde Helm-Revision 32 nach einem Datenbankbackup über Harbor ausgerollt; alle 14 Workloads und vier persistente Volumes waren bei der Prüfung bereit bzw. gesund. Der HTTPS-Test erstellte, änderte und löschte einen Testpool, prüfte Personenzuweisung, Dublettenschutz, Rückgabe und Kiosk-Redaktion. Weitere Nachweise und Grenzen stehen im [Portalbericht](ui-redesign/portal-report.html).
 
 ## Lizenzgruppen und Pool-Verknüpfungen
 

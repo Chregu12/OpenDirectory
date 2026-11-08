@@ -13,7 +13,7 @@ export default function ServicePrincipalsView({ onCreateNew }: ServicePrincipals
   const [selectedSP, setSelectedSP] = useState<ServicePrincipal | null>(null);
 
   return (
-    <ABMShell
+    <ABMShell detailSelected={!!selectedSP} onBackToList={() => setSelectedSP(null)}
       showListColumn
       listColumn={
         <ServicePrincipalListColumn

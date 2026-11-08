@@ -34,3 +34,6 @@ global.URL.revokeObjectURL = jest.fn();
 
 // Note: Do NOT mock navigator.clipboard here — userEvent.setup() manages it.
 // If a test needs clipboard assertions, use userEvent's built-in clipboard support.
+
+// JSDOM does not implement the browser observer used by Headless UI dialogs.
+global.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };

@@ -1,0 +1,319 @@
+{
+  "checkedAt": "2026-11-02T21:21:17.560Z",
+  "sourcesConfirmed": 24,
+  "totalSources": 24,
+  "apps": [
+    {
+      "name": "7-Zip",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "26.05",
+          "disabled": false,
+          "homepage": "https://7-zip.org/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:16.653Z",
+          "packageId": "sevenzip",
+          "sourceUrl": "https://formulae.brew.sh/formula/sevenzip",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:16.653Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "26.05",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:16.383Z",
+          "packageId": "7zip.7zip",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/7/7zip/7zip",
+          "lastAttemptAt": "2026-11-02T21:21:16.383Z"
+        }
+      }
+    },
+    {
+      "name": "Git",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "2.56.0",
+          "disabled": false,
+          "homepage": "https://git-scm.com/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:16.672Z",
+          "packageId": "git",
+          "sourceUrl": "https://formulae.brew.sh/formula/git",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:16.672Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "2.56.0.4",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:16.387Z",
+          "packageId": "Git.Git",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/g/Git/Git",
+          "lastAttemptAt": "2026-11-02T21:21:16.387Z"
+        }
+      }
+    },
+    {
+      "name": "Google Chrome",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "156.0.8078.80",
+          "disabled": false,
+          "homepage": "https://www.google.com/chrome/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:16.632Z",
+          "packageId": "google-chrome",
+          "sourceUrl": "https://formulae.brew.sh/cask/google-chrome",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:16.632Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "156.0.8078.74",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:16.391Z",
+          "packageId": "Google.Chrome",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/g/Google/Chrome",
+          "lastAttemptAt": "2026-11-02T21:21:16.391Z"
+        }
+      }
+    },
+    {
+      "name": "KeePassXC",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "2.8.0,2.8.0-1",
+          "disabled": false,
+          "homepage": "https://keepassxc.org/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:16.954Z",
+          "packageId": "keepassxc",
+          "sourceUrl": "https://formulae.brew.sh/cask/keepassxc",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:16.954Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "2.8.0",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:16.752Z",
+          "packageId": "KeePassXCTeam.KeePassXC",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/k/KeePassXCTeam/KeePassXC",
+          "lastAttemptAt": "2026-11-02T21:21:16.752Z"
+        }
+      }
+    },
+    {
+      "name": "LibreOffice",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "26.8.2",
+          "disabled": false,
+          "homepage": "https://www.libreoffice.org/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:16.962Z",
+          "packageId": "libreoffice",
+          "sourceUrl": "https://formulae.brew.sh/cask/libreoffice",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:16.962Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "26.8.2.2",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:16.758Z",
+          "packageId": "TheDocumentFoundation.LibreOffice",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/t/TheDocumentFoundation/LibreOffice",
+          "lastAttemptAt": "2026-11-02T21:21:16.758Z"
+        }
+      }
+    },
+    {
+      "name": "Mozilla Firefox",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "159.0",
+          "disabled": false,
+          "homepage": "https://www.mozilla.org/firefox/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:17.040Z",
+          "packageId": "firefox",
+          "sourceUrl": "https://formulae.brew.sh/cask/firefox",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:17.040Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "159.0",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:16.772Z",
+          "packageId": "Mozilla.Firefox",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/m/Mozilla/Firefox",
+          "lastAttemptAt": "2026-11-02T21:21:16.772Z"
+        }
+      }
+    },
+    {
+      "name": "Mozilla Thunderbird",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "159.0",
+          "disabled": false,
+          "homepage": "https://www.thunderbird.net/en-US/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:17.230Z",
+          "packageId": "thunderbird",
+          "sourceUrl": "https://formulae.brew.sh/cask/thunderbird",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:17.230Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "159.0",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:16.991Z",
+          "packageId": "Mozilla.Thunderbird",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/m/Mozilla/Thunderbird",
+          "lastAttemptAt": "2026-11-02T21:21:16.991Z"
+        }
+      }
+    },
+    {
+      "name": "Node.js",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "26.13.0",
+          "disabled": false,
+          "homepage": "https://nodejs.org/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:17.189Z",
+          "packageId": "node",
+          "sourceUrl": "https://formulae.brew.sh/formula/node",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:17.189Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "26.13.0",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:16.999Z",
+          "packageId": "OpenJS.NodeJS.LTS",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/o/OpenJS/NodeJS/LTS",
+          "lastAttemptAt": "2026-11-02T21:21:16.999Z"
+        }
+      }
+    },
+    {
+      "name": "Slack",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "4.53.276",
+          "disabled": false,
+          "homepage": "https://slack.com/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:17.309Z",
+          "packageId": "slack",
+          "sourceUrl": "https://formulae.brew.sh/cask/slack",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:17.309Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "4.53.276",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:17.078Z",
+          "packageId": "SlackTechnologies.Slack",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/s/SlackTechnologies/Slack",
+          "lastAttemptAt": "2026-11-02T21:21:17.078Z"
+        }
+      }
+    },
+    {
+      "name": "VLC Media Player",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "3.0.24",
+          "disabled": false,
+          "homepage": "https://www.videolan.org/vlc/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:17.411Z",
+          "packageId": "vlc",
+          "sourceUrl": "https://formulae.brew.sh/cask/vlc",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:17.411Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "3.0.24",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:17.219Z",
+          "packageId": "VideoLAN.VLC",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/v/VideoLAN/VLC",
+          "lastAttemptAt": "2026-11-02T21:21:17.219Z"
+        }
+      }
+    },
+    {
+      "name": "Visual Studio Code",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "1.144.0",
+          "disabled": false,
+          "homepage": "https://code.visualstudio.com/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:17.453Z",
+          "packageId": "visual-studio-code",
+          "sourceUrl": "https://formulae.brew.sh/cask/visual-studio-code",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:17.453Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "1.143.1",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:17.262Z",
+          "packageId": "Microsoft.VisualStudioCode",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/m/Microsoft/VisualStudioCode",
+          "lastAttemptAt": "2026-11-02T21:21:17.262Z"
+        }
+      }
+    },
+    {
+      "name": "Zoom",
+      "sources": {
+        "macos": {
+          "status": "confirmed",
+          "version": "7.2.5.90525",
+          "disabled": false,
+          "homepage": "https://www.zoom.us/",
+          "provider": "Homebrew",
+          "checkedAt": "2026-11-02T21:21:17.533Z",
+          "packageId": "zoom",
+          "sourceUrl": "https://formulae.brew.sh/cask/zoom",
+          "deprecated": false,
+          "lastAttemptAt": "2026-11-02T21:21:17.533Z"
+        },
+        "windows": {
+          "status": "confirmed",
+          "version": "7.2.51704",
+          "provider": "WinGet",
+          "checkedAt": "2026-11-02T21:21:17.340Z",
+          "packageId": "Zoom.Zoom",
+          "sourceUrl": "https://github.com/microsoft/winget-pkgs/tree/master/manifests/z/Zoom/Zoom",
+          "lastAttemptAt": "2026-11-02T21:21:17.340Z"
+        }
+      }
+    }
+  ]
+}

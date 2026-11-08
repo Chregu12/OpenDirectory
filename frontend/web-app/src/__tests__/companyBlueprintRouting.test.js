@@ -12,9 +12,9 @@ test.each([
   expect(match).toBeDefined();
   expect(match.source).toBe(pathname === '/api/company-blueprints' ? '/api/company-blueprints' : '/api/company-blueprints/:path*');
   expect(match.destination).toBe(`${process.env.POLICY_SERVICE_URL || 'http://policy-service:3004'}${match.source}`);
-  expect(rules.indexOf(match)).toBeLessThan(rules.findIndex(rule => rule.source === '/api/:path*'));
+  expect(rules.indexOf(match)).toBeLessThan((rules.some(rule => rule.source === '/api/:path*') ? rules.findIndex(rule => rule.source === '/api/:path*') : rules.length));
 });
 test('a similarly named path is not admitted as an own-company Blueprint resource', async () => {
   const rules = await configuration.rewrites(); const match = rules.find(rule => getPathMatch(rule.source)('/api/company-blueprints-forged/capabilities'));
-  expect(match.source).toBe('/api/:path*');
+  expect(match).toBeUndefined();
 });

@@ -8,7 +8,7 @@ import { CompanyLicenseSources } from './CompanyApplicationAssignmentsPanel';
 import { DirectoryConfirmation } from './UserDetailPanel';
 
 const phases = { pending: 'Kontosperre ausstehend', licenses: 'Rückgabe bereit', paused: 'Pausiert – Prüfung erforderlich', completed_local: 'Lokaler Abschluss bestätigt' };
-const inputClass = 'mt-1 block w-full rounded border border-white/20 bg-transparent p-2';
+const inputClass = 'mt-1 block w-full rounded border border-[var(--border-strong)] bg-transparent p-2';
 export default function CompanyOffboardingV2Panel({ context }: { context: CompanyWorkflowContext }) {
   const client = useRef<CompanyOffboardingV2Client | null>(null); const generation = useRef(0); const running = useRef(false);
   const [open, setOpen] = useState(false); const [ready, setReady] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
@@ -81,7 +81,7 @@ export default function CompanyOffboardingV2Panel({ context }: { context: Compan
   const stopped = targetChanged || job?.workflow.failure?.code === 409 && job.workflow.failure.step === 'verify';
   const rows = job ? job.workflow.phase === 'paused' ? job.workflow.reviewAssignments : job.workflow.nextAssignments : [];
   const blocked = busy || !!intent || !!confirmation;
-  return <section id="company-offboarding-v2" aria-label="Offboarding mit Blueprint-Rückgabe" className="rounded border border-white/10 p-4 space-y-4">
+  return <section id="company-offboarding-v2" aria-label="Offboarding mit Blueprint-Rückgabe" className="rounded border border-[var(--border)] p-4 space-y-4">
     <button className="fluent-btn-secondary" aria-expanded={open} disabled={busy} onClick={() => setOpen(value => !value)}>Offboarding mit Blueprint-Rückgabe</button>
     {open && <div className="space-y-4">
       <p>Konto sperren, alle erfassten lokalen Lizenzquellen gemeinsam zurückgeben und die erfassten Blueprint-Bindungen beenden – auch Bindungen ohne Apps. Die ursprüngliche Kontosperre und Kontogeneration bleiben verbindlich. Keine Gerätebefehle, Gruppen-/Rollenänderungen oder externe Abrechnung.</p>
@@ -105,7 +105,7 @@ export default function CompanyOffboardingV2Panel({ context }: { context: Compan
         <ul className="space-y-2">{queue.workflows.map(value => <li key={value.id}><button className="fluent-btn-secondary" disabled={blocked} onClick={() => load(value.id)}>{phases[value.phase]} · {new Date(value.createdAt).toLocaleString('de-CH')}</button><p className="break-all text-sm">{value.userId} · {value.completedLicenses}/{value.totalLicenses ?? 'offen'} Lizenzplätze · {value.completedBindings}/{value.totalBindings ?? 'offen'} Bindungen</p></li>)}</ul>
         <nav aria-label="Blueprint-Offboarding-Seiten" className="flex gap-4"><button disabled={blocked || queue.page <= 1} onClick={() => { void run(current => current.list(queue.page - 1), setQueue); }}>Zurück</button><span>Seite {queue.page} · {queue.total} Vorgänge</span><button disabled={blocked || queue.page * 25 >= queue.total} onClick={() => { void run(current => current.list(queue.page + 1), setQueue); }}>Weiter</button></nav>
       </section>}
-      {job && <article aria-label="Blueprint-Offboarding-Arbeitsstand" className="border-t border-white/20 pt-3 space-y-3">
+      {job && <article aria-label="Blueprint-Offboarding-Arbeitsstand" className="border-t border-[var(--border-strong)] pt-3 space-y-3">
         <h3 className="font-semibold">{phases[job.workflow.phase]}</h3><p>{job.workflow.completedLicenses}/{job.workflow.totalLicenses ?? 'noch nicht erfasst'} lokale Lizenzplätze zurückgegeben · {job.workflow.completedBindings}/{job.workflow.totalBindings ?? 'noch nicht erfasst'} Bindungen beendet.</p>
         <p className="break-all">Vorgang {job.workflow.id} · Revision {job.workflow.revision} · Mitarbeiter {job.workflow.userId}</p><p>Kontostatus beim Abruf: {job.currentTarget.deleted ? 'Gelöscht' : job.currentTarget.enabled ? 'Aktiv' : 'Gesperrt'}.</p>
         {job.workflow.checkpoint && <details><summary>Ursprünglicher Kontosperrnachweis</summary><p className="break-all">Identity-Vorgang {job.workflow.checkpoint.workflowId} · Kontogeneration {job.workflow.checkpoint.afterEligibilityRevision} · {job.workflow.checkpoint.action === 'disabled' ? 'Konto gesperrt' : 'Bereits gesperrtes Konto bestätigt'}</p></details>}

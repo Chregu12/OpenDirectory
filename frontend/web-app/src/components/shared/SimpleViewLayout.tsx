@@ -84,7 +84,7 @@ const DEFAULT_ICONS: Record<HeroStatus, React.ReactNode> = {
 /** Compact status banner – white card with dot indicator */
 export function StatusBanner({ config }: { config: HeroConfig }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-6 py-5 flex items-center gap-4">
+    <div className="bg-[var(--bg-surface)] rounded-xl shadow-sm border border-[var(--border)] px-6 py-5 flex items-center gap-4">
       <div className="flex-shrink-0">
         {config.icon || DEFAULT_ICONS[config.status]}
       </div>
@@ -95,7 +95,7 @@ export function StatusBanner({ config }: { config: HeroConfig }) {
             {config.title}
           </h2>
         </div>
-        <p className="text-[13px] text-gray-400 mt-0.5">{config.subtitle}</p>
+        <p className="text-[13px] text-[var(--text-secondary)] mt-0.5">{config.subtitle}</p>
       </div>
     </div>
   );
@@ -110,17 +110,17 @@ export function StatGrid({ stats }: { stats: StatCard[] }) {
   return (
     <div className={`grid grid-cols-2 ${cols} gap-3`}>
       {stats.map((stat, i) => (
-        <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div key={i} className="bg-[var(--bg-surface)] rounded-xl shadow-sm border border-[var(--border)] p-4">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[13px] font-medium text-gray-400">{stat.label}</p>
-            {stat.icon && <span className="text-gray-300">{stat.icon}</span>}
+            <p className="text-[13px] font-medium text-[var(--text-secondary)]">{stat.label}</p>
+            {stat.icon && <span className="text-[var(--text-muted)]">{stat.icon}</span>}
           </div>
-          <p className={`text-2xl font-semibold ${stat.color || 'text-gray-900'}`}>{stat.value}</p>
+          <p className={`text-2xl font-semibold ${stat.color || 'text-[var(--text-primary)]'}`}>{stat.value}</p>
           {stat.trend && (
             <p className={`text-[12px] mt-1 ${
               stat.trend.direction === 'up' ? 'text-emerald-500' :
               stat.trend.direction === 'down' ? 'text-red-500' :
-              'text-gray-400'
+              'text-[var(--text-secondary)]'
             }`}>
               {stat.trend.direction === 'up' ? '↑' : stat.trend.direction === 'down' ? '↓' : '–'} {stat.trend.value}
             </p>
@@ -136,9 +136,9 @@ export function InfoCard({ title, items, maxItems = 5 }: { title: string; items:
   if (items.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-      <div className="px-5 py-3.5 border-b border-gray-100">
-        <h3 className="text-[14px] font-semibold text-gray-900">{title}</h3>
+    <div className="bg-[var(--bg-surface)] rounded-xl shadow-sm border border-[var(--border)]">
+      <div className="px-5 py-3.5 border-b border-[var(--border)]">
+        <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">{title}</h3>
       </div>
       <div className="p-1.5">
         {items.slice(0, maxItems).map(item => (
@@ -146,14 +146,14 @@ export function InfoCard({ title, items, maxItems = 5 }: { title: string; items:
             key={item.key}
             onClick={item.onClick}
             className={`flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
-              item.onClick ? 'hover:bg-gray-50 cursor-pointer' : ''
+              item.onClick ? 'hover:bg-[var(--bg-surface-raised)] cursor-pointer' : ''
             }`}
           >
             <div className="flex items-center gap-3 min-w-0">
               {item.icon}
               <div className="min-w-0">
-                <p className="text-[13px] font-medium text-gray-900 truncate">{item.title}</p>
-                {item.subtitle && <p className="text-[11px] text-gray-400 truncate">{item.subtitle}</p>}
+                <p className="text-[13px] font-medium text-[var(--text-primary)] truncate">{item.title}</p>
+                {item.subtitle && <p className="text-[11px] text-[var(--text-secondary)] truncate">{item.subtitle}</p>}
               </div>
             </div>
             {item.trailing}
@@ -177,7 +177,7 @@ export function ActionBar({ actions }: { actions: QuickAction[] }) {
           disabled={action.disabled}
           className={`inline-flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium rounded-lg transition-colors ${
             action.variant === 'secondary'
-              ? 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 shadow-sm'
+              ? 'text-[var(--text-secondary)] bg-[var(--bg-surface)] border border-gray-200 hover:bg-[var(--bg-surface-raised)] shadow-sm'
               : 'text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 shadow-sm'
           }`}
         >

@@ -1,17 +1,18 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { api } from '@/lib/api';
 import ActivityView from '@/components/views/ActivityView';
 
 const originalFetch = global.fetch;
 const event = (changes = {}) => ({ id: 'actual-event', timestamp: '2026-10-19T09:00:00Z', event: 'Actual policy update', user: 'actual-user', source: 'Policy', severity: 'success', ...changes });
-const response = (data: unknown) => ({ ok: true, json: async () => data });
+const response = (data: unknown) => ({ data });
 const summary = (label: string) => screen.getByText(label).nextElementSibling;
 
-beforeEach(() => { global.fetch = jest.fn(); });
+beforeEach(() => { (api.get as jest.Mock).mockReset(); });
 afterAll(() => { global.fetch = originalFetch; });
 
 test('counts distinct actual actors without an ES2015 iterator spread', async () => {
-  (global.fetch as jest.Mock).mockResolvedValue(response({ events: [
+  (api.get as jest.Mock).mockResolvedValue(response({ events: [
     event(), event({ id: 'second-event', severity: 'error' }),
     event({ id: 'third-event', user: 'other-user', severity: 'warning' }),
   ] }));
@@ -21,13 +22,13 @@ test('counts distinct actual actors without an ES2015 iterator spread', async ()
   expect(summary('ACTIVE USERS')).toHaveTextContent(/^2$/);
   expect(summary('ERRORS')).toHaveTextContent(/^1$/);
   expect(summary('WARNINGS')).toHaveTextContent(/^1$/);
-  expect(global.fetch).toHaveBeenCalledWith('/api/audit/events?limit=100');
+  expect(api.get).toHaveBeenCalledWith('/api/audit/events?limit=100');
   expect(screen.queryByText(/12%|EVENTS TODAY/)).not.toBeInTheDocument();
   expect(screen.queryByText('admin@corp.local')).not.toBeInTheDocument();
 });
 
 test('accepts actual backend data envelopes and does not invent absent actors or severity', async () => {
-  (global.fetch as jest.Mock).mockResolvedValue(response({ success: true, data: [
+  (api.get as jest.Mock).mockResolvedValue(response({ success: true, data: [
     { id: 0, event_time: '2026-10-19T09:00:00Z', operation: 'Actual policy update' },
   ] }));
   render(<ActivityView />);
@@ -38,7 +39,7 @@ test('accepts actual backend data envelopes and does not invent absent actors or
 });
 
 test.each([[], { events: [] }, { success: true, data: [] }])('keeps a genuine empty audit response empty: %j', async data => {
-  (global.fetch as jest.Mock).mockResolvedValue(response(data));
+  (api.get as jest.Mock).mockResolvedValue(response(data));
   render(<ActivityView />);
   await screen.findByText('No events found');
   expect(summary('LOADED EVENTS')).toHaveTextContent(/^0$/);
@@ -52,7 +53,7 @@ test.each([
   [event({ event: {} })], [event({ user: {} })], [event({ source: 42 })],
   [event({ severity: {} })], [event(), event()],
 ])('rejects unusable audit data %j without fabricated records', async data => {
-  (global.fetch as jest.Mock).mockResolvedValue(response(data));
+  (api.get as jest.Mock).mockResolvedValue(response(data));
   render(<ActivityView />);
   await screen.findByRole('alert');
   expect(summary('LOADED EVENTS')).toHaveTextContent(/^—$/);
@@ -62,7 +63,7 @@ test.each([
 });
 
 test.each(['HTTP', 'network', 'JSON'])('shows audit unavailability on %s failure', async failure => {
-  const fetchMock = global.fetch as jest.Mock;
+  const fetchMock = api.get as jest.Mock;
   if (failure === 'HTTP') fetchMock.mockResolvedValue({ ok: false, status: 503 });
   else if (failure === 'network') fetchMock.mockRejectedValue(new Error('offline'));
   else fetchMock.mockResolvedValue({ ok: true, json: async () => { throw new SyntaxError('Invalid JSON'); } });
@@ -72,7 +73,7 @@ test.each(['HTTP', 'network', 'JSON'])('shows audit unavailability on %s failure
 });
 
 test('clears stale events on failure and recovers on explicit refresh', async () => {
-  (global.fetch as jest.Mock).mockResolvedValueOnce(response([event()]))
+  (api.get as jest.Mock).mockResolvedValueOnce(response([event()]))
     .mockResolvedValueOnce({ ok: false, status: 503 }).mockResolvedValueOnce(response([]));
   render(<ActivityView />);
   await screen.findByText('Actual policy update');

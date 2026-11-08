@@ -42,7 +42,7 @@ test('role readers can load a known canonical UUID without directory-profile rea
   expect((api.get as jest.Mock).mock.calls.every(([url]) => url === '/api/identity/access' || url === '/api/identity/roles/catalog' || url === `/api/users/${target}/roles`)).toBe(true);
 });
 test('granting requires confirmation and sends no actor, permission, permanent or external-provider fields', async () => {
-  const user = await grant(); expect(api.post).not.toHaveBeenCalled(); expect(screen.getByRole('option', { name: 'admin · geschützt' })).toBeDisabled();
+  const user = await grant(); expect(api.post).not.toHaveBeenCalled(); expect(screen.getByRole('option', { name: 'admin · geschützt', hidden: true })).toBeDisabled();
   await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Bestätigen' }));
   await waitFor(() => expect(toast.success).toHaveBeenCalled());
   expect(api.post).toHaveBeenCalledWith(`/api/users/${target}/roles`, { role: 'license-manager', durationSeconds: 3600, reason: row().reason });

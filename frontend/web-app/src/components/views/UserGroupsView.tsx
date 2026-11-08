@@ -1,5 +1,8 @@
 'use client';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { UserGroupIcon } from '@heroicons/react/24/outline';
 
+import { Dialog } from '@headlessui/react';
 import React,{useEffect,useRef,useState} from 'react';
 import toast from 'react-hot-toast';
 import {directoryGroups,DirectoryGroup,GroupProfile} from '@/lib/directoryGroups';
@@ -13,7 +16,7 @@ import {companyLicenseGroups} from '@/lib/companyLicenseGroups';
 type Editor='create'|'edit'|'member'|null;
 type Confirmation={kind:'delete'|'remove';group:DirectoryGroup;userId?:string}|null;
 const panel={background:'var(--bg-surface, #161b22)',color:'var(--text-primary, #e4e6ea)'};
-const control='rounded border border-white/20 px-3 py-2 disabled:opacity-40';
+const control='rounded border border-[var(--border-strong)] px-3 py-2 disabled:opacity-40';
 
 export default function UserGroupsView(){
  const [access,setAccess]=useState<DirectoryAccess|null>(null);const [groups,setGroups]=useState<DirectoryGroup[]>([]);const [selected,setSelected]=useState<DirectoryGroup|null>(null);
@@ -66,19 +69,16 @@ export default function UserGroupsView(){
  }
  const filtered=groups.filter(group=>[group.name,group.description||'',group.id].join(' ').toLowerCase().includes(search.toLowerCase()));
  return <section className="h-full overflow-auto p-6 space-y-5" style={{background:'var(--bg-base, #0e1115)',color:'var(--text-primary, #e4e6ea)'}} aria-label="Kanonische Gruppenverwaltung">
-  <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-semibold">Verzeichnisgruppen</h1><p className="text-sm opacity-75">Echte Gruppen des angemeldeten Mandanten. Keine Beispieldaten.</p></div><div className="flex gap-3">
-   <button className={control} disabled={loading||busy||!!editor||!!confirmation} onClick={()=>void load()}>Gruppen neu laden</button>
-   {can('groups.create')&&<button className={control} disabled={!canCreate||loading||busy} onClick={()=>open('create')}>Gruppe erstellen</button>}
-  </div></header>
+  <PageHeader title="Verzeichnisgruppen" subtitle="Mitgliedschaften, Gruppenregeln und Lizenzverknüpfungen" icon={UserGroupIcon} actions={<><button className="fluent-btn-secondary" disabled={loading||busy||!!editor||!!confirmation} onClick={()=>void load()}>Gruppen neu laden</button>{can('groups.create')&&<button className="fluent-btn-primary" disabled={!canCreate||loading||busy} onClick={()=>open('create')}>Gruppe erstellen</button>}</>} />
   <p className="text-sm">Kanonische Verzeichnisgruppen und ausdrücklich konfigurierte Attribut-/Untergruppenregeln. Verknüpfung bedeutet nicht automatisch wirksamen App- oder Lizenzzugriff.</p>
   {!loading&&bound&&!canMutate&&(can('groups.update')||can('groups.delete')||can('groups.members.manage'))&&<p role="status" className="rounded border border-amber-500/40 p-3">Mandantengebundene Änderungen an bestehenden Gruppen sind auf diesem Server noch nicht bestätigt. Die Schreibaktionen bleiben gesperrt.</p>}
   {loading&&<p role="status">Gruppen werden geprüft …</p>}{error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {!loading&&access&&!can('groups.read')&&<p>Keine Berechtigung zum Lesen der Gruppenliste.</p>}
   {!loading&&!error&&can('groups.read')&&<div className="grid gap-5 lg:grid-cols-[minmax(240px,1fr)_2fr]">
-   <section aria-label="Kanonische Gruppenliste" className="rounded-xl border border-white/10 p-4 space-y-3"><label className="block">Gruppen suchen<input className={'mt-2 block w-full bg-transparent '+control} value={search} onChange={event=>setSearch(event.target.value)}/></label>
+   <section aria-label="Kanonische Gruppenliste" className="rounded-xl border border-[var(--border)] p-4 space-y-3"><label className="block">Gruppen suchen<input className={'mt-2 block w-full bg-transparent '+control} value={search} onChange={event=>setSearch(event.target.value)}/></label>
     <p>{groups.length} bestätigte Gruppen</p>{!groups.length?<p>Keine kanonischen Gruppen vorhanden.</p>:!filtered.length?<p>Keine passenden Gruppen.</p>:<ul className="space-y-2">{filtered.map(group=><li key={group.id}><button className={'w-full text-left '+control} disabled={busy} onClick={()=>{setSelected(group);setNotice('');}} aria-label={'Gruppe '+group.name} aria-pressed={selected?.id===group.id}><span className="block font-semibold">{group.name}</span><span className="text-xs break-all">{group.id}</span></button></li>)}</ul>}
    </section>
-   {selected?<article aria-label="Gruppendetails" className="rounded-xl border border-white/10 p-5 space-y-4"><h2 className="text-xl font-semibold">{selected.name}</h2><p>{selected.description||'Keine Beschreibung hinterlegt.'}</p><dl className="space-y-2"><div><dt>Gruppen-ID</dt><dd className="break-all">{selected.id}</dd></div><div><dt>Datensatzversion</dt><dd>{selected.revision}</dd></div></dl>
+   {selected?<article aria-label="Gruppendetails" className="rounded-xl border border-[var(--border)] p-5 space-y-4"><h2 className="text-xl font-semibold">{selected.name}</h2><p>{selected.description||'Keine Beschreibung hinterlegt.'}</p><dl className="space-y-2"><div><dt>Gruppen-ID</dt><dd className="break-all">{selected.id}</dd></div><div><dt>Datensatzversion</dt><dd>{selected.revision}</dd></div></dl>
     <div className="flex flex-wrap gap-3">{can('groups.update')&&<button className={control} disabled={!canMutate||busy} onClick={()=>open('edit')}>Gruppenprofil bearbeiten</button>}{can('groups.members.manage')&&<button className={control} disabled={!canMutate||busy} onClick={()=>open('member')}>Mitglied verknüpfen</button>}{can('groups.delete')&&<button className={control} disabled={!canMutate||busy} onClick={()=>{setOperationError('');setConfirmation({kind:'delete',group:selected});}}>Gruppe löschen</button>}</div>
     <h3 className="font-semibold">Verknüpfte Benutzer-IDs</h3>{!selected.members.length?<p>Keine Benutzer verknüpft.</p>:<ul className="space-y-2">{selected.members.map(userId=><li key={userId} className="flex flex-wrap items-center justify-between gap-2"><span className="break-all">{userId}</span>{can('groups.members.manage')&&<button className={control} disabled={!canMutate||busy} aria-label={'Verknüpfung '+userId+' entfernen'} onClick={()=>{setOperationError('');setConfirmation({kind:'remove',group:selected,userId});}}>Verknüpfung entfernen</button>}</li>)}</ul>}
     <p className="text-sm">Angezeigt werden kanonische Verknüpfungen, keine behaupteten effektiven Berechtigungen. Unabhängige Freigaben und Fristen findest du unter <a className="underline" href="/roles">Rollen &amp; Rechte</a>. Benutzerprofile werden für diese Ansicht nicht abgerufen.</p>
@@ -87,11 +87,11 @@ export default function UserGroupsView(){
    </article>:<p>Wähle eine kanonische Gruppe.</p>}
   </div>}
   {!loading&&!can('groups.read')&&selected&&<p role="status">Bestätigte Gruppe: {selected.name} · {selected.id}</p>}
-  {editor&&<div role="dialog" aria-modal="true" aria-label={editor==='create'?'Gruppe erstellen':editor==='edit'?'Gruppenprofil bearbeiten':'Mitglied verknüpfen'} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5"><form onSubmit={save} className="w-full max-w-lg rounded-xl p-6 space-y-4" style={panel}>
+  {editor&&<Dialog open onClose={() => { if (!busy) close(); }} aria-label={editor==='create'?'Gruppe erstellen':editor==='edit'?'Gruppenprofil bearbeiten':'Mitglied verknüpfen'} className="od-modal-frame"><Dialog.Panel as="form" onSubmit={save} className="od-modal-panel max-w-lg space-y-5" style={panel}>
    <h2 className="text-xl font-semibold">{editor==='create'?'Neue leere Gruppe':editor==='edit'?'Kanonisches Gruppenprofil':'Benutzer-ID verknüpfen'}</h2>
    {editor==='member'?<><label className="block">Kanonische Benutzer-ID<input className={'mt-2 w-full bg-transparent '+control} required maxLength={36} value={member} disabled={busy||!!operationError} onChange={event=>setMember(event.target.value)}/></label><p className="text-sm">Nur eine bekannte ID desselben Mandanten. Dies richtet weder ein Konto noch eine sofortige Lizenz- oder App-Freigabe ein.</p></>:<><label className="block">Gruppenname<input className={'mt-2 w-full bg-transparent '+control} required maxLength={255} value={name} disabled={busy||!!operationError} onChange={event=>setName(event.target.value)}/></label><label className="block">Gruppenbeschreibung<textarea className={'mt-2 w-full bg-transparent '+control} maxLength={2000} value={description} disabled={busy||!!operationError} onChange={event=>setDescription(event.target.value)}/></label></>}
    {operationError&&<p role="alert">{operationError}</p>}<div className="flex justify-end gap-3"><button type="button" className={control} disabled={busy} onClick={close}>Abbrechen</button><button type="submit" className={control} disabled={busy||!!operationError}>{busy?'Wird bestätigt …':'Verbindlich speichern'}</button></div>
-  </form></div>}
+  </Dialog.Panel></Dialog>}
   {confirmation&&<DirectoryConfirmation title={confirmation.kind==='delete'?'Kanonische Gruppe löschen':'Aktuelle Verknüpfung entfernen'} busy={busy} error={operationError} onClose={close} onConfirm={()=>void confirm()}><p>{confirmation.group.name} · <span className="break-all">{confirmation.group.id}</span></p>{confirmation.userId&&<p className="break-all">Benutzer-ID: {confirmation.userId}</p>}
    <p className="mt-3">Die Aktion bindet die angezeigte Gruppenversion. Entfernte App-/Lizenzquellen und externe Konten müssen separat bewertet werden; ein lokaler Beleg bestätigt keine Microsoft-Provisionierung.</p>
    {(confirmation.userId===access?.userId||confirmation.kind==='delete'&&!!access?.userId&&confirmation.group.members.includes(access.userId))&&<p className="mt-3 text-amber-400">Dein eigener Zugriff kann damit enden. Stelle einen unabhängigen Wiederherstellungsweg sicher.</p>}

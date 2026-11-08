@@ -13,7 +13,7 @@ export function CompanyLicenseSources({ sources }: { sources: CompanyLicenseSour
     <details><summary>Quellennachweis</summary><p className="break-all">Quelle: {source.sourceId}</p><p className="break-all">Grant: {source.grantId}</p></details>
   </li>)}</ul>;
 }
-const inputClass = 'mt-1 block w-full rounded border border-white/20 bg-transparent p-2';
+const inputClass = 'mt-1 block w-full rounded border border-[var(--border-strong)] bg-transparent p-2';
 export default function CompanyApplicationAssignmentsPanel({ context, pool, onReload }: { context: CompanyWorkflowContext; pool: CompanyPool; onReload: () => void }) {
   const client = useRef<CompanyApplicationsV2Client | null>(null); const generation = useRef(0); const running = useRef(false);
   const [ready, setReady] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [formError, setFormError] = useState('');
@@ -65,7 +65,7 @@ export default function CompanyApplicationAssignmentsPanel({ context, pool, onRe
     });
   };
   const blocked = busy || !!intent || !!confirmation || needsReload;
-  return <section aria-label="Quellenbasierte Lizenzverwaltung" className="border-t border-white/20 pt-4 space-y-4">
+  return <section aria-label="Quellenbasierte Lizenzverwaltung" className="border-t border-[var(--border-strong)] pt-4 space-y-4">
     <h3 className="font-semibold">Aktuelle Lizenzzuweisungen · alle Quellen</h3>
     <p>Ein Lizenzplatz je Mitarbeiter und Pool, auch bei mehreren Blueprints. Eine manuelle Rücknahme entfernt nur die manuelle Quelle. Blueprint-Quellen werden an ihrer Bindung oder im bestätigten Offboarding zurückgenommen.</p>
     {error && <p role="alert">{error}</p>}{formError && <p role="alert">{formError}</p>}{busy && <p role="status">Lizenzquellen werden geprüft …</p>}
@@ -73,7 +73,7 @@ export default function CompanyApplicationAssignmentsPanel({ context, pool, onRe
     {rows && <section aria-label="Vollständige Lizenzquellen" className="space-y-3">
       <p>Pool-Revision {rows.poolRevision} · {rows.total} belegte Benutzerplätze.</p>
       {!rows.assignments.length && <p>Keine Lizenzzuweisungen vorhanden.</p>}
-      <ul className="space-y-4">{rows.assignments.map(assignment => <li className="rounded border border-white/10 p-3 space-y-2" key={assignment.id}>
+      <ul className="space-y-4">{rows.assignments.map(assignment => <li className="rounded border border-[var(--border)] p-3 space-y-2" key={assignment.id}>
         <p className="break-all">{users?.users.find(user => user.id === assignment.userId) ? userName(users.users.find(user => user.id === assignment.userId)) : assignment.userId} · 1 Lizenzplatz</p>
         <CompanyLicenseSources sources={assignment.sources} />
         <details><summary>Zuweisungsnachweis</summary><p className="break-all">Zuweisung {assignment.id} · Generation {assignment.eligibilityRevision}</p><p>{new Date(assignment.assignedAt).toLocaleString('de-CH')}</p></details>
@@ -89,7 +89,7 @@ export default function CompanyApplicationAssignmentsPanel({ context, pool, onRe
       </> : <label>Bekannte Lizenz-Mitarbeiter-ID<input className={inputClass} disabled={blocked} maxLength={36} value={userId} onChange={event => { setUserId(event.target.value); setPreview(null); }} /><span className="text-sm">Keine Profil-Leseberechtigung. Bekannte eigene UUID eingeben; der Server prüft das Ziel.</span></label>}
       <button className="fluent-btn-secondary" disabled={blocked || !userId} onClick={() => inspect()}>Lizenzquellen-Vorschau laden</button>
     </section>}
-    {preview && <section aria-label="Manuelle Lizenzquellen-Vorschau" className="rounded border border-white/20 p-3 space-y-3">
+    {preview && <section aria-label="Manuelle Lizenzquellen-Vorschau" className="rounded border border-[var(--border-strong)] p-3 space-y-3">
       <p className="break-all">Mitarbeiter {preview.target.id} · {preview.target.deleted ? 'Gelöscht' : preview.target.enabled ? 'Aktiv' : 'Gesperrt'} · Berechtigungsgeneration {preview.target.eligibilityRevision} · Pool-Revision {preview.poolRevision}</p>
       {preview.assignment ? <><p>1 belegter Lizenzplatz · {preview.assignment.sources.length} Quellen.</p><CompanyLicenseSources sources={preview.assignment.sources} /></> : <p>Noch kein Lizenzplatz belegt. Eine neue manuelle Quelle benötigt einen freien Platz.</p>}
       <label>Begründung der manuellen Lizenzquelle<input className={inputClass} maxLength={500} disabled={blocked} value={reason} onChange={event => setReason(event.target.value)} /></label>

@@ -53,6 +53,12 @@ function resolve(rules, urlPath) {
       return { index: i, ...rules[i] };
     }
   }
+  if (urlPath.startsWith('/api/')) {
+    const file = urlPath.startsWith('/api/auth/') ? '../src/app/api/auth/[...path]/route.ts' : '../src/app/api/[...path]/route.ts';
+    const source = require('fs').readFileSync(require('path').join(__dirname, file), 'utf8');
+    const fallback = source.match(/createServiceProxy\('[^']+', '([^']+)'\)/)[1];
+    return { index: rules.length, source: urlPath, destination: fallback + urlPath };
+  }
   return null;
 }
 
@@ -223,7 +229,7 @@ describe('network-infrastructure routing', () => {
 
   test('the /api/network rule precedes the /api/:path* catch-all', () => {
     const networkRule = rules.findIndex(r => r.source === '/api/network/:path*');
-    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*') < 0 ? rules.length : rules.findIndex(r => r.source === '/api/:path*');
     expect(networkRule).toBeGreaterThan(-1);
     expect(networkRule).toBeLessThan(catchAllIndex);
   });
@@ -310,7 +316,7 @@ describe('least-privilege routing', () => {
   test('least-privilege rules precede the /api/:path* catch-all', () => {
     const perms = rules.findIndex(r => r.source === '/api/permissions/:path*');
     const pimElevation = rules.findIndex(r => r.source === '/api/pim/elevation/:path*');
-    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*') < 0 ? rules.length : rules.findIndex(r => r.source === '/api/:path*');
     expect(perms).toBeGreaterThan(-1);
     expect(pimElevation).toBeGreaterThan(-1);
     expect(perms).toBeLessThan(catchAllIndex);
@@ -334,7 +340,7 @@ describe('PIM roles & requests routing (authentication-service)', () => {
     '/api/pim/requests/req-1/revoke',
     '/api/pim/activations',
   ])('%s → authentication-service', urlPath => {
-    expectRoute(urlPath, 'auth-service:3001', '/api/pim');
+    expectRoute(urlPath, 'auth-service:3002', '/api/pim');
   });
 
   test('/api/pim/elevation precedes the broader /api/pim/:path* rule (still least-privilege, not shadowed)', () => {
@@ -348,7 +354,7 @@ describe('PIM roles & requests routing (authentication-service)', () => {
 
   test('the /api/pim/:path* rule precedes the /api/:path* catch-all', () => {
     const generic = rules.findIndex(r => r.source === '/api/pim/:path*');
-    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*') < 0 ? rules.length : rules.findIndex(r => r.source === '/api/:path*');
     expect(generic).toBeGreaterThan(-1);
     expect(generic).toBeLessThan(catchAllIndex);
   });
@@ -367,8 +373,8 @@ describe('auth routing split (api-backend vs authentication-service)', () => {
     '/api/auth/logout',
     '/api/auth/profile',
     '/api/auth/change-password',
-  ])('%s stays on api-backend', urlPath => {
-    expectRoute(urlPath, 'api-backend:8080', '/api/auth');
+  ])('%s uses the canonical authentication proxy', urlPath => {
+    expectRoute(urlPath, 'auth-service:3002', '/api/auth');
   });
 
   test.each([
@@ -395,25 +401,16 @@ describe('auth routing split (api-backend vs authentication-service)', () => {
     '/api/auth/audit/login-history',
     '/api/auth/audit/security-events',
   ])('%s → authentication-service (dead route via api-backend before this fix)', urlPath => {
-    expectRoute(urlPath, 'auth-service:3001', '/api/auth');
+    expectRoute(urlPath, 'auth-service:3002', '/api/auth');
   });
 
-  test('the four api-backend literals precede the broad /api/auth/:path* rule', () => {
-    const broad = rules.findIndex(r => r.source === '/api/auth/:path*');
-    expect(broad).toBeGreaterThan(-1);
-    for (const literal of ['/api/auth/login', '/api/auth/logout', '/api/auth/profile', '/api/auth/change-password']) {
-      const idx = rules.findIndex(r => r.source === literal);
-      expect(idx).toBeGreaterThan(-1);
-      expect(idx).toBeLessThan(broad);
+  test('auth uses a native runtime proxy without legacy api-backend overrides', () => {
+    for (const literal of ['/api/auth/login', '/api/auth/logout', '/api/auth/profile', '/api/auth/change-password', '/api/auth/:path*']) {
+      expect(rules.findIndex(rule => rule.source === literal)).toBe(-1);
     }
+    expectRoute('/api/auth/profile', 'auth-service:3002', '/api/auth');
   });
 
-  test('the broad /api/auth/:path* rule precedes the /api/:path* catch-all', () => {
-    const broad = rules.findIndex(r => r.source === '/api/auth/:path*');
-    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
-    expect(broad).toBeGreaterThan(-1);
-    expect(broad).toBeLessThan(catchAllIndex);
-  });
 });
 
 // ─── Service accounts & domain config (authentication-service) ────────────────
@@ -424,15 +421,15 @@ describe('service-accounts & config/domain routing (authentication-service)', ()
     '/api/service-accounts/sa-1',
     '/api/service-accounts/sa-1/token',
   ])('%s → authentication-service', urlPath => {
-    expectRoute(urlPath, 'auth-service:3001', '/api/service-accounts');
+    expectRoute(urlPath, 'auth-service:3002', '/api/service-accounts');
   });
 
   test('/api/config/domain → authentication-service (not the integration-service /api/config/* rules above)', () => {
-    expectRoute('/api/config/domain', 'auth-service:3001', '/api/config/domain');
+    expectRoute('/api/config/domain', 'auth-service:3002', '/api/config/domain');
   });
 
   test('these rules precede the /api/:path* catch-all', () => {
-    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*') < 0 ? rules.length : rules.findIndex(r => r.source === '/api/:path*');
     for (const source of ['/api/service-accounts', '/api/service-accounts/:path*', '/api/config/domain']) {
       const idx = rules.findIndex(r => r.source === source);
       expect(idx).toBeGreaterThan(-1);
@@ -454,11 +451,11 @@ describe('OU routing (identity-service)', () => {
 
   test('OUs do NOT go to authentication-service (its competing impl was consolidated away)', () => {
     const hit = resolve(rules, '/api/ous');
-    expect(serviceOf(hit.destination)).not.toBe('auth-service:3001');
+    expect(serviceOf(hit.destination)).not.toBe('auth-service:3002');
   });
 
   test('these rules precede the /api/:path* catch-all', () => {
-    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*') < 0 ? rules.length : rules.findIndex(r => r.source === '/api/:path*');
     for (const source of ['/api/ous', '/api/ous/:path*']) {
       const idx = rules.findIndex(r => r.source === source);
       expect(idx).toBeGreaterThan(-1);
@@ -470,13 +467,15 @@ describe('OU routing (identity-service)', () => {
 // ─── Rule ordering ────────────────────────────────────────────────────────────
 
 describe('rule ordering', () => {
-  test('the /api/:path* catch-all is the LAST /api rule', () => {
-    const apiRules = rules.filter(r => r.source.startsWith('/api/'));
-    expect(apiRules[apiRules.length - 1].source).toBe('/api/:path*');
+  test('the generic API fallback is a native runtime route', () => {
+    expect(rules.some(rule => rule.source === '/api/:path*')).toBe(false);
+    const source = require('fs').readFileSync(require('path').join(__dirname, '../src/app/api/[...path]/route.ts'), 'utf8');
+    expect(source).toContain("createServiceProxy('API_BACKEND_URL', 'http://api-backend:8080')");
+    expect(source).toContain("force-dynamic");
   });
 
   test('every specific rule wins over the catch-all (never shadowed)', () => {
-    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*');
+    const catchAllIndex = rules.findIndex(r => r.source === '/api/:path*') < 0 ? rules.length : rules.findIndex(r => r.source === '/api/:path*');
     expect(catchAllIndex).toBeGreaterThan(-1);
     for (const r of rules) {
       if (r.source.startsWith('/api/') && r.source !== '/api/:path*') {

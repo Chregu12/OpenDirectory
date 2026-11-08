@@ -1,4 +1,5 @@
 import React from 'react';
+import { api } from '../../lib/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UserOnboardingWizard from '../../components/views/UserOnboardingWizard';
@@ -12,6 +13,7 @@ describe('UserOnboardingWizard', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (api.get as jest.Mock).mockResolvedValue({ data: { configuredServices: ['quick-actions'] } });
     global.fetch = jest.fn().mockImplementation(async (url: string) => ({
       ok: true,
       json: async () => url.endsWith('/access') ? { subject: 'operator', permissions: ['users.onboard', 'users.roles.assign', 'users.groups.assign', 'users.devices.assign'], onboardingDepartments: ['General'] } : ({

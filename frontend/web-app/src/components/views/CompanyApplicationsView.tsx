@@ -210,11 +210,11 @@ export default function CompanyApplicationsView() {
     finally { if (generation.current === expected) { writing.current = false; setBusy(false); } }
   };
 
-  return <ViewShell title="Anwendungen & Lizenzen" subtitle="Eigene Firmen-App-Lizenzpools und lokale Benutzerzuweisungen."
+  return <ViewShell title="Apps & Lizenzen" subtitle="Eigene Firmen-App-Lizenzpools und lokale Benutzerzuweisungen."
     primaryAction={canCreate && pools ? { label: 'Lizenzpool erstellen', onClick: () => { setValues({ ...initialValues }); setFormError(''); setCreating(true); setNotice(''); }, disabled: busy } : undefined}
     actions={[{ label: 'Neu laden', onClick: () => { generation.current += 1; client.current?.invalidate(); clearReturns(); setReturnReceipt(null); setReload(value => value + 1); }, disabled: busy }]}>
     <div className="space-y-5" style={{ color: 'var(--text-primary)' }}>
-      <p className="rounded-lg border border-white/10 p-4 text-sm">Nur lokale Lizenzverteilung an Benutzer der eigenen Firma. Keine Cloud-Zuweisung, Installation, SSO-Einrichtung oder Abrechnung. Gesperrte Benutzer und pausierte Mandanten sind keine zulässigen neuen Ziele. Kontosperren geben diese lokalen Lizenzen noch nicht automatisch zurück. Bestehende Zuweisungen können ausdrücklich freigegeben werden, auch bei gesperrten oder gelöschten Benutzern.</p>
+      <details className="od-panel text-sm"><summary>Lokaler Bestand und Wirkung von Zuweisungen</summary><p className="mt-3">Nur lokale Lizenzverteilung an Benutzer der eigenen Firma. Keine Cloud-Zuweisung, Installation, SSO-Einrichtung oder Abrechnung. Gesperrte Benutzer und pausierte Mandanten sind keine zulässigen neuen Ziele. Kontosperren geben diese lokalen Lizenzen noch nicht automatisch zurück. Bestehende Zuweisungen können ausdrücklich freigegeben werden, auch bei gesperrten oder gelöschten Benutzern.</p></details>
       {error ? <p role="alert" className="rounded border border-red-500/40 p-4">{error}</p> : !access ? <p role="status">Lizenzberechtigungen werden geprüft …</p> : !canRead ? <p role="status">Keine Berechtigung zum Lesen der Firmen-Lizenzpools.</p> : <>
         {notice && <p role="status">{notice}</p>}
         <nav aria-label="Lizenzverwaltungsmodus" className="flex flex-wrap gap-3">
@@ -230,7 +230,7 @@ export default function CompanyApplicationsView() {
           }}>Bisherige Direktverwaltung</button>
         </nav>
         {canAssign && (protocol === 'v2' ? <CompanyOffboardingV2Panel context={access} /> : <div><h2 className="font-semibold">Bisherige Offboarding-Vorgänge</h2><p>Diese Direktverwaltung unterstützt keine gemischten Blueprint-Quellen. Ein Upgrade-Konflikt gibt keine Lizenz frei. Für alle Quellen ausdrücklich zur aktuellen Verwaltung wechseln.</p><CompanyOffboardingPanel context={access} /></div>)}
-        {returnReceipt && access.actorUserId === returnReceipt.receipt.actorUserId && access.tenantId === returnReceipt.receipt.tenantId && <section aria-label="Ergebnis der Lizenzrückgabe" className="rounded border border-white/10 p-4 space-y-3">
+        {returnReceipt && access.actorUserId === returnReceipt.receipt.actorUserId && access.tenantId === returnReceipt.receipt.tenantId && <section aria-label="Ergebnis der Lizenzrückgabe" className="rounded border border-[var(--border)] p-4 space-y-3">
           <p role="status">{returnReceipt.receipt.results.filter(row => row.status === 'released').length} von {returnReceipt.receipt.results.length} Freigaben dieser Seite bestätigt · Seite {returnReceipt.page} · zuvor {returnReceipt.total} Zuweisungen insgesamt.</p>
           <ul className="space-y-4">{returnReceipt.receipt.results.map(row => {
             const assignment = returnReceipt.assignments.find(candidate => candidate.id === row.assignmentId && candidate.poolId === row.poolId);
@@ -244,10 +244,10 @@ export default function CompanyApplicationsView() {
           })}</ul>
           <p>Unbestätigte Ergebnisse können bereits wirksam sein. Bitte ausdrücklich eine neue Vorschau laden und prüfen; keine automatische Wiederholung. Dies bestätigt nur diese Seite, kein vollständiges Offboarding.</p>
         </section>}
-        {canAssign && protocol === 'v1' && <section aria-label="Mitarbeiter-Lizenzrückgabe" className="rounded border border-white/10 p-4 space-y-3">
+        {canAssign && protocol === 'v1' && <section aria-label="Mitarbeiter-Lizenzrückgabe" className="rounded border border-[var(--border)] p-4 space-y-3">
           <button className="fluent-btn-secondary" aria-expanded={returnsOpen} aria-controls="company-license-returns" disabled={busy} onClick={() => { setReturnsOpen(value => !value); clearReturns(); }}>Lizenzen eines Mitarbeiters zurückgeben</button>
           {returnsOpen && <div id="company-license-returns" className="space-y-4">
-            <p>Zuerst unter People → Konto sperren das Konto sperren. Diese Aktion gibt ausschließlich lokale Lizenzen eines gesperrten oder gelöschten Mitarbeiters zurück. Sie sperrt kein Konto und führt keinen automatischen Offboarding-, Sitzungs- oder Geräteworkflow aus.</p>
+            <p>Zuerst unter Mitarbeitende → Konto sperren das Konto sperren. Diese Aktion gibt ausschließlich lokale Lizenzen eines gesperrten oder gelöschten Mitarbeiters zurück. Sie sperrt kein Konto und führt keinen automatischen Offboarding-, Sitzungs- oder Geräteworkflow aus.</p>
             <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); void previewReturns(); }}>
               <label className="text-sm">Mitarbeiter-ID für Lizenzrückgabe<input className="mt-1 block rounded border p-2 bg-transparent" aria-describedby="company-license-return-hint" minLength={36} maxLength={36} required pattern="[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}" value={returnUserId} disabled={busy || !!returnPending} onChange={event => { setReturnUserId(event.target.value); clearReturns(); setReturnReceipt(null); }} /></label>
               <button className="fluent-btn-secondary" type="submit" disabled={busy || !!returnPending}>Lizenzrückgabe-Vorschau laden</button>
@@ -281,7 +281,7 @@ export default function CompanyApplicationsView() {
           <Pagination label="Poolseite" page={pools.page} total={pools.total} disabled={busy} onPage={next => { clearSelection(); setPage(next); }} />
         </section> : <p role="status">Lizenzpools werden geladen …</p>}
         {selectedId && !selected && <p role="status">Lizenzpool wird geladen …</p>}
-        {selected && <article aria-label="Lizenzpooldetails" className="rounded-lg border border-white/10 p-5 space-y-5">
+        {selected && <article aria-label="Lizenzpooldetails" className="rounded-lg border border-[var(--border)] p-5 space-y-5">
           <div className="flex items-start justify-between gap-4"><h2 className="text-xl font-semibold">{selected.name}</h2><button className="fluent-btn-secondary" disabled={busy} onClick={clearSelection}>Details schließen</button></div>
           <dl className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">{Object.entries({
             'Pool-ID': selected.id, 'Firmen-ID': selected.tenantId, Hersteller: selected.vendor, Beschreibung: selected.description || '—',
@@ -292,7 +292,7 @@ export default function CompanyApplicationsView() {
           {protocol === 'v2' && <CompanyApplicationAssignmentsPanel key={access.actorUserId + ':' + access.tenantId + ':' + selected.id} context={access} pool={selected} onReload={() => {
             setPoolVersion(value => value + 1); setListVersion(value => value + 1);
           }} />}
-          {canAssign && protocol === 'v1' && <section aria-label="Lizenz zuweisen" className="border-t border-white/10 pt-4 space-y-4">
+          {canAssign && protocol === 'v1' && <section aria-label="Lizenz zuweisen" className="border-t border-[var(--border)] pt-4 space-y-4">
             <h3 className="font-semibold">Lizenz zuweisen oder freigeben</h3>
             <label className="block text-sm">Begründung<input className="mt-1 block w-full rounded border p-2 bg-transparent" minLength={10} maxLength={500} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label>
             {formError && <p role="alert">{formError}</p>}
@@ -314,7 +314,7 @@ export default function CompanyApplicationsView() {
               </form>
             </>}
           </section>}
-          {protocol === 'v1' && <section aria-label="Lizenzzuweisungen" className="border-t border-white/10 pt-4 space-y-3">
+          {protocol === 'v1' && <section aria-label="Lizenzzuweisungen" className="border-t border-[var(--border)] pt-4 space-y-3">
             <h3 className="font-semibold">Lokale Lizenzzuweisungen</h3>
             {assignments ? <><DataTable<CompanyAssignment> rows={assignments.assignments} getRowId={assignment => assignment.id} emptyMessage="Keine Lizenzzuweisungen vorhanden." columns={[
               { key: 'userId', header: 'Benutzer', render: assignment => { const profile = users?.users.find(user => user.id === assignment.userId); return profile ? userName(profile) : assignment.userId; } },
@@ -326,7 +326,7 @@ export default function CompanyApplicationsView() {
               ...(canAssign ? [{ key: 'action', header: 'Aktion', render: (assignment: CompanyAssignment) => <button className="fluent-btn-secondary" disabled={busy || reason.trim().length < 10} onClick={() => begin(assignment)}>Lizenz freigeben</button> }] : []),
             ]} /><Pagination label="Zuweisungsseite" page={assignments.page} total={assignments.total} disabled={busy} onPage={setAssignmentPage} /></> : <p role="status">Lizenzzuweisungen werden geladen …</p>}
           </section>}
-          {protocol === 'v1' && <section aria-label="Lizenzhistorie" className="border-t border-white/10 pt-4 space-y-3">
+          {protocol === 'v1' && <section aria-label="Lizenzhistorie" className="border-t border-[var(--border)] pt-4 space-y-3">
             <h3 className="font-semibold">Lizenzhistorie</h3>
             {history ? <><ol className="space-y-4">{history.events.map(event => <li key={event.id} className="text-sm space-y-1">
               <p className="font-medium">{eventLabels[event.type]}</p><p><time dateTime={event.createdAt}>{event.createdAt}</time> · Version {event.beforeRevision || '—'} → {event.afterRevision}</p>

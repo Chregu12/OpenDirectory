@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { VALID_VIEWS } from '@/lib/views';
 import { api } from '@/lib/api';
 import { directoryUsers } from '@/lib/directoryUsers';
 import { ensureSession, SessionError } from '@/lib/auth';
@@ -11,8 +12,10 @@ import CompanyOffboardingAccessView from '@/components/views/CompanyOffboardingA
 import DeviceReturnsView from '@/components/views/DeviceReturnsView';
 import CompanyAppsView from '@/components/views/CompanyAppsView';
 import EmployeeInvitationManager from '@/components/views/EmployeeInvitationManager';
+import ServiceAvailabilityGate from '@/components/shared/ServiceAvailabilityGate';
 
 // ─── Views ────────────────────────────────────────────────────────────────────
+import WorkspaceOverview from '@/components/views/WorkspaceOverview';
 import DashboardView from '@/components/views/DashboardView';
 import TopologyView from '@/components/views/TopologyView';
 import CompanyApplicationsView from '@/components/views/CompanyApplicationsView';
@@ -27,7 +30,6 @@ import SecurityView from '@/components/views/SecurityView';
 import PrintersView from '@/components/views/PrintersView';
 import IdentityProviderView from '@/components/views/IdentityProviderView';
 import EnrollmentHubView from '@/components/views/EnrollmentHubView';
-import PermissionsView from '@/components/views/PermissionsView';
 import AntivirusView from '@/components/views/AntivirusView';
 import AuditView from '@/components/views/AuditView';
 import BackupView from '@/components/views/BackupView';
@@ -104,33 +106,20 @@ const MODULE_NAV_MAP: Record<string, string> = {
   'security-suite':         'security',
 };
 
-const VALID_VIEWS = new Set([
-  'dashboard', 'topology', 'devices', 'applications', 'infrastructure',
-  'users', 'monitoring', 'secrets', 'security', 'threats', 'printers', 'policies', 'settings',
-  'identity', 'enrollment', 'permissions',
-  'antivirus', 'audit', 'backup', 'appstore', 'compliance', 'scanner',
-  'blueprints', 'company-blueprints', 'sync', 'integrations', 'roadmap', 'pim', 'licenses',
-  'mfa', 'sspr', 'conditionalaccess', 'alerting', 'certificates', 'radius', 'servicehealth',
-  'ldap-schema',
-  // ABM-style 3-column views
-  'fleet', 'serviceprincipals',
-  // Advanced infrastructure views
-  'trusts', 'kerberos', 'replication',
-  // Automation
-  'automation', 'company-apps',
-  'employee-invitations',
-  // Graph Explorer + Policy Simulator
-  'graph', 'simulator',
-  // ABM×UniFi new views
-  'subscription', 'activity', 'locations', 'organization', 'registration-reviews', 'offboarding-access', 'device-returns', 'usergroups', 'roles',
-  'assignment', 'appsbooks', 'gpo',
-]);
-
 // Views that display the QuickActionsBar
-const VIEWS_WITH_QUICK_ACTIONS = new Set(['dashboard', 'fleet', 'serviceprincipals']);
+const VIEWS_WITH_QUICK_ACTIONS = new Set(['fleet', 'serviceprincipals']);
 
 // Views that use the ABM 3-column layout (manage their own ABMShell internally)
 const ABM_VIEWS = new Set(['fleet', 'serviceprincipals', 'users']);
+
+const EXTENSION_SERVICES: Record<string, [string, string]> = {
+  threats: ['security-scanner', 'Bedrohungsanalyse'],
+  antivirus: ['antivirus-protection', 'Antivirus'], scanner: ['security-scanner', 'Security Scanner'],
+  conditionalaccess: ['conditional-access', 'Conditional Access'], certificates: ['certificate-authority', 'Zertifikate / PKI'],
+  compliance: ['compliance-engine', 'Compliance'], printers: ['printer-service', 'Drucker'],
+  infrastructure: ['network-infrastructure', 'Netzwerk-Infrastruktur'], radius: ['network-infrastructure', 'RADIUS / 802.1X'],
+  secrets: ['vault-integration', 'Secrets'], topology: ['network-infrastructure', 'Netzwerk'],
+};
 
 // ─── Scrollable content wrapper for standard views ────────────────────────────
 
@@ -146,7 +135,7 @@ function ContentPage({ children, withQuickActions, quickActionsProps }: {
   };
 }) {
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+    <div className="od-content">
       {withQuickActions && quickActionsProps && (
         <QuickActionsBar {...quickActionsProps} />
       )}
@@ -160,11 +149,12 @@ function ContentPage({ children, withQuickActions, quickActionsProps }: {
 export default function ViewPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const viewParam = Array.isArray(params.view) ? params.view[0] : (params.view ?? 'dashboard');
   const activeView = VALID_VIEWS.has(viewParam) ? viewParam : 'dashboard';
 
   const [enabledModules, setEnabledModules] = useState<string[]>(Object.keys(MODULE_NAV_MAP));
-  const [currentUser,    setCurrentUser]    = useState<{ name: string; username: string; role: string } | null>(null);
+  const [currentUser,    setCurrentUser]    = useState<{ name: string; username: string; role: string; roles?: string[] } | null>(null);
   const [authChecked,    setAuthChecked]    = useState(false);
   const [authError, setAuthError] = useState('');
   const [onboarded,      setOnboarded]      = useState(true);
@@ -221,12 +211,6 @@ export default function ViewPage() {
     return () => { active = false; };
   }, [authChecked, onboarded]);
 
-  // Update document title based on active view
-  useEffect(() => {
-    const viewLabel = activeView.charAt(0).toUpperCase() + activeView.slice(1);
-    document.title = `${viewLabel} — OpenDirectory`;
-  }, [activeView]);
-
   const handleViewChange = (view: string) => router.push(`/${view}`);
 
   const handleModuleChange = (moduleId: string, enabled: boolean) => {
@@ -237,7 +221,7 @@ export default function ViewPage() {
 
   const quickActionsProps = {
     onEnrollDevice:       () => setShowEnrollWizard(true),
-    onNewUser:            () => router.push('/users'),
+    onNewUser:            () => router.push('/users?create=1'),
     onServicePrincipal:   () => setShowSPWizard(true),
     onDeployPolicy:       () => setShowPolicyWizard(true),
     onComplianceSnapshot: () => setShowCompliance(true),
@@ -250,20 +234,20 @@ export default function ViewPage() {
     if (ABM_VIEWS.has(activeView)) {
       switch (activeView) {
         case 'fleet':
-          return <DeviceFleetView />;
+          return <DevicesView selectedDeviceId={searchParams.get('selected')} />;
         case 'serviceprincipals':
           return <ServicePrincipalsView onCreateNew={() => setShowSPWizard(true)} />;
         case 'users':
-          return <UsersView />;
+          return <UsersView selectedUserId={searchParams.get('selected')} createRequested={searchParams.get('create') === '1'} onCreateHandled={() => router.replace('/users')} />;
       }
     }
 
     // Standard full-width views wrapped in a scrollable container
     const content = (() => {
       switch (activeView) {
-        case 'dashboard':         return <DashboardView />;
+        case 'dashboard':         return currentUser?.roles?.includes('admin') ? <DashboardView /> : <WorkspaceOverview />;
         case 'topology':          return <TopologyView />;
-        case 'devices':           return <DevicesView />;
+        case 'devices':           return <DevicesView selectedDeviceId={searchParams.get('selected')} createRequested={searchParams.get('create') === '1'} onCreateHandled={() => router.replace('/devices')} />;
         case 'applications':      return <CompanyApplicationsView />;
         case 'infrastructure':    return <InfrastructureView />;
         case 'monitoring':        return <MonitoringView />;
@@ -277,7 +261,7 @@ export default function ViewPage() {
         case 'employee-invitations': return <EmployeeInvitationManager />;
         case 'identity':          return <IdentityProviderView />;
         case 'enrollment':        return <EnrollmentHubView />;
-        case 'permissions':       return <PermissionsView />;
+        case 'permissions':       return <RolesView />;
         case 'antivirus':         return <AntivirusView />;
         case 'audit':             return <AuditView />;
         case 'backup':            return <BackupView />;
@@ -290,7 +274,7 @@ export default function ViewPage() {
         case 'integrations':      return <IntegrationsView />;
         case 'roadmap':           return <RoadmapView onViewChange={handleViewChange} />;
         case 'pim':               return <PIMView />;
-        case 'licenses':          return <LicenseKioskView />;
+        case 'licenses':          return <LicenseKioskView createRequested={searchParams.get('create') === '1'} initialProduct={searchParams.get('product') || ''} initialVendor={searchParams.get('vendor') || ''} onCreateHandled={() => router.replace('/licenses')} />;
         case 'mfa':               return <MFAView />;
         case 'sspr':              return <SSPRView />;
         case 'conditionalaccess': return <ConditionalAccessView />;
@@ -318,7 +302,7 @@ export default function ViewPage() {
         case 'gpo':               return <PolicyView />;
         case 'settings':
           return (
-            <div className="p-6">
+            <div>
               <SettingsView enabledModules={enabledModules} onModuleChange={handleModuleChange} />
             </div>
           );
@@ -329,7 +313,7 @@ export default function ViewPage() {
 
     return (
       <ContentPage withQuickActions={hasQA} quickActionsProps={hasQA ? quickActionsProps : undefined}>
-        {content}
+        {EXTENSION_SERVICES[activeView] ? <ServiceAvailabilityGate service={EXTENSION_SERVICES[activeView][0]} label={EXTENSION_SERVICES[activeView][1]}>{content}</ServiceAvailabilityGate> : content}
       </ContentPage>
     );
   };

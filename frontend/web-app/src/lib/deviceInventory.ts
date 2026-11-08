@@ -70,7 +70,8 @@ export function deviceInventoryError(error: unknown) {
   if (status === 412) return 'Das Gerät wurde zwischenzeitlich geändert. Bitte neu laden; die Aktion wird nicht automatisch wiederholt.';
   if (status === 409) return 'Inventarnummer oder Seriennummer bereits vergeben oder Zuweisung geändert. Bitte neu laden.';
   if (status === 400) return 'Die Eingaben wurden abgelehnt. Bitte prüfen und neu laden.';
-  if (status === 428) return 'Eine aktuelle zusätzliche Anmeldung ist erforderlich. Bitte erneut anmelden und neu laden.';
+  if (status === 428) return 'Für das Geräteinventar ist eine höchstens fünf Minuten alte MFA-Anmeldung erforderlich. Richte MFA ein und melde dich mit Passwort und aktuellem Einmalcode erneut an.';
+  if (status === 503) return 'Der Gerätedienst kann den Anmeldestatus momentan nicht prüfen. Bitte später neu laden.';
   return unconfirmed().message;
 }
 

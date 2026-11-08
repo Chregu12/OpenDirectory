@@ -33,7 +33,7 @@ beforeEach(() => {
 });
 async function openPanel() {
   const mounted = render(<CompanyOffboardingDevicesPanel {...props} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true }));
   await screen.findByRole('region', { name: 'Gerätevorschau für Rückgaben' }); return mounted;
 }
 function select(index = 1) { fireEvent.click(screen.getByRole('checkbox', { name: `Rückgabe für ASSET-${index} auswählen` })); }
@@ -50,7 +50,7 @@ function confirmCurrent() {
 }
 test('stays explicitly collapsed without any API calls', () => {
   render(<CompanyOffboardingDevicesPanel {...props} />);
-  expect(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true })).toHaveAttribute('aria-expanded', 'false');
   expect(mockGet).not.toHaveBeenCalled(); expect(mockPost).not.toHaveBeenCalled();
 });
 test('opening reads real capabilities, preview and history; pending devices remain visible and disabled', async () => {
@@ -108,45 +108,45 @@ test('partial result keeps confirmed operations and marks not attempted entries 
 });
 test.each([403, 428, 409])('capability %s error has no fallback or selection', async code => {
   mockGet.mockRejectedValueOnce({ response: { status: code } });
-  render(<CompanyOffboardingDevicesPanel {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' }));
+  render(<CompanyOffboardingDevicesPanel {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true }));
   await screen.findByRole('alert'); expect(screen.queryByRole('checkbox')).not.toBeInTheDocument(); expect(mockPost).not.toHaveBeenCalled();
 });
 test('collapsing disposes a busy read and reopening cannot show the old late response', async () => {
   let resolve: (value: unknown) => void;
   mockGet.mockImplementationOnce(() => new Promise(value => { resolve = value; }));
   render(<CompanyOffboardingDevicesPanel {...props} />);
-  const toggle = screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' }); fireEvent.click(toggle); fireEvent.click(toggle);
+  const toggle = screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true }); fireEvent.click(toggle); fireEvent.click(toggle);
   await act(async () => { resolve({ status: 200, data: capability() }); });
   expect(screen.queryByRole('region', { name: 'Gerätevorschau für Rückgaben' })).not.toBeInTheDocument();
   fireEvent.click(toggle); await screen.findByRole('region', { name: 'Gerätevorschau für Rückgaben' }); expect(mockPost).not.toHaveBeenCalled();
 });
 test('collapse after an unknown write destroys recovery intent and closes modal; reopen is a new client', async () => {
   await dialog(); mockPost.mockRejectedValueOnce(new Error('Lost ACK')); confirmCurrent(); await screen.findByRole('alert');
-  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true }));
   await screen.findByRole('region', { name: 'Gerätevorschau für Rückgaben' });
   expect(screen.queryByRole('button', { name: 'Ursprünglichen Versuch wiederherstellen' })).not.toBeInTheDocument(); expect(mockPost).toHaveBeenCalledTimes(1);
 });
 test('session change closes modal, clears selection/recovery and never accepts stale results', async () => {
   await dialog(); act(() => { window.dispatchEvent(new Event('od:session-error')); });
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' })).toHaveAttribute('aria-expanded', 'false');
-  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' })); await screen.findByRole('region', { name: 'Gerätevorschau für Rückgaben' });
+  expect(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true })).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true })); await screen.findByRole('region', { name: 'Gerätevorschau für Rückgaben' });
   expect(screen.getByRole('checkbox', { name: 'Rückgabe für ASSET-1 auswählen' })).not.toBeChecked(); expect(mockPost).not.toHaveBeenCalled();
 });
 test('binding change remounts collapsed and removes old confirmation', async () => {
   const { mounted } = await dialog(); mounted.rerender(<CompanyOffboardingDevicesPanel {...props} eligibilityRevision="9" />);
-  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true })).toHaveAttribute('aria-expanded', 'false');
 });
 test('collapse during a live POST aborts and rejects a late successful acknowledgement without stale recovery controls', async () => {
   let resolve: (value: unknown) => void;
   await dialog(); mockPost.mockImplementationOnce(() => new Promise(value => { resolve = value; })); confirmCurrent();
   await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
   const body = mockPost.mock.calls[0][1]; const signal = mockPost.mock.calls[0][2].signal as AbortSignal;
-  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' })); expect(signal.aborted).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true })); expect(signal.aborted).toBe(true);
   await act(async () => { resolve({ status: 200, data: { ...envelope, correlationId: id(80), results: body.items.map(item => ({ deviceId: item.deviceId, assignmentId: item.assignmentId, requestId: item.requestId, status: 'requested', code: 200, operationId: id(81) })) } }); });
   expect(screen.queryByRole('region', { name: 'Ergebnis der Rückgabeanforderung' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' })); await screen.findByRole('region', { name: 'Gerätevorschau für Rückgaben' });
+  fireEvent.click(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true })); await screen.findByRole('region', { name: 'Gerätevorschau für Rückgaben' });
   expect(screen.queryByRole('button', { name: 'Ursprünglichen Versuch wiederherstellen' })).not.toBeInTheDocument(); expect(mockPost).toHaveBeenCalledTimes(1);
 });
 test.each(['licenses', 'paused', 'pending'] as const)('parent phase %s mounts only on a validated negative checkpoint, not on license completion', async phase => {
@@ -163,6 +163,6 @@ test.each(['licenses', 'paused', 'pending'] as const)('parent phase %s mounts on
   fireEvent.change(screen.getByLabelText('Bekannte Vorgangs-ID'), { target: { value: workflowId } }); fireEvent.click(screen.getByRole('button', { name: 'Arbeitsstand neu laden' }));
   await screen.findByRole('article', { name: 'Offboarding-Arbeitsstand' });
   if (phase === 'pending') expect(screen.queryByRole('button', { name: 'Geräterückgaben beim Austritt planen' })).not.toBeInTheDocument();
-  else expect(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen' })).toHaveAttribute('aria-expanded', 'false');
+  else expect(screen.getByRole('button', { name: 'Geräterückgaben beim Austritt planen', hidden: true })).toHaveAttribute('aria-expanded', 'false');
   expect(mockGet.mock.calls.some(([url]) => url.startsWith('/api/devices/'))).toBe(false); expect(mockPost).not.toHaveBeenCalled();
 });

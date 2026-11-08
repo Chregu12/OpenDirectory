@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { companyGroupRules, groupRuleAttributes, groupRuleOperators, CompanyGroupRuleDraft, CompanyGroupRulePage, CompanyGroupRulePreview, CompanyGroupRuleResult, CompanyGroupRuleHistory } from '@/lib/companyGroupRules';
 import { DirectoryGroup, directoryGroups } from '@/lib/directoryGroups';
-const button = 'rounded border border-white/20 px-3 py-2 disabled:opacity-40'; const field = { background: 'var(--bg-input)', color: 'var(--text-primary)' };
+const button = 'rounded border border-[var(--border-strong)] px-3 py-2 disabled:opacity-40'; const field = { background: 'var(--bg-input)', color: 'var(--text-primary)' };
 const attributeNames = { department: 'Abteilung', title: 'Funktion', email: 'E-Mail', username: 'Benutzername', displayName: 'Anzeigename' };
 const operatorNames = { equals: 'ist gleich', startsWith: 'beginnt mit', endsWith: 'endet mit' };
 const statuses = { added: 'Verknüpft', retained: 'Regelquelle beibehalten', 'manual-retained': 'Manuelle Verknüpfung beibehalten', removed: 'Regelquelle entfernt', 'awaiting-review': 'Unabhängige Freigabe ausstehend', blocked: 'Blockiert' };
@@ -35,7 +35,7 @@ export default function CompanyGroupRulesPanel({ group, groups, actorUserId, onC
  async function loadHistory(number = 1) { if (!page || disabled) return; const version = epoch.current; setBusy(true);
   try { const value = await companyGroupRules.history(page, number); if (version === epoch.current) setHistory(value); } catch { if (version === epoch.current) setError('Gruppenregel-Historie nicht bestätigt. Neu laden.'); } finally { if (version === epoch.current) setBusy(false); }
  }
- return <section aria-label="Dynamische und verschachtelte Gruppenregeln" className="space-y-3 rounded border border-white/20 p-4"><h3 className="font-semibold">Dynamische und verschachtelte Gruppen</h3>
+ return <section aria-label="Dynamische und verschachtelte Gruppenregeln" className="space-y-3 rounded border border-[var(--border-strong)] p-4"><h3 className="font-semibold">Dynamische und verschachtelte Gruppen</h3>
   <p>Attributbedingungen gelten gemeinsam. Effektive Mitglieder der Untergruppen werden zusätzlich übernommen. Ausnahmen betreffen nur die Regelquelle; manuelle Verknüpfungen bleiben erhalten. Fällt eine Regelbedingung oder eine erforderliche Freigabe weg, vermittelt die bestehende Regelverknüpfung bereits vor dem nächsten Abgleich keinen Gruppenzugriff mehr.</p>
   <p>Der Abgleich wird hier ausdrücklich gestartet. Neue Verknüpfungen bleiben bei einer Gruppenprüfung bis zur unabhängigen Freigabe unwirksam. Für unbeaufsichtigte Abgleiche eine eigene App unter Automationen ausdrücklich für Gruppenregeln freigeben und einen Zeitplan anlegen. <a className="underline" href={"/automation?groupRule="+group.id}>Gruppenregel-Automation einrichten</a></p>
   <button className={button} disabled={busy} onClick={() => setReload(value => value + 1)}>Gruppenregel neu laden</button>

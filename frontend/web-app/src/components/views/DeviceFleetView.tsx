@@ -9,7 +9,7 @@ export default function DeviceFleetView() {
   const [selectedDevice, setSelectedDevice] = useState<FleetDevice | null>(null);
 
   return (
-    <ABMShell
+    <ABMShell detailSelected={!!selectedDevice} onBackToList={() => setSelectedDevice(null)}
       showListColumn
       listColumn={
         <DeviceListColumn

@@ -10,13 +10,19 @@ import UserListColumn from './UserListColumn';
 import UserDetailPanel, { DirectoryConfirmation } from './UserDetailPanel';
 import DirectoryUserEditor from './DirectoryUserEditor';
 
-export default function UsersView() {
+export default function UsersView({ createRequested = false, onCreateHandled, selectedUserId }: { selectedUserId?: string | null; createRequested?: boolean; onCreateHandled?: () => void } = {}) {
   const { access, can, unavailable, reload: reloadAccess } = useIdentityAccess();
   const [users, setUsers] = useState<DirectoryUser[]>([]); const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1); const [search, setSearch] = useState(''); const [enabled, setEnabled] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null); const [selected, setSelected] = useState<DirectoryUser | null>(null);
   const [loading, setLoading] = useState(false); const [listError, setListError] = useState(''); const [detailError, setDetailError] = useState('');
   const [creating, setCreating] = useState(false); const [reload, setReload] = useState(0);
+  useEffect(() => {
+    if (createRequested && can('users.create')) { setCreating(true); onCreateHandled?.(); }
+  }, [createRequested, access, onCreateHandled]);
+  useEffect(() => {
+    if (selectedUserId && access?.permissions.includes('users.read')) setSelectedId(selectedUserId);
+  }, [selectedUserId, access]);
   const [createdReceipt, setCreatedReceipt] = useState<DirectoryUser | null>(null);
   const [knownId, setKnownId] = useState(''); const [resetId, setResetId] = useState(''); const [resetBusy, setResetBusy] = useState(false); const [resetError, setResetError] = useState('');
   const refresh = () => setReload(value => value + 1);
@@ -45,7 +51,7 @@ export default function UsersView() {
   if (unavailable) return <section className="p-8" role="alert">Verzeichnisberechtigungen nicht verfügbar. Es werden keine Beispieldaten angezeigt. <button onClick={reloadAccess}>Erneut prüfen</button></section>;
   if (!access) return <p className="p-8" role="status">Verzeichnisberechtigungen werden geprüft …</p>;
   const resetOnly = !can('users.read') && can('users.sessions.invalidate');
-  const details = <div className="flex flex-col flex-1 min-h-0" style={{ background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)' }}><div className="p-3 text-sm border-b border-white/10">Quelle: kanonischer Verzeichnisdienst{access.demoMode ? ' · Expliziter Demo-Modus' : ''}</div>
+  const details = <div className="flex flex-col flex-1 min-h-0" style={{ background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)' }}><div className="p-3 text-sm border-b border-[var(--border)]">Quelle: kanonischer Verzeichnisdienst{access.demoMode ? ' · Expliziter Demo-Modus' : ''}</div>
     {detailError ? <p className="p-8" role="alert">{detailError} <button onClick={refresh}>Details neu laden</button></p> :
       <UserDetailPanel key={selectedId || 'none'} user={selected} permissions={access.permissions} actorUserId={access.userId} onReload={refresh} onDenied={reloadAccess}
         onChanged={(updated, expectedId) => {
@@ -55,10 +61,10 @@ export default function UsersView() {
         }} />}
   </div>;
   return <>
-    {can('users.read') ? <ABMShell showListColumn listColumn={<UserListColumn users={users} total={total} page={page} selectedId={selectedId} loading={loading} error={listError}
+    {can('users.read') ? <ABMShell detailSelected={!!selectedId} onBackToList={() => choose(null)} showListColumn listColumn={<UserListColumn users={users} total={total} page={page} selectedId={selectedId} loading={loading} error={listError}
       search={search} enabled={enabled} onSelect={choose} onReload={refresh}
       onSearch={value => { setSearch(value); setPage(1); choose(null); }} onFilter={value => { setEnabled(value); setPage(1); choose(null); }}
-      onPage={value => { setPage(value); choose(null); }} onCreateNew={can('users.create') && !loading && !listError ? () => setCreating(true) : undefined} />} detailPanel={details} /> :
+      onPage={value => { setPage(value); choose(null); }} onCreateNew={can('users.create') ? () => setCreating(true) : undefined} />} detailPanel={details} /> :
       <section className="p-8 space-y-5"><h1 className="text-xl">Benutzerverwaltung</h1><p>Keine Berechtigung zum Lesen der Benutzerliste.</p>
         {can('users.create') && <button onClick={() => setCreating(true)}>Verzeichniseintrag erstellen</button>}
         {createdReceipt && can('users.create') && <section aria-label="Erstellter Verzeichniseintrag"><h2>Gesperrt erstellt: {createdReceipt.username}</h2><p className="break-all">Verzeichnis-ID: {createdReceipt.id}</p><p>Zugangsdaten und Anmelde-Verknüpfung sind nicht provisioniert.</p></section>}

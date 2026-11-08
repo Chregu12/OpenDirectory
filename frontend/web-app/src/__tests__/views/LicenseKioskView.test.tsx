@@ -9,7 +9,7 @@ const mockedApi = api as jest.Mocked<typeof api>;
 test.each([['directory-unobserved','Verzeichnisnachweis fehlt'],['directory-stale','Verzeichnisnachweis abgelaufen'],['membership-expired','Mitgliedschaftsfrist abgelaufen']])('group lease status %s remains truthful even when its last directory poll failed',async(status,label)=>{
  mockBackend(['licenses.assignments.read']);const get=mockedApi.get;
  mockedApi.get=jest.fn((url:string)=>url==='/api/licenses/groups'?Promise.resolve({data:{groups:[{license_id:'office',group_id:'engineering',group_name:'Engineering',license_name:'Office Suite',status,last_error:'Owned directory outage',assigned_users:0,desired_users:1,directory_valid_until:'2026-10-18T12:00:00.000Z',membership_valid_until:'2026-10-18T11:59:00.000Z'}]}}):get(url)) as any;
- render(<LicenseKioskView/>);expect(await screen.findByText(label)).toBeInTheDocument();expect(screen.getByText('Owned directory outage')).toBeInTheDocument();expect(screen.getByText(/Ohne rechtzeitigen manuellen Abgleich/)).toBeInTheDocument();expect(screen.getByText(/Verzeichnis gültig bis:/)).toBeInTheDocument();expect(screen.getByText(/Früheste Mitgliedschaftsfrist:/)).toBeInTheDocument();expect(mockedApi.post).not.toHaveBeenCalled();
+ render(<LicenseKioskView/>);await userEvent.setup().click(await screen.findByRole('button',{name:'Erweiterte Einstellungen'}));expect(await screen.findByText(label)).toBeInTheDocument();expect(screen.getByText('Owned directory outage')).toBeInTheDocument();expect(screen.getByText(/Ohne rechtzeitigen manuellen Abgleich/)).toBeInTheDocument();expect(screen.getByText(/Verzeichnis gültig bis:/)).toBeInTheDocument();expect(screen.getByText(/Früheste Mitgliedschaftsfrist:/)).toBeInTheDocument();expect(mockedApi.post).not.toHaveBeenCalled();
 });
 const license = {
   id: 'office', name: 'Office Suite', vendor: 'Vendor', category: 'Productivity',
@@ -32,11 +32,52 @@ function mockBackend(permissions: string[] = [], demoMode = false) {
     if (url === '/api/licenses/users') return Promise.resolve({ data: { users: [{ user_id: 'canonical-user', disabled: false, directory_revision: '43', directory_enabled: false, directory_deleted: false, directory_error: 'source unavailable' }] } });
     return Promise.reject(new Error(`Unexpected URL: ${url}`));
   }) as any;
-  mockedApi.post = jest.fn().mockResolvedValue({ data: { status: 'pending' } });
+  mockedApi.post = jest.fn().mockResolvedValue({ status:201, data: {id:'request1',license_id:'office',assignee_type:'user',status:'pending'} });
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+test('catalog renewals and availability can be filtered without changing or hiding the underlying inventory', async () => {
+  mockBackend(['licenses.catalog.read']);
+  const get = mockedApi.get;
+  mockedApi.get = jest.fn((url: string) => url === '/api/licenses' ? Promise.resolve({ data: { licenses: [
+    { ...license, name: 'Overdue Product', renewal_date: '2000-01-01', total_seats: 3, used_seats: 3 },
+    { ...license, id: 'future', name: 'Future Product', renewal_date: '2099-01-01', used_seats: 1 },
+    { ...license, id: 'undated', name: 'Undated Product' },
+  ] } }) : get(url)) as any;
+  const user = userEvent.setup(); render(<LicenseKioskView />);
+  await user.click(await screen.findByRole('button', { name: 'Erneuerungen ansehen' }));
+  expect(screen.getByText('Overdue Product')).toBeInTheDocument();
+  expect(screen.queryByText('Future Product')).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Filter zurücksetzen' }));
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Platzverfügbarkeit' }), 'available');
+  expect(screen.queryByText('Overdue Product')).not.toBeInTheDocument();
+  expect(screen.getByText('Future Product')).toBeInTheDocument();
+  expect(screen.getByText('2 von 3 Einträgen')).toBeInTheDocument();
+});
+
+test('removing a catalog entry requires confirmation and a confirmed 204 response', async () => {
+  mockBackend(['licenses.catalog.read', 'licenses.catalog.manage']);
+  mockedApi.delete = jest.fn().mockResolvedValue({ status: 204 });
+  const user = userEvent.setup(); render(<LicenseKioskView />);
+  await user.click(await screen.findByRole('button', { name: 'Lizenz Office Suite entfernen' }));
+  expect(mockedApi.delete).not.toHaveBeenCalled();
+  expect(screen.getByRole('alertdialog', { name: 'Lizenzeintrag löschen' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Bestätigen' }));
+  await waitFor(() => expect(mockedApi.delete).toHaveBeenCalledWith('/api/licenses/office'));
+  expect(toast.success).toHaveBeenCalledWith('Lizenz entfernt');
+});
+
+test('a retained history conflict keeps the catalog entry and never reports a successful deletion', async () => {
+  mockBackend(['licenses.catalog.read', 'licenses.catalog.manage']);
+  mockedApi.delete = jest.fn().mockRejectedValue({ response: { status: 409 } });
+  const user = userEvent.setup(); render(<LicenseKioskView />);
+  await user.click(await screen.findByRole('button', { name: 'Lizenz Office Suite entfernen' }));
+  await user.click(screen.getByRole('button', { name: 'Bestätigen' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('geschützte Zuweisungen oder Historie');
+  expect(toast.success).not.toHaveBeenCalledWith('Lizenz entfernt');
 });
 
 test.each([
@@ -51,8 +92,8 @@ test.each([
   render(<LicenseKioskView />);
   expect(await screen.findByText(message)).toBeInTheDocument();
   expect(await screen.findByText('Office Suite')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Bestellen' })).toBeDisabled();
-  expect(screen.queryByRole('button', { name: 'Verwaltung' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Lizenz anfragen' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'Lizenzbestand' })).not.toBeInTheDocument();
   expect(mockedApi.get).not.toHaveBeenCalledWith('/api/licenses/requests');
   expect(mockedApi.get).not.toHaveBeenCalledWith('/api/licenses');
 });
@@ -75,6 +116,7 @@ test('legacy pending requests remain visible to reviewers but cannot be approved
 test('group rules report blocked capacity without pretending all members were assigned', async () => {
   mockBackend(['licenses.catalog.read', 'licenses.assignments.read']);
   render(<LicenseKioskView />);
+  await userEvent.setup().click(await screen.findByRole('button',{name:'Erweiterte Einstellungen'}));
   expect(await screen.findByText('Kapazität fehlt')).toBeInTheDocument();
   expect(screen.getByText('1 / 3 Mitglieder')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Abgleichen' })).not.toBeInTheDocument();
@@ -85,6 +127,7 @@ test('group managers can request reconciliation without supplying a membership l
   mockBackend(['licenses.catalog.read', 'licenses.assignments.read', 'licenses.assignments.manage']);
   const user = userEvent.setup();
   render(<LicenseKioskView />);
+  await userEvent.setup().click(await screen.findByRole('button',{name:'Erweiterte Einstellungen'}));
   await user.click(await screen.findByRole('button', { name: 'Abgleichen' }));
   expect(mockedApi.post).toHaveBeenCalledWith('/api/licenses/office/groups/engineering/reconcile');
 });
@@ -92,6 +135,7 @@ test('group managers can request reconciliation without supplying a membership l
 test('read-only assignment access shows last confirmed eligibility and source errors without mutation controls', async () => {
   mockBackend(['licenses.assignments.read']);
   render(<LicenseKioskView />);
+  await userEvent.setup().click(await screen.findByRole('button',{name:'Erweiterte Einstellungen'}));
   expect(await screen.findByText('Im Verzeichnis deaktiviert')).toBeInTheDocument();
   expect(screen.getByText('Abgleichfehler: source unavailable')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Kontostand abgleichen' })).not.toBeInTheDocument();
@@ -101,6 +145,7 @@ test('an assignment manager can reconcile the authoritative user state without s
   mockBackend(['licenses.assignments.read', 'licenses.assignments.manage']);
   const user = userEvent.setup();
   render(<LicenseKioskView />);
+  await userEvent.setup().click(await screen.findByRole('button',{name:'Erweiterte Einstellungen'}));
   await user.click(await screen.findByRole('button', { name: 'Kontostand abgleichen' }));
   expect(mockedApi.post).toHaveBeenCalledWith('/api/licenses/users/canonical-user/reconcile');
 });
@@ -139,7 +184,7 @@ test('uses the self-service catalog and real response envelopes without admin pr
   expect(await screen.findByText('Office Suite')).toBeInTheDocument();
   expect(mockedApi.get).toHaveBeenCalledWith('/api/licenses/kiosk');
   expect(mockedApi.get).not.toHaveBeenCalledWith('/api/licenses');
-  expect(screen.queryByRole('button', { name: 'Verwaltung' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Lizenzbestand' })).not.toBeInTheDocument();
   expect(screen.queryByText('Kosten der Zuweisungen')).not.toBeInTheDocument();
   expect(screen.queryByText(/CHF/)).not.toBeInTheDocument();
 });
@@ -149,11 +194,11 @@ test('submits a request for the signed-in identity without placeholder or delega
   const user = userEvent.setup();
   render(<LicenseKioskView />);
   await screen.findByText('Office Suite');
-  await user.click(screen.getByRole('button', { name: 'Bestellen' }));
+  await user.click(screen.getByRole('button', { name: 'Lizenz anfragen' }));
   expect(screen.getByText(/für dein angemeldetes Benutzerkonto/)).toBeInTheDocument();
   expect(screen.queryByPlaceholderText('user123')).not.toBeInTheDocument();
   await user.type(screen.getByPlaceholderText('Warum wird diese Lizenz benötigt?'), 'Für die Arbeit');
-  await user.click(screen.getAllByRole('button', { name: 'Bestellen' })[1]);
+  await user.click(screen.getByRole('button', { name: 'Lizenz anfragen' }));
   await waitFor(() => expect(mockedApi.post).toHaveBeenCalledWith('/api/licenses/office/request', { justification: 'Für die Arbeit' }));
   expect(toast.success).toHaveBeenCalledWith('Anfrage eingereicht — wartet auf Genehmigung');
 });
@@ -188,8 +233,8 @@ test('lets readers view private catalog data but hides catalog changes', async (
   render(<LicenseKioskView />);
   await screen.findByText('Office Suite');
   expect(screen.getByText('CHF 12.50')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Verwaltung' }));
-  expect(screen.queryByRole('button', { name: /Lizenz hinzufügen/ })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Lizenzbestand' }));
+  expect(screen.queryByRole('button', { name: /Erhaltene Lizenz erfassen/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /bearbeiten|entfernen/ })).not.toBeInTheDocument();
 });
 
@@ -198,8 +243,8 @@ test('shows management controls only for the corresponding permission', async ()
   const user = userEvent.setup();
   render(<LicenseKioskView />);
   await screen.findByText('Office Suite');
-  await user.click(screen.getByRole('button', { name: 'Verwaltung' }));
-  expect(screen.getByRole('button', { name: /Lizenz hinzufügen/ })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Lizenzbestand' }));
+  expect(screen.getByRole('button', { name: /Erhaltene Lizenz erfassen/ })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Lizenz Office Suite bearbeiten' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Lizenz Office Suite entfernen' })).toBeInTheDocument();
 });
@@ -208,7 +253,7 @@ test('shows an error and no privileged controls when capabilities cannot be load
   mockedApi.get = jest.fn().mockRejectedValue(new Error('Unauthorized'));
   render(<LicenseKioskView />);
   expect(await screen.findByRole('alert')).toHaveTextContent('Lizenzdaten konnten nicht geladen werden');
-  expect(screen.queryByRole('button', { name: 'Verwaltung' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Lizenzbestand' })).not.toBeInTheDocument();
   expect(mockedApi.get).toHaveBeenCalledTimes(1);
 });
 
@@ -216,4 +261,38 @@ test('explicitly identifies development fallback mode', async () => {
   mockBackend([], true);
   render(<LicenseKioskView />);
   expect(await screen.findByRole('status')).toHaveTextContent('Demo-Modus');
+});
+
+test('normal pool workflows keep provider and privileged governance forms collapsed', async () => {
+  mockBackend(['licenses.catalog.read','licenses.catalog.manage','licenses.assignments.read']);
+  render(<LicenseKioskView />); await screen.findByText('Office Suite');
+  expect(screen.getByRole('button',{name:'Erweiterte Einstellungen'})).toHaveAttribute('aria-expanded','false');
+  expect(screen.queryByText('Microsoft-365-Bereitstellung')).not.toBeInTheDocument();
+  expect(screen.queryByPlaceholderText('Bekannte Lizenzpool-ID')).not.toBeInTheDocument();
+});
+test('creates a finite pool for an arbitrary vendor and confirms only the returned persisted pool', async () => {
+  mockBackend(['licenses.catalog.read','licenses.catalog.manage']);
+  mockedApi.post=jest.fn().mockResolvedValue({status:201,data:{id:'new-pool',inventory_details:{reference:'REF-TEST',orderReference:'',supplier:'Test Supplier',receivedDate:''}}});
+  render(<LicenseKioskView />); const user=userEvent.setup();
+  await user.click(await screen.findByRole('button',{name:'Erhaltene Lizenz erfassen'}));
+  await user.type(screen.getByRole('textbox',{name:'Produktname'}),'Engineering Suite');
+  await user.type(screen.getByRole('textbox',{name:'Hersteller'}),'Independent Vendor');
+  await user.type(screen.getByRole('textbox',{name:'Lizenz-/Vertragsreferenz'}),'REF-TEST');
+  await user.type(screen.getByRole('textbox',{name:'Lieferant'}),'Test Supplier');
+  await user.clear(screen.getByRole('spinbutton',{name:'Gekaufte Plätze (Gesamtbestand)'}));await user.type(screen.getByRole('spinbutton',{name:'Gekaufte Plätze (Gesamtbestand)'}),'8');
+  await user.click(screen.getByRole('button',{name:'Speichern'}));
+  await waitFor(()=>expect(mockedApi.post).toHaveBeenCalledWith('/api/licenses',expect.objectContaining({name:'Engineering Suite',vendor:'Independent Vendor',total_seats:8,license_type:'per_user'})));
+  expect(toast.success).toHaveBeenCalledWith('Lizenzeintrag erfasst.');
+});
+
+test('catalog managers start with purchased stock and assignments always target a person',async()=>{
+ mockBackend(['licenses.catalog.read','licenses.catalog.manage','licenses.assignments.read','licenses.assignments.manage']);render(<LicenseKioskView/>);
+ expect(await screen.findByRole('button',{name:'Lizenzbestand'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('button',{name:'Erhaltene Lizenz erfassen'})).toBeInTheDocument();expect(await screen.findByRole('button',{name:'Personen zuweisen'})).toBeInTheDocument();
+ expect(screen.getByText(/ein zusätzliches Gerät erzeugt keine zweite Zuweisung/)).toBeInTheDocument();
+});
+test('delegated requests offer people only, without device or group assignment controls',async()=>{
+ mockBackend(['licenses.requests.delegate']);render(<LicenseKioskView/>);const user=userEvent.setup();await user.click(await screen.findByRole('button',{name:'Lizenz anfragen'}));
+ expect(screen.queryByRole('button',{name:'Gerät'})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'Gruppe'})).not.toBeInTheDocument();
+ await user.click(screen.getByRole('checkbox',{name:'Für eine andere Person anfragen'}));expect(screen.getByRole('textbox',{name:'Kanonische Personen-ID'})).toBeRequired();
 });

@@ -55,19 +55,19 @@ export default function EmployeeInvitationAcceptancePage() {
   const enrollmentLink = '/login';
   const complete = !!accepted || preview?.status === 'accepted';
 
-  return <main className="min-h-screen bg-gray-50 text-gray-900 px-4 py-10"><section className="max-w-2xl mx-auto space-y-6">
-    <header className="space-y-3"><a href="/login" className="text-blue-700 underline">Zur Anmeldung</a><h1 className="text-3xl font-semibold">Mitarbeitereinladung annehmen</h1>
+  return <main className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] px-4 py-10"><section className="max-w-2xl mx-auto space-y-6">
+    <header className="space-y-3"><a href="/login" className="text-[var(--text-link)] underline">Zur Anmeldung</a><h1 className="text-3xl font-semibold">Mitarbeitereinladung annehmen</h1>
       <p>Prüfe deine Einladung und lege ein eigenes Passwort fest. Die erste Anmeldung führt dich durch die OpenDirectory-MFA-Einrichtung, falls deine App sie verlangt.</p>
       <p>Der Einladungslink ist vertraulich. Das Token wird nur im Arbeitsspeicher dieser Seite verwendet und nicht im Browser-Verlauf, in der URL oder im Sitzungsspeicher abgelegt.</p></header>
     {error && <p role="alert" className="border border-red-400 rounded p-4">{error}</p>}
     {enabled === null && !error && <p role="status">Einladungsdienst wird geprüft …</p>}
     {enabled === false && <p role="status">Die Annahme von Mitarbeitereinladungen ist derzeit deaktiviert.</p>}
-    {enabled && !preview && <form className="bg-white border rounded-xl p-6 space-y-4" onSubmit={event => { event.preventDefault(); void inspect(); }}>
+    {enabled && !preview && <form className="bg-[var(--bg-surface)] border rounded-xl p-6 space-y-4" onSubmit={event => { event.preventDefault(); void inspect(); }}>
       <label className="block" htmlFor="employee-invitation-token">Vertrauliches Einladungs-Token<input id="employee-invitation-token" className="block border rounded p-2 w-full" type="password" autoComplete="off" autoCapitalize="none" spellCheck={false} required maxLength={80} value={token} onChange={event => setToken(event.target.value)} /></label>
       <button className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50" disabled={busy || token.length !== 80}>{busy ? 'Wird geprüft …' : 'Einladung prüfen'}</button>
       <p className="text-sm">Falls du den Link per E-Mail erhalten hast, öffne den Link direkt. Du kannst das Token hier auch manuell einfügen.</p>
     </form>}
-    {preview && <section className="bg-white border rounded-xl p-6 space-y-4" aria-live="polite">
+    {preview && <section className="bg-[var(--bg-surface)] border rounded-xl p-6 space-y-4" aria-live="polite">
       <h2 className="text-xl font-semibold">{complete ? 'Konto aktiviert' : 'Einladung geprüft'}</h2>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2"><dt>Organisation</dt><dd>{preview.organizationName}</dd><dt>Benutzername</dt><dd>{preview.loginName}</dd><dt>Einladung gültig bis</dt><dd><time dateTime={preview.expiresAt}>{new Date(preview.expiresAt).toLocaleString('de-CH')}</time></dd></dl>
       {complete ? <><p>Dein Zugang wurde aktiviert. Melde dich jetzt mit der dir zugewiesenen App und deinem neuen Passwort an. Falls diese App MFA verlangt, richtest du den Faktor direkt auf der Anmeldeseite ein und setzt die Anmeldung danach fort.</p><a className="inline-block bg-blue-600 text-white rounded px-4 py-2" href={enrollmentLink}>Mit OpenDirectory anmelden</a></>

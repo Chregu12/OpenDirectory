@@ -1,13 +1,14 @@
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { api } from '@/lib/api';
 import AppsBooksView from '@/components/views/AppsBooksView';
 
 const originalFetch = global.fetch;
 const license = (changes = {}) => ({ id: 'actual-app', name: 'Actual Editor', platform: 'macOS', licenses: 10, assigned: 4, ...changes });
-const response = (data: unknown) => ({ ok: true, json: async () => data });
+const response = (data: unknown) => ({ data });
 const summary = (label: string) => screen.getByText(label).nextElementSibling;
 
-beforeEach(() => { global.fetch = jest.fn(); });
+beforeEach(() => { (api.get as jest.Mock).mockReset(); });
 afterAll(() => { global.fetch = originalFetch; });
 
 test.each([
@@ -15,19 +16,19 @@ test.each([
   ['apps envelope', (rows: unknown[]) => ({ apps: rows })],
   ['items envelope', (rows: unknown[]) => ({ items: rows })],
 ])('renders only actual license stock from an %s', async (_label, envelope) => {
-  (global.fetch as jest.Mock).mockResolvedValue(response(envelope([license()])));
+  (api.get as jest.Mock).mockResolvedValue(response(envelope([license()])));
   render(<AppsBooksView />);
   const row = within(await screen.findByRole('row', { name: /Actual Editor/ }));
   expect(row.getAllByRole('cell').map(cell => cell.textContent)).toEqual(['Actual Editor', 'macOS', '10', '440%', '6', '—', '—']);
   expect(summary('TOTAL LICENSES')).toHaveTextContent('10');
   expect(summary('ASSIGNED')).toHaveTextContent('4');
   expect(summary('AVAILABLE')).toHaveTextContent('6');
-  expect(global.fetch).toHaveBeenCalledWith('/api/apps?type=vpp');
+  expect(api.get).toHaveBeenCalledWith('/api/apps?type=vpp');
   expect(screen.queryByText('Microsoft 365')).not.toBeInTheDocument();
 });
 
 test('uses total/used aliases and preserves a trusted explicit zero availability', async () => {
-  (global.fetch as jest.Mock).mockResolvedValue(response({ apps: [
+  (api.get as jest.Mock).mockResolvedValue(response({ apps: [
     { id: 0, title: 'Actual Editor', totalLicenses: 10, usedLicenses: 4, available: 0, expiryDate: 'N/A' },
   ] }));
   render(<AppsBooksView />);
@@ -39,7 +40,7 @@ test('uses total/used aliases and preserves a trusted explicit zero availability
 });
 
 test('derives alias availability and gives primary zero counts precedence', async () => {
-  (global.fetch as jest.Mock).mockResolvedValue(response([
+  (api.get as jest.Mock).mockResolvedValue(response([
     { id: 'alias-app', name: 'Alias Editor', totalLicenses: 7, usedLicenses: 2, available: null },
     license({ licenses: 0, totalLicenses: 10, assigned: 0, usedLicenses: 4 }),
   ]));
@@ -53,7 +54,7 @@ test('derives alias availability and gives primary zero counts precedence', asyn
 });
 
 test.each([[], { apps: [] }, { items: [] }])('keeps a real empty inventory empty: %j', async data => {
-  (global.fetch as jest.Mock).mockResolvedValue(response(data));
+  (api.get as jest.Mock).mockResolvedValue(response(data));
   render(<AppsBooksView />);
   await screen.findByText('No apps found');
   expect(summary('TOTAL LICENSES')).toHaveTextContent(/^0$/);
@@ -86,7 +87,7 @@ test.each([
   ['object price', { price: {} }],
   ['object expiry', { expires: {} }],
 ])('rejects %s without manufacturing any stock', async (_label, changes) => {
-  (global.fetch as jest.Mock).mockResolvedValue(response([license(changes)]));
+  (api.get as jest.Mock).mockResolvedValue(response([license(changes)]));
   render(<AppsBooksView />);
   expect(await screen.findByRole('alert')).toHaveTextContent('License inventory is unavailable');
   expect(summary('TOTAL LICENSES')).toHaveTextContent(/^—$/);
@@ -99,7 +100,7 @@ test.each([
 
 test.each([null, {}, { apps: {} }, { items: 'bad' }, { success: false, apps: [] }, [null], [42], [[]]])(
   'rejects malformed response %j instead of treating it as empty stock', async data => {
-    (global.fetch as jest.Mock).mockResolvedValue(response(data));
+    (api.get as jest.Mock).mockResolvedValue(response(data));
     render(<AppsBooksView />);
     await screen.findByRole('alert');
     expect(screen.queryByText('No apps found')).not.toBeInTheDocument();
@@ -111,7 +112,7 @@ test.each([
   ['a malformed row alongside a valid row', [license(), null]],
   ['unsafe aggregate counts', [license({ licenses: Number.MAX_SAFE_INTEGER, assigned: 0 }), license({ id: 'second-app', assigned: 0 })]],
 ])('rejects %s instead of reporting misleading partial totals', async (_label, rows) => {
-  (global.fetch as jest.Mock).mockResolvedValue(response(rows));
+  (api.get as jest.Mock).mockResolvedValue(response(rows));
   render(<AppsBooksView />);
   await screen.findByRole('alert');
   expect(summary('AVAILABLE')).toHaveTextContent(/^—$/);
@@ -119,14 +120,14 @@ test.each([
 });
 
 test.each([401, 403, 503])('shows unavailable on HTTP %s', async status => {
-  (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status });
+  (api.get as jest.Mock).mockResolvedValue({ ok: false, status });
   render(<AppsBooksView />);
   await screen.findByRole('alert');
   expect(summary('AVAILABLE')).toHaveTextContent(/^—$/);
 });
 
 test.each(['network', 'JSON'])('shows unavailable on %s failure', async failure => {
-  const fetchMock = global.fetch as jest.Mock;
+  const fetchMock = api.get as jest.Mock;
   if (failure === 'network') fetchMock.mockRejectedValue(new Error('offline'));
   else fetchMock.mockResolvedValue({ ok: true, json: async () => { throw new SyntaxError('Invalid JSON'); } });
   render(<AppsBooksView />);
@@ -135,7 +136,7 @@ test.each(['network', 'JSON'])('shows unavailable on %s failure', async failure 
 });
 
 test('clears stale stock on failed refresh and recovers to a real empty response', async () => {
-  (global.fetch as jest.Mock).mockResolvedValueOnce(response([license()]))
+  (api.get as jest.Mock).mockResolvedValueOnce(response([license()]))
     .mockResolvedValueOnce({ ok: false, status: 503 }).mockResolvedValueOnce(response([]));
   render(<AppsBooksView />);
   await screen.findByText('Actual Editor');

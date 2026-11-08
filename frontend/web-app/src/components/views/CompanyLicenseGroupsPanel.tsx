@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { CompanyApplicationsClient, CompanyPool } from '@/lib/companyApplications';
 import { companyLicenseGroups, CompanyLicenseGroup, LicenseGroupContext, LicenseGroupResult } from '@/lib/companyLicenseGroups';
 import { DirectoryGroup } from '@/lib/directoryGroups';
-const button = 'rounded border border-white/20 px-3 py-2 disabled:opacity-40';
+const button = 'rounded border border-[var(--border-strong)] px-3 py-2 disabled:opacity-40';
 function summary(results: LicenseGroupResult[]) {
   const count = (status: string) => results.filter(row => row.status === status).length;
   return `${count('assigned')} zugewiesen, ${count('removed')} entfernt, ${count('retained')} beibehalten, ${count('blocked')} blockiert. Lokale Pool-Zuweisung; Herstellerfreischaltung separat prüfen.`;
@@ -53,7 +53,7 @@ export default function CompanyLicenseGroupsPanel({ group, actorUserId }: { grou
     } catch (failure) { if (version === epoch.current) setError(failure instanceof Error ? failure.message : 'Ausgang unklar. Gruppe und Pool prüfen; nicht blind wiederholen.'); }
     finally { if (version === epoch.current) setBusy(false); }
   }
-  return <section aria-label="Lizenzgruppen und Pool-Verknüpfungen" className="rounded border border-white/20 p-4 space-y-3">
+  return <section aria-label="Lizenzgruppen und Pool-Verknüpfungen" className="rounded border border-[var(--border-strong)] p-4 space-y-3">
     <h3 className="font-semibold">Lizenzgruppe</h3><p>Ein verknüpfter Pool macht diese normale Verzeichnisgruppe zur Lizenzgruppe. Pro Benutzer und Pool wird ein Platz belegt; andere gültige Zuweisungsquellen bleiben erhalten.</p>
     <p>Änderungen an Mitgliedern lösen in dieser Ansicht den Abgleich aus. Für andere Integrationen steht ein Skript-/API-Abgleich bereit.</p>
     {busy && <p role="status">Gruppen und Lizenzplätze werden geprüft …</p>}{error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
@@ -63,7 +63,7 @@ export default function CompanyLicenseGroupsPanel({ group, actorUserId }: { grou
       <label className="block">Begründung<input aria-label="Begründung der Lizenzgruppenänderung" className={button} value={reason} maxLength={500} onChange={event => setReason(event.target.value)} disabled={busy}/></label>
       <button className={button} disabled={busy || !poolId || reason.trim().length < 10 || rules.some(rule => rule.poolId === poolId && rule.status === 'active')} onClick={() => void run()}>Pool verknüpfen und Mitglieder zuweisen</button>
       {!rules.length && <p>Normale Gruppe: kein Lizenzpool verknüpft.</p>}
-      {rules.map(rule => <article key={rule.id} className="rounded border border-white/10 p-3"><p>Pool {pools.find(pool => pool.id === rule.poolId)?.name || rule.poolId} · {rule.status === 'active' ? 'Verknüpft' : 'Verknüpfung beendet'}</p>
+      {rules.map(rule => <article key={rule.id} className="rounded border border-[var(--border)] p-3"><p>Pool {pools.find(pool => pool.id === rule.poolId)?.name || rule.poolId} · {rule.status === 'active' ? 'Verknüpft' : 'Verknüpfung beendet'}</p>
         <p><a className="underline" href={'/automation?licenseRule=' + encodeURIComponent(rule.id)}>Automatischen Abgleich einrichten</a></p>
         <button className={button} disabled={busy || reason.trim().length < 10} onClick={() => void run(rule)}>Mitglieder abgleichen</button>
         {rule.status === 'active' && <button className={button} disabled={busy || reason.trim().length < 10} onClick={() => setConfirmation(rule)}>Pool-Verknüpfung entfernen</button>}

@@ -1,4 +1,6 @@
 'use client';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { BuildingOfficeIcon } from '@heroicons/react/24/outline';
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useIdentityAccess } from '@/hooks/useIdentityAccess';
@@ -42,7 +44,7 @@ export default function OrganizationView() {
   }
 
   return <section className="p-6 space-y-6 max-w-5xl" style={{ color: 'var(--text-primary)' }}>
-    <header><h1 className="text-2xl font-semibold">Organisation</h1><p className="mt-2" style={{ color: 'var(--text-secondary)' }}>Firmenprofil des angemeldeten Unternehmens</p></header>
+    <PageHeader title="Organisation" subtitle="Firmenprofil und Organisationsstruktur" icon={BuildingOfficeIcon} />
     <p>Das Profil speichert Unternehmensdaten. Es aktiviert keinen Mandanten und bestätigt weder eine Firma noch eine Domain.</p>
     {unavailable && <p role="alert">Berechtigungen nicht verfügbar. Es werden keine Beispieldaten angezeigt.</p>}
     {!access && !unavailable && <p role="status">Berechtigungen werden geprüft …</p>}
@@ -61,8 +63,8 @@ export default function OrganizationView() {
           <button className="rounded px-5 py-2 bg-blue-600 text-white disabled:opacity-50" disabled={busy || !page.canManage || reason.trim().length < 10}>{busy ? 'Wird gespeichert …' : 'Organisationsprofil speichern'}</button>
         </div>}
       </form>
-      {access?.permissions.includes('ous.read') && <OrganizationUnits access={access} />}
       {access?.organizationDelegationProtocol === 1 && access.permissions.includes('organization.delegations.manage') && <OrganizationDelegations actorUserId={page.actorUserId} tenantId={page.tenant.id} />}
     </>}
+    {access?.permissions.includes('ous.read') && <OrganizationUnits access={access} />}
   </section>;
 }

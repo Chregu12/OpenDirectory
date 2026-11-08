@@ -129,7 +129,7 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'devices' | 'scans' | 'threats' | 'quarantine' | 'signatures'>('dashboard');
   const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [usingDemoData, setUsingDemoData] = useState(false);
+  const [serviceUnavailable, setServiceUnavailable] = useState(false);
   const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState('all');
   const [stats, setStats] = useState<AVStatistics>(emptyStats);
@@ -186,9 +186,9 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
         if (list.length > 0) { setDevices(list); apiDataFound = true; }
       }
 
-      setUsingDemoData(!apiDataFound);
+      setServiceUnavailable(!apiDataFound);
     } catch {
-      setUsingDemoData(true);
+      setServiceUnavailable(true);
     } finally {
       setLoading(false);
     }
@@ -287,10 +287,10 @@ export default function AntivirusView({ onOpenWizard }: AntivirusViewProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Demo data banner */}
-      {usingDemoData && (
+      {serviceUnavailable && (
         <div className="mx-6 mt-4 p-3 rounded-lg flex items-center gap-2 text-sm" style={{ background: 'rgba(210,153,34,0.15)', border: '1px solid rgba(210,153,34,0.4)', color: '#d29922' }}>
           <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500 shrink-0" />
-          <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
+          <span>Der Sicherheitsdienst ist nicht erreichbar. Es werden keine Beispieldaten angezeigt.</span>
         </div>
       )}
       {/* Loading skeleton */}

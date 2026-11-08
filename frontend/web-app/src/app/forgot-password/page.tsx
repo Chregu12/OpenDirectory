@@ -35,10 +35,10 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <section className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-gray-900">Passwort zurücksetzen</h1>
-        <p className="mt-2 text-sm text-gray-600">Gib die E-Mail-Adresse deines OpenDirectory-Kontos ein.</p>
+    <main className="min-h-screen bg-[var(--bg-base)] flex items-center justify-center px-4">
+      <section className="w-full max-w-md rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-8 shadow-sm">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Passwort zurücksetzen</h1>
+        <p className="mt-2 text-sm text-[var(--text-secondary)]">Gib die E-Mail-Adresse deines OpenDirectory-Kontos ein.</p>
         {message && <p role="status" className="mt-5 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">{message}</p>}
         {error && <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <form className="mt-6 space-y-4" onSubmit={submit}>
@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
             {busy ? 'Anfrage wird gesendet …' : 'Reset-Link anfordern'}
           </button>
         </form>
-        <a className="mt-6 inline-block text-sm text-blue-700 underline" href="/login">Zur Anmeldung</a>
+        <a className="mt-6 inline-block text-sm text-[var(--text-link)] underline" href="/login">Zur Anmeldung</a>
       </section>
     </main>
   );

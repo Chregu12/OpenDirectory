@@ -45,6 +45,14 @@ async function select() {
   await screen.findByRole('heading', { name: 'Employee' });
 }
 
+test('the dashboard create request opens the real editor without submitting a user', async () => {
+  permissions = ['users.read', 'users.create']; const handled = jest.fn();
+  render(<UsersView createRequested onCreateHandled={handled} />);
+  expect(await screen.findByRole('heading', { name: 'Verzeichniseintrag erstellen' })).toBeInTheDocument();
+  expect(handled).toHaveBeenCalled();
+  expect(api.post).not.toHaveBeenCalled();
+});
+
 test('ordinary users do not fetch the directory or see fake sample users', async () => {
   permissions = []; render(<UsersView />);
   expect(await screen.findByText('Keine Berechtigung zum Lesen der Benutzerliste.')).toBeInTheDocument();
@@ -53,9 +61,18 @@ test('ordinary users do not fetch the directory or see fake sample users', async
 });
 test('a reader sees canonical enabled=false and no invented roles, MFA or administrative actions', async () => {
   records = [record({ enabled: false })]; render(<UsersView />); await select();
-  expect(within(screen.getByRole('article', { name: 'Benutzerdetails' })).getByText('Gesperrt')).toBeInTheDocument();
+  expect(within(screen.getByRole('article', { name: 'Benutzerdetails' })).getByText('Verzeichniskonto gesperrt')).toBeInTheDocument();
   for (const name of ['Profil bearbeiten', 'Konto freigeben', 'Konto sperren', 'Sicherheitsreset', 'Eintrag löschen', 'Verzeichniseintrag erstellen', 'Reset Password', 'Manage MFA']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
   expect(api.get).not.toHaveBeenCalledWith('/api/lldap/users');
+});
+test('account effects are available through a keyboard-accessible information icon', async () => {
+  const user = userEvent.setup(); render(<UsersView />); await select();
+  const info = screen.getByRole('button', { name: 'Informationen zu Profil und Kontofreigabe' });
+  const description = screen.getByText(/Eine Profiländerung ändert keine separate Anmeldekennung/);
+  expect(info).toHaveAttribute('aria-expanded', 'false'); expect(description).not.toBeVisible();
+  info.focus(); await user.keyboard(' ');
+  expect(info).toHaveAttribute('aria-expanded', 'true'); expect(description).toBeVisible();
+  await user.keyboard('{Enter}'); expect(info).toHaveAttribute('aria-expanded', 'false'); expect(description).not.toBeVisible();
 });
 test('a confirmed empty directory is empty, never replaced by sample administrators', async () => {
   records = []; render(<UsersView />); expect(await screen.findByText('Keine Benutzer gefunden.')).toBeInTheDocument();
@@ -107,9 +124,10 @@ test('a delayed mutation response cannot replace the details of a different sele
   const other = record({ id: '44444444-4444-4444-8444-444444444444', username: 'other', displayName: 'Other Employee' }); records.push(other);
   let finish: (value: unknown) => void;
   (api.put as jest.Mock).mockReturnValue(new Promise(resolve => { finish = resolve; }));
-  const user = userEvent.setup(); render(<UsersView />); await select(); await user.click(screen.getByRole('button', { name: 'Konto sperren' }));
+  const user = userEvent.setup(); const { rerender } = render(<UsersView />); await select(); await user.click(screen.getByRole('button', { name: 'Konto sperren' }));
   await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Bestätigen' }));
-  await user.click(screen.getByRole('button', { name: 'Benutzer other' })); await screen.findByRole('heading', { name: 'Other Employee' });
+  expect(screen.queryByRole('button', { name: 'Benutzer other' })).not.toBeInTheDocument();
+  rerender(<UsersView selectedUserId={other.id} />); await screen.findByRole('heading', { name: 'Other Employee' });
   await act(async () => { finish!({ data: record({ enabled: false, revision: '2' }) }); });
   await waitFor(() => expect(toast.success).toHaveBeenCalled());
   await screen.findByRole('heading', { name: 'Other Employee' });
@@ -167,4 +185,10 @@ test('server-side pagination and status filters replace the visible page instead
   await user.click(screen.getByRole('button', { name: 'Weiter' })); await screen.findByRole('button', { name: 'Benutzer person-26' }); expect(screen.queryByRole('button', { name: 'Benutzer person-1' })).not.toBeInTheDocument();
   await user.selectOptions(screen.getByLabelText('Kontostatus'), 'false'); await screen.findByRole('button', { name: 'Benutzer person-26' });
   await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/users', expect.objectContaining({ params: { page: 1, limit: 25, enabled: 'false' } })));
+});
+test('a canonical person deep link loads that exact ID without a write', async () => {
+  render(<UsersView selectedUserId={targetId} />);
+  expect(await screen.findByRole('heading', { name: 'Employee' })).toBeInTheDocument();
+  expect(api.get).toHaveBeenCalledWith('/api/users/' + targetId, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  expect(api.post).not.toHaveBeenCalled(); expect(api.put).not.toHaveBeenCalled();
 });

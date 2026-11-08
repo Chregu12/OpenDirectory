@@ -88,7 +88,7 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
   const [activeTab, setActiveTab] = useState<'overview' | 'findings' | 'trends'>('overview');
   const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [usingDemoData, setUsingDemoData] = useState(false);
+  const [serviceUnavailable, setServiceUnavailable] = useState(false);
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [scanResult, setScanResult] = useState<ScanResult>(emptyScanResult);
@@ -140,9 +140,9 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
         if (list.length > 0) { setTrends(list); apiDataFound = true; }
       }
 
-      setUsingDemoData(!apiDataFound);
+      setServiceUnavailable(!apiDataFound);
     } catch {
-      setUsingDemoData(true);
+      setServiceUnavailable(true);
     } finally {
       setLoading(false);
     }
@@ -208,10 +208,10 @@ export default function SecurityScannerView({ onOpenWizard }: SecurityScannerVie
   return (
     <div className="flex flex-col h-full">
       {/* Demo data banner */}
-      {usingDemoData && (
+      {serviceUnavailable && (
         <div className="mx-6 mt-4 p-3 rounded-lg flex items-center gap-2 text-sm" style={{ background: 'var(--warning-light)', border: '1px solid rgba(210,153,34,0.3)', color: 'var(--warning)' }}>
           <ExclamationTriangleIcon className="w-4 h-4 shrink-0" />
-          <span>Demo-Modus: API nicht erreichbar. Gezeigte Daten sind Beispieldaten.</span>
+          <span>Der Sicherheitsdienst ist nicht erreichbar. Es werden keine Beispieldaten angezeigt.</span>
         </div>
       )}
       {/* Loading skeleton */}

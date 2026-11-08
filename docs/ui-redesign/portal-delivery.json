@@ -1,0 +1,613 @@
+{
+  "version": "1.0.16",
+  "status": "deployed-and-verified-through-https",
+  "checkedAt": "2026-11-02T21:42:50.052754+00:00",
+  "deployment": {
+    "version": "1.0.16",
+    "helmRevision": 30,
+    "checkedAt": "2026-11-02T21:40:20.692117+00:00",
+    "images": {
+      "api-backend": {
+        "image": "harbor.heusser.local/opendirectory/api-backend:1.0.10",
+        "digest": "sha256:dd8bca6fd67bec0ee6497c04541cea9958d3d05038295822ab8881b794de8a6c",
+        "pod": "opendirectory-api-backend-5f4975778c-fzc64"
+      },
+      "api-gateway": {
+        "image": "harbor.heusser.local/opendirectory/api-gateway:1.0.14",
+        "digest": "sha256:32d0e323d99412860d20d760d521ef4b7eec554e784a5293b2717b528c40ca7e",
+        "pod": "opendirectory-api-gateway-56bff8799c-bdwvs"
+      },
+      "app-store": {
+        "image": "harbor.heusser.local/opendirectory/app-store:1.0.15",
+        "digest": "sha256:eb064edb8c4e8d35ef3a26f5e7a0b825f6cb10cd1267260c47c2ab08202e5a55",
+        "pod": "opendirectory-app-store-6cc65fdfc5-qlksw"
+      },
+      "auth-service": {
+        "image": "harbor.heusser.local/opendirectory/auth-service:1.0.10",
+        "digest": "sha256:a829db23f83a4409c4f7236a9c91eb8c1a283e236531ae8619659bc349cceda8",
+        "pod": "opendirectory-auth-service-5c64c66685-z4lk4"
+      },
+      "integration-service": {
+        "image": "harbor.heusser.local/opendirectory/integration-service:1.0.16",
+        "digest": "sha256:8503c9f58d4d94695dd74a447cee766839dac9a04df48345eaaf1c154a51f3cc",
+        "pod": "opendirectory-integration-service-5f97c4d7d8-cp588"
+      },
+      "oauth-provider": {
+        "image": "harbor.heusser.local/opendirectory/oauth-provider:1.0.11",
+        "digest": "sha256:57313669ea07c955b2ec85f2d419672b35be255c4a12d2345dc6b8dce2018d5f",
+        "pod": "opendirectory-oauth-provider-774bb49dc6-llz9c"
+      },
+      "web-app": {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.16",
+        "digest": "sha256:67675b8f0ce339dc5e955c1606b3501093ef36b2b7377dd2afce06523a5826d0",
+        "pod": "opendirectory-web-app-849d489dd7-j4cnx"
+      }
+    },
+    "workloads": {
+      "opendirectory-api-backend": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-api-gateway": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-app-store": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-auth-service": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-device-service": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-identity-service": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-integration-service": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-license-management": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-oauth-provider": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-policy-service": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-web-app": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-lldap": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-postgres": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-redis": {
+        "ready": 1,
+        "desired": 1
+      }
+    },
+    "volumes": {
+      "data-opendirectory-lldap-0": {
+        "status": "Bound",
+        "size": "2Gi",
+        "volume": "pvc-8ee18973-0791-4f3a-a593-c86b85cb40a4",
+        "robustness": "healthy",
+        "desiredReplicas": 3
+      },
+      "data-opendirectory-postgres-0": {
+        "status": "Bound",
+        "size": "20Gi",
+        "volume": "pvc-c07c1db8-040c-4ceb-8a01-a2bf2649d180",
+        "robustness": "healthy",
+        "desiredReplicas": 3
+      },
+      "data-opendirectory-redis-0": {
+        "status": "Bound",
+        "size": "2Gi",
+        "volume": "pvc-f012c945-33ac-41a0-8e81-a5978d73a160",
+        "robustness": "healthy",
+        "desiredReplicas": 3
+      },
+      "opendirectory-app-store-data": {
+        "status": "Bound",
+        "size": "5Gi",
+        "volume": "pvc-0e44b736-b4a8-4f69-9ff4-30681f427b13",
+        "robustness": "healthy",
+        "desiredReplicas": 3
+      }
+    }
+  },
+  "checks": {
+    "frontend": {
+      "suites": 135,
+      "tests": 3033,
+      "status": "passed"
+    },
+    "integration": {
+      "suites": 4,
+      "tests": 98,
+      "status": "passed"
+    },
+    "gateway": {
+      "suites": 11,
+      "tests": 197,
+      "status": "passed"
+    },
+    "appStore": {
+      "suites": 2,
+      "tests": 57,
+      "status": "passed"
+    },
+    "typecheck": "passed",
+    "productionBuild": "passed linux/amd64",
+    "helmLint": "passed",
+    "servedHttpsStyles": {
+      ".od-page-header": true,
+      ".od-page-icon": true,
+      ".input-apple": true,
+      ".od-tabs-panel": true,
+      "--type-title:20px": true,
+      "--panel-padding:20px": true,
+      "--radius-lg:12px": true
+    },
+    "nativeBrowser": "Unavailable: Sky Computer Use native pipe startup failed",
+    "viewports": "Not visually tested; no post-change screenshot or full WCAG AA claim"
+  },
+  "liveRole": {
+    "roles": [
+      "admin"
+    ],
+    "companyOwner": false
+  },
+  "realHttpsWorkflow": {
+    "imageVersion": "1.0.16",
+    "httpsFlowComplete": true,
+    "steps": [
+      {
+        "step": "start_oidc",
+        "httpStatus": 303
+      },
+      {
+        "step": "login_page",
+        "httpStatus": 200
+      },
+      {
+        "step": "authorize_login",
+        "httpStatus": 200
+      },
+      {
+        "step": "oidc_callback",
+        "httpStatus": 303
+      },
+      {
+        "step": "dashboard",
+        "httpStatus": 200
+      },
+      {
+        "step": "session_and_refresh",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/services",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/prometheus/alerts",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/prometheus/rules",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/auth/audit/security-events?limit=5",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/config/modules",
+        "httpStatus": 200
+      },
+      {
+        "step": "persist_unchanged_module_setting",
+        "httpStatus": 200
+      },
+      {
+        "step": "reread_persisted_module_settings",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/policies/access",
+        "httpStatus": 200
+      },
+      {
+        "step": "/oauth/federation/providers",
+        "httpStatus": 200
+      },
+      {
+        "step": "/.well-known/openid-configuration",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/store/catalog/sync",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_sspr",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_appstore",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_licenses",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_integrations",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_servicehealth",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_alerting",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_identity",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_settings",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_audit",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_subscription",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_graph",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_simulator",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_enrollment",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_fleet",
+        "httpStatus": 200
+      },
+      {
+        "step": "served_view_assignment",
+        "httpStatus": 200
+      },
+      {
+        "step": "authenticated_session_list",
+        "httpStatus": 200
+      },
+      {
+        "step": "refresh_rotation",
+        "httpStatus": 200
+      },
+      {
+        "step": "logout",
+        "httpStatus": 200
+      },
+      {
+        "step": "old_access_after_logout",
+        "httpStatus": 401,
+        "error": "invalid_token"
+      },
+      {
+        "step": "session_after_logout",
+        "httpStatus": 401,
+        "error": "browser_auth_session_invalid"
+      }
+    ],
+    "nativeBrowser": "Unavailable: native pipe startup failed",
+    "mfaConfiguration": "Unchanged"
+  },
+  "liveApis": {
+    "/api/services": {
+      "status": 200
+    },
+    "/api/prometheus/alerts": {
+      "status": 200,
+      "confirmedAlertCount": 13
+    },
+    "/api/prometheus/rules": {
+      "status": 200
+    },
+    "/api/auth/audit/security-events?limit=5": {
+      "status": 200
+    },
+    "/api/config/modules": {
+      "status": 200
+    },
+    "/api/policies/access": {
+      "status": 200
+    },
+    "/oauth/federation/providers": {
+      "status": 200
+    },
+    "/.well-known/openid-configuration": {
+      "status": 200
+    },
+    "/api/store/catalog/sync": {
+      "status": 200,
+      "confirmedSources": 24
+    }
+  },
+  "disposableBusinessWorkflow": {
+    "imageVersion": "1.0.14",
+    "httpsFlowComplete": true,
+    "steps": [
+      {
+        "step": "start_oidc",
+        "httpStatus": 303
+      },
+      {
+        "step": "login_page",
+        "httpStatus": 200
+      },
+      {
+        "step": "authorize_login",
+        "httpStatus": 200
+      },
+      {
+        "step": "oidc_callback",
+        "httpStatus": 303
+      },
+      {
+        "step": "dashboard",
+        "httpStatus": 200
+      },
+      {
+        "step": "session_and_refresh",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/identity/access",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/users?page=1&limit=25",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/devices/capabilities",
+        "httpStatus": 428,
+        "error": "Inventory identity authority rejected the original request"
+      },
+      {
+        "step": "/api/licenses/access",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/licenses",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/licenses/requests",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/identity/roles/catalog",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/store/catalog",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/store/categories",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/store/stats",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/services",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/gateway/access",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/gateway/webhooks",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/gateway/api-keys",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/store/catalog/sync",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/auth/profile",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/auth/audit/login-history?limit=5",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/system/resources",
+        "httpStatus": 200
+      },
+      {
+        "step": "/api/platform/capabilities",
+        "httpStatus": 200
+      },
+      {
+        "step": "/health",
+        "httpStatus": 200
+      },
+      {
+        "step": "create_arbitrary_vendor_pool",
+        "httpStatus": 201
+      },
+      {
+        "step": "assign_local_pool_to_own_canonical_identity",
+        "httpStatus": 201
+      },
+      {
+        "step": "read_confirmed_pool_assignment",
+        "httpStatus": 200
+      },
+      {
+        "step": "return_disposable_direct_source",
+        "httpStatus": 204
+      },
+      {
+        "step": "pool_empty_after_return",
+        "httpStatus": 200
+      },
+      {
+        "step": "delete_disposable_license_pool",
+        "httpStatus": 204
+      },
+      {
+        "step": "create_custom_catalog_app",
+        "httpStatus": 201
+      },
+      {
+        "step": "edit_custom_catalog_app",
+        "httpStatus": 200
+      },
+      {
+        "step": "remove_disposable_catalog_app",
+        "httpStatus": 200
+      },
+      {
+        "step": "register_disposable_webhook",
+        "httpStatus": 201
+      },
+      {
+        "step": "edit_disposable_webhook",
+        "httpStatus": 200
+      },
+      {
+        "step": "unapproved_webhook_target_rejected",
+        "httpStatus": 403,
+        "error": "Webhook destination is not approved by deployment egress policy"
+      },
+      {
+        "step": "disposable_webhook_has_no_outbound_deliveries",
+        "httpStatus": 200
+      },
+      {
+        "step": "delete_disposable_webhook",
+        "httpStatus": 204
+      },
+      {
+        "step": "automatic_catalog_source_sync",
+        "httpStatus": 200
+      },
+      {
+        "step": "confirmed_live_package_observations",
+        "httpStatus": 200
+      },
+      {
+        "step": "authenticated_session_list",
+        "httpStatus": 200
+      },
+      {
+        "step": "refresh_rotation",
+        "httpStatus": 200
+      },
+      {
+        "step": "logout",
+        "httpStatus": 200
+      },
+      {
+        "step": "old_access_after_logout",
+        "httpStatus": 401,
+        "error": "invalid_token"
+      },
+      {
+        "step": "session_after_logout",
+        "httpStatus": 401,
+        "error": "browser_auth_session_invalid"
+      }
+    ],
+    "nativeBrowser": "Unavailable: native pipe startup failed",
+    "mfaConfiguration": "Unchanged"
+  },
+  "catalogRepair": {
+    "beforeAfter": [
+      {
+        "app": "7zip",
+        "before": "p7zip",
+        "after": "sevenzip"
+      },
+      {
+        "app": "nodejs",
+        "before": "node@20",
+        "after": "node"
+      }
+    ],
+    "confirmedSources": 24,
+    "sourceTotal": 24
+  },
+  "persistentSettings": {
+    "database": "integration",
+    "table": "platform_module_settings",
+    "rows": 5,
+    "verified": "real API acknowledgement, independent PostgreSQL read, restart/new-instance behavior in automated test",
+    "realWriteChangedValue": false
+  },
+  "externalStatus": {
+    "checkedAt": "2026-11-02T21:41:59.166852+00:00",
+    "openBaoReady": {
+      "openbao-0": false,
+      "openbao-1": true,
+      "openbao-2": false
+    },
+    "externalSecretReady": {
+      "harbor-opendirectory": false,
+      "opendirectory-database": false,
+      "opendirectory-files": false,
+      "opendirectory-grafana": true,
+      "opendirectory-postgres-admin": false,
+      "opendirectory-runtime": false
+    }
+  },
+  "limits": [
+    "Inventory-only device service; no confirmed agent/MDM/remote install contract",
+    "Signed business webhook dispatch and Alertmanager administration are not integrated",
+    "No live manufacturer activation or billing-provider acceptance",
+    "No native-browser visual or manual owner/delegate/third-party-provider acceptance",
+    "Existing own web-app assignment expires 2026-11-03 03:40 Europe/Zurich; unchanged",
+    "Nexpt SSO/JML remains a subsequent integration"
+  ]
+}

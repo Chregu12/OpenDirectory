@@ -18,6 +18,7 @@ beforeEach(() => { jest.clearAllMocks(); });
 
 test('ordinary identities cannot fetch administrative lists or open mutation dialogs', async () => {
   backend(); render(<IntegrationsView />);
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Alte API-Schlüssel' }));
   expect(await screen.findByText(/Gateway-API-Schlüssel sind stillgelegt/)).toBeInTheDocument();
   expect(mockedApi.get).not.toHaveBeenCalledWith('/api/gateway/api-keys');
   expect(mockedApi.get).not.toHaveBeenCalledWith('/api/gateway/webhooks');
@@ -27,7 +28,7 @@ test('ordinary identities cannot fetch administrative lists or open mutation dia
 });
 test('read-only webhook permission never enables test delivery or writes', async () => {
   backend(['gateway.webhooks.read']); render(<IntegrationsView />);
-  await screen.findByText(/Gateway-API-Schlüssel sind stillgelegt/);
+  await screen.findByText('Keine Freigabe zum Lesen der globalen Dienstverbindungen.');
   await userEvent.setup().click(screen.getByRole('button', { name: 'Webhooks' }));
   expect(await screen.findByText('Hook')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Test senden' })).toBeDisabled();
@@ -35,6 +36,7 @@ test('read-only webhook permission never enables test delivery or writes', async
 });
 test('retired credentials are not advertised as active and no new master key can be minted in the UI', async () => {
   backend(['gateway.keys.read', 'gateway.keys.manage']); render(<IntegrationsView />);
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Alte API-Schlüssel' }));
   expect(await screen.findByText('Legacy Record')).toBeInTheDocument();
   expect(screen.getByText('Stillgelegt')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /erstellen/i })).not.toBeInTheDocument();
@@ -44,4 +46,20 @@ test('an unavailable capability source clears privileges instead of pretending a
   render(<IntegrationsView />);
   expect(await screen.findByRole('alert')).toHaveTextContent('Gateway-Anmeldung oder Berechtigungen sind nicht verfügbar.');
   expect(mockedApi.get).toHaveBeenCalledTimes(1);
+});
+test('a failed connection query cannot produce a healthy connection card', async () => {
+  backend(['gateway.status.read']); const get=mockedApi.get;
+  mockedApi.get=jest.fn((url:string)=>url==='/api/services'?Promise.reject(new Error('offline')):get(url)) as any;
+  render(<IntegrationsView/>);
+  expect(await screen.findByRole('alert')).toHaveTextContent('Integrationsdaten konnten nicht bestätigt werden');
+  expect(screen.queryByText('Verbunden')).not.toBeInTheDocument();
+});
+test('a webhook without deployment egress approval cannot be sent, even by a manager', async () => {
+  backend(['gateway.webhooks.read','gateway.webhooks.manage']);render(<IntegrationsView/>);
+  await screen.findByText('Keine Freigabe zum Lesen der globalen Dienstverbindungen.');
+  await userEvent.setup().click(screen.getByRole('button',{name:'Webhooks'}));
+  expect(await screen.findByText('Hook')).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Test senden'})).toBeDisabled();
+  expect(screen.getByText(/Keine Testziele serverseitig freigegeben/)).toBeInTheDocument();
+  expect(mockedApi.post).not.toHaveBeenCalled();
 });

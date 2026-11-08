@@ -17,7 +17,7 @@ const nextConfig = {
     const enterpriseDirUrl     = process.env.ENTERPRISE_DIRECTORY_URL       || 'http://enterprise-directory:3000';
     const conditionalAccessUrl = process.env.CONDITIONAL_ACCESS_URL         || 'http://conditional-access:3007';
     const quickActionsUrl      = process.env.QUICK_ACTIONS_URL              || 'http://quick-actions:3950';
-    const authServiceUrl       = process.env.AUTH_SERVICE_URL               || 'http://auth-service:3001';
+    const authServiceUrl       = process.env.AUTH_SERVICE_URL               || 'http://auth-service:3002';
     const identityServiceUrl   = process.env.IDENTITY_SERVICE_URL           || 'http://identity-service:3001';
     const deviceServiceUrl     = process.env.DEVICE_SERVICE_URL             || 'http://device-service:3003';
     const sambaUrl             = process.env.SAMBA_SERVICE_URL              || 'http://samba-ad-dc:3010';
@@ -82,6 +82,7 @@ const nextConfig = {
       { source: '/api/license',             destination: `${licenseAdapterUrl}/api/license` },
       { source: '/api/license/:path*',      destination: `${licenseAdapterUrl}/api/license/:path*` },
       { source: '/api/gateway/:path*',      destination: `${coreGatewayUrl}/api/gateway/:path*` },
+      { source: '/api/system/resources',   destination: `${coreGatewayUrl}/api/system/resources` },
       { source: '/api/clients',             destination: `${oauthProviderUrl}/api/clients` },
       { source: '/api/clients/:path*',      destination: `${oauthProviderUrl}/api/clients/:path*` },
       { source: '/api/mfa',                 destination: `${oauthProviderUrl}/api/mfa` },
@@ -147,14 +148,7 @@ const nextConfig = {
       // narrower /api/pim/elevation/:path* rule MUST precede this broader
       // /api/pim/:path* rule, or it would shadow it.
       { source: '/api/pim/:path*',          destination: `${authServiceUrl}/api/pim/:path*` },
-      // The four legacy auth endpoints below still use api-backend. Other
-      // /api/auth/* endpoints use the runtime proxy route at
-      // src/app/api/auth/[...path]/route.ts; a rewrite here would bake the
-      // cluster service URL into the image at build time.
-      { source: '/api/auth/login',           destination: `${apiBackendUrl}/api/auth/login` },
-      { source: '/api/auth/logout',          destination: `${apiBackendUrl}/api/auth/logout` },
-      { source: '/api/auth/profile',         destination: `${apiBackendUrl}/api/auth/profile` },
-      { source: '/api/auth/change-password', destination: `${apiBackendUrl}/api/auth/change-password` },
+      // /api/auth/* uses the runtime proxy to the canonical credential service.
       // Service accounts (SettingsView / service-account management) ->
       // authentication-service (src/routes/serviceAccounts.js). quick-actions
       // already calls this service directly server-to-server; this rule adds
@@ -177,6 +171,8 @@ const nextConfig = {
       { source: '/api/identity/:path*',      destination: `${identityServiceUrl}/api/identity/:path*` },
       { source: '/api/users',               destination: `${identityServiceUrl}/api/users` },
       { source: '/api/users/:path*',        destination: `${identityServiceUrl}/api/users/:path*` },
+      { source: '/api/roles',               destination: `${identityServiceUrl}/api/roles` },
+      { source: '/api/roles/:path*',        destination: `${identityServiceUrl}/api/roles/:path*` },
       { source: '/api/groups',              destination: `${identityServiceUrl}/api/groups` },
       { source: '/api/groups/:path*',       destination: `${identityServiceUrl}/api/groups/:path*` },
       { source: '/api/license-groups/:path*', destination: `${identityServiceUrl}/api/license-groups/:path*` },

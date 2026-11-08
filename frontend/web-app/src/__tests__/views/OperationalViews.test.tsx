@@ -1,0 +1,12 @@
+import { render,screen } from '@testing-library/react';
+import ServiceHealthView from '@/components/views/ServiceHealthView';
+import AlertingView from '@/components/views/AlertingView';
+import AuditView from '@/components/views/AuditView';
+import SubscriptionView from '@/components/views/SubscriptionView';
+import { api } from '@/lib/api';
+beforeEach(()=>jest.clearAllMocks());
+test('health outage cannot retain demo uptime, incidents or healthy services',async()=>{(api.get as jest.Mock).mockRejectedValue(new Error('offline'));render(<ServiceHealthView/>);expect(await screen.findByRole('alert')).toHaveTextContent('kein gesunder Ersatzstatus');expect(screen.queryByText('Verbunden',{selector:'span'})).not.toBeInTheDocument();expect(screen.queryByText(/99.9%/)).not.toBeInTheDocument();});
+test('disabled services remain unconfigured and do not count as operational',async()=>{(api.get as jest.Mock).mockResolvedValue({data:[{id:'vault',name:'Vault',status:'disabled'}]});render(<ServiceHealthView/>);expect(await screen.findByText('Vault')).toBeInTheDocument();expect(screen.getByText('Nicht eingerichtet',{selector:'span'})).toBeInTheDocument();expect(screen.queryByText('Gestört')).not.toBeInTheDocument();});
+test('monitoring query failure is unknown, not a zero-alert success',async()=>{(api.get as jest.Mock).mockRejectedValue(new Error('offline'));render(<AlertingView/>);expect(await screen.findByRole('alert')).toHaveTextContent('Systemzustand ist nicht bestätigt');expect(screen.queryByText(/keine aktiven Meldungen/)).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:/bestätigen|quittieren|Test senden/i})).not.toBeInTheDocument();});
+test('audit failure does not generate sample events or integrity confirmation',async()=>{(api.get as jest.Mock).mockRejectedValue(new Error('offline'));render(<AuditView/>);expect(await screen.findByRole('alert')).toHaveTextContent('keine Beispielereignisse');expect(screen.queryByText('admin@corp.local')).not.toBeInTheDocument();expect(screen.queryByText('Integrität bestätigt')).not.toBeInTheDocument();});
+test('module configuration has no invented subscription plan, seat use or renewal',async()=>{(api.get as jest.Mock).mockResolvedValue({data:{security:{name:'Sicherheit',enabled:false}}});render(<SubscriptionView/>);expect(await screen.findByText('Sicherheit')).toBeInTheDocument();expect(screen.queryByText('87')).not.toBeInTheDocument();expect(screen.queryByText('2026-12-31')).not.toBeInTheDocument();expect(screen.getByText('Konfiguriert inaktiv')).toBeInTheDocument();});

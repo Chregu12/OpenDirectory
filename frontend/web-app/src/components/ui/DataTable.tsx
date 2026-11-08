@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 
 export interface Column<T> {
@@ -9,158 +9,79 @@ export interface Column<T> {
   sortable?: boolean;
   render?: (row: T, index: number) => React.ReactNode;
 }
-
+type Sort = { key: string; direction: 'asc' | 'desc' };
 interface DataTableProps<T> {
   columns: Column<T>[];
   rows: T[];
   getRowId: (row: T) => string;
+  getRowLabel?: (row: T) => string;
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>) => void;
   onRowClick?: (row: T) => void;
   activeRowId?: string;
   emptyMessage?: string;
   loading?: boolean;
+  label?: string;
+  sort?: Sort;
+  onSortChange?: (sort: Sort) => void;
 }
 
-export function DataTable<T>({
-  columns,
-  rows,
-  getRowId,
-  selectedIds,
-  onSelectionChange,
-  onRowClick,
-  activeRowId,
-  emptyMessage = 'No items found.',
-  loading = false,
-}: DataTableProps<T>) {
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-
+export function DataTable<T>({ columns, rows, getRowId, getRowLabel = getRowId, selectedIds = new Set(), onSelectionChange,
+  onRowClick, activeRowId, emptyMessage = 'Keine Einträge gefunden.', loading = false, label = 'Einträge', sort, onSortChange }: DataTableProps<T>) {
+  const [localSort, setLocalSort] = useState<Sort | undefined>();
+  const currentSort = onSortChange ? sort : localSort;
   const handleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDir('asc');
-    }
+    const next: Sort = { key, direction: currentSort?.key === key && currentSort.direction === 'asc' ? 'desc' : 'asc' };
+    if (onSortChange) onSortChange(next); else setLocalSort(next);
   };
-
-  const sortedRows = React.useMemo(() => {
-    if (!sortKey) return rows;
+  const sortedRows = useMemo(() => {
+    if (!currentSort || onSortChange) return rows;
     return [...rows].sort((a, b) => {
-      const av = (a as Record<string, unknown>)[sortKey];
-      const bv = (b as Record<string, unknown>)[sortKey];
-      const cmp = String(av ?? '').localeCompare(String(bv ?? ''), undefined, { numeric: true });
-      return sortDir === 'asc' ? cmp : -cmp;
+      const av = (a as Record<string, unknown>)[currentSort.key]; const bv = (b as Record<string, unknown>)[currentSort.key];
+      const comparison = String(av ?? '').localeCompare(String(bv ?? ''), 'de', { numeric: true });
+      return currentSort.direction === 'asc' ? comparison : -comparison;
     });
-  }, [rows, sortKey, sortDir]);
-
-  const allSelected = rows.length > 0 && selectedIds && rows.every(r => selectedIds.has(getRowId(r)));
-  const someSelected = selectedIds && rows.some(r => selectedIds.has(getRowId(r)));
-
+  }, [rows, currentSort, onSortChange]);
+  const allSelected = rows.length > 0 && rows.every(row => selectedIds.has(getRowId(row)));
+  const someSelected = rows.some(row => selectedIds.has(getRowId(row)));
   const toggleAll = () => {
-    if (!onSelectionChange) return;
-    if (allSelected) {
-      onSelectionChange(new Set());
-    } else {
-      onSelectionChange(new Set(rows.map(getRowId)));
-    }
-  };
-
-  const toggleRow = (id: string) => {
-    if (!onSelectionChange || !selectedIds) return;
     const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onSelectionChange(next);
+    rows.forEach(row => { if (allSelected) next.delete(getRowId(row)); else next.add(getRowId(row)); });
+    onSelectionChange?.(next);
   };
-
-  if (loading) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-        Loading…
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <table className="fluent-table">
-        <thead>
-          <tr>
-            {onSelectionChange && (
-              <th style={{ width: 40 }}>
-                <input
-                  type="checkbox"
-                  checked={!!allSelected}
-                  ref={el => { if (el) el.indeterminate = !allSelected && !!someSelected; }}
-                  onChange={toggleAll}
-                  style={{ cursor: 'pointer' }}
-                />
-              </th>
-            )}
-            {columns.map(col => (
-              <th
-                key={String(col.key)}
-                style={{ width: col.width }}
-                onClick={() => col.sortable && handleSort(String(col.key))}
-              >
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  {col.header}
-                  {col.sortable && sortKey === String(col.key) && (
-                    sortDir === 'asc'
-                      ? <ChevronUpIcon style={{ width: 12, height: 12 }} />
-                      : <ChevronDownIcon style={{ width: 12, height: 12 }} />
-                  )}
-                  {col.sortable && sortKey !== String(col.key) && (
-                    <span style={{ opacity: 0.3 }}><ChevronUpIcon style={{ width: 12, height: 12 }} /></span>
-                  )}
-                </span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sortedRows.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length + (onSelectionChange ? 1 : 0)} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>
-                {emptyMessage}
-              </td>
-            </tr>
-          ) : (
-            sortedRows.map((row, i) => {
-              const id = getRowId(row);
-              const isActive = activeRowId === id;
-              const isSelected = !!selectedIds?.has(id);
-              return (
-                <tr
-                  key={id}
-                  className={isSelected ? 'selected' : ''}
-                  onClick={() => onRowClick?.(row)}
-                  style={{
-                    cursor: onRowClick ? 'pointer' : 'default',
-                    outline: isActive ? '2px solid var(--accent-blue)' : 'none',
-                    outlineOffset: -1,
-                  }}
-                >
-                  {onSelectionChange && (
-                    <td onClick={e => { e.stopPropagation(); toggleRow(id); }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => {}} style={{ cursor: 'pointer' }} />
-                    </td>
-                  )}
-                  {columns.map(col => (
-                    <td key={String(col.key)}>
-                      {col.render
-                        ? col.render(row, i)
-                        : String((row as Record<string, unknown>)[String(col.key)] ?? '')}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
+  const toggleRow = (id: string) => {
+    const next = new Set(selectedIds); if (next.has(id)) next.delete(id); else next.add(id);
+    onSelectionChange?.(next);
+  };
+  return <div className="od-table-scroll" role="region" aria-label={label} tabIndex={0} aria-busy={loading}>
+    {loading && <p role="status" className="p-4">Einträge werden geladen …</p>}
+    <table className="fluent-table">
+      <caption className="sr-only">{label}{columns.some(column => column.sortable) && !onSortChange ? ' · Sortierung nur der angezeigten Einträge' : ''}</caption>
+      <thead><tr>
+        {onSelectionChange && <th scope="col" style={{ width: 48 }}><label className="od-checkbox-target"><span className="sr-only">Alle angezeigten Einträge auswählen</span>
+          <input type="checkbox" checked={allSelected} disabled={loading || !rows.length} ref={element => { if (element) element.indeterminate = !allSelected && someSelected; }} onChange={toggleAll} />
+        </label></th>}
+        {columns.map(column => <th key={String(column.key)} scope="col" style={{ width: column.width }}
+          aria-sort={column.sortable ? currentSort?.key === String(column.key) ? currentSort.direction === 'asc' ? 'ascending' : 'descending' : 'none' : undefined}>
+          {column.sortable ? <button type="button" className="od-sort-button" onClick={() => handleSort(String(column.key))} disabled={loading}
+            title={!onSortChange ? 'Angezeigte Einträge sortieren' : undefined}>
+            {column.header}{currentSort?.key === String(column.key) && currentSort.direction === 'desc' ? <ChevronDownIcon className="h-4 w-4" aria-hidden="true" /> : <ChevronUpIcon className="h-4 w-4" aria-hidden="true" />}
+          </button> : column.header}
+        </th>)}
+        {onRowClick && <th scope="col"><span className="sr-only">Details</span></th>}
+      </tr></thead>
+      <tbody>{!sortedRows.length ? <tr><td colSpan={columns.length + Number(!!onSelectionChange) + Number(!!onRowClick)} className="text-center p-8">{loading ? 'Wird geladen …' : emptyMessage}</td></tr> : sortedRows.map((row, index) => {
+        const id = getRowId(row); const rowLabel = getRowLabel(row);
+        return <tr key={id} className={selectedIds.has(id) ? 'selected' : ''} data-active={activeRowId === id || undefined}
+          onClick={event => { if (!(event.target as Element).closest('button, a, input, select, textarea, label')) onRowClick?.(row); }} style={{ cursor: onRowClick ? 'pointer' : undefined }}>
+          {onSelectionChange && <td><label className="od-checkbox-target"><span className="sr-only">{rowLabel} auswählen</span>
+            <input type="checkbox" checked={selectedIds.has(id)} onChange={() => toggleRow(id)} />
+          </label></td>}
+          {columns.map(column => <td key={String(column.key)}>{column.render ? column.render(row, index) : String((row as Record<string, unknown>)[String(column.key)] ?? '')}</td>)}
+          {onRowClick && <td><button type="button" className="fluent-btn-ghost" aria-label={'Details für ' + rowLabel} onClick={() => onRowClick(row)}>Öffnen</button></td>}
+        </tr>;
+      })}</tbody>
+    </table>
+    {columns.some(column => column.sortable) && !onSortChange && <p className="px-4 py-2 text-sm" style={{ color: 'var(--text-secondary)' }}>Sortierung der angezeigten Einträge.</p>}
+  </div>;
 }

@@ -12,7 +12,7 @@ test.each([base, `${base}/`, `${base}/${assignmentId}`, `${base}/${assignmentId}
     expect(match).toBeDefined();
     expect(match.source).toBe(pathname === base || pathname === `${base}/` ? base : `${base}/:path*`);
     expect(match.destination).toBe(`${process.env.POLICY_SERVICE_URL || 'http://policy-service:3004'}${match.source}`);
-    expect(rules.indexOf(match)).toBeLessThan(rules.findIndex(rule => rule.source === '/api/:path*'));
+    expect(rules.indexOf(match)).toBeLessThan((rules.some(rule => rule.source === '/api/:path*') ? rules.findIndex(rule => rule.source === '/api/:path*') : rules.length));
   },
 );
 
@@ -31,7 +31,7 @@ test.each([
 ])('the actual Next matcher does not admit near-match %s into the assignment namespace', async pathname => {
   const rules = await configuration.rewrites();
   const match = rules.find(rule => getPathMatch(rule.source)(pathname));
-  expect(match.source).toBe('/api/:path*');
+  expect(match).toBeUndefined();
   for (const rule of rules.filter(rule => rule.source === base || rule.source === `${base}/:path*`)) {
     expect(getPathMatch(rule.source)(pathname)).toBe(false);
   }

@@ -1,0 +1,195 @@
+{
+  "version": "1.0.13",
+  "baselineVersion": "1.0.12",
+  "status": "deployed-and-https-styles-verified",
+  "reference": "https://fluent2.microsoft.design/typography",
+  "changes": {
+    "bodyFont": {
+      "before": "15px",
+      "after": "14px"
+    },
+    "pageTitle": {
+      "before": "24–28px",
+      "after": "22px"
+    },
+    "sectionTitle": {
+      "before": "19px",
+      "after": "16px"
+    },
+    "navigationWidth": {
+      "before": "260px",
+      "after": "232px"
+    },
+    "headerHeight": {
+      "before": "64px",
+      "after": "48px"
+    },
+    "panelPadding": {
+      "before": "24px",
+      "after": "16px"
+    },
+    "fieldGroupGap": {
+      "before": "24px",
+      "after": "16px"
+    },
+    "sectionGap": {
+      "before": "32px",
+      "after": "24px"
+    },
+    "pagePadding": {
+      "before": "16–32px",
+      "after": "12–20px"
+    }
+  },
+  "checks": {
+    "tests": 43,
+    "suites": 7,
+    "typecheck": "passed",
+    "productionBuild": "passed: linux/amd64",
+    "helmLint": "passed",
+    "nativeBrowser": "unavailable: native pipe startup failed"
+  },
+  "scope": "Visual density only; existing API, authority, theme and workflow behavior retained.",
+  "deployment": {
+    "version": "1.0.13",
+    "helmRevision": 27,
+    "checkedAt": "2026-11-02T20:40:45.965514+00:00",
+    "images": {
+      "api-backend": {
+        "image": "harbor.heusser.local/opendirectory/api-backend:1.0.10",
+        "digest": "sha256:dd8bca6fd67bec0ee6497c04541cea9958d3d05038295822ab8881b794de8a6c",
+        "pod": "opendirectory-api-backend-5f4975778c-fzc64"
+      },
+      "api-gateway": {
+        "image": "harbor.heusser.local/opendirectory/api-gateway:1.0.10",
+        "digest": "sha256:ba8c726a1ed62d0305b3fa1cae883bacc0b6a9298a913e08278a57effe477f9f",
+        "pod": "opendirectory-api-gateway-8468cbb76f-rdbch"
+      },
+      "app-store": {
+        "image": "harbor.heusser.local/opendirectory/app-store:1.0.10",
+        "digest": "sha256:cb4ba5d2e276cdcc2004bf993e3c604c87fe68f2c0ce68232c82276b336f5f14",
+        "pod": "opendirectory-app-store-5d6ff9bbdb-kdw54"
+      },
+      "auth-service": {
+        "image": "harbor.heusser.local/opendirectory/auth-service:1.0.10",
+        "digest": "sha256:a829db23f83a4409c4f7236a9c91eb8c1a283e236531ae8619659bc349cceda8",
+        "pod": "opendirectory-auth-service-5c64c66685-z4lk4"
+      },
+      "oauth-provider": {
+        "image": "harbor.heusser.local/opendirectory/oauth-provider:1.0.11",
+        "digest": "sha256:57313669ea07c955b2ec85f2d419672b35be255c4a12d2345dc6b8dce2018d5f",
+        "pod": "opendirectory-oauth-provider-774bb49dc6-llz9c"
+      },
+      "web-app": {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.13",
+        "digest": "sha256:8afd4334a0eda18e8b48d4c46797cf5f06052326b1f28320d70fcc2182ba815f",
+        "pod": "opendirectory-web-app-55b4f4ddd-dc8b4"
+      }
+    },
+    "workloads": {
+      "opendirectory-api-backend": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-api-gateway": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-app-store": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-auth-service": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-device-service": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-identity-service": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-integration-service": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-license-management": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-oauth-provider": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-policy-service": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-web-app": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-lldap": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-postgres": {
+        "ready": 1,
+        "desired": 1
+      },
+      "opendirectory-redis": {
+        "ready": 1,
+        "desired": 1
+      }
+    },
+    "volumes": {
+      "data-opendirectory-lldap-0": {
+        "status": "Bound",
+        "size": "2Gi",
+        "volume": "pvc-8ee18973-0791-4f3a-a593-c86b85cb40a4",
+        "robustness": "healthy",
+        "desiredReplicas": 3
+      },
+      "data-opendirectory-postgres-0": {
+        "status": "Bound",
+        "size": "20Gi",
+        "volume": "pvc-c07c1db8-040c-4ceb-8a01-a2bf2649d180",
+        "robustness": "healthy",
+        "desiredReplicas": 3
+      },
+      "data-opendirectory-redis-0": {
+        "status": "Bound",
+        "size": "2Gi",
+        "volume": "pvc-f012c945-33ac-41a0-8e81-a5978d73a160",
+        "robustness": "healthy",
+        "desiredReplicas": 3
+      },
+      "opendirectory-app-store-data": {
+        "status": "Bound",
+        "size": "5Gi",
+        "volume": "pvc-0e44b736-b4a8-4f69-9ff4-30681f427b13",
+        "robustness": "healthy",
+        "desiredReplicas": 3
+      }
+    }
+  },
+  "servedStyles": {
+    "version": "1.0.13",
+    "https": true,
+    "productionStylesheets": [
+      "/_next/static/chunks/3wwm9gc2j70bi.css"
+    ],
+    "verifiedTokens": {
+      "--sidebar-width": "232px",
+      "--topbar-height": "48px",
+      "--type-body": "14px",
+      "--type-title": "22px",
+      "--panel-padding": "16px",
+      "--space-group": "16px",
+      "--space-section": "24px"
+    },
+    "visualBrowserCheck": "not available: native pipe startup failed"
+  }
+}

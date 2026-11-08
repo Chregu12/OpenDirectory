@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
 import { qaGet } from '@/lib/quickActionsApi';
 
 interface QuickActionAccess {
@@ -15,7 +16,10 @@ export function useQuickActionAccess() {
   const [unavailable, setUnavailable] = useState(false);
   useEffect(() => {
     let active = true;
-    qaGet<QuickActionAccess>('/api/quick/access').then(result => {
+    api.get('/api/platform/capabilities').then(({ data }) => {
+      if (data.configuredServices !== null && (!Array.isArray(data.configuredServices) || !data.configuredServices.includes('quick-actions'))) throw new Error('Quick actions are not configured');
+      return qaGet<QuickActionAccess>('/api/quick/access');
+    }).then(result => {
       if (typeof result?.subject !== 'string' || !result.subject.trim() || !Array.isArray(result.permissions) || result.permissions.some(permission => typeof permission !== 'string')) throw new Error('Invalid permissions');
       if (result.onboardingDepartments !== undefined && (!Array.isArray(result.onboardingDepartments) || result.onboardingDepartments.some(department => typeof department !== 'string'))) throw new Error('Invalid departments');
       if (result.delegablePermissions != null && (!Array.isArray(result.delegablePermissions) || result.delegablePermissions.some(permission => typeof permission !== 'string'))) throw new Error('Invalid delegation');

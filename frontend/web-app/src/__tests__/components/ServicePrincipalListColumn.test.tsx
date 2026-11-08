@@ -1,4 +1,5 @@
 import React from 'react';
+import { api } from '../../lib/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import ServicePrincipalListColumn from '../../components/views/ServicePrincipalListColumn';
 import { qaGet } from '../../lib/quickActionsApi';
@@ -11,7 +12,7 @@ function backend(permissions: string[]) {
     : { success: true, data: [{ clientId: 'app-id', name: 'Inventory Application', permissions: ['directory.read'] }] });
 }
 
-beforeEach(() => { jest.clearAllMocks(); });
+beforeEach(() => { jest.clearAllMocks(); (api.get as jest.Mock).mockResolvedValue({ data: { configuredServices: ['quick-actions'] } }); });
 
 test('a reader sees the canonical data envelope without administrative controls', async () => {
   backend(['applications.read']);

@@ -91,7 +91,7 @@ function BoundDevicesPanel(props: OffboardingDevicesBinding) {
   const parent = { 'Vorgangs-ID der Kontosperre': props.workflowId, 'Benutzer-ID': props.userId, 'Berechtigungsversion der Kontosperre': props.eligibilityRevision, Mandant: props.tenantId };
   const canRecover = !busy && !readback && !!attempt && !!client.current?.canRecover(attempt);
 
-  return <section aria-label="Geräterückgaben beim Austritt" className="rounded border border-white/10 p-4 space-y-4 min-w-0">
+  return <section aria-label="Geräterückgaben beim Austritt" className="rounded border border-[var(--border)] p-4 space-y-4 min-w-0">
     <button className="fluent-btn-secondary" aria-expanded={open} aria-controls={contentId} onClick={() => {
       generation.current++; client.current?.dispose(); client.current = null; running.current = false; reset(); setOpen(value => !value);
     }}>Geräterückgaben beim Austritt planen</button>

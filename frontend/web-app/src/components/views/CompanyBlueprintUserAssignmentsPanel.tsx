@@ -9,7 +9,7 @@ import { UserPage, userName } from '@/lib/directoryUsers';
 import { DirectoryConfirmation } from './UserDetailPanel';
 
 const labels = { screen_lock: 'Bildschirmsperre', filevault: 'FileVault', software_update: 'Software-Updates' };
-const inputClass = 'mt-1 block w-full rounded border border-white/20 bg-transparent p-2';
+const inputClass = 'mt-1 block w-full rounded border border-[var(--border-strong)] bg-transparent p-2';
 export default function CompanyBlueprintUserAssignmentsPanel({ context, blueprintId, version, disabled = false }: {
   context: CompanyWorkflowContext; blueprintId: string; version: CompanyBlueprintVersionDetail; disabled?: boolean;
 }) {
@@ -67,7 +67,7 @@ export default function CompanyBlueprintUserAssignmentsPanel({ context, blueprin
     });
   };
   const blocked = busy || disabled || !!intent || !!confirmation;
-  return <section aria-label="Blueprint-Mitarbeiterzuweisungen" className="border-t border-white/20 pt-4 space-y-4">
+  return <section aria-label="Blueprint-Mitarbeiterzuweisungen" className="border-t border-[var(--border-strong)] pt-4 space-y-4">
     <button className="fluent-btn-secondary" aria-expanded={open} disabled={busy || disabled} onClick={() => setOpen(value => !value)}>Mitarbeitenden zuweisen</button>
     {open && <div className="space-y-4">
       <p>Version {version.version} wird unveränderlich an einen Mitarbeiter gebunden. Apps belegen echte lokale Lizenzen, pro Mitarbeiter und Pool höchstens einen Platz. Überlappende und manuelle Quellen bleiben getrennt erhalten. Konfigurationen sind nur gewünschte lokale Vorgaben, keine bestätigte Gerätewirkung und kein MDM-Befehl.</p>
@@ -88,7 +88,7 @@ export default function CompanyBlueprintUserAssignmentsPanel({ context, blueprin
         <div className="flex flex-wrap gap-3"><button className="fluent-btn-secondary" disabled={blocked || needsReload || !userId} onClick={() => inspect()}>Mitarbeiterzuweisungen laden</button>
           <button className="fluent-btn-secondary" disabled={blocked || needsReload || !userId} onClick={() => inspect(true)}>Neue Zuweisung prüfen</button></div>
       </>}
-      {preview && <section aria-label="Blueprint-Zuweisungsvorschau" className="rounded border border-white/20 p-3 space-y-3">
+      {preview && <section aria-label="Blueprint-Zuweisungsvorschau" className="rounded border border-[var(--border-strong)] p-3 space-y-3">
         <h4 className="font-semibold">Version {preview.version} · Mitarbeiter {preview.userId}</h4><p>Berechtigungsgeneration {preview.eligibilityRevision}. Keine Änderung durch diese Vorschau.</p>
         <p>{preview.hasConflicts ? 'Widersprüchliche Vorgaben: Zuweisung gesperrt.' : 'Keine widersprüchlichen Vorgaben in dieser Vorschau.'}</p>
         <ul>{preview.pools.map(pool => <li key={pool.poolId} className="break-all">Pool {pool.poolId} · Revision {pool.poolRevision} · {pool.availableSeats} verfügbar · {pool.additionalSeats} zusätzlicher Lizenzplatz erforderlich{pool.additionalSeats > pool.availableSeats ? ' · Lizenzmangel' : ''}</li>)}</ul>

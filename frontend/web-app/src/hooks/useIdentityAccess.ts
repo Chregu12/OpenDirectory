@@ -10,8 +10,10 @@ export function useIdentityAccess() {
   const reload = useCallback(() => { setAccess(null); setUnavailable(false); setAttempt(value => value + 1); }, []);
   useEffect(() => {
     let active = true;
+    const invalid = () => { active = false; setAccess(null); setUnavailable(true); };
+    window.addEventListener('od:session-error', invalid);
     directoryUsers.access().then(result => { if (active) setAccess(result); }).catch(() => { if (active) { setAccess(null); setUnavailable(true); } });
-    return () => { active = false; };
+    return () => { active = false; window.removeEventListener('od:session-error', invalid); };
   }, [attempt]);
   return { access, unavailable, reload, can: (permission: string) => access?.permissions.includes(permission) === true };
 }

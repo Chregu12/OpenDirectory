@@ -1,4 +1,5 @@
 import React from 'react';
+import { api } from '../../lib/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import QuickActionsBar from '../../components/views/QuickActionsBar';
@@ -14,7 +15,7 @@ const capabilities = ['devices.enroll', 'users.onboard', 'applications.create', 
 
 async function renderReady() {
   render(<QuickActionsBar {...defaultProps} />);
-  await screen.findByText('Enroll Device');
+  await screen.findByText('Gerät registrieren');
 }
 
 const defaultProps = {
@@ -28,23 +29,24 @@ const defaultProps = {
 describe('QuickActionsBar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (api.get as jest.Mock).mockResolvedValue({ data: { configuredServices: ['quick-actions'] } });
     identityPermissions(['users.read']);
     (qaGet as jest.Mock).mockResolvedValue({ subject: 'operator', permissions: capabilities });
   });
 
   test('renders all 5 action buttons for authorized operators', async () => {
     await renderReady();
-    expect(screen.getByText('Enroll Device')).toBeInTheDocument();
+    expect(screen.getByText('Gerät registrieren')).toBeInTheDocument();
     expect(screen.getByText('Benutzerverwaltung')).toBeInTheDocument();
     expect(screen.getByText('Service Principal')).toBeInTheDocument();
-    expect(screen.getByText('Deploy Policy')).toBeInTheDocument();
-    expect(screen.getByText('Compliance Snapshot')).toBeInTheDocument();
+    expect(screen.getByText('Richtlinie bereitstellen')).toBeInTheDocument();
+    expect(screen.getByText('Compliance prüfen')).toBeInTheDocument();
   });
 
-  test('clicking Enroll Device calls onEnrollDevice', async () => {
+  test('clicking Gerät registrieren calls onEnrollDevice', async () => {
     const user = userEvent.setup();
     await renderReady();
-    await user.click(screen.getByText('Enroll Device'));
+    await user.click(screen.getByText('Gerät registrieren'));
     expect(defaultProps.onEnrollDevice).toHaveBeenCalledTimes(1);
   });
 
@@ -62,17 +64,17 @@ describe('QuickActionsBar', () => {
     expect(defaultProps.onServicePrincipal).toHaveBeenCalledTimes(1);
   });
 
-  test('clicking Deploy Policy calls onDeployPolicy', async () => {
+  test('clicking Richtlinie bereitstellen calls onDeployPolicy', async () => {
     const user = userEvent.setup();
     await renderReady();
-    await user.click(screen.getByText('Deploy Policy'));
+    await user.click(screen.getByText('Richtlinie bereitstellen'));
     expect(defaultProps.onDeployPolicy).toHaveBeenCalledTimes(1);
   });
 
-  test('clicking Compliance Snapshot calls onComplianceSnapshot', async () => {
+  test('clicking Compliance prüfen calls onComplianceSnapshot', async () => {
     const user = userEvent.setup();
     await renderReady();
-    await user.click(screen.getByText('Compliance Snapshot'));
+    await user.click(screen.getByText('Compliance prüfen'));
     expect(defaultProps.onComplianceSnapshot).toHaveBeenCalledTimes(1);
   });
 
@@ -90,10 +92,10 @@ describe('QuickActionsBar', () => {
     expect(buttons).toHaveLength(5);
   });
 
-  test('Enroll Device button has accent styling (it is the primary action)', async () => {
+  test('Gerät registrieren button has accent styling (it is the primary action)', async () => {
     await renderReady();
-    // Enroll Device is the accent button - it's first and has different styling
-    const enrollBtn = screen.getByText('Enroll Device');
+    // Gerät registrieren is the accent button - it's first and has different styling
+    const enrollBtn = screen.getByText('Gerät registrieren');
     expect(enrollBtn).toBeInTheDocument();
   });
 
@@ -113,7 +115,7 @@ describe('QuickActionsBar', () => {
     identityPermissions([]);
     (qaGet as jest.Mock).mockReturnValue(new Promise(() => {}));
     render(<QuickActionsBar {...defaultProps} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Checking action permissions');
+    expect(screen.getByRole('status')).toHaveTextContent('Aktionsberechtigungen werden geprüft');
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
@@ -121,7 +123,7 @@ describe('QuickActionsBar', () => {
     identityPermissions([]);
     (qaGet as jest.Mock).mockResolvedValue({ subject: 'reader', permissions: ['compliance.read'] });
     render(<QuickActionsBar {...defaultProps} />);
-    expect(await screen.findByRole('button', { name: 'Compliance Snapshot' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Compliance prüfen' })).toBeInTheDocument();
     expect(screen.getAllByRole('button')).toHaveLength(1);
     expect(qaGet).toHaveBeenCalledWith('/api/quick/access');
   });

@@ -20,7 +20,7 @@ const colorMap: Record<string, { text: string; bg: string; iconColor: string }> 
 
 export function StatCards({ cards }: { cards: StatCard[] }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(cards.length, 4)}, 1fr)`, gap: 12, marginBottom: 20 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(cards.length, 4)}, 1fr)`, gap: 12, marginBottom: 16 }}>
       {cards.map((card, i) => {
         const colors = colorMap[card.color || 'blue'];
         return (
@@ -35,12 +35,12 @@ export function StatCards({ cards }: { cards: StatCard[] }) {
                 {card.label}
               </span>
               {card.icon && (
-                <div style={{ width: 28, height: 28, borderRadius: 6, background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 24, height: 24, borderRadius: 6, background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <card.icon style={{ width: 16, height: 16, color: colors.iconColor }} />
                 </div>
               )}
             </div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--apple-text-primary)', lineHeight: 1 }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--apple-text-primary)', lineHeight: 1 }}>
               {card.value.toLocaleString()}
             </div>
             {card.trend && (

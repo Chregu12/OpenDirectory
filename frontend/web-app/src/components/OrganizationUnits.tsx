@@ -62,7 +62,7 @@ export default function OrganizationUnits({ access }: { access: DirectoryAccess 
       {access.permissions.includes('ous.delete') && <button type="button" className="border rounded px-3 py-1 disabled:opacity-40" disabled={!canMutate || !unit.revision || busy || !!byParent.get(unit.id)?.length || !!unit.memberCount} title={byParent.get(unit.id)?.length || unit.memberCount ? 'Zuerst untergeordnete Einheiten und Benutzerzuordnungen kontrolliert entfernen.' : undefined} aria-label={`Organisationseinheit ${unit.name} löschen`} onClick={() => { setRemoving(unit); setNotice(''); }}>Löschen</button>}
     </div>{children(unit.id)}
   </li>)}</ul>;
-  return <section aria-label="Organisationsstruktur" className="space-y-4 border-t border-white/20 pt-6">
+  return <section aria-label="Organisationsstruktur" className="space-y-4 border-t border-[var(--border-strong)] pt-6">
     <h2 className="text-xl font-semibold">Organisationsstruktur</h2>
     <p>Einheiten des eigenen Mandanten. Änderungen binden die angezeigte Version. Kinder und Benutzerzuordnungen verhindern die Löschung; Mitgliedschaften vergeben keine automatischen Rollen oder Lizenzen.</p>
     {!supported && <p role="alert">Der mandantengebundene Verzeichnisdienst ist nicht verfügbar.</p>}

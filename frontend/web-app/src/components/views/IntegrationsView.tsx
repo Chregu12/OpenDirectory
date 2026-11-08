@@ -1,670 +1,757 @@
-'use client';
-
-import React, { useState, useEffect, useCallback } from 'react';
-import AppRegistrationsView from './AppRegistrationsView';
+"use client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Dialog } from "@headlessui/react";
 import {
-  PlusIcon,
-  TrashIcon,
-  CheckCircleIcon,
-  ExclamationCircleIcon,
-  XMarkIcon,
-  ClipboardDocumentIcon,
-  BoltIcon,
-  ClockIcon,
+  ArrowPathIcon,
   GlobeAltIcon,
-} from '@heroicons/react/24/outline';
-import toast from 'react-hot-toast';
-import { api } from '@/lib/api';
+  PlusIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
+import { api } from "@/lib/api";
+import { PageHeader } from "@/components/ui/PageHeader";
+import AppRegistrationsView from "./AppRegistrationsView";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface ApiKey {
-  id: string;
-  name: string;
-  permissions: string[];
-  created: string;
-  created_at?: string;
-  lastUsed?: string;
-  last_used?: string;
-  active?: boolean;
-}
-
-interface Webhook {
+type Hook = {
   id: string;
   name: string;
   url: string;
   events: string[];
   active: boolean;
-  createdAt?: string;
-  created_at?: string;
-  lastTriggered?: string;
   last_triggered?: string;
-  deliveryCount?: number;
-  delivery_count?: number;
-  failureCount?: number;
-  failure_count?: number;
-}
-
-interface WebhookDelivery {
+};
+type Service = { id: string; name: string; status: string; lastCheck?: string };
+type Key = { id: string; name: string; active: boolean };
+type Delivery = {
   id: string;
-  webhookId?: string;
-  webhook_id?: string;
-  eventType?: string;
   event_type?: string;
-  responseStatus?: number;
-  response_status?: number;
-  deliveredAt?: string;
-  delivered_at?: string;
+  eventType?: string;
   success: boolean;
-}
-
-type Tab = 'apikeys' | 'webhooks' | 'oauth';
-
-const ALL_EVENTS = [
-  'user.created', 'user.updated', 'user.deleted',
-  'device.enrolled', 'device.compliance_failed',
-  'group.created', 'auth.login_failed', 'auth.mfa_disabled',
+  response_status?: number;
+  responseStatus?: number;
+  delivered_at?: string;
+  deliveredAt?: string;
+};
+const EVENTS = [
+  "user.created",
+  "user.updated",
+  "user.deleted",
+  "device.enrolled",
+  "device.compliance_failed",
+  "group.created",
+  "auth.login_failed",
+  "auth.mfa_disabled",
 ];
-
-const PERMISSION_OPTIONS = [
-  { value: 'read', label: 'Lesen' },
-  { value: 'write', label: 'Schreiben' },
-  { value: 'admin', label: 'Admin' },
-];
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function fmtDate(d: string | null | undefined): string {
-  if (!d) return '—';
-  return new Date(d).toLocaleString('de-CH');
+const date = (value?: string) =>
+  value ? new Date(value).toLocaleString("de-CH") : "—";
+function origin(value: string) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return "";
+  }
 }
-
-function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text).then(
-    () => toast.success('In Zwischenablage kopiert'),
-    () => toast.error('Kopieren fehlgeschlagen'),
-  );
-}
-
-// ── Event Badges ───────────────────────────────────────────────────────────────
-
-function EventBadges({ events }: { events: string[] }) {
-  const visible = events.slice(0, 3);
-  const rest = events.length - visible.length;
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-      {visible.map(e => (
-        <span key={e} style={{ padding: '2px 6px', borderRadius: 4, background: 'var(--accent-light)', color: 'var(--accent)', fontSize: 11, fontWeight: 500 }}>{e}</span>
-      ))}
-      {rest > 0 && <span style={{ padding: '2px 6px', borderRadius: 4, background: 'var(--bg-overlay)', color: 'var(--text-muted)', fontSize: 11 }}>+{rest}</span>}
-    </div>
-  );
-}
-
-// ── Create API Key Modal ───────────────────────────────────────────────────────
-
-interface CreateApiKeyModalProps {
-  onClose: () => void;
-  onCreated: (key: { name: string; key: string }) => void;
-}
-
-function CreateApiKeyModal({ onClose, onCreated }: CreateApiKeyModalProps) {
-  const [name, setName] = useState('');
-  const [permissions, setPermissions] = useState<string[]>(['read']);
-  const [saving, setSaving] = useState(false);
-
-  const toggle = (perm: string) => {
-    setPermissions(prev => prev.includes(perm) ? prev.filter(p => p !== perm) : [...prev, perm]);
-  };
-
-  const handleCreate = async () => {
-    if (!name.trim()) { toast.error('Name ist erforderlich'); return; }
-    if (permissions.length === 0) { toast.error('Mind. eine Berechtigung wählen'); return; }
-    setSaving(true);
-    try {
-      const res = await api.post('/api/gateway/api-keys', { name, permissions });
-      onCreated({ name, key: res.data.key });
-    } catch {
-      toast.error('Fehler beim Erstellen des API-Schlüssels');
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 28, width: 440, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>API-Schlüssel erstellen</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-            <XMarkIcon style={{ width: 20, height: 20 }} />
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>Name</label>
-            <input
-              value={name} onChange={e => setName(e.target.value)} placeholder="z.B. CI/CD Pipeline"
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-strong)', fontSize: 14, boxSizing: 'border-box', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 8 }}>Berechtigungen</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {PERMISSION_OPTIONS.map(opt => (
-                <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: 'var(--text-secondary)' }}>
-                  <input
-                    type="checkbox" checked={permissions.includes(opt.value)} onChange={() => toggle(opt.value)}
-                    style={{ width: 16, height: 16, cursor: 'pointer' }}
-                  />
-                  {opt.label}
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer' }}>Abbrechen</button>
-          <button
-            onClick={handleCreate} disabled={saving}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
-          >
-            {saving ? 'Erstellt...' : 'Erstellen'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Show API Key Modal ─────────────────────────────────────────────────────────
-
-function ShowKeyModal({ keyName, rawKey, onClose }: { keyName: string; rawKey: string; onClose: () => void }) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 28, width: 480, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>API-Schlüssel erstellt</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-            <XMarkIcon style={{ width: 20, height: 20 }} />
-          </button>
-        </div>
-
-        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
-          Der Schlüssel <strong>{keyName}</strong> wurde erstellt.
-        </p>
-
-        <div style={{ background: 'var(--success-light)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <code style={{ fontSize: 13, color: 'var(--success)', wordBreak: 'break-all', flex: 1 }}>{rawKey}</code>
-            <button
-              onClick={() => copyToClipboard(rawKey)}
-              style={{ flexShrink: 0, padding: 6, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-surface-raised)', cursor: 'pointer' }}
-              title="Kopieren"
-            >
-              <ClipboardDocumentIcon style={{ width: 16, height: 16, color: 'var(--success)' }} />
-            </button>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--warning-light)', border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 20 }}>
-          <ExclamationCircleIcon style={{ width: 16, height: 16, color: 'var(--warning)', flexShrink: 0, marginTop: 1 }} />
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--warning)' }}>Speichere diesen Schlüssel — er wird nicht mehr angezeigt.</p>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
-            Fertig
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Add Webhook Modal ──────────────────────────────────────────────────────────
-
-interface AddWebhookModalProps {
+function HookEditor({
+  hook,
+  onClose,
+  onSaved,
+}: {
+  hook?: Hook;
   onClose: () => void;
   onSaved: () => void;
-}
-
-function AddWebhookModal({ onClose, onSaved }: AddWebhookModalProps) {
-  const [name, setName] = useState('');
-  const [url, setUrl] = useState('');
-  const [events, setEvents] = useState<string[]>([]);
-  const [secret, setSecret] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const toggleEvent = (e: string) => setEvents(prev => prev.includes(e) ? prev.filter(x => x !== e) : [...prev, e]);
-
-  const handleSave = async () => {
-    if (!name.trim()) { toast.error('Name ist erforderlich'); return; }
-    if (!url.trim()) { toast.error('URL ist erforderlich'); return; }
-    setSaving(true);
-    try {
-      await api.post('/api/gateway/webhooks', { name, url, events });
-      toast.success('Webhook hinzugefügt');
-      onSaved();
-    } catch {
-      toast.error('Fehler beim Speichern');
-    } finally {
-      setSaving(false);
-    }
-  };
-
+}) {
+  const [name, setName] = useState(hook?.name || "");
+  const [url, setUrl] = useState(hook?.url || "");
+  const [active, setActive] = useState(hook?.active ?? true);
+  const [events, setEvents] = useState(hook?.events || []);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [unconfirmed, setUnconfirmed] = useState(false);
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 28, width: 520, maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Webhook hinzufügen</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-            <XMarkIcon style={{ width: 20, height: 20 }} />
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>Name</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="z.B. Slack-Benachrichtigungen" style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-strong)', fontSize: 14, boxSizing: 'border-box', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }} />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>Payload-URL</label>
-            <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://..." style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-strong)', fontSize: 14, boxSizing: 'border-box', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }} />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 8 }}>Ereignisse</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              {ALL_EVENTS.map(e => (
-                <label key={e} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
-                  <input type="checkbox" checked={events.includes(e)} onChange={() => toggleEvent(e)} style={{ width: 14, height: 14, cursor: 'pointer' }} />
-                  <code style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{e}</code>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>Secret (optional)</label>
-            <input type="password" disabled value={secret} onChange={e => setSecret(e.target.value)} placeholder="Signierung noch nicht implementiert" style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-strong)', fontSize: 14, boxSizing: 'border-box', background: 'var(--bg-surface-raised)', color: 'var(--text-primary)' }} />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer' }}>Abbrechen</button>
+    <Dialog
+      open
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      className="od-modal-frame"
+    >
+      <Dialog.Panel
+        as="form"
+        className="od-modal-panel max-w-xl space-y-5"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (busy || unconfirmed) return;
+          setBusy(true);
+          setError("");
+          try {
+            const target = new URL(url);
+            if (
+              target.protocol !== "https:" ||
+              target.username ||
+              target.password ||
+              target.hash
+            ) {
+              setError(
+                "Eine HTTPS-Adresse ohne Zugangsdaten oder Fragment angeben.",
+              );
+              return;
+            }
+            const fields = {
+              name: name.trim(),
+              url: target.href,
+              events,
+              ...(hook ? { active } : {}),
+            };
+            const response = hook
+              ? await api.put("/api/gateway/webhooks/" + hook.id, fields)
+              : await api.post("/api/gateway/webhooks", fields);
+            if (
+              response.status !== (hook ? 200 : 201) ||
+              !response.data?.id ||
+              (hook && response.data.id !== hook.id)
+            )
+              throw new Error("Unconfirmed");
+            onSaved();
+            onClose();
+          } catch (failure: any) {
+            setError(
+              "Speicherung nicht bestätigt. Eingaben bleiben erhalten; vor einer Wiederholung die registrierten Webhooks prüfen.",
+            );
+            setUnconfirmed(![400, 422].includes(failure?.response?.status));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <div className="flex justify-between gap-3">
+          <Dialog.Title className="text-lg font-semibold">
+            {hook ? "Webhook bearbeiten" : "Webhook hinzufügen"}
+          </Dialog.Title>
           <button
-            onClick={handleSave} disabled={saving}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
+            type="button"
+            disabled={busy}
+            aria-label="Webhook-Editor schliessen"
+            onClick={onClose}
           >
-            {saving ? 'Speichert...' : 'Speichern'}
+            <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
-      </div>
-    </div>
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          Registriert die lokale Verbindung. Automatische signierte
+          Ereigniszustellung ist in diesem Gateway noch nicht integriert.
+          Manuelle Tests benötigen eine serverseitig freigegebene Zieladresse.
+        </p>
+        <label className="block">
+          Name
+          <input
+            className="input-apple mt-2"
+            required
+            maxLength={160}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            disabled={busy || unconfirmed}
+          />
+        </label>
+        <label className="block">
+          Payload-URL
+          <input
+            className="input-apple mt-2"
+            required
+            type="url"
+            pattern="https://.*"
+            maxLength={2000}
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            disabled={busy || unconfirmed}
+          />
+        </label>
+        <fieldset>
+          <legend className="font-medium mb-3">Vorgesehene Ereignisse</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {EVENTS.map((value) => (
+              <label className="flex gap-2 items-center text-sm" key={value}>
+                <input
+                  type="checkbox"
+                  disabled={busy || unconfirmed}
+                  checked={events.includes(value)}
+                  onChange={(event) =>
+                    setEvents((current) =>
+                      event.target.checked
+                        ? [...current, value]
+                        : current.filter((item) => item !== value),
+                    )
+                  }
+                />
+                {value}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {hook && (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={active}
+              disabled={busy || unconfirmed}
+              onChange={(event) => setActive(event.target.checked)}
+            />
+            Verbindung aktiviert
+          </label>
+        )}
+        {error && <p role="alert">{error}</p>}
+        <div className="flex gap-3 justify-end">
+          <button
+            type="button"
+            className="fluent-btn-secondary"
+            disabled={busy}
+            onClick={onClose}
+          >
+            Abbrechen
+          </button>
+          <button
+            className="fluent-btn-primary"
+            type="submit"
+            disabled={busy || unconfirmed}
+          >
+            {busy ? "Wird gespeichert …" : "Speichern"}
+          </button>
+        </div>
+      </Dialog.Panel>
+    </Dialog>
   );
 }
-
-// ── Delivery Log Panel ─────────────────────────────────────────────────────────
-
-function DeliveryLogPanel({ webhookId, onClose }: { webhookId: string; onClose: () => void }) {
-  const [deliveries, setDeliveries] = useState<WebhookDelivery[]>([]);
-  const [loading, setLoading] = useState(true);
-
+function Deliveries({ hook, onClose }: { hook: Hook; onClose: () => void }) {
+  const [rows, setRows] = useState<Delivery[] | null>(null);
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
   useEffect(() => {
-    api.get(`/api/gateway/webhooks/${webhookId}/deliveries`)
-      .then(res => setDeliveries(Array.isArray(res.data) ? res.data : []))
-      .catch(() => setDeliveries([]))
-      .finally(() => setLoading(false));
-  }, [webhookId]);
-
+    let active = true;
+    setError("");
+    setRows(null);
+    api
+      .get("/api/gateway/webhooks/" + hook.id + "/deliveries")
+      .then((response) => {
+        if (!Array.isArray(response.data))
+          throw new Error("Invalid delivery log");
+        if (active) setRows(response.data);
+      })
+      .catch(() => {
+        if (active)
+          setError("Zustellungsprotokoll konnte nicht geladen werden.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [hook.id, revision]);
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 24, width: 600, maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Zustellungsprotokoll</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-            <XMarkIcon style={{ width: 20, height: 20 }} />
+    <Dialog open onClose={onClose} className="od-modal-frame">
+      <Dialog.Panel className="od-modal-panel max-w-3xl space-y-5">
+        <Dialog.Title className="text-lg font-semibold">
+          Zustellungsprotokoll · {hook.name}
+        </Dialog.Title>
+        {error && <p role="alert">{error}</p>}
+        {!rows && !error && <p role="status">Protokoll wird geladen …</p>}
+        {rows?.length === 0 && (
+          <p>Keine bestätigten Zustellungsversuche vorhanden.</p>
+        )}
+        {!!rows?.length && (
+          <div className="od-table-scroll">
+            <table className="fluent-table">
+              <thead>
+                <tr>
+                  {["Zeitpunkt", "Ereignis", "Ergebnis", "HTTP"].map(
+                    (value) => (
+                      <th scope="col" key={value}>
+                        {value}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{date(row.delivered_at || row.deliveredAt)}</td>
+                    <td>{row.event_type || row.eventType}</td>
+                    <td>{row.success ? "Zugestellt" : "Fehlgeschlagen"}</td>
+                    <td>{row.response_status ?? row.responseStatus ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="flex justify-end gap-3">
+          <button
+            className="fluent-btn-secondary"
+            onClick={() => setRevision((value) => value + 1)}
+          >
+            Protokoll neu laden
+          </button>
+          <button className="fluent-btn-secondary" onClick={onClose}>
+            Schliessen
           </button>
         </div>
-
-      {loading ? (
-          <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Laden...</p>
-        ) : deliveries.length === 0 ? (
-          <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 24 }}>Keine Zustellungen</p>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--bg-surface-raised)' }}>
-                {['Zeitpunkt', 'Ereignis', 'Status', 'HTTP'].map(h => (
-                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {deliveries.map((d, i) => (
-                <tr key={d.id} style={{ borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
-                  <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>{fmtDate(d.deliveredAt || d.delivered_at)}</td>
-                  <td style={{ padding: '10px 12px' }}><code style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{d.eventType || d.event_type}</code></td>
-                  <td style={{ padding: '10px 12px' }}>
-                    {d.success
-                      ? <span style={{ color: '#16A34A', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}><CheckCircleIcon style={{ width: 14, height: 14 }} />Zugestellt</span>
-                      : <span style={{ color: '#DC2626', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}><ExclamationCircleIcon style={{ width: 14, height: 14 }} />Fehler</span>}
-                  </td>
-                  <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>{d.responseStatus ?? d.response_status ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
+      </Dialog.Panel>
+    </Dialog>
   );
 }
-
-// ── Main Component ─────────────────────────────────────────────────────────────
-
 export default function IntegrationsView() {
-  const [activeTab, setActiveTab] = useState<Tab>('apikeys');
-  const [gatewayPermissions, setGatewayPermissions] = useState<string[]>([]);
-  const [gatewayError, setGatewayError] = useState('');
-  const canManageKeys = gatewayPermissions.includes('gateway.keys.manage');
-  const canManageWebhooks = gatewayPermissions.includes('gateway.webhooks.manage');
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [tab, setTab] = useState("connections");
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [origins, setOrigins] = useState<string[]>([]);
+  const [services, setServices] = useState<Service[] | null>(null);
+  const [hooks, setHooks] = useState<Hook[] | null>(null);
+  const [keys, setKeys] = useState<Key[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showCreateKeyModal, setShowCreateKeyModal] = useState(false);
-  const [newKeyData, setNewKeyData] = useState<{ name: string; key: string } | null>(null);
-  const [showAddWebhookModal, setShowAddWebhookModal] = useState(false);
-  const [selectedWebhookId, setSelectedWebhookId] = useState<string | null>(null);
-  const [testingIds, setTestingIds] = useState<Set<string>>(new Set());
-
-  const loadData = useCallback(async () => {
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [editor, setEditor] = useState<Hook | "new" | null>(null);
+  const [log, setLog] = useState<Hook | null>(null);
+  const [removing, setRemoving] = useState<Hook | Key | null>(null);
+  const [removalError, setRemovalError] = useState("");
+  const generation = useRef(0);
+  const can = (permission: string) => permissions.includes(permission);
+  const load = useCallback(async () => {
+    const epoch = ++generation.current;
     setLoading(true);
-    setGatewayError('');
+    setErrors({});
     try {
-      const access = await api.get('/api/gateway/access');
-      const permissions = Array.isArray(access.data?.permissions) ? access.data.permissions : [];
-      setGatewayPermissions(permissions);
-      const [keysRes, hooksRes] = await Promise.allSettled([
-        permissions.includes('gateway.keys.read') ? api.get('/api/gateway/api-keys') : Promise.resolve({ data: [] }),
-        permissions.includes('gateway.webhooks.read') ? api.get('/api/gateway/webhooks') : Promise.resolve({ data: [] }),
-      ]);
-      setApiKeys(keysRes.status === 'fulfilled' && Array.isArray(keysRes.value.data) ? keysRes.value.data : []);
-      setWebhooks(hooksRes.status === 'fulfilled' && Array.isArray(hooksRes.value.data) ? hooksRes.value.data : []);
-      if (keysRes.status === 'rejected' || hooksRes.status === 'rejected') setGatewayError('Integrationsdaten konnten nicht bestätigt werden; kein lokaler Ersatz wird angezeigt.');
+      const access = (await api.get("/api/gateway/access")).data;
+      if (!Array.isArray(access?.permissions) || !access?.subject)
+        throw new Error("Invalid access");
+      const rights: string[] = access.permissions;
+      if (epoch !== generation.current) return;
+      setPermissions(rights);
+      setOrigins(
+        Array.isArray(access.webhooks?.allowedOrigins)
+          ? access.webhooks.allowedOrigins.filter(
+              (value: unknown) => typeof value === "string",
+            )
+          : [],
+      );
+      if (!rights.includes("gateway.webhooks.manage")) setEditor(null);
+      const jobs = [
+        ["connections", "gateway.status.read", "/api/services", setServices],
+        [
+          "webhooks",
+          "gateway.webhooks.read",
+          "/api/gateway/webhooks",
+          setHooks,
+        ],
+        ["apikeys", "gateway.keys.read", "/api/gateway/api-keys", setKeys],
+      ] as const;
+      await Promise.all(
+        jobs.map(async ([area, permission, path, setter]) => {
+          if (!rights.includes(permission)) {
+            setter(null);
+            return;
+          }
+          try {
+            const response = await api.get(path);
+            if (!Array.isArray(response.data)) throw new Error("Invalid data");
+            if (epoch === generation.current) setter(response.data);
+          } catch {
+            if (epoch === generation.current) {
+              setter(null);
+              setErrors((current) => ({
+                ...current,
+                [area]:
+                  "Integrationsdaten konnten nicht bestätigt werden; kein lokaler Ersatz wird angezeigt.",
+              }));
+            }
+          }
+        }),
+      );
     } catch {
-      setGatewayPermissions([]); setApiKeys([]); setWebhooks([]);
-      setShowCreateKeyModal(false); setShowAddWebhookModal(false); setSelectedWebhookId(null);
-      setGatewayError('Gateway-Anmeldung oder Berechtigungen sind nicht verfügbar.');
-    } finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
-
-  const handleRevokeKey = async (keyId: string) => {
-    if (!confirm('API-Schlüssel wirklich widerrufen?')) return;
-    try {
-      await api.delete(`/api/gateway/api-keys/${keyId}`);
-      toast.success('Schlüssel widerrufen');
-      loadData();
-    } catch {
-      toast.error('Fehler beim Widerrufen');
-    }
-  };
-
-  const handleDeleteWebhook = async (webhookId: string) => {
-    if (!confirm('Webhook wirklich löschen?')) return;
-    try {
-      await api.delete(`/api/gateway/webhooks/${webhookId}`);
-      toast.success('Webhook gelöscht');
-      loadData();
-    } catch {
-      toast.error('Fehler beim Löschen');
-    }
-  };
-
-  const handleTestWebhook = async (webhookId: string) => {
-    setTestingIds(prev => new Set(prev).add(webhookId));
-    try {
-      const res = await api.post(`/api/gateway/webhooks/${webhookId}/test`);
-      const result = res.data as { success: boolean; responseStatus: number };
-      if (result.success) {
-        toast.success(`Test zugestellt (HTTP ${result.responseStatus})`);
-      } else {
-        toast.error(`Test fehlgeschlagen (HTTP ${result.responseStatus})`);
+      if (epoch === generation.current) {
+        setPermissions([]);
+        setOrigins([]);
+        setServices(null);
+        setHooks(null);
+        setKeys(null);
+        setEditor(null);
+        setLog(null);
+        setRemoving(null);
+        setErrors({
+          access: "Gateway-Anmeldung oder Berechtigungen sind nicht verfügbar.",
+        });
       }
-    } catch {
-      toast.error('Fehler beim Testen');
     } finally {
-      setTestingIds(prev => { const n = new Set(prev); n.delete(webhookId); return n; });
+      if (epoch === generation.current) setLoading(false);
     }
-  };
-
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'apikeys', label: 'API-Schlüssel' },
-    { id: 'webhooks', label: 'Webhooks' },
-    { id: 'oauth', label: 'OAuth-Apps' },
-  ];
-
+  }, []);
+  useEffect(() => {
+    void load();
+    return () => {
+      generation.current++;
+    };
+  }, [load]);
   return (
-    <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Integrationen</h1>
-          <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>API-Schlüssel, Webhooks und OAuth-Anwendungen verwalten</p>
-        </div>
-        {false && activeTab === 'apikeys' && (
-          <button
-            onClick={() => setShowCreateKeyModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
-          >
-            <PlusIcon style={{ width: 16, height: 16 }} />
-            API-Schlüssel erstellen
-          </button>
-        )}
-        {canManageWebhooks && activeTab === 'webhooks' && (
-          <button
-            onClick={() => setShowAddWebhookModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#006FFF', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
-          >
-            <PlusIcon style={{ width: 16, height: 16 }} />
-            Webhook hinzufügen
-          </button>
-        )}
-      </div>
-
-      {gatewayError && <p role="alert">{gatewayError}</p>}
-      <p role="status">Gateway-API-Schlüssel sind stillgelegt. Für neue Integrationen autorisierte OAuth-App-Zugangsdaten verwenden. Webhooks registrieren Metadaten; produktive signierte Ereigniszustellung ist noch nicht implementiert.</p>
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 24 }}>
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: '10px 16px', fontSize: 14, fontWeight: activeTab === tab.id ? 600 : 400,
-              color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)',
-              borderBottom: activeTab === tab.id ? '2px solid var(--accent)' : '2px solid transparent',
-              background: 'none', border: 'none', cursor: 'pointer', marginBottom: -1,
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>Laden...</div>
-      ) : (
-        <>
-          {/* API Keys Tab */}
-          {activeTab === 'apikeys' && (
-            <div>
-              {apiKeys.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>
-                  <p style={{ margin: 0, fontWeight: 500 }}>Keine API-Schlüssel</p>
-                  <p style={{ margin: '4px 0 0', fontSize: 13 }}>Für neue Integrationen die autorisierte App-Registrierung verwenden.</p>
-                </div>
-              ) : (
-                <div style={{ background: 'var(--bg-surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--bg-surface-raised)' }}>
-                        {['Name', 'Berechtigungen', 'Erstellt', 'Zuletzt verwendet', 'Status', 'Aktionen'].map(h => (
-                          <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {apiKeys.map((key, i) => (
-                        <tr key={key.id} style={{ borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
-                          <td style={{ padding: '12px 16px', fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>{key.name}</td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                              {(key.permissions || []).map(p => (
-                                <span key={p} style={{ padding: '2px 6px', borderRadius: 4, background: 'var(--bg-overlay)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500 }}>{p}</span>
-                              ))}
-                            </div>
-                          </td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)' }}>{fmtDate(key.created || key.created_at)}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)' }}>
-                            {key.lastUsed || key.last_used ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <ClockIcon style={{ width: 14, height: 14 }} />
-                                {fmtDate(key.lastUsed || key.last_used)}
-                              </div>
-                            ) : '—'}
-                          </td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: 'var(--bg-overlay)', color: 'var(--text-muted)', fontSize: 12, fontWeight: 500 }}>
-                              Stillgelegt
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <button
-                              disabled={!canManageKeys} onClick={() => handleRevokeKey(key.id)}
-                              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--danger-light)', background: 'var(--danger-light)', fontSize: 12, cursor: 'pointer', color: 'var(--danger)' }}
-                            >
-                              <TrashIcon style={{ width: 14, height: 14 }} />
-                              Widerrufen
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Integrationen"
+        subtitle="Verbundene Dienste, OAuth-Anwendungen und Webhooks"
+        icon={GlobeAltIcon}
+        actions={
+          <>
+            <button
+              className="fluent-btn-secondary"
+              disabled={loading || busy || !!editor || !!removing}
+              onClick={() => void load()}
+            >
+              <ArrowPathIcon
+                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              />
+              Aktualisieren
+            </button>
+            {tab === "webhooks" && can("gateway.webhooks.manage") && (
+              <button
+                className="fluent-btn-primary"
+                disabled={loading || busy}
+                onClick={() => setEditor("new")}
+              >
+                <PlusIcon className="h-4 w-4" />
+                Webhook hinzufügen
+              </button>
+            )}
+          </>
+        }
+      />
+      {errors.access && <p role="alert">{errors.access}</p>}
+      {notice && <p role="status">{notice}</p>}
+      <div className="od-tabs-panel">
+        <nav className="od-tabs" aria-label="Integrationsbereiche">
+          {[
+            ["connections", "Verbindungen"],
+            ["oauth", "OAuth-Apps"],
+            ["webhooks", "Webhooks"],
+            ["apikeys", "Alte API-Schlüssel"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              aria-pressed={tab === id}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="p-5 space-y-5">
+          {loading && <p role="status">Verbindungen werden geprüft …</p>}
+          {errors[tab] && <p role="alert">{errors[tab]}</p>}
+          {tab === "connections" && (
+            <>
+              <section
+                aria-label="Verbundene Dienste"
+                className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+              >
+                {services?.map((service) => (
+                  <article className="od-panel space-y-3" key={service.id}>
+                    <div className="flex justify-between gap-3">
+                      <h2 className="font-semibold">{service.name}</h2>
+                      <span
+                        className="od-badge"
+                        style={{
+                          color:
+                            service.status === "healthy"
+                              ? "var(--success)"
+                              : "var(--text-secondary)",
+                        }}
+                      >
+                        {(
+                          {
+                            healthy: "Verbunden",
+                            disabled: "Nicht eingerichtet",
+                            unhealthy: "Gestört",
+                            unknown: "Nicht bestätigt",
+                            degraded: "Eingeschränkt",
+                          } as Record<string, string>
+                        )[service.status] || "Nicht bestätigt"}
+                      </span>
+                    </div>
+                    <p
+                      className="text-sm"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      Zuletzt geprüft: {date(service.lastCheck)}
+                    </p>
+                    <button
+                      className="fluent-btn-secondary"
+                      disabled={loading}
+                      onClick={() => void load()}
+                    >
+                      Verbindung prüfen
+                    </button>
+                  </article>
+                ))}
+              </section>
+              {!loading && !can("gateway.status.read") && !errors.access && (
+                <p>Keine Freigabe zum Lesen der globalen Dienstverbindungen.</p>
               )}
-            </div>
-          )}
-
-          {/* Webhooks Tab */}
-          {activeTab === 'webhooks' && (
-            <div>
-              {webhooks.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>
-                  <GlobeAltIcon style={{ width: 40, height: 40, margin: '0 auto 12px', color: 'var(--text-muted)' }} />
-                  <p style={{ margin: 0, fontWeight: 500 }}>Keine Webhooks konfiguriert</p>
-                  <p style={{ margin: '4px 0 0', fontSize: 13 }}>Fügen Sie einen Webhook hinzu, um externe Dienste zu benachrichtigen.</p>
+              {services?.length === 0 && (
+                <p>Keine Dienstverbindungen in der bestätigten Antwort.</p>
+              )}
+              <section className="od-panel space-y-3">
+                <h2 className="font-semibold">Anwendung anbinden</h2>
+                <p>
+                  Registriere eine OAuth-Anwendung und erteile die benötigten
+                  Rechte. Eigene Firmen-App-Konten besitzen einen eigenen
+                  Geltungsbereich.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    className="fluent-btn-primary"
+                    onClick={() => setTab("oauth")}
+                  >
+                    OAuth-Anwendungen öffnen
+                  </button>
+                  <a className="fluent-btn-secondary" href="/company-apps">
+                    Eigene Firmen-App-Konten
+                  </a>
                 </div>
-              ) : (
-                <div style={{ background: 'var(--bg-surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--bg-surface-raised)' }}>
-                        {['Name', 'URL', 'Ereignisse', 'Status', 'Letzter Aufruf', 'Aktionen'].map(h => (
-                          <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {webhooks.map((wh, i) => (
-                        <tr
-                          key={wh.id}
-                          style={{ borderTop: i > 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}
-                          onClick={() => setSelectedWebhookId(wh.id)}
+              </section>
+            </>
+          )}
+          {tab === "oauth" && <AppRegistrationsView />}
+          {tab === "webhooks" && (
+            <>
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                Webhooks registrieren lokale Metadaten. Produktive signierte
+                Ereigniszustellung ist noch nicht implementiert. Ein manueller
+                Test prüft die Erreichbarkeit des freigegebenen Ziels.
+              </p>
+              {can("gateway.webhooks.manage") && (
+                <p className="text-sm">
+                  {origins.length
+                    ? "Für Tests freigegebene Ziele: " + origins.join(", ")
+                    : "Keine Testziele serverseitig freigegeben. Die Ziel-Origin muss in GATEWAY_WEBHOOK_ALLOWED_ORIGINS konfiguriert werden."}
+                </p>
+              )}
+              {!loading && !can("gateway.webhooks.read") && !errors.access && (
+                <p>Keine Freigabe zum Lesen der Webhooks.</p>
+              )}
+              {hooks?.length === 0 && <p>Keine Webhooks konfiguriert.</p>}
+              <div className="space-y-4">
+                {hooks?.map((hook) => (
+                  <article key={hook.id} className="od-panel space-y-3">
+                    <div className="flex flex-wrap justify-between gap-3">
+                      <div>
+                        <h2 className="font-semibold">{hook.name}</h2>
+                        <p
+                          className="text-sm break-all"
+                          style={{ color: "var(--text-muted)" }}
                         >
-                          <td style={{ padding: '12px 16px', fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>{wh.name}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-muted)', maxWidth: 200 }}>
-                            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wh.url}</span>
-                          </td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <EventBadges events={wh.events || []} />
-                          </td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: wh.active ? 'var(--success-light)' : 'var(--bg-overlay)', color: wh.active ? 'var(--success)' : 'var(--text-muted)', fontSize: 12, fontWeight: 500 }}>
-                              <CheckCircleIcon style={{ width: 12, height: 12 }} />
-                              {wh.active ? 'Aktiv' : 'Inaktiv'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)' }}>
-                            {fmtDate(wh.lastTriggered || wh.last_triggered)}
-                          </td>
-                          <td style={{ padding: '12px 16px' }} onClick={e => e.stopPropagation()}>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              <button
-                                onClick={() => handleTestWebhook(wh.id)}
-                                disabled={!canManageWebhooks || testingIds.has(wh.id)}
-                                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-surface-raised)', color: 'var(--text-secondary)', fontSize: 12, cursor: testingIds.has(wh.id) ? 'not-allowed' : 'pointer', opacity: testingIds.has(wh.id) ? 0.6 : 1 }}
-                              >
-                                <BoltIcon style={{ width: 14, height: 14 }} />
-                                Test senden
-                              </button>
-                              <button
-                                disabled={!canManageWebhooks} onClick={() => handleDeleteWebhook(wh.id)}
-                                style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--danger-light)', background: 'var(--danger-light)', cursor: 'pointer', color: 'var(--danger)' }}
-                              >
-                                <TrashIcon style={{ width: 14, height: 14 }} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                          {hook.url}
+                        </p>
+                      </div>
+                      <span className="od-badge">
+                        {hook.active ? "Aktiv registriert" : "Inaktiv"}
+                      </span>
+                    </div>
+                    <p className="text-sm">
+                      Ereignisauswahl: {hook.events?.join(", ") || "Keine"} ·
+                      Letzter Test: {date(hook.last_triggered)}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="fluent-btn-secondary"
+                        onClick={() => setLog(hook)}
+                      >
+                        Protokoll öffnen
+                      </button>
+                      <button
+                        className="fluent-btn-secondary"
+                        disabled={
+                          !can("gateway.webhooks.manage") ||
+                          busy ||
+                          !hook.active ||
+                          !origins.includes(origin(hook.url))
+                        }
+                        onClick={async () => {
+                          setBusy(true);
+                          setNotice("");
+                          try {
+                            const response = await api.post(
+                              "/api/gateway/webhooks/" + hook.id + "/test",
+                            );
+                            if (
+                              response.status !== 200 ||
+                              typeof response.data?.success !== "boolean"
+                            )
+                              throw new Error("Unconfirmed");
+                            setNotice(
+                              response.data.success
+                                ? `Test zugestellt (HTTP ${response.data.responseStatus}).`
+                                : `Test fehlgeschlagen (HTTP ${response.data.responseStatus || "keine Antwort"}).`,
+                            );
+                            void load();
+                          } catch {
+                            setNotice(
+                              "Test nicht bestätigt. Vor einer Wiederholung das Zustellungsprotokoll prüfen.",
+                            );
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        Test senden
+                      </button>
+                      {can("gateway.webhooks.manage") && (
+                        <>
+                          <button
+                            className="fluent-btn-secondary"
+                            disabled={busy}
+                            onClick={() => setEditor(hook)}
+                          >
+                            Bearbeiten
+                          </button>
+                          <button
+                            className="fluent-btn-secondary"
+                            disabled={busy}
+                            onClick={() => {
+                              setRemovalError("");
+                              setRemoving(hook);
+                            }}
+                          >
+                            Webhook entfernen
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
           )}
-
-          {/* OAuth Apps Tab */}
-          {activeTab === 'oauth' && <AppRegistrationsView />}
-        </>
-      )}
-
-      {/* Modals */}
-      {false && showCreateKeyModal && (
-        <CreateApiKeyModal
-          onClose={() => setShowCreateKeyModal(false)}
-          onCreated={data => { setShowCreateKeyModal(false); setNewKeyData(data); loadData(); }}
+          {tab === "apikeys" && (
+            <>
+              <p>
+                Gateway-API-Schlüssel sind stillgelegt. Für neue Integrationen
+                autorisierte OAuth-App-Zugangsdaten verwenden.
+              </p>
+              {!loading && !can("gateway.keys.read") && !errors.access && (
+                <p>Keine Lesefreigabe für alte Schlüssel.</p>
+              )}
+              {keys?.length === 0 && <p>Keine alten Schlüssel registriert.</p>}
+              {keys?.map((key) => (
+                <article
+                  className="od-panel flex flex-wrap justify-between gap-3"
+                  key={key.id}
+                >
+                  <div>
+                    <h2 className="font-semibold">{key.name}</h2>
+                    <p>Stillgelegt</p>
+                  </div>
+                  {can("gateway.keys.manage") && key.active && (
+                    <button
+                      className="fluent-btn-secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        setRemovalError("");
+                        setRemoving(key);
+                      }}
+                    >
+                      Alten Schlüssel widerrufen
+                    </button>
+                  )}
+                </article>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+      {editor && can("gateway.webhooks.manage") && (
+        <HookEditor
+          hook={editor === "new" ? undefined : editor}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setNotice("Webhook-Metadaten lokal gespeichert.");
+            void load();
+          }}
         />
       )}
-
-      {newKeyData && (
-        <ShowKeyModal
-          keyName={newKeyData.name}
-          rawKey={newKeyData.key}
-          onClose={() => setNewKeyData(null)}
-        />
+      {log && can("gateway.webhooks.read") && (
+        <Deliveries hook={log} onClose={() => setLog(null)} />
       )}
-
-      {canManageWebhooks && showAddWebhookModal && (
-        <AddWebhookModal
-          onClose={() => setShowAddWebhookModal(false)}
-          onSaved={() => { setShowAddWebhookModal(false); loadData(); }}
-        />
-      )}
-
-      {selectedWebhookId && (
-        <DeliveryLogPanel
-          webhookId={selectedWebhookId}
-          onClose={() => setSelectedWebhookId(null)}
-        />
+      {removing && (
+        <Dialog
+          open
+          onClose={() => {
+            if (!busy) setRemoving(null);
+          }}
+          className="od-modal-frame"
+        >
+          <Dialog.Panel className="od-modal-panel max-w-lg space-y-5">
+            <Dialog.Title className="text-lg font-semibold">
+              {"url" in removing
+                ? "Webhook entfernen"
+                : "Alten Schlüssel widerrufen"}
+            </Dialog.Title>
+            <p>
+              {removing.name} ·{" "}
+              {"url" in removing
+                ? removing.url
+                : "Die bestehende Schlüssel-Metadatenfreigabe wird widerrufen."}
+            </p>
+            {removalError && <p role="alert">{removalError}</p>}
+            <div className="flex gap-3 justify-end">
+              <button
+                className="fluent-btn-secondary"
+                disabled={busy}
+                onClick={() => setRemoving(null)}
+              >
+                Abbrechen
+              </button>
+              <button
+                className="fluent-btn-primary"
+                disabled={
+                  busy ||
+                  !!removalError ||
+                  !can(
+                    "url" in removing
+                      ? "gateway.webhooks.manage"
+                      : "gateway.keys.manage",
+                  )
+                }
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const hook = "url" in removing;
+                    const response = await api.delete(
+                      "/api/gateway/" +
+                        (hook ? "webhooks/" : "api-keys/") +
+                        removing.id,
+                    );
+                    if (
+                      hook
+                        ? response.status !== 204
+                        : response.status !== 200 ||
+                          response.data.id !== removing.id ||
+                          response.data.active !== false
+                    )
+                      throw new Error("Unconfirmed");
+                    setNotice(
+                      hook
+                        ? "Webhook lokal entfernt."
+                        : "Alter Schlüssel widerrufen.",
+                    );
+                    setRemoving(null);
+                    void load();
+                  } catch {
+                    setRemovalError(
+                      "Änderung nicht bestätigt. Dialog schliessen und aktuellen Stand neu laden; keine automatische Wiederholung.",
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {busy ? "Wird ausgeführt …" : "Bestätigen"}
+              </button>
+            </div>
+          </Dialog.Panel>
+        </Dialog>
       )}
     </div>
   );
