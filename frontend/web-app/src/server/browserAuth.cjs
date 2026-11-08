@@ -51,6 +51,13 @@ function cookieValue(request, name) {
   return matching[0].slice(name.length + 1);
 }
 
+function loginReturnPath(value) {
+  if (value === undefined || value === null) return '/dashboard';
+  if (typeof value !== 'string' || /\s/.test(value) || !/^\/[a-z][a-z0-9-]{0,63}$/.test(value)
+    || ['/api', '/auth', '/login', '/logout'].includes(value)) throw new BrowserAuthError(400, 'browser_auth_return_path_invalid');
+  return value;
+}
+
 class BrowserAuth {
   constructor({ origin = process.env.BROWSER_AUTH_ORIGIN, issuer = process.env.BROWSER_AUTH_ISSUER,
     publicUrl = process.env.BROWSER_AUTH_PUBLIC_URL, internalUrl = process.env.BROWSER_AUTH_INTERNAL_URL,
@@ -330,14 +337,17 @@ class BrowserAuth {
     return claims.iss === this.issuer && claims.sub === session.subject && claims.sid === session.sid && claims.auth_time === session.authTime;
   }
 
-  async login() {
+  async login(request) {
+    const targets = request ? new URL(request.url).searchParams.getAll('returnTo') : [];
+    if (targets.length > 1) throw new BrowserAuthError(400, 'browser_auth_return_path_invalid');
+    const returnTo = loginReturnPath(targets[0]);
     const state = crypto.randomBytes(32).toString('base64url'); const verifier = crypto.randomBytes(32).toString('base64url');
     const nonce = crypto.randomBytes(32).toString('base64url');
     const url = new URL('/oauth/authorize', this.publicUrl);
     url.search = new URLSearchParams({ response_type: 'code', client_id: this.clientId, redirect_uri: this.redirectUri, scope: this.scopes, state, nonce,
       code_challenge_method: 'S256', code_challenge: crypto.createHash('sha256').update(verifier).digest('base64url') }).toString();
     const headers = this.headers(); headers.set('Location', url.href);
-    this.cookie(headers, this.flowCookie, this.seal({ state, verifier, nonce, expiresAt: this.now() + 600000 }, 'flow'), '/auth/callback', 600, true, 'Lax');
+    this.cookie(headers, this.flowCookie, this.seal({ state, verifier, nonce, returnTo, expiresAt: this.now() + 600000 }, 'flow'), '/auth/callback', 600, true, 'Lax');
     return new Response(null, { status: 303, headers });
   }
 
@@ -347,6 +357,7 @@ class BrowserAuth {
     try {
       const query = new URL(request.url).searchParams;
       const flow = this.unseal(cookieValue(request, this.flowCookie), 'flow');
+      const returnTo = loginReturnPath(flow.returnTo);
       if (query.getAll('state').length !== 1 || !equal(query.get('state'), flow.state) || query.has('error') || query.getAll('code').length !== 1 || !query.get('code')) throw new BrowserAuthError(401, 'browser_auth_callback_invalid');
       const pair = this.pair(await this.exchange({ grant_type: 'authorization_code', code: query.get('code'), redirect_uri: this.redirectUri, code_verifier: flow.verifier }));
       const identity = await this.verify(pair.id_token, 'id', flow.nonce); const access = await this.verify(pair.access_token, 'access');
@@ -354,7 +365,7 @@ class BrowserAuth {
       await this.active(pair.access_token, access);
       const session = { refreshToken: pair.refresh_token, subject: access.sub, sid: access.sid, authTime: access.auth_time,
         csrf: crypto.randomBytes(32).toString('base64url'), expiresAt: access.auth_time * 1000 + 30 * 86400_000 };
-      this.store(headers, session); headers.set('Location', this.origin + '/dashboard');
+      this.store(headers, session); headers.set('Location', this.origin + returnTo);
       return new Response(null, { status: 303, headers });
     } catch (error) {
       if (request.headers.get('accept')?.includes('text/html')) {

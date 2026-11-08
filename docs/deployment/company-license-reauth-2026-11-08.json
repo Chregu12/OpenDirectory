@@ -1,0 +1,75 @@
+{
+  "checkedAt": "2026-11-08T16:47:08.332157+00:00",
+  "status": "deployed-and-recovery-flow-verified-personal-mfa-pending",
+  "features": [
+    "Company license MFA errors explain the five-minute requirement and offer login and factor setup actions",
+    "MFA setup returns through a new login to the requesting local view",
+    "The return view is validated and bound to the sealed state/nonce/S256 flow; unsafe and duplicate targets fail before authentication",
+    "Private license snapshots are cleared and rejected writes are not automatically repeated"
+  ],
+  "deployment": {
+    "helmRevision": 49,
+    "chart": "opendirectory-lite-0.1.33",
+    "image": {
+      "image": "harbor.heusser.local/opendirectory/web-app:1.0.29",
+      "digest": "sha256:d1c8b4c395a46d6bc050f99dd58534e13562413df4da4633c7198f4e48e05039"
+    },
+    "readyDeployments": 11,
+    "onlyWebImageChanged": true
+  },
+  "checks": {
+    "frontendUnitTests": 3066,
+    "browserSessionTests": 67,
+    "browserSessionTestsInProductionImage": 67,
+    "typecheck": "passed",
+    "helmLint": "passed",
+    "runtimeSourceHashes": "passed",
+    "https": {
+      "applications": 200,
+      "mfa": 200,
+      "anonymousCompanyLicenseCapabilities": 401,
+      "newLogin": 303,
+      "unsafeReturnViews": 400
+    },
+    "nativeBrowser": {
+      "licenseRecoveryPromptAndActions": "verified on the actual authenticated page",
+      "mfaSetupPage": "opened through the recovery link",
+      "credentialsEntered": false
+    }
+  },
+  "maintenance": {
+    "localImageCopiesRemoved": [
+      {
+        "image": "harbor.heusser.local/opendirectory/policy-service:1.0.23",
+        "digest": "sha256:cb835264864bf39380c832a05396ca6c51f1445a65492da334b3ed0a075876df",
+        "localId": "sha256:9ba376a25c7080b2576c77ebfff5364f959c7c69c24eca871b3fff039ef0c9d7"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/policy-service:1.0.24",
+        "digest": "sha256:b4f2093fc8a52023f11b964f0a538268a32a2334ee0448e68abfed3e6382bc6d",
+        "localId": "sha256:16513eddac7f0d3cd30237b11328fd72eac4a206f17ca314e69aa525e8acbf7b"
+      }
+    ],
+    "registryDigestsVerifiedBeforeRemoval": true,
+    "containerIdsUnchanged": true,
+    "containerCount": 88,
+    "volumesRemoved": false,
+    "buildCacheIdsTargeted": [
+      "3s95mcbm3uc5fsazk42vw0sco",
+      "jt2srsbrhkvt0b1dxusx90ps5",
+      "k79t8d6i04ys7g7cxh4fxf0nw",
+      "ysyxa6dkswk0ow7jiiwshg4dv",
+      "lwq8mmx295qib0svr5jcfuh14",
+      "75env3324bfrsy0uie6lct8o2",
+      "vlalwa5m4uzvqydrqwgdlxp2z",
+      "9ggeb97ax7178fn7qvzcx239o"
+    ],
+    "buildCacheReclaimedApproxBytes": 31620000
+  },
+  "limits": [
+    "No password, TOTP factor, MFA age rule, role, company ownership or license assignment was changed.",
+    "The existing backend still requires a proven OpenDirectory MFA login no older than five minutes for company-license access.",
+    "The personal password/OTP login and actual factor setup require the account holder and were not completed by automated tests.",
+    "No database or vendor connector change was made; database integration suites were not repeated."
+  ]
+}

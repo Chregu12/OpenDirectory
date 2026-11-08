@@ -13,9 +13,13 @@ export default function MFAView() {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0); const [changed, setChanged] = useState(false);
   const [uncertain, setUncertain] = useState(false); const [disabling, setDisabling] = useState(false);
+  const [returnTo, setReturnTo] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true; const controller = new AbortController(); setStatus(null);
+    const targets = new URLSearchParams(window.location.search).getAll('returnTo');
+    const target = targets[0];
+    setReturnTo(targets.length === 1 && !/\s/.test(target) && /^\/[a-z][a-z0-9-]{0,63}$/.test(target) && !['/api', '/auth', '/login', '/logout'].includes(target) ? target : null);
     verifiedMfa.status(controller.signal).then(value => { if (active) setStatus(value); })
       .catch(failure => { if (active) setError(mfaError(failure)); });
     return () => { active = false; controller.abort(); };
@@ -43,6 +47,9 @@ export default function MFAView() {
     <label>Code des Passwortanbieters (optional)<input className="block w-full bg-black/20 border p-2 rounded" autoComplete="one-time-code" value={providerCode} onChange={event => setProviderCode(event.target.value)} disabled={busy} /></label>
   </div>;
   const otp = <label>Neuer OpenDirectory-Einmalcode<input className="block w-full max-w-lg bg-black/20 border p-2 rounded" value={code} onChange={event => setCode(event.target.value)} autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required disabled={busy} /></label>;
+  const loginAction = returnTo
+    ? <a className="fluent-btn-primary inline-block" href={'/api/auth/oidc/login?returnTo=' + encodeURIComponent(returnTo)}>Anmeldung bestätigen und zurück</a>
+    : <button className="border rounded px-4 py-2" onClick={startLogin}>Erneut anmelden und Status prüfen</button>;
 
   return <section className="p-6 space-y-5 max-w-4xl" style={{ color: 'var(--text-primary)' }}>
     <h1 className="text-2xl font-semibold">MFA – eigenes Konto</h1>
@@ -50,10 +57,11 @@ export default function MFAView() {
     <p>Keine SMS- oder Passkey-Unterstützung in diesem Ausbau. Nach der Einrichtung neu anmelden und eigene Notfallcodes mit Passwort und einem unverbrauchten Einmalcode erzeugen. Diese Codes sicher getrennt aufbewahren; ohne sie gibt es keine Selbstwiederherstellung bei verlorenem Authenticator.</p>
     {error && <p role="alert" className="text-amber-300">{error}</p>}
     {changed && <p role="status">Änderung bestätigt. Alle bisherigen Tokens dieses Kontos sind ungültig. Vor der nächsten Anmeldung einen neuen Einmalcode abwarten.</p>}
-    {(changed || uncertain) ? <button className="border rounded px-4 py-2" onClick={startLogin}>Erneut anmelden und Status prüfen</button> : <>
+    {(changed || uncertain) ? loginAction : <>
       <button disabled={busy} className="border rounded px-4 py-2" onClick={() => { setError(''); setSetup(null); setDisabling(false); setAttempt(value => value + 1); }}>Status neu laden</button>
       {!status && !error && <p role="status">MFA-Status wird geprüft …</p>}
       {status && <p role="status">{status.enabled ? 'TOTP aktiviert' : status.pending ? 'Einrichtung noch nicht bestätigt' : 'TOTP nicht eingerichtet'}</p>}
+      {status?.enabled && returnTo && loginAction}
       {status && !status.enabled && !setup && <form className="space-y-4" onSubmit={event => { event.preventDefault(); void change('enroll'); }}>
         <p>Die eigenen Anmeldedaten werden erneut geprüft. Ein neuer Start ersetzt eine bisher unbestätigte Einrichtung. Nur diese Browsersitzung darf den Faktor innerhalb von zehn Minuten bestätigen.</p>
         {credentials}<button disabled={busy} className="border rounded px-4 py-2">TOTP einrichten</button>

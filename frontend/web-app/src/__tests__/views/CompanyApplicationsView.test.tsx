@@ -153,6 +153,26 @@ test.each([401, 403, 409, 412, 428, 503])('native %s clears private data and req
   fireEvent.click(screen.getByRole('button', { name: 'Neu laden' }));
   await screen.findByRole('button', { name: 'Own Company Editor' }); expect(api.post).toHaveBeenCalledTimes(1);
 });
+test.each([[401, 'Erneut anmelden'], [428, 'Anmeldung bestätigen']])('initial %s offers a new login bound to the license view without retrying requests', async (status, label) => {
+  (api.get as jest.Mock).mockRejectedValue({ response: { status } });
+  render(<CompanyApplicationsView />);
+  await screen.findByRole('alert');
+  expect(screen.getByRole('link', { name: label as string })).toHaveAttribute('href', '/api/auth/oidc/login?returnTo=%2Fapplications');
+  if (status === 428) {
+    expect(screen.getByRole('alert')).toHaveTextContent(/OpenDirectory-Einmalcode/);
+    expect(screen.getByRole('link', { name: 'MFA einrichten oder prüfen' })).toHaveAttribute('href', '/mfa?returnTo=%2Fapplications');
+    expect(screen.getByRole('link', { name: 'Zur zentralen Lizenzverwaltung' })).toHaveAttribute('href', '/licenses');
+  } else expect(screen.queryByRole('link', { name: 'MFA einrichten oder prüfen' })).not.toBeInTheDocument();
+  expect(api.get).toHaveBeenCalledTimes(1);
+  expect(api.post).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: 'Lizenzpool erstellen' })).not.toBeInTheDocument();
+});
+test('a permission denial does not masquerade as an expired MFA login', async () => {
+  (api.get as jest.Mock).mockRejectedValue({ response: { status: 403 } });
+  render(<CompanyApplicationsView />); await screen.findByRole('alert');
+  expect(screen.queryByRole('link', { name: 'Anmeldung bestätigen' })).not.toBeInTheDocument();
+  expect(api.get).toHaveBeenCalledTimes(1);
+});
 test('read-only capabilities expose no creation, allocation, profile picker or revoke control', async () => {
   access.permissions = ['company.apps.read']; assigned = [assignment()]; await renderLegacy();
   fireEvent.click(await screen.findByRole('button', { name: 'Own Company Editor' }));

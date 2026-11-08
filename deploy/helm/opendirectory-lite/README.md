@@ -225,6 +225,12 @@ exact callback, reviewed CA trust, explicit assignments, and interactive login
 checks. Rancher maintains its own roles and sessions; these changes do not imply
 automatic external role grants or immediate revocation of existing Rancher tokens.
 
+Web `1.0.29` adds an explicit recovery path when company-license access requires
+a fresh MFA login. The page links to login and factor setup and returns to the
+original license view after successful authentication. Return destinations are
+restricted to local view paths and sealed into the existing state/nonce/PKCE
+transaction. Backend MFA, tenant and license checks remain in force.
+
 
 Policy-service `1.0.25` extends the protected manual read probe with Adobe Enterprise
 product-profile members and Slack SCIM 2.0 users. Adobe checks profile ID, name and

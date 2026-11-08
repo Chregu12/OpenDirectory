@@ -120,8 +120,9 @@ before(async () => {
 beforeEach(() => { auth = new BrowserAuth(config); flow = null; tokenCalls = 0; stateActive = true; stateUnavailable = false; invalidId = false; });
 after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); fs.rmSync(directory, { recursive: true, force: true }); });
 
-async function callback(queryOverride) {
-  const login = await auth.login(); const location = new URL(login.headers.get('location'));
+async function callback(queryOverride, returnTo) {
+  const login = await auth.login(returnTo === undefined ? undefined : new Request(config.origin + '/api/auth/oidc/login?' + new URLSearchParams({ returnTo })));
+  const location = new URL(login.headers.get('location'));
   const cookie = cookies(login); flow = auth.unseal(cookie.slice(cookie.indexOf('=') + 1), 'flow');
   const query = queryOverride === undefined ? '?state=' + location.searchParams.get('state') + '&code=one-use-code' : queryOverride;
   return auth.callback(new Request(config.origin + '/auth/callback' + query, { headers: { Cookie: cookie } }));
@@ -145,6 +146,35 @@ test('callback verifies identity/access/live state and exposes neither token nor
   assert.match(session, /Path=\/api\/auth\/oidc/); assert.match(session, /SameSite=Strict; HttpOnly; Secure/);
   assert.equal(session.includes(originalRefresh), false); assert.equal(session.includes(subject), false); assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.match(headers.find(value => value.startsWith(auth.csrfCookie + '=')), /Path=\/;.*SameSite=Strict; Secure$/);
+});
+
+for (const target of ['/applications', '/mfa', '/company-apps']) {
+  test('a verified new login returns to its sealed local view: ' + target, async () => {
+    const response = await callback(undefined, target);
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), config.origin + target);
+    assert.equal(tokenCalls, 1);
+  });
+}
+for (const target of ['https://evil.test', '//evil.test', '/\\evil.test', '/%2F%2Fevil.test', '/../dashboard', '/api/auth/oidc/logout', '/applications?x=y', '/applications#secret', '', '/login', '/api', '/applications\n', '/applications\u2028']) {
+  test('login rejects an unsafe return view before contacting the issuer: ' + JSON.stringify(target), async () => {
+    await assert.rejects(auth.login(new Request(config.origin + '/api/auth/oidc/login?' + new URLSearchParams({ returnTo: target }))), { status: 400, code: 'browser_auth_return_path_invalid' });
+    assert.equal(tokenCalls, 0);
+  });
+}
+test('duplicate return views are rejected instead of selecting one', async () => {
+  await assert.rejects(auth.login(new Request(config.origin + '/api/auth/oidc/login?returnTo=/applications&returnTo=/mfa')), { status: 400 });
+});
+test('callback query parameters cannot replace the return view in the sealed transaction', async () => {
+  const login = await auth.login(new Request(config.origin + '/api/auth/oidc/login?returnTo=/applications'));
+  const cookie = cookies(login); flow = auth.unseal(cookie.slice(cookie.indexOf('=') + 1), 'flow');
+  const response = await auth.callback(new Request(config.origin + '/auth/callback?' + new URLSearchParams({ state: flow.state, code: 'one-use-code', returnTo: 'https://evil.test' }), { headers: { Cookie: cookie } }));
+  assert.equal(response.status, 303); assert.equal(response.headers.get('location'), config.origin + '/applications');
+});
+test('older login transactions without a return view retain the dashboard destination', async () => {
+  const login = await auth.login(); flow = auth.unseal(cookies(login).split('=')[1], 'flow'); delete flow.returnTo;
+  const response = await auth.callback(new Request(config.origin + '/auth/callback?' + new URLSearchParams({ state: flow.state, code: 'one-use-code' }), { headers: { Cookie: auth.flowCookie + '=' + auth.seal(flow, 'flow') } }));
+  assert.equal(response.status, 303); assert.equal(response.headers.get('location'), config.origin + '/dashboard');
 });
 
 for (const query of ['?code=x', '?code=x&state=wrong', '?code=x&state=ä'.repeat(2), '?code=x&state=x&state=x', '?state=x&code=x&code=y']) {

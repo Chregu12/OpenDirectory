@@ -13,8 +13,23 @@ const setup = { secret, otpauthUri: `otpauth://totp/OpenDirectory:${userId}?secr
 let enabled: boolean;
 beforeEach(() => {
   jest.clearAllMocks(); enabled = false;
+  window.history.replaceState({}, '', '/mfa');
   (api.get as jest.Mock).mockResolvedValue({ data: { enabled: false, pending: false, pendingOwned: false, method: 'totp', reauthenticationRequiredAfterChange: true } });
   (api.post as jest.Mock).mockImplementation(async (route: string) => route.endsWith('/enroll') ? { data: setup } : { data: { enabled: !enabled, reauthenticationRequired: true } });
+});
+test('a configured factor offers a new login back to the requesting license view', async () => {
+  window.history.replaceState({}, '', '/mfa?returnTo=%2Fapplications');
+  (api.get as jest.Mock).mockResolvedValue({ data: { enabled: true, pending: false, pendingOwned: false, method: 'totp', reauthenticationRequiredAfterChange: true } });
+  render(<MFAView />); await screen.findByText('TOTP aktiviert');
+  expect(screen.getByRole('link', { name: 'Anmeldung bestätigen und zurück' })).toHaveAttribute('href', '/api/auth/oidc/login?returnTo=%2Fapplications');
+  expect(api.post).not.toHaveBeenCalled();
+});
+test.each(['https://evil.test', '//evil.test', '/api/auth/oidc/logout', '/applications\n'])('an unsafe MFA return target is not offered: %s', async target => {
+  window.history.replaceState({}, '', '/mfa?' + new URLSearchParams({ returnTo: target }));
+  (api.get as jest.Mock).mockResolvedValue({ data: { enabled: true, pending: false, pendingOwned: false, method: 'totp', reauthenticationRequiredAfterChange: true } });
+  render(<MFAView />); await screen.findByText('TOTP aktiviert');
+  expect(screen.queryByRole('link', { name: 'Anmeldung bestätigen und zurück' })).not.toBeInTheDocument();
+  expect(api.post).not.toHaveBeenCalled();
 });
 async function credentials() {
   const user = userEvent.setup(); await user.type(screen.getByLabelText('Eigener Benutzername'), 'owner'); await user.type(screen.getByLabelText('Aktuelles Passwort'), 'current-password'); return user;

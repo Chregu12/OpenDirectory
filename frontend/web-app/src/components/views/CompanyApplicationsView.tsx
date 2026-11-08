@@ -26,6 +26,7 @@ export default function CompanyApplicationsView() {
   const generation = useRef(0);
   const writing = useRef(false);
   const [reload, setReload] = useState(0);
+  const [authenticationStatus, setAuthenticationStatus] = useState<number | null>(null);
   const [access, setAccess] = useState<CompanyApplicationsCapabilities | null>(null);
   const [protocol, setProtocol] = useState<'v1' | 'v2'>('v2');
   const [pools, setPools] = useState<CompanyPoolPage | null>(null);
@@ -77,11 +78,13 @@ export default function CompanyApplicationsView() {
     generation.current += 1; client.current?.invalidate(); writing.current = false;
     setAccess(null); setPools(null); clearSelection(); clearReturns(); setReturnUserId(''); setReturnReceipt(null); setCreating(false); setBusy(false); setNotice('');
     setError(companyApplicationsError(failure) + (readback ? ' Die Änderung kann bereits wirksam sein. Nicht erneut bestätigen; zuerst den aktuellen Pool neu laden und prüfen.' : ''));
+    const status = (failure as { response?: { status?: number } })?.response?.status;
+    setAuthenticationStatus(status === 401 || status === 428 ? status : null);
   };
   useEffect(() => {
     const current = new CompanyApplicationsClient(); client.current = current;
     const expected = ++generation.current;
-    setAccess(null); setPools(null); clearSelection(); clearReturns(); setReturnUserId(''); setCreating(false); setBusy(false); setError(''); setNotice(''); writing.current = false;
+    setAccess(null); setPools(null); clearSelection(); clearReturns(); setReturnUserId(''); setCreating(false); setBusy(false); setError(''); setNotice(''); setAuthenticationStatus(null); writing.current = false;
     const onSessionError = () => fail({ response: { status: 401 } }, expected);
     window.addEventListener('od:session-error', onSessionError);
     current.reload().then(result => { if (generation.current === expected) {
@@ -215,7 +218,16 @@ export default function CompanyApplicationsView() {
     actions={[{ label: 'Neu laden', onClick: () => { generation.current += 1; client.current?.invalidate(); clearReturns(); setReturnReceipt(null); setReload(value => value + 1); }, disabled: busy }]}>
     <div className="space-y-5" style={{ color: 'var(--text-primary)' }}>
       <details className="od-panel text-sm"><summary>Lokaler Bestand und Wirkung von Zuweisungen</summary><p className="mt-3">Nur lokale Lizenzverteilung an Benutzer der eigenen Firma. Keine Cloud-Zuweisung, Installation, SSO-Einrichtung oder Abrechnung. Gesperrte Benutzer und pausierte Mandanten sind keine zulässigen neuen Ziele. Kontosperren geben diese lokalen Lizenzen noch nicht automatisch zurück. Bestehende Zuweisungen können ausdrücklich freigegeben werden, auch bei gesperrten oder gelöschten Benutzern.</p></details>
-      {error ? <p role="alert" className="rounded border border-red-500/40 p-4">{error}</p> : !access ? <p role="status">Lizenzberechtigungen werden geprüft …</p> : !canRead ? <p role="status">Keine Berechtigung zum Lesen der Firmen-Lizenzpools.</p> : <>
+      {error ? <div role="alert" className="rounded border border-red-500/40 p-4 space-y-3">
+        <p>{error}</p>
+        {authenticationStatus && <div className="flex flex-wrap gap-3">
+          <a className="fluent-btn-primary" href="/api/auth/oidc/login?returnTo=%2Fapplications">{authenticationStatus === 428 ? 'Anmeldung bestätigen' : 'Erneut anmelden'}</a>
+          {authenticationStatus === 428 && <>
+            <a className="fluent-btn-secondary" href="/mfa?returnTo=%2Fapplications">MFA einrichten oder prüfen</a>
+            <a className="fluent-btn-secondary" href="/licenses">Zur zentralen Lizenzverwaltung</a>
+          </>}
+        </div>}
+      </div> : !access ? <p role="status">Lizenzberechtigungen werden geprüft …</p> : !canRead ? <p role="status">Keine Berechtigung zum Lesen der Firmen-Lizenzpools.</p> : <>
         {notice && <p role="status">{notice}</p>}
         <nav aria-label="Lizenzverwaltungsmodus" className="flex flex-wrap gap-3">
           <button className="fluent-btn-secondary" aria-pressed={protocol === 'v2'} disabled={busy} onClick={() => {
