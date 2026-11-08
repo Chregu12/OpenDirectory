@@ -1,0 +1,53 @@
+{
+  "checkedAt": "2026-11-08T08:30:58.968468+00:00",
+  "status": "deployed-and-public-https-recovery-verified",
+  "causes": [
+    "Successful logins consumed the five-attempt account and twenty-attempt source-IP budgets.",
+    "Expired or replaced ten-minute login cookies produced raw JSON at the browser callback."
+  ],
+  "change": "Successful password and MFA-prompt responses no longer consume failed-login budgets. Browser callback failures retain denial and offer an explicit fresh-login link; JSON callers retain JSON errors.",
+  "deployment": {
+    "helmRevision": 40,
+    "chart": "opendirectory-lite-0.1.25",
+    "status": "deployed",
+    "images": {
+      "auth-service": {
+        "image": "harbor.heusser.local/opendirectory/auth-service:1.0.21",
+        "digest": "sha256:bc584661f65cb5d78ed83ba44985d61ba38630cce0f65d51d6e9132db597d0e2"
+      },
+      "web-app": {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.21",
+        "digest": "sha256:258aefb499c71fd08f3a54566decc879bafb6ae7d1294788abc83aa937112215"
+      }
+    },
+    "readyDeployments": 11,
+    "otherApplicationImagesUnchanged": true
+  },
+  "tests": {
+    "rateLimit": {
+      "passed": 6
+    },
+    "browserAuth": {
+      "passed": 48
+    },
+    "actualCredentialServicePostgres": {
+      "passed": 17
+    },
+    "actualChromeLoginRecoveryAndRefresh": {
+      "passed": 3
+    },
+    "productionBuilds": "passed: linux/amd64",
+    "helmLint": "passed"
+  },
+  "publicHttpsChecks": {
+    "invalidCallbackDeniedWithRecoveryPage": true,
+    "noSessionMintedOnFailure": true,
+    "recoveryLinkStartsFreshS256Flow": true,
+    "secureHttpOnlyFlowCookie": true,
+    "unknownCredentialsDeniedWithoutRateLimit": true
+  },
+  "limits": [
+    "The owner's full password login in production was not performed. Actual successful logins were verified with isolated credentials and PostgreSQL, and Chrome used isolated credential fixtures.",
+    "The existing unrelated OpenBao secret-synchronization outage remains outside this repair."
+  ]
+}

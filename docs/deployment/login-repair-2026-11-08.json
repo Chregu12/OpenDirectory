@@ -1,0 +1,57 @@
+{
+  "checkedAt": "2026-11-08T08:18:30.453232+00:00",
+  "status": "deployed-and-live-authorization-verified",
+  "problem": "The existing installation administrator had only expiring eight-hour web-app bootstrap assignments; the last one expired on 2026-11-05.",
+  "change": "An explicit UUID list grants only the configured protected web client to the current canonical admin. Identity eligibility, credential binding, password, MFA, other-client assignments and live revocation checks remain enforced.",
+  "deployment": {
+    "image": "harbor.heusser.local/opendirectory/oauth-provider:1.0.20",
+    "digest": "sha256:4a541aed6328fd6df7146d5edb8333c8d3ac06b4931910fcd43756b60788a4ef",
+    "chart": "opendirectory-lite-0.1.24",
+    "helmRevision": 39,
+    "helmStatus": "deployed",
+    "waitStrategy": "legacy; all deployment readiness checked explicitly",
+    "readyDeployments": 11,
+    "changedApplicationImages": [
+      "oauth-provider"
+    ]
+  },
+  "checks": {
+    "oauthUnitTests": {
+      "passed": 519,
+      "suites": 21
+    },
+    "postgresApplicationAccess": {
+      "passed": 23,
+      "failed": 0
+    },
+    "helmLint": "passed",
+    "syntaxAndWhitespace": "passed",
+    "https": {
+      "loginPage": 200,
+      "discovery": 200,
+      "freshCodeFlowWithS256": 200
+    },
+    "liveAuthorization": {
+      "canonicalIdentityActive": true,
+      "canonicalAdminRoleActive": true,
+      "credentialBindingValid": true,
+      "webAccessGrantedWithoutTemporaryLease": true,
+      "repeatedLiveAuthorityCheckPassed": true,
+      "unassignedApplicationDenied": true,
+      "differentIdentityDenied": true,
+      "removedAdminRoleDenied": true,
+      "removedConfigurationDenied": true,
+      "activeTemporaryAssignments": 0,
+      "authenticationPolicy": {
+        "required": false,
+        "maxAgeSeconds": 86400
+      },
+      "verification": "Production authorization source only; no password login or user session created"
+    }
+  },
+  "limits": [
+    "A complete password login with the owner's current password was not performed; no password was changed and no user session was minted.",
+    "The extended unrelated regression run was stopped after 124 completed cases, with zero test failures and one cancelled file; it is not a full-platform acceptance.",
+    "Pre-existing OpenBao quorum/active-node failure has prevented secret synchronization since 2026-11-01. Existing application secrets remain present. That separate service was not repaired."
+  ]
+}

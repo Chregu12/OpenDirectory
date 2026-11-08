@@ -35,9 +35,14 @@ function source(connection) {
   };
 }
 class ApplicationAccess {
-  constructor(database, { identity, demo = false, production = process.env.NODE_ENV === 'production', companyConsoleClientId = process.env.COMPANY_CONSOLE_CLIENT_ID || '' } = {}) {
+  constructor(database, { identity, demo = false, production = process.env.NODE_ENV === 'production', companyConsoleClientId = process.env.COMPANY_CONSOLE_CLIENT_ID || '',
+    webClientId = '', webAdminUserIds = JSON.parse(process.env.OAUTH_WEB_ADMIN_USER_IDS || '[]') } = {}) {
     if (demo && production) throw new Error('Application assignment bypass is forbidden in production');
+    if (!Array.isArray(webAdminUserIds) || webAdminUserIds.length > 100 || webAdminUserIds.some(id => !validUuid(id))
+      || new Set(webAdminUserIds.map(id => id.toLowerCase())).size !== webAdminUserIds.length
+      || (webAdminUserIds.length && (!webClientId || !ID.test(webClientId)))) throw new Error('Web administrator access requires canonical UUIDs and a configured protected web client');
     this.database = database; this.identity = identity; this.demo = demo; this.companyConsoleClientId = companyConsoleClientId;
+    this.webClientId = webClientId; this.webAdminUserIds = new Set(webAdminUserIds.map(id => id.toLowerCase()));
   }
   async transaction(operation, actor) {
     let connection;
@@ -69,6 +74,11 @@ class ApplicationAccess {
     const membership = new Map(state.memberships.map(member => [member.groupId,member.membershipId]));
     const grants = await this.transaction(repository => repository.effective(clientId, state.context.userId, [...membership.keys()]));
     if (grants.length > 100) fail(503, 'application_assignment_limit');
+    if (!grants.length && clientId === this.webClientId && this.webAdminUserIds.has(state.context.userId.toLowerCase())
+      && Array.isArray(state.authorization?.roles) && state.authorization.roles.includes('admin')) {
+      const revision = createHash('sha256').update(JSON.stringify(['configured-web-admin-v1', clientId, state.context])).digest('hex');
+      return { schemaVersion: 1, clientId, userId: state.context.userId, revision };
+    }
     if (!grants.length && this.companyConsoleClientId && clientId === this.companyConsoleClientId) {
       const source = await this.identity.companyConsole(clientId, state.context.userId);
       if (source.active) return { schemaVersion: 1, clientId, userId: state.context.userId, revision: source.revision };

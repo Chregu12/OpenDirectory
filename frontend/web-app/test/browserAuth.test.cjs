@@ -164,6 +164,30 @@ test('tampered, expired and purpose-confused cookies fail authentication', () =>
   const other = new BrowserAuth({ ...config, origin: 'https://other.test' }); assert.throws(() => other.unseal(value, 'flow'), BrowserAuthError);
 });
 
+test('browser callback with a missing, expired or replaced flow offers an explicit fresh login without exchanging the code', async () => {
+  for (const cookie of ['', auth.flowCookie + '=' + auth.seal({ expiresAt: 1, state: 'old' }, 'flow'), auth.flowCookie + '=tampered']) {
+    const response = await auth.callback(new Request(config.origin + '/auth/callback?code=private-code&state=private-state', { headers: { Accept: 'text/html', Cookie: cookie } }));
+    assert.equal(response.status, 401);
+    assert.match(response.headers.get('content-type'), /text\/html/);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.match(response.headers.get('content-security-policy'), /default-src 'none'/);
+    assert.match(response.headers.getSetCookie()[0], /Max-Age=0/);
+    const body = await response.text();
+    assert.match(body, /Anmeldung neu starten/);
+    assert.match(body, /href="\/api\/auth\/oidc\/login"/);
+    assert.doesNotMatch(body, /private-code|private-state|browser_auth_session_invalid/);
+    assert.equal(tokenCalls, 0);
+  }
+});
+
+test('browser wrong-state callbacks retain state validation and never turn an error into a session', async () => {
+  const login = await auth.login();
+  const response = await auth.callback(new Request(config.origin + '/auth/callback?code=unused&state=wrong', { headers: { Accept: 'text/html', Cookie: cookies(login) } }));
+  assert.equal(response.status, 401);
+  assert.equal(tokenCalls, 0);
+  assert.equal(response.headers.getSetCookie().some(value => value.startsWith(auth.sessionCookie + '=')), false);
+});
+
 for (const overrides of [{ Origin: 'https://evil.test' }, { Origin: '' }, { 'X-OD-CSRF': 'wrong' }, { 'Sec-Fetch-Site': 'cross-site' }]) {
   test('session and logout deny foreign origin or missing CSRF without rotating: ' + JSON.stringify(overrides), async () => {
     assert.equal((await auth.session(sessionRequest(overrides))).status, 403);

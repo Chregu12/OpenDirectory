@@ -4,7 +4,7 @@ const helmet = require('helmet');
 const session = require('express-session');
 const RedisStore = require('connect-redis').default;
 const passport = require('passport');
-const rateLimit = require('express-rate-limit');
+const { authRateLimit } = require('./middleware/authRateLimit');
 
 const AuthenticationManager = require('./services/authenticationManager');
 const TokenService = require('./services/tokenService');
@@ -115,43 +115,6 @@ class UnifiedAuthenticationService {
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-Id', 'X-Session-Id'],
     }));
 
-    // Rate limiting per IP
-    const authLimiterByIp = rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 20,
-      standardHeaders: true,
-      legacyHeaders: false,
-      message: 'Too many authentication attempts, please try again later.',
-      keyGenerator: (req) => req.ip,
-    });
-
-    // Rate limiting per username — prevents distributed brute-force bypassing IP limits
-    const usernameStore = new Map();
-    const authLimiter = (req, res, next) => {
-      const username = (req.body?.username || '').toLowerCase().trim();
-      if (!username) return authLimiterByIp(req, res, next);
-
-      const key = `auth:${username}`;
-      const now = Date.now();
-      const windowMs = 15 * 60 * 1000;
-      const maxAttempts = 5;
-
-      const record = usernameStore.get(key) || { count: 0, resetAt: now + windowMs };
-      if (now > record.resetAt) {
-        record.count = 0;
-        record.resetAt = now + windowMs;
-      }
-      record.count += 1;
-      usernameStore.set(key, record);
-
-      if (record.count > maxAttempts) {
-        return res.status(429).json({
-          error: 'Too many authentication attempts for this account, please try again later.',
-        });
-      }
-      return authLimiterByIp(req, res, next);
-    };
-
     // Body parsing
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
@@ -178,8 +141,8 @@ class UnifiedAuthenticationService {
     this.app.use(passport.session());
 
     // Apply rate limiting to auth endpoints
-    this.app.use('/api/auth/login', authLimiter);
-    this.app.use('/api/auth/register', authLimiter);
+    this.app.use('/api/auth/login', ...authRateLimit({ skipSuccessfulRequests: true }));
+    this.app.use('/api/auth/register', ...authRateLimit());
   }
 
   initializePassport() {
@@ -342,7 +305,20 @@ class UnifiedAuthenticationService {
 
   // Middleware
   requireAuth() {
-    return passport.authenticate('jwt', { session: false });
+    const verify = require('./middleware/verifiedBearerAuth').verifiedBearerAuth();
+    return (req, res, next) => verify(req, res, async () => {
+      try {
+        const principal = req.user;
+        const user = await this.userService.getUserById(principal.id);
+        if (!user) return res.status(401).json({ error: 'Account unavailable' });
+        if (await this.zeroTrust.evaluateTrust(req, user) < config.zeroTrust.minTrustScore) {
+          await this.auditService.logSecurityEvent('jwt_trust_failed', user.id, req);
+          return res.status(401).json({ error: 'Re-authentication required' });
+        }
+        req.user = { ...user, roles: principal.roles };
+        next();
+      } catch (error) { next(error); }
+    });
   }
 
   requireAdmin() {

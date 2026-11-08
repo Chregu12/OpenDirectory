@@ -247,7 +247,7 @@ const { configuredWebClient, assertWebClient } = require('./webClient');
 const webClient = configuredWebClient();
 if (webClient) clientSeeds.push(webClient);
 const clientRegistry = new ClientRegistry(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true', seeds: clientSeeds,companyTenantActive:(id,tenant)=>identityAuthority.companyAppTenant(id,tenant) });
-const applicationAccess = new ApplicationAccess(db, { identity: identityAuthority, demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
+const applicationAccess = new ApplicationAccess(db, { identity: identityAuthority, demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true', webClientId: webClient?.clientId });
 const mfaAuthority = new MfaAuthority(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
 const mfaRecovery = new MfaRecovery({ mfa: mfaAuthority, identity: identityAuthority, issuer: ISSUER });
 const mfaEnrollment = new MfaEnrollment({ mfa: mfaAuthority, clients: clientRegistry, identity: identityAuthority, applications: applicationAccess, issuer: ISSUER });
@@ -431,23 +431,22 @@ app.get('/oauth/authorize', protocol((req, res) => {
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OpenDirectory Login</title>
 <style>
+  :root{color-scheme:dark;--base:#0e1115;--surface:#161b22;--input:#1c2128;--text:#e4e6ea;--secondary:#a5afbd;--line:#6b7b90;--focus:#8ab8ff;--error:#ff7b72;--error-bg:#3a2023}
+  :root[data-theme=light]{color-scheme:light;--base:#f4f6f9;--surface:#fff;--input:#f0f3f7;--text:#1f2937;--secondary:#4d5c70;--line:#79879a;--focus:#1d4ed8;--error:#cf222e;--error-bg:#fff1f1}
+  @media(prefers-color-scheme:light){:root:not([data-theme=dark]){color-scheme:light;--base:#f4f6f9;--surface:#fff;--input:#f0f3f7;--text:#1f2937;--secondary:#4d5c70;--line:#79879a;--focus:#1d4ed8;--error:#cf222e;--error-bg:#fff1f1}}
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;min-height:100vh;display:flex;align-items:center;justify-content:center}
-  .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:40px;width:380px}
-  .logo{text-align:center;margin-bottom:32px}
-  .logo h1{color:#fff;font-size:22px;font-weight:700;letter-spacing:-0.5px}
-  .logo p{color:#94a3b8;font-size:13px;margin-top:4px}
-  .app-badge{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;margin-bottom:24px;display:flex;align-items:center;gap:10px}
-  .app-badge span{color:#94a3b8;font-size:12px}
-  .app-badge strong{color:#e2e8f0;font-size:13px}
-  label{display:block;color:#94a3b8;font-size:12px;font-weight:500;margin-bottom:6px;margin-top:16px}
-  input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;color:#fff;font-size:14px;outline:none}
-  input:focus{border-color:#3b82f6}
-  .error{background:#7f1d1d;border:1px solid #dc2626;border-radius:8px;padding:10px 14px;color:#fca5a5;font-size:13px;margin-top:16px;display:none}
-  .error.visible{display:block}
-  button{width:100%;margin-top:24px;background:#3b82f6;border:none;border-radius:8px;padding:12px;color:#fff;font-size:14px;font-weight:600;cursor:pointer}
-  button:hover{background:#2563eb}
-  button:disabled{opacity:0.5;cursor:not-allowed}
+  body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--base);color:var(--text);min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px 16px;font-size:15px;line-height:1.5}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:clamp(20px,5vw,32px);width:min(100%,440px)}
+  .logo{text-align:center;margin-bottom:32px}.logo h1{font-size:28px;font-weight:600;letter-spacing:-.5px}.logo p{color:var(--secondary);margin-top:8px}
+  .app-badge{background:var(--input);border-radius:8px;padding:12px 16px;margin-bottom:24px;display:flex;align-items:center;gap:8px;overflow-wrap:anywhere}
+  .app-badge span{color:var(--secondary)}.app-badge strong{font-size:15px}
+  label{display:block;color:var(--secondary);font-size:14px;font-weight:500;margin-bottom:8px;margin-top:24px}
+  input,select{width:100%;background:var(--input);border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:var(--text);font:inherit;min-height:44px}
+  :is(input,select,button,a):focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+  .error{background:var(--error-bg);border:1px solid var(--error);border-radius:8px;padding:12px;color:var(--error);font-size:14px;margin-top:16px;display:none}.error.visible{display:block}
+  button{width:100%;margin-top:24px;background:#2563eb;border:none;border-radius:8px;padding:12px;color:#fff;font-size:15px;font-weight:600;cursor:pointer;min-height:44px}
+  button:hover{background:#1d4ed8}button:disabled{opacity:.5;cursor:not-allowed}
+  a{color:var(--focus)}.theme{margin-top:24px;border-top:1px solid var(--line);padding-top:8px}
 </style>
 </head>
 <body>
@@ -470,32 +469,40 @@ app.get('/oauth/authorize', protocol((req, res) => {
     <input type="hidden" name="code_challenge" value="${escapeHtml(code_challenge)}">
     <input type="hidden" name="code_challenge_method" value="${escapeHtml(code_challenge_method)}">
     <input type="hidden" name="device_id" value="${escapeHtml(device_id)}">
-    <label>Benutzername</label>
-    <input type="text" name="username" autocomplete="username" required autofocus>
-    <label>Passwort</label>
-    <input type="password" name="password" autocomplete="current-password" required>
-    <label>Einmalcode des Passwortanbieters (falls dort aktiviert)</label>
-    <input type="text" name="mfaCode" autocomplete="one-time-code" inputmode="numeric">
-    <label>OpenDirectory-Einmalcode (falls eingerichtet)</label>
-    <input type="text" name="otpCode" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6">
-    <div class="error" id="errBox"></div>
+    <label for="login-username">Benutzername</label>
+    <input type="text" id="login-username" name="username" autocomplete="username" required autofocus>
+    <label for="login-password">Passwort</label>
+    <input type="password" id="login-password" name="password" autocomplete="current-password" required>
+    <label for="login-mfaCode">Einmalcode des Passwortanbieters (falls dort aktiviert)</label>
+    <input type="text" id="login-mfaCode" name="mfaCode" autocomplete="one-time-code" inputmode="numeric">
+    <label for="login-otpCode">OpenDirectory-Einmalcode (falls eingerichtet)</label>
+    <input type="text" id="login-otpCode" name="otpCode" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6">
+    <div class="error" id="errBox" role="alert"></div>
     <button type="submit" id="submitBtn">Anmelden</button>
   </form>
-  <section id="mfaSetup" hidden style="margin-top:24px;border-top:1px solid #334155;padding-top:20px;color:#cbd5e1">
-    <h2 style="color:#fff;font-size:16px">OpenDirectory-MFA erstmals einrichten</h2>
+  <section id="mfaSetup" hidden style="margin-top:32px;border-top:1px solid var(--line);padding-top:24px;color:var(--text)">
+    <h2 style="color:var(--text);font-size:19px">OpenDirectory-MFA erstmals einrichten</h2>
     <p style="font-size:13px;margin-top:8px">Diese App verlangt MFA. Richte den Faktor hier ein und melde dich danach mit einem neuen Einmalcode an.</p>
     <button type="button" id="startEnrollment">Faktor sicher vorbereiten</button>
     <div id="enrollmentSetup" hidden style="margin-top:16px">
       <p style="font-size:13px">Diesen Schlüssel im Authenticator erfassen (SHA-1, sechs Stellen, 30 Sekunden):</p>
-      <code id="enrollmentSecret" style="display:block;overflow-wrap:anywhere;background:#0f172a;padding:12px;margin-top:8px"></code>
-      <a id="enrollmentUri" style="display:block;color:#93c5fd;margin-top:8px;font-size:12px">Authenticator-Link öffnen</a>
-      <label>Einmalcode des neuen Authenticators</label>
+      <code id="enrollmentSecret" style="display:block;overflow-wrap:anywhere;background:var(--input);padding:12px;margin-top:8px"></code>
+      <a id="enrollmentUri" style="display:block;color:var(--focus);margin-top:8px;font-size:12px">Authenticator-Link öffnen</a>
+      <label for="enrollmentCode">Einmalcode des neuen Authenticators</label>
       <input id="enrollmentCode" type="text" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6">
       <button type="button" id="confirmEnrollment">Faktor bestätigen</button>
     </div>
   </section>
+  <div class="theme"><label for="appearance">Darstellung</label><select id="appearance"><option value="system">Automatisch</option><option value="light">Hell</option><option value="dark">Dunkel</option></select></div>
 </div>
 <script>
+  if(typeof window!=='undefined'){
+    const appearance=document.getElementById('appearance');
+    const apply=value=>{if(value==='light'||value==='dark')document.documentElement.setAttribute('data-theme',value);else document.documentElement.removeAttribute('data-theme');};
+    try{const saved=window.localStorage.getItem('theme');appearance.value=['light','dark'].includes(saved)?saved:'system';}catch{appearance.value='system';}
+    apply(appearance.value);
+    appearance.addEventListener('change',()=>{apply(appearance.value);try{window.localStorage.setItem('theme',appearance.value);}catch{}});
+  }
   const f=document.getElementById('loginForm');
   const err=document.getElementById('errBox');
   const btn=document.getElementById('submitBtn');
@@ -508,19 +515,21 @@ app.get('/oauth/authorize', protocol((req, res) => {
   const showError=value=>{err.textContent=value;err.classList.add('visible');};
   const jsonPost=async(path,body)=>{const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-OD-Auth-Flow':'1'},body:JSON.stringify(body),cache:'no-store',credentials:'same-origin',redirect:'error'});let value;try{value=await response.json();}catch{throw Object.assign(new Error('invalid_response'),{status:response.status});}if(!response.ok)throw Object.assign(new Error(value.error||'login_failed'),{status:response.status});return value;};
   const credentials=()=>({username:f.elements.username.value,password:f.elements.password.value,mfaCode:f.elements.mfaCode.value});
-  const messages={invalid_credentials:'Benutzername oder Passwort ist ungültig.',mfa_required:'Der Passwortanbieter verlangt zusätzlich seinen MFA-Code.',invalid_otp:'Der Einmalcode ist ungültig.',application_not_assigned:'Dieses Konto ist dieser Anwendung nicht zugewiesen. Bitte den Firmeninhaber um eine passende Gruppenzuweisung.',mfa_enrollment_required:'Diese App verlangt einen OpenDirectory-Faktor. Richte ihn unten ein.',invalid_enrollment_challenge:'Die Einrichtung ist abgelaufen. Bitte Anmeldung prüfen und bewusst neu beginnen.',enrollment_authorization_changed:'App-Zuweisung oder MFA-Richtlinie hat sich geändert. Bitte neu anmelden.'};
+  const messages={invalid_credentials:'Benutzername oder Passwort ist ungültig.',authentication_rate_limited:'Zu viele Anmeldeversuche. Bitte warte, bis die Anmeldesperre abgelaufen ist (bis zu 15 Minuten).',mfa_required:'Der Passwortanbieter verlangt zusätzlich seinen MFA-Code.',otp_required:'Bitte den aktuellen OpenDirectory-Einmalcode aus deinem Authenticator eingeben.',invalid_otp:'Der Einmalcode ist ungültig.',mfa_temporarily_locked:'Zu viele falsche Einmalcodes. Bitte fünf Minuten warten.',application_not_assigned:'Dieses Konto ist dieser Anwendung nicht zugewiesen. Bitte den Firmeninhaber um eine passende Gruppenzuweisung.',mfa_enrollment_required:'Diese App verlangt einen OpenDirectory-Faktor. Richte ihn unten ein.',invalid_enrollment_challenge:'Die Einrichtung ist abgelaufen. Bitte Anmeldung prüfen und bewusst neu beginnen.',enrollment_authorization_changed:'App-Zuweisung oder MFA-Richtlinie hat sich geändert. Bitte neu anmelden.',credential_authorization_changed:'Die Zugangsdaten haben sich geändert. Bitte die Anmeldung neu starten.'};
   f.addEventListener('submit',async event=>{
     event.preventDefault();err.classList.remove('visible');btn.disabled=true;
     try{const result=await jsonPost('/oauth/authorize/login',{...Object.fromEntries(new FormData(f).entries())});if(typeof result.redirect==='string'){location.assign(result.redirect);return;}
-      if(result.error==='mfa_enrollment_required'){setup.hidden=false;setupDetails.hidden=true;enrollmentChallenge='';uncertainStart=false;uncertainConfirmation=false;startEnrollment.textContent='Faktor sicher vorbereiten';confirmEnrollment.hidden=false;showError(messages[result.error]);startEnrollment.focus();}
-      else showError(messages[result.error]||'Anmeldung nicht bestätigt. Bitte Eingaben prüfen und erneut versuchen.');
-    }catch{showError('Anmeldedienst nicht verfügbar. Ausgang prüfen, bevor du es erneut versuchst.');}finally{btn.disabled=false;}
+      showError('Anmeldung nicht bestätigt. Bitte Eingaben prüfen und erneut versuchen.');
+    }catch(failure){
+      if(failure.message==='mfa_enrollment_required'){setup.hidden=false;setupDetails.hidden=true;enrollmentChallenge='';uncertainStart=false;uncertainConfirmation=false;startEnrollment.textContent='Faktor sicher vorbereiten';confirmEnrollment.hidden=false;startEnrollment.focus();}
+      showError(messages[failure.message]||'Anmeldedienst nicht verfügbar. Ausgang prüfen, bevor du es erneut versuchst.');
+    }finally{btn.disabled=false;}
   });
   startEnrollment.addEventListener('click',async()=>{
     if(uncertainStart&&!confirm('Der vorherige Start könnte bereits erfolgt sein. Hast du zuerst mit dem neuen Code die normale Anmeldung geprüft? Nur wenn sie weiterhin MFA verlangt, bestätige den neuen Faktorstart.'))return;
     startEnrollment.disabled=true;err.classList.remove('visible');
     try{const data=await jsonPost('/oauth/mfa/enrollment/start',{clientId:f.elements.client_id.value,...credentials()});
-      if(typeof data.challenge!=='string'||typeof data.secret!=='string'||typeof data.otpauthUri!=='string'||!/^otpauth:\/\/totp\/OpenDirectory:/.test(data.otpauthUri))throw new Error('invalid_setup');
+      if(typeof data.challenge!=='string'||typeof data.secret!=='string'||typeof data.otpauthUri!=='string'||!data.otpauthUri.startsWith('otpauth://totp/OpenDirectory:'))throw new Error('invalid_setup');
       enrollmentChallenge=data.challenge;uncertainStart=false;uncertainConfirmation=false;startEnrollment.textContent='Faktor sicher vorbereiten';confirmEnrollment.hidden=false;document.getElementById('enrollmentSecret').textContent=data.secret;const uri=document.getElementById('enrollmentUri');uri.href=data.otpauthUri;setupDetails.hidden=false;enrollmentCode.focus();
     }catch(failure){if(!failure.status||failure.status>=500||failure.message==='invalid_setup'){uncertainStart=true;showError('Der MFA-Start ist nicht eindeutig bestätigt. Prüfe zuerst die normale Anmeldung. Nur wenn sie weiterhin MFA verlangt, starte nach bewusster Bestätigung neu.');}else showError(messages[failure.message]||'MFA-Ersteinrichtung abgelehnt. App-Zuweisung, Passwort und Passwortanbieter-MFA prüfen.');}
     finally{startEnrollment.disabled=false;}

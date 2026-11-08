@@ -127,7 +127,7 @@ async function issue(username = 'operator', scope = 'openid roles') {
   const otpCode = await nextOtp(username);
   const login = await request(issuerBase, '/oauth/authorize/login', { method: 'POST', body: {
     client_id: clientId, redirect_uri: 'http://localhost:4000/callback', username, password: 'disposable-password', scope, ...(otpCode ? { otpCode } : {}) } });
-  assert.equal(login.status, 302);
+  assert.equal(login.status, 302, JSON.stringify(login.body));
   const code = new URL(login.headers.get('location')).searchParams.get('code');
   const pair = await request(issuerBase, '/oauth/token', { method: 'POST', body: { grant_type: 'authorization_code', code, client_id: clientId,
     client_secret: clientSecret, redirect_uri: 'http://localhost:4000/callback' } });
@@ -411,6 +411,8 @@ before(async () => {
   fs.writeFileSync(previousKeyFile, JSON.stringify(load(firstKeyFile).jwks()), { mode: 0o644 });
   const published = path.join(keyDirectory, 'prepublished.json');
   fs.writeFileSync(published, JSON.stringify(load(secondKeyFile).jwks()), { mode: 0o644 });
+  const credentialKeys = new Map([firstKeyFile, secondKeyFile].flatMap(filename => load(filename).jwks().keys)
+    .map(key => [key.kid, require('node:crypto').createPublicKey({ key, format: 'jwk' })]));
   Object.assign(process.env, { OAUTH_SIGNING_KEY_FILE: firstKeyFile, OAUTH_VERIFICATION_JWKS_FILE: published, OAUTH_EPHEMERAL_SIGNING_KEYS: 'false' });
   credentialServer = http.createServer(async (incoming, response) => {
     const chunks = []; for await (const chunk of incoming) chunks.push(chunk);
@@ -421,8 +423,10 @@ before(async () => {
       try {
         const authorization = incoming.headers.authorization || '';
         const token = authorization.startsWith('Bearer ') && authorization.slice(7);
-        const verified = jwt.verify(token, load(firstKeyFile).publicKey, { algorithms: ['RS256'], issuer, audience: credentialContract.AUDIENCE });
-        const header = jwt.decode(token, { complete: true }).header;
+        const header = jwt.decode(token, { complete: true })?.header;
+        const key = credentialKeys.get(header?.kid);
+        if (!key) throw new Error('Unknown credential assertion key');
+        const verified = jwt.verify(token, key, { algorithms: ['RS256'], issuer, audience: credentialContract.AUDIENCE });
         if (!credentialContract.exact(credentials, ['subject']) || !credentialContract.validSubject(credentials.subject)
           || !credentialContract.exact(verified, ['iss','sub','aud','actor_type','token_use','scope','htm','htu','request_subject','jti','iat','exp'])
           || Object.keys(header).length !== 3 || header.typ !== credentialContract.TYPE || verified.sub !== 'oauth-provider'
@@ -431,7 +435,7 @@ before(async () => {
           || !credentialContract.uuid(verified.jti) || verified.exp <= Math.floor(Date.now() / 1000) || verified.exp - verified.iat > 30) throw new Error('Invalid credential request');
         return response.end(JSON.stringify({ schemaVersion: 1, credentialAuthenticationProtocol: 1, subject: credentials.subject,
           known: false, ready: false, subjectId: null, securityRevision: null, invitation: null }));
-      } catch { response.statusCode = 401; return response.end('{}'); }
+      } catch (error) { console.error('Credential fixture rejected assertion:', error.message); response.statusCode = 401; return response.end('{}'); }
     }
     if (incoming.url !== '/api/auth/login' || ![...canonicalSubjects.keys(), 'gone', 'unlinked', 'company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner'].includes(credentials.username) || credentials.password !== 'disposable-password') {
       response.statusCode = 401; return response.end('{}');
@@ -481,7 +485,7 @@ before(async () => {
   process.env.DEVICE_SERVICE_URL=inventoryFixture.base;
   process.env.DATABASE_URL = databaseUrl(schemas[2]);
   policyDb = require('../../../policy-service/src/db/postgres');
-  for (const migration of ['001_policies.sql', '003_blueprints.sql', '004_licenses.sql', '005_license_allocation.sql', '006_group_license_sources.sql', '007_license_principal_binding.sql', '008_user_eligibility.sql', '009_license_fulfillment.sql', '010_license_grant_lineage.sql', '011_license_reviews.sql', '012_license_delegations.sql', '013_license_scope_activation.sql', '014_license_scope_policies.sql', '015_license_delegation_reviews.sql', '016_group_directory_leases.sql', '017_group_source_consents.sql','018_policy_configuration.sql','019_policy_publication.sql','020_license_capacity.sql','021_license_capacity_admission.sql','022_company_licenses.sql','023_company_offboarding.sql','024_company_pool_updates.sql','025_company_blueprints.sql','026_company_blueprint_assignments.sql','027_company_blueprint_lifecycle.sql']) {
+  for (const migration of ['001_policies.sql', '003_blueprints.sql', '004_licenses.sql', '005_license_allocation.sql', '006_group_license_sources.sql', '007_license_principal_binding.sql', '008_user_eligibility.sql', '009_license_fulfillment.sql', '010_license_grant_lineage.sql', '011_license_reviews.sql', '012_license_delegations.sql', '013_license_scope_activation.sql', '014_license_scope_policies.sql', '015_license_delegation_reviews.sql', '016_group_directory_leases.sql', '017_group_source_consents.sql','018_policy_configuration.sql','019_policy_publication.sql','020_license_capacity.sql','021_license_capacity_admission.sql','022_company_licenses.sql','023_company_offboarding.sql','024_company_pool_updates.sql','025_company_blueprints.sql','026_company_blueprint_assignments.sql','027_company_blueprint_lifecycle.sql','028_company_license_groups.sql','029_company_license_automation.sql','030_license_inventory_details.sql']) {
     await policyDb.query(fs.readFileSync(path.join(__dirname, '../../../policy-service/src/db/migrations', migration), 'utf8'));
   }
   process.env.OAUTH_PROVIDER_URL = issuerBase;
@@ -2395,7 +2399,7 @@ test('a stalled directory query is cancelled server-side and refresh recovers wi
 
 async function firstRoleFactor(username) {
   const setup = await request(issuerBase,'/oauth/mfa/enrollment/start',{ method:'POST',body:{ clientId,username,password:'disposable-password' } });
-  assert.equal(setup.status,200); const counter = Math.floor(Date.now()/30000)-1;
+  assert.equal(setup.status,200,JSON.stringify(setup.body)); const counter = Math.floor(Date.now()/30000)-1;
   const confirmed = await request(issuerBase,'/oauth/mfa/enrollment/confirm',{ method:'POST',body:{ challenge:setup.body.challenge,code:totp(setup.body.secret,counter) } });
   assert.equal(confirmed.status,200); assert.deepEqual(confirmed.body,{ enabled:true,reauthenticationRequired:true }); assert.equal(confirmed.headers.get('set-cookie'),null);
   rememberFactor(username,setup.body.secret,counter); return issue(username);
@@ -3154,7 +3158,7 @@ test('production gateway does not treat a real credential-bound pending company 
     const status = await request(issuerBase, route + '/status', { method: 'POST', body: { registrationId, username: body.username, password: body.password, mfaCode: '' } }); assert.equal(status.status, 200); assert.deepEqual(status.body, repeated.body);
     assert.equal((await request(issuerBase, route + '/submit', { method: 'POST', body: { ...body, profile: { ...body.profile, city: 'Retargeted' } } })).status, 409);
     const rejectedLogin = await request(issuerBase, '/oauth/authorize/login', { method: 'POST', body: { client_id: clientId, redirect_uri: 'http://localhost:4000/callback', username: body.username, password: body.password, scope: 'openid roles' } }); assert.equal(rejectedLogin.status, 403); assert.equal(rejectedLogin.body.error, 'identity_not_eligible');
-    const administrator = await productionGlobalAdministrator();
+    let administrator = await productionGlobalAdministrator();
     const substitution = await request(identityBase, '/internal/identity/company-registrations/status', { method: 'POST', token: administrator.access_token, body: { registrationId, subject: body.username + '-subject' } }); assert.equal(substitution.status, 401);
     await withProductionGateway(async base => { assert.equal((await request(base, '/api/identity/organization', { token: registrationId })).status, 401); });
     const actual = (await identityDb.query('SELECT tenant.enabled AS tenant_enabled,account.enabled AS user_enabled,event.type,outbox.status FROM identity_company_registrations registration JOIN identity_tenants tenant ON tenant.id=registration.tenant_id JOIN users account ON account.id=registration.user_id JOIN identity_company_registration_events event ON event.id=registration.event_id JOIN identity_company_registration_outbox outbox ON outbox.id=event.id WHERE registration.id=$1', [registrationId])).rows;
@@ -3184,7 +3188,7 @@ test('production gateway does not treat a real credential-bound pending company 
     const companyOwner = await firstRoleFactor(body.username); assert.deepEqual(payload(companyOwner.access_token).roles, []);
     await withProductionGateway(async base => {
       const ownProfile = await request(base, '/api/identity/organization', { token: companyOwner.access_token }); assert.equal(ownProfile.status, 200, JSON.stringify(ownProfile.body)); assert.equal(ownProfile.body.organization.name, body.profile.name);
-      const token = companyOwner.access_token; const metadata = await request(base, '/api/identity/access', { token }); assert.equal(metadata.status, 200);
+      let token = companyOwner.access_token; const metadata = await request(base, '/api/identity/access', { token }); assert.equal(metadata.status, 200);
       assert.equal(require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS.length, 14);
       assert.deepEqual(metadata.body.permissions, ['organization.read', 'organization.manage', 'organization.delegations.manage', ...require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS]);
       const people = await request(base, '/api/users', { token }); assert.equal(people.status, 200); assert.deepEqual(people.body.users.map(account => account.id), [activated.body.administratorId]);
@@ -3776,6 +3780,11 @@ test('production gateway does not treat a real credential-bound pending company 
       for (const [input, expectedStatus] of [[{ ...accessInput, workflowId: randomUUID() }, 409], [{ ...accessInput, eligibilityRevision: String(BigInt(accessInput.eligibilityRevision) + 1n) }, 409], [{ ...accessInput, items: [accessInput.items[0], { id: protectedAccessItem.id, version: protectedAccessItem.version }] }, 403], [{ ...accessInput, items: [accessInput.items[0], { id: accessActiveAssignment.id, version: '0'.repeat(64) }] }, 412]]) {
         const denied = await request(base, accessRoute, { method: 'POST', token: accessOperator.access_token, body: input }); assert.equal(denied.status, expectedStatus, JSON.stringify(denied.body)); assert.deepEqual(await accessState(), capturedAccessState);
       }
+      // The foreign administrator is also subject to the real MFA deadline.
+      // Reauthenticate before checking its tenant boundary in this long journey.
+      administrator = await issue('production-global-admin');
+      assert.equal(payload(administrator.access_token).identity_authorization.userId, canonicalSubjects.get('production-global-admin'));
+      assert.ok(payload(administrator.access_token).roles.includes('admin')); assert.equal(provenMfa(payload(administrator.access_token)), true);
       assert.equal((await request(base, accessRoute + '/capabilities?workflowId=' + workflow.id, { token: administrator.access_token })).status, 409);
       await identityDb.query("CREATE FUNCTION reject_company_access_cleanup() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Explicit isolated original role-child rollback oracle' USING ERRCODE='23514'; END $$");
       await identityDb.query('CREATE TRIGGER reject_company_access_cleanup BEFORE UPDATE ON identity_role_assignments FOR EACH ROW WHEN (OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL) EXECUTE FUNCTION reject_company_access_cleanup()');
@@ -3818,6 +3827,12 @@ test('production gateway does not treat a real credential-bound pending company 
       }
       assert.equal((await identityDb.query('SELECT count(*)::int AS count FROM identity_role_assignments WHERE user_id=$1', [activated.body.administratorId])).rows[0].count, 0);
       process.stdout.write('Slice18 signed: genuine separate no-profile/no-company-apps canonical operator; roleless Owner denied; protected revocation needs actual admin; exact UTC row hashes; original checkpoint/outbox evidence; original-ID recovery preserves later role grant; actual PIM active/pending cascade verified.\n');
+      // This end-to-end journey can exceed the five-minute MFA freshness window.
+      // Authenticate again before device returns; each receipt below still binds
+      // the exact newly signed bearer to the independently checked source.
+      const currentOwner = await issue(body.username); token = currentOwner.access_token;
+      assert.equal(payload(token).identity_authorization.userId, activated.body.administratorId);
+      assert.deepEqual(payload(token).roles, []); assert.equal(provenMfa(payload(token)), true);
       const deviceReturnBase = '/api/devices/returns'; const deviceOffboardingRoute = '/api/devices/users/' + returnUserId + '/offboarding-returns';
       const deviceReturnEnvelope = { schemaVersion: 1, actorUserId: activated.body.administratorId, tenantId: activated.body.tenantId };
       const deviceOffboardingEnvelope = { ...deviceReturnEnvelope, deviceOffboardingReturnsProtocol: 1, workflowId: workflow.id, userId: returnUserId, target: cleanupTarget, permissions: require('../../../../../packages/device-inventory-contract').INVENTORY_PERMISSIONS, managementMode: 'inventory-only' };

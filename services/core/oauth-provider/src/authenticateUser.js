@@ -16,6 +16,7 @@ async function authenticateUser({ username, password, mfaCode }) {
       body: JSON.stringify({ username, password, ...(mfaCode ? { mfaCode } : {}) }),
       signal: AbortSignal.timeout(5000),
     });
+    if (response.status === 429) return { status: 429, error: 'authentication_rate_limited' };
     if (response.status >= 500) return { status: 503, error: 'authentication_unavailable' };
     if (!response.ok) return { status: 401, error: 'invalid_credentials' };
     const data = await response.json();

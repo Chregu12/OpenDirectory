@@ -357,6 +357,15 @@ class BrowserAuth {
       this.store(headers, session); headers.set('Location', this.origin + '/dashboard');
       return new Response(null, { status: 303, headers });
     } catch (error) {
+      if (request.headers.get('accept')?.includes('text/html')) {
+        const title = error.status === 401 ? 'Anmeldung neu starten' : 'Anmeldung derzeit nicht verfügbar';
+        const message = error.status === 401
+          ? 'Diese Anmeldung ist abgelaufen oder nicht mehr gültig. Starte einen neuen Anmeldeversuch. Verwende danach die neu geöffnete Anmeldeseite.'
+          : 'Die Anmeldung konnte derzeit nicht abgeschlossen werden. Bitte versuche es erneut.';
+        headers.set('Content-Type', 'text/html; charset=utf-8');
+        headers.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+        return new Response(`<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · OpenDirectory</title><style>body{font:16px system-ui,sans-serif;background:#f5f6f8;color:#17202e;margin:0;padding:24px}main{max-width:440px;margin:12vh auto;background:white;border:1px solid #d5dae3;border-radius:12px;padding:32px}h1{font-size:24px}p{line-height:1.6}a{display:inline-block;background:#175cd3;color:white;padding:12px 18px;border-radius:6px;text-decoration:none}a:focus-visible{outline:3px solid #17202e;outline-offset:3px}</style><main><p>OpenDirectory</p><h1>${title}</h1><p>${message}</p><a href="/api/auth/oidc/login">Anmeldung neu starten</a></main></html>`, { status: error.status || 503, headers });
+      }
       return new Response(JSON.stringify({ error: error.code || 'browser_auth_callback_invalid' }), { status: error.status || 503, headers: new Headers([...headers, ['Content-Type', 'application/json']]) });
     }
   }

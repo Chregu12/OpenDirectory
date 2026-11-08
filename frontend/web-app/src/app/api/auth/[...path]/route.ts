@@ -2,7 +2,7 @@ import { createServiceProxy } from '@/lib/server/serviceProxy';
 
 export const dynamic = 'force-dynamic';
 
-const proxy = createServiceProxy('AUTH_SERVICE_URL', 'http://auth-service:3001');
+const proxy = createServiceProxy('AUTH_SERVICE_URL', 'http://auth-service:3002');
 
 export const GET = proxy;
 export const POST = proxy;

@@ -123,6 +123,19 @@ test('the actual production service cold-starts and authenticates through the OA
   assert.equal((await fetch(server.url+'/health')).status,503);
  }finally{if(server)await server.stop();if(previous===undefined)delete process.env.AUTH_SERVICE_URL;else process.env.AUTH_SERVICE_URL=previous;}
 });
+test('repeated successful logins through the actual provider never exhaust the failed-login budget', {timeout:45000},async()=>{
+ const{user}=await account();const{startAuthenticationService}=require('./fixtures/server.cjs');const{authenticateUser}=require('../../../oauth-provider/src/authenticateUser');
+ const databaseUrl=new URL(process.env.AUTH_TEST_DATABASE_URL);databaseUrl.searchParams.set('options','-c search_path='+schema+',pg_catalog');
+ const previous=process.env.AUTH_SERVICE_URL;let server;
+ try{
+  server=await startAuthenticationService(databaseUrl.href);process.env.AUTH_SERVICE_URL=server.url;
+  for(let attempt=0;attempt<8;attempt++){
+   const result=await authenticateUser({username:user.username,password});assert.equal(result.error,undefined,result.error);assert.equal(result.user.id,user.id);
+  }
+  const wrong=await authenticateUser({username:user.username,password:'incorrect-disposable-password'});assert.equal(wrong.status,401);
+  const correct=await authenticateUser({username:user.username,password});assert.equal(correct.error,undefined,correct.error);
+ }finally{if(server)await server.stop();if(previous===undefined)delete process.env.AUTH_SERVICE_URL;else process.env.AUTH_SERVICE_URL=previous;}
+});
 test('the actual service exits without listening when its real migration cannot apply', {timeout:20000},async()=>{
  await connection.query('CREATE TABLE password_history(incompatible_column INTEGER)');const {startAuthenticationService}=require('./fixtures/server.cjs');
  const databaseUrl=new URL(process.env.AUTH_TEST_DATABASE_URL);databaseUrl.searchParams.set('options','-c search_path='+schema+',pg_catalog');

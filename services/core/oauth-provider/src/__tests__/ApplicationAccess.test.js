@@ -62,3 +62,46 @@ test('a durable company owner source grants only the configured console and neve
   identity.companyConsole.mockResolvedValueOnce({ active: false, revision: null }); await expect(current.context('web-app', state)).rejects.toMatchObject({ status: 403 });
   identity.companyConsole.mockRejectedValueOnce(new Error('source unavailable')); await expect(current.context('web-app', state)).rejects.toThrow('source unavailable');
 });
+
+test.each([null, {}, 'admin', ['christianheusser'], ['*'], [context.userId, context.userId.toUpperCase()], Array(101).fill(context.userId)])('invalid configured web administrator list fails closed: %j', webAdminUserIds => {
+  expect(() => new ApplicationAccess({}, { webClientId: 'web-app', webAdminUserIds })).toThrow();
+});
+test('configured administrator access requires the protected web client', () => {
+  expect(() => new ApplicationAccess({}, { webAdminUserIds: [context.userId] })).toThrow();
+});
+test('configured web access requires both the exact canonical user and current canonical admin role', async () => {
+  const current = new ApplicationAccess({}, { webClientId: 'web-app', webAdminUserIds: [context.userId], production: true });
+  current.transaction = jest.fn(async operation => operation({ effective: async () => [] }));
+  const state = { context, memberships: [], authorization: { roles: ['admin'] } };
+  const original = await current.context('web-app', state);
+  expect(validApplicationContext(original)).toBe(true);
+  expect(await current.matches('web-app', state, original)).toBe(true);
+  await expect(current.context('other-app', state)).rejects.toMatchObject({ code: 'application_not_assigned' });
+  await expect(current.context('web-app', { ...state, context: { ...context, userId: randomUUID() } })).rejects.toMatchObject({ status: 403 });
+  for (const authorization of [undefined, { roles: [] }, { roles: ['role-administrator'] }, { roles: 'admin' }]) {
+    const changed = { ...state, authorization };
+    await expect(current.context('web-app', changed)).rejects.toMatchObject({ status: 403 });
+    expect(await current.matches('web-app', changed, original)).toBe(false);
+  }
+  expect(await current.matches('web-app', { ...state, context: { ...context, rolesRevision: 'b'.repeat(64) } }, original)).toBe(false);
+  current.webAdminUserIds.clear();
+  expect(await current.matches('web-app', state, original)).toBe(false);
+});
+test('configured web access cannot mask unavailable assignment storage or invalid canonical state', async () => {
+  const current = new ApplicationAccess({ isAvailable: () => false }, { webClientId: 'web-app', webAdminUserIds: [context.userId] });
+  const state = { context, memberships: [], authorization: { roles: ['admin'] } };
+  await expect(current.context('web-app', state)).rejects.toMatchObject({ status: 503 });
+  await expect(current.context('web-app', { ...state, context: undefined })).rejects.toMatchObject({ status: 503 });
+  await expect(current.context('web-app', { ...state, memberships: undefined })).rejects.toMatchObject({ status: 503 });
+});
+test('existing application grants retain precedence over configured web administrator access', async () => {
+  const current = new ApplicationAccess({}, { webClientId: 'web-app', webAdminUserIds: [context.userId] });
+  const grant = { id: randomUUID(), target_type: 'user', target_id: context.userId };
+  let grants = [grant];
+  current.transaction = jest.fn(async operation => operation({ effective: async () => grants }));
+  const state = { context, memberships: [], authorization: { roles: ['admin'] } };
+  const explicit = await current.context('web-app', state);
+  grants = [];
+  expect(await current.matches('web-app', state, explicit)).toBe(false);
+  expect(validApplicationContext(await current.context('web-app', state))).toBe(true);
+});

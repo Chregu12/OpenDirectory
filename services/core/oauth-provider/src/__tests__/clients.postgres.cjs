@@ -161,6 +161,21 @@ test('mandatory application assignment denies even global roles until an explici
   const audit = (await values.pool.query('SELECT * FROM oauth_application_access_audit')).rows[0];
   assert.equal(audit.actor.subject,accessActor.sub); assert.equal(audit.actor.userId,actor.identity_authorization.userId); assert.equal(audit.action,'granted');
 }));
+test('explicit configured web administrator access survives restart without manufacturing or renewing SQL leases', () => authority(async values => {
+  const { client } = await assignmentFixture(values);
+  const options = { identity: identityProof, webClientId: client.clientId, webAdminUserIds: [recipient], production: true };
+  const state = { ...canonicalState([]), authorization: { roles: ['admin'] } };
+  const access = new ApplicationAccess(values.database, options);
+  const original = await access.context(client.clientId, state);
+  assert.equal(await new ApplicationAccess(values.database, options).matches(client.clientId, state, original), true);
+  assert.equal((await values.pool.query('SELECT COUNT(*)::int AS count FROM oauth_application_assignments')).rows[0].count, 0);
+  assert.equal(await access.matches(client.clientId, { ...state, authorization: { roles: [] } }, original), false);
+  assert.equal(await new ApplicationAccess(values.database, { ...options, webAdminUserIds: [] }).matches(client.clientId, state, original), false);
+  await assert.rejects(access.context('different-app', state), { status: 403 });
+  await values.pool.query('ALTER TABLE oauth_application_assignments RENAME TO unavailable_assignments');
+  try { await assert.rejects(access.context(client.clientId, state), { status: 503 }); }
+  finally { await values.pool.query('ALTER TABLE unavailable_assignments RENAME TO oauth_application_assignments'); }
+}));
 test('assignment retries bind the immutable request to canonical actor, target, client and duration without duplicate audit', () => authority(async values => {
   const { client,access } = await assignmentFixture(values); const input = grantInput();
   const first = await access.grant(client.clientId,input,accessActor); const repeated = await access.grant(client.clientId,input,accessActor); assert.equal(repeated.reused,true); assert.equal(first.assignment.id,repeated.assignment.id);

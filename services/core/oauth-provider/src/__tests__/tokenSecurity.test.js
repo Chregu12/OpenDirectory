@@ -208,6 +208,14 @@ describe('Application scope grants', () => {
 });
 
 describe('Verified identities and MFA', () => {
+  test('preserves an authentication rate limit without reporting a wrong password', async () => {
+    global.fetch.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({ error: 'Too many authentication attempts' }) });
+    const response = await login('alice');
+    expect(response.status).toBe(429);
+    expect(response.body.error).toBe('authentication_rate_limited');
+    expect(response.headers.location).toBeUndefined();
+  });
+
   test('authentication outage fails closed instead of accepting the submitted username', async () => {
     global.fetch.mockRejectedValueOnce(new Error('Authentication service offline'));
     const response = await login('root', 'openid roles');
@@ -294,6 +302,69 @@ describe('Verified identities and MFA', () => {
     expect(response.text).toContain('&lt;script&gt;');
     const device = await request(app).get('/oauth/device/verify').query({ user_code: injected, error: injected });
     expect(device.text).not.toContain(injected);
+  });
+});
+
+describe('Served browser login', () => {
+  async function browser(responses, savedTheme = 'system') {
+    const response = await request(app).get('/oauth/authorize').query({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code' });
+    expect(response.status).toBe(200);
+    const nodes = new Map();
+    const node = id => {
+      if (!nodes.has(id)) nodes.set(id, { hidden: ['mfaSetup', 'enrollmentSetup'].includes(id), value: '', textContent: '', disabled: false,
+        events: {}, classList: { add: jest.fn(), remove: jest.fn() }, focus: jest.fn(), removeAttribute: jest.fn(),
+        addEventListener(type, handler) { this.events[type] = handler; } });
+      return nodes.get(id);
+    };
+    const values = { client_id: clientId, redirect_uri: redirectUri, username: 'alice', password: 'disposable-#%+&-password', mfaCode: '', otpCode: '' };
+    node('loginForm').elements = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value, focus: jest.fn() }]));
+    const fetch = jest.fn();
+    for (const [status, body] of responses) fetch.mockResolvedValueOnce({ status, ok: status < 400, json: async () => body });
+    const context = { document: { getElementById: node, documentElement: { setAttribute: jest.fn(), removeAttribute: jest.fn() } }, window: { localStorage: { getItem: jest.fn(() => { if (savedTheme === 'blocked') throw new Error('Blocked storage'); return savedTheme; }), setItem: jest.fn() } }, fetch, location: { search: '', assign: jest.fn() }, URLSearchParams, confirm: jest.fn(() => true),
+      FormData: class { constructor(form) { this.form = form; } entries() { return Object.entries(this.form.elements).map(([key, field]) => [key, field.value]); } } };
+    const script = response.text.match(/<script>([\s\S]*?)<\/script>/)[1];
+    require('node:vm').runInNewContext(script, context);
+    await node('loginForm').events.submit({ preventDefault() {} });
+    expect(JSON.parse(fetch.mock.calls[0][1].body).password).toBe(values.password);
+    return { node, fetch, context };
+  }
+
+  test.each(['light', 'dark', 'system', 'blocked'])('served login preserves authentication with %s appearance or unavailable storage', async theme => {
+    const { node, context } = await browser([[200, { redirect: 'https://app.example.test/callback' }]], theme);
+    expect(context.location.assign).toHaveBeenCalled();
+    if (['light', 'dark'].includes(theme)) expect(context.document.documentElement.setAttribute).toHaveBeenCalledWith('data-theme', theme);
+    else expect(context.document.documentElement.removeAttribute).toHaveBeenCalledWith('data-theme');
+    node('appearance').value = 'light'; node('appearance').events.change();
+    expect(context.document.documentElement.setAttribute).toHaveBeenLastCalledWith('data-theme', 'light');
+    expect(context.window.localStorage.setItem).toHaveBeenCalledWith('theme', 'light');
+  });
+
+  test.each([
+    [401, 'invalid_credentials', 'Benutzername oder Passwort ist ungültig.'],
+    [429, 'authentication_rate_limited', 'Zu viele Anmeldeversuche'],
+    [401, 'otp_required', 'aktuellen OpenDirectory-Einmalcode'],
+  ])('shows a useful in-page error for HTTP %s / %s', async (status, error, message) => {
+    const page = await browser([[status, { error }]]);
+    expect(page.node('errBox').textContent).toContain(message);
+    expect(page.node('submitBtn').disabled).toBe(false);
+    expect(page.context.location.assign).not.toHaveBeenCalled();
+  });
+
+  test('a real HTTP MFA requirement opens enrollment and accepts its authenticator URI', async () => {
+    const page = await browser([[401, { error: 'mfa_enrollment_required' }], [200, {
+      challenge: 'disposable-challenge', secret: 'disposable-secret', otpauthUri: 'otpauth://totp/OpenDirectory:disposable?secret=TEST',
+    }], [200, { enabled: true, reauthenticationRequired: true }]]);
+    expect(page.node('mfaSetup').hidden).toBe(false);
+    await page.node('startEnrollment').events.click();
+    expect(page.fetch.mock.calls[1][0]).toBe('/oauth/mfa/enrollment/start');
+    expect(page.node('enrollmentSetup').hidden).toBe(false);
+    expect(page.node('enrollmentUri').href).toMatch(/^otpauth:\/\/totp\/OpenDirectory:/);
+    page.node('enrollmentCode').value = '123456';
+    await page.node('confirmEnrollment').events.click();
+    expect(page.node('enrollmentSecret').textContent).toBe('');
+    expect(page.node('enrollmentSetup').hidden).toBe(true);
+    expect(page.node('errBox').textContent).toContain('MFA ist eingerichtet.');
+    expect(page.node('loginForm').elements.otpCode.value).toBe('');
   });
 });
 
