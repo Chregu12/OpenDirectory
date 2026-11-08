@@ -43,6 +43,8 @@ function asAdmin() { return token({ roles: ['admin'] }); }
 const protectedOperations = [
   ['get', '/health/detailed', 'gateway.status.read'], ['get', '/api/gateway/info', 'gateway.status.read'],
   ['get', '/api/gateway/routes', 'gateway.status.read'], ['get', '/api/services', 'gateway.status.read'],
+  ['get', '/api/gateway/stats', 'gateway.status.read'],
+  ['get', '/api/system/resources', 'gateway.status.read'],
   ['get', '/api/config/modules', 'gateway.config.read'], ['post', '/api/config/modules/fixture', 'gateway.config.manage'],
   ['get', '/api/admin/keys', 'gateway.keys.read'], ['post', '/api/admin/keys', 'gateway.keys.manage'], ['delete', '/api/admin/keys/fixture', 'gateway.keys.manage'],
   ['get', '/api/gateway/api-keys', 'gateway.keys.read'], ['post', '/api/gateway/api-keys', 'gateway.keys.manage'], ['delete', '/api/gateway/api-keys/fixture', 'gateway.keys.manage'],
@@ -54,6 +56,43 @@ const protectedOperations = [
 test.each(['/health', '/health/live'])('liveness %s is minimal and does not expose internal service/process data', async path => {
   const result = await request(gateway.app).get(path);
   expect(result.status).toBe(200); expect(result.body).toEqual({ status: 'ok', service: 'api-gateway' }); expect(jwtVerify).not.toHaveBeenCalled();
+});
+
+test('readiness fails when its database is unavailable, while liveness remains available', async () => {
+  const result = await request(gateway.app).get('/health/ready');
+  expect(result.status).toBe(503);
+  expect(result.body).toEqual({ status: 'not ready', service: 'api-gateway' });
+  expect(jwtVerify).not.toHaveBeenCalled();
+});
+
+test('a production gateway exits its startup path when PostgreSQL is unavailable', async () => {
+  const previous = process.env.NODE_ENV;
+  const instance = new APIGateway({ discover: false });
+  try {
+    process.env.NODE_ENV = 'production';
+    await expect(instance.start(0)).rejects.toThrow('PostgreSQL is required');
+    expect(instance.server.listening).toBe(false);
+  } finally {
+    process.env.NODE_ENV = previous;
+    instance.stop();
+  }
+});
+
+test('explicit Kubernetes upstreams replace localhost discovery without removing OIDC authorization', async () => {
+  process.env.GATEWAY_UPSTREAMS = JSON.stringify([{ name: 'users', target: 'http://opendirectory-identity-service:3001', pathPrefix: '/api/users' }]);
+  let configured;
+  try {
+    configured = new APIGateway({ discover: false });
+    expect([...configured.services.keys()]).toEqual(['users']);
+    expect((await request(configured.app).get('/api/users')).status).toBe(401);
+    const credential = asAdmin();
+    const response = await request(configured.app).get('/api/users?limit=2').set('Authorization', 'Bearer ' + credential);
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ target: 'http://opendirectory-identity-service:3001', authorization: 'Bearer ' + credential, originalUrl: '/api/users?limit=2' });
+  } finally {
+    configured?.stop();
+    delete process.env.GATEWAY_UPSTREAMS;
+  }
 });
 test.each(protectedOperations)('%s %s requires a real token and the exact permission %s', async (method, path, permission) => {
   expect((await request(gateway.app)[method](path).send({ roles: ['admin'] })).status).toBe(401);

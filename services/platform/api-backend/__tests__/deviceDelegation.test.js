@@ -13,6 +13,9 @@ process.env.API_BACKEND_CLIENT_SECRET = 'test-api-backend-secret';
 process.env.OAUTH_TOKEN_URL = 'http://oauth-provider.test/oauth/token';
 process.env.DEVICE_SERVICE_URL = 'http://device-service.test';
 
+jest.mock('../db', () => ({ initDb: jest.fn(async () => {}), isAvailable: () => false,
+  query: jest.fn(async () => { throw new Error('Database unavailable'); }), pool: { end: jest.fn() } }));
+
 const nock = require('nock');
 const request = require('supertest');
 

@@ -64,6 +64,14 @@ export const SERVICES: Record<string, ServiceConfig> = {
   },
 };
 
+const enabledServices = process.env.INTEGRATION_ENABLED_SERVICES === undefined
+  ? Object.keys(SERVICES)
+  : process.env.INTEGRATION_ENABLED_SERVICES.split(',').map(id => id.trim()).filter(Boolean);
+if (!enabledServices.length || enabledServices.some(id => !Object.prototype.hasOwnProperty.call(SERVICES, id))) {
+  throw new Error('INTEGRATION_ENABLED_SERVICES must list known service IDs');
+}
+export const isServiceEnabled = (id: string): boolean => enabledServices.includes(id);
+
 export const API_CONFIG = {
   port: process.env.PORT || 3005,
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],

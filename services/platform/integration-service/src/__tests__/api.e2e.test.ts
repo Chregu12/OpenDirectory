@@ -1,3 +1,4 @@
+export {};
 /**
  * E2E API tests for integration-service — P0 auth-fix verification.
  *
@@ -31,6 +32,12 @@
 // ─── Fake jose: drives the real oidcAuth/requireAdmin logic, no real IdP ──
 // Must be declared before anything requires '../middleware/oidcAuth' (which
 // happens transitively as soon as '../index' is required below).
+jest.mock('pg',()=>({Pool:jest.fn(()=>{const rows=new Map();return{query:jest.fn(async(sql:string,args:any[]=[])=>{
+ if(sql.startsWith('INSERT')){if(!rows.has(args[0]))rows.set(args[0],args[1]);return{rows:[]};}
+ if(sql.startsWith('SELECT'))return{rows:[...rows].map(([id,enabled])=>({id,enabled}))};
+ if(sql.startsWith('UPDATE')){rows.set(args[0],args[1]);return{rows:[{id:args[0],enabled:args[1]}]};}return{rows:[]};
+})};})}));
+
 jest.mock('jose', () => ({
   createRemoteJWKSet: jest.fn(() => ({})),
   jwtVerify: jest.fn(async (token: string) => {

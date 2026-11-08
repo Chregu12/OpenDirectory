@@ -23,6 +23,7 @@
     "jsonwebtoken": "^9.0.0",
     "ldapjs": "^3.0.3",
     "node-vault": "^0.10.2",
+    "pg": "8.23.1",
     "pino": "^8.14.0",
     "pino-http": "^8.3.0",
     "prom-client": "^14.2.0"

@@ -71,7 +71,7 @@ export interface VaultSecret {
 
 export interface ServiceStatus {
   name: string;
-  status: 'healthy' | 'unhealthy' | 'unknown';
+  status: 'healthy' | 'unhealthy' | 'unknown' | 'disabled';
   version?: string;
   uptime?: number;
   lastCheck: string;

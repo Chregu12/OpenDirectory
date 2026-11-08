@@ -220,6 +220,8 @@ export class GrafanaService {
       
       if (health.database === 'ok') {
         const org = await this.getOrganization();
+        if (!org) return { name: SERVICES.grafana.name, status: 'unhealthy', lastCheck,
+          details: { error: 'Grafana API access is unavailable; verify its configured credential' } };
         const dashboards = await this.getDashboards();
         
         return {

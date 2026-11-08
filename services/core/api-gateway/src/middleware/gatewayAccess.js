@@ -10,7 +10,8 @@ const ROLE_PERMISSIONS = {
 };
 const OPERATIONS = [
   ['GET', /^\/api\/gateway\/access\/?$/, null],
-  ['GET', /^\/(?:health\/detailed|api\/gateway\/(?:info|routes)|api\/services(?:\/[^/]+\/health)?)\/?$/, 'gateway.status.read'],
+  ['GET', /^\/api\/system\/resources\/?$/, 'gateway.status.read'],
+  ['GET', /^\/(?:health\/detailed|api\/gateway\/(?:info|routes|stats)|api\/services(?:\/[^/]+\/health)?)\/?$/, 'gateway.status.read'],
   ['GET', /^\/api\/config\/modules\/?$/, 'gateway.config.read'],
   ['POST', /^\/api\/config\/modules\/[^/]+\/?$/, 'gateway.config.manage'],
   ['GET', /^\/api\/(?:admin\/keys|gateway\/api-keys)\/?$/, 'gateway.keys.read'],
@@ -31,7 +32,7 @@ function getGatewayPermissions(user) {
 }
 function isPublic(req) {
   if (req.method === 'OPTIONS') return true;
-  if (req.method === 'GET' && ['/health', '/health/live', '/docs', '/api-docs', '/docs/openapi.json'].includes(req.path)) return true;
+  if (req.method === 'GET' && ['/health', '/health/live', '/health/ready', '/docs', '/api-docs', '/docs/openapi.json'].includes(req.path)) return true;
   return req.method === 'POST' && ['/api/auth/login', '/api/auth/register'].includes(req.path);
 }
 function gatewayAccess(resolveProxy) {

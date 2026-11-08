@@ -190,14 +190,14 @@ function concretePath(routePath) {
 
 function supertestCall(method, path) {
   const fn = method.toLowerCase();
-  let req = request(app)[fn](path);
+  let req = request(httpServer)[fn](path);
   if (['post', 'put', 'patch'].includes(fn)) req = req.send({});
   return req;
 }
 
 describe('GET /health — public liveness probe (skipPaths)', () => {
   test('reachable with no token at all', async () => {
-    const res = await request(app).get('/health');
+    const res = await request(httpServer).get('/health');
     expect(res.status).toBe(200);
   });
 });
@@ -231,12 +231,12 @@ describe('every non-admin route requires at least authentication', () => {
 
 describe('expired / garbage tokens are never silently accepted', () => {
   test('expired token -> 401', async () => {
-    const res = await request(app).get('/api/network/dns/records').set(bearer(expiredToken));
+    const res = await request(httpServer).get('/api/network/dns/records').set(bearer(expiredToken));
     expect(res.status).toBe(401);
   });
 
   test('garbage bearer token -> 401 or 403, never reaches the handler', async () => {
-    const res = await request(app).get('/api/network/dns/records').set(bearer(garbageToken));
+    const res = await request(httpServer).get('/api/network/dns/records').set(bearer(garbageToken));
     expect([401, 403]).toContain(res.status);
   });
 });

@@ -65,9 +65,6 @@ const allowedOrigins = process.env.CORS_ORIGIN
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) {
-      if (process.env.NODE_ENV === 'production') {
-        return callback(new Error('Origin header is required'), false);
-      }
       return callback(null, true);
     }
     if (allowedOrigins.includes(origin)) return callback(null, true);
@@ -905,20 +902,26 @@ app.post('/api/users/sync', authMiddleware, async (req, res) => {
 
 // System Health API (public — used by Docker healthchecks)
 app.get('/api/health', async (req, res) => {
-  const [devices, users] = await Promise.all([getAllLocalDevices(), getAllUsersFull()]);
-  res.json({
-    success: true,
+  let databaseConnected = false;
+  try {
+    await db.query('SELECT 1');
+    databaseConnected = true;
+  } catch (_) {}
+  const [devices, users] = databaseConnected
+    ? await Promise.all([getAllLocalDevices(), getAllUsersFull()]) : [null, null];
+  res.status(databaseConnected ? 200 : 503).json({
+    success: databaseConnected,
     data: {
-      status: 'healthy',
+      status: databaseConnected ? 'healthy' : 'unhealthy',
       timestamp: new Date(),
       services: {
-        database: 'connected',
-        ldap: 'connected',
-        monitoring: 'active'
+        database: databaseConnected ? 'connected' : 'unavailable',
+        ldap: 'not-checked',
+        monitoring: 'not-checked'
       },
       stats: {
-        devices: devices.length,
-        users: users.length,
+        devices: devices ? devices.length : null,
+        users: users ? users.length : null,
         uptime: process.uptime()
       }
     }
@@ -1191,7 +1194,7 @@ app.post('/api/printers', authMiddleware, (req, res) => {
 // ECONNREFUSED, not a multi-second timeout) and every route above falls
 // back to its pre-existing in-memory store, so this does not slow down or
 // change the outcome of the 22 pre-existing tests.
-db.initDb()
+const databaseInitialization = db.initDb()
   .then(() => seedAdminUser())
   .catch(err => console.warn('[api-backend-db] initDb failed:', err.message));
 
@@ -1199,6 +1202,11 @@ db.initDb()
 module.exports = { app, server, userStore, hashPassword };
 
 if (require.main === module) {
+databaseInitialization.then(() => {
+if (process.env.NODE_ENV === 'production' && !db.isAvailable()) {
+  console.error('PostgreSQL is required before starting the production API backend');
+  process.exit(1);
+}
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`OpenDirectory API Backend running on port ${PORT}`);
@@ -1254,4 +1262,8 @@ function shutdown(signal) {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
+}).catch(error => {
+  console.error('API backend startup failed:', error.message);
+  process.exit(1);
+});
 } // end if (require.main === module)

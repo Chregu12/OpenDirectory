@@ -40,6 +40,9 @@ process.env.JWKS_URI = 'https://idp.test/jwks';
 process.env.OIDC_ISSUER = 'https://idp.test';
 process.env.APPSTORE_AGENT_TOKEN = 'test-agent-shared-secret';
 process.env.PACKAGES_DIR = require('path').join(__dirname, '.tmp-packages');
+jest.mock('../../../../../packages/oidc-access-state', () => ({ createAccessStateClient: () => jest.fn(async (_authorization, claims) => {
+  if (claims.revoked) throw Object.assign(new Error('Revoked token'), { status: 401 });
+}) }));
 
 // ─── Mock external dependencies BEFORE any require ────────────────────────
 
@@ -87,7 +90,7 @@ jest.mock('jose', () => ({
 }));
 
 function makeToken(claims) {
-  return Buffer.from(JSON.stringify(claims)).toString('base64url');
+  return Buffer.from(JSON.stringify({ token_use: 'access', actor_type: 'user', ...claims })).toString('base64url');
 }
 const adminToken = makeToken({ sub: 'admin-1', roles: ['admin'] });
 const userToken = makeToken({ sub: 'user-1', roles: ['user'] });
@@ -97,6 +100,14 @@ const userToken = makeToken({ sub: 'user-1', roles: ['user'] });
 const request = require('supertest');
 const fs = require('fs');
 let app;
+
+test.each([
+  [makeToken({ sub: 'user-1', token_use: 'id', roles: ['admin'] }), 403],
+  [makeToken({ sub: 'app-1', actor_type: 'application', roles: ['admin'] }), 403],
+  [makeToken({ sub: 'user-1', revoked: true, roles: ['admin'] }), 401],
+])('rejects tokens without current human API authority', async (token, status) => {
+  expect((await request(app).get('/api/store/categories').set('Authorization', 'Bearer ' + token)).status).toBe(status);
+});
 
 beforeAll(async () => {
   jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -108,6 +119,7 @@ beforeAll(async () => {
   // ensureAppstoreTables/ensurePackagesTable, hydrateAppstoreCatalog,
   // connectBus) settle before the suite starts issuing requests.
   await new Promise(resolve => setTimeout(resolve, 100));
+  await request(app).post('/api/appstore/apps').set('Authorization', 'Bearer ' + adminToken).send({ id: 'slack', name: 'Disposable Slack Fixture', version: '1.0.0', vendor: 'Test fixture', platforms: ['windows'] }).expect(201);
 });
 
 afterAll(() => {

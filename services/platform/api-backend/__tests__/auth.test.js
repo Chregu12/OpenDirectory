@@ -2,6 +2,9 @@ process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-secret-for-jest-not-for-production';
 process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
+jest.mock('../db', () => ({ initDb: jest.fn(async () => {}), isAvailable: () => false,
+  query: jest.fn(async () => { throw new Error('Database unavailable'); }), pool: { end: jest.fn() } }));
+
 const request = require('supertest');
 const { app, userStore, hashPassword } = require('../server');
 

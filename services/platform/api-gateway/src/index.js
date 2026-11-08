@@ -27,7 +27,7 @@ const config = {
   },
   services: {
     discovery: {
-      enabled: true,
+      enabled: process.env.SERVICE_DISCOVERY_ENABLED !== 'false',
       interval: 30000, // 30 seconds
       timeout: 5000,   // 5 seconds
       retries: 3

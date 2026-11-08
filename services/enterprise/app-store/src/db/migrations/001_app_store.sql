@@ -82,8 +82,8 @@ INSERT INTO store_categories (name, display_name, icon, sort_order) VALUES
   ('system', 'System', 'cog', 8)
 ON CONFLICT (name) DO NOTHING;
 
-CREATE INDEX idx_store_apps_category ON store_apps(category);
-CREATE INDEX idx_store_apps_platforms ON store_apps USING gin(platforms);
-CREATE INDEX idx_store_assignments_target ON store_assignments(target_type, target_id);
-CREATE INDEX idx_store_installations_device ON store_installations(device_id);
-CREATE INDEX idx_store_installations_status ON store_installations(status);
+CREATE INDEX IF NOT EXISTS idx_store_apps_category ON store_apps(category);
+CREATE INDEX IF NOT EXISTS idx_store_apps_platforms ON store_apps USING gin(platforms);
+CREATE INDEX IF NOT EXISTS idx_store_assignments_target ON store_assignments(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_store_installations_device ON store_installations(device_id);
+CREATE INDEX IF NOT EXISTS idx_store_installations_status ON store_installations(status);

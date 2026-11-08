@@ -371,7 +371,8 @@ class DeviceLifecycleService extends EventEmitter {
      */
     async start() {
         try {
-            const port = parseInt(process.env.PORT) || 3020;
+            const configuredPort = Number.parseInt(process.env.PORT ?? '', 10);
+            const port = Number.isNaN(configuredPort) ? 3020 : configuredPort;
             const host = process.env.HOST || '0.0.0.0';
 
             // Connect to event bus and subscribe to trigger events

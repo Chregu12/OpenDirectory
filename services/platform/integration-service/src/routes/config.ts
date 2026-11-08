@@ -1,60 +1,60 @@
-import { Router, Request, Response } from 'express';
-import { requireAdmin } from '../middleware/oidcAuth';
-import logger from '../lib/logger';
-
+import { Router } from "express";
+import { requireAdmin } from "../middleware/oidcAuth";
+import { ModuleStore, moduleDefaults } from "../services/module-store";
+import { SERVICES, isServiceEnabled } from "../config/services";
 const router = Router();
-
-// In-memory module config (persists for process lifetime)
-const moduleConfig: Record<string, { enabled: boolean; name: string; description: string }> = {
-  'monitoring-analytics':   { enabled: true,  name: 'Monitoring & Analytics',   description: 'Grafana dashboards and Prometheus metrics' },
-  'secrets-management':     { enabled: true,  name: 'Secrets Management',        description: 'HashiCorp Vault integration' },
-  'device-management':      { enabled: true,  name: 'Device Management',         description: 'Endpoint lifecycle and enrollment' },
-  'network-infrastructure': { enabled: true,  name: 'Network Infrastructure',    description: 'DNS, DHCP, and network topology' },
-  'security-suite':         { enabled: true,  name: 'Security Suite',            description: 'Vulnerability scanning and threat detection' },
-};
-
-router.get('/modules', (req: Request, res: Response) => {
-  res.json(moduleConfig);
-});
-
-router.get('/modules/:moduleId', (req: Request, res: Response) => {
-  const { moduleId } = req.params;
-  if (!moduleConfig[moduleId]) {
-    return res.status(404).json({ error: 'Module not found' });
+const modules = new ModuleStore();
+router.get("/modules", async (_req, res) => {
+  try {
+    res.set("Cache-Control", "no-store").json(await modules.list());
+  } catch {
+    res.status(503).json({ error: "Module configuration storage unavailable" });
   }
-  res.json(moduleConfig[moduleId]);
 });
-
-// requireAdmin: this toggles a platform module on/off for every user, a
-// system-wide administrative action, not a per-user preference.
-router.post('/modules/:moduleId', requireAdmin, (req: Request, res: Response) => {
-  const { moduleId } = req.params;
-  const { enabled } = req.body;
-  if (!moduleConfig[moduleId]) {
-    return res.status(404).json({ error: 'Module not found' });
+router.get("/modules/:moduleId", async (req, res) => {
+  if (
+    !Object.prototype.hasOwnProperty.call(moduleDefaults, req.params.moduleId)
+  )
+    return res.status(404).json({ error: "Module not found" });
+  try {
+    res.json((await modules.list())[req.params.moduleId]);
+  } catch {
+    res.status(503).json({ error: "Module configuration storage unavailable" });
   }
-  moduleConfig[moduleId].enabled = Boolean(enabled);
-  logger.info(`Module ${moduleId} ${enabled ? 'enabled' : 'disabled'}`);
-  res.json(moduleConfig[moduleId]);
 });
-
-router.get('/features', (req: Request, res: Response) => {
+router.post("/modules/:moduleId", requireAdmin, async (req, res) => {
+  const id = req.params.moduleId;
+  if (!Object.prototype.hasOwnProperty.call(moduleDefaults, id))
+    return res.status(404).json({ error: "Module not found" });
+  if (
+    typeof req.body.enabled !== "boolean" ||
+    Object.keys(req.body).some((key) => key !== "enabled")
+  )
+    return res
+      .status(400)
+      .json({ error: "An explicit enabled boolean is required" });
+  try {
+    res.json(await modules.update(id, req.body.enabled));
+  } catch {
+    res.status(503).json({ error: "Module configuration not confirmed" });
+  }
+});
+router.get("/features", (_req, res) => {
+  const enabled = Object.keys(SERVICES).filter(isServiceEnabled);
   res.json({
-    lldapIntegration: true,
-    grafanaDashboards: true,
-    prometheusMetrics: true,
-    vaultSecrets: true,
-    deviceEnrollment: true,
+    lldapIntegration: enabled.includes("lldap"),
+    grafanaDashboards: enabled.includes("grafana"),
+    prometheusMetrics: enabled.includes("prometheus"),
+    vaultSecrets: enabled.includes("vault"),
+    deviceEnrollment: false,
   });
 });
-
-router.get('/settings', (req: Request, res: Response) => {
+router.get("/settings", (_req, res) =>
   res.json({
-    siteName: 'OpenDirectory',
-    version: '1.0.0',
-    theme: 'light',
-    language: 'en',
-  });
-});
-
+    siteName: "OpenDirectory",
+    language: "de",
+    theme: "browser-preference",
+    configurationStorage: "postgresql",
+  }),
+);
 export default router;

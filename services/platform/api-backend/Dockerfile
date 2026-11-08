@@ -33,7 +33,7 @@ EXPOSE 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/api/health || exit 1
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/health',{headers:{Origin:(process.env.CORS_ORIGIN||'http://localhost:3000').split(',')[0].trim()},signal:AbortSignal.timeout(5000)}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"
 
 # Start the application
 CMD ["node", "server.js"]

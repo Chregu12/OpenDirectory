@@ -99,6 +99,11 @@ beforeAll(async () => {
   console.error = () => {};
   try {
     httpServer = await mod.start();
+    if (!httpServer.listening) await new Promise((resolve, reject) => {
+      httpServer.once('listening', resolve);
+      httpServer.once('error', reject);
+    });
+    expect(httpServer.address().port).not.toBe(3020);
   } finally {
     console.log = origLog;
     console.warn = origWarn;

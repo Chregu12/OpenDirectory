@@ -77,6 +77,7 @@ const authMiddleware = require('./middleware/auth');
 const routingMiddleware = require('./middleware/routing');
 const configManager = require('./config/configManager');
 const healthCheck = require('./middleware/health');
+const { configuredUpstreams } = require('./config/upstreams');
 
 class APIGateway {
   constructor({ authentication = authMiddleware, discover = true, enabledModules } = {}) {
@@ -269,10 +270,17 @@ class APIGateway {
 
   initializeRoutes() {
     this.app.get('/api/gateway/access', (req, res) => res.set('Cache-Control', 'no-store').json({ subject: req.user.sub, permissions: getGatewayPermissions(req.user),
+      webhooks: { signedEvents: false, manualTest: true, allowedOrigins: getGatewayPermissions(req.user).includes('gateway.webhooks.manage') ? (process.env.GATEWAY_WEBHOOK_ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean) : [] },
       keyIssuanceEnabled: false, websocketAuthentication: 'bearer-header' }));
     // Health check endpoints (public)
     this.app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'api-gateway' }));
     this.app.get('/health/live', (_req, res) => res.json({ status: 'ok', service: 'api-gateway' }));
+    this.app.get('/health/ready', async (_req, res) => {
+      let database = false;
+      try { await databaseReady; if (apiGwDbReady) { await pgPool.query('SELECT 1'); database = true; } } catch (_) {}
+      const ready = database && this.services.size > 0 && [...this.services.values()].every(service => service.status === 'healthy');
+      res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not ready', service: 'api-gateway' });
+    });
     this.app.get('/health/detailed', this.getDetailedHealth.bind(this));
     this.app.get('/health/*', healthCheck);
 
@@ -284,6 +292,16 @@ class APIGateway {
     // Gateway info endpoints (public)
     this.app.get('/api/gateway/info', this.getGatewayInfo.bind(this));
     this.app.get('/api/gateway/routes', this.getGatewayRoutes.bind(this));
+    this.app.get('/api/gateway/stats', (req, res) => res.json({
+      uptime: process.uptime(), memory: process.memoryUsage(),
+      services: { total: this.services.size, healthy: [...this.services.values()].filter(service => service.status === 'healthy').length }
+    }));
+    this.app.get('/api/system/resources', (_req, res) => {
+      const os = require('node:os'); const total = os.totalmem(); const free = os.freemem();
+      res.json({ success: true, data: { source: 'api-gateway', ram: {
+        totalMB: Math.round(total / 1048576), usedMB: Math.round((total - free) / 1048576), freeMB: Math.round(free / 1048576), usagePercent: Math.round((total - free) / total * 100)
+      }, cpu: { cores: os.cpus().length, model: os.cpus()[0]?.model || 'Unknown' }, uptime: process.uptime(), platform: os.platform(), hostname: os.hostname() } });
+    });
 
     // Service endpoints (public read access)
     this.app.get('/api/services', this.getServices.bind(this));
@@ -341,6 +359,15 @@ class APIGateway {
   }
 
   setupDynamicProxies() {
+    const upstreams = configuredUpstreams(process.env.GATEWAY_UPSTREAMS);
+    if (upstreams) {
+      for (const { name, target, pathPrefix, healthPath = '/health' } of upstreams) {
+        if (pathPrefix === '/api/devices') this.app.use(pathPrefix, require('./middleware/deviceInventoryProxy').deviceInventoryReceiver(target));
+        this.app.use(pathPrefix, createProxyMiddleware({ target, changeOrigin: true }));
+        this.services.set(name, { name, target, pathPrefix, healthPath, status: 'unknown', lastCheck: null });
+      }
+      return;
+    }
     const enabledModules = this.enabledModules || configManager.getEnabledModules();
     const connectedServices = [];
 
@@ -717,13 +744,15 @@ class APIGateway {
   async updateServiceRegistry() {
     for (const [serviceName, serviceInfo] of this.services) {
       try {
-        const response = await fetch(`${serviceInfo.target}/health`, {
-          timeout: 5000
+        const response = await fetch(`${serviceInfo.target}${serviceInfo.healthPath || '/health'}`, {
+          headers: process.env.CORS_ORIGIN ? { Origin: process.env.CORS_ORIGIN.split(',')[0].trim() } : undefined,
+          signal: AbortSignal.timeout(5000)
         });
+        const health = await response.json();
         
         this.services.set(serviceName, {
           ...serviceInfo,
-          status: response.ok ? 'healthy' : 'unhealthy',
+          status: response.ok && !['degraded', 'unhealthy', 'unknown', 'no-services'].includes(health.status) ? 'healthy' : 'unhealthy',
           lastCheck: new Date().toISOString()
         });
       } catch (error) {
@@ -768,7 +797,7 @@ class APIGateway {
 
   async getDetailedHealth(req, res) {
     const services = Array.from(this.services.values());
-    const overallStatus = services.every(s => s.status === 'healthy') ? 'healthy' : 'degraded';
+    const overallStatus = services.length === 0 ? 'unknown' : services.every(s => s.status === 'healthy') ? 'healthy' : 'degraded';
 
     res.json({
       status: overallStatus,
@@ -796,7 +825,10 @@ class APIGateway {
     }
 
     try {
-      const response = await fetch(`${service.target}/health`);
+      const response = await fetch(`${service.target}${service.healthPath || '/health'}`, {
+        headers: process.env.CORS_ORIGIN ? { Origin: process.env.CORS_ORIGIN.split(',')[0].trim() } : undefined,
+        signal: AbortSignal.timeout(5000)
+      });
       const healthData = await response.json();
 
       res.json({
@@ -1126,7 +1158,9 @@ class APIGateway {
     ];
   }
 
-  start(port = process.env.PORT || 8080) {
+  async start(port = process.env.PORT || 8080) {
+    await databaseReady;
+    if (process.env.NODE_ENV === 'production' && !apiGwDbReady) throw new Error('PostgreSQL is required before starting the production gateway');
     connectBus();
     this.server.listen(port, () => {
       logger.info(`🚀 OpenDirectory API Gateway started on port ${port}`);
@@ -1153,7 +1187,10 @@ class APIGateway {
 
 if (require.main === module) {
   const gateway = new APIGateway();
-  gateway.start();
+  gateway.start().catch(error => {
+    logger.error('Gateway startup failed: ' + error.message);
+    process.exit(1);
+  });
   const shutdown = () => {
     gateway.stop();
     setTimeout(() => process.exit(1), 10000).unref();

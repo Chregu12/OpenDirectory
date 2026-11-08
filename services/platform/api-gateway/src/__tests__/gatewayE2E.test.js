@@ -74,6 +74,7 @@ beforeAll(async () => {
       // Deliberately unreachable Redis: the gateway must survive this.
       REDIS_HOST: '127.0.0.1',
       REDIS_PORT: '1',
+      SERVICE_DISCOVERY_ENABLED: 'false',
       LOG_LEVEL: 'error',
     },
     stdio: ['ignore', 'pipe', 'pipe'],

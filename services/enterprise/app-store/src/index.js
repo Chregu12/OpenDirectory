@@ -16,6 +16,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const CatalogManager = require('./catalog/catalogManager');
+const { ReleaseSync } = require('./catalog/releaseSync');
 const ClientDetector = require('./detection/clientDetector');
 const DistributionEngine = require('./distribution/distributionEngine');
 const AssignmentEngine = require('./assignment/assignmentEngine');
@@ -136,6 +137,7 @@ pool.on('error', (err) => {
 
 // Service instances
 const catalogManager = new CatalogManager(pool);
+const releaseSync = new ReleaseSync(pool);
 const clientDetector = new ClientDetector(pool);
 const distributionEngine = new DistributionEngine(pool, wss, publishEvent);
 const assignmentEngine = new AssignmentEngine(pool, distributionEngine);
@@ -191,8 +193,9 @@ app.use(oidcAuth({
 }));
 
 // --- Health & Metrics ---
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', service: 'app-store', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  try { await pool.query('SELECT 1'); res.json({ status: 'healthy', service: 'app-store', timestamp: new Date().toISOString() }); }
+  catch { res.status(503).json({ status: 'unhealthy', service: 'app-store' }); }
 });
 
 app.get('/metrics', async (req, res) => {
@@ -227,6 +230,13 @@ app.get('/api/store/catalog', async (req, res) => {
     res.status(500).json({ error: 'Failed to list apps' });
   }
 });
+
+// Explicit refresh reads only fixed official package sources and persists observations.
+app.post('/api/store/catalog/sync', requireAdmin, (_req, res) => {
+  releaseSync.sync().catch(error => logger.warn('Catalog release sync unavailable', { reason: error.message }));
+  res.status(202).json(releaseSync.status);
+});
+app.get('/api/store/catalog/sync', requireAdmin, (_req, res) => res.set('Cache-Control','no-store').json(releaseSync.status));
 
 // Add app to catalog
 app.post('/api/store/catalog', requireAdmin, async (req, res) => {
@@ -620,25 +630,7 @@ app.post('/api/store/shares/:shareId/scan', requireAdmin, async (req, res) => {
 
 const { v4: uuidv4 } = require('uuid');
 
-const DEMO_APPS = [
-  { id: 'slack', name: 'Slack', vendor: 'Salesforce', version: '4.35.131', category: 'Kommunikation', size: '180MB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'per_user', description: 'Team communication and collaboration platform', icon_url: null },
-  { id: 'zoom', name: 'Zoom', vendor: 'Zoom Video', version: '5.17.0', category: 'Kommunikation', size: '95MB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'per_user', description: 'Video conferencing and virtual meetings', icon_url: null },
-  { id: 'chrome', name: 'Google Chrome', vendor: 'Google', version: '122.0.6261', category: 'Browser', size: '280MB', platforms: ['macOS', 'Windows'], license_type: 'free', description: 'Fast and secure web browser by Google', icon_url: null },
-  { id: 'firefox', name: 'Mozilla Firefox', vendor: 'Mozilla', version: '124.0', category: 'Browser', size: '220MB', platforms: ['macOS', 'Windows'], license_type: 'free', description: 'Open-source web browser focused on privacy', icon_url: null },
-  { id: 'vscode', name: 'Visual Studio Code', vendor: 'Microsoft', version: '1.87.0', category: 'Entwicklung', size: '340MB', platforms: ['macOS', 'Windows'], license_type: 'free', description: 'Lightweight but powerful source code editor', icon_url: null },
-  { id: 'office365', name: 'Microsoft 365', vendor: 'Microsoft', version: '16.83', category: 'Produktivität', size: '4.2GB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'subscription', description: 'Microsoft Office suite with cloud services', icon_url: null },
-  { id: '1password', name: '1Password', vendor: '1Password', version: '8.10.28', category: 'Sicherheit', size: '120MB', platforms: ['macOS', 'Windows', 'iOS', 'Android'], license_type: 'per_user', description: 'Password manager and secure digital wallet', icon_url: null },
-  { id: 'jamf-connect', name: 'Jamf Connect', vendor: 'Jamf', version: '2.35.0', category: 'Sicherheit', size: '45MB', platforms: ['macOS'], license_type: 'per_device', description: 'macOS identity management with cloud IdP', icon_url: null },
-];
-
-// In-memory stores (with optional DB persistence)
-const inMemoryCatalog = new Map(DEMO_APPS.map(a => [a.id, {
-  ...a,
-  supported_platforms: a.platforms,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-  version_history: [{ version: a.version, released_at: new Date().toISOString(), notes: 'Initial version' }],
-}]));
+const inMemoryCatalog = new Map();
 const inMemoryDeployments = new Map();
 const inMemoryDeploymentStatus = new Map(); // deploymentId -> [{ device_id, status, installed_at, error }]
 
@@ -676,23 +668,7 @@ async function ensureAppstoreTables() {
   }
 }
 
-// Persistence audit finding (not part of the auth mandate, taken along
-// because it's risk-free and additive): /api/appstore/* writes every
-// create/update to the app_catalog table (see the POST/PUT handlers below)
-// but the GET handlers only ever read from the inMemoryCatalog Map — which
-// is (re)seeded from DEMO_APPS on every process start. So a custom-published
-// app, or an edit to a demo app, survives in Postgres but is invisible again
-// the moment the service restarts, until this function runs.
-//
-// This only rehydrates the catalog (app_catalog → inMemoryCatalog): that
-// table's `metadata` JSONB column already carries the full app object, so
-// overlaying it onto the DEMO_APPS seed is a pure additive read with no
-// schema change and no route-behavior change. inMemoryDeployments /
-// inMemoryDeploymentStatus are deliberately NOT rehydrated here — the
-// app_deployments / deployment_status tables don't have columns for
-// `app_name` or `version` (see ensureAppstoreTables above), so a faithful
-// round-trip would need a schema migration; that's out of scope for this
-// auth-focused change and is called out in the audit report instead.
+// Restore explicitly published legacy entries; production contains no synthetic seed entries.
 async function hydrateAppstoreCatalog() {
   try {
     const result = await pool.query('SELECT id, metadata FROM app_catalog');
@@ -752,13 +728,11 @@ app.post('/api/appstore/apps', requireAdmin, async (req, res) => {
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       version_history: [{ version, released_at: new Date().toISOString(), notes: 'Initial publish' }],
     };
-    inMemoryCatalog.set(id, entry);
-    try {
-      await pool.query(
+    await pool.query(
         'INSERT INTO app_catalog (id, metadata) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET metadata = $2',
         [id, JSON.stringify(entry)]
       );
-    } catch (_) { /* DB optional */ }
+    inMemoryCatalog.set(id, entry);
     publishEvent('app.published', { appId: id, name, version, category: category || 'Allgemein', vendor: vendor || '' });
     res.status(201).json(entry);
   } catch (err) {
@@ -778,13 +752,11 @@ app.put('/api/appstore/apps/:id', requireAdmin, async (req, res) => {
         version: req.body.version, released_at: new Date().toISOString(), notes: req.body.release_notes || ''
       }];
     }
-    inMemoryCatalog.set(req.params.id, updated);
-    try {
-      await pool.query(
+    await pool.query(
         'INSERT INTO app_catalog (id, metadata) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET metadata = $2',
         [req.params.id, JSON.stringify(updated)]
       );
-    } catch (_) { /* DB optional */ }
+    inMemoryCatalog.set(req.params.id, updated);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1194,10 +1166,8 @@ async function runMigrations() {
     await pool.query(sql);
     logger.info('Database migrations applied');
   } catch (err) {
-    // Ignore "already exists" errors — tables/indexes may already be present
-    if (!err.message.includes('already exists')) {
-      logger.warn('Migration warning:', { error: err.message });
-    }
+    logger.error('App Store migration failed', { error: err.message });
+    throw err;
   }
 }
 
@@ -1218,6 +1188,12 @@ async function start() {
     // Restore custom-published/edited catalog apps that survived a restart
     // in Postgres but not in the in-memory catalog (see hydrateAppstoreCatalog).
     await hydrateAppstoreCatalog();
+
+    if (process.env.CATALOG_RELEASE_SYNC_ENABLED === 'true') {
+      releaseSync.sync().catch(error => logger.warn('Catalog release sync unavailable', { reason: error.message }));
+      const releaseTimer = setInterval(() => releaseSync.sync().catch(error => logger.warn('Catalog release sync unavailable', { reason: error.message })), 6 * 60 * 60 * 1000);
+      releaseTimer.unref();
+    }
 
     // Connect to event bus (fire and forget)
     connectBus().catch(() => {});

@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 LABEL maintainer="OpenDirectory Team"
 LABEL description="Enterprise App Store with domain-aware catalog and push installation"
@@ -7,11 +7,14 @@ RUN apk add --no-cache tini curl samba-client
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY services/enterprise/app-store/package*.json ./
 
-RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
+RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
 
-COPY . .
+COPY services/enterprise/app-store/src/ ./src/
+COPY packages/oidc-access-state.js /packages/oidc-access-state.js
+COPY packages/grpc-event-bus/ /packages/grpc-event-bus/
+RUN cd /packages/grpc-event-bus && npm install --omit=dev --ignore-scripts --no-audit --no-fund
 
 RUN addgroup -g 1001 -S appstore && \
     adduser -S appstore -u 1001 -G appstore

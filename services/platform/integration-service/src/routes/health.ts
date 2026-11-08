@@ -1,240 +1,41 @@
 import { Router } from 'express';
-import { LLDAPService } from '../services/lldap.service';
-import { GrafanaService } from '../services/grafana.service';
-import { PrometheusService } from '../services/prometheus.service';
-import { VaultService } from '../services/vault.service';
-import { NetworkInfrastructureService } from '../services/network-infrastructure.service';
-import { WazuhService } from '../services/wazuh.service';
-import { ServiceStatus } from '../types';
-import logger from '../lib/logger';
+import { SERVICES } from '../config/services';
+import { checkService, checkServices } from '../services/service-status';
 
 const router = Router();
-const lldapService                 = new LLDAPService();
-const grafanaService               = new GrafanaService();
-const prometheusService            = new PrometheusService();
-const vaultService                 = new VaultService();
-const networkInfrastructureService = new NetworkInfrastructureService();
-const wazuhService                 = new WazuhService();
 
-// Overall health check
-router.get('/', async (req, res) => {
-  try {
-    const startTime = Date.now();
-    
-    // Check all services in parallel
-    const [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus, networkStatus, wazuhStatus] = await Promise.allSettled([
-      lldapService.getServiceStatus(),
-      grafanaService.getServiceStatus(),
-      prometheusService.getServiceStatus(),
-      vaultService.getServiceStatus(),
-      networkInfrastructureService.getServiceStatus(),
-      wazuhService.getServiceStatus(),
-    ]);
-
-    const services: ServiceStatus[] = [];
-
-    if (lldapStatus.status === 'fulfilled')    services.push(lldapStatus.value);
-    if (grafanaStatus.status === 'fulfilled')  services.push(grafanaStatus.value);
-    if (prometheusStatus.status === 'fulfilled') services.push(prometheusStatus.value);
-    if (vaultStatus.status === 'fulfilled')    services.push(vaultStatus.value);
-    if (networkStatus.status === 'fulfilled')  services.push(networkStatus.value);
-    if (wazuhStatus.status === 'fulfilled')    services.push(wazuhStatus.value);
-
-    const healthyServices = services.filter(s => s.status === 'healthy').length;
-    const totalServices = services.length;
-    const overallStatus = healthyServices === totalServices ? 'healthy' : 
-                         healthyServices > 0 ? 'degraded' : 'unhealthy';
-
-    const response = {
-      status: overallStatus,
-      timestamp: new Date().toISOString(),
-      responseTime: Date.now() - startTime,
-      services,
-      summary: {
-        healthy: healthyServices,
-        total: totalServices,
-      },
-    };
-
-    // Return appropriate HTTP status code
-    if (overallStatus === 'healthy') {
-      res.status(200).json(response);
-    } else if (overallStatus === 'degraded') {
-      res.status(207).json(response); // Multi-Status
-    } else {
-      res.status(503).json(response); // Service Unavailable
-    }
-  } catch (error) {
-    logger.error('Health check failed:', error);
-    res.status(500).json({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
+router.get(['/', '/detailed'], async (_req, res) => {
+  const start = Date.now();
+  const health = await checkServices();
+  res.status(health.status === 'healthy' ? 200 : health.status === 'degraded' ? 207 : 503)
+    .json({ ...health, responseTime: Date.now() - start });
 });
 
-// Individual service health checks
-router.get('/lldap', async (req, res) => {
-  try {
-    const status = await lldapService.getServiceStatus();
-    const httpStatus = status.status === 'healthy' ? 200 : 503;
-    res.status(httpStatus).json(status);
-  } catch (error) {
-    logger.error('LLDAP health check failed:', error);
-    res.status(500).json({
-      name: 'LLDAP',
-      status: 'error',
-      lastCheck: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
+router.get('/live', (_req, res) => res.json({ status: 'alive', timestamp: new Date().toISOString() }));
 
-router.get('/grafana', async (req, res) => {
-  try {
-    const status = await grafanaService.getServiceStatus();
-    const httpStatus = status.status === 'healthy' ? 200 : 503;
-    res.status(httpStatus).json(status);
-  } catch (error) {
-    logger.error('Grafana health check failed:', error);
-    res.status(500).json({
-      name: 'Grafana',
-      status: 'error',
-      lastCheck: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
-router.get('/prometheus', async (req, res) => {
-  try {
-    const status = await prometheusService.getServiceStatus();
-    const httpStatus = status.status === 'healthy' ? 200 : 503;
-    res.status(httpStatus).json(status);
-  } catch (error) {
-    logger.error('Prometheus health check failed:', error);
-    res.status(500).json({
-      name: 'Prometheus',
-      status: 'error',
-      lastCheck: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
-router.get('/vault', async (req, res) => {
-  try {
-    const status = await vaultService.getServiceStatus();
-    const httpStatus = status.status === 'healthy' ? 200 : 503;
-    res.status(httpStatus).json(status);
-  } catch (error) {
-    logger.error('Vault health check failed:', error);
-    res.status(500).json({
-      name: 'Vault',
-      status: 'error',
-      lastCheck: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
-// Detailed health (same as main health endpoint)
-router.get('/detailed', async (req, res) => {
-  try {
-    const [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus, networkStatus, wazuhStatus] = await Promise.allSettled([
-      lldapService.getServiceStatus(),
-      grafanaService.getServiceStatus(),
-      prometheusService.getServiceStatus(),
-      vaultService.getServiceStatus(),
-      networkInfrastructureService.getServiceStatus(),
-      wazuhService.getServiceStatus(),
-    ]);
-    const services = [lldapStatus, grafanaStatus, prometheusStatus, vaultStatus, networkStatus, wazuhStatus]
-      .filter(r => r.status === 'fulfilled')
-      .map(r => (r as PromiseFulfilledResult<any>).value);
-    const healthy = services.filter(s => s.status === 'healthy').length;
-    res.json({
-      status: healthy === services.length ? 'healthy' : healthy > 0 ? 'degraded' : 'unhealthy',
-      services,
-      timestamp: new Date().toISOString(),
-      gateway: {
-        uptime: process.uptime(),
-        version: process.env.npm_package_version ?? '1.0.0',
-        environment: process.env.NODE_ENV ?? 'production',
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ status: 'error', error: String(error) });
-  }
-});
-
-// Generic per-service health check
-router.get('/service/:name', async (req, res) => {
-  const { name } = req.params;
-  const serviceMap: Record<string, () => Promise<any>> = {
-    lldap:      () => lldapService.getServiceStatus(),
-    grafana:    () => grafanaService.getServiceStatus(),
-    prometheus: () => prometheusService.getServiceStatus(),
-    vault:      () => vaultService.getServiceStatus(),
-  };
-  const fn = serviceMap[name.toLowerCase()];
-  if (!fn) return res.status(404).json({ error: 'Service not found' });
-  try {
-    const status = await fn();
-    res.status(status.status === 'healthy' ? 200 : 503).json(status);
-  } catch (error) {
-    res.status(500).json({ name, status: 'error', error: String(error) });
-  }
-});
-
-// Liveness probe (for Kubernetes)
-router.get('/live', (req, res) => {
-  res.status(200).json({
-    status: 'alive',
-    timestamp: new Date().toISOString(),
+router.get('/ready', async (_req, res) => {
+  const health = await checkServices();
+  res.status(health.status === 'healthy' ? 200 : 503).json({
+    status: health.status === 'healthy' ? 'ready' : 'not ready',
+    summary: health.summary,
+    timestamp: health.timestamp,
   });
 });
 
-// Readiness probe (for Kubernetes)
-router.get('/ready', async (req, res) => {
+router.get('/metrics', async (_req, res) => {
   try {
-    // Quick health check - just verify we can connect to at least one service
-    const prometheusStatus = await prometheusService.getServiceStatus();
-    
-    if (prometheusStatus.status === 'healthy') {
-      res.status(200).json({
-        status: 'ready',
-        timestamp: new Date().toISOString(),
-      });
-    } else {
-      res.status(503).json({
-        status: 'not ready',
-        timestamp: new Date().toISOString(),
-        reason: 'Core services not available',
-      });
-    }
-  } catch (error) {
-    res.status(503).json({
-      status: 'not ready',
-      timestamp: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+    const register = await import('prom-client').then(module => module.register);
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  } catch {
+    res.status(500).json({ error: 'Failed to generate metrics' });
   }
 });
 
-// Metrics endpoint for Prometheus scraping
-router.get('/metrics', async (req, res) => {
-  try {
-    const register = await import('prom-client').then(m => m.register);
-    res.set('Content-Type', register.contentType);
-    res.end(await register.metrics());
-  } catch (error) {
-    logger.error('Failed to generate metrics:', error);
-    res.status(500).json({
-      error: 'Failed to generate metrics',
-    });
-  }
+router.get(['/service/:name', '/:name'], async (req, res) => {
+  if (!Object.prototype.hasOwnProperty.call(SERVICES, req.params.name)) return res.status(404).json({ error: 'Service not found' });
+  const service = await checkService(req.params.name);
+  return res.status(service.status === 'healthy' ? 200 : 503).json(service);
 });
 
 export default router;

@@ -38,6 +38,8 @@
 
 const crypto = require('crypto');
 const { createRemoteJWKSet, jwtVerify } = require('jose');
+const { createAccessStateClient } = require('../../../../../packages/oidc-access-state');
+const accessState = createAccessStateClient();
 
 const JWKS_URI = process.env.JWKS_URI || 'http://localhost:3001/jwks';
 const ISSUER = process.env.OIDC_ISSUER || 'http://localhost:3001';
@@ -58,7 +60,9 @@ function getJWKS() {
  * instead of each call site reimplementing its own jwtVerify() call.
  */
 async function verifyToken(token) {
-  const { payload } = await jwtVerify(token, getJWKS(), { issuer: ISSUER });
+  const { payload } = await jwtVerify(token, getJWKS(), { issuer: ISSUER, audience: process.env.OIDC_AUDIENCE || 'opendirectory-api', algorithms: ['RS256'], requiredClaims: ['sub', 'exp', 'iat', 'jti'] });
+  if (payload.token_use !== 'access' || payload.actor_type !== 'user') throw Object.assign(new Error('Human app-store access token required'), { status: 403 });
+  await accessState('Bearer ' + token, payload);
   return payload;
 }
 
@@ -152,7 +156,7 @@ function oidcAuth({ skipPaths = [], agentTokenPaths = [] } = {}) {
       req.user = await verifyToken(auth.slice(7));
       next();
     } catch (err) {
-      const status = err.code === 'ERR_JWT_EXPIRED' ? 401 : 403;
+      const status = err.status || (err.code === 'ERR_JWT_EXPIRED' ? 401 : 403);
       res.status(status).json({ error: 'invalid_token', message: err.message });
     }
   };

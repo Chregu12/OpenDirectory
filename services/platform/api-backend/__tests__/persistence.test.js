@@ -23,6 +23,9 @@ process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-secret-for-jest-not-for-production';
 process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
+jest.mock('../db', () => ({ initDb: jest.fn(async () => {}), isAvailable: () => false,
+  query: jest.fn(async () => { throw new Error('Database unavailable'); }), pool: { end: jest.fn() } }));
+
 const request = require('supertest');
 
 function freshApp() {
@@ -300,16 +303,15 @@ describe('Setup wizard config flow', () => {
   });
 });
 
-describe('GET /api/health reflects current counts', () => {
-  test('shape is unchanged and counts are non-negative integers', async () => {
+describe('GET /api/health', () => {
+  test('does not report fallback data as a healthy database', async () => {
     const app = freshApp();
     const res = await request(app).get('/api/health');
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.status).toBe('healthy');
-    expect(res.body.data.services).toEqual({ database: 'connected', ldap: 'connected', monitoring: 'active' });
-    expect(Number.isInteger(res.body.data.stats.devices)).toBe(true);
-    expect(Number.isInteger(res.body.data.stats.users)).toBe(true);
-    expect(res.body.data.stats.users).toBeGreaterThanOrEqual(1);
+    expect(res.status).toBe(503);
+    expect(res.body.success).toBe(false);
+    expect(res.body.data.status).toBe('unhealthy');
+    expect(res.body.data.services).toEqual({ database: 'unavailable', ldap: 'not-checked', monitoring: 'not-checked' });
+    expect(res.body.data.stats.devices).toBeNull();
+    expect(res.body.data.stats.users).toBeNull();
   });
 });
