@@ -189,3 +189,10 @@ test('the bounded transport rejects unsafe URLs, redirects, HTML, oversized bodi
   await assert.rejects(client.request('POST', '/api/licenses', 'Bearer operator', { body: { name: 'Office' } }), { status: 503 });
   assert.equal(attempts, 1);
 });
+
+test('forwards private received-license reference metadata only to the canonical catalog operation',async()=>{
+ const metadata={reference:'REF-TEST',supplier:'Test Supplier',receivedDate:'2026-11-02'};
+ const result=await api('POST','/api/license/licenses','operator',{name:'Received license',total_seats:5,inventory_details:metadata});
+ assert.equal(result.status,201);assert.deepEqual(result.body.body.inventory_details,metadata);
+ assert.equal(calls.at(-1).path,'/api/licenses');
+});

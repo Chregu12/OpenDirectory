@@ -1,6 +1,14 @@
+FROM rust:1.90-alpine AS connector-build
+RUN apk add --no-cache musl-dev
+WORKDIR /build
+COPY services/connectors-rust/Cargo.toml services/connectors-rust/Cargo.lock ./
+COPY services/connectors-rust/src ./src
+RUN cargo build --locked --release
+
 FROM node:20-alpine
 
 RUN apk add --no-cache dumb-init
+COPY --from=connector-build /build/target/release/opendirectory-connectors /usr/local/bin/opendirectory-connectors
 
 WORKDIR /app
 

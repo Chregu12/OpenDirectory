@@ -12,7 +12,7 @@ const { groupSnapshot }=require('../../../../../../scripts/lib/group-license-sna
 const { LicenseGrants,etag:grantEtag }=require('../LicenseGrants');
 const { LicenseReviews }=require('../LicenseReviews');
 const { ProviderStore }=require('../fulfillment/ProviderStore');
-const { GraphLicenseClient }=require('../fulfillment/GraphLicenseClient');
+const { fulfillmentClient }=require('../fulfillment/RustGraphLicenseClient');
 const { FulfillmentWorker }=require('../fulfillment/FulfillmentWorker');
 const { etag }=require('../fulfillment/contracts');
 const { assertWorkerDatabase }=require('../fulfillment/databasePrivileges');
@@ -55,7 +55,7 @@ function operator(roles=['license-provider-administrator']) {
   return { principal,user:{ iss:principal.issuer,sub:principal.subject,actor_type:'user',roles,identity_authorization:{ userId,revision:'1',linkRevision:'1',rolesRevision:'a'.repeat(64) },
     auth_time:authTime,amr:['pwd','otp'],mfa_authorization:{ schemaVersion:1,userId,revision:'1',authTime,methods:['pwd','otp'] } } };
 }
-async function fixture({ assign=true,enable=true,capacityReview=true,capacityUnits=100 }={}) {
+async function fixture({ assign=true,enable=true,capacityReview=true,capacityUnits=100,readEngine='javascript' }={}) {
   const targetUser=randomUUID(); let snapshot={ schemaVersion:1,userId:targetUser,revision:'1',enabled:true,deleted:false };
   const identity={ user:async userId=>({...structuredClone(snapshot),userId}) }; const source={ user:async userId=>({...structuredClone(snapshot),userId}),snapshot:async groupId=>groupSnapshot({groupId,name:'Owned provider group',revision:'1',memberIds:[targetUser]}) };
   const allocator=new LicenseAllocator(database,{ source });new GroupLicenseAllocator({allocator,source}); const store=new ProviderStore(allocator,{ revalidate:async()=>{} }); const actor=operator(); const reason='Reviewed exclusive direct Microsoft license management';
@@ -65,7 +65,13 @@ async function fixture({ assign=true,enable=true,capacityReview=true,capacityUni
   const subject=await store.create('subjects',{ connectorId:connector.id,userId:targetUser,objectId:remote.id,exclusiveDirectManagement:true,reason },actor.user,actor.principal,'Bearer owned-fixture');
   if (enable) for (const [kind,row] of [['connectors',connector],['products',product],['subjects',subject]]) await store.enable(kind,row.id,etag(kind,row.id,row.version),{ enabled:true,reason },actor.user,actor.principal);
   if (assign) await allocator.assign(license.id,{ assignee_type:'user',assignee_id:targetUser },actor.principal.userId);
-  const graph=()=>new GraphLicenseClient({ tenantId:connector.tenantId,clientId:randomUUID(),clientSecret:'isolated-provider-secret',fetchImpl:(url,options)=>fetch(origin+new URL(url).pathname+new URL(url).search,options) });
+  const graph=()=>fulfillmentClient({ tenantId:connector.tenantId,clientId:randomUUID(),clientSecret:'isolated-provider-secret',fetchImpl:(url,options)=>fetch(origin+new URL(url).pathname+new URL(url).search,options),
+    spawnImpl:(_binary,args,options)=>{
+      assert.deepEqual(args,[]); assert.deepEqual(options.env,{});
+      // Process-contract fixture; Rust's fixed-host HTTP parsing is tested in cargo.
+      const script=`let input='';process.stdin.on('data',part=>input+=part);process.stdin.on('end',async()=>{const request=JSON.parse(input);if(request.operation!=='microsoft.user'||request.objectId!==${JSON.stringify(remote.id)})process.exit(2);const response=await fetch(${JSON.stringify(origin)}+'/v1.0/users/'+request.objectId+'?$select=id,accountEnabled,assignedLicenses,licenseAssignmentStates',{headers:{Authorization:'Bearer '+request.accessToken}});process.stdout.write(JSON.stringify({ok:true,user:await response.json()}));});`;
+      return spawn(process.execPath,['-e',script],options);
+    } },readEngine);
   const worker=()=>new FulfillmentWorker({ store,identity,graph:graph(),connectorId:connector.id,tenantId:connector.tenantId,sourceClientId:'owned-workload-client' });
   const target=()=>store.lookup(license.id,targetUser,actor.user);
   let capacity;
@@ -179,8 +185,8 @@ test('a real dedicated worker database identity can fulfill but cannot create lo
     } finally { if(child && child.exitCode===null && child.signalCode===null) { const stopped=new Promise(resolve=>child.once('exit',resolve)); child.kill('SIGKILL'); await stopped; } fs.rmSync(directory,{ recursive:true,force:true }); }
   } finally { if (limited) await limited.end(); await pool.query(`DROP OWNED BY ${role}`); await admin.query(`DROP ROLE ${role}`); }
 });
-test('transactional desired state drives only the mapped Graph user and SKU; successful mutation alone is not provisioned',async()=>{
-  const context=await fixture(); const target=await context.target(); assert.equal(target.desired,true);
+for(const readEngine of ['javascript','rust']) test(`${readEngine}: transactional desired state drives only the mapped Graph user and SKU; successful mutation alone is not provisioned`,async()=>{
+  const context=await fixture({readEngine}); const target=await context.target(); assert.equal(target.desired,true);
   await context.worker().target(target.id); assert.equal((await context.target()).status,'verifying'); assert.equal(writes().length,1);
   assert.deepEqual(JSON.parse(writes()[0].body),{ addLicenses:[{ skuId:context.product.skuId,disabledPlans:[] }],removeLicenses:[] });
   assert.equal(writes()[0].url,`/v1.0/users/${context.subject.objectId}/assignLicense`);

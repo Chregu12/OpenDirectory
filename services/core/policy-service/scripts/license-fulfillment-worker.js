@@ -3,7 +3,7 @@
 const database=require('../src/db/postgres');
 const { LicenseAllocator }=require('../src/licenses/LicenseAllocator');
 const { ProviderStore }=require('../src/licenses/fulfillment/ProviderStore');
-const { GraphLicenseClient }=require('../src/licenses/fulfillment/GraphLicenseClient');
+const { fulfillmentClient }=require('../src/licenses/fulfillment/RustGraphLicenseClient');
 const { configuration,WorkerIdentity }=require('../src/licenses/fulfillment/WorkerConfiguration');
 const { FulfillmentWorker }=require('../src/licenses/fulfillment/FulfillmentWorker');
 const { assertWorkerDatabase }=require('../src/licenses/fulfillment/databasePrivileges');
@@ -18,7 +18,7 @@ async function main() {
   const connector=await store.get('connectors',config.connectorId);
   if (connector.tenantId!==config.tenantId) throw new Error('Worker configuration must match its immutable connector tenant');
   const identity=new WorkerIdentity(config);
-  const graph=new GraphLicenseClient({ tenantId:config.tenantId,clientId:config.graphClientId,clientSecret:config.graphClientSecret });
+  const graph=fulfillmentClient({ tenantId:config.tenantId,clientId:config.graphClientId,clientSecret:config.graphClientSecret });
   const worker=new FulfillmentWorker({ store,identity,graph,connectorId:config.connectorId,tenantId:config.tenantId,sourceClientId:config.sourceClientId });
   let stopped=false; let wake=null;
   const stop=()=>{ stopped=true; worker.stop(); if (wake) wake(); };

@@ -1,0 +1,49 @@
+{
+  "checkedAt": "2026-11-08T10:15:28.402200+00:00",
+  "status": "deployed-and-artifact-verified-provider-not-connected",
+  "features": [
+    "Rust read of one explicitly mapped Microsoft user and license assignment sources",
+    "Shared existing Node observation parser and reviewed write transport",
+    "Bound read-only live-connection probe without database writes",
+    "Joi patch 17.13.9"
+  ],
+  "deployment": {
+    "helmRevision": 42,
+    "chart": "opendirectory-lite-0.1.27",
+    "image": {
+      "image": "harbor.heusser.local/opendirectory/policy-service:1.0.23",
+      "digest": "sha256:cb835264864bf39380c832a05396ca6c51f1445a65492da334b3ed0a075876df"
+    },
+    "readyDeployments": 11,
+    "otherApplicationImagesUnchanged": true,
+    "licenseWorkersEnabled": false
+  },
+  "checks": {
+    "rustHttpAndProtocolTests": 11,
+    "rustClippy": "passed with warnings denied",
+    "nodePolicyTests": 1381,
+    "postgresFulfillmentTests": 53,
+    "artifactSmoke": {
+      "userProtocol": "passed",
+      "legacyCapacityProtocol": "passed",
+      "companyPoolProbeDenied": true,
+      "networkRequests": 0
+    },
+    "helmLint": "passed",
+    "https": {
+      "/licenses": 200,
+      "/api/licenses": 401
+    },
+    "policyProductionNpmAudit": {
+      "vulnerabilities": 0
+    }
+  },
+  "limits": [
+    "No real Microsoft tenant, provider credential, admin consent or live license assignment was tested.",
+    "No provider connection was created; existing production connector and capacity-source counts were both zero before rollout.",
+    "Rust HTTP fixtures and Node process-contract fixtures were tested separately; PostgreSQL adapter coverage uses a process fixture.",
+    "Google Workspace, GitHub Copilot and Adobe are not implemented by this change.",
+    "An initial full Node run had two failures; the affected suite passed in isolation and the final full rerun passed.",
+    "The existing separate OpenBao secret synchronization outage was not repaired."
+  ]
+}

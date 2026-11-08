@@ -1,0 +1,54 @@
+{
+  "checkedAt": "2026-11-08T11:08:58.768315+00:00",
+  "status": "deployed-and-read-probes-verified-providers-not-connected",
+  "features": [
+    "Rust Google Workspace license-assignment reader bound to customer, product and SKU",
+    "Google service-account JWT with delegated administrator and fixed Licensing scope",
+    "Rust GitHub Copilot billed-seat reader bound to one organization and API version 2026-03-10",
+    "Protected-file manual probe emits summary counts without identities or secrets",
+    "Existing Microsoft protocols preserved"
+  ],
+  "deployment": {
+    "helmRevision": 43,
+    "chart": "opendirectory-lite-0.1.28",
+    "image": {
+      "image": "harbor.heusser.local/opendirectory/policy-service:1.0.24",
+      "digest": "sha256:b4f2093fc8a52023f11b964f0a538268a32a2334ee0448e68abfed3e6382bc6d"
+    },
+    "readyDeployments": 11,
+    "otherApplicationImagesUnchanged": true,
+    "licenseWorkersEnabled": false
+  },
+  "checks": {
+    "rustHttpAndProtocolTests": 20,
+    "rustClippy": "passed with warnings denied",
+    "nodePolicyTests": 1414,
+    "postgresFulfillmentTests": "not repeated; this change adds no database path",
+    "artifactSmoke": {
+      "microsoftUserProtocol": "passed",
+      "legacyCapacityProtocol": "passed",
+      "googleProtocol": "passed",
+      "githubProtocol": "passed",
+      "companyPoolProbeDenied": true,
+      "networkRequests": 0
+    },
+    "helmLint": "passed",
+    "https": {
+      "/licenses": 200,
+      "/api/licenses": 401
+    },
+    "policyProductionNpmAudit": {
+      "vulnerabilities": 0
+    }
+  },
+  "limits": [
+    "No real Google Workspace, GitHub Copilot or Microsoft provider credential/consent/live connection was used.",
+    "The new probe does not write the database, import catalog entries, allocate capacity or run a synchronization worker.",
+    "Google Licensing uses the broader apps.licensing scope; the connector performs only GET calls to the license endpoint.",
+    "Rust HTTP fixtures and Node process-contract fixtures were tested separately; live artifact smoke used invalid tokens rejected before network.",
+    "Pagination is bounded to 1000 rows and cannot guarantee an atomic snapshot during concurrent provider changes.",
+    "GitHub Copilot API is in public preview; Enterprise Server and GHE.com hosts are not supported.",
+    "Adobe remains unimplemented.",
+    "The pre-existing OpenBao synchronization outage was not repaired."
+  ]
+}

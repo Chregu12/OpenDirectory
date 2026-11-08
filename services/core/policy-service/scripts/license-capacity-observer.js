@@ -3,10 +3,12 @@
 const database=require('../src/db/postgres');
 const {configuration}=require('../src/licenses/fulfillment/CapacityConfiguration');
 const {GraphCapacityClient}=require('../src/licenses/fulfillment/GraphCapacityClient');
+const {RustGraphCapacityClient}=require('../src/licenses/fulfillment/RustGraphCapacityClient');
 const {CapacityObserver,assertCapacityDatabase}=require('../src/licenses/fulfillment/CapacityObserver');
 async function main(){
   const config=configuration(process.env.LICENSE_CAPACITY_CONFIG_FILE);if(!process.env.DATABASE_URL)throw new Error('Explicit capacity database identity required');
-  await assertCapacityDatabase(database);const graph=new GraphCapacityClient({tenantId:config.tenantId,clientId:config.graphClientId,clientSecret:config.graphClientSecret});const observer=new CapacityObserver(database,config,graph);
+  const engine=process.env.LICENSE_CAPACITY_ENGINE||'javascript';if(!['javascript','rust'].includes(engine))throw new Error('Unknown capacity connector engine');
+  await assertCapacityDatabase(database);const GraphClient=engine==='rust'?RustGraphCapacityClient:GraphCapacityClient;const graph=new GraphClient({tenantId:config.tenantId,clientId:config.graphClientId,clientSecret:config.graphClientSecret});const observer=new CapacityObserver(database,config,graph);
   let stopped=false;let wake;const stop=()=>{stopped=true;observer.stop();wake?.();};process.once('SIGTERM',stop);process.once('SIGINT',stop);
   const client=await database.getClient();try{await observer.source(client);}finally{client.release();}
   while(!stopped){let delay=60;try{delay=(await observer.sweep()).delay;}catch{process.stderr.write('Capacity observation unavailable; no inventory or allocation success acknowledged.\n');}

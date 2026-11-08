@@ -1,7 +1,7 @@
 'use strict';
 
 const { AdapterError } = require('../PolicyLicenseClient');
-const catalogFields = ['name', 'vendor', 'category', 'license_type', 'total_seats', 'cost_per_seat', 'currency', 'renewal_date', 'auto_approve', 'description'];
+const catalogFields = ['name', 'vendor', 'category', 'license_type', 'total_seats', 'cost_per_seat', 'currency', 'renewal_date', 'auto_approve', 'description', 'inventory_details'];
 const actorFields = new Set(['createdBy', 'updatedBy', 'deletedBy', 'assignedBy', 'revokedBy', 'renewedBy', 'assigned_by', 'decided_by', 'requester_id', 'requester_name',
   'actor', 'authorization', 'roles', 'permissions', 'scope', 'scopes', 'directory_user_id']);
 const operations = [

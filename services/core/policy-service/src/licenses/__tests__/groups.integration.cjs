@@ -121,7 +121,7 @@ before(async () => {
   for (const schema of schemas) await administration.query(`CREATE SCHEMA ${schema}`);
   pool = new Pool({ connectionString, max: 12, options: `-c search_path=${schemas[0]},public` });
   directory = new Pool({ connectionString, max: 8, options: `-c search_path=${schemas[1]},public` });
-  for (const migration of fs.readdirSync(path.join(__dirname,'../../db/migrations')).filter(name=>/^(00[4-9]|01[0-7]|02[0-2])_.*\.sql$/.test(name)).sort()) await pool.query(policyMigration(migration));
+  for (const migration of fs.readdirSync(path.join(__dirname,'../../db/migrations')).filter(name=>/^(00[4-9]|01[0-7]|02[0-2])_.*\.sql$/.test(name)||name==='030_license_inventory_details.sql').sort()) await pool.query(policyMigration(migration));
   for (const migration of fs.readdirSync(path.join(__dirname,'../../../../identity-service/migrations')).filter(file=>file.endsWith('.sql')).sort()) await directory.query(fs.readFileSync(path.join(__dirname, '../../../../identity-service/migrations', migration), 'utf8'));
   await require('../../../../../../scripts/lib/tenant-ownership-fixture.cjs').installTenantFixture(directory,schemas[1]);
   const keys = await generateKeyPair('RS256'); privateKey = keys.privateKey;
@@ -1146,4 +1146,43 @@ test('upgrading legacy group and UUID-alias records preserves direct grants with
     await legacy.query(policyMigration('006_group_license_sources.sql'));
     assert.equal((await legacy.query('SELECT COUNT(*)::int AS count FROM license_assignment_sources')).rows[0].count, 1);
   } finally { await legacy.end(); await administration.query(`DROP SCHEMA ${schema} CASCADE`); }
+});
+
+test('received-license inventory persists private references atomically and removes them with its entry', async () => {
+  const details = { reference:'RECEIVED-TEST',orderReference:'ORDER-TEST',supplier:'Test Supplier',receivedDate:'2026-11-02' };
+  const created = await legacy('POST','/licenses','manager','license-manager',{name:'Received Inventory Test',vendor:'Test Vendor',total_seats:5,inventory_details:details});
+  assert.equal(created.status,201);assert.deepEqual(created.body.inventory_details,details);
+  const id=created.body.id; const next={...details,reference:'CHANGED-TEST'};
+  const changed=await legacy('PUT',`/licenses/${id}`,'manager','license-manager',{inventory_details:next});assert.equal(changed.status,200);assert.deepEqual(changed.body.inventory_details,next);
+  const loaded=await api('GET',`/${id}`,'manager','license-manager');assert.equal(loaded.status,200);assert.deepEqual(loaded.body.inventory_details,next);assert.equal(loaded.body.total_seats,5);
+  const kiosk=await api('GET','/kiosk','requester','user');assert.equal(kiosk.status,200);assert.equal(kiosk.body.licenses.find(row=>row.id===id).inventory_details,undefined);
+  const before=(await pool.query('SELECT count(*)::int AS count FROM license_catalog')).rows[0].count;
+  await pool.query("CREATE FUNCTION reject_inventory_metadata_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Test metadata storage unavailable';END;$$;CREATE TRIGGER reject_inventory_metadata_test BEFORE INSERT ON license_inventory_details FOR EACH ROW EXECUTE FUNCTION reject_inventory_metadata_test()");
+  try {assert.equal((await legacy('POST','/licenses','manager','license-manager',{name:'Must roll back',total_seats:2,inventory_details:details})).status,503);assert.equal((await pool.query('SELECT count(*)::int AS count FROM license_catalog')).rows[0].count,before);}
+  finally {await pool.query('DROP TRIGGER reject_inventory_metadata_test ON license_inventory_details;DROP FUNCTION reject_inventory_metadata_test()');}
+  assert.equal((await legacy('DELETE',`/licenses/${id}`,'manager','license-manager')).status,204);assert.equal((await pool.query('SELECT count(*)::int AS count FROM license_inventory_details WHERE license_id=$1',[id])).rows[0].count,0);
+});
+
+test('catalog corrections persist explicit cleared renewal and description fields without clearing omitted values', async () => {
+  const created = await legacy('POST', '/licenses', 'manager', 'license-manager', { name: 'Renewal Contract', total_seats: 5, renewal_date: '2027-02-01', description: 'Old description', cost_per_seat: 0, currency: 'chf' });
+  assert.equal(created.status, 201); assert.equal(Number(created.body.cost_per_seat), 0); assert.equal(created.body.currency, 'CHF');
+  const id = created.body.id;
+  const updated = await legacy('PUT', `/licenses/${id}`, 'manager', 'license-manager', { renewal_date: '', description: '' });
+  assert.equal(updated.status, 200); assert.equal(updated.body.renewal_date, null); assert.equal(updated.body.description, null); assert.equal(updated.body.total_seats, 5);
+  const fresh = await api('GET', `/${id}`, 'manager', 'license-manager');
+  assert.equal(fresh.status, 200); assert.equal(fresh.body.renewal_date, null); assert.equal(fresh.body.name, 'Renewal Contract');
+  for (const values of [{ cost_per_seat: -10 }, { renewal_date: '2026-02-30' }, { auto_approve: 'false' }]) {
+    assert.equal((await legacy('PUT', `/licenses/${id}`, 'manager', 'license-manager', values)).status, 400);
+  }
+  const unchanged = await api('GET', `/${id}`, 'manager', 'license-manager'); assert.equal(Number(unchanged.body.cost_per_seat), 0);
+});
+
+test('catalog capacity conflicts return 409 without dropping the active assignments', async () => {
+  const license = await product(3); const first = await person(); const second = await person();
+  await direct(license, first); await direct(license, second);
+  const changed = await legacy('PUT', `/licenses/${license.id}`, 'manager', 'license-manager', { total_seats: 1 });
+  assert.equal(changed.status, 409);
+  assert.match(changed.body.error, /Capacity/);
+  assert.equal((await pool.query('SELECT total_seats FROM license_catalog WHERE id=$1', [license.id])).rows[0].total_seats, 3);
+  assert.equal((await assigned(license)).length, 2);
 });

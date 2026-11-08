@@ -33,8 +33,8 @@ class ClientCredentialToken {
     if (this.cached && this.cached.until>Date.now()) return this.cached.token;
     const data=await jsonRequest(this.fetchImpl,this.url,{ method:'POST',signal,headers:{ 'Content-Type':'application/x-www-form-urlencoded' },
       body:new URLSearchParams({ grant_type:'client_credentials',client_id:this.clientId,client_secret:this.clientSecret,scope:this.scope }).toString() },this.stage);
-    if (data.token_type?.toLowerCase()!=='bearer' || !bearer(data.access_token) || !Number.isInteger(data.expires_in) || data.expires_in<60 || data.expires_in>86400 || this.requireScope&&data.scope!==this.scope) throw new ProviderError(this.stage+'_invalid_response');
+    if (typeof data?.token_type!=='string' || data.token_type.toLowerCase()!=='bearer' || !bearer(data.access_token) || !Number.isInteger(data.expires_in) || data.expires_in<60 || data.expires_in>86400 || this.requireScope&&data.scope!==this.scope) throw new ProviderError(this.stage+'_invalid_response');
     this.cached={ token:data.access_token,until:Date.now()+(data.expires_in-30)*1000 }; return data.access_token;
   }
 }
-module.exports = { ProviderError,jsonRequest,ClientCredentialToken };
+module.exports = { ProviderError,jsonRequest,ClientCredentialToken,bearer };

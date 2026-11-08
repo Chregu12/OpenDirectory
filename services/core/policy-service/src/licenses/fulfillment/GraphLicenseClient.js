@@ -29,14 +29,18 @@ class GraphLicenseClient {
     this.tokens=new ClientCredentialToken({ url:`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,clientId,clientSecret,scope:'https://graph.microsoft.com/.default',fetchImpl,stage:'graph_token' });
   }
   async inspect(objectId,skuId,disabledPlans) {
-    uuid(objectId); uuid(skuId); plans(disabledPlans); const token=await this.tokens.get();
-    const data=await jsonRequest(this.fetch,`https://graph.microsoft.com/v1.0/users/${objectId}?$select=id,accountEnabled,assignedLicenses,licenseAssignmentStates`,{ method:'GET',headers:{ Authorization:'Bearer '+token } },'graph_read');
+    uuid(objectId); uuid(skuId); plans(disabledPlans);
+    const data=await this.readUser(objectId);
     const observed=observation(data,objectId,skuId,disabledPlans);
     const direct=data.licenseAssignmentStates.find(item=>item.skuId.toLowerCase()===skuId && item.assignedByGroup===null);
     if (direct && (direct.state!=='Active' || ![null,'None'].includes(direct.error))) {
       const error=new ProviderError('graph_assignment_error'); error.observation=observed; throw error;
     }
     return observed;
+  }
+  async readUser(objectId) {
+    const token=await this.tokens.get();
+    return jsonRequest(this.fetch,`https://graph.microsoft.com/v1.0/users/${objectId}?$select=id,accountEnabled,assignedLicenses,licenseAssignmentStates`,{ method:'GET',headers:{ Authorization:'Bearer '+token } },'graph_read');
   }
   async mutate(objectId,skuId,disabledPlans,desired,token,attemptId) {
     uuid(objectId); uuid(skuId); plans(disabledPlans); uuid(attemptId);

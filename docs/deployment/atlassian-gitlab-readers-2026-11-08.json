@@ -1,0 +1,69 @@
+{
+  "checkedAt": "2026-11-08T12:26:18.129459+00:00",
+  "status": "deployed-and-read-probes-verified-providers-not-connected",
+  "features": [
+    "Rust Atlassian current directory-user POST search with the directoryIds filter pinned on every page",
+    "Rust GitLab.com billable members after top-level group ID/path confirmation",
+    "Validated GitLab continuation URLs and page/total headers",
+    "Typed projections drop emails, avatars, project inventories and metadata secrets",
+    "Existing provider protocols preserved"
+  ],
+  "deployment": {
+    "helmRevision": 45,
+    "chart": "opendirectory-lite-0.1.30",
+    "image": {
+      "image": "harbor.heusser.local/opendirectory/policy-service:1.0.26",
+      "digest": "sha256:ca7ab2a77e81820908ada3812ca5728fac9384887e4093f5b05742aee8d5d2ca"
+    },
+    "readyDeployments": 11,
+    "otherApplicationImagesUnchanged": true,
+    "licenseWorkersEnabled": false
+  },
+  "checks": {
+    "rustHttpAndProtocolTests": 40,
+    "rustClippy": "passed with warnings denied",
+    "nodePolicyTests": 1469,
+    "postgresFulfillmentTests": "not repeated; this change adds no database path",
+    "artifactSmoke": {
+      "microsoftUserProtocol": "passed",
+      "legacyCapacityProtocol": "passed",
+      "googleProtocol": "passed",
+      "githubProtocol": "passed",
+      "adobeProtocol": "passed",
+      "slackProtocol": "passed",
+      "atlassianProtocol": "passed",
+      "gitlabProtocol": "passed",
+      "companyPoolProbeDenied": true,
+      "networkRequests": 0
+    },
+    "helmLint": "passed",
+    "https": {
+      "/licenses": 200,
+      "/api/licenses": 401
+    },
+    "policyProductionNpmAudit": {
+      "vulnerabilities": 0
+    }
+  },
+  "maintenance": {
+    "buildFailure": "Docker VM inode exhaustion during npm installation",
+    "removedBuildCacheId": "kycck9fuvarimh5mfu1e02q2e",
+    "removedBuildCacheBytesApprox": 282500000,
+    "cacheVerifiedReclaimableUnshared": true,
+    "cacheParent": "COPY services/connectors-rust/src ./src",
+    "freeInodesBefore": 2840,
+    "freeInodesAfter": 10437,
+    "containerVolumeOrTaggedImagePrune": false
+  },
+  "limits": [
+    "No real Atlassian, GitLab or other provider credential/consent/live connection was used.",
+    "The manual probe does not write the database, import catalog entries, allocate capacity or run a synchronization worker.",
+    "Atlassian uses only the non-mutating POST search endpoint. GitLab uses only GET on fixed GitLab.com routes.",
+    "Rust HTTP fixtures and Node process fixtures were tested separately. Artifact smoke rejects invalid tokens before any network request.",
+    "Captures are bounded to 1000 rows and 16 pages. Provider pagination is not an atomic snapshot. Counts do not prove purchased capacity or provisioning.",
+    "An initial full Node run had one unrelated route-test failure; that suite passed in isolation and the full rerun passed.",
+    "JetBrains implementation requires the selected product variant, instance URL and its public API contract; these were requested but not supplied during this run.",
+    "GitLab Self-Managed/Dedicated hosts are not implemented.",
+    "The pre-existing OpenBao synchronization outage was not repaired."
+  ]
+}

@@ -344,12 +344,13 @@ app.post('/api/licenses/:id/groups/:groupId/reconcile', requireLicensePermission
 app.get('/api/licenses', requireLicensePermission('licenses.catalog.read'), async (_req, res) => {
   try {
     const result = await db.query(`
-      SELECT lc.*,
+      SELECT lc.*, COALESCE(inventory.details,'{}'::jsonb) AS inventory_details,
              COALESCE(COUNT(la.id), 0)::int AS used_seats
       FROM license_catalog lc
       LEFT JOIN license_assignments la ON la.license_id = lc.id AND (la.expires_at IS NULL OR la.expires_at > license_now())
+      LEFT JOIN license_inventory_details inventory ON inventory.license_id=lc.id
       WHERE lc.business_tenant_id IS NULL
-      GROUP BY lc.id
+      GROUP BY lc.id,inventory.details
       ORDER BY lc.name ASC
     `);
     res.json({ licenses: result.rows, total: result.rows.length });
@@ -435,10 +436,11 @@ app.get('/api/licenses/requests', async (req, res) => {
 
 app.get('/api/licenses/:id', requireLicensePermission('licenses.catalog.read'), async (req, res) => {
   try {
-    const result = await db.query(`SELECT catalog.*,COALESCE(COUNT(assignment.id),0)::int AS used_seats
+    const result = await db.query(`SELECT catalog.*,COALESCE(inventory.details,'{}'::jsonb) AS inventory_details,COALESCE(COUNT(assignment.id),0)::int AS used_seats
       FROM license_catalog catalog LEFT JOIN license_assignments assignment ON assignment.license_id=catalog.id
       AND (assignment.expires_at IS NULL OR assignment.expires_at>license_now())
-      WHERE catalog.id=$1 AND catalog.business_tenant_id IS NULL GROUP BY catalog.id`, [req.params.id]);
+      LEFT JOIN license_inventory_details inventory ON inventory.license_id=catalog.id
+      WHERE catalog.id=$1 AND catalog.business_tenant_id IS NULL GROUP BY catalog.id,inventory.details`, [req.params.id]);
     if (!result.rows.length) return res.status(404).json({ error: 'License not found' });
     res.json(result.rows[0]);
   } catch (error) {
@@ -453,27 +455,31 @@ app.get('/api/licenses/:id', requireLicensePermission('licenses.catalog.read'), 
 // POST /api/licenses — create license
 app.post('/api/licenses', requireLicensePermission('licenses.catalog.manage'), async (req, res) => {
   if (['business_tenant_id', 'business_revision', 'tenantId'].some(field => Object.hasOwn(req.body, field))) return res.status(400).json({ error: 'Legacy catalog cannot select company ownership' });
-  const { name, vendor, category, license_type, total_seats, cost_per_seat, currency, renewal_date, auto_approve, description } = req.body;
-  if (!name) return res.status(400).json({ error: 'name is required' });
-  if (total_seats != null && (!Number.isInteger(total_seats) || total_seats < 0 || total_seats > 2147483647)) return res.status(400).json({ error: 'total_seats must be a nonnegative integer' });
+  let input;
+  try { input = require('./licenses/catalogInput').parseCatalogInput(req.body); } catch (error) { return res.status(400).json({ error: error.message }); }
+  const { name, vendor, category, license_type, total_seats, cost_per_seat, currency, renewal_date, auto_approve, description, inventory_details: inventoryDetails } = input;
 
   try {
     const result = await db.query(
-      `INSERT INTO license_catalog
-         (name, vendor, category, license_type, total_seats, cost_per_seat, currency, renewal_date, auto_approve, description)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       RETURNING *`,
+      `WITH created AS (
+         INSERT INTO license_catalog
+           (name,vendor,category,license_type,total_seats,cost_per_seat,currency,renewal_date,auto_approve,description)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
+       ), recorded AS (
+         INSERT INTO license_inventory_details(license_id,details) SELECT id,$11::jsonb FROM created RETURNING license_id,details
+       ) SELECT created.*,recorded.details AS inventory_details FROM created JOIN recorded ON recorded.license_id=created.id`,
       [
         name,
         vendor || null,
         category || 'Software',
         license_type || 'per_user',
         total_seats || 0,
-        cost_per_seat || null,
+        cost_per_seat ?? null,
         currency || 'CHF',
         renewal_date || null,
         auto_approve || false,
         description || null,
+        JSON.stringify(inventoryDetails || {}),
       ]
     );
     logger.info(`License created: ${name}`, { id: result.rows[0].id });
@@ -489,13 +495,14 @@ app.post('/api/licenses', requireLicensePermission('licenses.catalog.manage'), a
       license_type: license_type || 'per_user',
       total_seats: total_seats || 0,
       used_seats: 0,
-      cost_per_seat: cost_per_seat || null,
+      cost_per_seat: cost_per_seat ?? null,
       currency: currency || 'CHF',
       renewal_date: renewal_date || null,
       auto_approve: auto_approve || false,
       description: description || null,
       icon_url: null,
       notes: null,
+      inventory_details: inventoryDetails || {},
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -507,26 +514,33 @@ app.post('/api/licenses', requireLicensePermission('licenses.catalog.manage'), a
 // PUT /api/licenses/:id — update license
 app.put('/api/licenses/:id', requireLicensePermission('licenses.catalog.manage'), async (req, res) => {
   if (['business_tenant_id', 'business_revision', 'tenantId'].some(field => Object.hasOwn(req.body, field))) return res.status(400).json({ error: 'Legacy catalog cannot select company ownership' });
-  const { name, vendor, category, license_type, total_seats, cost_per_seat, currency, renewal_date, auto_approve, description, notes, icon_url } = req.body;
-  if (total_seats != null && (!Number.isInteger(total_seats) || total_seats < 0 || total_seats > 2147483647)) return res.status(400).json({ error: 'total_seats must be a nonnegative integer' });
+  let input;
+  try { input = require('./licenses/catalogInput').parseCatalogInput(req.body, true); } catch (error) { return res.status(400).json({ error: error.message }); }
+  const { name, vendor, category, license_type, total_seats, cost_per_seat, currency, renewal_date, auto_approve, description, notes, icon_url, inventory_details: inventoryDetails } = input;
   try {
     const result = await db.query(
-      `UPDATE license_catalog SET
+      `WITH changed AS (UPDATE license_catalog SET
          name = COALESCE($1, name),
-         vendor = COALESCE($2, vendor),
+         vendor = CASE WHEN $15::jsonb ? 'vendor' THEN $2::text ELSE vendor END,
          category = COALESCE($3, category),
          license_type = COALESCE($4, license_type),
          total_seats = COALESCE($5, total_seats),
-         cost_per_seat = COALESCE($6, cost_per_seat),
+         cost_per_seat = CASE WHEN $15::jsonb ? 'cost_per_seat' THEN $6::numeric ELSE cost_per_seat END,
          currency = COALESCE($7, currency),
-         renewal_date = COALESCE($8, renewal_date),
+         renewal_date = CASE WHEN $15::jsonb ? 'renewal_date' THEN $8::date ELSE renewal_date END,
          auto_approve = COALESCE($9, auto_approve),
-         description = COALESCE($10, description),
-         notes = COALESCE($11, notes),
-         icon_url = COALESCE($12, icon_url),
+         description = CASE WHEN $15::jsonb ? 'description' THEN $10::text ELSE description END,
+         notes = CASE WHEN $15::jsonb ? 'notes' THEN $11::text ELSE notes END,
+         icon_url = CASE WHEN $15::jsonb ? 'icon_url' THEN $12::text ELSE icon_url END,
          updated_at = NOW()
        WHERE id = $13 AND business_tenant_id IS NULL
-       RETURNING *`,
+       RETURNING *), recorded AS (
+         INSERT INTO license_inventory_details(license_id,details)
+         SELECT id,$14::jsonb FROM changed WHERE $14::jsonb IS NOT NULL
+         ON CONFLICT(license_id) DO UPDATE SET details=EXCLUDED.details RETURNING license_id,details
+       ) SELECT changed.*,COALESCE(recorded.details,existing.details,'{}'::jsonb) AS inventory_details
+         FROM changed LEFT JOIN recorded ON recorded.license_id=changed.id
+         LEFT JOIN license_inventory_details existing ON existing.license_id=changed.id`,
       [
         name || null, vendor || null, category || null, license_type || null,
         total_seats != null ? total_seats : null,
@@ -535,11 +549,14 @@ app.put('/api/licenses/:id', requireLicensePermission('licenses.catalog.manage')
         auto_approve != null ? auto_approve : null,
         description || null, notes || null, icon_url || null,
         req.params.id,
+        inventoryDetails === undefined ? null : JSON.stringify(inventoryDetails),
+        JSON.stringify(Object.keys(input)),
       ]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'License not found' });
     res.json(result.rows[0]);
   } catch (err) {
+    if (err.code === '23514') return res.status(409).json({ error: 'Capacity cannot be reduced below active assignments' });
     if (licenseStorageUnavailable(res)) return;
     logger.warn('DB unavailable, updating in-memory license', { error: err.message });
     const lic = inMemoryLicenses.get(req.params.id);
@@ -548,17 +565,18 @@ app.put('/api/licenses/:id', requireLicensePermission('licenses.catalog.manage')
     const updated = {
       ...lic,
       ...(name != null && { name }),
-      ...(vendor != null && { vendor }),
+      ...(Object.hasOwn(input, 'vendor') && { vendor }),
       ...(category != null && { category }),
       ...(license_type != null && { license_type }),
       ...(total_seats != null && { total_seats }),
-      ...(cost_per_seat != null && { cost_per_seat }),
+      ...(Object.hasOwn(input, 'cost_per_seat') && { cost_per_seat }),
       ...(currency != null && { currency }),
-      ...(renewal_date != null && { renewal_date }),
+      ...(Object.hasOwn(input, 'renewal_date') && { renewal_date }),
       ...(auto_approve != null && { auto_approve }),
-      ...(description != null && { description }),
-      ...(notes != null && { notes }),
-      ...(icon_url != null && { icon_url }),
+      ...(Object.hasOwn(input, 'description') && { description }),
+      ...(Object.hasOwn(input, 'notes') && { notes }),
+      ...(Object.hasOwn(input, 'icon_url') && { icon_url }),
+      ...(inventoryDetails !== undefined && { inventory_details: inventoryDetails }),
       updated_at: new Date().toISOString(),
     };
     inMemoryLicenses.set(req.params.id, updated);

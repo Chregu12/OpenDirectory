@@ -1,0 +1,70 @@
+{
+  "checkedAt": "2026-11-08T09:32:42.218809+00:00",
+  "status": "deployed-and-public-assets-verified",
+  "features": [
+    "Renewal attention summary and direct attention filter",
+    "Renewal and free-seat filters with sort controls",
+    "Filtered UTF-8 CSV export with spreadsheet-formula protection",
+    "Confirmed deletion with retained-history conflict handling",
+    "Server validation of catalog prices, dates, currency and model",
+    "Explicit clearing of renewal dates and descriptions, with omitted fields preserved",
+    "Capacity conflicts retain existing assignments and return 409"
+  ],
+  "deployment": {
+    "helmRevision": 41,
+    "chart": "opendirectory-lite-0.1.26",
+    "status": "deployed",
+    "images": {
+      "policy-service": {
+        "image": "harbor.heusser.local/opendirectory/policy-service:1.0.22",
+        "digest": "sha256:83c8901c471757a34428650857968f89f178bff477918392df026de066f4fa51"
+      },
+      "web-app": {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.22",
+        "digest": "sha256:14582245ea3062964aeb667c8f88bbfbbc47c97be6327a1ba9214df041683ef3"
+      }
+    },
+    "readyDeployments": 11,
+    "otherApplicationImagesUnchanged": true
+  },
+  "checks": {
+    "policyUnitAndApi": {
+      "passed": 83
+    },
+    "frontendUnit": {
+      "passed": 41
+    },
+    "realPostgresInventoryAndCorrections": {
+      "passed": 2
+    },
+    "realPostgresCapacityConflict": {
+      "passed": 1
+    },
+    "chromeWorkflowTests": {
+      "passed": 3
+    },
+    "typecheck": "passed after regenerating stale Next.js route types",
+    "productionBuilds": "passed: linux/amd64",
+    "helmLint": "passed",
+    "publicHttps": {
+      "licensesPage": 200,
+      "newFeatureAssetsConfirmed": [
+        "CSV exportieren",
+        "Erneuerungsstatus",
+        "Filter zurücksetzen",
+        "Platzverfügbarkeit"
+      ],
+      "anonymousCatalogDenied": 401
+    },
+    "productionBackend": {
+      "catalogReadable": true,
+      "catalogEntries": 1,
+      "deployedValidationVerified": true
+    }
+  },
+  "limits": [
+    "Browser workflow checks used isolated API fixtures; database checks used isolated PostgreSQL schemas. No production license was created, edited, assigned or deleted for testing.",
+    "Manufacturer synchronization and external contract renewal were not expanded in this change.",
+    "The pre-existing separate OpenBao secret-synchronization outage remains unresolved."
+  ]
+}

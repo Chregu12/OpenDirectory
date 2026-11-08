@@ -1,0 +1,62 @@
+{
+  "checkedAt": "2026-11-08T12:01:01.454558+00:00",
+  "status": "deployed-and-read-probes-verified-providers-not-connected",
+  "features": [
+    "Adobe OAuth Server-to-Server on the fixed IMS v3 endpoint",
+    "Rust Adobe product-profile membership with organization, profile ID, name and type confirmation",
+    "Slack auth.test context verification followed by Rust SCIM 2.0 users",
+    "Workspace and Enterprise scopes cannot be interchanged",
+    "Existing Microsoft, Google and GitHub read protocols preserved"
+  ],
+  "deployment": {
+    "helmRevision": 44,
+    "chart": "opendirectory-lite-0.1.29",
+    "image": {
+      "image": "harbor.heusser.local/opendirectory/policy-service:1.0.25",
+      "digest": "sha256:35f89b77253ae8401fb31bdfce3417cd52332c19db4fb02b8cc1662921306fe2"
+    },
+    "readyDeployments": 11,
+    "otherApplicationImagesUnchanged": true,
+    "licenseWorkersEnabled": false
+  },
+  "checks": {
+    "rustHttpAndProtocolTests": 30,
+    "rustClippy": "passed with warnings denied",
+    "nodePolicyTests": 1444,
+    "postgresFulfillmentTests": "not repeated; this change adds no database path",
+    "artifactSmoke": {
+      "microsoftUserProtocol": "passed",
+      "legacyCapacityProtocol": "passed",
+      "googleProtocol": "passed",
+      "githubProtocol": "passed",
+      "adobeProtocol": "passed",
+      "slackProtocol": "passed",
+      "companyPoolProbeDenied": true,
+      "networkRequests": 0
+    },
+    "helmLint": "passed",
+    "https": {
+      "/licenses": 200,
+      "/api/licenses": 401
+    },
+    "policyProductionNpmAudit": {
+      "vulnerabilities": 0
+    },
+    "buildInfrastructure": {
+      "initialFailure": "Docker build cache exhausted local builder storage",
+      "resolution": "Removed five verified unshared OpenDirectory Cargo build caches (about 1.4 GB)",
+      "runningContainersPreserved": 81,
+      "volumesAndTaggedImagesRemoved": false
+    }
+  },
+  "limits": [
+    "No real Adobe, Slack or other provider credential/consent/live connection was used.",
+    "The manual probe does not write the database, import catalog entries, allocate capacity or run a synchronization worker.",
+    "Adobe UMAPI and Slack SCIM administrative scopes can authorize writes; the implementation only reads resource endpoints. Slack auth.test is a non-mutating POST.",
+    "Rust HTTP fixtures and Node process fixtures were tested separately. Artifact smoke rejects invalid tokens before any network request.",
+    "Adobe metadata reads are limited to five pages per probe; all new user captures are bounded to 1000 rows and 16 user pages.",
+    "Provider pagination is not an atomic snapshot. Membership, profile quota and active accounts are not purchased capacity.",
+    "Atlassian, JetBrains and GovSlack are not implemented.",
+    "The pre-existing OpenBao synchronization outage was not repaired."
+  ]
+}

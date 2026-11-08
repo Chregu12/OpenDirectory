@@ -350,3 +350,22 @@ describe('Explicit development demo', () => {
     expect(access.body.demoMode).toBe(true);
   });
 });
+
+describe('Received-license inventory',()=>{
+ test('stores structured received-license references on create and keeps writes behind catalog authority',async()=>{
+  const metadata={reference:'REF-TEST',orderReference:'ORDER-TEST',supplier:'Test Vendor',receivedDate:'2026-11-02'};
+  db.query.mockResolvedValue({rows:[{id:'license-id',inventory_details:metadata}]});
+  const response=await request(app).post('/api/licenses').set('Authorization','Bearer manager').send({name:'Received license',total_seats:5,inventory_details:metadata});
+  expect(response.status).toBe(201);expect(response.body.inventory_details).toEqual(metadata);
+  expect(db.query).toHaveBeenCalledWith(expect.stringContaining('inventory_details'),expect.arrayContaining([JSON.stringify(metadata)]));
+  expect((await request(app).post('/api/licenses').set('Authorization','Bearer reader').send({name:'Denied',inventory_details:metadata})).status).toBe(403);
+ });
+ test('rejects unsupported secret or authority fields before persistence',async()=>{
+  const response=await request(app).post('/api/licenses').set('Authorization','Bearer manager').send({name:'Invalid',inventory_details:{licenseKey:'unsupported'}});
+  expect(response.status).toBe(400);expect(db.query).not.toHaveBeenCalled();
+ });
+ test('the self-service SQL never selects private inventory references',async()=>{
+  db.query.mockResolvedValue({rows:[]});const response=await request(app).get('/api/licenses/kiosk').set('Authorization','Bearer alice');expect(response.status).toBe(200);
+  const select=db.query.mock.calls.find(([sql])=>sql.includes('FROM license_catalog lc'))[0];expect(select).not.toContain('inventory_details');expect(select).not.toContain('lc.*');
+ });
+});
