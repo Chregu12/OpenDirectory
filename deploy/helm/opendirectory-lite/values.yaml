@@ -236,6 +236,7 @@ apps:
       OAUTH_MFA_KEY_FILE: /run/opendirectory/mfa-encryption.key
       OAUTH_VERIFICATION_JWKS_FILE: /run/opendirectory/oauth-verification.jwks.json
       OAUTH_WEB_CLIENT_ID: web-app
+      COMPANY_LICENSE_ACTIVATION_MAX_SECONDS: "36000"
       OAUTH_WEB_ADMIN_USER_IDS: '[]'
       OAUTH_WEB_CLIENT_SECRET_FILE: /run/opendirectory/oauth-web-client.secret
       OAUTH_WEB_REDIRECT_URIS: '["{{ .Values.global.publicURL }}/auth/callback"]'

@@ -27,9 +27,9 @@ async function locked<Result>(action: () => Promise<Result>): Promise<Result> {
   return navigator.locks.request('opendirectory-browser-session', { signal: AbortSignal.timeout(20000) }, action);
 }
 
-async function request(action: 'session' | 'logout') {
+async function request(action: 'session' | 'logout', rotate = false) {
   forgetLegacyCredentials();
-  const token = getAccessToken();
+  const token = rotate ? null : getAccessToken();
   const response = await fetch(`/api/auth/oidc/${action}`, {
     method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(10000),
     headers: { 'X-OD-CSRF': csrf(), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -38,11 +38,11 @@ async function request(action: 'session' | 'logout') {
   return response.json();
 }
 
-export async function ensureSession(force = false): Promise<BrowserSession> {
-  if (!force && current && getAccessToken()) return current;
-  if (pending) return pending;
+export async function ensureSession(force = false, { rotate = false }: { rotate?: boolean } = {}): Promise<BrowserSession> {
+  if (!force && !rotate && current && getAccessToken()) return current;
+  if (pending) { if (!rotate) return pending; await pending; }
   pending = locked(async () => {
-    const session = await request('session');
+    const session = await request('session', rotate);
     if (typeof session.access_token !== 'string' || !session.access_token || !Number.isFinite(session.expires_at)
       || session.expires_at <= Date.now() || typeof session.user?.id !== 'string' || typeof session.user?.name !== 'string'
       || typeof session.user?.role !== 'string' || !Array.isArray(session.user?.roles)) throw new SessionError(503, 'Ungültige Sitzungsantwort.');

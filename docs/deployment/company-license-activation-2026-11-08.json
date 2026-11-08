@@ -1,0 +1,239 @@
+{
+  "checkedAt": "2026-11-08T18:15:51.149882+00:00",
+  "status": "deployed-and-verified-personal-mfa-activation-pending",
+  "features": [
+    "Explicit own-company license assurance activation for 15 minutes, 1, 2, 4, 8 or 10 hours",
+    "Existing canonical Home-Admin or actual Owner eligibility, fresh proven MFA, reason and confirmation required",
+    "Session, client revision, identity context, tenant generation and MFA factor binding with immutable audit",
+    "Short access tokens renew inside the window without changing the original auth_time",
+    "Immediate live revocation, automatic expiry and no fallback to the old five-minute MFA after this session had an activation",
+    "Source-aware manual license assignments accept the license window while independent blueprint assurance remains mandatory",
+    "Explicit browser token rotation after activation, recovery and revocation preserves normal heartbeat behavior"
+  ],
+  "deployment": {
+    "helmRevision": 53,
+    "chart": "opendirectory-lite-0.1.36",
+    "readyDeployments": 11,
+    "images": [
+      {
+        "image": "harbor.heusser.local/opendirectory/identity-service:1.0.31",
+        "digest": "sha256:14f8744144b8ca7c4877d922d274ad8cd8840217a565d98f525a798bd76defbf",
+        "architecture": "amd64",
+        "os": "linux",
+        "readyReplicas": 1,
+        "restarts": 0
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/oauth-provider:1.0.31",
+        "digest": "sha256:2d95201ed3f8a895981d1a56554f1a71e2e162ed326b067e7ba273ac3c474c85",
+        "architecture": "amd64",
+        "os": "linux",
+        "readyReplicas": 1,
+        "restarts": 0
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/policy-service:1.0.32",
+        "digest": "sha256:1fd76697e2e25799fa118a94ef5cc1c8c5a2f3ffe0a582e5a605969b11f1d005",
+        "architecture": "amd64",
+        "os": "linux",
+        "readyReplicas": 1,
+        "restarts": 0
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.31",
+        "digest": "sha256:5907efa7c448f3a624c50dc2b364dd7d062ccdce272a9e2333c136f7e7d6b955",
+        "architecture": "amd64",
+        "os": "linux",
+        "readyReplicas": 1,
+        "restarts": 0
+      }
+    ],
+    "otherDeploymentImagesUnchanged": true,
+    "liveSourceHashesMatch": true,
+    "sourceFilesVerified": 17,
+    "linuxAmd64NonRootRuntime": true,
+    "verifiedHttps": [
+      {
+        "path": "/.well-known/openid-configuration",
+        "status": 200
+      },
+      {
+        "path": "/applications",
+        "status": 200
+      },
+      {
+        "path": "/api/mfa/company-license-activation",
+        "status": 401
+      },
+      {
+        "path": "/api/identity/company-license-eligibility",
+        "status": 401
+      },
+      {
+        "path": "/api/licenses/company/v2/capabilities",
+        "status": 401
+      }
+    ],
+    "verifiedTLS": true
+  },
+  "database": {
+    "migration": "oauth/016_company_license_activations.sql",
+    "tablesVerified": 2,
+    "enabledGuardAndAuditTriggersVerified": 3,
+    "backups": [
+      {
+        "database": "oauth",
+        "bytes": 160557,
+        "sha256": "9975d34db96b0f1d9c43135e59bd7dbcdeb9de124a17a435caf1a110d3d98064",
+        "tocEntries": 247
+      },
+      {
+        "database": "identity",
+        "bytes": 3203498,
+        "sha256": "6aa44930545f32d72af5ea74b221c92ef7b430b7727ca2cb0eb088b5ee1f2a71",
+        "tocEntries": 5217
+      },
+      {
+        "database": "policy",
+        "bytes": 848849,
+        "sha256": "5f8bd99d99aeb33f89801e073746db3658838f394094f62c6133bafa8ba5a1a1",
+        "tocEntries": 962
+      }
+    ]
+  },
+  "checks": {
+    "frontendUnitTests": 3081,
+    "identityUnitTests": 1225,
+    "oauthUnitTests": 522,
+    "policyUnitTests": 1471,
+    "activationPostgresTests": 7,
+    "selectedCrossServiceCases": 1,
+    "nativeBrowserSessionTests": 67,
+    "nativeBrowserSessionTestsInAmd64ProductionImage": 67,
+    "typecheck": "passed",
+    "productionBuild": "linux/amd64 passed",
+    "helmLint": "passed",
+    "crossServiceCase": [
+      "actual disposable MFA enrollment/login",
+      "ten-hour activation and short-token refresh",
+      "actual pool creation and source-aware manual assignment via PostgreSQL receivers",
+      "simulated ten-minute clock advance preserves original MFA and permits license reads",
+      "independent blueprint capabilities still reject old MFA",
+      "revocation rejects the already-issued token and removes claims on refresh",
+      "revoked session window cannot fall back to original fresh MFA"
+    ],
+    "testNotes": [
+      "A prior concurrent policy test run reported status and timeout failures; the final serial run passed all 1471 tests.",
+      "Only the selected cross-service case ran to completion; the full cross-service suite was not run."
+    ]
+  },
+  "rolloutHistory": [
+    {
+      "revision": 50,
+      "result": "failed",
+      "tag": "1.0.30",
+      "reason": "arm64 artifacts were incompatible with the amd64 cluster; containers failed before application startup",
+      "useOnAmd64": false
+    },
+    {
+      "revision": 51,
+      "result": "automatic rollback completed; 11 previous Deployments ready"
+    },
+    {
+      "revision": 52,
+      "result": "four corrected linux/amd64 images 1.0.31 deployed and verified"
+    },
+    {
+      "revision": 53,
+      "result": "policy-service 1.0.32 completes source-aware manual assignment support"
+    }
+  ],
+  "maintenance": {
+    "localCopiesRemoved": [
+      {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.21",
+        "digest": "sha256:258aefb499c71fd08f3a54566decc879bafb6ae7d1294788abc83aa937112215"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.22",
+        "digest": "sha256:14582245ea3062964aeb667c8f88bbfbbc47c97be6327a1ba9214df041683ef3"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/identity-service:1.0.30",
+        "digest": "sha256:d0347f4b76fd8f37127ea189bfe6b29b15c4f4f6df64114f39a9669664bb9d6c"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/oauth-provider:1.0.11",
+        "digest": "sha256:57313669ea07c955b2ec85f2d419672b35be255c4a12d2345dc6b8dce2018d5f"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/oauth-provider:1.0.20",
+        "digest": "sha256:4a541aed6328fd6df7146d5edb8333c8d3ac06b4931910fcd43756b60788a4ef"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/oauth-provider:1.0.27",
+        "digest": "sha256:43d9c9c5f65bb5401c924623bde13c561858ed55e5128d599adac5363d6a7459"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/oauth-provider:1.0.30",
+        "digest": "sha256:c43ecb0a42dd25009371fea8374849070ef3d0db4502df3abea5401159ca0cd5"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/oauth-provider:1.0.8",
+        "digest": "sha256:14c6aad3c611ead7e303fd56b3ee75de2765727b9d817ee190f3bbeb2b9f8c97"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/policy-service:1.0.17",
+        "digest": "sha256:7fdc98a396c0617c6d10e18b2b214daf202a1687813837f4b420a7540f9af8a2"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/policy-service:1.0.19",
+        "digest": "sha256:4a8be293dad9dddc3280d85df7ba1f6b9e5874e5e48d6ca09809b42a6b439792"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/policy-service:1.0.22",
+        "digest": "sha256:83c8901c471757a34428650857968f89f178bff477918392df026de066f4fa51"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/policy-service:1.0.25",
+        "digest": "sha256:35f89b77253ae8401fb31bdfce3417cd52332c19db4fb02b8cc1662921306fe2"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/policy-service:1.0.30",
+        "digest": "sha256:08dfb6c04711148e6140e840019d09114607a0966388f9119b07131dd81c5e68"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.17",
+        "digest": "sha256:0515a14fb88a7a184a4e5ed0df04a40cc0533d6c72709f3fc3a978c59112f7ec"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.18",
+        "digest": "sha256:08e1b9a554155cdf0c52a0b0c003363b96e3bf5fe71c4ac351031d4044d36518"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.19",
+        "digest": "sha256:d025ca2e37f0c7d0bf9f367eb9515d5348ade202e1a2de1f838ed9141056c3e7"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.30",
+        "digest": "sha256:345a225da8dc1f5a2ae4399985ac0e82f2fa73b801807d1638c21bf0970742b9"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.27",
+        "digest": "sha256:9e8f1b040ca1c9693769e3522338ad2b506d74b4d9f603d303f4f15d17b6baab"
+      }
+    ],
+    "remoteDigestsVerifiedBeforeLocalRemoval": true,
+    "existingContainerCount": 88,
+    "existingContainersPreserved": true,
+    "volumesRemoved": 0,
+    "harborArtifactsRemoved": 0,
+    "buildCacheReclamation": "Only exact reclaimable, unshared cache IDs with verified OpenDirectory source ancestry were pruned.",
+    "identityImageOwnership": "Application files and dependencies remain root-owned and readable; only the working directory is writable by the runtime user, avoiding a duplicate dependency layer."
+  },
+  "remaining": [
+    "The agent did not perform the personal production MFA login or create a production activation for the user.",
+    "The window grants only existing company-license duties; stricter current app/role policies can require earlier reauthentication.",
+    "General directory-role PIM, blueprint assignment and offboarding retain independent eligibility and assurance rules."
+  ]
+}

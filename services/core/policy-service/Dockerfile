@@ -18,6 +18,7 @@ RUN npm install --only=production --legacy-peer-deps && npm cache clean --force
 
 COPY services/core/policy-service/ ./
 COPY packages/oidc-access-state.js /packages/oidc-access-state.js
+COPY packages/company-license-activation.js /packages/company-license-activation.js
 COPY packages/mfa-authorization-contract.js /packages/mfa-authorization-contract.js
 COPY packages/role-authentication-contract.js /packages/role-authentication-contract.js
 COPY packages/policy-authorization-contract.js /packages/policy-authorization-contract.js

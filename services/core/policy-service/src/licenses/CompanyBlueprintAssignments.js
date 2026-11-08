@@ -3,7 +3,9 @@
 const { randomUUID } = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const { CompanyBlueprintAssignmentAuthority } = require('./CompanyBlueprintAssignmentAuthority');
-const { CompanyLicenseAuthority } = require('./CompanyLicenseAuthority');
+const { provenMfa } = require('../../../../../packages/mfa-authorization-contract');
+const { validClaim, sameTenantContext } = require('../../../../../packages/company-license-activation');
+const { CompanyLicenseAuthority, validCompanyLicenseSource } = require('./CompanyLicenseAuthority');
 const { LicenseAllocator } = require('./LicenseAllocator');
 const { companyLicenseContext } = require('./CompanyLicenseContext');
 const { principalContext } = require('./LicensePrincipal');
@@ -22,7 +24,9 @@ function validApplicationSource(source, user, userId) {
   try {
     exact(source, ['schemaVersion', 'issuer', 'subject', 'tokenId', 'expiresAt', 'context', 'tenant', 'actorUserId', 'permissions', 'validUntil', 'target']);
     return JSON.stringify(source.permissions) === JSON.stringify(['company.apps.read', 'company.apps.create', 'company.apps.assign'])
-      && validSource({ ...source, companyBlueprintAssignmentsProtocol: 1, permissions: [...COMPANY_BLUEPRINT_ASSIGNMENT_PERMISSIONS] }, user, userId);
+      && (validSource({ ...source, companyBlueprintAssignmentsProtocol: 1, permissions: [...COMPANY_BLUEPRINT_ASSIGNMENT_PERMISSIONS] }, user, userId)
+        || user?.token_use === 'access' && provenMfa(user) && user.auth_time <= Math.floor(Date.now() / 1000) + 5 && validClaim(user.company_license_activation)
+          && sameTenantContext(source.tenant, user.company_license_activation.tenant) && validCompanyLicenseSource(source, user, userId));
   } catch { return false; }
 }
 function captures(values, maximum = 25) {
@@ -215,4 +219,4 @@ class CompanyBlueprintAssignments {
     } catch (error) { throw storageError(error); }
   }
 }
-module.exports = { CompanyBlueprintAssignments, ownConfigurations };
+module.exports = { CompanyBlueprintAssignments, ownConfigurations, validApplicationSource };

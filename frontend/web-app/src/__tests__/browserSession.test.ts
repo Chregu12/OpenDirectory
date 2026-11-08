@@ -32,6 +32,22 @@ test('heartbeat forwards the in-memory token to avoid rotating a still-live fami
   await ensureSession(); await ensureSession(true);
   expect(global.fetch).toHaveBeenLastCalledWith('/api/auth/oidc/session', expect.objectContaining({ headers: { 'X-OD-CSRF': 'browser-csrf', Authorization: 'Bearer verified-access' } }));
 });
+test('explicit activation rotation omits a still-live bearer so the server issues updated claims', async () => {
+  await ensureSession();
+  (global.fetch as jest.Mock).mockImplementation(async () => ({ ok: true, json: async () => ({ ...session(), access_token: 'new-activation-claims' }) }));
+  await ensureSession(true, { rotate: true });
+  expect(global.fetch).toHaveBeenLastCalledWith('/api/auth/oidc/session', expect.objectContaining({ headers: { 'X-OD-CSRF': 'browser-csrf' } }));
+  expect(getAccessToken()).toBe('new-activation-claims');
+});
+test('activation rotation waits for an in-flight heartbeat and then performs its own refresh', async () => {
+  await ensureSession(); let release: (value: any) => void;
+  (global.fetch as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+  const heartbeat = ensureSession(true); await Promise.resolve();
+  const rotation = ensureSession(true, { rotate: true });
+  release({ ok: true, json: async () => session() }); await heartbeat; await rotation;
+  expect(global.fetch).toHaveBeenCalledTimes(3);
+  expect(global.fetch).toHaveBeenLastCalledWith('/api/auth/oidc/session', expect.objectContaining({ headers: { 'X-OD-CSRF': 'browser-csrf' } }));
+});
 test('authority outages invalidate local access instead of inventing a successful login', async () => {
   await ensureSession(); (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 503 });
   await expect(ensureSession(true)).rejects.toMatchObject({ status: 503 }); expect(getAccessToken()).toBeNull();

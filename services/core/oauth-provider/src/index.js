@@ -64,6 +64,8 @@ const enrolledDevicesGauge = new promClient.Gauge({ name: 'enrolled_devices_tota
 
 const revocations = new TokenRevocationStore(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
 const sessions = new SessionStore(db, { demo: process.env.OAUTH_REVOCATION_DEMO_MODE === 'true' });
+const companyLicenseActivations = new (require('./CompanyLicenseActivations').CompanyLicenseActivations)(db);
+const licenseActivationContract = require('../../../../packages/company-license-activation');
 
 async function isTokenRevoked(tokenHash, payload) {
   return !await verifiedAccessState(tokenHash, payload);
@@ -806,9 +808,11 @@ app.post('/oauth/token', protocol(async (req, res) => {
           || !await applicationAccess.matches(client_id,state,record.authorization.application_authorization)) return { error: 'invalid_grant' };
         const approvedScope = resolveScopes(client, req.body.scope === undefined ? record.scope : req.body.scope, [], record.scope);
         if (approvedScope === null) return { error: 'invalid_scope' };
-        const { roles, permissions, groups, iat, ...original } = record.authorization;
+        const { roles, permissions, groups, iat, company_license_activation, ...original } = record.authorization;
         const payload = { ...original, iss: ISSUER, aud: client_id, scope: approvedScope, iat: Math.floor(Date.now() / 1000), ...userAuthorizationClaims(record.authorization, approvedScope), ...groupClaims(approvedScope, state) };
-        const accessToken = signToken(payload, Math.max(1, Math.min(TOKEN_TTL, Math.floor((session.expiresAt - Date.now()) / 1000))));
+        const activation = payload.actor_type === 'user' && !identityAuthority.demo ? await companyLicenseActivations.claim(payload) : null;
+        if (activation) payload.company_license_activation = activation;
+        const accessToken = signToken(payload, Math.max(1, Math.min(TOKEN_TTL, activation ? Math.min(300, activation.expiresAt - payload.iat) : TOKEN_TTL, Math.floor((session.expiresAt - Date.now()) / 1000))));
         const refreshToken = crypto.randomBytes(32).toString('base64url');
         return { refresh: { hash: crypto.createHash('sha256').update(refreshToken).digest('hex'), scope: approvedScope, authorization: payload, expiresAt: record.expiresAt },
           response: { access_token: accessToken, refresh_token: refreshToken, token_type: 'Bearer', expires_in: jwt.decode(accessToken).exp - payload.iat, scope: approvedScope } };
@@ -1161,6 +1165,26 @@ async function reauthenticateMfa(req) {
     || !sameContext(state.context, req.user.identity_authorization)
     || !credentialContract.sameBinding(state.credentialAuthorization, req.user.credential_authorization)) throw new MfaError(401, 'authorization_changed');
 }
+const activationPath = licenseActivationContract.PATH;
+function exactActivationRequest(req) {
+  if (req.method === 'HEAD') throw Object.assign(new Error('activation_method_unsupported'), { status: 404 });
+  if (Object.keys(req.query).length || req.headers['x-api-key'] !== undefined || (req.method === 'GET' && (Object.keys(req.body || {}).length || Number(req.headers['content-length'] || 0) || req.headers['transfer-encoding']))) throw Object.assign(new Error('exact_activation_request_required'), { status: 400, code: 'exact_activation_request_required' });
+}
+app.get(activationPath + '/source', adminAuth, protocol(async (req, res) => {
+  exactActivationRequest(req);
+  const user = req.user; const current = await identityAuthority.verifiedState(user);
+  if (!current?.tenant) return res.status(401).json({ error: 'company_license_authority_changed' });
+  const state = await companyLicenseActivations.state(user);
+  if (state.activation && !licenseActivationContract.sameTenantContext(current.tenant, state.activation.tenant)) state.activation = null;
+  res.set('Cache-Control', 'no-store').json({ schemaVersion: 1, issuer: user.iss, subject: user.sub, tokenId: user.jti, expiresAt: user.exp,
+    context: user.identity_authorization, tenant: current.tenant, ...state });
+}, false));
+app.get(activationPath, adminAuth, protocol(async (req, res) => {
+  exactActivationRequest(req); res.set('Cache-Control', 'no-store').json(await companyLicenseActivations.status(req.user, req.headers.authorization));
+}, false));
+app.post(activationPath, adminAuth, protocol(async (req, res) => {
+  exactActivationRequest(req); res.set('Cache-Control', 'no-store').json(await companyLicenseActivations.change(req.user, req.headers.authorization, req.body));
+}, false));
 app.get('/api/mfa', ...mfaRoute([], req => mfaAuthority.status(req.user)));
 app.post('/api/mfa/enroll', ...mfaRoute(['username', 'password', 'mfaCode'], async req => {
   await reauthenticateMfa(req);

@@ -10,6 +10,18 @@ beforeEach(() => { const now = Math.floor(Date.now() / 1000); const context = { 
   source = { schemaVersion: 1, issuer: user.iss, subject: user.sub, tokenId: user.jti, expiresAt: user.exp, context, tenant, actorUserId: actor, permissions: [...COMPANY_LICENSE_PERMISSIONS], validUntil: now + 300, target: null };
 });
 const response = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
+test('only proven MFA and a short signed activation token permit the trusted source to exceed the original five minutes', async () => {
+  const now = Math.floor(Date.now() / 1000); user.auth_time = now - 3600; user.iat = now; user.exp = now + 300;
+  user.amr = ['pwd', 'otp']; user.mfa_authorization = { schemaVersion: 1, userId: actor, revision: '1', authTime: user.auth_time, methods: user.amr };
+  user.company_license_activation = { schemaVersion: 1, scope: 'company-licenses', id: randomUUID(), tenant, expiresAt: now + 32400 };
+  source.expiresAt = user.exp; source.validUntil = user.exp;
+  const reader = new CompanyLicenseAuthority({ fetchImpl: async () => response(source) });
+  expect(await reader.read('Bearer actual.original', user)).toEqual(source);
+  user.exp += 1; source.expiresAt = user.exp;
+  await expect(reader.read('Bearer actual.original', user)).rejects.toMatchObject({ status: 503 });
+  user.exp -= 1; source.expiresAt = user.exp; user.amr = ['pwd'];
+  await expect(reader.read('Bearer actual.original', user)).rejects.toMatchObject({ status: 503 });
+});
 test('the actual original bearer reads only the fixed own-company source without a service credential or caller tenant', async () => {
   const fetchImpl = jest.fn(async () => response(source)); const reader = new CompanyLicenseAuthority({ endpoint: 'https://identity.test/api/identity/company-licenses', fetchImpl });
   expect(await reader.read('Bearer actual.original', user)).toEqual(source); const [url, request] = fetchImpl.mock.calls[0];

@@ -87,7 +87,7 @@ export function companyApplicationsError(error: unknown) {
   if (status === 403) return 'Keine Berechtigung für diese Lizenzaktion oder dieses Benutzerziel. Bitte neu laden.';
   if (status === 409) return 'Lizenzbestand oder Zuweisung steht im Konflikt. Bitte neu laden; die Aktion wird nicht automatisch wiederholt.';
   if (status === 412) return 'Der Lizenzpool wurde zwischenzeitlich geändert. Bitte neu laden; die Aktion wird nicht automatisch wiederholt.';
-  if (status === 428) return 'Firmen-Lizenzen erfordern eine höchstens fünf Minuten alte Anmeldung mit OpenDirectory-Einmalcode. Bitte die Anmeldung bestätigen und danach neu laden. Falls noch kein Authenticator eingerichtet ist, zuerst MFA einrichten.';
+  if (status === 428) return 'Firmen-Lizenzen erfordern eine aktive zeitlich begrenzte Freigabe oder eine höchstens fünf Minuten alte Anmeldung mit OpenDirectory-Einmalcode. Bitte oben die Aktivierung übernehmen oder die Anmeldung bestätigen und danach neu laden. Falls noch kein Authenticator eingerichtet ist, zuerst MFA einrichten.';
   if (status === 503) return 'Der Lizenzdienst ist nicht verfügbar. Ergebnis nicht bestätigt; bitte neu laden. Nicht automatisch wiederholen.';
   if (status === 400) return 'Die Eingaben wurden abgelehnt. Bitte prüfen und neu laden.';
   if (status === 404) return 'Der Lizenzpool oder die Zuweisung ist nicht verfügbar. Bitte neu laden.';

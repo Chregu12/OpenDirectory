@@ -49,6 +49,34 @@ test('workloads and unavailable canonical storage cannot become company administ
   await expect(authority.read({ ...user, actor_type: 'application' }, 'Bearer original')).rejects.toMatchObject({ status: 403 }); database.isAvailable = () => false; await expect(authority.read(user, 'Bearer original')).rejects.toMatchObject({ status: 503 });
 });
 const values = { name: 'Actual company application', vendor: 'Vendor', description: '', totalSeats: 1, reason: 'Explicit reviewed local license inventory' };
+test('an active session-bound window accepts older proven MFA, preserves the source shape and rechecks revocation after the transaction', async () => {
+  const now = Math.floor(Date.now() / 1000); user.auth_time = now - 3600; user.mfa_authorization.authTime = user.auth_time;
+  user.iat = now; user.exp = now + 300; state.authentication = { required: false, maxAgeSeconds: 300 };
+  const activation = { schemaVersion: 1, scope: 'company-licenses', id: randomUUID(), tenant, expiresAt: now + 32400 };
+  user.company_license_activation = activation;
+  const activationState = jest.fn(async () => ({ known: true, activation }));
+  authority = new CompanyLicenseAuthority(database, { issuer: user.iss, revalidate, activationState });
+  const result = await authority.read(user, 'Bearer original'); expect(Object.keys(result)).toHaveLength(11); expect(result.validUntil).toBe(user.exp);
+  activationState.mockResolvedValueOnce({ known: true, activation }).mockResolvedValueOnce({ known: true, activation: null });
+  await expect(authority.read(user, 'Bearer original')).rejects.toMatchObject({ status: 401 });
+  activationState.mockResolvedValue({ known: true, activation: null });
+  await expect(authority.read(user, 'Bearer original')).rejects.toMatchObject({ status: 428 });
+});
+test('activation cannot bypass stricter role assurance, switch tenants or use a long access token after MFA expires', async () => {
+  const now = Math.floor(Date.now() / 1000); user.auth_time = now - 600; user.mfa_authorization.authTime = user.auth_time; user.iat = now; user.exp = now + 300;
+  const activation = { schemaVersion: 1, scope: 'company-licenses', id: randomUUID(), tenant, expiresAt: now + 36000 }; user.company_license_activation = activation;
+  const activationState = jest.fn(async () => ({ known: true, activation })); authority = new CompanyLicenseAuthority(database, { issuer: user.iss, revalidate, activationState });
+  await expect(authority.read(user, 'Bearer original')).rejects.toMatchObject({ status: 401 });
+  state.authentication.required = false; user.exp = now + 3600;
+  await expect(authority.read(user, 'Bearer original')).rejects.toMatchObject({ status: 428 });
+  user.exp = now + 300; activation.tenant = { ...tenant, generation: '2' };
+  await expect(authority.read(user, 'Bearer original')).rejects.toMatchObject({ status: 401 });
+});
+test('revocation cannot fall back to the original fresh MFA of the same session', async () => {
+  authority = new CompanyLicenseAuthority(database, { issuer: user.iss, revalidate, activationState: async () => ({ known: true, activation: null }) });
+  await expect(authority.read(user, 'Bearer original')).rejects.toMatchObject({ status: 428 });
+  expect(await authority.read(user, 'Bearer original', null, true)).toMatchObject({ tenant, actorUserId: userId });
+});
 test('finite new pools normalize explicit local values without prices or unlimited licensing', () => { expect(poolValues({ ...values, name: '  Actual company application  ' })).toEqual(values); expect(pagination({ page: '2', limit: '25', search: '%' }, true)).toEqual({ page: 2, limit: 25, search: '%' }); });
 test.each([{ ...values, totalSeats: 0 }, { ...values, totalSeats: 10001 }, { ...values, totalSeats: 1.5 }, { ...values, vendor: '' }, { ...values, name: 'bad\nname' }, { ...values, reason: 'short' }, { ...values, tenantId: tenant.id }])('pool request rejects unsupported or unbounded input: %j', input => { expect(() => poolValues(input)).toThrow(); });
 test('original exact pool versions and explicit target confirmations cannot be replaced by wildcards or tenant selectors', () => {

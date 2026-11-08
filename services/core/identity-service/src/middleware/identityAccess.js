@@ -54,6 +54,7 @@ const ROUTES = [
   ['GET', /^\/users\/[a-f0-9-]{36}\/company-offboarding-access(?:\/(?:capabilities|history))?$/, []],
   ['POST', /^\/users\/[a-f0-9-]{36}\/company-offboarding-access$/, []],
   ['POST', /^\/users\/[a-f0-9-]{36}\/company-offboarding$/, []],
+  ['GET', /^\/identity\/company-license-eligibility\/?$/, []],
   ['GET', /^\/identity\/company-licenses\/?$/, []],
   ['POST', /^\/identity\/company-licenses\/?$/, []],
   ['GET', /^\/identity\/company-blueprints\/?$/, []],

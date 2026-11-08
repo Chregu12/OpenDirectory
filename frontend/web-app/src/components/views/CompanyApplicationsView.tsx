@@ -8,6 +8,7 @@ import { UserPage, userName } from '@/lib/directoryUsers';
 import { DirectoryConfirmation } from './UserDetailPanel';
 import CompanyOffboardingPanel from './CompanyOffboardingPanel';
 import CompanyApplicationAssignmentsPanel from './CompanyApplicationAssignmentsPanel';
+import CompanyLicenseActivationPanel from './CompanyLicenseActivationPanel';
 import CompanyOffboardingV2Panel from './CompanyOffboardingV2Panel';
 
 const initialValues: CompanyPoolInput = { name: '', vendor: '', description: '', totalSeats: 1, reason: '' };
@@ -217,6 +218,11 @@ export default function CompanyApplicationsView() {
     primaryAction={canCreate && pools ? { label: 'Lizenzpool erstellen', onClick: () => { setValues({ ...initialValues }); setFormError(''); setCreating(true); setNotice(''); }, disabled: busy } : undefined}
     actions={[{ label: 'Neu laden', onClick: () => { generation.current += 1; client.current?.invalidate(); clearReturns(); setReturnReceipt(null); setReload(value => value + 1); }, disabled: busy }]}>
     <div className="space-y-5" style={{ color: 'var(--text-primary)' }}>
+      <CompanyLicenseActivationPanel disabled={busy} onAccessChanged={refresh => {
+        generation.current += 1; client.current?.invalidate(); writing.current = false;
+        setAccess(null); setPools(null); clearSelection(); clearReturns(); setReturnReceipt(null); setCreating(false); setBusy(false); setError('');
+        if (refresh) setReload(value => value + 1);
+      }} />
       <details className="od-panel text-sm"><summary>Lokaler Bestand und Wirkung von Zuweisungen</summary><p className="mt-3">Nur lokale Lizenzverteilung an Benutzer der eigenen Firma. Keine Cloud-Zuweisung, Installation, SSO-Einrichtung oder Abrechnung. Gesperrte Benutzer und pausierte Mandanten sind keine zulässigen neuen Ziele. Kontosperren geben diese lokalen Lizenzen noch nicht automatisch zurück. Bestehende Zuweisungen können ausdrücklich freigegeben werden, auch bei gesperrten oder gelöschten Benutzern.</p></details>
       {error ? <div role="alert" className="rounded border border-red-500/40 p-4 space-y-3">
         <p>{error}</p>

@@ -4231,3 +4231,50 @@ test('production gateway applies actual roleless company blueprint license origi
     if (previousActivation === undefined) delete process.env.COMPANY_ACTIVATION_ENABLED; else process.env.COMPANY_ACTIVATION_ENABLED = previousActivation;
   }
 });
+
+
+test('company license assurance activation binds ten hours to the real MFA login and revokes old access immediately', async () => {
+  const route = '/api/mfa/company-license-activation';
+  const pair = await configureFactor('operator', await issue('operator'));
+  const directEligibility = await request(identityBase, '/api/identity/company-license-eligibility', { token: pair.access_token });
+  assert.equal(directEligibility.status, 200, JSON.stringify(directEligibility.body));
+  const before = await request(issuerBase, route, { token: pair.access_token });
+  assert.equal(before.status, 200, JSON.stringify(before.body)); assert.ok(before.body.durations.includes(36000));
+  const activated = await request(issuerBase, route, { method: 'POST', token: pair.access_token, body: { durationSeconds: 36000, reason: 'Actual authenticated own company license maintenance', confirm: true } });
+  assert.equal(activated.status, 200, JSON.stringify(activated.body));
+  assert.equal((await request(policyBase, '/api/licenses/company/capabilities', { token: pair.access_token })).status, 428);
+  const refreshed = await renew(pair.refresh_token); assert.equal(refreshed.status, 200, JSON.stringify(refreshed.body));
+  const token = refreshed.body.access_token; const claims = payload(token);
+  assert.equal(claims.company_license_activation.id, activated.body.activation.id); assert.equal(claims.auth_time, payload(pair.access_token).auth_time);
+  assert.ok(claims.exp - claims.iat <= 300); assert.deepEqual(claims.amr, ['pwd', 'otp']);
+  const capabilities = await request(policyBase, '/api/licenses/company/capabilities', { token });
+  assert.equal(capabilities.status, 200, JSON.stringify(capabilities.body));
+  const pool = await request(policyBase, '/api/licenses/company/pools', { method: 'POST', token, body: { name: 'Activated bounded company pool', vendor: 'Disposable test vendor', description: '', totalSeats: 2, reason: 'Explicit local stock during an MFA activation window' } });
+  assert.equal(pool.status, 201, JSON.stringify(pool.body));
+  const v2 = '/api/licenses/company/v2/pools/' + pool.body.id;
+  const preview = await request(policyBase, v2 + '/assignment-preview', { method: 'POST', token, body: { userId: canonicalUser } });
+  assert.equal(preview.status, 200, JSON.stringify(preview.body));
+  const assigned = await request(policyBase, v2 + '/assignments', { method: 'POST', token, headers: { 'If-Match': require('../../../../../packages/company-license-contract').poolEtag(pool.body), 'Idempotency-Key': randomUUID() },
+    body: { userId: canonicalUser, eligibilityRevision: preview.body.target.eligibilityRevision, assignmentId: null, sources: [], reason: 'Actual source-aware manual assignment during the license window', confirm: true } });
+  assert.equal(assigned.status, 201, JSON.stringify(assigned.body));
+  const originalNow = Date.now;
+  let laterRefresh;
+  try {
+    Date.now = () => originalNow() + 600000;
+    laterRefresh = await renew(refreshed.body.refresh_token); assert.equal(laterRefresh.status, 200, JSON.stringify(laterRefresh.body));
+    const laterClaims = payload(laterRefresh.body.access_token);
+    assert.equal(laterClaims.auth_time, claims.auth_time); assert.ok(laterClaims.iat - laterClaims.auth_time >= 600);
+    assert.equal(laterClaims.company_license_activation.id, activated.body.activation.id);
+    const stillAllowed = await request(policyBase, '/api/licenses/company/capabilities', { token: laterRefresh.body.access_token });
+    assert.equal(stillAllowed.status, 200, JSON.stringify(stillAllowed.body));
+    assert.equal((await request(policyBase, v2 + '/assignments', { token: laterRefresh.body.access_token })).status, 200);
+    assert.equal((await request(policyBase, '/api/company-blueprint-assignments/capabilities', { token: laterRefresh.body.access_token })).status, 428);
+  } finally { Date.now = originalNow; }
+  const revoked = await request(issuerBase, route, { method: 'POST', token, body: { activationId: activated.body.activation.id, confirm: true } });
+  assert.equal(revoked.status, 200, JSON.stringify(revoked.body)); assert.equal(revoked.body.activation, null);
+  assert.equal((await request(policyBase, '/api/licenses/company/capabilities', { token })).status, 428);
+  const ordinaryRefresh = await renew(laterRefresh.body.refresh_token); assert.equal(ordinaryRefresh.status, 200);
+  assert.equal(payload(ordinaryRefresh.body.access_token).company_license_activation, undefined);
+  assert.equal((await request(policyBase, '/api/licenses/company/capabilities', { token: ordinaryRefresh.body.access_token })).status, 428);
+  assert.deepEqual((await issuerDb.query('SELECT action FROM oauth_company_license_activation_audit WHERE activation_id=$1 ORDER BY id', [activated.body.activation.id])).rows.map(row => row.action), ['activated', 'revoked']);
+});

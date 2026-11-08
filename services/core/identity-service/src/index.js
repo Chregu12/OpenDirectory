@@ -180,6 +180,10 @@ app.post('/api/identity/device-offboarding', asyncRoute(async (req, res) => {
   if (Object.keys(req.query).length || req.headers['x-api-key']) return res.status(400).json({ error: 'Exact offboarding device source request required' });
   res.json(await deviceOffboardingAuthority.read(req.user, req.headers.authorization, req.body));
 }));
+app.get('/api/identity/company-license-eligibility', asyncRoute(async (req, res) => {
+  if (Object.keys(req.query).length || Object.keys(req.body || {}).length || req.headers['x-api-key']) return res.status(400).json({ error: 'Exact company license eligibility request required' });
+  res.set('Cache-Control', 'no-store').json(await companyLicenseAuthority.read(req.user, req.headers.authorization, null, true));
+}));
 app.get('/api/identity/company-licenses', asyncRoute(async (req, res) => {
   if (Object.keys(req.query).length || Object.keys(req.body || {}).length || req.headers['x-api-key']) return res.status(400).json({ error: 'Exact company license source request required' });
   res.set('Cache-Control', 'no-store').json(await companyLicenseAuthority.read(req.user, req.headers.authorization));

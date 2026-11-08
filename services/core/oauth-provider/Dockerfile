@@ -16,6 +16,7 @@ COPY packages/credential-authorization-contract.js /packages/credential-authoriz
 COPY packages/employee-invitation-contract.js /packages/employee-invitation-contract.js
 COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-contract.js
 COPY packages/company-app-contract.js /packages/company-app-contract.js
+COPY packages/company-license-activation.js /packages/company-license-activation.js
 COPY packages/mfa-authorization-contract.js /packages/mfa-authorization-contract.js
 COPY packages/role-authentication-contract.js /packages/role-authentication-contract.js
 COPY packages/policy-authorization-contract.js /packages/policy-authorization-contract.js

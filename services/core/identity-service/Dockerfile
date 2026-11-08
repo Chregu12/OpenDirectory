@@ -28,6 +28,7 @@ COPY packages/oidc-tenant-state.js /packages/oidc-tenant-state.js
 COPY packages/oidc-access-state.js /packages/oidc-access-state.js
 COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
 COPY packages/credential-authorization-contract.js /packages/credential-authorization-contract.js
+COPY packages/company-license-activation.js /packages/company-license-activation.js
 COPY packages/mfa-authorization-contract.js /packages/mfa-authorization-contract.js
 COPY packages/role-authentication-contract.js /packages/role-authentication-contract.js
 COPY packages/directory-role-contract.js /packages/directory-role-contract.js
@@ -36,7 +37,7 @@ COPY packages/grpc-event-bus/ /packages/grpc-event-bus/
 RUN cd /packages/grpc-event-bus && npm install --omit=dev --ignore-scripts --no-audit --no-fund
 
 RUN addgroup -S appuser && adduser -S -G appuser appuser
-RUN chown -R appuser:appuser /app
+RUN chown appuser:appuser /app
 
 EXPOSE 3001
 

@@ -4,6 +4,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import CompanyApplicationsView from '@/components/views/CompanyApplicationsView';
 import { api } from '@/lib/api';
 
+jest.mock('@/components/views/CompanyLicenseActivationPanel', () => () => null);
+
 jest.mock('@/lib/api', () => ({ api: { get: jest.fn(), post: jest.fn(), patch: jest.fn() } }));
 
 const actorId = '11111111-1111-4111-8111-111111111111';

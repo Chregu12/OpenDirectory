@@ -15,10 +15,12 @@ ingress:
   clusterIssuer: homelab-ca-issuer
 
 apps:
+  identity-service:
+    imageTag: "1.0.31"
   license-management:
     imageTag: "1.0.17"
   policy-service:
-    imageTag: "1.0.26"
+    imageTag: "1.0.32"
   license-fulfillment:
     imageTag: "1.0.26"
     env:
@@ -33,11 +35,11 @@ apps:
   auth-service:
     imageTag: "1.0.21"
   oauth-provider:
-    imageTag: "1.0.28"
+    imageTag: "1.0.31"
     env:
       OAUTH_WEB_ADMIN_USER_IDS: '["27d3f95a-a75d-45ac-a4f9-faeef85f5c54"]'
   web-app:
-    imageTag: "1.0.29"
+    imageTag: "1.0.31"
   api-backend:
     imageTag: "1.0.10"
   api-gateway:

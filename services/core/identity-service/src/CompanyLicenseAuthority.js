@@ -5,18 +5,24 @@ const { sameTenantContext } = require('../../../../packages/tenant-authorization
 const { acceptsRoleAuthentication } = require('../../../../packages/role-authentication-contract');
 const { createTenantStateClient } = require('../../../../packages/oidc-tenant-state');
 const { COMPANY_LICENSE_PERMISSIONS, exact, identifier } = require('../../../../packages/company-license-contract');
+const activationContract = require('../../../../packages/company-license-activation');
+const defaultActivationState = require('./CompanyLicenseActivationClient');
+const { isDeepStrictEqual } = require('util');
 const { AuthorizationState } = require('./AuthorizationState');
 const { companyOwner } = require('./CompanyOwner');
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 class CompanyLicenseAuthority {
-  constructor(database, { issuer = process.env.OIDC_ISSUER || 'http://localhost:3001', revalidate = createTenantStateClient() } = {}) {
-    this.database = database; this.issuer = issuer; this.revalidate = revalidate;
+  constructor(database, { issuer = process.env.OIDC_ISSUER || 'http://localhost:3001', revalidate = createTenantStateClient(), activationState = defaultActivationState } = {}) {
+    this.database = database; this.issuer = issuer; this.revalidate = revalidate; this.activationState = activationState;
   }
-  async read(user, authorization, body = null) {
+  async read(user, authorization, body = null, eligibility = false) {
     if (body !== null) { exact(body, ['userId']); identifier(body.userId); }
     if (!this.database.isAvailable()) fail(503, 'Canonical company license storage required');
     if (user?.actor_type !== 'user' || user.iss !== this.issuer || !validContext(user.identity_authorization)) fail(403, 'Canonical company license human required');
-    if (!acceptsRoleAuthentication({ required: true, maxAgeSeconds: 300 }, user)) fail(428, 'Fresh company license MFA required');
+    const activation = eligibility ? null : await this.activationState(user, authorization);
+    const active = !eligibility && activation.known && activationContract.validClaim(user.company_license_activation)
+      && isDeepStrictEqual(activation.activation, user.company_license_activation) && activationContract.deadline(user) > Math.floor(Date.now() / 1000);
+    if (!eligibility && (activation.known ? !active : !acceptsRoleAuthentication({ required: true, maxAgeSeconds: 300 }, user))) fail(428, 'Fresh company license MFA or active license window required');
     const tenant = await this.revalidate(authorization, user);
     const result = await this.database.transaction(async client => {
       const source = await new AuthorizationState({ transaction: operation => operation(client) }).state(user.iss, user.sub);
@@ -35,9 +41,10 @@ class CompanyLicenseAuthority {
         }
       }
       return { schemaVersion: 1, issuer: user.iss, subject: user.sub, tokenId: user.jti, expiresAt: user.exp, context: source.context, tenant,
-        actorUserId: source.context.userId, permissions: [...COMPANY_LICENSE_PERMISSIONS], validUntil: Math.min(user.exp, user.auth_time + Math.min(300, source.authentication.required ? source.authentication.maxAgeSeconds : 300)), target };
+        actorUserId: source.context.userId, permissions: [...COMPANY_LICENSE_PERMISSIONS], validUntil: Math.min(user.exp, eligibility ? user.exp : active ? activationContract.deadline(user) : user.auth_time + 300, source.authentication.required ? user.auth_time + source.authentication.maxAgeSeconds : user.exp), target };
     }, { readOnly: true });
-    if (!sameTenantContext(tenant, await this.revalidate(authorization, user)) || !acceptsRoleAuthentication({ required: true, maxAgeSeconds: 300 }, user) || result.validUntil * 1000 <= Date.now()) fail(401, 'Original company license authority changed');
+    if (!sameTenantContext(tenant, await this.revalidate(authorization, user)) || (active && !sameTenantContext(tenant, activation.activation.tenant))
+      || (!eligibility && !isDeepStrictEqual(activation, await this.activationState(user, authorization))) || result.validUntil * 1000 <= Date.now()) fail(401, 'Original company license authority changed');
     return result;
   }
 }
