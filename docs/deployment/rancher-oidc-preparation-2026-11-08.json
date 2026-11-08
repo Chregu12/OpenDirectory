@@ -1,0 +1,63 @@
+{
+  "checkedAt": "2026-11-08T14:26:25.645253+00:00",
+  "status": "deployed-oidc-foundation-and-ca-trust-awaiting-interactive-rancher-setup",
+  "features": [
+    "Application register accepts the actual OAuth administrator permission contract while rejecting unknown permissions",
+    "Scoped OIDC group UUIDs come from verified canonical memberships, not credential-provider or SCIM group labels",
+    "Refresh recomputes groups and scope reduction removes the claim; UserInfo returns current memberships",
+    "Rancher template has the exact verify-auth callback, Generic OIDC documentation and S256 settings"
+  ],
+  "deployment": {
+    "openDirectoryHelmRevision": 48,
+    "chart": "opendirectory-lite-0.1.32",
+    "images": {
+      "oauth-provider": {
+        "image": "harbor.heusser.local/opendirectory/oauth-provider:1.0.28",
+        "digest": "sha256:abe99e61865324d08323f6b330207e7cf1c9fde3b88de8cbe9fca4c741d2aaa2"
+      },
+      "web-app": {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.27",
+        "digest": "sha256:9e8f1b040ca1c9693769e3522338ad2b506d74b4d9f603d303f4f15d17b6baab"
+      }
+    },
+    "readyOpenDirectoryDeployments": 11,
+    "otherOpenDirectoryResourcesUnchanged": true,
+    "rancherHelmRevision": 10,
+    "rancherImage": "rancher/rancher:v2.15.2",
+    "readyRancherPods": 3,
+    "verifiedTlsDiscoveryFromPods": [
+      "rancher-d8697b4c8-cfw8r",
+      "rancher-d8697b4c8-j7d9p",
+      "rancher-d8697b4c8-ttt7d"
+    ],
+    "publicCaBundleSha256": "2d2bd557afb75f794259b803a71bfcb39e6de33dac839f688e8854db4809ebc7",
+    "rancherEnabledAuthProviders": [
+      "local"
+    ]
+  },
+  "checks": {
+    "unitTests": {
+      "web": 3058,
+      "oauth": 522
+    },
+    "focusedPostgresTests": 9,
+    "latestRancherHttpRegressionSuite": 83,
+    "typecheck": "passed",
+    "helmLint": "passed",
+    "runtimeSourceHashChecks": "passed",
+    "https": {
+      "/identity": 200,
+      "/licenses": 200,
+      "/api/clients/access": 401,
+      "/api/licenses": 401
+    },
+    "productionBuilds": "linux/amd64 passed"
+  },
+  "limits": [
+    "Rancher Generic OIDC is not enabled; actual client registration, assignments, provider configuration and personal SSO acceptance remain pending browser coordination.",
+    "A broader database run was deliberately stopped in favor of the nine relevant isolated regressions; no full-database-suite result is claimed.",
+    "Tests use synthetic identities and do not establish an actual external user login.",
+    "Rancher retains its own cached permissions, sessions and Kubernetes credentials; OpenDirectory membership changes do not immediately revoke those.",
+    "The existing personal Claude settings remain local."
+  ]
+}

@@ -61,6 +61,21 @@ test('readers see actual disabled state and never mutation or credential control
   expect(screen.getByText(/Deaktiviert/)).toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Aktivieren' })).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Geheimnis ersetzen' })).not.toBeInTheDocument();
   expect((api.get as jest.Mock).mock.calls.every(([url]) => ['/api/clients/access','/api/clients'].includes(url))).toBe(true);
 });
+test('the actual OAuth administrator permission response loads the application register', async () => {
+  permissions = require('../../../../../services/core/oauth-provider/src/ClientRegistry').permissionsOf({ actor_type: 'user', roles: ['admin'] });
+  render(<AppRegistrationsView />);
+  await screen.findByRole('article', { name: 'Canonical application' });
+  expect(screen.getByRole('button', { name: 'Anwendung registrieren' })).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+test('unknown permission names still reject the register response', async () => {
+  permissions = ['applications.read', 'applications.untrusted'];
+  render(<AppRegistrationsView />);
+  await screen.findByRole('alert');
+  expect(api.get).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('article')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Anwendung registrieren' })).not.toBeInTheDocument();
+});
 test('creation defaults disabled, sends canonical metadata and shows then discards the only secret receipt', async () => {
   const user = await creation(); await user.click(screen.getByRole('button', { name: 'Verbindlich speichern' })); await screen.findByTestId('client-secret');
   expect(api.post).toHaveBeenCalledWith('/api/clients', { name: 'New canonical app', redirectUris: ['https://new-app.test/callback'], scopes: ['openid','profile','email'], grantTypes: ['authorization_code','refresh_token'], publicClient: false, enabled: false });

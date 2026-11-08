@@ -6,7 +6,7 @@ export interface RegisteredClient {
 }
 export interface ClientAccess { permissions: string[]; subject: string; userId: string | null; clientId: string; demoMode: boolean }
 export type ClientMetadata = Pick<RegisteredClient, 'name' | 'redirectUris' | 'scopes' | 'grantTypes' | 'publicClient' | 'enabled'>;
-const permissionNames = ['applications.read','applications.create','applications.update','applications.delete','applications.credentials.rotate','applications.permissions.assign','applications.assignments.read','applications.assignments.manage','applications.authentication.read','applications.authentication.manage'];
+const permissionNames = ['applications.read','applications.create','applications.update','applications.delete','applications.credentials.rotate','applications.permissions.assign','applications.assignments.read','applications.assignments.manage','applications.authentication.read','applications.authentication.manage','applications.licensesources.discover'];
 const unconfirmed = (): never => { throw new Error('Vorgang nicht bestätigt. Vor einem weiteren Versuch aktuellen Registerstand prüfen.'); };
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9._~-]{1,255}$/.test(value) && value.trim() === value;
 const version = (value: unknown): value is string => typeof value === 'string' && /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value).toString() === value && BigInt(value) <= BigInt('9223372036854775807');

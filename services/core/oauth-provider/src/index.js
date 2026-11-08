@@ -385,6 +385,10 @@ function signToken(payload, expiresIn) {
   return token;
 }
 
+function groupClaims(scope, state) {
+  return scope?.split(' ').includes('groups') ? { groups: state.memberships.map(member => member.groupId) } : {};
+}
+
 async function issueSession(payload, principalType, withRefresh = false, client) {
   const bound = { ...payload, client_revision: client.version, sid: uuidv4(), actor_type: principalType, ...(client.companyTenant?{company_tenant:client.companyTenant}:{}),auth_time: Number.isInteger(payload.auth_time) ? payload.auth_time : Math.floor(Date.now() / 1000) };
   const state = await identityAuthority.verifiedState(bound);
@@ -393,6 +397,7 @@ async function issueSession(payload, principalType, withRefresh = false, client)
   if (!acceptsAuthentication(client, bound)) throw new MfaError(400, 'invalid_grant');
   if (principalType === 'user' && !await applicationAccess.matches(client.clientId,state,bound.application_authorization)) throw new IdentityAuthorityError(400,'invalid_grant');
   if (!await clientRegistry.current(client)) throw new IdentityAuthorityError(400, 'invalid_grant');
+  if (principalType === 'user') Object.assign(bound, groupClaims(bound.scope, state));
   const accessToken = signToken(bound);
   const decoded = jwt.decode(accessToken);
   const expiry = withRefresh ? bound.auth_time * 1000 + 30 * 86400_000 : decoded.exp * 1000;
@@ -773,7 +778,6 @@ app.post('/oauth/token', protocol(async (req, res) => {
       name:  scimUser?.name?.formatted ?? scimUser?.displayName ?? ui.name ?? ui.displayName ?? record.userId,
       email: scimUser?.emails?.[0]?.value ?? ui.email ?? `${record.userId}@opendirectory.local`,
       preferred_username: scimUser?.userName ?? ui.username ?? record.userId,
-      groups: (Array.isArray(scimUser?.groups) ? scimUser.groups : Array.isArray(ui.groups) ? ui.groups : []).map((group) => group?.value ?? group?.display ?? group).filter(group => typeof group === 'string'),
       scope: approvedScope,
       ...userAuthorizationClaims(ui, approvedScope),
     };
@@ -802,8 +806,8 @@ app.post('/oauth/token', protocol(async (req, res) => {
           || !await applicationAccess.matches(client_id,state,record.authorization.application_authorization)) return { error: 'invalid_grant' };
         const approvedScope = resolveScopes(client, req.body.scope === undefined ? record.scope : req.body.scope, [], record.scope);
         if (approvedScope === null) return { error: 'invalid_scope' };
-        const { roles, permissions, iat, ...original } = record.authorization;
-        const payload = { ...original, iss: ISSUER, aud: client_id, scope: approvedScope, iat: Math.floor(Date.now() / 1000), ...userAuthorizationClaims(record.authorization, approvedScope) };
+        const { roles, permissions, groups, iat, ...original } = record.authorization;
+        const payload = { ...original, iss: ISSUER, aud: client_id, scope: approvedScope, iat: Math.floor(Date.now() / 1000), ...userAuthorizationClaims(record.authorization, approvedScope), ...groupClaims(approvedScope, state) };
         const accessToken = signToken(payload, Math.max(1, Math.min(TOKEN_TTL, Math.floor((session.expiresAt - Date.now()) / 1000))));
         const refreshToken = crypto.randomBytes(32).toString('base64url');
         return { refresh: { hash: crypto.createHash('sha256').update(refreshToken).digest('hex'), scope: approvedScope, authorization: payload, expiresAt: record.expiresAt },
@@ -860,8 +864,10 @@ app.get('/oauth/userinfo', async (req, res) => {
   try {
     const payload = verifyToken(token);
     const hash = crypto.createHash('sha256').update(token).digest('hex');
-    if (await isTokenRevoked(hash, payload)) return res.status(401).json({ error: 'token_revoked' });
-    return res.json({ sub: payload.sub, name: payload.name, email: payload.email, preferred_username: payload.preferred_username, groups: payload.groups ?? [] });
+    const state = await verifiedAccessState(hash, payload);
+    if (!state) return res.status(401).json({ error: 'token_revoked' });
+    return res.json({ sub: payload.sub, name: payload.name, email: payload.email, preferred_username: payload.preferred_username,
+      ...(payload.actor_type === 'user' ? groupClaims(payload.scope, state) : {}) });
   } catch (error) {
     if (error.status === 503) return res.status(503).json({ error: 'token_state_unavailable' });
     return res.status(401).json({ error: 'invalid_token' });

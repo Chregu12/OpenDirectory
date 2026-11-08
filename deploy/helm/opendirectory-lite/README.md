@@ -218,6 +218,13 @@ scheduled sync, database import or automatic grant for these providers. Existing
 Microsoft workers remain disabled. See
 [configuration and live-test instructions](../../../services/connectors-rust/READ_PROVIDERS.md).
 
+OAuth `1.0.28` and web `1.0.27` repair the application-register permission contract and
+derive scoped OIDC group claims from current canonical memberships. The
+[Rancher Generic OIDC guide](../../../docs/features/rancher-oidc.md) includes the
+exact callback, reviewed CA trust, explicit assignments, and interactive login
+checks. Rancher maintains its own roles and sessions; these changes do not imply
+automatic external role grants or immediate revocation of existing Rancher tokens.
+
 
 Policy-service `1.0.25` extends the protected manual read probe with Adobe Enterprise
 product-profile members and Slack SCIM 2.0 users. Adobe checks profile ID, name and

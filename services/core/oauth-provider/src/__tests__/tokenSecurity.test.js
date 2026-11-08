@@ -131,6 +131,76 @@ async function createClient(metadata) {
   expect(response.status).toBe(201);
   return { ...response.body, adminToken: token };
 }
+
+test('OIDC groups come only from current canonical memberships and disappear after removal or scope reduction', async () => {
+  const client = await createClient({ scopes: ['openid', 'groups'] });
+  const groupId = '11111111-1111-4111-8111-111111111111';
+  const authority = jest.spyOn(require('../IdentityAuthority').IdentityAuthority.prototype, 'verifiedState');
+  authority.mockResolvedValue({ memberships: [{ groupId, membershipId: '22222222-2222-4222-8222-222222222222' }] });
+  try {
+    const pair = await tokenPair('alice', 'openid groups', { client_id: client.clientId, client_secret: client.clientSecret });
+    expect(verifiedPayload(pair.access_token).groups).toEqual([groupId]);
+    expect(verifiedPayload(pair.id_token).groups).toEqual([groupId]);
+    const info = () => request(app).get('/oauth/userinfo').set('Authorization', 'Bearer ' + pair.access_token);
+    expect((await info()).body.groups).toEqual([groupId]);
+    authority.mockResolvedValue({ memberships: [] });
+    expect((await info()).body.groups).toEqual([]);
+    const refreshed = await request(app).post('/oauth/token').type('form').send({ grant_type: 'refresh_token', client_id: client.clientId,
+      client_secret: client.clientSecret, refresh_token: pair.refresh_token });
+    expect(refreshed.status).toBe(200);
+    expect(verifiedPayload(refreshed.body.access_token).groups).toEqual([]);
+    authority.mockResolvedValue({ memberships: [{ groupId, membershipId: '22222222-2222-4222-8222-222222222222' }] });
+    const narrowed = await request(app).post('/oauth/token').type('form').send({ grant_type: 'refresh_token', client_id: client.clientId,
+      client_secret: client.clientSecret, refresh_token: refreshed.body.refresh_token, scope: 'openid' });
+    expect(narrowed.status).toBe(200);
+    expect(verifiedPayload(narrowed.body.access_token).groups).toBeUndefined();
+    expect((await request(app).get('/oauth/userinfo').set('Authorization', 'Bearer ' + narrowed.body.access_token)).body.groups).toBeUndefined();
+    authority.mockRejectedValueOnce(Object.assign(new Error('Authority unavailable'), { status: 503 }));
+    expect((await info()).status).toBe(503);
+  } finally { authority.mockRestore(); }
+});
+
+test('credential-provider groups grant no external OIDC group authority, with or without the groups scope', async () => {
+  const client = await createClient({ scopes: ['openid', 'groups'] });
+  const credentialFetch = global.fetch;
+  global.fetch = jest.fn(async (...args) => {
+    const response = await credentialFetch(...args);
+    const data = await response.json();
+    return { ...response, json: async () => ({ ...data, user: { ...data.user, groups: ['rancher-admins', { value: 'forged-group' }] } }) };
+  });
+  for (const scope of ['openid', 'openid groups']) {
+    const pair = await tokenPair('alice', scope, { client_id: client.clientId, client_secret: client.clientSecret });
+    const expected = scope === 'openid' ? undefined : [];
+    expect(verifiedPayload(pair.access_token).groups).toEqual(expected);
+    expect(verifiedPayload(pair.id_token).groups).toEqual(expected);
+    expect((await request(app).get('/oauth/userinfo').set('Authorization', 'Bearer ' + pair.access_token)).body.groups).toEqual(expected);
+  }
+});
+
+test('a Rancher-style S256 authorization code survives the OAuth client authentication fallback to form credentials', async () => {
+  const rancher = require('../appCatalog').APP_CATALOG.find(app => app.id === 'rancher');
+  expect(rancher.configTemplate.rancherUrl).toBe(rancher.defaultRedirectUriPattern);
+  const callback = rancher.configTemplate.rancherUrl.replace('rancher.example.com', 'rancher.test');
+  const client = await createClient({ redirectUris: [callback], scopes: ['openid', 'profile', 'email', 'groups'] });
+  const verifier = crypto.randomBytes(32).toString('base64url');
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  const authorized = await login('alice', 'openid profile email groups', { client_id: client.clientId, redirect_uri: callback,
+    state: 'rancher-browser-state', nonce: 'rancher-nonce', code_challenge: challenge, code_challenge_method: 'S256' });
+  expect(authorized.status).toBe(302);
+  const location = new URL(authorized.headers.location);
+  expect(location.origin + location.pathname).toBe(callback);
+  expect(location.searchParams.get('state')).toBe('rancher-browser-state');
+  const body = { grant_type: 'authorization_code', code: location.searchParams.get('code'), redirect_uri: callback, code_verifier: verifier };
+  const basic = await request(app).post('/oauth/token').type('form').auth(client.clientId, client.clientSecret).send(body);
+  expect(basic.status).toBe(401);
+  expect(basic.body).toEqual({ error: 'invalid_client' });
+  const exchanged = await request(app).post('/oauth/token').type('form').send({ ...body, client_id: client.clientId, client_secret: client.clientSecret });
+  expect(exchanged.status).toBe(200);
+  expect(verifiedPayload(exchanged.body.id_token)).toMatchObject({ aud: client.clientId, nonce: 'rancher-nonce', groups: [] });
+  expect((await request(app).get('/oauth/userinfo').set('Authorization', 'Bearer ' + exchanged.body.access_token)).status).toBe(200);
+  expect((await request(app).post('/oauth/token').type('form').send({ ...body, client_id: client.clientId, client_secret: client.clientSecret })).status).toBe(400);
+});
+
 test('actual client-credentials issuance carries the dedicated automation purpose without human or tenant authority', async () => {
   const client = await createClient({ name: 'Dedicated automation worker', publicClient: false, grantTypes: ['client_credentials'], redirectUris: [], scopes: ['company.automation'] });
   const response = await request(app).post('/oauth/token').type('form').send({ grant_type: 'client_credentials', client_id: client.clientId, client_secret: client.clientSecret, scope: 'company.automation' });

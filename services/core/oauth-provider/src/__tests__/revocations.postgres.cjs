@@ -952,6 +952,9 @@ test('group app access follows canonical membership incarnations, not credential
     assert.equal((await request(issuerBase,'/oauth/authorize/login',{ method: 'POST',body: credentials })).status,403);
     assert.equal((await groupRequest(identityBase,`/api/groups/${groupId}/members`,{ method: 'POST',token: administrator.access_token,body: { userId: aliceId } })).status,200);
     const pair = await issueForApplication(client,'alice','openid groups');
+    assert.deepEqual(payload(pair.access_token).groups,[groupId]);
+    assert.deepEqual(payload(pair.id_token).groups,[groupId]);
+    assert.deepEqual((await request(issuerBase,'/oauth/userinfo',{token:pair.access_token})).body.groups,[groupId]);
     const member = (await identityDb.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[groupId,aliceId])).rows[0].membership_id;
     assert.equal((await groupRequest(identityBase,`/api/groups/${groupId}/members/${aliceId}`,{ method: 'DELETE',token: administrator.access_token })).status,200);
     assert.equal((await request(issuerBase,'/oauth/access-state',{ token: pair.access_token })).body.active,false);
@@ -960,7 +963,20 @@ test('group app access follows canonical membership incarnations, not credential
     assert.notEqual((await identityDb.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[groupId,aliceId])).rows[0].membership_id,member);
     assert.equal((await request(issuerBase,'/oauth/access-state',{ token: pair.access_token })).body.active,false); assert.ok((await issueForApplication(client,'alice','openid groups')).access_token);
     const direct = await applicationGrant(client,manager.access_token,'user',aliceId); assert.equal(direct.status,201);
-    await groupRequest(identityBase,`/api/groups/${groupId}/members/${aliceId}`,{ method: 'DELETE',token: administrator.access_token }); assert.ok((await issueForApplication(client,'alice','openid groups')).access_token);
+    await groupRequest(identityBase,`/api/groups/${groupId}/members/${aliceId}`,{ method: 'DELETE',token: administrator.access_token });
+    const directPair=await issueForApplication(client,'alice','openid groups');
+    assert.deepEqual(payload(directPair.access_token).groups,[]);
+    const observed=await groupRequest(identityBase,'/api/groups',{method:'POST',token:administrator.access_token,body:{name:'OIDC observed group '+randomUUID()}});assert.equal(observed.status,201);
+    assert.equal((await groupRequest(identityBase,`/api/groups/${observed.body.id}/members`,{method:'POST',token:administrator.access_token,body:{userId:aliceId}})).status,200);
+    const info=()=>request(issuerBase,'/oauth/userinfo',{token:directPair.access_token});
+    assert.deepEqual((await info()).body.groups,[observed.body.id]);
+    const renewed=await request(issuerBase,'/oauth/token',{method:'POST',body:{grant_type:'refresh_token',client_id:client.clientId,client_secret:client.clientSecret,refresh_token:directPair.refresh_token}});assert.equal(renewed.status,200);
+    assert.deepEqual(payload(renewed.body.access_token).groups,[observed.body.id]);
+    const narrowed=await request(issuerBase,'/oauth/token',{method:'POST',body:{grant_type:'refresh_token',client_id:client.clientId,client_secret:client.clientSecret,refresh_token:renewed.body.refresh_token,scope:'openid'}});assert.equal(narrowed.status,200);
+    assert.equal(payload(narrowed.body.access_token).groups,undefined);
+    assert.equal((await request(issuerBase,'/oauth/userinfo',{token:narrowed.body.access_token})).body.groups,undefined);
+    assert.equal((await groupRequest(identityBase,`/api/groups/${observed.body.id}/members/${aliceId}`,{method:'DELETE',token:administrator.access_token})).status,200);
+    assert.deepEqual((await info()).body.groups,[]);
   } finally { credentialGroupOverrides.delete('alice'); }
 });
 test('self-target aliases and current own group membership cannot manufacture an application grant', async () => {

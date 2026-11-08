@@ -1,0 +1,3 @@
+# Merge with the existing Rancher release; keep its exact installed chart version.
+# Requires cattle-system/tls-ca-additional with the reviewed public CA bundle.
+additionalTrustedCAs: true
