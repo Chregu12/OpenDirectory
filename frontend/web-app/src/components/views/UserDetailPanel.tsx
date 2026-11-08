@@ -38,6 +38,7 @@ export default function UserDetailPanel({ user, permissions, actorUserId, onChan
       {can('users.update') && <button onClick={() => setEditing(true)}>Profil bearbeiten</button>}
       {can('users.update') && can('users.status.manage') && <button onClick={() => begin('status')}>{user.enabled ? 'Konto sperren' : 'Konto freigeben'}</button>}
       {can('users.update') && can('users.status.manage') && user.id !== actorUserId && <a className="rounded border border-[var(--border-strong)] px-3 py-2 text-sm" href={`/applications?offboard=${user.id}#company-offboarding`}>Mitarbeiter-Offboarding</a>}
+      {can('pim.eligibilities.manage') && <a className="rounded border border-[var(--border-strong)] px-3 py-2 text-sm" href={`/pim?userId=${user.id}`}>PIM-Gruppen zuweisen</a>}
       {can('users.sessions.invalidate') && <button onClick={() => begin('reset')}>Sicherheitsreset</button>}
       {can('users.delete') && <button className="text-red-500" onClick={() => begin('delete')}>Eintrag löschen</button>}
       <button onClick={onReload}>Details neu laden</button>

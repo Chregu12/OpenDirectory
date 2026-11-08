@@ -17,7 +17,7 @@ function fields(body, allowed) {
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !allowed.includes(key))) fail(400, 'invalid_fields');
 }
 function reason(value) { if (typeof value !== 'string' || value.trim().length < 10 || value.length > 500 || /[\u0000-\u001f\u007f]/.test(value)) fail(400, 'reason_required'); return value.trim(); }
-function duration(value, maximum = 28800) { if (!Number.isInteger(value) || value < 60 || value > maximum) fail(400, 'invalid_duration'); return value; }
+function duration(value, maximum = 36000) { if (!Number.isInteger(value) || value < 60 || value > maximum) fail(400, 'invalid_duration'); return value; }
 function authority(user) {
   if (user?.actor_type !== 'user' || !validContext(user.identity_authorization) || typeof user.iss !== 'string' || !user.iss
     || typeof user.sub !== 'string' || !user.sub.trim()) fail(403, 'canonical_human_required');
@@ -114,18 +114,26 @@ class PrivilegedActivation {
     }, { readOnly: true });
   }
   async grantEligibility(body, user, authorization) {
-    fields(body, ['userId', 'role', 'maxDurationSeconds', 'validForSeconds', 'reason']); const target = uuid(body.userId); const proof = authority(user);
+    fields(body, ['userId', 'role', 'groupId', 'maxDurationSeconds', 'validForSeconds', 'reason']); const target = uuid(body.userId); const proof = authority(user);
     if (proof.userId === target) fail(403, 'self_eligibility_forbidden');
-    if (!ROLES.includes(body.role) || body.role === 'user') fail(400, 'invalid_role');
+    const groupId = body.groupId === undefined ? null : uuid(body.groupId);
+    if (groupId ? body.role !== undefined : !ROLES.includes(body.role) || body.role === 'user') fail(400, 'invalid_role');
     duration(body.maxDurationSeconds); duration(body.validForSeconds, 2592000); const explanation = reason(body.reason);
     return this.commands.run(user, authorization, async client => {
       await requireAuthorityReceiver(client); const tenant = await authorityTenant(client, proof, { write: true });
+      const group = groupId ? (await client.query('SELECT * FROM identity_pim_groups WHERE id=$1 AND tenant_id=$2 FOR SHARE', [groupId, tenant])).rows[0] : null;
+      if (groupId && (!group || group.disabled_at || body.maxDurationSeconds > group.max_duration_seconds)) fail(409, 'pim_group_unavailable');
+      const selectedRole = group?.role || body.role;
+
       const locked = await this.lockUsers(client, [proof.userId, target], tenant); const roles = await this.verify(client, proof, locked, 'pim.eligibilities.manage');
-      this.protectedRole(body.role, roles); if (!locked.find(row => row.id === target)?.enabled) fail(409, 'recipient_not_enabled');
+      if (groupId && (await client.query(`SELECT binding.eligibility_id FROM identity_pim_group_eligibilities binding JOIN identity_pim_eligibilities eligibility ON eligibility.id=binding.eligibility_id
+        WHERE binding.group_id=$1 AND binding.user_id=$2 AND eligibility.revoked_at IS NULL AND eligibility.expires_at>clock_timestamp() LIMIT 1`, [groupId, target])).rows.length) fail(409, 'pim_group_eligibility_exists');
+      this.protectedRole(selectedRole, roles); if (!locked.find(row => row.id === target)?.enabled) fail(409, 'recipient_not_enabled');
       const count = (await client.query('SELECT COUNT(*)::int AS count FROM identity_pim_eligibilities WHERE user_id=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp() AND identity_role_review_eligible(id)', [target])).rows[0].count;
       if (count >= 100) fail(409, 'eligibility_limit');
       const result = await client.query(`INSERT INTO identity_pim_eligibilities(user_id,role,reason,max_duration_seconds,expires_at)
-        VALUES($1,$2,$3,$4,clock_timestamp()+$5*interval '1 second') RETURNING *,clock_timestamp() AS observed_at`, [target, body.role, explanation, body.maxDurationSeconds, body.validForSeconds]);
+        VALUES($1,$2,$3,$4,clock_timestamp()+$5*interval '1 second') RETURNING *,clock_timestamp() AS observed_at`, [target, selectedRole, explanation, body.maxDurationSeconds, body.validForSeconds]);
+      if (groupId) await client.query('INSERT INTO identity_pim_group_eligibilities(eligibility_id,group_id,user_id) VALUES($1,$2,$3)', [result.rows[0].id, groupId, target]);
       return eligibilityView(result.rows[0]);
     }, { actor: JSON.stringify(proof) });
   }

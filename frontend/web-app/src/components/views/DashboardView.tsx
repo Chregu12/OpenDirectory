@@ -32,6 +32,7 @@ import {
   configApi,
   policyApi,
 } from '@/lib/api';
+import PIMGroupsPanel from './PIMGroupsPanel';
 import BackupRecoveryWizard from '@/components/setup/BackupRecoveryWizard';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -652,6 +653,7 @@ export default function DashboardView() {
           </div>
           <div className="h-5 w-28 rounded animate-pulse" style={{ background: 'var(--bg-surface-raised)' }} />
         </div>
+        <PIMGroupsPanel key="pim-groups" />
         {/* KPI rows */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[...Array(8)].map((_, i) => <SkeletonCard key={i} />)}
@@ -693,6 +695,8 @@ export default function DashboardView() {
         <button className="fluent-btn-secondary" onClick={() => setShowBackupWizard(true)}><SparklesIcon className="h-4 w-4" />Backup-Assistent</button>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Aktualisierung alle 30 Sekunden · zuletzt {lastRefresh.toLocaleTimeString('de-CH')}</p>
       </>} />
+
+      <PIMGroupsPanel key="pim-groups" />
 
       {/* ------------------------------------------------------------------ */}
       {/* Quick Stats Row (German, simplified)                                */}

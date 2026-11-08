@@ -4278,3 +4278,24 @@ test('company license assurance activation binds ten hours to the real MFA login
   assert.equal((await request(policyBase, '/api/licenses/company/capabilities', { token: ordinaryRefresh.body.access_token })).status, 428);
   assert.deepEqual((await issuerDb.query('SELECT action FROM oauth_company_license_activation_audit WHERE activation_id=$1 ORDER BY id', [activated.body.activation.id])).rows.map(row => row.action), ['activated', 'revoked']);
 });
+
+test('PIM task groups activate only licensed duties through real OAuth and withdraw the issued role tokens', async () => {
+ const initial=await issue('operator');const admin=provenMfa(payload(initial.access_token))?initial:await configureFactor('operator',initial);
+ const original=await issue('alice');const owner=provenMfa(payload(original.access_token))?original:await configureFactor('alice',original);const reviewer=await issue('second-admin');const route='/api/identity/pim/groups';
+ const initialized=await request(identityBase,route+'/initialize',{method:'POST',token:admin.access_token,body:{confirm:true}});assert.equal(initialized.status,200,JSON.stringify(initialized.body));
+ assert.equal((await request(policyBase,'/api/licenses',{token:owner.access_token})).status,403);
+ const created=await request(identityBase,route,{method:'POST',token:admin.access_token,body:{name:'Actual OAuth license duty',description:'Only license inventory read access',role:'license-reader',maxDurationSeconds:3600,reason:'Explicit actual group definition without an active role',confirm:true}});assert.equal(created.status,201,JSON.stringify(created.body));
+ const grant=await request(identityBase,route+'/'+created.body.id+'/eligibilities',{method:'POST',token:admin.access_token,body:{userId:canonicalSubjects.get('alice'),maxDurationSeconds:3600,validForSeconds:86400,reason:'Independently eligible for the license group only',confirm:true}});assert.equal(grant.status,201,JSON.stringify(grant.body));
+ assert.equal((await request(policyBase,'/api/licenses',{token:owner.access_token})).status,403);
+ const requested=await request(identityBase,'/api/identity/pim/requests',{method:'POST',token:owner.access_token,body:{id:randomUUID(),eligibilityId:grant.body.eligibility.id,durationSeconds:3600,reason:'Actual selected task group activation with original MFA'}});assert.equal(requested.status,200,JSON.stringify(requested.body));
+ assert.equal((await request(identityBase,'/api/identity/pim/requests/'+requested.body.id+'/approve',{method:'POST',token:owner.access_token,body:{}})).status,403);
+ const reviewed=await request(identityBase,'/api/identity/pim/requests/'+requested.body.id+'/approve',{method:'POST',token:reviewer.access_token,body:{}});assert.equal(reviewed.status,200,JSON.stringify(reviewed.body));
+ const active=await request(identityBase,'/api/identity/pim/requests/'+requested.body.id+'/activate',{method:'POST',token:owner.access_token,body:{}});assert.equal(active.status,200,JSON.stringify(active.body));
+ assert.equal((await request(policyBase,'/api/licenses',{token:owner.access_token})).status,401);
+ const renewed=await renew(owner.refresh_token);assert.equal(renewed.status,400);const current=await issue('alice');assert.ok(payload(current.access_token).roles.includes('license-reader'));assert.ok(!payload(current.access_token).roles.includes('admin'));
+ assert.equal((await request(policyBase,'/api/licenses',{token:current.access_token})).status,200);
+ assert.equal((await request(identityBase,'/api/users',{token:current.access_token})).status,403);
+ const history=await request(identityBase,route+'/'+created.body.id+'/history',{token:admin.access_token});assert.equal(history.status,200,JSON.stringify(history.body));assert.ok(history.body.events.some(event=>event.action==='active'&&event.actorUserId===canonicalSubjects.get('alice')));
+ const disabled=await request(identityBase,route+'/'+created.body.id+'/disable',{method:'POST',token:admin.access_token,body:{reason:'Actual group withdrawal must end the independently issued role',confirm:true}});assert.equal(disabled.status,200,JSON.stringify(disabled.body));
+ assert.equal((await request(policyBase,'/api/licenses',{token:current.access_token})).status,401);
+});

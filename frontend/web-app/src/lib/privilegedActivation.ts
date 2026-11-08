@@ -15,14 +15,14 @@ function common(value: any) {
 }
 function eligibility(value: any): Eligibility {
   common(value);
-  if (!Number.isInteger(value.maxDurationSeconds) || value.maxDurationSeconds < 60 || value.maxDurationSeconds > 28800 || !date(value.expiresAt)
+  if (!Number.isInteger(value.maxDurationSeconds) || value.maxDurationSeconds < 60 || value.maxDurationSeconds > 36000 || !date(value.expiresAt)
     || !['eligible', 'expired', 'revoked'].includes(value.status) || (value.revokedAt !== null && !date(value.revokedAt))
     || ((value.status === 'revoked') !== (value.revokedAt !== null))) return invalid();
   return value;
 }
 function request(value: any): ActivationRequest {
   common(value); canonicalRoleUser(value.eligibilityId);
-  if (!Number.isInteger(value.durationSeconds) || value.durationSeconds < 60 || value.durationSeconds > 28800 || !date(value.deadlineAt)
+  if (!Number.isInteger(value.durationSeconds) || value.durationSeconds < 60 || value.durationSeconds > 36000 || !date(value.deadlineAt)
     || !['pending', 'approved', 'active', 'denied', 'cancelled', 'revoked', 'expired', 'stale'].includes(value.status)
     || ['decidedAt', 'approvalExpiresAt', 'expiresAt'].some(key => value[key] !== null && !date(value[key]))) return invalid();
   for (const key of ['decidedBy', 'assignmentId']) if (value[key] !== null) canonicalRoleUser(value[key]);
@@ -45,9 +45,9 @@ export function pimError(error: any) {
 export const privilegedActivation = {
   async catalog(signal?: AbortSignal): Promise<PIMCatalogRole[]> {
     const { data } = await api.get(base + '/catalog', { signal });
-    if (!Array.isArray(data?.roles) || data.roles.length > 100 || data.minDurationSeconds !== 60 || data.maxDurationSeconds !== 28800 || data.maxEligibilitySeconds !== 2592000 || data.approvalWindowSeconds !== 300
+    if (!Array.isArray(data?.roles) || data.roles.length > 100 || data.minDurationSeconds !== 60 || ![28800, 36000].includes(data.maxDurationSeconds) || data.maxEligibilitySeconds !== 2592000 || data.approvalWindowSeconds !== 300
       || data.roles.some((item: any) => typeof item.role !== 'string' || typeof item.protected !== 'boolean' || typeof item.assignable !== 'boolean' || typeof item.reviewable !== 'boolean'
-        || typeof item.activationRequired !== 'boolean' || !Number.isInteger(item.maxDurationSeconds) || item.maxDurationSeconds < 60 || item.maxDurationSeconds > 28800)) return invalid();
+        || typeof item.activationRequired !== 'boolean' || !Number.isInteger(item.maxDurationSeconds) || item.maxDurationSeconds < 60 || item.maxDurationSeconds > 36000)) return invalid();
     return data.roles;
   },
   async self(signal?: AbortSignal): Promise<PIMSelf> {
@@ -84,3 +84,5 @@ export const privilegedActivation = {
     if (response.status !== 200 || changed.id !== id || !expected[action].includes(changed.status)) return invalid(); return changed;
   },
 };
+
+export { eligibility as parsePimEligibility };

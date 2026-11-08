@@ -24,7 +24,7 @@ function validateProfile(profile) {
   if (!exact(authentication, ['required', 'maxAgeSeconds']) || typeof authentication.required !== 'boolean' || !integer(authentication.maxAgeSeconds, 300, 86400)
     || MFA_LOCKED_ROLES.includes(profile.role) && (!authentication.required || authentication.maxAgeSeconds !== 300)
     || !exact(activation, ['required', 'maxDurationSeconds', 'reviewerUserIds']) || typeof activation.required !== 'boolean'
-    || !integer(activation.maxDurationSeconds, 60, 28800) || !reviewers(activation.reviewerUserIds)
+    || !integer(activation.maxDurationSeconds, 60, 36000) || !reviewers(activation.reviewerUserIds)
     || activation.reviewerUserIds.length && (!activation.required || !PROTECTED.includes(profile.role))
     || profile.role === 'admin' && activation.required && !activation.reviewerUserIds.length
     || profile.role === 'user' && (activation.required || activation.maxDurationSeconds !== 28800 || review !== null)) unavailable();
@@ -115,7 +115,7 @@ function resolveOwnedAuthorityPlan(snapshot, now = Date.now()) {
         || request.state.state !== 'active' || request.state.user_id !== assignment.userId || eligibility.state.user_id !== assignment.userId
         || eligibility.state.role !== assignment.role || eligibility.state.revoked_at !== null || request.state.policy_version !== state.policy_version
         || !integer(request.state.duration_seconds, 60, profile.activation.maxDurationSeconds)
-        || !integer(eligibility.state.max_duration_seconds, 60, 28800) || request.state.duration_seconds > eligibility.state.max_duration_seconds) issue = 'owned_activation_unavailable';
+        || !integer(eligibility.state.max_duration_seconds, 60, 36000) || request.state.duration_seconds > eligibility.state.max_duration_seconds) issue = 'owned_activation_unavailable';
       else if (timestamp(eligibility.state.expires_at) <= now || timestamp(state.expires_at) > timestamp(eligibility.state.expires_at)
         || timestamp(state.expires_at) - timestamp(state.created_at) > request.state.duration_seconds * 1000) issue = 'owned_activation_expired';
     }

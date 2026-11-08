@@ -30,7 +30,7 @@ async function readRoleState(client, userId, { delegateEvidence = false, scopeRe
   const held = [...new Set(grants.map(grant => grant.role))].sort();
   if (grants.length > 100 || !validRoles(held) || grants.some(grant => !validRevision(String(grant.policy_version))
     || !validRevision(String(grant.activation_version)) || typeof grant.activation_required !== 'boolean'
-    || !Number.isInteger(grant.max_duration_seconds) || grant.max_duration_seconds < 60 || grant.max_duration_seconds > 28800)) throw new Error('Invalid canonical role state');
+    || !Number.isInteger(grant.max_duration_seconds) || grant.max_duration_seconds < 60 || grant.max_duration_seconds > 36000)) throw new Error('Invalid canonical role state');
   const roles = [...new Set(grants.filter(grant => String(grant.policy_version) === String(grant.activation_version)
     && (!grant.activation_required || grant.activation_request_id)).map(grant => grant.role))].sort();
   const policies = (await client.query('SELECT * FROM identity_role_authentication WHERE role=ANY($1::text[]) ORDER BY role COLLATE "C"', [held])).rows;

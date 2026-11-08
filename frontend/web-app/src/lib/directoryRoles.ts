@@ -23,7 +23,7 @@ function assignment(value: any): RoleAssignment {
 export const directoryRoles = {
   async catalog(signal?: AbortSignal): Promise<CatalogRole[]> {
     const { data } = await api.get('/api/identity/roles/catalog', { signal });
-    if (!Array.isArray(data?.roles) || !data.roles.length || data.roles.length > 100 || data.minDurationSeconds !== 60 || data.maxDurationSeconds !== 28800
+    if (!Array.isArray(data?.roles) || !data.roles.length || data.roles.length > 100 || data.minDurationSeconds !== 60 || ![28800, 36000].includes(data.maxDurationSeconds)
       || data.roles.some((item: any) => typeof item.role !== 'string' || !/^[a-z][a-z-]{0,63}$/.test(item.role) || typeof item.protected !== 'boolean' || typeof item.assignable !== 'boolean')
       || new Set(data.roles.map((item: CatalogRole) => item.role)).size !== data.roles.length) return unconfirmed();
     return data.roles.map((item: CatalogRole) => ({ role: item.role, protected: item.protected, assignable: item.assignable }));

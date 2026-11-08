@@ -1,3 +1,4 @@
+jest.mock('../../components/views/PIMGroupsPanel', () => () => null);
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import DashboardView from '@/components/views/DashboardView';
 import { api } from '@/lib/api';

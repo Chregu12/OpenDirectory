@@ -9,7 +9,7 @@ function record(data: any): PrivilegedAccessPolicy {
   const fields = ['role','version','required','maxDurationSeconds','reviewerUserIds','protected','locked','canManage','requiresFreshMfa'];
   if (!data || typeof data !== 'object' || Array.isArray(data) || Object.keys(data).length !== fields.length || fields.some(key => !Object.hasOwn(data,key))
     || typeof data.version !== 'string' || !/^[1-9][0-9]{0,18}$/.test(data.version) || BigInt(data.version) > BigInt('9223372036854775807')
-    || !Number.isInteger(data.maxDurationSeconds) || data.maxDurationSeconds < 60 || data.maxDurationSeconds > 28800
+    || !Number.isInteger(data.maxDurationSeconds) || data.maxDurationSeconds < 60 || data.maxDurationSeconds > 36000
     || ['required','protected','locked','canManage','requiresFreshMfa'].some(key => typeof data[key] !== 'boolean')
     || !Array.isArray(data.reviewerUserIds) || data.reviewerUserIds.length>20
     || data.reviewerUserIds.some((identifier: unknown,index: number) => typeof identifier!=='string'

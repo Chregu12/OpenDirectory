@@ -258,6 +258,7 @@ app.use('/api/identity/reviews',roleReviewRoutes(roleReviews));
 const membershipReviews=new (require('./ScopedGroupReviews').ScopedGroupReviews)(db);
 app.use('/api/identity/membership-reviews',require('./GroupMembershipReviewRoutes').groupMembershipReviewRoutes(membershipReviews));
 
+app.use('/api/identity/pim/groups', require('./PrivilegedGroupRoutes').privilegedGroupRoutes(db));
 app.use('/api/identity/pim', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -274,7 +275,7 @@ app.get('/api/identity/pim/catalog', asyncRoute(async (req, res) => {
     assignable: req.identityPermissions.includes('pim.eligibilities.manage') && (!PROTECTED.includes(role) || req.user.roles?.includes('admin') === true),
     reviewable: req.identityPermissions.includes('pim.requests.review') && (!PROTECTED.includes(role) || req.user.roles?.includes('admin') === true
       || policies.get(role).activation_required && policies.get(role).reviewer_user_ids.includes(req.user.identity_authorization.userId) && req.user.roles?.includes('pim-approver')) })),
-    minDurationSeconds: 60, maxDurationSeconds: 28800, maxEligibilitySeconds: 2592000, approvalWindowSeconds: 300 });
+    minDurationSeconds: 60, maxDurationSeconds: 36000, maxEligibilitySeconds: 2592000, approvalWindowSeconds: 300 });
 }));
 app.get('/api/identity/pim/self', asyncRoute(async (req, res) => res.json(await privilegedActivation.self(req.user))));
 app.get('/api/identity/pim/policies/:role', asyncRoute(async (req, res) => {

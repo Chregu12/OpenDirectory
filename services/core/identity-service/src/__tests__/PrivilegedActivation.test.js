@@ -8,7 +8,7 @@ test('an issuer subject without a canonical human context cannot use PIM self-se
   for (const user of [{ ...actor, actor_type: 'application' }, { ...actor, identity_authorization: undefined }, { ...actor, sub: '' }]) expect(() => authority(user)).toThrow();
   expect(authority(actor).userId).toBe(actor.identity_authorization.userId);
 });
-test.each([0, 59, 28801, '3600', null, 1.5])('duration %j is not a bounded activation', value => expect(() => duration(value)).toThrow());
+test.each([0, 59, 36001, '3600', null, 1.5])('duration %j is not a bounded activation', value => expect(() => duration(value)).toThrow());
 test('validation accepts international reasons but not control characters, guessed users or empty explanations', () => {
   expect(reason('  Geprüfte Lizenzverwaltung  ')).toBe('Geprüfte Lizenzverwaltung'); expect(uuid(actor.identity_authorization.userId.toUpperCase())).toBe(actor.identity_authorization.userId);
   for (const value of ['short', 'new\nline', 'a'.repeat(501), null]) expect(() => reason(value)).toThrow();
@@ -24,3 +24,5 @@ test('a source outage cannot fall back to a successful memory request or eligibi
   await expect(service.self(actor)).rejects.toThrow('offline');
   await expect(service.request({ id: randomUUID(), eligibilityId: randomUUID(), durationSeconds: 3600, reason: 'Reviewed activation request' }, actor)).rejects.toThrow('offline');
 });
+
+test('the activation ceiling accepts ten hours without widening fixed per-role policies', () => { expect(duration(36000)).toBe(36000); expect(() => duration(36001)).toThrow(); });

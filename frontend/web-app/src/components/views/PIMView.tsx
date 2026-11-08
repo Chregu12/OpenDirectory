@@ -6,6 +6,7 @@ import { canonicalRoleUser } from '@/lib/directoryRoles';
 import { ActivationRequest, Eligibility, PIMAction, PIMSelf, PIMCatalogRole, privilegedActivation, pimError } from '@/lib/privilegedActivation';
 import { ensureSession, startLogin } from '@/lib/auth';
 import { DirectoryConfirmation } from './UserDetailPanel';
+import PIMGroupsPanel from './PIMGroupsPanel';
 import PrivilegedAccessPolicyView from './PrivilegedAccessPolicyView';
 
 const labels = { eligible: 'Berechtigt, nicht aktiv', pending: 'Ausstehend', approved: 'Genehmigt, noch nicht aktiv', active: 'Aktiv', denied: 'Abgelehnt', cancelled: 'Abgebrochen', revoked: 'Widerrufen', expired: 'Abgelaufen', stale: 'Berechtigung geändert' };
@@ -72,8 +73,10 @@ export default function PIMView() {
   if (!access.userId) return <p className="p-8" role="alert">Eine bestätigte kanonische Anmelde-Verknüpfung ist erforderlich.</p>;
   return <section className="p-6 space-y-6 overflow-auto h-full" style={{ background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)' }}>
     <h1 className="text-xl font-semibold">Privilegierter Zugriff</h1><p>Quelle: kanonischer Verzeichnisdienst. Berechtigung, unabhängige Genehmigung und tatsächliche Aktivierung sind getrennte Schritte.</p>
-    <p>Maximal acht Stunden, zusätzlich begrenzt durch Rollenrichtlinie und Berechtigungsfrist. Genehmigungen gelten fünf Minuten; Aktivierung verlangt eine höchstens fünf Minuten alte Anmeldung mit geprüftem OpenDirectory-TOTP.</p>
-    <p>Direkte Vergaben sind nur ohne verbindliche PIM-Richtlinie erlaubt. Alte PIM-Gruppen, Aufzeichnungen und Break-Glass-Prototypen sind keine kanonischen Aktivierungen.</p>
+    <p>Maximal zehn Stunden, zusätzlich begrenzt durch Rollenrichtlinie und Berechtigungsfrist. Genehmigungen gelten fünf Minuten; Aktivierung verlangt eine höchstens fünf Minuten alte Anmeldung mit geprüftem OpenDirectory-TOTP.</p>
+    <p>Direkte Vergaben sind nur ohne verbindliche PIM-Richtlinie erlaubt. Aufgabengruppen verwenden die kanonische PIM-Rollenvergabe. Frühere Break-Glass-Prototypen erteilen keine Rechte.</p>
+    <PIMGroupsPanel management />
+    <h2 className="text-lg font-semibold">Einzelrollen und Rollenrichtlinien</h2>
     <PrivilegedAccessPolicyView access={access} />
     <button disabled={busy || !!action} onClick={refresh}>Neu laden</button>{error && <p role="alert">{error}</p>}
     {!self && !error && <p role="status">PIM-Zustand wird geladen …</p>}
@@ -86,7 +89,7 @@ export default function PIMView() {
         begin({ kind: 'request', body: { id: crypto.randomUUID(), eligibilityId, durationSeconds: duration, reason: explanation } });
       }}><label htmlFor="pim-own-role">Eigene Berechtigung</label><select id="pim-own-role" className="block p-2 bg-gray-900 border" value={eligibilityId} required onChange={event => { setEligibilityId(event.target.value); const selected = self.eligibilities.find(item => item.id === event.target.value); setDuration(Math.min(3600, selected?.maxDurationSeconds || 3600,catalog.find(entry => entry.role === selected?.role)?.maxDurationSeconds || 0)); }}>
         <option value="">Berechtigung wählen</option>{self.eligibilities.filter(item => item.status === 'eligible').map(item => <option key={item.id} value={item.id}>{item.role} · {item.id}</option>)}</select>
-        <label className="block">Dauer in Minuten<input className="block p-2 border bg-transparent" type="number" min={1} max={Math.min(self.eligibilities.find(item => item.id === eligibilityId)?.maxDurationSeconds || 28800,catalog.find(entry => entry.role === self.eligibilities.find(item => item.id === eligibilityId)?.role)?.maxDurationSeconds || 28800) / 60} required value={duration / 60} onChange={event => setDuration(Number(event.target.value) * 60)} /></label>
+        <label className="block">Dauer in Minuten<input className="block p-2 border bg-transparent" type="number" min={1} max={Math.min(self.eligibilities.find(item => item.id === eligibilityId)?.maxDurationSeconds || 36000,catalog.find(entry => entry.role === self.eligibilities.find(item => item.id === eligibilityId)?.role)?.maxDurationSeconds || 36000) / 60} required value={duration / 60} onChange={event => setDuration(Number(event.target.value) * 60)} /></label>
         <label className="block">Aktivierungsbegründung<textarea className="block p-2 border bg-transparent w-full" minLength={10} maxLength={500} required value={explanation} onChange={event => setExplanation(event.target.value)} /></label><button>Aktivierung beantragen</button>
       </form>}
     </section><section className="space-y-3"><h2 className="text-lg font-semibold">Meine Anträge und Aktivierungen</h2>{!self.requests.length && <p>Keine eigenen Anträge.</p>}{requests(self.requests, false)}</section>
@@ -98,7 +101,7 @@ export default function PIMView() {
         {can('pim.eligibilities.manage') && target !== self.userId && item.status === 'eligible' && catalog.some(entry => entry.role === item.role && entry.assignable) && <button onClick={() => begin({ kind: 'eligibility-revoke', eligibility: item })}>Berechtigung widerrufen</button>}</li>)}</ul>
         {target === self.userId ? <p>Keine Selbstverwaltung eigener PIM-Berechtigungen.</p> : can('pim.eligibilities.manage') && <form className="space-y-3 max-w-xl" onSubmit={event => { event.preventDefault(); if (catalog.some(item => item.role === role && item.assignable)) begin({ kind: 'eligibility', body: { userId: target, role, maxDurationSeconds: maxDuration, validForSeconds: validDays * 86400, reason: managementReason } }); }}>
           <label htmlFor="pim-managed-role">Berechtigte Rolle</label><select id="pim-managed-role" className="block bg-gray-900 border p-2" value={role} onChange={event => setRole(event.target.value)} required><option value="">Rolle wählen</option>{catalog.map(item => <option key={item.role} value={item.role} disabled={!item.assignable}>{item.role}{item.protected ? ' · geschützt' : ''}</option>)}</select>
-          <label className="block">Maximale Aktivierungsdauer in Minuten<input className="block p-2 border bg-transparent" type="number" min={1} max={480} value={maxDuration / 60} required onChange={event => setMaxDuration(Number(event.target.value) * 60)} /></label>
+          <label className="block">Maximale Aktivierungsdauer in Minuten<input className="block p-2 border bg-transparent" type="number" min={1} max={600} value={maxDuration / 60} required onChange={event => setMaxDuration(Number(event.target.value) * 60)} /></label>
           <label className="block">Berechtigung gültig in Tagen<input className="block p-2 border bg-transparent" type="number" min={1} max={30} required value={validDays} onChange={event => setValidDays(Number(event.target.value))} /></label>
           <label className="block">Verwaltungsbegründung<textarea className="block p-2 border bg-transparent w-full" minLength={10} maxLength={500} required value={managementReason} onChange={event => setManagementReason(event.target.value)} /></label><button>Berechtigung prüfen</button>
         </form>}</>}

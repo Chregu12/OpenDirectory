@@ -51,7 +51,7 @@ test('conflicts and lost results show no success and cannot be blindly replayed'
   await userEvent.click(screen.getByLabelText('Rechteentzug und Wiederherstellung geprüft')); await userEvent.click(screen.getByRole('button',{ name:'PIM-Richtlinie verbindlich speichern' }));
   await screen.findByText(/wurde inzwischen geändert/); expect(api.put).toHaveBeenCalledTimes(1); expect(screen.getByRole('button',{ name:'PIM-Richtlinie verbindlich speichern' })).toBeDisabled();
 });
-test.each([{ required:'true' },{ maxDurationSeconds:59 },{ maxDurationSeconds:28801 },{ role:'other-role' },{ version:'0' },{ locked:true },{ ignored:true },{ reviewerUserIds:null },{ reviewerUserIds:['not-canonical'] },{ reviewerUserIds:['11111111-1111-4111-8111-111111111111','11111111-1111-4111-8111-111111111111'] }])('malformed source cannot grant editability: %j',async extra=>{
+test.each([{ required:'true' },{ maxDurationSeconds:59 },{ maxDurationSeconds:36001 },{ role:'other-role' },{ version:'0' },{ locked:true },{ ignored:true },{ reviewerUserIds:null },{ reviewerUserIds:['not-canonical'] },{ reviewerUserIds:['11111111-1111-4111-8111-111111111111','11111111-1111-4111-8111-111111111111'] }])('malformed source cannot grant editability: %j',async extra=>{
   (api.get as jest.Mock).mockResolvedValue({ status:200,data:row(extra) }); render(<PrivilegedAccessPolicyView access={access} />);
   await userEvent.type(screen.getByLabelText('Kanonische Rolle für PIM-Richtlinie'),'license-manager'); await userEvent.click(screen.getByRole('button',{ name:'PIM-Richtlinie laden' }));
   await screen.findByRole('alert'); expect(screen.queryByRole('button',{ name:'PIM-Richtlinie prüfen' })).not.toBeInTheDocument();

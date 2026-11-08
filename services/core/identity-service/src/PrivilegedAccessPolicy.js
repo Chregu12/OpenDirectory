@@ -12,7 +12,7 @@ function catalogRole(role) { if (!ROLES.includes(role)) fail(400,'catalog_role_r
 function activationEtag(role, version) { return `"od-role-activation:${role}:${version}"`; }
 function validActivationPolicy(row) {
   if (!row || !ROLES.includes(row.role) || !validRevision(String(row.version)) || typeof row.activation_required !== 'boolean'
-    || !Number.isInteger(row.max_duration_seconds) || row.max_duration_seconds < 60 || row.max_duration_seconds > 28800
+    || !Number.isInteger(row.max_duration_seconds) || row.max_duration_seconds < 60 || row.max_duration_seconds > 36000
     || !Array.isArray(row.reviewer_user_ids) || row.reviewer_user_ids.length>20
     || row.reviewer_user_ids.some((identifier,index) => typeof identifier!=='string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(identifier)
       || index>0 && row.reviewer_user_ids[index-1]>=identifier)
@@ -63,7 +63,7 @@ class PrivilegedAccessPolicy {
     catalogRole(role); const actor = this.authority(user,'pim.policies.manage');
     if (!body || typeof body !== 'object' || Array.isArray(body) || ![4,5].includes(Object.keys(body).length)
       || Object.keys(body).some(key => !['required','maxDurationSeconds','reason','acknowledgeInvalidation','reviewerUserIds'].includes(key))
-      || typeof body.required !== 'boolean' || !Number.isInteger(body.maxDurationSeconds) || body.maxDurationSeconds < 60 || body.maxDurationSeconds > 28800
+      || typeof body.required !== 'boolean' || !Number.isInteger(body.maxDurationSeconds) || body.maxDurationSeconds < 60 || body.maxDurationSeconds > 36000
       || body.acknowledgeInvalidation !== true || typeof body.reason !== 'string' || body.reason.trim().length < 10 || body.reason.length > 500
       || /[\u0000-\u001f\u007f]/.test(body.reason)) fail(400,'invalid_activation_policy');
     const reviewers = body.reviewerUserIds === undefined ? [] : body.reviewerUserIds;

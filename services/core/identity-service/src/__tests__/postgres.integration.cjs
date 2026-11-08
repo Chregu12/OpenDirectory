@@ -1481,3 +1481,67 @@ test('denial and owner cancellation remain terminal, and an owner can deactivate
   const owner = await pimRefresh(fixture.owner); assert.equal((await pimChange(pending.id, 'cancel', owner)).body.status, 'revoked');
   assert.ok((await database.query('SELECT revoked_at FROM identity_role_assignments WHERE id=$1', [active.body.assignmentId])).rows[0].revoked_at);
 });
+
+
+test('PIM task groups grant only the selected duty after independent approval and retain immutable activation history', async () => {
+ const admin=await pimPrincipal('admin');const reviewer=await pimPrincipal('admin');const owner=await pimPrincipal();const route='/api/identity/pim/groups';
+ assert.equal((await api('GET',pimPath+'/catalog',admin)).body.maxDurationSeconds,36000);
+ assert.equal((await api('GET','/api/identity/roles/catalog',admin)).body.maxDurationSeconds,28800);
+ const initialized=await api('POST',route+'/initialize',admin,{confirm:true});assert.equal(initialized.status,200,JSON.stringify(initialized.body));
+ const catalog=await api('GET',route,owner);assert.equal(catalog.status,200,JSON.stringify(catalog.body));assert.ok(catalog.body.groups.some(group=>group.name==='Global Security'&&group.role==='admin'&&group.protected));
+ const created=await api('POST',route,admin,{name:'Engineering disposable test',description:'Exactly one selected directory duty',role:'license-reader',maxDurationSeconds:36000,reason:'Reviewed named task group without standing privilege',confirm:true});assert.equal(created.status,201,JSON.stringify(created.body));const id=created.body.id;
+ assert.equal(created.body.configuredMaxDurationSeconds,36000);assert.equal(created.body.maxDurationSeconds,28800);
+ assert.equal((await api('POST',route+'/'+id+'/eligibilities',admin,{userId:admin.userId,maxDurationSeconds:3600,validForSeconds:86400,reason:'No self-granted PIM eligibility permitted',confirm:true})).status,403);
+ const grant=await api('POST',route+'/'+id+'/eligibilities',admin,{userId:owner.userId,maxDurationSeconds:3600,validForSeconds:86400,reason:'Independent eligibility for only the license reader task',confirm:true});assert.equal(grant.status,201,JSON.stringify(grant.body));
+ assert.deepEqual((await new AuthorizationState(database).state(issuer,owner.sub)).roles,['user']);
+ assert.equal((await api('POST',route+'/'+id+'/eligibilities',admin,{userId:owner.userId,maxDurationSeconds:3600,validForSeconds:86400,reason:'Must not create a duplicate group membership',confirm:true})).status,409);
+ const requested=await api('POST',pimPath+'/requests',owner,{id:randomUUID(),eligibilityId:grant.body.eligibility.id,durationSeconds:3600,reason:'Activate only this concrete task while working'});assert.equal(requested.status,200,JSON.stringify(requested.body));
+ assert.equal((await pimChange(requested.body.id,'approve',owner)).status,403);assert.equal((await pimChange(requested.body.id,'approve',reviewer)).status,200);
+ const active=await pimChange(requested.body.id,'activate',owner);assert.equal(active.status,200,JSON.stringify(active.body));assert.deepEqual((await new AuthorizationState(database).state(issuer,owner.sub)).roles,['license-reader','user']);
+ const history=await api('GET',route+'/'+id+'/history',await pimRefresh(owner));assert.equal(history.status,200,JSON.stringify(history.body));assert.ok(history.body.events.some(event=>event.action==='active'&&event.actorUserId===owner.userId&&event.durationSeconds===3600&&event.expiresAt));
+ assert.equal((await api('POST',route+'/'+id+'/disable',admin,{reason:'Withdraw all task rights and retain audit evidence',confirm:true})).status,200);
+ assert.deepEqual((await new AuthorizationState(database).state(issuer,owner.sub)).roles,['user']);
+ await assert.rejects(database.query('DELETE FROM identity_pim_group_audit WHERE group_id=$1',[id]),error=>error.code==='42501');
+ await assert.rejects(database.query('DELETE FROM identity_pim_group_eligibilities WHERE group_id=$1',[id]),error=>error.code==='23514');
+ await database.query(fs.readFileSync(path.join(__dirname,'../../migrations/056_pim_groups.sql'),'utf8'));
+ assert.ok((await api('GET',route,admin)).body.groups.find(group=>group.id===id&&!group.enabled));
+});
+
+test('PIM task groups allow ten-hour role leases within policy and protect Global Security eligibility', async () => {
+ const admin=await pimPrincipal('admin');const reviewer=await pimPrincipal('admin');const owner=await pimPrincipal();const limited=await pimPrincipal('pim-administrator');const policyManager=await pimPrincipal('privileged-access-policy-administrator');const route='/api/identity/pim/groups';
+ assert.equal((await api('POST',route+'/initialize',admin,{confirm:true})).status,200);
+ const security=(await api('GET',route,admin)).body.groups.find(group=>group.role==='admin');
+ assert.equal((await api('POST',route+'/'+security.id+'/eligibilities',limited,{userId:owner.userId,maxDurationSeconds:3600,validForSeconds:86400,reason:'A limited PIM administrator cannot delegate full Global Security',confirm:true})).status,403);
+ assert.equal((await activationPolicy('license-reader',policyManager,false,36000)).status,200);
+ try {
+  const created=await api('POST',route,admin,{name:'Ten hour task fixture',description:'Bounded ten hour reader role',role:'license-reader',maxDurationSeconds:36000,reason:'Explicit policy-bounded ten hour task group',confirm:true});assert.equal(created.status,201,JSON.stringify(created.body));assert.equal(created.body.maxDurationSeconds,36000);
+  const grant=await api('POST',route+'/'+created.body.id+'/eligibilities',admin,{userId:owner.userId,maxDurationSeconds:36000,validForSeconds:86400,reason:'Independent ten hour PIM group eligibility',confirm:true});assert.equal(grant.status,201,JSON.stringify(grant.body));
+  const requested=await api('POST',pimPath+'/requests',owner,{id:randomUUID(),eligibilityId:grant.body.eligibility.id,durationSeconds:36000,reason:'A real policy-bounded ten hour privilege request'});assert.equal(requested.status,200,JSON.stringify(requested.body));
+  assert.equal((await pimChange(requested.body.id,'approve',reviewer)).status,200);
+  assert.equal((await pimChange(requested.body.id,'activate',{...owner,amr:['pwd']})).status,428);
+  const activated=await pimChange(requested.body.id,'activate',owner);assert.equal(activated.status,200,JSON.stringify(activated.body));
+  const lease=(await database.query('SELECT extract(epoch FROM expires_at-created_at) AS duration FROM identity_role_assignments WHERE activation_request_id=$1',[requested.body.id])).rows[0];assert.ok(Number(lease.duration)>35995&&Number(lease.duration)<=36000);
+  assert.deepEqual((await new AuthorizationState(database).state(issuer,owner.sub)).roles,['license-reader','user']);
+ }finally{await restoreActivationPolicy('license-reader');}
+});
+
+test('PIM task groups attribute disabling a bootstrapped group to the actual administrator', async () => {
+ const admin=await pimPrincipal('admin');const route='/api/identity/pim/groups';
+ const group=await database.transaction(async client=>{
+  await client.query("SELECT set_config('opendirectory.pim_group_seed','on',true)");
+  return (await client.query("INSERT INTO identity_pim_groups(tenant_id,name,description,role,max_duration_seconds,reason) VALUES(identity_tenant_id('user',$1),$2,'Disposable bootstrap definition','license-administrator',36000,'Bootstrap group has no human creator') RETURNING id",[admin.userId,'Bootstrap audit '+randomUUID()])).rows[0];
+ });
+ assert.equal((await database.query('SELECT created_by FROM identity_pim_groups WHERE id=$1',[group.id])).rows[0].created_by,null);
+ assert.equal((await api('POST',route+'/'+group.id+'/disable',admin,{reason:'Actual administrator withdraws a seeded task group',confirm:true})).status,200);
+ const history=await api('GET',route+'/'+group.id+'/history',admin);assert.equal(history.status,200,JSON.stringify(history.body));
+ assert.ok(history.body.events.some(event=>event.action==='group_disabled'&&event.actorUserId===admin.userId&&event.reason==='Actual administrator withdraws a seeded task group'));
+});
+
+test('PIM task groups roll back the group and its audit when original authority is withdrawn', async () => {
+ const admin=await pimPrincipal('admin');let checks=0;
+ const {PrivilegedGroups}=require('../PrivilegedGroups');const groups=new PrivilegedGroups(database,{revalidate:async()=>{if(++checks===2)throw Object.assign(new Error('Withdrawn actual session'),{status:401});}});
+ const audits=Number((await database.query('SELECT count(*) AS count FROM identity_pim_group_audit')).rows[0].count);
+ await assert.rejects(groups.create({name:'Uncommitted group fixture',description:'Must never survive authority withdrawal',role:'license-reader',maxDurationSeconds:3600,reason:'Original human authority must survive the audit write',confirm:true},{...admin,iss:issuer},'Bearer original'),error=>error.status===401);
+ assert.equal(checks,2);assert.equal(Number((await database.query("SELECT count(*) AS count FROM identity_pim_groups WHERE name='Uncommitted group fixture'")).rows[0].count),0);
+ assert.equal(Number((await database.query('SELECT count(*) AS count FROM identity_pim_group_audit')).rows[0].count),audits);
+});

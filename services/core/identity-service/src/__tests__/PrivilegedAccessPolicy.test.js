@@ -39,7 +39,7 @@ test('versioned changes bind the actor, reason and original bearer before and af
   expect(database.query).toHaveBeenCalledWith(expect.stringContaining('set_config'),[input.reason]);
   await expect(store.change(row.role,activationEtag(row.role,'1'),input,user,'Bearer original')).rejects.toMatchObject({ status:412 });
 });
-test.each([{ required:'true' },{ maxDurationSeconds:59 },{ maxDurationSeconds:28801 },{ maxDurationSeconds:'600' },{ acknowledgeInvalidation:false },{ reason:'short' },{ reason:'control\ncharacters' },{ role:'admin' },{ actor:'admin' }])('unreviewed/injected policy fields fail before persistence: %j', async patch => {
+test.each([{ required:'true' },{ maxDurationSeconds:59 },{ maxDurationSeconds:36001 },{ maxDurationSeconds:'600' },{ acknowledgeInvalidation:false },{ reason:'short' },{ reason:'control\ncharacters' },{ role:'admin' },{ actor:'admin' }])('unreviewed/injected policy fields fail before persistence: %j', async patch => {
   await expect(store.change(row.role,activationEtag(row.role,'1'),{ ...input,...patch },user)).rejects.toMatchObject({ status:400 });
   expect(database.transaction).not.toHaveBeenCalled();
 });

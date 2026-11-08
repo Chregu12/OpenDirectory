@@ -1,0 +1,248 @@
+{
+  "checkedAt": "2026-11-08T19:54:41.250537+00:00",
+  "status": "deployed-and-verified-personal-production-activation-pending",
+  "features": [
+    "Dashboard PIM task cards for administrators and regular users: Engineering, Lizenzen, Benutzerverwaltung, Apps & SSO, Richtlinien-Rollout, Global Security",
+    "Tenant-owned groups each bind one canonical role; custom task groups and user eligibilities are managed under /pim and linked from user details",
+    "Assignment grants eligibility only; independent review and fresh bound MFA are required for a real expiring role lease",
+    "Protected Global Security maps to the canonical admin role and cannot be delegated by an ordinary PIM administrator",
+    "Immutable group and PIM lifecycle history includes actor, target, reason, timestamps and planned lease expiry; disabling bootstrapped definitions retains the actual disabling actor",
+    "Disabling a task group revokes live linked eligibilities and role leases, and makes previously issued role tokens stale",
+    "Hard duration ceiling is ten hours; effective duration retains existing stricter role, group and eligibility limits",
+    "Existing standing administrator rights are explicitly labelled and are not automatically removed"
+  ],
+  "deployment": {
+    "revision": 56,
+    "chart": "opendirectory-lite-0.1.39",
+    "appVersion": "1.0.36",
+    "readyDeployments": 11,
+    "images": {
+      "identity-service": {
+        "image": "harbor.heusser.local/opendirectory/identity-service:1.0.36",
+        "digest": "sha256:5bcc26145fdceea0327d0ec5e02743b4110d1ce3e2369ff8debaf892671bc7a6"
+      },
+      "web-app": {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.34",
+        "digest": "sha256:a4c4b4d7e4faa2b223de714110f48dc0ee5ef3c6d50957464622080ba59507ec"
+      }
+    },
+    "onlyReviewedImagesChanged": true
+  },
+  "database": {
+    "groups": [
+      {
+        "name": "Apps & SSO",
+        "role": "application-administrator",
+        "max_duration_seconds": 36000,
+        "definitions": 1
+      },
+      {
+        "name": "Benutzerverwaltung",
+        "role": "user-administrator",
+        "max_duration_seconds": 36000,
+        "definitions": 1
+      },
+      {
+        "name": "Engineering",
+        "role": "device-enrollment-operator",
+        "max_duration_seconds": 36000,
+        "definitions": 1
+      },
+      {
+        "name": "Global Security",
+        "role": "admin",
+        "max_duration_seconds": 36000,
+        "definitions": 1
+      },
+      {
+        "name": "Lizenzen",
+        "role": "license-administrator",
+        "max_duration_seconds": 36000,
+        "definitions": 1
+      },
+      {
+        "name": "Richtlinien-Rollout",
+        "role": "policy-deployment-operator",
+        "max_duration_seconds": 36000,
+        "definitions": 1
+      }
+    ],
+    "auditAttributionCorrect": true,
+    "bindings": 0,
+    "groupAudit": 6,
+    "eligibilities": 0,
+    "requests": 0,
+    "roleAssignments": 1,
+    "activeRoleAssignments": 1,
+    "guards": [
+      {
+        "relname": "identity_pim_group_audit",
+        "enabled_triggers": 36
+      },
+      {
+        "relname": "identity_pim_group_eligibilities",
+        "enabled_triggers": 36
+      },
+      {
+        "relname": "identity_pim_groups",
+        "enabled_triggers": 37
+      }
+    ],
+    "constraints": [
+      {
+        "conname": "identity_owned_role_activation_max_duration_seconds_check",
+        "definition": "CHECK (((max_duration_seconds >= 60) AND (max_duration_seconds <= 36000)))"
+      },
+      {
+        "conname": "identity_pim_eligibilities_max_duration_seconds_check",
+        "definition": "CHECK (((max_duration_seconds >= 60) AND (max_duration_seconds <= 36000)))"
+      },
+      {
+        "conname": "identity_pim_requests_duration_seconds_check",
+        "definition": "CHECK (((duration_seconds >= 60) AND (duration_seconds <= 36000)))"
+      },
+      {
+        "conname": "identity_role_activation_policies_max_duration_seconds_check",
+        "definition": "CHECK (((max_duration_seconds >= 60) AND (max_duration_seconds <= 36000)))"
+      }
+    ]
+  },
+  "checks": {
+    "identityUnit": {
+      "suites": 65,
+      "passed": 1226
+    },
+    "frontendFullBeforeFinalWorkspaceIntegration": {
+      "suites": 142,
+      "passed": 3097
+    },
+    "frontendAfterFinalWorkspaceIntegration": {
+      "suites": 4,
+      "passed": 23,
+      "includesNewNonAdminCases": 2
+    },
+    "nativePimRegressionsWithFinalMigration": {
+      "passed": 16,
+      "includesTaskGroupCases": 4
+    },
+    "realOAuthIdentityPolicyFlowWithFinalMigration": {
+      "passed": 1,
+      "assertions": [
+        "Actual MFA-backed user authentication",
+        "Assignment alone confers no role",
+        "Self approval is denied",
+        "Independent approval and activation grant only the requested license reader role",
+        "Old access and refresh tokens are invalid after activation",
+        "New login can read licenses while user administration remains forbidden",
+        "Group disable invalidates the actual role token"
+      ]
+    },
+    "productionAmd64BrowserSessionTests": 67,
+    "typecheck": "passed",
+    "nextProductionBuild": "passed",
+    "helmLint": "passed",
+    "renderReview": "49 resources compared; only Identity and Web images changed from revision 53; subsequent audit-attribution and direct-role catalog corrections changed only Identity",
+    "liveSourceHashes": {
+      "identity-service": {
+        "arch": "x64",
+        "uid": 100,
+        "hashes": {
+          "src/PrivilegedGroups.js": "7086a50de49daff7a756babbeec8d4c8c56d9dff51d71ff982e45935e565f885",
+          "src/PrivilegedGroupRoutes.js": "446e301b939c78e76f4c93a59647b6c4085c6193199d094a2077656794073d20",
+          "src/PrivilegedActivation.js": "c74927fcfec08bdd6d99a74a7100fa1d7117a9d2a9c4f57a738c82b19f5b32c3",
+          "src/RoleState.js": "128779bed710de753484636b4494b7e1b4d44edea43913779832c31c91ab07b6",
+          "src/OwnedAuthorityPlan.js": "f9ad7b82075baa253ff1004dbb4ebd604de1f1b684e08314f756c39942409a8e",
+          "src/PrivilegedAccessPolicy.js": "f141c3bf6509822e5b7c89547d71b722afe53383335eceac4923b60b09a330e0",
+          "src/index.js": "4b4b6ee9859b10c3ddba56580088f850243381a4d1b89222eeb1fbc2e9c72dc4",
+          "src/middleware/identityAccess.js": "97ee6bda5a4bfda4bf0ba795d77a1577aef06a513a1ad08aa00c91ca149ac1b8",
+          "migrations/056_pim_groups.sql": "b99cf69197f8736b36925bac911d2f7eaa67f70e8860c83121b65ed821b85015"
+        }
+      },
+      "web-app": {
+        "arch": "x64",
+        "uid": 1001,
+        "hashes": {
+          "src/components/views/PIMGroupsPanel.tsx": "59e71ba665819a29d2fcb4c0e6224ec9286fa5ae4286fe91937075c490163b49",
+          "src/components/views/DashboardView.tsx": "498e204ee4217db537edd84ffdbde039428356d56428efd216787b5711efbabe",
+          "src/components/views/WorkspaceOverview.tsx": "21bdde9b12c73503e089e9830b66147f84058e26e32a8b1350691645d1f26595",
+          "src/components/views/PIMView.tsx": "ad88c14aadab5a61090a1c5bc95090813cc636d99bbdf904ad2c21c82e71b760",
+          "src/components/views/UserDetailPanel.tsx": "261562347df4281f862929b1d12fb7dc2917f30784372e14e01585e0c035e32a",
+          "src/components/views/PrivilegedAccessPolicyView.tsx": "f24ba2a599f59f9aefbc6ee2e0040b6fbd2be332db836a5463353e167bf8826d",
+          "src/lib/privilegedGroups.ts": "afd4d9be1898bf3547f96c9b6296a8d97b66b1c40673fa21d0fff7f52337a599",
+          "src/lib/privilegedActivation.ts": "f689afeaae924a6421860cb15bbfc86dc6e078967f67bda9d75f67ce1ab34ff0",
+          "src/lib/privilegedAccessPolicy.ts": "2d630ccc6557f0acd01afb2b48a26bbf2060f83d5f15e023870d2e766817206f",
+          "src/lib/directoryRoles.ts": "0128b7259f7d8af52a681cc6d52ac7a5862b87668e9cc4f72697b74bbb998083",
+          "src/lib/auth.ts": "724aafc872197aff1b300e708632c06323f725e95d1dc2d02a2ec75e7302de84",
+          "src/server/browserAuth.cjs": "82d67dbc109e30e978dfdb41599271cc6aa602f35257b639e0614f6922ea4789"
+        }
+      }
+    },
+    "https": {
+      "/dashboard": 200,
+      "/pim": 200,
+      "/.well-known/openid-configuration": 200,
+      "/api/identity/pim/groups": 401,
+      "/api/identity/pim/self": 401,
+      "/api/licenses/company/capabilities": 401
+    },
+    "visualQa": {
+      "desktopWidth": 1600,
+      "mobileWidth": 390,
+      "cards": 6,
+      "method": "Headless Chrome with the actual production Web bundle and synthetic local API fixtures; no production user session",
+      "nonAdminViewIncluded": true
+    },
+    "productionAuthorityUnchanged": {
+      "eligibilities": 0,
+      "requests": 0,
+      "roleAssignments": 1,
+      "activeRoleAssignments": 1
+    },
+    "finalNativeGroupAndCatalogCases": {
+      "passed": 4,
+      "includes": "PIM 36000-second catalog and unchanged direct-role 28800-second catalog; actual human attribution for disabling seeded groups"
+    }
+  },
+  "backups": {
+    "scope": "identity, oauth, policy before rollout",
+    "validation": "Custom-format archives, SHA256 and pg_restore TOCs verified; private files retained outside repository",
+    "archives": [
+      {
+        "database": "identity",
+        "bytes": 3203500,
+        "sha256": "0f3cba2003ecb414dd76bf6722ea7d092153c103c4b63470999557d5ae9cb8dc",
+        "tocEntries": 5217
+      },
+      {
+        "database": "oauth",
+        "bytes": 173203,
+        "sha256": "e79328c230fab6df4b6a80baaa0313375798cdde38cb967b88b1a8f1d66f9647",
+        "tocEntries": 265
+      },
+      {
+        "database": "policy",
+        "bytes": 848851,
+        "sha256": "1ca6fa2a1e27afa629e27ec8db978a317be17f13ac517ae6bab9ab642d91746e",
+        "tocEntries": 962
+      }
+    ]
+  },
+  "limits": [
+    "No personal production MFA enrollment, login, eligibility assignment or role activation was performed for the account holder.",
+    "Existing permanent roles and role policy durations remain unchanged; stricter MFA and application checks still apply.",
+    "The protocol records the PIM lifecycle; it does not add a new audit event for every API read.",
+    "Groups activate OpenDirectory canonical roles; no AD, LDAP, Rancher or external SaaS group membership is changed.",
+    "New tenants without task groups require explicit authorized initialization through Standardgruppen einrichten.",
+    "Database owners remain the explicit physical trust boundary."
+  ],
+  "maintenance": {
+    "localReleasedCopiesRemoved": [
+      "identity-service:1.0.33",
+      "identity-service:1.0.35",
+      "web-app:1.0.33"
+    ],
+    "scopedIdentityBuildCacheCandidates": 113,
+    "containerOrVolumeRemoval": false,
+    "existingDockerContainersPreserved": 88
+  }
+}
