@@ -13,3 +13,47 @@ ingress:
   host: opendirectory.heusser.local
   tlsSecretName: opendirectory-tls
   clusterIssuer: homelab-ca-issuer
+
+apps:
+  license-management:
+    imageTag: "1.0.17"
+  policy-service:
+    imageTag: "1.0.26"
+  license-fulfillment:
+    imageTag: "1.0.26"
+    env:
+      LICENSE_FULFILLMENT_READ_ENGINE: rust
+  license-capacity:
+    imageTag: "1.0.26"
+    env:
+      LICENSE_CAPACITY_ENGINE: rust
+  app-store:
+    enabled: true
+    imageTag: "1.0.15"
+  auth-service:
+    imageTag: "1.0.21"
+  oauth-provider:
+    imageTag: "1.0.20"
+    env:
+      OAUTH_WEB_ADMIN_USER_IDS: '["27d3f95a-a75d-45ac-a4f9-faeef85f5c54"]'
+  web-app:
+    imageTag: "1.0.22"
+  api-backend:
+    imageTag: "1.0.10"
+  api-gateway:
+    imageTag: "1.0.14"
+    env:
+      JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
+  integration-service:
+    imageTag: "1.0.16"
+    healthPath: /health/ready
+    env:
+      GRAFANA_URL: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local
+      PROMETHEUS_URL: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+      INTEGRATION_ENABLED_SERVICES: lldap,grafana,prometheus
+    secretEnv:
+      GRAFANA_ADMIN_USER: { name: "{{ .Release.Name }}-grafana", key: admin-user }
+      GRAFANA_ADMIN_PASSWORD: { name: "{{ .Release.Name }}-grafana", key: admin-password }
+
+grafanaCredentials:
+  enabled: true

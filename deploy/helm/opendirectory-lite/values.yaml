@@ -84,6 +84,30 @@ appDefaults:
     limits: { cpu: "1", memory: 512Mi }
 
 apps:
+  app-store:
+    enabled: false
+    image: app-store
+    port: 3906
+    healthPath: /health
+    persistence:
+      storage: 5Gi
+      mountPath: /app/uploads
+      group: 1001
+    env:
+      NODE_ENV: production
+      PORT: "3906"
+      CATALOG_RELEASE_SYNC_ENABLED: "true"
+      DB_HOST: "{{ .Release.Name }}-postgres"
+      DB_NAME: app_store
+      DB_USER: opendirectory
+      PACKAGES_DIR: /app/uploads/packages
+      INTEGRATION_SERVICE_URL: "http://{{ .Release.Name }}-integration-service:3005"
+      OIDC_ISSUER: "{{ .Values.global.publicURL }}"
+      OIDC_AUDIENCE: opendirectory-api
+      JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
+      OIDC_ACCESS_STATE_URL: "http://{{ .Release.Name }}-oauth-provider:3010/oauth/access-state"
+    secretEnv:
+      DB_PASSWORD: { key: postgres-app-initial-password, database: true }
   identity-service:
     enabled: true
     image: identity-service
@@ -169,6 +193,7 @@ apps:
       OIDC_ISSUER: "{{ .Values.global.publicURL }}"
       IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
       JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
+      OIDC_ACCESS_STATE_URL: "http://{{ .Release.Name }}-oauth-provider:3010/oauth/access-state"
     secretEnv:
       DB_PASSWORD: { key: postgres-app-initial-password, database: true }
 
@@ -185,6 +210,7 @@ apps:
       JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
       IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
       OAUTH_PROVIDER_URL: "http://{{ .Release.Name }}-oauth-provider:3010"
+      OIDC_ACCESS_STATE_URL: "http://{{ .Release.Name }}-oauth-provider:3010/oauth/access-state"
       LICENSE_DEMO_MODE: "false"
     secretEnv:
       DATABASE_URL: { key: policy-database-url, database: true }
@@ -210,6 +236,7 @@ apps:
       OAUTH_MFA_KEY_FILE: /run/opendirectory/mfa-encryption.key
       OAUTH_VERIFICATION_JWKS_FILE: /run/opendirectory/oauth-verification.jwks.json
       OAUTH_WEB_CLIENT_ID: web-app
+      OAUTH_WEB_ADMIN_USER_IDS: '[]'
       OAUTH_WEB_CLIENT_SECRET_FILE: /run/opendirectory/oauth-web-client.secret
       OAUTH_WEB_REDIRECT_URIS: '["{{ .Values.global.publicURL }}/auth/callback"]'
       OAUTH_EPHEMERAL_SIGNING_KEYS: "false"
@@ -228,17 +255,33 @@ apps:
     enabled: true
     image: api-gateway
     port: 3000
-    healthPath: /health
+    healthPath: /health/ready
     env:
       NODE_ENV: production
-      API_GATEWAY_PORT: "3000"
+      PORT: "3000"
+      CORS_ORIGIN: "{{ .Values.global.publicURL }}"
+      DB_HOST: "{{ .Release.Name }}-postgres"
+      DB_PORT: "5432"
+      DB_NAME: api_gateway
+      DB_USER: opendirectory
       OIDC_ISSUER: "{{ .Values.global.publicURL }}"
       OIDC_AUDIENCE: opendirectory-api
       JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
       REDIS_HOST: "{{ .Release.Name }}-redis"
       REDIS_PORT: "6379"
       LOG_LEVEL: info
+      OIDC_ACCESS_STATE_URL: "http://{{ .Release.Name }}-oauth-provider:3010/oauth/access-state"
+      GATEWAY_UPSTREAMS: >-
+        [{"name":"auth","target":"http://{{ .Release.Name }}-auth-service:3002","pathPrefix":"/api/auth"},
+        {"name":"identity","target":"http://{{ .Release.Name }}-identity-service:3001","pathPrefix":"/api/users"},
+        {"name":"devices","target":"http://{{ .Release.Name }}-device-service:3003","pathPrefix":"/api/devices"},
+        {"name":"policy","target":"http://{{ .Release.Name }}-policy-service:3004","pathPrefix":"/api/licenses"},
+        {"name":"oauth","target":"http://{{ .Release.Name }}-oauth-provider:3010","pathPrefix":"/api/clients"},
+        {"name":"integration","target":"http://{{ .Release.Name }}-integration-service:3005","pathPrefix":"/api/lldap"},
+        {"name":"license","target":"http://{{ .Release.Name }}-license-management:3018","pathPrefix":"/api/license"},
+        {"name":"api","target":"http://{{ .Release.Name }}-api-backend:8080","pathPrefix":"/api/system","healthPath":"/api/health"}]
     secretEnv:
+      DB_PASSWORD: { key: postgres-app-initial-password, database: true }
       REDIS_PASSWORD: { key: redis-password }
       JWT_SECRET: { key: jwt-secret }
 
@@ -281,6 +324,7 @@ apps:
     env:
       NODE_ENV: production
       LICENSE_FULFILLMENT_CONFIG_FILE: /run/opendirectory/license-fulfillment.json
+      LICENSE_FULFILLMENT_READ_ENGINE: javascript
     secretEnv:
       DATABASE_URL: { key: license-fulfillment-database-url, database: true }
 
@@ -292,6 +336,7 @@ apps:
     env:
       NODE_ENV: production
       LICENSE_CAPACITY_CONFIG_FILE: /run/opendirectory/license-capacity.json
+      LICENSE_CAPACITY_ENGINE: javascript
     secretEnv:
       DATABASE_URL: { key: license-capacity-database-url, database: true }
 
@@ -319,10 +364,12 @@ apps:
       IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
       DEVICE_SERVICE_URL: "http://{{ .Release.Name }}-device-service:3003"
       OAUTH_PROVIDER_URL: "http://{{ .Release.Name }}-oauth-provider:3010"
-      CORE_GATEWAY_URL: "http://{{ .Release.Name }}-api-backend:8080"
+      CORE_GATEWAY_URL: "http://{{ .Release.Name }}-api-gateway:3000"
       API_BACKEND_URL: "http://{{ .Release.Name }}-api-backend:8080"
       POLICY_SERVICE_URL: "http://{{ .Release.Name }}-policy-service:3004"
       LICENSE_ADAPTER_URL: "http://{{ .Release.Name }}-license-management:3018"
+      APP_STORE_URL: "http://{{ .Release.Name }}-app-store:3906"
+      PLATFORM_SERVICES: '{{ range $name, $app := .Values.apps }}{{ if $app.enabled }}{{ $name }},{{ end }}{{ end }}'
 
 ingress:
   enabled: true
@@ -331,3 +378,8 @@ ingress:
   tlsSecretName: opendirectory-tls
   clusterIssuer: letsencrypt-prod
   annotations: {}
+
+grafanaCredentials:
+  enabled: false
+  sourceNamespace: monitoring
+  sourceSecret: kube-prometheus-stack-grafana

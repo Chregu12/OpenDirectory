@@ -8,6 +8,10 @@ Build and push the application images to a private Harbor project. The default r
 
 The applications consume Kubernetes Secrets named `opendirectory-runtime` and `opendirectory-files`. You can create them manually before install, or enable the optional ESO synchronization below. The chart never puts secret values in Helm values or rendered manifests.
 
+The k3s profile mirrors the existing Grafana release's `admin-user` and `admin-password` through ESO into a separate namespaced Secret. Its reader can get only that exact monitoring Secret; application pods do not receive its Kubernetes token. This keeps the integration aligned with the actual external Grafana credential instead of generating an unrelated password in OpenBao. Disable `grafanaCredentials.enabled` or adjust its source namespace/name for another monitoring installation.
+
+The k3s profile pins the web app and integration service to `1.0.16`, app store to `1.0.15`, gateway to `1.0.14`, OAuth to `1.0.11` and auth/API backend to `1.0.10`. Module navigation settings use PostgreSQL in the existing `integration` database; storage failures return 503 rather than reporting an in-memory save. Prometheus alert/rule failures are propagated instead of producing a healthy empty result. The catalog source refresh reads only fixed WinGet/Homebrew hosts, starts on service boot, and repeats every six hours when `CATALOG_RELEASE_SYNC_ENABLED=true`. An admin can start/observe the same single-flight job through `/api/store/catalog/sync`. Failed sources retain only matching last-confirmed observations; no device installation is inferred. Optional `CATALOG_GITHUB_TOKEN` is server-only; without it GitHub's public rate limit may yield a partial refresh. Webhook manual tests require explicit HTTPS origins in `GATEWAY_WEBHOOK_ALLOWED_ORIGINS`; credentials/redirects are rejected. Production signed event dispatch is not implemented. The build helper packages the core OIDC gateway with explicit Kubernetes upstreams. Enabled integrations and API dependencies must pass real readiness checks; optional services excluded from Lite are reported as disabled.
+
 The chart consumes native Kubernetes Secrets. OpenBao is the source of truth; External Secrets Operator (ESO) reads OpenBao KV v2 using short-lived Kubernetes ServiceAccount tokens and writes the resulting values into the app namespace. PostgreSQL password rotation is handled by OpenBao's database engine, which changes the `opendirectory` database role password and publishes the replacement through ESO. For Harbor, use a scoped project robot and rotate its credential through Harbor's API before ESO refreshes the pull Secret.
 
 OpenBao is installed separately with the official Helm chart. Deployment values and certificate resources are in `deploy/helm/openbao/` and `deploy/k8s/openbao/`. Initialize it only after you have a safe place to save its recovery shares and initial root token, such as a secure note in your existing Vaultwarden account or an offline password manager. Keep recovery material outside the cluster too. The Helm release is configured for three-node Raft storage on Longhorn, with TLS and no public ingress by default. Do not enable ESO synchronization until OpenBao is initialized, unsealed, and Kubernetes auth is configured.
@@ -165,6 +169,12 @@ Set `graphMail.tenantId`, `graphMail.clientId`, and `graphMail.sender` in a priv
 
 ## Install on the homelab k3s cluster
 
+OAuth image `1.0.20` adds explicitly provisioned web-console access for the existing canonical installation administrator. `apps.oauth-provider.env.OAUTH_WEB_ADMIN_USER_IDS` is a JSON UUID list, empty by default; the k3s profile names the existing installation administrator. Access requires that exact identity to remain eligible with its current canonical `admin` role, and applies only to the configured protected web client. Password/MFA checks and other applications' assignments remain enforced. Remove the UUID to withdraw this configured entitlement; do not renew an eight-hour bootstrap grant as a permanent login solution.
+
+Auth-service and web-app `1.0.21` repair the follow-up login flow: successful password logins and MFA prompts no longer consume the failed-login limit. Five failed attempts per account and twenty per source IP still throttle for fifteen minutes; registration retains its existing request limits. Browser callbacks with missing, expired or replaced login cookies return a German recovery page with an explicit fresh-login link. State, nonce, PKCE and session validation remain enforced, and API callers retain JSON denials.
+
+Policy-service and web-app `1.0.22` extend `/licenses` with renewal attention, renewal/capacity filters, sorting, a filtered CSV export and confirmed catalog deletion. Renewal dates are reminders from the recorded contract, not provider-confirmed validity. Catalog writes validate costs, currency, license models and calendar dates; explicit blank/null values clear renewal dates and descriptions while omitted fields are preserved. Capacity conflicts return 409 with existing assignments retained. No schema migration or new manufacturer credential is required.
+
 ```sh
 helm upgrade --install opendirectory deploy/helm/opendirectory-lite \
   --namespace opendirectory --create-namespace \
@@ -176,4 +186,51 @@ The k3s values use `opendirectory.heusser.local`, the `homelab-ca-issuer` Cluste
 
 ## Scope
 
-MongoDB, Grafana, Prometheus, network infrastructure, printer service, and enterprise add-ons from Compose are outside this core chart. Add them as separate releases after their storage, network privileges, and ingress requirements are defined.
+The existing app-store service is optional in the base chart and enabled in the k3s values. It uses the existing PostgreSQL instance, live OIDC access-state validation, and a persistent package volume. Its local catalog does not establish device management or provider-confirmed installation.
+
+MongoDB, Grafana, Prometheus, network infrastructure, printer service, and the other enterprise add-ons from Compose are outside this core chart. Add them as separate releases after their storage, network privileges, and ingress requirements are defined.
+
+## UI repair and redesign release (2 November 2026)
+
+Release 1.0.12 uses web-app 1.0.12, oauth-provider 1.0.11, and the repaired gateway/backend/auth/app-store images 1.0.10. Images are built for linux/amd64 and pushed to Harbor before Helm is upgraded. Keep the per-component imageTag values in values.k3s.yaml aligned with the images actually built; choose a new version for later code changes. Do not overwrite a released tag.
+
+The device and policy receivers must reach the release-prefixed OAuth access-state endpoint. Inventory additionally requires a current, at most five-minute-old MFA login; a 428 response is not an API outage and must not be bypassed.
+
+See [the implementation and acceptance report](../../../docs/ui-redesign/report.html) and [the complete route/capability matrix](../../../docs/ui-redesign/capability-routes.json). Browser screenshots and full WCAG acceptance remain explicitly unverified while native computer use is unavailable.
+
+The compact-density update uses web-app 1.0.13 (chart 0.1.17). Header, navigation, content spacing, typography and tables are smaller; other service versions retain the repair/redesign baseline. See [the compact delivery evidence](../../../docs/ui-redesign/compact-delivery.json).
+
+
+Policy-service `1.0.23` adds Rust reads for an explicitly mapped Microsoft user's
+license assignments, selected by `LICENSE_FULFILLMENT_READ_ENGINE=rust`. The
+existing observation parser and reviewed Node write path remain authoritative.
+k3s pins both disabled license workers to this image and selects Rust reads;
+neither worker is enabled and no provider connection or consent is created.
+The read-only probe and live-test procedure are documented in
+[the Rust connector README](../../../services/connectors-rust/README.md#bound-microsoft-user-reads-8-november-2026).
+
+
+Policy-service `1.0.24` includes read-only Rust clients for Google Workspace license
+assignments and GitHub Copilot billed seats, plus the protected-file
+`node scripts/license-provider-probe.js` connection test. Google uses service
+account delegation; GitHub uses a reviewed organization token. There is no
+scheduled sync, database import or automatic grant for these providers. Existing
+Microsoft workers remain disabled. See
+[configuration and live-test instructions](../../../services/connectors-rust/READ_PROVIDERS.md).
+
+
+Policy-service `1.0.25` extends the protected manual read probe with Adobe Enterprise
+product-profile members and Slack SCIM 2.0 users. Adobe checks profile ID, name and
+type; Slack verifies workspace/Enterprise token context before directory access.
+Both use fixed provider hosts, bounded pagination and redacted errors. Provider
+credentials are not created or enabled by this release; Microsoft workers remain
+disabled and no new provider daemon runs. See
+[configuration and live-test instructions](../../../services/connectors-rust/READ_PROVIDERS.md).
+
+
+Policy-service `1.0.26` extends the manual read probe with Atlassian Cloud directory
+users and GitLab.com billable group members. Atlassian repeats an explicit directory
+filter in the current search API; GitLab confirms the top-level group and validates
+pagination links and counts. Existing license workers remain disabled. No new
+credential, scheduled import or cloud grant is created. See
+[configuration and live-test instructions](../../../services/connectors-rust/READ_PROVIDERS.md).

@@ -20,6 +20,10 @@ metadata:
     {{- end }}
 spec:
   replicas: {{ $app.replicas | default 1 }}
+  {{- if $app.persistence }}
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/instance: {{ $root.Release.Name }}
@@ -33,6 +37,10 @@ spec:
         opendirectory.heusser.local/uses-database-password: "true"
         {{- end }}
     spec:
+      {{- if $app.persistence }}
+      securityContext:
+        fsGroup: {{ $app.persistence.group | default 1001 }}
+      {{- end }}
       {{- with $root.Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -94,6 +102,9 @@ spec:
             {{- if and $reference.database $root.Values.externalSecrets.enabled $root.Values.externalSecrets.databasePasswordRotation.enabled }}
             {{- $secretName = $root.Values.secrets.databaseName }}
             {{- end }}
+            {{- if $reference.name }}
+            {{- $secretName = tpl (toString $reference.name) $root }}
+            {{- end }}
             - name: {{ $key }}
               valueFrom:
                 secretKeyRef:
@@ -127,21 +138,47 @@ spec:
           {{- end }}
           resources:
             {{- toYaml ($app.resources | default $root.Values.appDefaults.resources) | nindent 12 }}
-          {{- if $app.mountFiles }}
+          {{- if or $app.mountFiles $app.persistence }}
           volumeMounts:
+            {{- if $app.persistence }}
+            - name: data
+              mountPath: {{ $app.persistence.mountPath | quote }}
+            {{- end }}
+            {{- if $app.mountFiles }}
             - name: credentials
               mountPath: /run/opendirectory
               readOnly: true
+            {{- end }}
           {{- end }}
-      {{- if $app.mountFiles }}
+      {{- if or $app.mountFiles $app.persistence }}
       volumes:
+        {{- if $app.persistence }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $root.Release.Name }}-{{ $name }}-data
+        {{- end }}
+        {{- if $app.mountFiles }}
         - name: credentials-source
           secret:
             secretName: {{ $root.Values.secrets.filesName }}
             defaultMode: 0400
         - name: credentials
           emptyDir: {}
+        {{- end }}
       {{- end }}
+{{ if $app.persistence }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $root.Release.Name }}-{{ $name }}-data
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ $root.Values.global.storageClass | quote }}
+  resources:
+    requests:
+      storage: {{ $app.persistence.storage | quote }}
+{{ end }}
 {{ if $app.port }}
 ---
 apiVersion: v1

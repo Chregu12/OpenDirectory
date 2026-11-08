@@ -33,9 +33,10 @@ build_push device-service services/core/device-service/Dockerfile .
 build_push policy-service services/core/policy-service/Dockerfile .
 build_push oauth-provider services/core/oauth-provider/Dockerfile .
 build_push integration-service services/platform/integration-service/Dockerfile services/platform/integration-service
-build_push api-gateway services/platform/api-gateway/Dockerfile services/platform/api-gateway
+build_push api-gateway services/core/api-gateway/Dockerfile .
 build_push api-backend services/platform/api-backend/Dockerfile services/platform/api-backend
 build_push license-management services/core/license-management/Dockerfile services/core/license-management
 build_push web-app frontend/web-app/Dockerfile .
+build_push app-store services/enterprise/app-store/Dockerfile .
 
 printf 'Published OpenDirectory images to %s with tag %s.\n' "$registry" "$tag"
