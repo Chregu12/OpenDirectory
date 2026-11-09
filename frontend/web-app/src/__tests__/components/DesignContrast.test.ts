@@ -25,3 +25,13 @@ test.each(['dark', 'light'] as const)('%s semantic text and control tokens meet 
   expect(ratio(palette['--control-border'], palette['--bg-input'])).toBeGreaterThanOrEqual(3);
   expect(ratio(palette['--focus-ring'], palette['--bg-surface'])).toBeGreaterThanOrEqual(3);
 });
+test.each(['dark', 'light'] as const)('%s header text remains readable on the dark header and its menus', theme => {
+  const palette = tokens(theme);
+  for (const block of css.matchAll(/\.od-app-topbar\s*\{([^}]*)\}/g)) {
+    for (const property of block[1].matchAll(/(--[\w-]+):\s*([^;]+);/g)) palette[property[1]] = property[2].trim();
+  }
+  for (const background of ['#1f1f1f', palette['--bg-surface'], palette['--bg-surface-raised']]) {
+    for (const text of ['--text-primary', '--text-secondary', '--text-muted', '--text-link', '--danger']) expect(ratio(palette[text], background)).toBeGreaterThanOrEqual(4.5);
+  }
+  expect(ratio(palette['--control-border'], palette['--bg-input'])).toBeGreaterThanOrEqual(3);
+});

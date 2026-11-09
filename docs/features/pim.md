@@ -1,6 +1,6 @@
 # PIM-Aufgabengruppen
 
-Die kanonische PIM-Verwaltung liegt im Identity-Service unter `/api/identity/pim`. Die Übersicht (`/dashboard`) zeigt die tatsächlich eingerichteten Aufgabengruppen und eigene Berechtigungen, Anträge und Aktivierungen. `/pim` ergänzt die Gruppen-, Benutzerzuweisungs- und Rollenrichtlinienverwaltung.
+Die kanonische PIM-Verwaltung liegt im Identity-Service unter `/api/identity/pim`. Die Übersicht (`/dashboard`) und `/pim` zeigen eigene Berechtigungen, aktive Rollen und Anträge in getrennten Tabellen. Gruppenverwaltung und Genehmigungen haben eigene Bereiche; die Aktivierung erfolgt in einem seitlichen Formular. `/pim` ergänzt die Gruppen-, Benutzerzuweisungs- und Rollenrichtlinienverwaltung.
 
 ## Getrennte Aufgaben
 

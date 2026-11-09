@@ -310,7 +310,7 @@ export default function UnifiLayout({
   const sidebarContent = (
     <div className="flex flex-col h-full">
       <div className="od-section-heading">
-        <h2>{currentSection?.label || "Home"}</h2>
+        <h2>Verwaltung</h2>
         <p>
           {access?.companyOwner
             ? "Eigene Firma"
@@ -326,6 +326,20 @@ export default function UnifiLayout({
           <XMarkIcon className="h-5 w-5" />
         </button>
       </div>
+
+        <nav className="od-main-sections" aria-label="Hauptbereiche">
+          {sections.map((section) => (
+            <button
+              key={section.id}
+              aria-current={
+                currentSection?.id === section.id ? "true" : undefined
+              }
+              onClick={() => chooseSection(section)}
+            >
+              {section.label}
+            </button>
+          ))}
+        </nav>
 
       {/* Navigation */}
       <nav
@@ -381,10 +395,11 @@ export default function UnifiLayout({
                       fontSize: 13,
                       fontWeight: isActive ? 600 : 400,
                       textAlign: "left",
-                      background: isActive ? "var(--accent)" : "transparent",
-                      color: isActive ? "#ffffff" : "var(--text-secondary)",
+                      background: isActive ? "var(--accent-light)" : "transparent",
+                      color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
                       border: "none",
-                      borderRadius: 4,
+                      borderRadius: 0,
+                      borderLeft: isActive ? "3px solid var(--accent)" : "3px solid transparent",
                       cursor: "pointer",
                       transition: "background 0.15s, color 0.15s",
                       whiteSpace: "normal",
@@ -410,7 +425,7 @@ export default function UnifiLayout({
                         width: 16,
                         height: 16,
                         flexShrink: 0,
-                        color: isActive ? "#ffffff" : "var(--text-secondary)",
+                        color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
                       }}
                     />
                     {item.name}
@@ -456,19 +471,7 @@ export default function UnifiLayout({
           </span>
           <span>OpenDirectory</span>
         </div>
-        <nav className="od-main-sections" aria-label="Hauptbereiche">
-          {sections.map((section) => (
-            <button
-              key={section.id}
-              aria-current={
-                currentSection?.id === section.id ? "true" : undefined
-              }
-              onClick={() => chooseSection(section)}
-            >
-              {section.label}
-            </button>
-          ))}
-        </nav>
+
         <div className="od-app-tools">
           <div className="od-header-search">
             <GlobalSearch views={navigationItems} />

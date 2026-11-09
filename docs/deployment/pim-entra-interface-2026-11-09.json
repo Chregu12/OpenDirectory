@@ -1,0 +1,126 @@
+{
+  "checkedAt": "2026-11-09T22:12:59.089068+00:00",
+  "status": "deployed-and-verified-personal-mfa-login-not-performed",
+  "features": [
+    "Entra-inspired administration shell with navigation on the left, dark header, larger search field, restrained page headings and flat surfaces in light and dark themes",
+    "PIM assignment tables separate eligible roles, active roles, own requests, groups and authorized approvals on both dashboard variants and /pim",
+    "Eligible roles open a right-hand activation blade with a duration slider, hours field and reason; one explicit submit sends the request without a redundant confirmation modal",
+    "Independent approval and fresh MFA remain required; pending approval is never presented as an active role; approved activation starts a real new login",
+    "Duration is bounded by group, current role policy, eligibility and remaining eligibility lifetime; unknown legacy role policies cannot activate",
+    "Existing personal role eligibilities remain available in the same activation list; direct grants are labelled separately and do not imply a new PIM lease",
+    "User assignment, review, revocation and group administration retain explicit confirmation and the existing canonical APIs",
+    "Rare individual-role and role-policy tools load only after opening Weitere Rollen und Richtlinien",
+    "Duplicate dashboard metrics and login feeds removed, hardcoded connected-app count removed, quick actions condensed and platform details collapsed"
+  ],
+  "designReferences": [
+    "https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/groups-discover-groups",
+    "https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/groups-activate-roles",
+    "https://www.alitajran.com/microsoft-entra-privileged-identity-management/",
+    "https://www.cloudkaffee.ch/microsoft-azure/privileged-identity-management-pim-konfiguration-onbaording/",
+    "https://docs.apporetum.com/docs/managing-apps/Configure-PIM-roles/"
+  ],
+  "deployment": {
+    "revision": 57,
+    "chart": "opendirectory-lite-0.1.40",
+    "appVersion": "1.0.37",
+    "readyDeployments": 11,
+    "image": {
+      "image": "harbor.heusser.local/opendirectory/web-app:1.0.37",
+      "digest": "sha256:b3a48d1c0e45e5e7da1c1cca91ae506a70dbe793baa6360182708e02a4936690"
+    },
+    "onlyWebImageChanged": true
+  },
+  "checks": {
+    "frontendFullSuite": {
+      "suites": 144,
+      "passed": 3105
+    },
+    "finalTargetedChecks": {
+      "suites": 6,
+      "passed": 36,
+      "includes": "PIM forms, legacy role operations, uncertain writes, expiry, policy bounds, dashboard actions, navigation and root/header contrast; includes additional checks added after the full suite"
+    },
+    "registeredRoutes": {
+      "passed": 59,
+      "scope": "Shared shell and registered page titles under unavailable-service fixtures"
+    },
+    "productionBrowserCases": {
+      "passed": 8,
+      "widths": [
+        320,
+        390,
+        768,
+        1280,
+        1440,
+        1920
+      ],
+      "assertions": [
+        "Real production bundle under headless Chrome with isolated synthetic API fixtures",
+        "Eligible and active assignment separation",
+        "Ten-hour request carries only explicit expected fields and awaits independent approval",
+        "Escape cancels without a write and restores focus",
+        "User assignment is distinct from activation and binds the selected directory user",
+        "No horizontal page overflow on mobile",
+        "Reduced dashboard metrics and entry point",
+        "Light and dark themes inspected"
+      ]
+    },
+    "browserSessionTestsInProductionAmd64Image": 67,
+    "typecheck": "passed",
+    "productionNextBuild": "passed",
+    "helmLint": "passed",
+    "helmRender": "49 resources compared; only the Web Deployment image changed from revision 56",
+    "runtime": {
+      "arch": "x64",
+      "uid": 1001,
+      "buildId": "qy3ZOV9JSLaSFOsj53gZE",
+      "hashes": {
+        "src/components/views/PIMGroupsPanel.tsx": "6e8ee1a517af141405438cf81b8c564bdb58d323bede7dba77e6de2303ed48da",
+        "src/components/views/PIMView.tsx": "e24c345f9f1f4ab99db9ed95dacd38b104d117101931435469a629373375e2f8",
+        "src/components/views/PIMAdvancedView.tsx": "2492b348e0335347993ee35e6b4c83775ce926c732d3c0faa6f4c04e3ccdb346",
+        "src/components/views/DashboardView.tsx": "b3455bac2d96342e4686e8c3917893c44d457f872d8f8f9dbfe6816b65296909",
+        "src/components/views/WorkspaceOverview.tsx": "21bdde9b12c73503e089e9830b66147f84058e26e32a8b1350691645d1f26595",
+        "src/components/views/UserDetailPanel.tsx": "261562347df4281f862929b1d12fb7dc2917f30784372e14e01585e0c035e32a",
+        "src/components/layout/UnifiLayout.tsx": "2c1917747066c9cf71a2fa7f6c4d18cd1f6a42b6e926ced18a5a0079401d881e",
+        "src/components/ui/PageHeader.tsx": "2c036332e42950815c26c540d0c63f341e7888551e181c8a4e3c7bd5b1bb7df4",
+        "src/app/globals.css": "213e9abeb962c199ce474d78f62e54ea5246184eed9d0ccfc318bf305e096334",
+        "src/lib/privilegedGroups.ts": "afd4d9be1898bf3547f96c9b6296a8d97b66b1c40673fa21d0fff7f52337a599",
+        "src/lib/privilegedActivation.ts": "f689afeaae924a6421860cb15bbfc86dc6e078967f67bda9d75f67ce1ab34ff0",
+        "src/lib/auth.ts": "724aafc872197aff1b300e708632c06323f725e95d1dc2d02a2ec75e7302de84",
+        "src/lib/navigationSections.ts": "f36ae1b01b1bd16768ad07c647d445f4ae5ffc5e1c9d9281a7a61b360af13561",
+        "src/server/browserAuth.cjs": "82d67dbc109e30e978dfdb41599271cc6aa602f35257b639e0614f6922ea4789"
+      }
+    },
+    "compiledStylesheetsDeliveredOverVerifiedTls": [
+      {
+        "path": "/_next/static/chunks/1kyzsnmtcz0l9.css",
+        "sha256": "6b0a7a3cc218b677cf95b3e0eaee17ce08ef1e5ed7a920b50ed269aad7a4eb9c"
+      }
+    ],
+    "https": {
+      "/dashboard": 200,
+      "/pim": 200,
+      "/users": 200,
+      "/.well-known/openid-configuration": 200,
+      "/api/identity/pim/groups": 401,
+      "/api/identity/pim/self": 401
+    }
+  },
+  "maintenance": {
+    "obsoleteWeb33BuildCacheCandidates": 11,
+    "containerOrVolumeRemoval": false,
+    "unpublishedCandidateCacheCandidates": 11,
+    "additionalHarborVerifiedLocalCopiesRemoved": [
+      "identity-service:1.0.36",
+      "web-app:1.0.34"
+    ],
+    "additionalBuildCacheCandidates": 69,
+    "existingDockerContainersPreserved": 88
+  },
+  "limits": [
+    "No personal production login, password, OTP enrollment, eligibility grant or activation was performed for the account holder.",
+    "Approval, MFA, role policies and audit enforcement remain in the unchanged backend services; backend suites were not repeated for this UI-only release.",
+    "Browser interaction tests use local synthetic fixtures; they do not represent a production user activation.",
+    "No new activation capability, directory-group connector or PIM policy bypass is implied by the Entra-inspired layout."
+  ]
+}

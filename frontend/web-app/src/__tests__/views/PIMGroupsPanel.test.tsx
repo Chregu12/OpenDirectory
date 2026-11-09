@@ -25,52 +25,57 @@ beforeEach(() => {
   jest.clearAllMocks(); (privilegedGroups.load as jest.Mock).mockResolvedValue(fixture());
   Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: () => requestId });
 });
-test('overview displays separated tasks and identifies standing global administration honestly', async () => {
+test('separates eligible assignments from permanent Global Security in the active tab', async () => {
   (privilegedGroups.load as jest.Mock).mockResolvedValue(fixture({ standingRoles: ['admin'] })); render(<PIMGroupsPanel />);
-  expect(await screen.findByRole('article', { name: 'PIM-Gruppe Lizenzen' })).toHaveTextContent('Nur Lizenzbestand');
-  expect(screen.getByRole('article', { name: 'PIM-Gruppe Global Security' })).toHaveTextContent('Dauerhaft aktiv');
-  expect(screen.getByText(/Dauerhafte Adminrechte sind bereits aktiv/)).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Gruppen & Zuweisungen' })).toHaveAttribute('href', '/pim');
+  expect(await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' })).toHaveTextContent('Nur Lizenzbestand');
+  expect(screen.queryByRole('row', { name: 'PIM-Gruppe Global Security' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Aktiv', exact: true }));
+  expect(screen.getByRole('row', { name: 'PIM-Gruppe Global Security' })).toHaveTextContent('Direkt aktiv');
+  expect(screen.getByText(/Direkte Adminrechte sind bereits aktiv/)).toBeInTheDocument();
   expect(privilegedActivation.change).not.toHaveBeenCalled();
 });
 test('requests only the chosen group for ten hours after reason and explicit review', async () => {
   (privilegedActivation.request as jest.Mock).mockResolvedValue({ ...approved('pending') }); render(<PIMGroupsPanel />);
-  const card = await screen.findByRole('article', { name: 'PIM-Gruppe Lizenzen' }); fireEvent.click(within(card).getByRole('button', { name: 'Aktivierung anfordern' }));
-  fireEvent.change(screen.getByLabelText('Gewünschte Dauer'), { target: { value: '36000' } }); fireEvent.change(screen.getByLabelText('Begründung'), { target: { value: 'Lizenzen für den Engineering-Arbeitstag verwalten' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Vorgang prüfen' })); const dialog = await screen.findByRole('alertdialog');
-  expect(dialog).toHaveTextContent('Lizenzen für 10 Stunden'); expect(privilegedActivation.request).not.toHaveBeenCalled();
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Bestätigen' })); await waitFor(() => expect(privilegedActivation.request).toHaveBeenCalledTimes(1));
+  const card = await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' }); fireEvent.click(within(card).getByRole('button', { name: 'Aktivieren' }));
+  fireEvent.change(screen.getByLabelText('Dauer (Stunden)'), { target: { value: '10' } }); fireEvent.change(screen.getByLabelText(/^Begründung/), { target: { value: 'Lizenzen für den Engineering-Arbeitstag verwalten' } });
+  expect(privilegedActivation.request).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Aktivieren' }));
+  await waitFor(() => expect(privilegedActivation.request).toHaveBeenCalledTimes(1));
+  expect(await screen.findByRole('status')).toHaveTextContent('wartet auf eine unabhängige Freigabe');
+  expect(screen.getByRole('tab', { name: 'Meine Anträge' })).toHaveAttribute('aria-selected', 'true');
   expect(privilegedActivation.request).toHaveBeenCalledWith({ id: requestId, eligibilityId, durationSeconds: 36000, reason: 'Lizenzen für den Engineering-Arbeitstag verwalten' });
   expect(privilegedActivation.change).not.toHaveBeenCalled();
 });
 test('a confirmed approved activation starts a real new login for the changed canonical role', async () => {
   const state = fixture(); state.self.requests = [approved()]; (privilegedGroups.load as jest.Mock).mockResolvedValue(state);
   (privilegedActivation.change as jest.Mock).mockResolvedValue(approved('active')); render(<PIMGroupsPanel />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Jetzt aktivieren' })); expect(startLogin).not.toHaveBeenCalled();
-  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Bestätigen' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Aktivieren' }));
   await waitFor(() => expect(startLogin).toHaveBeenCalledTimes(1)); expect(privilegedActivation.change).toHaveBeenCalledWith(requestId, 'activate');
 });
 test('assigning a selected user creates eligibility and never activates their role', async () => {
-  render(<PIMGroupsPanel management />); const card = await screen.findByRole('article', { name: 'PIM-Gruppe Lizenzen' });
-  fireEvent.click(within(card).getByRole('button', { name: 'Benutzer zuweisen' }));
+  render(<PIMGroupsPanel management />); await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' });
+  fireEvent.click(screen.getByRole('tab', { name: 'Gruppen', exact: true }));
+  const card = screen.getByRole('row', { name: 'PIM-Gruppe Lizenzen' });
+  fireEvent.click(within(card).getByRole('button', { name: 'Zuweisen' }));
   fireEvent.change(await screen.findByLabelText('Benutzer auswählen'), { target: { value: other } });
-  fireEvent.change(screen.getByLabelText('Begründung'), { target: { value: 'Benutzer unabhängig für die Lizenzaufgabe berechtigen' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Vorgang prüfen' })); fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Bestätigen' }));
+  fireEvent.change(screen.getByLabelText(/^Begründung/), { target: { value: 'Benutzer unabhängig für die Lizenzaufgabe berechtigen' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Weiter' })); fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Bestätigen' }));
   await waitFor(() => expect(privilegedGroups.assign).toHaveBeenCalledTimes(1));
   expect(privilegedGroups.assign).toHaveBeenCalledWith(groupId, { userId: other, maxDurationSeconds: 3600, validForSeconds: 604800, reason: 'Benutzer unabhängig für die Lizenzaufgabe berechtigen', confirm: true });
   expect(privilegedActivation.change).not.toHaveBeenCalled();
 });
 test('an unconfirmed write clears the old group state and cannot repeat without explicit readback', async () => {
   (privilegedActivation.request as jest.Mock).mockRejectedValue(new Error('lost reply')); render(<PIMGroupsPanel />);
-  const card = await screen.findByRole('article', { name: 'PIM-Gruppe Lizenzen' }); fireEvent.click(within(card).getByRole('button', { name: 'Aktivierung anfordern' }));
-  fireEvent.change(screen.getByLabelText('Begründung'), { target: { value: 'Diese konkrete Aufgabe ist nachvollziehbar nötig' } }); fireEvent.click(screen.getByRole('button', { name: 'Vorgang prüfen' }));
-  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Bestätigen' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('aktuellen Stand neu laden'); expect(screen.queryByRole('article')).not.toBeInTheDocument(); expect(privilegedActivation.request).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole('button', { name: 'PIM neu laden' })); await screen.findByRole('article', { name: 'PIM-Gruppe Lizenzen' }); expect(privilegedActivation.request).toHaveBeenCalledTimes(1);
+  const card = await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' }); fireEvent.click(within(card).getByRole('button', { name: 'Aktivieren' }));
+  fireEvent.change(screen.getByLabelText(/^Begründung/), { target: { value: 'Diese konkrete Aufgabe ist nachvollziehbar nötig' } });
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Aktivieren' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('aktuellen Stand neu laden'); expect(screen.queryByRole('row')).not.toBeInTheDocument(); expect(privilegedActivation.request).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Aktualisieren' })); await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' }); expect(privilegedActivation.request).toHaveBeenCalledTimes(1);
 });
 test('the group protocol shows actor, reason and planned end from the server', async () => {
   (privilegedGroups.history as jest.Mock).mockResolvedValue({ schemaVersion: 1, groupId, page: 1, limit: 25, total: 1, events: [{ id: requestId, userId: owner, actorUserId: other, role: group.role, action: 'active', reason: 'Actual immutable activation reason', createdAt: new Date().toISOString(), durationSeconds: 3600, expiresAt: new Date(Date.now() + 3600000).toISOString() }] });
-  render(<PIMGroupsPanel />); const card = await screen.findByRole('article', { name: 'PIM-Gruppe Lizenzen' }); fireEvent.click(within(card).getByRole('button', { name: 'Protokoll' }));
+  render(<PIMGroupsPanel />); const card = await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' }); fireEvent.click(within(card).getByLabelText('Weitere Aktionen für Lizenzen')); fireEvent.click(within(card).getByRole('button', { name: 'Protokoll' }));
   const log = await screen.findByRole('region', { name: 'PIM-Protokoll' }); await waitFor(() => expect(log).toHaveTextContent('Actual immutable activation reason')); expect(log).toHaveTextContent(other); expect(log).toHaveTextContent('Geplantes Ende');
 });
 test('expiry removes the activation cards without silently granting or reactivating rights', async () => {
@@ -78,6 +83,39 @@ test('expiry removes the activation cards without silently granting or reactivat
   try {
     const state = fixture(); state.self.requests = [{ ...approved('active'), expiresAt: new Date(Date.now() + 2000).toISOString() }]; (privilegedGroups.load as jest.Mock).mockResolvedValue(state);
     render(<PIMGroupsPanel />); await act(async () => {}); await act(async () => { jest.advanceTimersByTime(3000); });
-    expect(screen.getByRole('status')).toHaveTextContent('abgelaufen'); expect(screen.queryByRole('article')).not.toBeInTheDocument(); expect(privilegedActivation.change).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent('abgelaufen'); expect(screen.queryByRole('row')).not.toBeInTheDocument(); expect(privilegedActivation.change).not.toHaveBeenCalled();
   } finally { jest.useRealTimers(); }
+});
+
+test('eligibility expiry bounds the duration offered in the simple form', async () => {
+  const state = fixture(); state.self.eligibilities[0].expiresAt = new Date(Date.now() + 1800000).toISOString();
+  (privilegedGroups.load as jest.Mock).mockResolvedValue(state); render(<PIMGroupsPanel />);
+  fireEvent.click(within(await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' })).getByRole('button', { name: 'Aktivieren' }));
+  const input = screen.getByLabelText('Dauer (Stunden)'); const maximum = Number(input.getAttribute('max'));
+  expect(maximum).toBeLessThanOrEqual(0.5); expect(maximum).toBeGreaterThan(0.45); expect(input).toHaveValue(maximum);
+});
+test('tab arrow keys change the selected panel and its keyboard focus', async () => {
+  render(<PIMGroupsPanel />); await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' });
+  fireEvent.keyDown(screen.getByRole('tab', { name: 'Berechtigt', exact: true }), { key: 'ArrowRight' });
+  const selected = screen.getByRole('tab', { name: 'Aktiv', exact: true });
+  expect(selected).toHaveAttribute('aria-selected', 'true'); expect(selected).toHaveFocus();
+  expect(screen.getAllByRole('tab').filter(tab => tab.tabIndex === 0)).toHaveLength(1);
+});
+test('legacy eligibility remains activatable without inventing a group binding', async () => {
+  (privilegedGroups.load as jest.Mock).mockResolvedValue(fixture({ bindings: [] })); render(<PIMGroupsPanel />);
+  const row = await screen.findByRole('row', { name: 'PIM-Gruppe license-administrator' });
+  expect(row).toHaveTextContent('Persönliche Rollenberechtigung'); expect(within(row).getByRole('button', { name: 'Aktivieren' })).toBeEnabled();
+  expect(within(row).queryByLabelText(/Weitere Aktionen/)).not.toBeInTheDocument();
+});
+test('closing the activation blade never submits the filled request', async () => {
+  render(<PIMGroupsPanel />); fireEvent.click(within(await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' })).getByRole('button', { name: 'Aktivieren' }));
+  fireEvent.change(screen.getByLabelText(/^Begründung/), { target: { value: 'Reviewed task that is deliberately cancelled' } });
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Abbrechen' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); expect(privilegedActivation.request).not.toHaveBeenCalled();
+});
+test('a legacy eligibility without a confirmed role policy cannot be activated', async () => {
+  (privilegedGroups.load as jest.Mock).mockResolvedValue(fixture({ bindings: [], roles: [] })); render(<PIMGroupsPanel />);
+  await screen.findByText('Keine berechtigten Zuweisungen');
+  expect(screen.queryByRole('button', { name: 'Aktivieren', exact: true })).not.toBeInTheDocument();
+  expect(privilegedActivation.request).not.toHaveBeenCalled();
 });

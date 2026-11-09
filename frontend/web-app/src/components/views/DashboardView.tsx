@@ -239,7 +239,6 @@ function SkeletonPanel({ tall = false }: { tall?: boolean }) {
 
 interface KpiCardProps {
   icon: React.ReactNode;
-  iconBg: string;
   label: string;
   value: React.ReactNode;
   subtitle?: React.ReactNode;
@@ -247,17 +246,17 @@ interface KpiCardProps {
   alert?: boolean;
 }
 
-function KpiCard({ icon, iconBg, label, value, subtitle, footer, alert }: KpiCardProps) {
+function KpiCard({ icon, label, value, subtitle, footer, alert }: KpiCardProps) {
   return (
     <div
-      className={`rounded-xl p-4 transition-shadow hover:shadow-md ${alert ? 'border-red-200' : ''}`}
+      className={`od-dashboard-kpi rounded-xl p-4 ${alert ? 'border-red-200' : ''}`}
       style={alert
         ? { background: 'var(--bg-surface)', border: '1px solid #f85149', boxShadow: 'var(--card-shadow)' }
         : { background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }
       }
     >
       <div className="flex items-start gap-4">
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+        <div className="od-dashboard-kpi-icon">
           {icon}
         </div>
         <div className="min-w-0">
@@ -699,140 +698,16 @@ export default function DashboardView() {
       <PIMGroupsPanel key="pim-groups" />
 
       {/* ------------------------------------------------------------------ */}
-      {/* Quick Stats Row (German, simplified)                                */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
-          <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Geräte gesamt</p>
-          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>{kpi.totalDevices ?? '—'}</p>
-          <p className="text-xs text-green-600 mt-1">{kpi.onlineDevices ?? 0} online</p>
-        </div>
-        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
-          <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Compliant %</p>
-          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>
-            {deviceCompliance && deviceCompliance.total > 0 ? `${Math.round((deviceCompliance.compliant / deviceCompliance.total) * 100)}%` : '—'}
-          </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Konformitatsquote</p>
-        </div>
-        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
-          <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Nutzer aktiv</p>
-          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>{kpi.totalUsers ?? '—'}</p>
-          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{kpi.totalGroups ?? 0} Gruppen</p>
-        </div>
-        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
-          <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Apps verbunden</p>
-          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>2</p>
-          <p className="text-xs text-blue-600 mt-1">SSO aktiv</p>
-        </div>
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Compliance Donut + Platform bars + Activity feed                    */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Compliance Donut (CSS/SVG) */}
-        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
-          <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Compliance Verteilung</h2>
-          {deviceCompliance && deviceCompliance.total > 0 ? (
-            <div className="flex flex-col items-center">
-              {/* SVG Donut */}
-              <svg viewBox="0 0 120 120" className="w-32 h-32 -rotate-90">
-                {(() => {
-                  const total = deviceCompliance.total;
-                  const slices = [
-                    { val: deviceCompliance.compliant, color: '#22c55e' },
-                    { val: deviceCompliance.atRisk,    color: '#facc15' },
-                    { val: deviceCompliance.nonCompliant, color: '#ef4444' },
-                    { val: deviceCompliance.noData,    color: '#d1d5db' },
-                  ];
-                  const r = 46; const cx = 60; const cy = 60;
-                  const circ = 2 * Math.PI * r;
-                  let offset = 0;
-                  return slices.map((s, i) => {
-                    const pct = s.val / total;
-                    const dash = pct * circ;
-                    const el = (
-                      <circle key={i} cx={cx} cy={cy} r={r}
-                        fill="none" stroke={s.color} strokeWidth="18"
-                        strokeDasharray={`${dash} ${circ - dash}`}
-                        strokeDashoffset={-offset}
-                      />
-                    );
-                    offset += dash;
-                    return el;
-                  });
-                })()}
-                <text x="60" y="64" textAnchor="middle" style={{ fill: 'var(--text-primary)', fontWeight: 'bold', fontSize: 18, transform: 'rotate(90deg)', transformOrigin: '60px 60px' }}>
-                  {deviceCompliance.total}
-                </text>
-              </svg>
-              <div className="mt-3 space-y-1 text-xs w-full">
-                {[{ label: 'Konform', count: deviceCompliance.compliant, color: 'bg-green-500' }, { label: 'Gefährdet', count: deviceCompliance.atRisk, color: 'bg-yellow-400' }, { label: 'Nicht konform', count: deviceCompliance.nonCompliant, color: 'bg-red-500' }, { label: 'Keine Daten', count: deviceCompliance.noData, color: 'bg-gray-300' }].map(row => (
-                  <div key={row.label} className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.color}`} /><span style={{ color: 'var(--text-secondary)' }}>{row.label}</span></div>
-                    <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>{row.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-8 text-sm" style={{ color: 'var(--text-muted)' }}>Keine Gerätedaten</div>
-          )}
-        </div>
-
-        {/* Platform breakdown bars */}
-        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
-          <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Plattform-Verteilung</h2>
-          <div className="space-y-4">
-            {platformBreakdown.length > 0 ? platformBreakdown.map(p => {
-              const total = platformBreakdown.reduce((s, x) => s + x.count, 0);
-              const pct = Math.round((p.count / total) * 100);
-              return (
-                <div key={p.label}>
-                  <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--text-secondary)' }}><span>{p.label}</span><span>{p.count} Geräte</span></div>
-                  <div className="w-full rounded-full h-2" style={{ background: 'var(--bg-surface-raised)' }}><div className={`h-2 rounded-full ${p.color}`} style={{ width: `${pct}%` }} /></div>
-                </div>
-              );
-            }) : (
-              <div className="text-center py-4 text-xs" style={{ color: 'var(--text-muted)' }}>Keine Gerätedaten</div>
-            )}
-          </div>
-        </div>
-
-        {/* Activity Feed */}
-        <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
-          <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Letzte Aktivitäten</h2>
-          <div className="space-y-2.5">
-            {activityEvents && activityEvents.length > 0 ? (
-              activityEvents.map(evt => (
-                <div key={evt.id} className="flex items-start gap-2 text-xs">
-                  <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${evt.type === 'success' ? 'bg-green-500' : evt.type === 'warning' ? 'bg-yellow-400' : evt.type === 'error' ? 'bg-red-500' : 'bg-blue-400'}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="leading-snug" style={{ color: 'var(--text-secondary)' }}>{evt.message}</p>
-                    <p className="mt-0.5" style={{ color: 'var(--text-muted)' }}>{new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-sm" style={{ color: 'var(--text-muted)' }}>
-                {activityError ? 'Audit-Log nicht verfügbar' : 'Keine Ereignisse'}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
       {/* Quick Actions                                                        */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="od-dashboard-actions">
         {[
-          { label: 'Gerät erfassen', target: '/devices?create=1', icon: ComputerDesktopIcon, color: 'text-blue-600 bg-blue-50 hover:bg-blue-100 border-blue-200' },
-          { label: 'Nutzer hinzufügen', target: '/users?create=1', icon: UsersIcon, color: 'text-green-600 bg-green-50 hover:bg-green-100 border-green-200' },
-          { label: 'App verbinden', target: '/identity', icon: SparklesIcon, color: 'text-purple-600 bg-purple-50 hover:bg-purple-100 border-purple-200' },
-          { label: 'Richtlinien verwalten', target: '/policies', icon: DocumentTextIcon, color: 'text-orange-600 bg-orange-50 hover:bg-orange-100 border-orange-200' },
+          { label: 'Gerät erfassen', target: '/devices?create=1', icon: ComputerDesktopIcon },
+          { label: 'Nutzer hinzufügen', target: '/users?create=1', icon: UsersIcon },
+          { label: 'App verbinden', target: '/identity', icon: SparklesIcon },
+          { label: 'Richtlinien verwalten', target: '/policies', icon: DocumentTextIcon },
         ].map(action => (
-          <button key={action.label} onClick={() => router.push(action.target)} className={`flex items-center justify-center gap-2 p-4 border rounded-xl text-sm font-medium transition-colors ${action.color}`}>
+          <button key={action.label} onClick={() => router.push(action.target)} className="fluent-btn-secondary">
             <action.icon className="w-5 h-5" />
             {action.label}
           </button>
@@ -846,8 +721,7 @@ export default function DashboardView() {
         {/* 1. Users */}
         <KpiCard
           icon={<UsersIcon className="w-6 h-6 text-blue-600" />}
-          iconBg="bg-blue-50"
-          label="Users"
+          label="Benutzer"
           value={kpi.totalUsers !== null ? kpi.totalUsers.toLocaleString() : '—'}
           subtitle={
             kpi.totalGroups !== null
@@ -865,8 +739,7 @@ export default function DashboardView() {
         {/* 2. Devices */}
         <KpiCard
           icon={<ComputerDesktopIcon className="w-6 h-6 text-indigo-600" />}
-          iconBg="bg-indigo-50"
-          label="Devices"
+          label="Geräte"
           value={kpi.totalDevices !== null ? kpi.totalDevices.toLocaleString() : '—'}
           subtitle={
             kpi.onlineDevices !== null && kpi.totalDevices !== null
@@ -898,7 +771,6 @@ export default function DashboardView() {
         {/* 3. Dienstzustand */}
         <KpiCard
           icon={<ServerIcon className="w-6 h-6 text-emerald-600" />}
-          iconBg="bg-emerald-50"
           label="Dienstzustand"
           value={
             kpi.healthyServices !== null && kpi.totalServices !== null
@@ -926,8 +798,7 @@ export default function DashboardView() {
         <KpiCard
           alert={kpi.openAlerts !== null && kpi.openAlerts > 0}
           icon={<BellAlertIcon className={`w-6 h-6 ${kpi.openAlerts ? 'text-red-600' : 'text-orange-500'}`} />}
-          iconBg={kpi.openAlerts ? 'bg-red-50' : 'bg-orange-50'}
-          label="Security Alerts"
+          label="Sicherheitsmeldungen"
           value={
             <span className={kpi.openAlerts ? 'text-red-600' : ''} style={kpi.openAlerts ? {} : { color: 'var(--text-primary)' }}>
               {kpi.openAlerts !== null ? kpi.openAlerts : '—'}
@@ -961,8 +832,7 @@ export default function DashboardView() {
         {/* 5. Active Policies */}
         <KpiCard
           icon={<DocumentTextIcon className="w-6 h-6 text-violet-600" />}
-          iconBg="bg-violet-50"
-          label="Active Policies"
+          label="Aktive Richtlinien"
           value={kpi.activePolicies !== null ? kpi.activePolicies : '—'}
           subtitle={
             kpi.totalPolicies !== null
@@ -984,7 +854,6 @@ export default function DashboardView() {
         {/* 6. Gateway-Laufzeit */}
         <KpiCard
           icon={<ClockIcon className="w-6 h-6 text-sky-600" />}
-          iconBg="bg-sky-50"
           label="Gateway-Laufzeit"
           value={kpi.uptime ?? '—'}
           subtitle="Quelle: API-Gateway"
@@ -998,7 +867,6 @@ export default function DashboardView() {
         {/* 7. Memory */}
         <KpiCard
           icon={<ChartBarIcon className="w-6 h-6 text-fuchsia-600" />}
-          iconBg="bg-fuchsia-50"
           label="Speicherauslastung"
           value={
             kpi.memoryPercent !== null
@@ -1021,8 +889,7 @@ export default function DashboardView() {
         {/* 8. Active Modules */}
         <KpiCard
           icon={<Cog6ToothIcon className="w-6 h-6 text-amber-600" />}
-          iconBg="bg-amber-50"
-          label="Active Modules"
+          label="Aktive Module"
           value={
             kpi.enabledModules !== null && kpi.totalModules !== null
               ? `${kpi.enabledModules} / ${kpi.totalModules}`
@@ -1159,8 +1026,8 @@ export default function DashboardView() {
         <div className="rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
             <div>
-              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>System Resources</h2>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Live metrics via Prometheus</p>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Systemressourcen</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Aktuelle Messwerte über Prometheus</p>
             </div>
             <CpuChipIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
           </div>
@@ -1318,6 +1185,9 @@ export default function DashboardView() {
           </div>
         </div>
       </div>
+      <details className="od-advanced-section"><summary>Geräte nach Plattform</summary>
+        {platformBreakdown.length ? <table className="fluent-table w-full"><thead><tr><th>Plattform</th><th>Geräte</th></tr></thead><tbody>{platformBreakdown.map(platform => <tr key={platform.label}><td>{platform.label}</td><td>{platform.count}</td></tr>)}</tbody></table> : <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Keine Gerätedaten vorhanden.</p>}
+      </details>
       {showBackupWizard && <BackupRecoveryWizard onClose={() => setShowBackupWizard(false)} />}
     </div>
   );

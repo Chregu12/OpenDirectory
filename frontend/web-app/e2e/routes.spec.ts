@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 import { VIEWS } from '../src/lib/views';
 import { mockApi, seedAuth } from './fixtures/api';
 
+test.use({ viewport: { width: 1280, height: 900 } });
+
 // This checks that every registered deep link renders the shared shell when
 // unavailable services return errors. It does not prove provider capabilities.
 for (const view of VIEWS) {
