@@ -23,7 +23,7 @@ function deviceInventoryReceiver(target,{fetchImpl=(...args)=>global.fetch(...ar
       if(returns){
         if(Object.keys(data).length!==6 || data.schemaVersion!==1 || data.deviceReturnsProtocol!==1 || data.actorUserId!==req.user.identity_authorization.userId
           || !validUuid(data.tenantId) || data.managementMode!=='inventory-only' || JSON.stringify(data.permissions)!==JSON.stringify(INVENTORY_PERMISSIONS))throw new Error('Mismatched device returns receiver');
-      }else if(data.schemaVersion!==1 || data.inventoryProtocol!==1 || data.userId!==req.user.identity_authorization.userId || !validUuid(data.tenantId) || data.managementMode!=='inventory-only'
+      }else if(data.schemaVersion!==1 || ![1,2].includes(data.inventoryProtocol) || data.userId!==req.user.identity_authorization.userId || !validUuid(data.tenantId) || data.managementMode!=='inventory-only'
         || !Array.isArray(data.supportedActions) || data.supportedActions.length || !Array.isArray(data.permissions) || !data.permissions.includes('devices.inventory.read'))throw new Error('Mismatched inventory receiver');
       next();
     }catch(error){res.status(503).json({error:'Canonical inventory receiver unavailable'});}

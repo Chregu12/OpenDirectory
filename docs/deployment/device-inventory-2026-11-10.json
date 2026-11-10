@@ -1,0 +1,312 @@
+{
+  "checkedAt": "2026-11-10T18:24:35.508259+00:00",
+  "url": "https://opendirectory.heusser.local/devices",
+  "namespace": "opendirectory",
+  "release": "opendirectory",
+  "chart": "opendirectory-lite-0.1.41",
+  "appVersion": "1.0.38",
+  "baselineCommit": "b9baa2cd72de41c6f9e3f36db5bf773044a32466",
+  "features": [
+    "Persistent device creation and revision-checked metadata editing",
+    "Exclusive user assignment, explicit release and retained assignment history",
+    "Maintenance, archival and restoration of unassigned assets with confirmed reasons",
+    "Tenant-bound server filtering, sorting, pagination and CSV export",
+    "Current canonical Engineering PIM duty, actual administrator or own company owner authority",
+    "Actual changed fields, actor, correlation, reason and pending outbox audit",
+    "Interactive MFA/session recovery that returns to /devices"
+  ],
+  "security": {
+    "inventoryProtocol": 2,
+    "backwardCompatibleClients": [
+      1,
+      2
+    ],
+    "permissions": [
+      "devices.inventory.read",
+      "devices.inventory.create",
+      "devices.inventory.assign"
+    ],
+    "freshMfaSeconds": 300,
+    "originalBearerAndCanonicalTenantRequired": true,
+    "strongIfMatchRequired": true,
+    "automaticWriteRetries": false,
+    "physicalSqlDeadlineAndDeferredCommitGuards": true,
+    "remoteDeviceActions": []
+  },
+  "validation": {
+    "deviceUnit": {
+      "suites": 21,
+      "passed": 619
+    },
+    "deviceNativePostgresAndReturns": {
+      "passed": 100
+    },
+    "identityUnit": {
+      "suites": 65,
+      "passed": 1228
+    },
+    "gatewayUnit": {
+      "suites": 11,
+      "passed": 199
+    },
+    "frontendFullUnit": {
+      "suites": 144,
+      "passed": 3117
+    },
+    "finalDeviceFrontendUnit": {
+      "suites": 2,
+      "passed": 147
+    },
+    "finalNavigationUnit": {
+      "passed": 6
+    },
+    "typescript": "passed",
+    "developmentBrowser": {
+      "passed": 77
+    },
+    "productionImageBrowser": {
+      "passed": 69
+    },
+    "productionImageBrowserAuth": {
+      "passed": 67
+    },
+    "actualOAuthPimGatewayInventoryPostgres": {
+      "passed": 1,
+      "scenario": "Engineering eligibility, independent review, original MFA activation and newly issued OAuth role token; create/edit/assign/release/archive/filter/export/restore/history; stale ETag and assigned archive denial; unrelated users denied; token rejected after duty withdrawal",
+      "disposableFixtureOnly": true
+    },
+    "openApiGeneratorConsistency": "passed",
+    "gitDiffCheck": "passed",
+    "helmLint": "passed",
+    "allArtifacts": "linux/amd64 and non-root; relevant runtime source SHA256 verified"
+  },
+  "rollout": {
+    "resourceCount": 49,
+    "onlyImageChangesBeyondChartLabels": true,
+    "phase1": {
+      "phase": 1,
+      "revision": 58,
+      "readyDeployments": 11,
+      "runtime": {
+        "identity-service": {
+          "pod": "opendirectory-identity-service-658d8949cc-r7mlg",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/identity-service:1.0.38",
+            "digest": "sha256:d428d309edc8be1d51f6c5ffb1901e72b4e6ef367cd1c40fb4131de17a31d56c"
+          },
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/DeviceInventoryAuthority.js": "7d3d4c3461780fac35c53a095131b228ed3a8ad1ede1650d80bb937eef004898",
+            "/packages/device-inventory-contract/index.js": "763e303d443c4141e194c0fbc6d0fc2f278974c25142374c732411c754323625"
+          }
+        },
+        "api-gateway": {
+          "pod": "opendirectory-api-gateway-85f98c979-mczpm",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/api-gateway:1.0.38",
+            "digest": "sha256:58b34e974195231d16dd097e09ad5e50dfd99f97562ee502c3b04dd85a385bec"
+          },
+          "arch": "x64",
+          "uid": 1001,
+          "hashes": {
+            "/app/src/middleware/deviceInventoryProxy.js": "9e215cf4291eab6da1f76de84ad348153da773e1f88bc85e0d67dc1a3b394e4a",
+            "/packages/device-inventory-contract/index.js": "763e303d443c4141e194c0fbc6d0fc2f278974c25142374c732411c754323625"
+          }
+        },
+        "web-app": {
+          "pod": "opendirectory-web-app-6d96679875-54hkb",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/web-app:1.0.38",
+            "digest": "sha256:cb5a4940b01e45ec5b8bd3ba20d19dc50aa6fc5d269badafe9915138874f79c8"
+          },
+          "arch": "x64",
+          "uid": 1001,
+          "buildId": "-mc2qv7uYC6pBEE28ecFo",
+          "hashes": {
+            "src/components/views/DeviceInventoryView.tsx": "41a2a0f4509e9a04f21d5afa9af9fa229acb18f1d6990cac31741c34012673d3",
+            "src/components/views/DeviceInventoryEditor.tsx": "25311741f685e4ee233e14189b28461f338baa8e2c1ffea6c31700bf2515a521",
+            "src/components/views/UserDetailPanel.tsx": "4848601495fd70f2439f3c8a4c7b23a9b69d50aec4c00810014062f56d7be0ea",
+            "src/lib/deviceInventory.ts": "e41330ddbc6326356ed288abe380254787328d01fd810aa00cb5e234b7652a6b",
+            "src/lib/views.ts": "0166937d13ad1fb5caff931b47f8dd33b39c5a02b30b5ca57847e5a14af451f3",
+            "src/server/browserAuth.cjs": "82d67dbc109e30e978dfdb41599271cc6aa602f35257b639e0614f6922ea4789"
+          }
+        }
+      }
+    },
+    "phase2": {
+      "phase": 2,
+      "revision": 59,
+      "readyDeployments": 11,
+      "runtime": {
+        "identity-service": {
+          "pod": "opendirectory-identity-service-658d8949cc-r7mlg",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/identity-service:1.0.38",
+            "digest": "sha256:d428d309edc8be1d51f6c5ffb1901e72b4e6ef367cd1c40fb4131de17a31d56c"
+          },
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/DeviceInventoryAuthority.js": "7d3d4c3461780fac35c53a095131b228ed3a8ad1ede1650d80bb937eef004898",
+            "/packages/device-inventory-contract/index.js": "763e303d443c4141e194c0fbc6d0fc2f278974c25142374c732411c754323625"
+          }
+        },
+        "api-gateway": {
+          "pod": "opendirectory-api-gateway-85f98c979-mczpm",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/api-gateway:1.0.38",
+            "digest": "sha256:58b34e974195231d16dd097e09ad5e50dfd99f97562ee502c3b04dd85a385bec"
+          },
+          "arch": "x64",
+          "uid": 1001,
+          "hashes": {
+            "/app/src/middleware/deviceInventoryProxy.js": "9e215cf4291eab6da1f76de84ad348153da773e1f88bc85e0d67dc1a3b394e4a",
+            "/packages/device-inventory-contract/index.js": "763e303d443c4141e194c0fbc6d0fc2f278974c25142374c732411c754323625"
+          }
+        },
+        "web-app": {
+          "pod": "opendirectory-web-app-6d96679875-54hkb",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/web-app:1.0.38",
+            "digest": "sha256:cb5a4940b01e45ec5b8bd3ba20d19dc50aa6fc5d269badafe9915138874f79c8"
+          },
+          "arch": "x64",
+          "uid": 1001,
+          "buildId": "-mc2qv7uYC6pBEE28ecFo",
+          "hashes": {
+            "src/components/views/DeviceInventoryView.tsx": "41a2a0f4509e9a04f21d5afa9af9fa229acb18f1d6990cac31741c34012673d3",
+            "src/components/views/DeviceInventoryEditor.tsx": "25311741f685e4ee233e14189b28461f338baa8e2c1ffea6c31700bf2515a521",
+            "src/components/views/UserDetailPanel.tsx": "4848601495fd70f2439f3c8a4c7b23a9b69d50aec4c00810014062f56d7be0ea",
+            "src/lib/deviceInventory.ts": "e41330ddbc6326356ed288abe380254787328d01fd810aa00cb5e234b7652a6b",
+            "src/lib/views.ts": "0166937d13ad1fb5caff931b47f8dd33b39c5a02b30b5ca57847e5a14af451f3",
+            "src/server/browserAuth.cjs": "82d67dbc109e30e978dfdb41599271cc6aa602f35257b639e0614f6922ea4789"
+          }
+        },
+        "device-service": {
+          "pod": "opendirectory-device-service-7f854664d4-shf6m",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/device-service:1.0.38",
+            "digest": "sha256:fbe6738f68f7d1431e8ba1667b6d351bbdf4eefcbc390cc6b0b7c244c633489f"
+          },
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/DeviceInventory.js": "b7c9ee088c8c256b65bed32a583f5595ea584cdbf909051c1b9c44709fa4666b",
+            "/app/src/inventoryServer.js": "acdf6894ff44a86366b18171742b7c0d62ddc3a45d6ab72b3fa3ab43d48bf620",
+            "/app/src/InventoryAuthority.js": "043aba3162613572684fcce98066a5dbd799522fc78bdee0c5c01b7dcd069413",
+            "/app/migrations/007_inventory_maintenance.sql": "3e845af00e14e235ba2bfadeb6c118bd6eb31ba232978fd444db0b30cdf3cc0d",
+            "/packages/device-inventory-contract/index.js": "763e303d443c4141e194c0fbc6d0fc2f278974c25142374c732411c754323625"
+          }
+        }
+      }
+    },
+    "unrelatedDeploymentsChanged": false,
+    "privateValuesReused": true
+  },
+  "backups": {
+    "scope": "devices and identity before the inventory maintenance rollout",
+    "archives": [
+      {
+        "database": "devices",
+        "bytes": 87285,
+        "sha256": "ce578fdf186da619db82f4c44c53da2928a79701e4d622d1ad77eaa16244e2aa",
+        "tocEntries": 111
+      },
+      {
+        "database": "identity",
+        "bytes": 3337767,
+        "sha256": "21b7be98c8ce8d22f7ebca27192eed1dfadc0b7cc1ae6f673f8ae8476ba05d72",
+        "tocEntries": 5582
+      }
+    ],
+    "validation": "pg_dump custom format; pg_restore --list and SHA256 checked"
+  },
+  "storage": {
+    "health": {
+      "service": "device-service",
+      "mode": "inventory-only",
+      "storage": "healthy"
+    },
+    "sqlReceiving": {
+      "metadataCommandInstalled": true,
+      "lifecycleCommandInstalled": true,
+      "utcPinned": true
+    },
+    "startupMigrations": 7,
+    "originalBusinessDataUnchanged": true
+  },
+  "businessDataBefore": {
+    "devices": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_assignments": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    }
+  },
+  "businessDataAfter": {
+    "devices": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_assignments": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    }
+  },
+  "publicVerification": {
+    "checkedAt": "2026-11-10T18:23:26.641337+00:00",
+    "https": {
+      "/devices": 200,
+      "/device-returns": 200,
+      "/pim": 200,
+      "/.well-known/openid-configuration": 200,
+      "/api/devices/capabilities": 401,
+      "/api/devices/export": 401,
+      "/api/devices": 401,
+      "/api/identity/device-inventory": 401
+    },
+    "compiledStylesheets": [
+      {
+        "path": "/_next/static/chunks/3tkb4cr1victr.css",
+        "sha256": "d24ec5fc5c80163709cd8c2707c3c7eec88f4112c8cd4317d39f2af42a61b2c5"
+      }
+    ]
+  },
+  "maintenance": {
+    "localCleanup": "Only unused local OpenDirectory images and their source/build cache branches; published copies checked against Harbor before removal. Two untagged unpublished OpenDirectory build candidates identified by exact Docker build history were also removed.",
+    "unpublishedCandidateImageIds": [
+      "98731ff0e510",
+      "c6191321a256"
+    ],
+    "existingContainersPreserved": 88,
+    "existingVolumesRemoved": false,
+    "temporaryPreviewContainerRemoved": true
+  },
+  "limits": [
+    "This release completes local inventory workflows. It does not enroll a real agent or MDM provider, infer online/compliance status or execute remote device commands.",
+    "No personal production login, MFA enrollment, eligibility grant or activation was performed; interactive browser tests use synthetic local fixtures and the actual OAuth integration test uses a disposable environment.",
+    "The existing five-minute MFA freshness rule remains independent of the PIM lease duration.",
+    "CSV is limited to 5000 filtered devices and the web client accepts downloads up to 32 MiB. Large exports require narrower filters.",
+    "Audit events are retained locally with pending outbox state; external delivery is not claimed.",
+    "Migration 007 retains all business rows and replaces guarded functions. After new lifecycle states/events exist, keep a protocol-2-compatible device receiver when rolling back applications; do not automatically downgrade it or restore the database."
+  ]
+}

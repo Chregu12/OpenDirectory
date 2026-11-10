@@ -24,3 +24,10 @@ test('an actual canonical source change invalidates a previously valid original 
 test('a longer canonical MFA policy cannot extend the inventory deadline and malformed policies fail closed',async()=>{state.authentication.maxAgeSeconds=86400;expect((await authority.read(user,'Bearer original')).validUntil).toBe(user.auth_time+300);state.authentication.maxAgeSeconds=0;await expect(authority.read(user,'Bearer original')).rejects.toMatchObject({status:401});});
 test('a changed tenant after canonical SQL prevents releasing an authority response',async()=>{revalidate.mockResolvedValueOnce(tenant).mockResolvedValueOnce({...tenant,generation:'2'});await expect(authority.read(user,'Bearer original')).rejects.toMatchObject({status:401});});
 test('workload or unconfirmed storage never acquires inventory authority',async()=>{await expect(authority.read({...user,actor_type:'application'},'Bearer original')).rejects.toMatchObject({status:403});database.isAvailable=()=>false;await expect(authority.read(user,'Bearer original')).rejects.toMatchObject({status:503});});
+test('an activated canonical Engineering duty obtains only home-tenant inventory permissions with fresh MFA',async()=>{
+ state.roles=['device-enrollment-operator'];companyOwner.mockResolvedValue(null);user.roles=[];
+ const source=await authority.read(user,'Bearer original');expect(source.tenant).toEqual(tenant);expect(source.permissions).toEqual(INVENTORY_PERMISSIONS);expect(companyOwner).not.toHaveBeenCalled();
+});
+test('claiming Engineering without the canonical role cannot authorize inventory operations',async()=>{
+ state.roles=['user'];companyOwner.mockResolvedValue(null);user.roles=['device-enrollment-operator'];await expect(authority.read(user,'Bearer original')).rejects.toMatchObject({status:403});
+});

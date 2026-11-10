@@ -6,6 +6,7 @@
  */
 
 // ─── Mock external dependencies BEFORE any require ────────────────────────────
+jest.mock('dotenv', () => ({ config: jest.fn() }));
 
 // Mock pg
 jest.mock('pg', () => ({
@@ -75,7 +76,7 @@ jest.mock('ws', () => {
 });
 
 // Mock service-contracts
-jest.mock('../../../../packages/service-contracts/src/messageBus', () => {
+jest.mock('../../../../../packages/service-contracts/src/messageBus', () => {
   return jest.fn().mockImplementation(() => ({
     connect: jest.fn().mockResolvedValue(undefined),
     publish: jest.fn().mockResolvedValue(undefined),
@@ -87,7 +88,7 @@ jest.mock('../../../../packages/service-contracts/src/messageBus', () => {
   }));
 }, { virtual: true });
 
-jest.mock('../../../../packages/service-contracts/src/events', () => ({
+jest.mock('../../../../../packages/service-contracts/src/events', () => ({
   Events: {
     DEVICE_ENROLLED: 'device.enrolled',
     DEVICE_NON_COMPLIANT: 'device.non_compliant',

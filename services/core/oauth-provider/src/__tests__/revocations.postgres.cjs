@@ -4299,3 +4299,33 @@ test('PIM task groups activate only licensed duties through real OAuth and withd
  const disabled=await request(identityBase,route+'/'+created.body.id+'/disable',{method:'POST',token:admin.access_token,body:{reason:'Actual group withdrawal must end the independently issued role',confirm:true}});assert.equal(disabled.status,200,JSON.stringify(disabled.body));
  assert.equal((await request(policyBase,'/api/licenses',{token:current.access_token})).status,401);
 });
+
+test('Engineering PIM inventory maintenance works through original OAuth and the production gateway', async () => {
+ const first=await issue('operator');const admin=provenMfa(payload(first.access_token))?first:await configureFactor('operator',first);
+ const initial=await issue('alice');const employee=provenMfa(payload(initial.access_token))?initial:await configureFactor('alice',initial);const reviewer=await issue('second-admin');const groups='/api/identity/pim/groups';
+ const created=await request(identityBase,groups,{method:'POST',token:admin.access_token,body:{name:'Actual device Engineering duty',description:'Only own device inventory',role:'device-enrollment-operator',maxDurationSeconds:3600,reason:'A bounded Engineering role for actual inventory management',confirm:true}});assert.equal(created.status,201,JSON.stringify(created.body));
+ const eligible=await request(identityBase,groups+'/'+created.body.id+'/eligibilities',{method:'POST',token:admin.access_token,body:{userId:canonicalSubjects.get('alice'),maxDurationSeconds:3600,validForSeconds:86400,reason:'Eligible for the independently reviewed Engineering duty',confirm:true}});assert.equal(eligible.status,201,JSON.stringify(eligible.body));
+ assert.equal((await request(inventoryFixture.base,'/api/devices/capabilities',{token:employee.access_token})).status,403);
+ const requested=await request(identityBase,'/api/identity/pim/requests',{method:'POST',token:employee.access_token,body:{id:randomUUID(),eligibilityId:eligible.body.eligibility.id,durationSeconds:3600,reason:'Manage the actual inventory during this approved work period'}});assert.equal(requested.status,200,JSON.stringify(requested.body));
+ assert.equal((await request(identityBase,'/api/identity/pim/requests/'+requested.body.id+'/approve',{method:'POST',token:reviewer.access_token,body:{}})).status,200);
+ assert.equal((await request(identityBase,'/api/identity/pim/requests/'+requested.body.id+'/activate',{method:'POST',token:employee.access_token,body:{}})).status,200);
+ const current=await issue('alice');const token=current.access_token;assert.ok(payload(token).roles.includes('device-enrollment-operator'));assert.ok(!payload(token).roles.includes('admin'));
+ await withProductionGateway(async base=>{
+  const cap=await request(base,'/api/devices/capabilities',{token});assert.equal(cap.status,200,JSON.stringify(cap.body));assert.equal(cap.body.inventoryProtocol,2);
+  const values={assetId:'PIM-ENGINEERING-01',serialNumber:'PIM-ENGINEERING-SERIAL-01',manufacturer:'Example',model:'Actual inventory',deviceClass:'laptop',platform:'linux',osVersion:'',ownership:'corporate',purchaseDate:'',warrantyEnd:'',description:''};
+  const registered=await request(base,'/api/devices',{method:'POST',token,body:values});assert.equal(registered.status,201,JSON.stringify(registered.body));const route='/api/devices/'+registered.body.id;const {deviceEtag}=require('../../../../../packages/device-inventory-contract');
+  const changed=await request(base,route,{method:'PUT',token,headers:{'If-Match':deviceEtag(registered.body)},body:{...values,model:'Reviewed corporate laptop',reason:'Verified the manufacturer equipment description',confirm:true}});assert.equal(changed.status,200,JSON.stringify(changed.body));assert.equal(changed.body.revision,'2');
+  assert.equal((await request(base,route+'/lifecycle',{method:'POST',token,headers:{'If-Match':deviceEtag(registered.body)},body:{lifecycle:'retired',reason:'This stale browser must never archive the device',confirm:true}})).status,412);
+  const assigned=await request(base,route+'/assignment',{method:'PUT',token,headers:{'If-Match':deviceEtag(changed.body)},body:{userId:canonicalSubjects.get('alice')}});assert.equal(assigned.status,200,JSON.stringify(assigned.body));
+  assert.equal((await request(base,route+'/lifecycle',{method:'POST',token,headers:{'If-Match':deviceEtag(assigned.body)},body:{lifecycle:'retired',reason:'Assigned equipment must first be released explicitly',confirm:true}})).status,409);
+  const released=await request(base,route+'/assignment',{method:'PUT',token,headers:{'If-Match':deviceEtag(assigned.body)},body:{userId:null}});assert.equal(released.status,200);
+  const retired=await request(base,route+'/lifecycle',{method:'POST',token,headers:{'If-Match':deviceEtag(released.body)},body:{lifecycle:'retired',reason:'Archive the released equipment with retained history',confirm:true}});assert.equal(retired.status,200,JSON.stringify(retired.body));assert.equal(retired.body.lifecycle,'retired');
+  const listing=await request(base,'/api/devices?lifecycle=retired&platform=linux',{token});assert.equal(listing.status,200);assert.ok(listing.body.devices.some(unit=>unit.id===registered.body.id));
+  const csv=await fetch(base+'/api/devices/export?search=PIM-ENGINEERING',{headers:{Authorization:'Bearer '+token}});assert.equal(csv.status,200);assert.equal(csv.headers.get('x-inventory-tenant'),cap.body.tenantId);assert.ok((await csv.text()).includes('Reviewed corporate laptop'));
+  const restored=await request(base,route+'/lifecycle',{method:'POST',token,headers:{'If-Match':deviceEtag(retired.body)},body:{lifecycle:'available',reason:'Restore the retained asset after a completed review',confirm:true}});assert.equal(restored.status,200);assert.equal(restored.body.lifecycle,'available');
+  const history=await request(base,route+'/history',{token});assert.equal(history.status,200,JSON.stringify(history.body));assert.equal(history.body.events.length,6);assert.ok(history.body.events.some(event=>event.type==='device.updated'&&event.changes.some(change=>change.field==='model')));
+  assert.equal((await request(base,'/api/users',{token})).status,403);
+  assert.equal((await request(identityBase,groups+'/'+created.body.id+'/disable',{method:'POST',token:admin.access_token,body:{reason:'Withdraw the actual Engineering authority and its issued tokens',confirm:true}})).status,200);
+  assert.equal((await request(base,route,{token})).status,401);
+ });
+});

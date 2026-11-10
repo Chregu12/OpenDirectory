@@ -47,11 +47,14 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   }));
   app.get('/api/devices',route(async(req,res)=>res.json(await inventory.list(req.query,req.user,req.headers.authorization))));
   app.post('/api/devices',route(async(req,res)=>result(res,await inventory.create(req.body,req.user,req.headers.authorization,req.correlationId),201)));
+  app.get('/api/devices/export',route(async(req,res)=>{const value=await inventory.exportCsv(req.query,req.user,req.headers.authorization);res.type('text/csv').set('Content-Disposition','attachment; filename="opendirectory-devices.csv"').set('X-Inventory-Tenant',value.tenantId).set('X-Inventory-Count',String(value.count)).send(value.csv);}));
   app.get('/api/devices/:id/history',route(async(req,res)=>res.json(await inventory.history(req.params.id,req.query,req.user,req.headers.authorization))));
   app.get('/api/devices/:id',route(async(req,res)=>{
     if(Object.keys(req.query).length)throw Object.assign(new Error('No inventory device selectors'),{status:400});result(res,await inventory.get(req.params.id,req.user,req.headers.authorization));
   }));
   app.put('/api/devices/:id/assignment',route(async(req,res)=>result(res,await inventory.assign(req.params.id,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId))));
+  app.put('/api/devices/:id',route(async(req,res)=>result(res,await inventory.update(req.params.id,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId))));
+  app.post('/api/devices/:id/lifecycle',route(async(req,res)=>result(res,await inventory.lifecycle(req.params.id,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId))));
   app.use('/api',(req,res)=>res.status(501).json({error:'unsupported',managementMode:'inventory-only',message:'No enrolled provider or remote device action is implemented by this inventory receiver.'}));
   app.use((error,req,res,_next)=>{
     const status=error.status || ({23505:409,23514:409,23503:409,42501:503,'22P02':400,'22003':409,'55P03':409,'57014':503}[error.code]) || 503;

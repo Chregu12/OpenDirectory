@@ -63,7 +63,7 @@ test('Unicode length, real leap days and ownership defaults follow the inventory
 });
 
 test.each([
-  { schemaVersion: 0 }, { inventoryProtocol: undefined }, { inventoryProtocol: 2 }, { userId: 'admin' }, { userId: actorId.toUpperCase().replace('1111', 'ABCD') },
+  { schemaVersion: 0 }, { inventoryProtocol: undefined }, { inventoryProtocol: 3 }, { userId: 'admin' }, { userId: actorId.toUpperCase().replace('1111', 'ABCD') },
   { tenantId: null }, { permissions: ['admin'] }, { supportedActions: ['wipe'] }, { managementMode: 'managed' }, { mock: true },
 ])('down-level, unbound and remote-management capabilities fail closed: %j', async changes => {
   const client = new DeviceInventoryClient(); clients.push(client);
@@ -229,4 +229,32 @@ test('caller cancellation prevents late reads without invalidating an otherwise 
   const controller = new AbortController(); const listing = client.list(1, '', controller.signal); const rejected = expect(listing).rejects.toThrow();
   controller.abort(); pending.resolve({ status: 200, data: page() }); await rejected;
   expect(await client.get(deviceId)).toEqual(device());
+});
+
+test('protocol two metadata edits bind the current ETag, preserve assignment and require the exact saved values', async () => {
+  const client=await ready({inventoryProtocol:2});const original=device({lifecycle:'assigned',assignedUserId:recipientId,assignmentId});
+  (api.put as jest.Mock).mockResolvedValue({status:200,data:{...original,model:'Verified model',revision:'2'}});
+  const changed=await client.update(original,{...profile,model:'Verified model'},'Correct verified hardware details');expect(changed.assignmentId).toBe(assignmentId);
+  expect(api.put).toHaveBeenCalledWith('/api/devices/'+deviceId,{...profile,model:'Verified model',reason:'Correct verified hardware details',confirm:true},{headers:{'If-Match':deviceEtag(original)},signal:expect.any(AbortSignal)});
+});
+test('an update cannot acknowledge an unrelated assignment or a partial metadata response',async()=>{
+  const client=await ready({inventoryProtocol:2});(api.put as jest.Mock).mockResolvedValue({status:200,data:device({model:'Verified model',revision:'2',assignedUserId:recipientId,assignmentId,lifecycle:'assigned'})});
+  await expect(client.update(device(),{...profile,model:'Verified model'},'Correct verified hardware details')).rejects.toThrow();await expect(client.list()).rejects.toThrow();
+});
+test('archival is versioned, explicit and cannot be sent for an assigned device',async()=>{
+  const client=await ready({inventoryProtocol:2});(api.post as jest.Mock).mockResolvedValue({status:200,data:device({lifecycle:'retired',revision:'2'})});
+  expect((await client.lifecycle(device(),'retired','Archive obsolete unassigned equipment')).lifecycle).toBe('retired');
+  expect(api.post).toHaveBeenCalledWith('/api/devices/'+deviceId+'/lifecycle',{lifecycle:'retired',reason:'Archive obsolete unassigned equipment',confirm:true},{headers:{'If-Match':deviceEtag(device())},signal:expect.any(AbortSignal)});
+  await expect(client.lifecycle(device({lifecycle:'assigned',assignedUserId:recipientId,assignmentId}),'retired','Must not archive an assigned device')).rejects.toThrow();expect(api.post).toHaveBeenCalledTimes(1);
+});
+test('older receivers remain readable but never receive unsupported maintenance writes',async()=>{
+  const client=await ready();await expect(client.update(device(),{...profile,model:'New model'},'Requires an upgraded inventory receiver')).rejects.toThrow();expect(api.put).not.toHaveBeenCalled();expect(api.post).not.toHaveBeenCalled();
+});
+test('filter results must actually match the requested inventory selectors',async()=>{
+  const client=await ready({inventoryProtocol:2});await expect(client.list(1,'',undefined,{platform:'windows'})).rejects.toThrow();
+  expect(api.get).toHaveBeenLastCalledWith('/api/devices',{params:{page:1,limit:25,platform:'windows'},signal:expect.any(AbortSignal)});
+});
+test('CSV responses from a different company are rejected before a download can be offered',async()=>{
+ const client=await ready({inventoryProtocol:2});(api.get as jest.Mock).mockImplementation(async url=>url.endsWith('/capabilities')?{status:200,data:capabilities({inventoryProtocol:2})}:{status:200,headers:{'x-inventory-tenant':otherId,'x-inventory-count':'1','content-type':'text/csv'},data:new Blob(['header\r\nrow\r\n'])});
+ await expect(client.exportCsv()).rejects.toThrow();await expect(client.list()).rejects.toThrow();
 });

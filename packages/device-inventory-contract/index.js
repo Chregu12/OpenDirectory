@@ -6,6 +6,7 @@ const DEVICE_FIELDS = Object.freeze([
 ]);
 const DEVICE_CLASSES = Object.freeze(['smartphone', 'tablet', 'laptop', 'desktop', 'shared', 'kiosk', 'other']);
 const INVENTORY_PERMISSIONS = Object.freeze(['devices.inventory.read', 'devices.inventory.create', 'devices.inventory.assign']);
+const INVENTORY_LIFECYCLES = Object.freeze(['available', 'assigned', 'maintenance', 'retired']);
 const PLATFORMS = ['macos', 'ios', 'ipados', 'windows', 'linux', 'android', 'other'];
 const TEXT_FIELDS = { assetId: 120, serialNumber: 120, manufacturer: 120, model: 120, osVersion: 120, description: 2000 };
 const DEFAULTS = { osVersion: '', ownership: 'corporate', purchaseDate: '', warrantyEnd: '', description: '' };
@@ -61,6 +62,21 @@ function validateDeviceAssignment(input) {
   if (!validFields(input, ['userId']) || !Object.hasOwn(input, 'userId')
     || input.userId !== null && !validUuid(input.userId)) fail(400, 'invalid_device_assignment');
   return { userId: input.userId };
+}
+
+function inventoryReason(value) {
+  if (typeof value !== 'string' || /[\u0000-\u001f\u007f-\u009f]/u.test(value) || [...value.trim()].length < 10 || [...value.trim()].length > 500) fail(400, 'inventory_reason_required');
+  return value.trim();
+}
+function validateDeviceUpdate(input) {
+  if (!validFields(input, [...DEVICE_FIELDS, 'reason', 'confirm']) || input.confirm !== true) fail(400, 'confirmed_inventory_update_required');
+  const { reason, confirm, ...values } = input;
+  return { ...validateDeviceValues(values), reason: inventoryReason(reason), confirm };
+}
+function validateDeviceLifecycle(input) {
+  if (!validFields(input, ['lifecycle', 'reason', 'confirm']) || Object.keys(input).length !== 3 || input.confirm !== true
+    || !['available', 'maintenance', 'retired'].includes(input.lifecycle)) fail(400, 'confirmed_inventory_lifecycle_required');
+  return { lifecycle: input.lifecycle, reason: inventoryReason(input.reason), confirm: true };
 }
 
 function deviceEtag(device) {
@@ -137,6 +153,6 @@ function validateDeviceReturnEtag(value) {
   return { id: match[1], revision: match[2], deviceRevision: match[3] };
 }
 
-module.exports = { DEVICE_FIELDS, DEVICE_CLASSES, INVENTORY_PERMISSIONS, validateDeviceValues, validateDeviceAssignment, deviceEtag, validateDeviceEtag,
+module.exports = { DEVICE_FIELDS, DEVICE_CLASSES, INVENTORY_PERMISSIONS, INVENTORY_LIFECYCLES, validateDeviceValues, validateDeviceAssignment, validateDeviceUpdate, validateDeviceLifecycle, deviceEtag, validateDeviceEtag,
   RETURN_STATUSES, returnListQuery, offboardingReturnQuery, offboardingReturnCapabilityQuery, deviceOffboardingValues, offboardingReturnValues,
   returnDecisionValues, deviceReturnEtag, validateDeviceReturnEtag };

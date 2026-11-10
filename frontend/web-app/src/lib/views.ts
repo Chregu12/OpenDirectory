@@ -33,8 +33,8 @@ export const VIEWS: ViewDefinition[] = [
   { id: 'sspr', name: 'Passwort zurücksetzen', group: 'Administration', icon: ArrowUturnLeftIcon, keywords: ['Passwort-Reset', 'sspr'], audience: 'self' },
   { id: 'identity', name: 'Identitätsanbieter', group: 'Administration', icon: FingerPrintIcon, keywords: ['Identity Provider', 'identity'], audience: 'platform' },
   { id: 'sync', name: 'Verzeichnis-Sync', group: 'Automatisierung & Integrationen', icon: ArrowPathIcon, keywords: ['Verzeichnis-Sync', 'sync'], audience: 'platform' },
-  { id: 'devices', name: 'Geräte', group: 'Geräte', icon: ComputerDesktopIcon, keywords: ['Geräte', 'devices'], audience: 'owner-or-admin', module: 'device-management' },
-  { id: 'device-returns', name: 'Geräterückgaben', group: 'Geräte', icon: ArrowUturnLeftIcon, keywords: ['Geräterückgaben', 'device-returns'], audience: 'owner-or-admin' },
+  { id: 'devices', name: 'Geräte', group: 'Geräte', icon: ComputerDesktopIcon, keywords: ['Geräte', 'devices'], audience: 'owner-or-admin', roles: ['device-enrollment-operator'], module: 'device-management' },
+  { id: 'device-returns', name: 'Geräterückgaben', group: 'Geräte', icon: ArrowUturnLeftIcon, keywords: ['Geräterückgaben', 'device-returns'], audience: 'owner-or-admin', roles: ['device-enrollment-operator'] },
   { id: 'enrollment', name: 'Enrollment', group: 'Geräte', icon: ArrowDownOnSquareStackIcon, keywords: ['Enrollment', 'enrollment'], audience: 'platform', service: 'quick-actions' },
   { id: 'blueprints', name: 'Plattform-Blueprints', group: 'Blueprints', icon: RectangleStackIcon, keywords: ['Blueprints', 'blueprints'], audience: 'platform', roles: ['policy-reader', 'policy-administrator', 'policy-deployment-operator', 'policy-publication-reviewer'] },
   { id: 'company-blueprints', name: 'Firmen-Blueprints', group: 'Blueprints', icon: RectangleStackIcon, keywords: ['Firmen-Blueprints', 'company-blueprints'], audience: 'owner-or-admin' },
@@ -97,7 +97,7 @@ export function visibleViews(context: NavigationContext) {
     if (view.audience === 'self') return true;
     if (!context.access || context.access.demoMode || !context.access.userId) return false;
     if (view.audience === 'owner') return context.access.companyOwner === true;
-    if (view.audience === 'owner-or-admin') return context.access.companyOwner === true || context.platformAdmin;
+    if (view.audience === 'owner-or-admin') return context.access.companyOwner === true || context.platformAdmin || view.roles?.some(role => context.roles?.includes(role)) === true;
     if (view.audience === 'permissions') return view.permissions?.some(permission => context.access!.permissions.includes(permission)) === true || view.roles?.some(role => context.roles?.includes(role)) === true;
     return context.platformAdmin || view.roles?.some(role => context.roles?.includes(role)) === true;
   });

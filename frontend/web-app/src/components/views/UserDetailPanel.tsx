@@ -9,12 +9,12 @@ import { DirectoryUser, directoryUsers, directoryError, userName } from '@/lib/d
 import { ensureSession } from '@/lib/auth';
 import DirectoryUserEditor from './DirectoryUserEditor';
 
-export function DirectoryConfirmation({ title, children, busy, error, onConfirm, onClose }: { title: string; children: React.ReactNode; busy: boolean; error: string; onConfirm: () => void; onClose: () => void }) {
+export function DirectoryConfirmation({ title, children, busy, error, onConfirm, onClose, confirmDisabled = false }: { title: string; children: React.ReactNode; busy: boolean; error: string; onConfirm: () => void; onClose: () => void; confirmDisabled?: boolean }) {
   const heading = useRef<HTMLHeadingElement>(null); const cancel = useRef<HTMLButtonElement>(null);
   return <Dialog open initialFocus={busy ? heading : cancel} onClose={() => { if (!busy) onClose(); }} className="od-modal-frame" role="alertdialog" aria-label={title}>
     <Dialog.Panel className="od-modal-panel max-w-lg space-y-4" style={{ background: 'var(--bg-surface, #161b22)', color: 'var(--text-primary, #e4e6ea)' }}>
       <Dialog.Title ref={heading} tabIndex={-1} className="text-lg font-semibold">{title}</Dialog.Title><div>{children}</div>{error && <p role="alert">{error}</p>}
-      <div className="flex justify-end gap-4"><button ref={cancel} autoFocus disabled={busy} onClick={onClose}>Abbrechen</button><button className="rounded bg-red-700 px-4 py-2 text-white" disabled={busy || !!error} onClick={onConfirm}>{busy ? 'Wird ausgeführt …' : 'Bestätigen'}</button></div>
+      <div className="flex justify-end gap-4"><button ref={cancel} autoFocus disabled={busy} onClick={onClose}>Abbrechen</button><button className="rounded bg-red-700 px-4 py-2 text-white" disabled={busy || !!error || confirmDisabled} onClick={onConfirm}>{busy ? 'Wird ausgeführt …' : 'Bestätigen'}</button></div>
     </Dialog.Panel>
   </Dialog>;
 }

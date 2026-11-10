@@ -7163,7 +7163,7 @@
       "get": {
         "operationId": "readOwnDeviceInventoryCapabilities",
         "summary": "Read actual bounded own-inventory capabilities",
-        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
         "responses": {
           "200": {
             "description": "Confirmed current source and exact SQL receivers; no remote actions",
@@ -7398,6 +7398,41 @@
               }
             }
           },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
           "428": {
             "description": "Fresh verified MFA and exact strong If-Match required",
             "content": {
@@ -7510,7 +7545,7 @@
       "get": {
         "operationId": "listOwnInventoryDevices",
         "summary": "Read a persistent own-tenant inventory page",
-        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
         "parameters": [
           {
             "name": "page",
@@ -7538,6 +7573,86 @@
             "schema": {
               "type": "string",
               "maxLength": 255
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "macos",
+                "ios",
+                "ipados",
+                "windows",
+                "linux",
+                "android",
+                "other"
+              ]
+            }
+          },
+          {
+            "name": "lifecycle",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "available",
+                "assigned",
+                "maintenance",
+                "retired"
+              ]
+            }
+          },
+          {
+            "name": "ownership",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "corporate",
+                "byod",
+                "shared"
+              ]
+            }
+          },
+          {
+            "name": "deviceClass",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "smartphone",
+                "tablet",
+                "laptop",
+                "desktop",
+                "shared",
+                "kiosk",
+                "other"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "updatedAt",
+                "assetId"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
             }
           }
         ],
@@ -7809,6 +7924,41 @@
               }
             }
           },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
           "428": {
             "description": "Fresh verified MFA and exact strong If-Match required",
             "content": {
@@ -7919,7 +8069,7 @@
       "post": {
         "operationId": "registerOwnInventoryDevice",
         "summary": "Register an unmanaged own-company inventory asset",
-        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
         "requestBody": {
           "required": true,
           "content": {
@@ -8158,6 +8308,41 @@
               }
             }
           },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
           "428": {
             "description": "Fresh verified MFA and exact strong If-Match required",
             "content": {
@@ -8270,7 +8455,7 @@
       "get": {
         "operationId": "readOwnInventoryDevice",
         "summary": "Read one persistent own inventory asset",
-        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
         "parameters": [
           {
             "name": "id",
@@ -8516,6 +8701,451 @@
               }
             }
           },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh verified MFA and exact strong If-Match required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Inventory only: no supported enrollment or provider/remote action",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Persistent database, original live source or receiving evidence unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateOwnInventoryDevice",
+        "summary": "Conditionally edit actual device metadata, retaining assignment",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact current strong device-UUID-revision ETag; never retry a write automatically."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryDeviceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual incremented revision, retained assignment and mandatory before/after audit with reason",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryDevice"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid exact fields/selectors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original token revoked, expired or changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own inventory duty required; no workload/claim bypass",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or canonical recipient absent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate asset/serial, same assignment or conflicting local state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Exact device revision changed; reload, never automatically retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
           "428": {
             "description": "Fresh verified MFA and exact strong If-Match required",
             "content": {
@@ -8628,7 +9258,7 @@
       "put": {
         "operationId": "assignOwnInventoryDevice",
         "summary": "Conditionally assign, replace or release one exclusive inventory recipient",
-        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred. Exact canonical own-user snapshot is checked live, including disabled employees. Reassignment releases the previous retained history row and inserts a fresh assignment UUID atomically. Null releases only the current assignment; already identical states return 409. Not user activation or offboarding.",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred. Exact canonical own-user snapshot is checked live, including disabled employees. Reassignment releases the previous retained history row and inserts a fresh assignment UUID atomically. Null releases only the current assignment; already identical states return 409. Not user activation or offboarding.",
         "parameters": [
           {
             "name": "id",
@@ -8910,6 +9540,41 @@
               }
             }
           },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
           "428": {
             "description": "Fresh verified MFA and exact strong If-Match required",
             "content": {
@@ -9022,7 +9687,7 @@
       "get": {
         "operationId": "readOwnInventoryDeviceHistory",
         "summary": "Read a persistent page of local device audit and pending delivery state",
-        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
         "parameters": [
           {
             "name": "id",
@@ -9327,6 +9992,41 @@
               }
             }
           },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
           "428": {
             "description": "Fresh verified MFA and exact strong If-Match required",
             "content": {
@@ -9439,7 +10139,7 @@
       "get": {
         "operationId": "readOriginalInventoryAuthority",
         "summary": "Resolve the original human inventory home/duties from live canonical identity",
-        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
         "responses": {
           "200": {
             "description": "Original bearer-bound current authority; not a reusable credential or a new access grant",
@@ -9685,6 +10385,41 @@
               }
             }
           },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
           "428": {
             "description": "Fresh verified MFA and exact strong If-Match required",
             "content": {
@@ -9795,7 +10530,7 @@
       "post": {
         "operationId": "readOriginalInventoryRecipient",
         "summary": "Resolve one exact own canonical inventory recipient with original live authority",
-        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
         "requestBody": {
           "required": true,
           "content": {
@@ -10048,6 +10783,41 @@
           },
           "412": {
             "description": "Exact device revision changed; reload, never automatically retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
             "content": {
               "application/json": {
                 "schema": {
@@ -40120,6 +40890,902 @@
           }
         }
       }
+    },
+    "/api/devices/{id}/lifecycle": {
+      "post": {
+        "operationId": "changeOwnInventoryLifecycle",
+        "summary": "Conditionally maintain, archive or restore an unassigned asset",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred. Release an assignment first. Maintenance and retired devices cannot be assigned until restored. No deletion or physical return is inferred.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact current strong device-UUID-revision ETag; never retry a write automatically."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryLifecycleUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Retained asset with actual new lifecycle and incremented revision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryDevice"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid exact fields/selectors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original token revoked, expired or changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own inventory duty required; no workload/claim bypass",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or canonical recipient absent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate asset/serial, same assignment or conflicting local state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Exact device revision changed; reload, never automatically retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh verified MFA and exact strong If-Match required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Inventory only: no supported enrollment or provider/remote action",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Persistent database, original live source or receiving evidence unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/export": {
+      "get": {
+        "operationId": "exportOwnInventoryDevices",
+        "summary": "Export the complete filtered own inventory as CSV",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred. At most 5000 devices per export. Quoted UTF-8 BOM CSV with spreadsheet formula escaping; no caller-selected tenant, limit or page.",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "macos",
+                "ios",
+                "ipados",
+                "windows",
+                "linux",
+                "android",
+                "other"
+              ]
+            }
+          },
+          {
+            "name": "lifecycle",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "available",
+                "assigned",
+                "maintenance",
+                "retired"
+              ]
+            }
+          },
+          {
+            "name": "ownership",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "corporate",
+                "byod",
+                "shared"
+              ]
+            }
+          },
+          {
+            "name": "deviceClass",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "smartphone",
+                "tablet",
+                "laptop",
+                "desktop",
+                "shared",
+                "kiosk",
+                "other"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "updatedAt",
+                "assetId"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One coherent read-only snapshot of the selected own-company assets",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Inventory-Tenant": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "X-Inventory-Count": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 5000
+                }
+              }
+            },
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid exact fields/selectors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original token revoked, expired or changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own inventory duty required; no workload/claim bypass",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or canonical recipient absent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate asset/serial, same assignment or conflicting local state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Exact device revision changed; reload, never automatically retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh verified MFA and exact strong If-Match required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Inventory only: no supported enrollment or provider/remote action",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Persistent database, original live source or receiving evidence unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -41481,7 +43147,9 @@
           "lifecycle": {
             "enum": [
               "available",
-              "assigned"
+              "assigned",
+              "maintenance",
+              "retired"
             ]
           },
           "managementMode": {
@@ -41548,7 +43216,7 @@
             "const": 1
           },
           "inventoryProtocol": {
-            "const": 1
+            "const": 2
           },
           "userId": {
             "type": "string",
@@ -41611,7 +43279,9 @@
             "enum": [
               "device.registered",
               "device.assigned",
-              "device.assignment.released"
+              "device.assignment.released",
+              "device.updated",
+              "device.lifecycle.changed"
             ]
           },
           "version": {
@@ -41714,8 +43384,51 @@
           },
           "deliveryStatus": {
             "const": "pending"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "changes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "field",
+                "before",
+                "after"
+              ],
+              "properties": {
+                "field": {
+                  "enum": [
+                    "assetId",
+                    "serialNumber",
+                    "manufacturer",
+                    "model",
+                    "deviceClass",
+                    "platform",
+                    "osVersion",
+                    "ownership",
+                    "purchaseDate",
+                    "warrantyEnd",
+                    "description",
+                    "lifecycle"
+                  ]
+                },
+                "before": {
+                  "type": "string"
+                },
+                "after": {
+                  "type": "string"
+                }
+              }
+            }
           }
-        }
+        },
+        "description": "Metadata and lifecycle events include the retained reason and actual changed fields; assignments remain unchanged."
       },
       "InventoryAuthoritySource": {
         "type": "object",
@@ -55301,6 +57014,133 @@
             "$ref": "#/components/schemas/EmployeeInvitation"
           },
           "partialEnrollmentWithdrawn": {
+            "const": true
+          }
+        }
+      },
+      "InventoryDeviceUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assetId",
+          "serialNumber",
+          "manufacturer",
+          "model",
+          "deviceClass",
+          "platform",
+          "osVersion",
+          "ownership",
+          "purchaseDate",
+          "warrantyEnd",
+          "description",
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "serialNumber": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "manufacturer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "deviceClass": {
+            "enum": [
+              "smartphone",
+              "tablet",
+              "laptop",
+              "desktop",
+              "shared",
+              "kiosk",
+              "other"
+            ]
+          },
+          "platform": {
+            "enum": [
+              "macos",
+              "ios",
+              "ipados",
+              "windows",
+              "linux",
+              "android",
+              "other"
+            ]
+          },
+          "osVersion": {
+            "type": "string",
+            "maxLength": 120,
+            "default": ""
+          },
+          "ownership": {
+            "enum": [
+              "corporate",
+              "byod",
+              "shared"
+            ],
+            "default": "corporate"
+          },
+          "purchaseDate": {
+            "type": "string",
+            "pattern": "^(|[0-9]{4}-[0-9]{2}-[0-9]{2})$",
+            "default": ""
+          },
+          "warrantyEnd": {
+            "type": "string",
+            "pattern": "^(|[0-9]{4}-[0-9]{2}-[0-9]{2})$",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "default": ""
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500,
+            "description": "Trimmed actual reason, no control characters."
+          },
+          "confirm": {
+            "const": true
+          }
+        }
+      },
+      "InventoryLifecycleUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lifecycle",
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "lifecycle": {
+            "enum": [
+              "available",
+              "maintenance",
+              "retired"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500,
+            "description": "Trimmed actual reason, no control characters."
+          },
+          "confirm": {
             "const": true
           }
         }

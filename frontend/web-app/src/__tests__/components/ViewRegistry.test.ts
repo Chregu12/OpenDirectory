@@ -23,3 +23,9 @@ test('only explicit company reviewers see the review queue', () => {
   expect(visibleViews({ ...context, platformAdmin: true }).some(view => view.id === 'registration-reviews')).toBe(false);
   expect(visibleViews({ ...context, access: { ...base, permissions: ['company.registrations.review'] } }).some(view => view.id === 'registration-reviews')).toBe(true);
 });
+
+test('Engineering sees its own inventory tasks without unrelated administration',()=>{
+ const ids=visibleViews({...context,roles:['device-enrollment-operator']}).map(view=>view.id);
+ for(const id of ['devices','device-returns'])expect(ids).toContain(id);
+ for(const id of ['settings','users','permissions','applications','company-blueprints','infrastructure'])expect(ids).not.toContain(id);
+});

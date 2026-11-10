@@ -1,87 +1,15 @@
-# Device Fleet View
+# Geräteverwaltung unter /devices
 
-The Device Fleet view (`DeviceFleetView.tsx`) is a 3-column layout: sidebar, device list (300 px), and detail panel. It gives administrators a full picture of every managed device and direct access to remediation actions.
+Die produktive Route verwendet `DeviceInventoryView.tsx`. Sie verwaltet das persistente Firmeninventar im Device-Service. `/fleet` öffnet dieselbe Ansicht.
 
-## Accessing the view
+1. Als Firmeninhaber, Administrator oder mit aktivierter PIM-Aufgabe Engineering anmelden. Die ursprüngliche MFA muss für Inventarzugriffe höchstens fünf Minuten zurückliegen. Bei Ablauf führt **Erneut anmelden** direkt zur Geräteansicht zurück.
+2. **Gerät erfassen** öffnet das Formular für Inventarnummer, Seriennummer, Hersteller, Modell, Klasse, Plattform, Eigentum, Betriebssystemversion, Kaufdatum, Garantieende und Beschreibung.
+3. Über Suche, Plattform, Status, Eigentum und Sortierung den serverseitigen Bestand eingrenzen. Seiten und Gesamtzahl stammen aus derselben Datenbanksicht. **CSV exportieren** lädt den vollständigen gefilterten eigenen Bestand mit höchstens 5000 Geräten; bei mehr Geräten muss der Filter eingeschränkt werden.
+4. Eine Inventarnummer öffnet Details, Benutzerzuweisung und Historie. Die separat berechtigte Personen-API liefert den Benutzerpicker. Ohne Profilrecht kann eine bekannte kanonische Benutzer-ID eingegeben werden.
+5. **Stammdaten bearbeiten** erhält die bestehende Benutzerzuweisung und verlangt eine Begründung. Die gespeicherte Revision muss weiterhin aktuell sein; Konflikte überschreiben keine parallelen Änderungen.
+6. **In Wartung nehmen**, **Archivieren** und **Wieder bereitstellen** verlangen eine ausdrückliche Bestätigung und Begründung. Ein zugewiesenes Gerät muss zuerst freigegeben werden. Wartende und archivierte Geräte können erst nach Wiederbereitstellung neu zugewiesen werden. Archivieren löscht weder Gerät noch Historie.
+7. Die Historie zeigt Akteur, Zeit, Version, ursprüngliche Zuweisungen, tatsächliche geänderte Felder und Begründung. Die lokale Outbox-Zustellung bleibt als ausstehend gekennzeichnet.
 
-Click **Devices** (💻) in the sidebar. The list column loads immediately; the detail panel is blank until you select a device.
+**Geräterückgaben öffnen** führt zum gesonderten bestätigten Rückgabeprozess. Eine einfache Freigabe einer Inventarzuweisung ist keine Bestätigung der physischen Rückgabe.
 
-## OS summary cards
-
-Across the top of the list column, a row of OS summary cards shows the total device count and compliance status breakdown for each operating system (macOS, Windows, Linux, iOS, Android). Click a card to filter the device list to that OS only. Click again to clear the filter.
-
-## Device list
-
-The list column is scrollable and shows one row per device. Each row displays:
-
-- OS icon (emoji)
-- Device name (hostname)
-- MDM server name · serial number (secondary line, `#86868b`)
-
-The selected row receives a blue background pill (`#0071e3`).
-
-## Searching and filtering
-
-Type in the search field at the top of the list column to filter by device name, serial number, or assigned user. The filter is applied client-side and updates instantly.
-
-## Sorting
-
-Use the sort control above the list to order by:
-
-- Name (A → Z / Z → A)
-- Serial number
-- Date added (newest first / oldest first)
-- Compliance status
-
-## Compliance status pills
-
-Each device row carries a compliance pill:
-
-| Colour | Meaning |
-|---|---|
-| Green | Compliant — all policies satisfied |
-| Yellow / amber | Warning — non-critical policy drift detected |
-| Red | Non-compliant — one or more enforced policies violated |
-
-## Selecting a device
-
-Click any row to load its details in the right-hand detail panel. The panel is divided into collapsible sections:
-
-### Overview
-- MDM server name
-- Model (e.g. "MacBook Pro 14-inch, 2023")
-- Serial number
-
-### Details
-- Source (ABM / manual enrollment / DEP)
-- Order number (if ABM-sourced)
-- Storage (disk capacity)
-
-### Activity
-- Date added
-- Last seen (last check-in timestamp)
-
-### LAPS (Local Administrator Password Solution)
-- Reveals the current local admin password on demand (click **Reveal**)
-- **Rotate** generates a new password immediately; the old password is invalidated
-- Retrieval and rotation events are recorded as `ad.laps.password.retrieved` / `ad.laps.password.rotated` on the event bus
-
-### BitLocker
-- Lists all stored recovery key entries for the device
-- Click **Retrieve** next to a key to display the full 48-digit recovery key
-- Key retrievals are recorded as `ad.bitlocker.key.retrieved`
-
-## Device actions menu
-
-Click the **...** (ellipsis) button on a device row or in the detail panel header to open the actions menu:
-
-| Action | Description |
-|---|---|
-| View Details | Expands the full detail panel |
-| Unenroll | Removes the device from MDM; triggers `device.retired` event |
-| Push Policy | Immediately pushes the assigned policy profile to the device |
-| Remote Lock | Sends a lock command via the MDM channel |
-
-## Enrolling a new device
-
-Click **+ Enroll Device** in the Quick Actions Bar at the top of the page. This opens the Enrollment Wizard — see [Enrollment Wizard Guide](./enrollment.md) for step-by-step instructions.
+Eine Inventarzeile registriert keinen Agenten und kein MDM. Enrollment, Online-Status, Compliance, LAPS, BitLocker, App-Installation und Fernaktionen benötigen eine echte geprüfte Anbindung. Die Ansicht erfindet diese Daten oder Aktionen nicht. Die früheren `DevicesView`-/`DeviceFleetView`-Prototypen beschreiben keinen produktiven Funktionsumfang.

@@ -22,7 +22,7 @@ class DeviceInventoryAuthority {
     const result = await this.database.transaction(async client => {
       const source = await new AuthorizationState({ transaction: callback => callback(client) }).state(user.iss, user.sub);
       if (!source.active || !sameContext(source.context, user.identity_authorization) || !sameTenantContext(source.tenant, tenant) || !acceptsRoleAuthentication(source.authentication, user)) fail(401, 'Original inventory authority changed');
-      const administrative = source.roles.includes('admin');
+      const administrative = source.roles.includes('admin') || source.roles.includes('device-enrollment-operator');
       const owner = administrative ? null : await companyOwner(client, user);
       if (!administrative && !owner) fail(403, 'Actual own-company inventory authority required');
       let target = null;

@@ -13,7 +13,7 @@ const { INVENTORY_PERMISSIONS, validateDeviceValues, deviceEtag } = require('../
 assert.ok(process.env.DEVICE_TEST_DATABASE_URL, 'Run scripts/test-inventory-postgres.js or set DEVICE_TEST_DATABASE_URL');
 
 const administration = new Pool({ connectionString: process.env.DEVICE_TEST_DATABASE_URL, max: 1 });
-const migrations = ['001_devices.sql', '002_device_system_info.sql', '003_device_columns_align.sql', '004_install_jobs.sql', '005_device_inventory.sql'];
+const migrations = ['001_devices.sql', '002_device_system_info.sql', '003_device_columns_align.sql', '004_install_jobs.sql', '005_device_inventory.sql', '007_inventory_maintenance.sql'];
 const relations = ['devices', 'device_inventory_events', 'device_inventory_assignments', 'device_inventory_outbox'];
 const authorization = 'Bearer inventory.explicit.server.fixture';
 let schema;
@@ -823,3 +823,37 @@ for (const [importedRevision, nextRevision] of [
     }
   });
 }
+
+test('metadata edits retain the exact current assignment and record every changed field and reason', async () => {
+  const created=await create(values());const assigned=await assign(created,fixture.ownUser);
+  const beforeLink=(await pool.query('SELECT to_jsonb(link) AS state FROM device_inventory_assignments link WHERE id=$1',[assigned.assignmentId])).rows[0].state;
+  const profile=Object.fromEntries(require('../../../../../packages/device-inventory-contract').DEVICE_FIELDS.map(field=>[field,assigned[field]]));
+  const edited=await inventory.update(assigned.id,{...profile,model:'Updated workstation',warrantyEnd:'2028-12-31',reason:'Correct verified purchase and hardware details',confirm:true},deviceEtag(assigned),fixture.user,authorization,randomUUID());
+  assert.equal(edited.revision,'3');assert.equal(edited.model,'Updated workstation');assert.equal(edited.assignedUserId,assigned.assignedUserId);assert.equal(edited.assignmentId,assigned.assignmentId);
+  assert.deepEqual((await pool.query('SELECT to_jsonb(link) AS state FROM device_inventory_assignments link WHERE id=$1',[assigned.assignmentId])).rows[0].state,beforeLink);
+  const event=(await inventory.history(edited.id,{},fixture.user,authorization)).events[0];assert.equal(event.type,'device.updated');assert.equal(event.reason,'Correct verified purchase and hardware details');assert.ok(event.changes.some(change=>change.field==='model'&&change.before===assigned.model&&change.after===edited.model));
+  await assert.rejects(inventory.update(edited.id,{...profile,model:'Stale overwrite',reason:'Must reject concurrent stale modifications',confirm:true},deviceEtag(assigned),fixture.user,authorization),{status:412});
+  const state=await snapshot();fixture.beforeCheckpoint=async()=>{fixture.revoked=true;};
+  await assert.rejects(inventory.update(edited.id,{...profile,model:'Withdrawn modification',reason:'Original source is lost before commit',confirm:true},deviceEtag(edited),fixture.user,authorization),{status:401});assert.deepEqual(await snapshot(),state);
+});
+
+test('maintenance and archival require released assignments and restore before assigning again', async () => {
+  const created=await create(values());const assigned=await assign(created,fixture.ownUser);
+  const transition=(row,lifecycle)=>inventory.lifecycle(row.id,{lifecycle,reason:'Explicit inventory lifecycle housekeeping',confirm:true},deviceEtag(row),fixture.user,authorization,randomUUID());
+  await assert.rejects(transition(assigned,'retired'),{status:409});const released=await assign(assigned,null);
+  const maintenance=await transition(released,'maintenance');assert.equal(maintenance.lifecycle,'maintenance');await assert.rejects(assign(maintenance,fixture.ownUser),{status:409});
+  const retired=await transition(maintenance,'retired');assert.equal(retired.lifecycle,'retired');assert.equal(retired.assignedUserId,null);
+  const available=await transition(retired,'available');assert.equal((await assign(available,fixture.nextUser)).lifecycle,'assigned');
+  const history=await inventory.history(created.id,{},fixture.user,authorization);assert.equal(history.events.filter(event=>event.type==='device.lifecycle.changed').length,3);
+  assert.equal((await pool.query('SELECT count(*)::int AS count FROM devices')).rows[0].count,1);
+});
+
+test('server filters and CSV use only the original tenant, actual rows and spreadsheet-safe cells', async () => {
+  const created=await create(values({assetId:'=DANGEROUS()',model:'Actual "quoted" model',platform:'linux'}));const second=await create(values({platform:'macos'}));
+  await inventory.lifecycle(second.id,{lifecycle:'retired',reason:'Retire the unassigned obsolete laptop',confirm:true},deviceEtag(second),fixture.user,authorization,randomUUID());
+  const ownTenant=fixture.source.tenant.id;fixture.source.tenant.id=randomUUID();await create(values({assetId:'Foreign-private-device',platform:'linux'}));fixture.source.tenant.id=ownTenant;
+  const list=await inventory.list({platform:'linux',lifecycle:'available',sort:'assetId',order:'desc'},fixture.user,authorization);assert.deepEqual(list.devices.map(row=>row.id),[created.id]);assert.equal(list.total,1);
+  const exported=await inventory.exportCsv({platform:'linux',lifecycle:'available'},fixture.user,authorization);assert.equal(exported.tenantId,ownTenant);assert.equal(exported.count,1);assert.ok(exported.csv.includes('"\'=DANGEROUS()"'));assert.ok(exported.csv.includes('Actual ""quoted"" model'));assert.ok(!exported.csv.includes('Foreign-private-device'));
+  for(const query of [{platform:'sql-injection'},{lifecycle:'deleted'},{sort:'tenant_id'},{order:'desc; drop table devices'},{tenantId:ownTenant}])await assert.rejects(inventory.list(query,fixture.user,authorization),{status:400});
+  await assert.rejects(inventory.exportCsv({page:'1'},fixture.user,authorization),{status:400});
+});

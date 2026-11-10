@@ -2,16 +2,13 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ViewShell } from '@/components/ui/ViewShell';
+import DeviceInventoryEditor, { deviceClassLabels as classLabels, devicePlatformLabels as platformLabels, deviceOwnershipLabels as ownershipLabels, deviceLifecycleLabels as lifecycleLabels } from './DeviceInventoryEditor';
 import { DataTable } from '@/components/ui/DataTable';
-import { Device, DeviceCapabilities, DeviceHistoryPage, DeviceInput, DeviceInventoryClient, DevicePage, deviceClasses, devicePlatforms, deviceInventoryError, normalizeDeviceInput } from '@/lib/deviceInventory';
+import { Device, DeviceCapabilities, DeviceHistoryPage, DeviceInput, DeviceInventoryClient, DevicePage, DeviceFilters, devicePlatforms, deviceLifecycles, deviceInventoryError } from '@/lib/deviceInventory';
 import { UserPage, userName } from '@/lib/directoryUsers';
 import { DirectoryConfirmation } from './UserDetailPanel';
 
-const initialValues: DeviceInput = { assetId: '', serialNumber: '', manufacturer: '', model: '', deviceClass: 'laptop', platform: 'other', osVersion: '', ownership: 'corporate', purchaseDate: '', warrantyEnd: '', description: '' };
-const classLabels = { smartphone: 'Smartphone', tablet: 'Tablet', laptop: 'Laptop', desktop: 'Desktop', shared: 'Gemeinschaftsgerät', kiosk: 'Kiosk', other: 'Sonstiges' };
-const platformLabels = { macos: 'macOS', ios: 'iOS', ipados: 'iPadOS', windows: 'Windows', linux: 'Linux', android: 'Android', other: 'Sonstiges' };
-const ownershipLabels = { corporate: 'Unternehmen', byod: 'Privatgerät (BYOD)', shared: 'Gemeinsame Nutzung' };
-const eventLabels = { 'device.registered': 'Gerät erfasst', 'device.assigned': 'Benutzer zugewiesen', 'device.assignment.released': 'Zuweisung aufgehoben' };
+const eventLabels = { 'device.registered': 'Gerät erfasst', 'device.assigned': 'Benutzer zugewiesen', 'device.assignment.released': 'Zuweisung aufgehoben', 'device.updated': 'Stammdaten geändert', 'device.lifecycle.changed': 'Lebenszyklus geändert' };
 
 function Pagination({ page, total, label, disabled, onPage }: { page: number; total: number; label: string; disabled?: boolean; onPage: (page: number) => void }) {
   return <nav aria-label={label + 'n'} className="flex flex-wrap items-center gap-4 py-3 text-sm">
@@ -43,8 +40,10 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
   const [userSearchDraft, setUserSearchDraft] = useState('');
   const [targetUserId, setTargetUserId] = useState('');
   const [creating, setCreating] = useState(false);
-  const [values, setValues] = useState<DeviceInput>({ ...initialValues });
-  const [formError, setFormError] = useState('');
+  const [editing, setEditing] = useState<Device | null>(null);
+  const [filters, setFilters] = useState<DeviceFilters>({});
+  const [lifecycleChange, setLifecycleChange] = useState<{ device: Device; lifecycle: 'available' | 'maintenance' | 'retired' } | null>(null);
+  const [lifecycleReason, setLifecycleReason] = useState('');
   const [pending, setPending] = useState<{ device: Device; userId: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -53,6 +52,9 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
   const canRead = access?.permissions.includes('devices.inventory.read');
   const canCreate = canRead && access?.permissions.includes('devices.inventory.create');
   const canAssign = canRead && access?.permissions.includes('devices.inventory.assign');
+  const enhanced = access?.inventoryProtocol === 2;
+  const filter = (key: keyof DeviceFilters, value: string) => { clearSelection(); setPage(1); setFilters(previous => ({ ...previous, [key]: value || undefined })); };
+  const beginLifecycle = (device: Device, lifecycle: 'available' | 'maintenance' | 'retired') => { setLifecycleReason(''); setLifecycleChange({ device, lifecycle }); };
   useEffect(() => {
     if (createRequested && canCreate && devices) { setCreating(true); onCreateHandled?.(); }
   }, [createRequested, canCreate, devices, onCreateHandled]);
@@ -62,7 +64,7 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
   }, [selectedDeviceId, canRead]);
 
   const clearSelection = () => {
-    setSelectedId(null); setSelected(null); setHistory(null); setHistoryPage(1); setPending(null);
+    setEditing(null); setLifecycleChange(null); setSelectedId(null); setSelected(null); setHistory(null); setHistoryPage(1); setPending(null);
     setUsers(null); setPicker('loading'); setTargetUserId(''); setUserPage(1); setUserSearch(''); setUserSearchDraft('');
   };
   const fail = (failure: unknown, expected: number) => {
@@ -90,10 +92,10 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
     const expected = generation.current;
     let active = true;
     setDevices(null);
-    client.current.list(page, search, controller.signal).then(result => { if (active && generation.current === expected) setDevices(result); })
+    client.current.list(page, search, controller.signal, filters).then(result => { if (active && generation.current === expected) setDevices(result); })
       .catch(failure => { if (active) fail(failure, expected); });
     return () => { active = false; controller.abort(); };
-  }, [access, page, search, listVersion]);
+  }, [access, page, search, listVersion, filters]);
 
   useEffect(() => {
     if (!canRead || !selectedId) return;
@@ -136,7 +138,7 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
     try {
       const result = await client.current.assign(change.device, { userId: change.userId });
       if (generation.current !== expected) return;
-      setSelected(result); setPending(null); setTargetUserId('');
+      setSelected(result); setPending(null); setTargetUserId(''); setListVersion(value => value + 1);
       setDevices(current => current && ({ ...current, devices: current.devices.map(device => device.id === result.id ? result : device) }));
       setHistoryPage(1); setHistoryVersion(value => value + 1);
       setNotice(change.userId === null ? 'Zuweisung aufgehoben.' : 'Inventarzuweisung gespeichert.');
@@ -144,31 +146,81 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
     finally { if (generation.current === expected) setBusy(false); }
   };
 
+  const saved = (result: Device) => {
+    setSelected(result); setDevices(current => current && ({ ...current, devices: current.devices.map(device => device.id === result.id ? result : device) }));
+    setHistoryPage(1); setHistoryVersion(value => value + 1); setListVersion(value => value + 1);
+  };
+  const save = async (values: DeviceInput, reason: string) => {
+    if (busy || !canCreate) return; const expected = generation.current; setBusy(true); setNotice('');
+    try {
+      const result = editing ? await client.current.update(editing, values, reason) : await client.current.create(values);
+      if (generation.current !== expected) return;
+      if (editing) saved(result); else { setPage(1); setListVersion(value => value + 1); }
+      setNotice(editing ? 'Stammdaten gespeichert und protokolliert.' : `Gerät ${result.assetId} im Inventar erfasst.`); setEditing(null); setCreating(false);
+    } catch (failure) { fail(failure, expected); }
+    finally { if (generation.current === expected) setBusy(false); }
+  };
+  const changeLifecycle = async () => {
+    if (busy || !canCreate || !lifecycleChange || lifecycleReason.trim().length < 10) return;
+    const expected = generation.current; setBusy(true); setNotice('');
+    try {
+      const result = await client.current.lifecycle(lifecycleChange.device, lifecycleChange.lifecycle, lifecycleReason);
+      if (generation.current !== expected) return; saved(result); setLifecycleChange(null); setNotice('Gerätestatus geändert und protokolliert.');
+    } catch (failure) { fail(failure, expected); }
+    finally { if (generation.current === expected) setBusy(false); }
+  };
+  const exportCsv = async () => {
+    if (busy || !canRead || !enhanced) return; const expected = generation.current; setBusy(true); setNotice('');
+    try {
+      const blob = await client.current.exportCsv(search, filters); if (generation.current !== expected) return;
+      const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'opendirectory-devices.csv'; document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000); setNotice('CSV-Export bereitgestellt.');
+    } catch (failure) { fail(failure, expected); }
+    finally { if (generation.current === expected) setBusy(false); }
+  };
+
   return <ViewShell title="Geräteinventar" subtitle="Geräte erfassen und genau einem Benutzer zuordnen."
-    primaryAction={canCreate && devices ? { label: 'Gerät erfassen', onClick: () => { setValues({ ...initialValues }); setFormError(''); setCreating(true); setNotice(''); }, disabled: busy } : undefined}
-    actions={[{ label: 'Neu laden', onClick: () => { generation.current += 1; client.current?.invalidate(); setReload(value => value + 1); }, disabled: busy }]}>
+    primaryAction={canCreate && devices ? { label: 'Gerät erfassen', onClick: () => { setEditing(null); setCreating(true); setNotice(''); }, disabled: busy } : undefined}
+    rightContent={canRead ? <a className="fluent-btn-secondary" href="/device-returns">Geräterückgaben öffnen</a> : undefined}
+    actions={[{ label: 'CSV exportieren', onClick: () => void exportCsv(), disabled: busy || !enhanced || !devices }, { label: 'Neu laden', onClick: () => { generation.current += 1; client.current?.invalidate(); setReload(value => value + 1); }, disabled: busy }]}>
     <div className="space-y-5" style={{ color: 'var(--text-primary)' }}>
       <details className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--border)' }}><summary className="cursor-pointer">Inventar und Geräteverwaltung</summary><p className="mt-2">Nur Inventar · Nicht registriert · Compliance unbekannt. Eine Inventarzuweisung richtet keine Geräteverwaltung ein.</p></details>
-      {error ? <div role="alert" className="rounded border border-red-500/40 p-4 space-y-3"><p>{error}</p>{needsMfa && <div className="flex gap-3"><a className="fluent-btn-secondary" href="/mfa">MFA einrichten</a><a className="fluent-btn-primary" href="/api/auth/oidc/login">Mit MFA neu anmelden</a></div>}</div> : !access ? <p role="status">Geräteberechtigungen werden geprüft …</p> : !canRead ? <p role="status">Keine Berechtigung zum Lesen des Geräteinventars.</p> : <>
-        {notice && <p role="status">{notice}</p>}
+      {error ? <div role="alert" className="rounded border border-red-500/40 p-4 space-y-3"><p>{error}</p><div className="flex gap-3">{needsMfa && <a className="fluent-btn-secondary" href="/mfa?returnTo=%2Fdevices">MFA einrichten</a>}<a className="fluent-btn-primary" href="/api/auth/oidc/login?returnTo=%2Fdevices">Erneut anmelden</a></div></div> : !access ? <p role="status">Geräteberechtigungen werden geprüft …</p> : !canRead ? <p role="status">Keine Berechtigung zum Lesen des Geräteinventars.</p> : <>
+        {notice && !selected && <p role="status">{notice}</p>}
         <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); clearSelection(); setPage(1); setSearch(searchDraft.trim()); setListVersion(value => value + 1); }}>
           <label className="text-sm">Geräte suchen<input className="mt-1 block rounded border p-2 bg-transparent" maxLength={200} value={searchDraft} disabled={busy} onChange={event => setSearchDraft(event.target.value)} placeholder="Inventarnummer, Seriennummer, Modell" /></label>
           <button className="fluent-btn-secondary" disabled={busy} type="submit">Suchen</button>
+          <label className="text-sm">Plattform filtern<select className="input-apple" value={filters.platform || ''} disabled={busy || !enhanced} onChange={event => filter('platform', event.target.value)}><option value="">Alle Plattformen</option>{devicePlatforms.map(value => <option key={value} value={value}>{platformLabels[value]}</option>)}</select></label>
+          <label className="text-sm">Status filtern<select className="input-apple" value={filters.lifecycle || ''} disabled={busy || !enhanced} onChange={event => filter('lifecycle', event.target.value)}><option value="">Alle Status</option>{deviceLifecycles.map(value => <option key={value} value={value}>{lifecycleLabels[value]}</option>)}</select></label>
+          <label className="text-sm">Eigentum filtern<select className="input-apple" value={filters.ownership || ''} disabled={busy || !enhanced} onChange={event => filter('ownership', event.target.value)}><option value="">Alle Eigentumsarten</option>{Object.entries(ownershipLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label className="text-sm">Sortierung<select className="input-apple" disabled={busy || !enhanced} value={(filters.sort || 'createdAt') + '-' + (filters.order || 'asc')} onChange={event => { const [sort, order] = event.target.value.split('-'); clearSelection(); setPage(1); setFilters(previous => ({ ...previous, sort: sort as DeviceFilters['sort'], order: order as DeviceFilters['order'] })); }}>
+            <option value="createdAt-asc">Älteste zuerst</option><option value="createdAt-desc">Neueste zuerst</option><option value="updatedAt-desc">Zuletzt geändert</option><option value="assetId-asc">Inventarnummer A–Z</option><option value="assetId-desc">Inventarnummer Z–A</option>
+          </select></label>
         </form>
         {devices ? <section aria-label="Geräteliste">
           <DataTable<Device> rows={devices.devices} getRowId={device => device.id} activeRowId={selectedId} emptyMessage="Keine Geräte gefunden." columns={[
             { key: 'assetId', header: 'Inventarnummer', render: device => <button className="text-blue-500 underline" disabled={busy} onClick={() => { if (selectedId === device.id) return; clearSelection(); setSelectedId(device.id); }}>{device.assetId}</button> },
             { key: 'serialNumber', header: 'Seriennummer' },
-            { key: 'model', header: 'Gerät', render: device => `${device.manufacturer} ${device.model}` },
+            { key: 'model', header: 'Gerät', render: device => <span className="inline-block min-w-[12rem]">{device.manufacturer} {device.model}</span> },
             { key: 'deviceClass', header: 'Geräteklasse', render: device => classLabels[device.deviceClass] },
             { key: 'platform', header: 'Plattform', render: device => platformLabels[device.platform] },
-            { key: 'lifecycle', header: 'Zuordnung', render: device => device.lifecycle === 'assigned' ? 'Zugewiesen' : 'Verfügbar' },
+            { key: 'lifecycle', header: 'Zuordnung', render: device => lifecycleLabels[device.lifecycle] },
           ]} />
           <Pagination label="Geräteseite" page={devices.page} total={devices.total} disabled={busy} onPage={next => { clearSelection(); setPage(next); }} />
         </section> : <p role="status">Geräte werden geladen …</p>}
         {selectedId && !selected && <p role="status">Gerätedetails werden geladen …</p>}
         {selected && <article aria-label="Gerätedetails" className="rounded-lg border border-[var(--border)] p-5 space-y-5">
-          <div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">{selected.assetId}</h2><p>{selected.manufacturer} {selected.model}</p></div><button className="fluent-btn-secondary" disabled={busy} onClick={clearSelection}>Details schließen</button></div>
+          <h2 className="text-lg font-semibold">{selected.assetId} · {selected.manufacturer} {selected.model}</h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="od-badge">{lifecycleLabels[selected.lifecycle]}</span>
+            {enhanced && canCreate && <><button className="fluent-btn-secondary" disabled={busy} onClick={() => { setEditing(selected); setCreating(false); }}>Stammdaten bearbeiten</button>
+              {!selected.assignedUserId && <>{selected.lifecycle !== 'maintenance' && <button className="fluent-btn-secondary" disabled={busy} onClick={() => beginLifecycle(selected, 'maintenance')}>In Wartung nehmen</button>}
+                {selected.lifecycle !== 'retired' && <button className="fluent-btn-secondary" disabled={busy} onClick={() => beginLifecycle(selected, 'retired')}>Archivieren</button>}
+                {['retired', 'maintenance'].includes(selected.lifecycle) && <button className="fluent-btn-secondary" disabled={busy} onClick={() => beginLifecycle(selected, 'available')}>Wieder bereitstellen</button>}</>}
+            </>}
+            <button className="fluent-btn-ghost" disabled={busy} onClick={clearSelection}>Details schließen</button>
+          </div>
+          {notice && <p role="status">{notice}</p>}
           <dl className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">{Object.entries({
             'Geräte-ID': selected.id, Seriennummer: selected.serialNumber, Geräteklasse: classLabels[selected.deviceClass],
             Plattform: platformLabels[selected.platform], Betriebssystemversion: selected.osVersion || '—', Eigentum: ownershipLabels[selected.ownership],
@@ -176,7 +228,7 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
             Benutzerzuordnung: selected.assignedUserId || 'Nicht zugewiesen', 'Zuweisungs-ID': selected.assignmentId || '—', Datensatzversion: selected.revision,
             'Erfasst am': selected.createdAt, 'Geändert am': selected.updatedAt, 'Zuletzt gesehen': 'Keine Telemetrie',
           }).map(([label, value]) => <div key={label}><dt className="opacity-70">{label}</dt><dd className="break-words">{value}</dd></div>)}</dl>
-          {canAssign && <section aria-label="Benutzerzuweisung" className="border-t border-[var(--border)] pt-4 space-y-4">
+          {canAssign && ['available', 'assigned'].includes(selected.lifecycle) && <section aria-label="Benutzerzuweisung" className="border-t border-[var(--border)] pt-4 space-y-4">
             <h3 className="font-semibold">Benutzerzuweisung</h3>
             {picker === 'loading' ? <p role="status">Verzeichnisberechtigung wird geprüft …</p> : <>
               {picker === 'directory' && <>
@@ -201,12 +253,15 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
               </form>
             </>}
           </section>}
+          {!selected.assignedUserId && ['maintenance', 'retired'].includes(selected.lifecycle) && <p className="text-sm">Für eine neue Benutzerzuweisung das Gerät zuerst wieder bereitstellen.</p>}
           <section aria-label="Gerätehistorie" className="border-t border-[var(--border)] pt-4 space-y-3">
             <h3 className="font-semibold">Gerätehistorie</h3>
             {history ? <><ol className="space-y-4">{history.events.map(event => <li key={event.id} className="text-sm space-y-1">
               <p className="font-medium">{eventLabels[event.type]}</p><p><time dateTime={event.createdAt}>{event.createdAt}</time> · Version {event.after.revision}</p>
               <p className="break-words">Benutzer: {event.before?.assignedUserId || 'Nicht zugewiesen'} → {event.after.assignedUserId || 'Nicht zugewiesen'}</p>
               <p className="break-words">Ausgeführt von: {event.actorUserId} · Korrelations-ID: {event.correlationId}</p>
+              {event.reason && <p>Begründung: {event.reason}</p>}
+              {event.changes && <ul className="space-y-1">{event.changes.map(change => <li key={change.field}>{change.field === 'lifecycle' ? 'Status' : change.field}: {change.before || '—'} → {change.after || '—'}</li>)}</ul>}
               <p className="opacity-70">Ereigniszustellung ausstehend</p>
             </li>)}</ol>{history.events.length === 0 && <p>Keine Ereignisse vorhanden.</p>}
               <Pagination label="Historienseite" page={history.page} total={history.total} disabled={busy} onPage={setHistoryPage} /></> : <p role="status">Historie wird geladen …</p>}
@@ -214,34 +269,11 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
         </article>}
       </>}
     </div>
-    {creating && canCreate && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5" role="dialog" aria-modal="true" aria-label="Gerät erfassen">
-      <form className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl p-6 space-y-5" style={{ background: 'var(--bg-surface, #161b22)', color: 'var(--text-primary, #e4e6ea)' }} onSubmit={async event => {
-        event.preventDefault(); if (busy) return;
-        let normalized: DeviceInput;
-        try { normalized = normalizeDeviceInput(values); } catch { setFormError('Bitte Pflichtfelder, Datumswerte und Garantiezeitraum prüfen.'); return; }
-        const expected = generation.current; setBusy(true); setFormError(''); setNotice('');
-        try {
-          const result = await client.current.create(normalized);
-          if (generation.current !== expected) return;
-          setCreating(false); setNotice(`Gerät ${result.assetId} im Inventar erfasst.`); setPage(1); setListVersion(value => value + 1);
-        } catch (failure) { fail(failure, expected); }
-        finally { if (generation.current === expected) setBusy(false); }
-      }}>
-        <h2 className="text-xl font-semibold">Gerät erfassen</h2><p className="text-sm">Der neue Eintrag ist verfügbar und keinem Benutzer zugewiesen.</p>
-        <fieldset disabled={busy} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {([{ field: 'assetId', label: 'Inventarnummer' }, { field: 'serialNumber', label: 'Seriennummer' }, { field: 'manufacturer', label: 'Hersteller' }, { field: 'model', label: 'Modell' }, { field: 'osVersion', label: 'Betriebssystemversion' }] as const).map(({ field, label }) => <label key={field} className="text-sm">{label}
-            <input className="mt-1 block w-full rounded border p-2 bg-transparent" name={field} required={field !== 'osVersion'} maxLength={120} value={values[field]} onChange={event => setValues(previous => ({ ...previous, [field]: event.target.value }))} />
-          </label>)}
-          <label className="text-sm">Geräteklasse<select aria-label="Geräteklasse" className="mt-1 block w-full rounded border p-2 bg-transparent" value={values.deviceClass} onChange={event => setValues(previous => ({ ...previous, deviceClass: event.target.value as DeviceInput['deviceClass'] }))}>{deviceClasses.map(value => <option key={value} value={value}>{classLabels[value]}</option>)}</select></label>
-          <label className="text-sm">Plattform<select aria-label="Plattform" className="mt-1 block w-full rounded border p-2 bg-transparent" value={values.platform} onChange={event => setValues(previous => ({ ...previous, platform: event.target.value as DeviceInput['platform'] }))}>{devicePlatforms.map(value => <option key={value} value={value}>{platformLabels[value]}</option>)}</select></label>
-          <label className="text-sm">Eigentum<select aria-label="Eigentum" className="mt-1 block w-full rounded border p-2 bg-transparent" value={values.ownership} onChange={event => setValues(previous => ({ ...previous, ownership: event.target.value as DeviceInput['ownership'] }))}>{Object.entries(ownershipLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          {([{ field: 'purchaseDate', label: 'Kaufdatum' }, { field: 'warrantyEnd', label: 'Garantieende' }] as const).map(({ field, label }) => <label className="text-sm" key={field}>{label}<input className="mt-1 block w-full rounded border p-2 bg-transparent" type="date" value={values[field]} onChange={event => setValues(previous => ({ ...previous, [field]: event.target.value }))} /></label>)}
-          <label className="text-sm md:col-span-2">Beschreibung<input className="mt-1 block w-full rounded border p-2 bg-transparent" maxLength={2000} value={values.description} onChange={event => setValues(previous => ({ ...previous, description: event.target.value }))} /></label>
-        </fieldset>
-        {formError && <p role="alert">{formError}</p>}
-        <div className="flex justify-end gap-4"><button className="fluent-btn-secondary" type="button" disabled={busy} onClick={() => setCreating(false)}>Abbrechen</button><button className="fluent-btn-primary" type="submit" disabled={busy}>{busy ? 'Wird gespeichert …' : 'Im Inventar speichern'}</button></div>
-      </form>
-    </div>}
+    {(creating || editing) && canCreate && <DeviceInventoryEditor device={editing} busy={busy} onClose={() => { setCreating(false); setEditing(null); }} onSave={save} />}
+    {lifecycleChange && canCreate && <DirectoryConfirmation title={lifecycleLabels[lifecycleChange.lifecycle] + ': ' + lifecycleChange.device.assetId} busy={busy} error="" confirmDisabled={lifecycleReason.trim().length < 10} onClose={() => setLifecycleChange(null)} onConfirm={() => void changeLifecycle()}>
+      <p>{lifecycleChange.device.assetId} · Version {lifecycleChange.device.revision}</p><p className="mt-3">Der Status wird auf „{lifecycleLabels[lifecycleChange.lifecycle]}“ geändert. Inventareintrag und Historie bleiben erhalten.</p>
+      <label className="block mt-4">Begründung<input className="input-apple" required minLength={10} maxLength={500} value={lifecycleReason} onChange={event => setLifecycleReason(event.target.value)} /></label>
+    </DirectoryConfirmation>}
     {pending && canAssign && <DirectoryConfirmation title={pending.userId === null ? 'Zuweisung aufheben' : pending.device.assignedUserId ? 'Benutzer neu zuweisen' : 'Benutzer zuweisen'} busy={busy} error="" onClose={() => setPending(null)} onConfirm={() => void assign(pending)}>
       <p>{pending.device.assetId} · Version {pending.device.revision}</p>
       <p className="mt-3 break-words">Bisher: {pending.device.assignedUserId || 'Nicht zugewiesen'}<br />Neu: {pending.userId || 'Nicht zugewiesen'}</p>

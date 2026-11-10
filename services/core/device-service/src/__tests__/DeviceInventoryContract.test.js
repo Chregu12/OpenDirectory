@@ -181,3 +181,16 @@ describe('device inventory ETags', () => {
     expect(() => validateDeviceEtag(value)).toThrow(expect.objectContaining({ status: 400 }));
   });
 });
+
+describe('confirmed inventory maintenance boundary',()=>{
+ const {validateDeviceUpdate,validateDeviceLifecycle}=require('../../../../../packages/device-inventory-contract');
+ test('metadata updates require explicit confirmation and cannot forge device authority',()=>{
+  const input={...requiredValues,reason:'Checked the actual device model',confirm:true};
+  expect(validateDeviceUpdate(input)).toEqual({...requiredValues,...defaultValues,reason:input.reason,confirm:true});
+  for(const change of [{confirm:'true'},{confirm:false},{reason:'short'},{reason:'A reason with\na hidden line'},{tenantId:deviceId},{assignedUserId:deviceId},{lifecycle:'assigned'},{revision:'2'}])expect(()=>validateDeviceUpdate({...input,...change})).toThrow(expect.objectContaining({status:400}));
+ });
+ test('lifecycle commands cannot forge assignment, actor or ownership',()=>{
+  const input={lifecycle:'retired',reason:'Equipment removed from active use',confirm:true};expect(validateDeviceLifecycle(input)).toEqual(input);
+  for(const change of [{lifecycle:'assigned'},{confirm:'true'},{reason:''},{actorUserId:deviceId},{tenantId:deviceId},{assignmentId:deviceId}])expect(()=>validateDeviceLifecycle({...input,...change})).toThrow(expect.objectContaining({status:400}));
+ });
+});

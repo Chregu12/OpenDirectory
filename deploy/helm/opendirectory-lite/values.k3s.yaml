@@ -16,7 +16,7 @@ ingress:
 
 apps:
   identity-service:
-    imageTag: "1.0.36"
+    imageTag: "1.0.38"
   license-management:
     imageTag: "1.0.17"
   policy-service:
@@ -39,11 +39,13 @@ apps:
     env:
       OAUTH_WEB_ADMIN_USER_IDS: '["27d3f95a-a75d-45ac-a4f9-faeef85f5c54"]'
   web-app:
-    imageTag: "1.0.37"
+    imageTag: "1.0.38"
   api-backend:
     imageTag: "1.0.10"
+  device-service:
+    imageTag: "1.0.38"
   api-gateway:
-    imageTag: "1.0.14"
+    imageTag: "1.0.38"
     env:
       JWKS_URI: "http://{{ .Release.Name }}-oauth-provider:3010/.well-known/jwks.json"
   integration-service:

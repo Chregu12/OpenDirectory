@@ -59,7 +59,7 @@ function nativeDatabase() {
 }
 
 async function migrate() {
-  for (const file of ['001_devices.sql', '002_device_system_info.sql', '003_device_columns_align.sql', '004_install_jobs.sql', '005_device_inventory.sql', '006_device_returns.sql']) await pool.query(fs.readFileSync(path.join(__dirname, '../../migrations', file), 'utf8'));
+  for (const file of ['001_devices.sql', '002_device_system_info.sql', '003_device_columns_align.sql', '004_install_jobs.sql', '005_device_inventory.sql', '006_device_returns.sql', '007_inventory_maintenance.sql']) await pool.query(fs.readFileSync(path.join(__dirname, '../../migrations', file), 'utf8'));
 }
 async function assigned() {
   const suffix = randomUUID(); const unit = await inventory.create({ assetId: `Asset-${suffix}`, serialNumber: `Serial-${suffix}`, manufacturer: 'Native', model: 'Portable', deviceClass: 'laptop', platform: 'linux' }, fixture.user, bearer);

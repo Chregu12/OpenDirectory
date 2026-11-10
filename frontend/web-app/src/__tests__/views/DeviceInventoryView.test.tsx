@@ -248,3 +248,27 @@ test('a canonical device deep link loads that exact device after current invento
   await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/devices/' + deviceId, expect.objectContaining({ signal: expect.any(AbortSignal) })));
   expect(api.post).not.toHaveBeenCalled(); expect(api.put).not.toHaveBeenCalled();
 });
+
+test('protocol two edits open the actual metadata form, retain the ETag and display the committed result',async()=>{
+ access=capabilities({inventoryProtocol:2});const user=await openDevice();
+ (api.put as jest.Mock).mockImplementation(async(_url,input)=>{rows=[device({...input,reason:undefined,confirm:undefined,revision:'2'})];delete rows[0].reason;delete rows[0].confirm;return{status:200,data:rows[0]};});
+ await user.click(screen.getByRole('button',{name:'Stammdaten bearbeiten'}));const dialog=within(screen.getByRole('dialog',{name:'Stammdaten bearbeiten'}));
+ fireEvent.change(dialog.getByLabelText('Modell'),{target:{value:'Verified Laptop'}});await user.type(dialog.getByLabelText('Änderungsbegründung'),'Verified hardware inventory correction');
+ await user.click(dialog.getByRole('button',{name:'Änderungen speichern'}));await screen.findByText('Stammdaten gespeichert und protokolliert.');
+ expect(api.put).toHaveBeenCalledWith('/api/devices/'+deviceId,expect.objectContaining({model:'Verified Laptop',reason:'Verified hardware inventory correction',confirm:true}),{headers:{'If-Match':'"device-'+deviceId+'-1"'},signal:expect.any(AbortSignal)});
+ expect(screen.getByRole('article',{name:'Gerätedetails'})).toHaveTextContent('Datensatzversion2');
+});
+test('archiving an unassigned device requires a reason and leaves a restorable actual record',async()=>{
+ access=capabilities({inventoryProtocol:2});const user=await openDevice();
+ (api.post as jest.Mock).mockImplementation(async()=>{rows=[device({lifecycle:'retired',revision:'2'})];return{status:200,data:rows[0]};});
+ await user.click(screen.getByRole('button',{name:'Archivieren'}));const confirmation=within(screen.getByRole('alertdialog'));
+ expect(confirmation.getByRole('button',{name:'Bestätigen'})).toBeDisabled();await user.type(confirmation.getByLabelText('Begründung'),'Archive replaced unassigned equipment');
+ expect(api.post).not.toHaveBeenCalled();await user.click(confirmation.getByRole('button',{name:'Bestätigen'}));await screen.findByText('Gerätestatus geändert und protokolliert.');
+ expect(screen.getByRole('button',{name:'Wieder bereitstellen'})).toBeEnabled();expect(screen.queryByRole('region',{name:'Benutzerzuweisung'})).not.toBeInTheDocument();
+ expect(api.post).toHaveBeenCalledWith('/api/devices/'+deviceId+'/lifecycle',{lifecycle:'retired',reason:'Archive replaced unassigned equipment',confirm:true},{headers:{'If-Match':'"device-'+deviceId+'-1"'},signal:expect.any(AbortSignal)});
+});
+test('an assigned device cannot be archived or moved to maintenance through the UI',async()=>{
+ access=capabilities({inventoryProtocol:2});rows=[device({lifecycle:'assigned',assignedUserId:recipientId,assignmentId})];await openDevice();
+ expect(screen.queryByRole('button',{name:'Archivieren'})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'In Wartung nehmen'})).not.toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Zuweisung aufheben'})).toBeEnabled();
+});
