@@ -72,6 +72,11 @@ fn plan(config: PathBuf) -> Result<Plan, Error> {
         service,
     })
 }
+pub fn preview(config: PathBuf) -> Result<(), Error> {
+    println!("{}", serde_json::to_string_pretty(&plan(config)?)?);
+    Ok(())
+}
+
 pub fn install(cfg: &AgentConfig, dry_run: bool, replace_existing: bool) -> Result<(), Error> {
     let plan = plan(cfg.path())?;
     if dry_run {

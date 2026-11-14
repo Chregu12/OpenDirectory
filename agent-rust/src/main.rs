@@ -64,14 +64,25 @@ async fn main() {
 
     let cli = Cli::parse();
 
-    let mut cfg =
-        match AgentConfig::load_from(cli.config_path.unwrap_or_else(AgentConfig::config_path)) {
-            Ok(cfg) => cfg,
-            Err(_) => {
-                error!("Cannot read agent configuration");
-                std::process::exit(1);
-            }
-        };
+    let config_path = cli.config_path.unwrap_or_else(AgentConfig::config_path);
+    if matches!(
+        cli.command.as_ref(),
+        Some(Commands::Install { dry_run: true, .. })
+    ) {
+        if let Err(error) = installation::preview(config_path) {
+            error!("Cannot prepare installation: {}", error);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    let mut cfg = match AgentConfig::load_from(config_path) {
+        Ok(cfg) => cfg,
+        Err(_) => {
+            error!("Cannot read agent configuration");
+            std::process::exit(1);
+        }
+    };
 
     if let Some(url) = cli.server_url {
         cfg.server_url = url;
