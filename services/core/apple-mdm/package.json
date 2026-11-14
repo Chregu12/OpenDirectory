@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test \"src/**/__tests__/*.test.js\""
+    "test": "node --test"
   },
   "dependencies": {
     "amqplib": "^0.10.3",
