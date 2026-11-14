@@ -16,7 +16,6 @@
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "express-prometheus-middleware": "^1.2.0",
     "express-rate-limit": "^6.8.0",
     "helmet": "^7.0.0",
     "jose": "^5.2.0",
