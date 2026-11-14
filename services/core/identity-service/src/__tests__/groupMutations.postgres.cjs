@@ -16,7 +16,7 @@ before(async()=>{
  }};
  for(const file of fs.readdirSync(migrations).filter(file=>file.endsWith('.sql')).sort())await pool.query(fs.readFileSync(path.join(migrations,file),'utf8'));
 });
-beforeEach(async()=>{await pool.query('TRUNCATE identity_tenants,users,groups,ous,identity_deleted_users,identity_deleted_groups,identity_user_audit,identity_user_outbox,identity_authorization_audit,identity_group_audit,identity_group_outbox CASCADE');});
+beforeEach(async()=>require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous,identity_deleted_users,identity_deleted_groups,identity_user_audit,identity_user_outbox,identity_authorization_audit,identity_group_audit,identity_group_outbox CASCADE'));
 after(async()=>{await pool.end();await administration.query('DROP SCHEMA '+schema+' CASCADE');await administration.end();});
 async function actor(role='group-administrator',tenant,{mfa=false,expiresSeconds}={}){
  tenant=tenant||await provisionTenant(database,schema,{enabled:true});const userId=randomUUID();const subject='group-operator-'+randomUUID();

@@ -30,6 +30,7 @@ export interface DirectoryAccess {
   organizationDelegationProtocol?: number;
   companyRegistrationReviewProtocol?: number;
   companyOwner?: boolean;
+  companyRolesProtocol?: number;
 }
 
 export type UserProfile = Pick<DirectoryUser, 'username' | 'email' | 'displayName' | 'department' | 'title'>;

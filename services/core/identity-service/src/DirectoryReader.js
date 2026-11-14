@@ -9,7 +9,7 @@ const { mayUseDirectory, requireDirectoryPermissions } = require('./DirectoryAut
 const { DirectoryRoles } = require('./DirectoryRoles');
 const { USER_COLUMNS, userFromRow, userListQuery } = require('./DirectoryUsers');
 const { getIdentityPermissions } = require('./middleware/identityAccess');
-const { companyDirectoryPermissions } = require('./CompanyOwner');
+const { companyOwner } = require('./CompanyOwner');
 
 function reject(status, message) { throw Object.assign(new Error(message), { status }); }
 function exactQuery(query = {}) { if (Object.keys(query).length) reject(400, 'No query selectors accepted'); }
@@ -30,35 +30,43 @@ class DirectoryReader {
     if (user?.actor_type !== 'user' || user.iss !== this.issuer || !validContext(user.identity_authorization)
       || !mayUseDirectory(user, permissions)) reject(403, 'Canonical directory reader required');
     const tenant = await this.revalidate(authorization, user);
-    let authentication;
+    let authentication; const checks = [];
     const result = await this.database.transaction(async client => {
       const source = new AuthorizationState({ transaction: callback => callback(client) });
       const current = await source.state(user.iss, user.sub);
       if (!current.active || !sameContext(current.context, user.identity_authorization) || !sameTenantContext(current.tenant, tenant)
         || !acceptsRoleAuthentication(current.authentication, user)) reject(401, 'Original directory authority changed');
       authentication = current.authentication;
-      await requireDirectoryPermissions(client, user, permissions);
-      return operation(client, tenant.id);
+      const authorize = async required => { const captured = await requireDirectoryPermissions(client,user,required); if (captured) checks.push({required,captured}); return captured; };
+      const captured = await authorize(permissions);
+      return operation(client, tenant.id, captured, authorize);
     }, { readOnly: true });
     if (!sameTenantContext(tenant, await this.revalidate(authorization, user)) || !acceptsRoleAuthentication(authentication, user)
       || !Number.isFinite(user.exp) || user.exp * 1000 <= Date.now()) reject(401, 'Original directory authority changed');
+    if (checks.length) {
+      if (!acceptsRoleAuthentication({required:true,maxAgeSeconds:300},user)) reject(401,'Original custom role assurance expired');
+      await this.database.transaction(async client => { for (const check of checks) { const actual=await requireDirectoryPermissions(client,user,check.required); if(JSON.stringify(actual)!==JSON.stringify(check.captured)) reject(401,'Original custom role source changed'); } },{readOnly:true});
+    }
     return result;
   }
 
   async users(query, user, authorization) {
     const { page, limit, search, enabled } = userListQuery(query);
-    return this.read(['users.read'], user, authorization, async (client, tenantId) => {
-      const where = "WHERE ($1='' OR strpos(lower(concat_ws(' ',username,email,display_name,department,title)),lower($1))>0) AND ($2::boolean IS NULL OR enabled=$2) AND identity_tenant_id('user',id)=$3";
-      const total = Number((await client.query('SELECT COUNT(*) AS count FROM users ' + where, [search,enabled,tenantId])).rows[0].count);
-      const result = await client.query(`SELECT ${USER_COLUMNS} FROM users ${where} ORDER BY created_at,id LIMIT $4 OFFSET $5`, [search,enabled,tenantId,limit,(page-1)*limit]);
+    return this.read(['users.read'], user, authorization, async (client, tenantId, captured) => {
+      const scoped=captured?.grants.some(grant=>grant.permission==='users.read');
+      const where = "WHERE ($1='' OR strpos(lower(concat_ws(' ',username,email,display_name,department,title)),lower($1))>0) AND ($2::boolean IS NULL OR enabled=$2) AND identity_tenant_id('user',id)=$3"+(scoped?" AND jsonb_array_length(identity_company_role_sources($4::uuid,$3::uuid,'users.read','user',id))>0":'');
+      const parameters=[search,enabled,tenantId,...(scoped?[user.identity_authorization.userId]:[])];
+      const total = Number((await client.query('SELECT COUNT(*) AS count FROM users ' + where, parameters)).rows[0].count);
+      const result = await client.query(`SELECT ${USER_COLUMNS} FROM users ${where} ORDER BY created_at,id LIMIT $${parameters.length+1} OFFSET $${parameters.length+2}`, [...parameters,limit,(page-1)*limit]);
       return { users: result.rows.map(userFromRow), total, page, limit };
     });
   }
 
   async user(userId, query, user, authorization) {
     identifier(userId); exactQuery(query);
-    return this.read(['users.read'], user, authorization, async (client, tenantId) => {
-      const row = (await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2`, [userId,tenantId])).rows[0];
+    return this.read(['users.read'], user, authorization, async (client, tenantId, captured) => {
+      const scoped=captured?.grants.some(grant=>grant.permission==='users.read');
+      const row = (await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2`+(scoped?" AND jsonb_array_length(identity_company_role_sources($3::uuid,$2::uuid,'users.read','user',id))>0":''), [userId,tenantId,...(scoped?[user.identity_authorization.userId]:[])])).rows[0];
       if (!row) reject(404, 'User not found');
       return userFromRow(row);
     });
@@ -71,8 +79,9 @@ class DirectoryReader {
     const { membership = 'member', ...selectors } = query;
     const { page, limit, search } = userListQuery(selectors);
     if (/[\u0000-\u001f\u007f-\u009f]/u.test(query.search || '')) reject(400, 'Invalid user group search');
-    return this.read(['users.read', 'groups.read'], user, authorization, async (client, tenantId) => {
-      if (!(await client.query("SELECT id FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2", [userId, tenantId])).rows.length) reject(404, 'User not found');
+    return this.read(['users.read', 'groups.read'], user, authorization, async (client, tenantId, captured) => {
+      const scoped=captured?.grants.some(grant=>grant.permission==='users.read');
+      if (!(await client.query("SELECT id FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2"+(scoped?" AND jsonb_array_length(identity_company_role_sources($3::uuid,$2::uuid,'users.read','user',id))>0":''), [userId, tenantId,...(scoped?[user.identity_authorization.userId]:[])])).rows.length) reject(404, 'User not found');
       await client.query('SELECT identity_company_group_rule_live_receiving()');
       const from = `FROM groups collection LEFT JOIN group_members member ON member.group_id=collection.id AND member.user_id=$1
         WHERE identity_tenant_id('group',collection.id)=$2 AND ($3='' OR strpos(lower(concat_ws(' ',collection.name,collection.description)),lower($3))>0)
@@ -153,9 +162,13 @@ class DirectoryReader {
 
   async ouMembers(ouId, query, user, authorization) {
     identifier(ouId); if (Object.keys(query).some(field => !['page', 'limit'].includes(field))) reject(400, 'Only membership pagination selectors accepted'); const { page, limit } = userListQuery(query);
-    return this.read(['ous.read'], user, authorization, async (client, tenantId) => {
+    return this.read(['ous.read'], user, authorization, async (client, tenantId, _captured, authorize) => {
       const unit = (await this.readOus(client, tenantId, ouId))[0]; if (!unit) reject(404, 'OU not found');
-      const profileAccess = getIdentityPermissions(user).includes('users.read') || (await companyDirectoryPermissions(client, user)).includes('users.read');
+      let profileAccess = getIdentityPermissions(user).includes('users.read') || Boolean(await companyOwner(client,user));
+      if (!profileAccess) {
+        try { const captured=await authorize(['users.read']); for (const grant of captured?.grants || []) { if(grant.source.scopeType==='tenant' || (await client.query('SELECT identity_company_role_contains($1::uuid,$2::uuid,$3::uuid) AS covered',[grant.source.ouId,ouId,tenantId])).rows[0]?.covered) {profileAccess=true;break;} } }
+        catch(failure) {if(failure.status!==403) throw failure;}
+      }
       if ((await client.query('SELECT id FROM identity_directory_ou_members WHERE ou_id=$1 AND tenant_id<>$2 LIMIT 1', [ouId, tenantId])).rows.length) reject(503, 'Incoherent membership tenant');
       const total = Number((await client.query('SELECT count(*) AS count FROM identity_directory_ou_members WHERE ou_id=$1 AND tenant_id=$2', [ouId, tenantId])).rows[0].count);
       if (total > 10000) reject(503, 'OU membership collection exceeds the supported boundary');
@@ -170,8 +183,9 @@ class DirectoryReader {
 
   async search(query, user, authorization) {
     exactQuery(query);
-    return this.read(['users.read','groups.read'], user, authorization, async (client, tenantId) => {
-      const users = bounded((await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE identity_tenant_id('user',id)=$1 ORDER BY created_at,id LIMIT 10001`, [tenantId])).rows).map(userFromRow);
+    return this.read(['users.read','groups.read'], user, authorization, async (client, tenantId, captured) => {
+      const scoped=captured?.grants.some(grant=>grant.permission==='users.read');
+      const users = bounded((await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE identity_tenant_id('user',id)=$1`+(scoped?" AND jsonb_array_length(identity_company_role_sources($2::uuid,$1::uuid,'users.read','user',id))>0":'')+' ORDER BY created_at,id LIMIT 10001', [tenantId,...(scoped?[user.identity_authorization.userId]:[])])).rows).map(userFromRow);
       const groups = await this.readGroups(client, tenantId); return { entries:[...users,...groups],total:users.length+groups.length };
     });
   }

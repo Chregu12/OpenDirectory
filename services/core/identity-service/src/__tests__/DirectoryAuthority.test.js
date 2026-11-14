@@ -15,6 +15,7 @@ beforeEach(() => {
     if (sql.startsWith('SELECT identity_authority_actor_home')) return { rows: [{ tenant_id: tenantId }] };
     if (sql.startsWith('SELECT owner.*')) return { rows: owner ? [owner] : [] };
     if (sql === 'SELECT identity_company_activation_receiving()') return { rows: [] };
+    if (sql.startsWith("SELECT to_regclass('identity_company_roles')")) return {rows:[{configured:false}]};
     if (sql === 'SELECT identity_directory_ou_receiving()') return { rows: [] };
     throw new Error('Unexpected authority query');
   }) };

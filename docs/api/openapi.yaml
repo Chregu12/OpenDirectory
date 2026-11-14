@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.31.0",
+    "version": "1.32.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation, public employee invitation acceptance with first MFA setup and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, external legal verification or production SaaS acceptance. Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
@@ -3763,6 +3763,9 @@
                       "const": 1
                     },
                     "licenseSnapshotProtocol": {
+                      "const": 1
+                    },
+                    "companyRolesProtocol": {
                       "const": 1
                     }
                   }
@@ -41980,6 +41983,586 @@
           }
         }
       }
+    },
+    "/api/identity/company-roles": {
+      "get": {
+        "operationId": "listOwnCompanyRoles",
+        "summary": "List own custom roles and protected group choices",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "const": 25
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyRoleCatalog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, canonical IDs, scope or duration rejected"
+          },
+          "401": {
+            "description": "Original authority changed or expired"
+          },
+          "403": {
+            "description": "Current own role duty or target scope missing"
+          },
+          "404": {
+            "description": "Own role, recipient or OU not found"
+          },
+          "409": {
+            "description": "Name, grant or concurrent command conflict"
+          },
+          "412": {
+            "description": "Object revision changed; reload explicitly"
+          },
+          "428": {
+            "description": "Current strong If-Match or fresh independently bound MFA required"
+          },
+          "503": {
+            "description": "Canonical source, SQL receiver or mandatory receipt unavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createOwnCompanyRole",
+        "summary": "Create a bounded own role definition",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleDefinition"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Original own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyRoleDefinitionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, canonical IDs, scope or duration rejected"
+          },
+          "401": {
+            "description": "Original authority changed or expired"
+          },
+          "403": {
+            "description": "Current own role duty or target scope missing"
+          },
+          "404": {
+            "description": "Own role, recipient or OU not found"
+          },
+          "409": {
+            "description": "Name, grant or concurrent command conflict"
+          },
+          "412": {
+            "description": "Object revision changed; reload explicitly"
+          },
+          "428": {
+            "description": "Current strong If-Match or fresh independently bound MFA required"
+          },
+          "503": {
+            "description": "Canonical source, SQL receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-roles/groups": {
+      "post": {
+        "operationId": "createOwnRoleAssignableGroup",
+        "summary": "Create a new immutable role-assignable static group",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleGroupInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Original own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyRoleGroupResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, canonical IDs, scope or duration rejected"
+          },
+          "401": {
+            "description": "Original authority changed or expired"
+          },
+          "403": {
+            "description": "Current own role duty or target scope missing"
+          },
+          "404": {
+            "description": "Own role, recipient or OU not found"
+          },
+          "409": {
+            "description": "Name, grant or concurrent command conflict"
+          },
+          "412": {
+            "description": "Object revision changed; reload explicitly"
+          },
+          "428": {
+            "description": "Current strong If-Match or fresh independently bound MFA required"
+          },
+          "503": {
+            "description": "Canonical source, SQL receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-roles/{id}": {
+      "get": {
+        "operationId": "readOwnCompanyRole",
+        "summary": "Read a role and actual paginated grants",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "const": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyRoleDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, canonical IDs, scope or duration rejected"
+          },
+          "401": {
+            "description": "Original authority changed or expired"
+          },
+          "403": {
+            "description": "Current own role duty or target scope missing"
+          },
+          "404": {
+            "description": "Own role, recipient or OU not found"
+          },
+          "409": {
+            "description": "Name, grant or concurrent command conflict"
+          },
+          "412": {
+            "description": "Object revision changed; reload explicitly"
+          },
+          "428": {
+            "description": "Current strong If-Match or fresh independently bound MFA required"
+          },
+          "503": {
+            "description": "Canonical source, SQL receiver or mandatory receipt unavailable"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateOwnCompanyRole",
+        "summary": "Version a definition and invalidate old grants",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact strong \"company-role-UUID-revision\" ETag."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Original own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyRoleDefinitionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, canonical IDs, scope or duration rejected"
+          },
+          "401": {
+            "description": "Original authority changed or expired"
+          },
+          "403": {
+            "description": "Current own role duty or target scope missing"
+          },
+          "404": {
+            "description": "Own role, recipient or OU not found"
+          },
+          "409": {
+            "description": "Name, grant or concurrent command conflict"
+          },
+          "412": {
+            "description": "Object revision changed; reload explicitly"
+          },
+          "428": {
+            "description": "Current strong If-Match or fresh independently bound MFA required"
+          },
+          "503": {
+            "description": "Canonical source, SQL receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-roles/{id}/history": {
+      "get": {
+        "operationId": "readOwnCompanyRoleHistory",
+        "summary": "Read actual retained role audit and pending delivery",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "const": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyRoleHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, canonical IDs, scope or duration rejected"
+          },
+          "401": {
+            "description": "Original authority changed or expired"
+          },
+          "403": {
+            "description": "Current own role duty or target scope missing"
+          },
+          "404": {
+            "description": "Own role, recipient or OU not found"
+          },
+          "409": {
+            "description": "Name, grant or concurrent command conflict"
+          },
+          "412": {
+            "description": "Object revision changed; reload explicitly"
+          },
+          "428": {
+            "description": "Current strong If-Match or fresh independently bound MFA required"
+          },
+          "503": {
+            "description": "Canonical source, SQL receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-roles/{id}/grants": {
+      "post": {
+        "operationId": "grantOwnCompanyRole",
+        "summary": "Temporarily grant one original role version to a person or protected group",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact strong \"company-role-UUID-revision\" ETag."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleAssignment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Original own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyRoleGrantResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, canonical IDs, scope or duration rejected"
+          },
+          "401": {
+            "description": "Original authority changed or expired"
+          },
+          "403": {
+            "description": "Current own role duty or target scope missing"
+          },
+          "404": {
+            "description": "Own role, recipient or OU not found"
+          },
+          "409": {
+            "description": "Name, grant or concurrent command conflict"
+          },
+          "412": {
+            "description": "Object revision changed; reload explicitly"
+          },
+          "428": {
+            "description": "Current strong If-Match or fresh independently bound MFA required"
+          },
+          "503": {
+            "description": "Canonical source, SQL receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-roles/grants/{id}/revoke": {
+      "post": {
+        "operationId": "revokeOwnCompanyRole",
+        "summary": "Conditionally revoke one exact retained grant",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact strong \"company-grant-UUID-revision\" ETag."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Original own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyRoleGrantResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, canonical IDs, scope or duration rejected"
+          },
+          "401": {
+            "description": "Original authority changed or expired"
+          },
+          "403": {
+            "description": "Current own role duty or target scope missing"
+          },
+          "404": {
+            "description": "Own role, recipient or OU not found"
+          },
+          "409": {
+            "description": "Name, grant or concurrent command conflict"
+          },
+          "412": {
+            "description": "Object revision changed; reload explicitly"
+          },
+          "428": {
+            "description": "Current strong If-Match or fresh independently bound MFA required"
+          },
+          "503": {
+            "description": "Canonical source, SQL receiver or mandatory receipt unavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -57459,6 +58042,831 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 100
+          }
+        }
+      },
+      "CompanyRole": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "tenantId",
+          "name",
+          "description",
+          "permissions",
+          "maxDurationSeconds",
+          "enabled",
+          "revision",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "users.read",
+                "users.create",
+                "users.update",
+                "users.status.manage",
+                "groups.read",
+                "groups.create",
+                "groups.update",
+                "groups.delete",
+                "groups.members.manage",
+                "ous.read",
+                "ous.create",
+                "ous.update",
+                "ous.delete",
+                "ous.members.manage"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 14,
+            "uniqueItems": true
+          },
+          "maxDurationSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 36000
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CompanyRoleGrant": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "tenantId",
+          "roleId",
+          "roleRevision",
+          "targetType",
+          "targetId",
+          "scopeType",
+          "ouId",
+          "revision",
+          "createdAt",
+          "expiresAt",
+          "revokedAt",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "roleRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "targetType": {
+            "enum": [
+              "user",
+              "group"
+            ]
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "scopeType": {
+            "enum": [
+              "tenant",
+              "ou"
+            ]
+          },
+          "ouId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "expired",
+              "definition-changed",
+              "revoked"
+            ]
+          }
+        }
+      },
+      "CompanyRoleDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "description",
+          "permissions",
+          "maxDurationSeconds",
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "users.read",
+                "users.create",
+                "users.update",
+                "users.status.manage",
+                "groups.read",
+                "groups.create",
+                "groups.update",
+                "groups.delete",
+                "groups.members.manage",
+                "ous.read",
+                "ous.create",
+                "ous.update",
+                "ous.delete",
+                "ous.members.manage"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 14,
+            "uniqueItems": true
+          },
+          "maxDurationSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 36000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "confirm": {
+            "const": true
+          }
+        }
+      },
+      "CompanyRoleUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "description",
+          "permissions",
+          "maxDurationSeconds",
+          "enabled",
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "users.read",
+                "users.create",
+                "users.update",
+                "users.status.manage",
+                "groups.read",
+                "groups.create",
+                "groups.update",
+                "groups.delete",
+                "groups.members.manage",
+                "ous.read",
+                "ous.create",
+                "ous.update",
+                "ous.delete",
+                "ous.members.manage"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 14,
+            "uniqueItems": true
+          },
+          "maxDurationSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 36000
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "confirm": {
+            "const": true
+          }
+        }
+      },
+      "CompanyRoleAssignment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "targetType",
+          "targetId",
+          "scopeType",
+          "ouId",
+          "durationSeconds",
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "targetType": {
+            "enum": [
+              "user",
+              "group"
+            ]
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "scopeType": {
+            "enum": [
+              "tenant",
+              "ou"
+            ]
+          },
+          "ouId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 36000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "confirm": {
+            "const": true
+          }
+        }
+      },
+      "CompanyRoleDecision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "confirm": {
+            "const": true
+          }
+        }
+      },
+      "CompanyRoleCatalog": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "companyRolesProtocol",
+          "permissions",
+          "ouPermissions",
+          "canManage",
+          "canCreateRoleGroup",
+          "roles",
+          "total",
+          "page",
+          "limit",
+          "groups",
+          "groupsTruncated"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "companyRolesProtocol": {
+            "const": 1
+          },
+          "permissions": {
+            "const": [
+              "users.read",
+              "users.create",
+              "users.update",
+              "users.status.manage",
+              "groups.read",
+              "groups.create",
+              "groups.update",
+              "groups.delete",
+              "groups.members.manage",
+              "ous.read",
+              "ous.create",
+              "ous.update",
+              "ous.delete",
+              "ous.members.manage"
+            ]
+          },
+          "ouPermissions": {
+            "const": [
+              "users.read",
+              "users.update",
+              "users.status.manage"
+            ]
+          },
+          "canManage": {
+            "type": "boolean"
+          },
+          "canCreateRoleGroup": {
+            "type": "boolean"
+          },
+          "roles": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/CompanyRole"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "groups": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "name",
+                "revision"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,18}$",
+                  "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+                }
+              }
+            }
+          },
+          "groupsTruncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CompanyRoleDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "role",
+          "grants",
+          "total",
+          "page",
+          "limit"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "role": {
+            "$ref": "#/components/schemas/CompanyRole"
+          },
+          "grants": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/CompanyRoleGrant"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          }
+        }
+      },
+      "CompanyRoleHistory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "roleId",
+          "total",
+          "page",
+          "limit",
+          "events"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "action",
+                "resourceId",
+                "actorUserId",
+                "reason",
+                "createdAt",
+                "deliveryStatus"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "action": {
+                  "enum": [
+                    "role-create",
+                    "role-update",
+                    "grant-create",
+                    "grant-revoke",
+                    "group-protect"
+                  ]
+                },
+                "resourceId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "actorUserId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 10,
+                  "maxLength": 500
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "deliveryStatus": {
+                  "const": "pending"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CompanyRoleDefinitionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "eventId",
+          "action",
+          "role"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "action": {
+            "enum": [
+              "role-create",
+              "role-update"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/CompanyRole"
+          }
+        }
+      },
+      "CompanyRoleGrantResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "eventId",
+          "action",
+          "grant"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "action": {
+            "enum": [
+              "grant-create",
+              "grant-revoke"
+            ]
+          },
+          "grant": {
+            "$ref": "#/components/schemas/CompanyRoleGrant"
+          }
+        }
+      },
+      "CompanyRoleGroupInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "description",
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "confirm": {
+            "const": true
+          }
+        }
+      },
+      "CompanyRoleGroupResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "eventId",
+          "group"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "group": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "revision",
+              "roleAssignable"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              },
+              "roleAssignable": {
+                "const": true
+              }
+            }
           }
         }
       }

@@ -11,6 +11,7 @@ const { mayUseDirectory, requireDirectoryPermissions } = require('./DirectoryAut
 const { DirectoryReader, ouMemberFromRow } = require('./DirectoryReader');
 const { groupFields } = require('./GroupMutator');
 
+const CompanyRoleAuthority = require('./CompanyRoleAuthority');
 function reject(status, message) { throw Object.assign(new Error(message), { status }); }
 function ouEtag(unit) { return `"ou-${unit.id}-${unit.revision}"`; }
 function validateOuEtag(value) {
@@ -59,6 +60,7 @@ class OuMutator {
     return this.database.transaction(async client => {
       const current = (await client.query('SELECT id,version,generation FROM identity_tenants WHERE id=$1 AND enabled FOR SHARE', [tenant.id])).rows[0];
       if (!current || !sameTenantContext(tenant, { id: current.id, version: String(current.version), generation: String(current.generation) })) reject(401, 'Tenant authority changed');
+      await CompanyRoleAuthority.lock(client,tenant.id);
       await requireOuReceiver(client); await client.query('SELECT identity_directory_ou_lock($1)', [tenant.id]);
       let member = null;
       if (membership) {
@@ -75,7 +77,8 @@ class OuMutator {
       } else if (!(await client.query("SELECT id FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2 FOR SHARE", [user.identity_authorization.userId, tenant.id])).rows.length) reject(401, 'Original OU operator unavailable');
       const source = await new AuthorizationState({ transaction: callback => callback(client) }).state(user.iss, user.sub);
       if (!source.active || !sameContext(source.context, user.identity_authorization) || !sameTenantContext(source.tenant, tenant) || !acceptsRoleAuthentication(source.authentication, user)) reject(401, 'Original OU authority changed');
-      await requireDirectoryPermissions(client, user, [permission]); await client.query("SET LOCAL statement_timeout = '15s'");
+      const companyRoles = await requireDirectoryPermissions(client,user,[permission],{kind:'ou',id:targetId});
+      const companyGovernance = await CompanyRoleAuthority.governance(client,user,'ou',targetId,changes?.parentId || null); await client.query("SET LOCAL statement_timeout = '15s'");
       const rows = (await client.query("SELECT id,parent_id FROM ous WHERE identity_tenant_id('ou',id)=$1 ORDER BY id LIMIT 10001 FOR UPDATE", [tenant.id])).rows;
       if (!rows.some(unit => unit.id === targetId)) reject(404, 'OU not found');
       const before = (await client.query("SELECT identity_directory_ou_state(unit) AS state FROM ous unit WHERE id=$1 AND identity_tenant_id('ou',id)=$2", [targetId, tenant.id])).rows[0]?.state;
@@ -89,9 +92,10 @@ class OuMutator {
       }
       if (!sameTenantContext(tenant, await this.revalidate(authorization, user))) reject(401, 'Tenant authority changed');
       const rolesSnapshot = (await client.query('SELECT identity_subject_link_role_state($1) AS state', [user.identity_authorization.userId])).rows[0].state;
-      const validUntil = Math.min(user.exp, source.authentication.required ? user.auth_time + source.authentication.maxAgeSeconds : user.exp);
+      const validUntil = Math.min(user.exp, source.authentication.required ? user.auth_time + source.authentication.maxAgeSeconds : user.exp, (companyRoles?user.auth_time+300:user.exp),...(companyRoles?.grants.map(grant => Number(grant.source.validUntil)) || []), companyGovernance?.validUntil || user.exp);
       if (!Number.isFinite(validUntil) || validUntil * 1000 <= Date.now()) reject(401, 'Original OU assurance expired');
-      const proof = { operationId: operationId.toLowerCase(), issuer: user.iss, subject: user.sub, context: user.identity_authorization, tenant, rolesSnapshot, validUntil, target: { id: targetId, action, before, expectedValues: values, ...(member ? { member } : {}) } };
+      const proof = { operationId: operationId.toLowerCase(), issuer: user.iss, subject: user.sub, context: user.identity_authorization, tenant, rolesSnapshot, validUntil, ...(companyRoles?{companyRoles}:{}), ...(companyGovernance?{companyGovernance}:{}), target: { id: targetId, action, before, expectedValues: values, ...(member ? { member } : {}) } };
+      if(companyRoles||companyGovernance)await client.query('SELECT identity_company_role_admit_use($1::jsonb)',[JSON.stringify(proof)]);
       await client.query(membership ? 'SELECT identity_directory_ou_membership_change($1::jsonb)' : 'SELECT identity_directory_ou_change($1::jsonb)', [JSON.stringify(proof)]);
       const receipt = await client.query(`SELECT event.id FROM identity_directory_ou_events event JOIN identity_directory_ou_outbox outbox USING(id)
         WHERE event.id=$1 AND event.tenant_id=$2 AND event.ou_id=$3 AND event.action=$4 AND event.proof=$5::jsonb

@@ -10,6 +10,7 @@ const { requireOuReceiver } = require('./AuthorityTenant');
 const { mayUseDirectory, requireDirectoryPermissions } = require('./DirectoryAuthority');
 const { userFields, userFromRow, USER_COLUMNS } = require('./DirectoryUsers');
 
+const CompanyRoleAuthority = require('./CompanyRoleAuthority');
 function reject(status, message) { throw Object.assign(new Error(message), { status }); }
 function namedValues(body, ou = false) {
   const allowed = ou ? ['name','description','parentId'] : ['name','description'];
@@ -38,12 +39,14 @@ class DirectoryCreator {
     return this.database.transaction(async client => {
       const current = (await client.query('SELECT id,version,generation FROM identity_tenants WHERE id=$1 AND enabled FOR SHARE', [tenant.id])).rows[0];
       if (!current || !sameTenantContext(tenant, {id:current.id,version:String(current.version),generation:String(current.generation)})) reject(401, 'Tenant authority changed');
+      await CompanyRoleAuthority.lock(client, tenant.id);
       if (kind === 'ou') { await requireOuReceiver(client); await client.query('SELECT identity_directory_ou_lock($1)', [tenant.id]); }
       if (!(await client.query('SELECT id FROM users WHERE id=$1 FOR SHARE', [user.identity_authorization.userId])).rows.length) reject(401, 'Original creator unavailable');
       const source = await new AuthorizationState({transaction:callback=>callback(client)}).state(user.iss,user.sub);
       if (!source.active || !sameContext(source.context,user.identity_authorization) || !sameTenantContext(source.tenant,tenant)
         || !acceptsRoleAuthentication(source.authentication,user)) reject(401, 'Original creator authority changed');
-      await requireDirectoryPermissions(client, user, [permission]);
+      const companyRoles = await requireDirectoryPermissions(client, user, [permission], { kind, id: resourceId.toLowerCase() });
+      const companyGovernance = await CompanyRoleAuthority.governance(client,user,kind,resourceId.toLowerCase(),values.parentId || null);
       await client.query("SET LOCAL statement_timeout = '15s'");
       if (kind === 'ou' && values.parentId && !(await client.query("SELECT id FROM ous WHERE id=$1 AND identity_tenant_id('ou',id)=$2 FOR KEY SHARE", [values.parentId,tenant.id])).rows.length) reject(404, 'OU parent not found');
       if (kind === 'ou' && values.parentId) {
@@ -61,9 +64,10 @@ class DirectoryCreator {
       }
       if (!sameTenantContext(tenant,await this.revalidate(authorization,user))) reject(401, 'Tenant authority changed');
       const rolesSnapshot = (await client.query('SELECT identity_subject_link_role_state($1) AS state', [user.identity_authorization.userId])).rows[0].state;
-      const validUntil = Math.min(user.exp, source.authentication.required ? user.auth_time + source.authentication.maxAgeSeconds : user.exp);
+      const validUntil = Math.min(user.exp, source.authentication.required ? user.auth_time + source.authentication.maxAgeSeconds : user.exp, (companyRoles?user.auth_time+300:user.exp),...(companyRoles?.grants.map(grant => Number(grant.source.validUntil)) || []), companyGovernance?.validUntil || user.exp);
       if (!Number.isFinite(validUntil) || validUntil * 1000 <= Date.now()) reject(401, 'Original creator assurance expired');
-      const proof = {issuer:user.iss,subject:user.sub,context:user.identity_authorization,tenant,rolesSnapshot,validUntil,resource:{kind,id:resourceId.toLowerCase(),values}};
+      const proof = {issuer:user.iss,subject:user.sub,context:user.identity_authorization,tenant,rolesSnapshot,validUntil,...(companyRoles?{companyRoles}:{}),...(companyGovernance?{companyGovernance}:{}),resource:{kind,id:resourceId.toLowerCase(),values}};
+      if(companyRoles||companyGovernance)await client.query('SELECT identity_company_role_admit_use($1::jsonb)',[JSON.stringify(proof)]);
       await client.query("SELECT set_config('opendirectory.directory_creation',$1,true)", [JSON.stringify(proof)]);
       if (kind === 'ou') await client.query('SELECT identity_directory_ou_creation_admit($1::jsonb)', [JSON.stringify(proof)]);
       const result = await operation(client,proof.resource.id);

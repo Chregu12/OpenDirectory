@@ -116,9 +116,10 @@ app.use('/api', asyncRoute(async (req, _res, next) => {
   if (req.method === 'GET' && path === '/identity/access' || /^\/identity\/company-registrations(?:\/[a-f0-9-]{36}(?:\/review)?)?$/.test(path)) {
     req.companyRegistrationPermissions = await companyReviews.permissions(req.user);
   }
-  if (req.method === 'GET' && path === '/identity/access' || /^\/(?:users(?:\/[a-f0-9-]{36})?|groups(?:\/[a-f0-9-]{36}(?:\/members(?:\/[a-f0-9-]{36})?)?)?|ous(?:\/[a-f0-9-]{36}(?:\/members(?:\/[a-f0-9-]{36})?)?)?|identity\/search)$/.test(path)) {
+  if (req.method === 'GET' && path === '/identity/access' || /^\/(?:users(?:\/[a-f0-9-]{36}(?:\/groups)?)?|groups(?:\/[a-f0-9-]{36}(?:\/members(?:\/[a-f0-9-]{36})?)?)?|ous(?:\/[a-f0-9-]{36}(?:\/members(?:\/[a-f0-9-]{36})?)?)?|identity\/search)$/.test(path)) {
     req.companyDirectoryPermissions = db.isAvailable() ? await db.transaction(client => require('./CompanyOwner').companyDirectoryPermissions(client, req.user), { readOnly: true }) : [];
   }
+  if (req.method === 'GET' && path === '/identity/access' || /^\/identity\/company-roles(?:\/|$)/.test(path)) req.companyRolePermissions = await new (require('./CompanyRoles').CompanyRoles)(db).permissions(req.user);
   next();
 }));
 for (const method of ['get', 'post']) app[method]('/api/identity/company-blueprint-assignments', asyncRoute(async (req, res) => {
@@ -153,6 +154,7 @@ app.post('/api/identity/employee-invitations',asyncRoute(async(req,res)=>{
 }));
 app.use('/api/identity/automation', require('./CompanyAutomationRoutes').companyAutomationRoutes(db));
 app.use('/api', requireIdentityAccess);
+app.use('/api/identity/company-roles',require('./CompanyRoleRoutes').companyRoleRoutes(db));
 const demoMode = process.env.IDENTITY_DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
 const snapshots = new GroupSnapshotStore(db);
 const sourceGrants=new(require('./GroupSourceGrants').GroupSourceGrants)(db);
@@ -160,7 +162,7 @@ const { UserSnapshotStore } = require('./UserSnapshotStore');
 app.get('/api/identity/access', (req, res) => {
   res.set('Cache-Control', 'no-store').json({ subject: req.user.sub, permissions: req.identityPermissions, demoMode,
     userId: req.user.identity_authorization?.userId || null, directoryReadProtocol: 1, directoryCreationProtocol: 1, directoryUserMutationProtocol: 1,
-    directoryUserGroupsProtocol:1,directoryGroupMutationProtocol:1,directoryOuMutationProtocol:1,directoryOuMembershipProtocol:1,licenseSnapshotProtocol:1,groupMembershipReviewProtocol:1,organizationProfileProtocol:1,organizationDelegationProtocol:1,companyRegistrationReviewProtocol:1,
+    companyRolesProtocol:1,directoryUserGroupsProtocol:1,directoryGroupMutationProtocol:1,directoryOuMutationProtocol:1,directoryOuMembershipProtocol:1,licenseSnapshotProtocol:1,groupMembershipReviewProtocol:1,organizationProfileProtocol:1,organizationDelegationProtocol:1,companyRegistrationReviewProtocol:1,
     companyOwner: req.organizationPermissions?.includes('organization.delegations.manage') === true });
 });
 app.use('/api', (_req, res, next) => {

@@ -8,6 +8,7 @@ const {acceptsRoleAuthentication}=require('../../../../packages/role-authenticat
 const {AuthorizationState}=require('./AuthorizationState');
 const {DirectoryUsers,userFromRow,userEtag,userFields,validateUserEtag}=require('./DirectoryUsers');
 const {mayUseDirectory,requireDirectoryPermissions}=require('./DirectoryAuthority');
+const CompanyRoleAuthority = require('./CompanyRoleAuthority');
 function reject(status,message){throw Object.assign(new Error(message),{status});}
 function profile(row){return{username:row.username,email:row.email,displayName:row.display_name??null,department:row.department??null,title:row.title??null,enabled:row.enabled};}
 
@@ -25,24 +26,27 @@ class UserMutator{
   return this.database.transaction(async client=>{
    const current=(await client.query('SELECT id,version,generation FROM identity_tenants WHERE id=$1 AND enabled FOR SHARE',[tenant.id])).rows[0];
    if(!current||!sameTenantContext(tenant,{id:current.id,version:String(current.version),generation:String(current.generation)}))reject(401,'Tenant authority changed');
+   await CompanyRoleAuthority.lock(client,tenant.id);
    const ids=[...new Set([user.identity_authorization.userId.toLowerCase(),targetId])].sort();
    const locked=(await client.query("SELECT id FROM users WHERE id=ANY($1::uuid[]) AND identity_tenant_id('user',id)=$2 ORDER BY id FOR UPDATE",[ids,tenant.id])).rows;
    if(!locked.some(row=>row.id===user.identity_authorization.userId.toLowerCase()))reject(401,'Original operator unavailable');
    if(!locked.some(row=>row.id===targetId))reject(404,'User not found');
    const source=await new AuthorizationState({transaction:callback=>callback(client)}).state(user.iss,user.sub);
    if(!source.active||!sameContext(source.context,user.identity_authorization)||!sameTenantContext(source.tenant,tenant)||!acceptsRoleAuthentication(source.authentication,user))reject(401,'Original operator authority changed');
-   await requireDirectoryPermissions(client,user,permissions);
+   const companyRoles=await requireDirectoryPermissions(client,user,permissions,{kind:'user',id:targetId});
    await client.query("SET LOCAL statement_timeout = '15s'");
    const before=(await client.query("SELECT identity_directory_user_state(to_jsonb(account)) AS state FROM users account WHERE account.id=$1 AND identity_tenant_id('user',account.id)=$2",[targetId,tenant.id])).rows[0]?.state;
    if(!before)reject(404,'User not found');
+   if(companyRoles&&targetId===user.identity_authorization.userId&&Object.hasOwn(changes||{},'enabled'))reject(403,'Independent company user status operator required');
    if(action!=='invalidate'&&userEtag(userFromRow(before))!==expected)reject(412,'User changed; reload before retrying');
    if(action==='delete'&&(await client.query('SELECT id FROM identity_directory_ou_members WHERE user_id=$1 LIMIT 1',[targetId])).rows.length)reject(409,'user_has_organization_memberships');
    if(!sameTenantContext(tenant,await this.revalidate(authorization,user)))reject(401,'Tenant authority changed');
    const expectedValues=action==='delete'?null:{...profile(before),...(changes||{})};
    const rolesSnapshot=(await client.query('SELECT identity_subject_link_role_state($1) AS state',[user.identity_authorization.userId])).rows[0].state;
-   const validUntil=Math.min(user.exp,source.authentication.required?user.auth_time+source.authentication.maxAgeSeconds:user.exp);
+   const validUntil=Math.min(user.exp,source.authentication.required?user.auth_time+source.authentication.maxAgeSeconds:user.exp,(companyRoles?user.auth_time+300:user.exp),...(companyRoles?.grants.map(grant=>Number(grant.source.validUntil))||[]));
    if(!Number.isFinite(validUntil)||validUntil*1000<=Date.now())reject(401,'Original operator assurance expired');
-   const proof={operationId:operationId.toLowerCase(),issuer:user.iss,subject:user.sub,context:user.identity_authorization,tenant,rolesSnapshot,validUntil,target:{id:targetId,action,before,expectedValues}};
+   const proof={operationId:operationId.toLowerCase(),issuer:user.iss,subject:user.sub,context:user.identity_authorization,tenant,rolesSnapshot,validUntil,...(companyRoles?{companyRoles}:{}),target:{id:targetId,action,before,expectedValues}};
+   if(companyRoles)await client.query('SELECT identity_company_role_admit_use($1::jsonb)',[JSON.stringify(proof)]);
    await client.query("SELECT set_config('opendirectory.user_mutation',$1,true)",[JSON.stringify(proof)]);
    const bound={isAvailable:()=>true,transaction:callback=>callback(client),write:(sql,values)=>client.query(sql,values)};
    const result=action==='update'?await new DirectoryUsers(bound).update(targetId,changes,expected,user.sub):action==='delete'?await new DirectoryUsers(bound).remove(targetId,expected,user.sub):await new AuthorizationState(bound).invalidate(targetId,user.sub);

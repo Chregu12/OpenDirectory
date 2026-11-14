@@ -3206,7 +3206,8 @@ test('production gateway does not treat a real credential-bound pending company 
       const ownProfile = await request(base, '/api/identity/organization', { token: companyOwner.access_token }); assert.equal(ownProfile.status, 200, JSON.stringify(ownProfile.body)); assert.equal(ownProfile.body.organization.name, body.profile.name);
       let token = companyOwner.access_token; const metadata = await request(base, '/api/identity/access', { token }); assert.equal(metadata.status, 200);
       assert.equal(require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS.length, 14);
-      assert.deepEqual(metadata.body.permissions, ['organization.read', 'organization.manage', 'organization.delegations.manage', ...require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS]);
+      assert.deepEqual(metadata.body.permissions, ['organization.read','organization.manage','organization.delegations.manage','company.roles.read','company.roles.manage',...require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS]);
+      const originalOwnerGroups=await request(base,'/api/users/'+activated.body.administratorId+'/groups',{token});assert.equal(originalOwnerGroups.status,200,JSON.stringify(originalOwnerGroups.body));
       const people = await request(base, '/api/users', { token }); assert.equal(people.status, 200); assert.deepEqual(people.body.users.map(account => account.id), [activated.body.administratorId]);
       assert.equal((await request(base, '/api/users/' + canonicalSubjects.get('production-ordinary'), { token })).status, 404);
       assert.equal((await request(base, '/api/identity/company-registrations', { token })).status, 403); assert.equal((await request(base, '/api/identity/roles/catalog', { token })).status, 403);
@@ -4355,5 +4356,33 @@ test('person group and role management uses original OAuth through the productio
   assert.equal((await request(base,'/api/users/'+target+'/roles/'+grant.body.id,{method:'DELETE',token})).status,200);
   assert.equal((await request(base,'/api/groups/'+collection.id+'/members/'+target,{method:'DELETE',token,headers:{'If-Match':groupEtag(assigned.body)}})).status,200);
   const removed=await request(base,route+'?search=Actual%20person',{token});assert.equal(removed.status,200);assert.equal(removed.body.total,0);
+ });
+});
+
+test('own custom directory roles and OU scopes use actual OAuth, canonical sources and the production gateway',async()=>{
+ const first=await issue('operator');const manager=provenMfa(payload(first.access_token))?first:await configureFactor('operator',first);const initial=await issue('alice');const delegate=provenMfa(payload(initial.access_token))?initial:await configureFactor('alice',initial);const managerToken=manager.access_token,delegateToken=delegate.access_token;
+ await withProductionGateway(async base=>{
+  const metadata=await request(base,'/api/identity/access',{token:managerToken});assert.equal(metadata.status,200,JSON.stringify(metadata.body));assert.equal(metadata.body.companyRolesProtocol,1);assert.ok(metadata.body.permissions.includes('company.roles.manage'));
+  const definition={name:'Actual own scoped Engineering profile role',description:'Real signed original user proof',permissions:['users.read','users.update'],maxDurationSeconds:3600,reason:'Explicit own scoped directory profile management',confirm:true};
+  const role=await request(base,'/api/identity/company-roles',{method:'POST',token:managerToken,body:definition});assert.equal(role.status,201,JSON.stringify(role.body));
+  const unit=await request(base,'/api/ous',{method:'POST',token:managerToken,body:{name:'Actual custom role scope'}});assert.equal(unit.status,201,JSON.stringify(unit.body));
+  const employee=await request(base,'/api/users',{method:'POST',token:managerToken,body:{username:'scoped-profile-target',email:'scoped-profile-target@native.test'}});assert.equal(employee.status,201,JSON.stringify(employee.body));
+  assert.equal((await request(base,'/api/ous/'+unit.body.id+'/members',{method:'POST',token:managerToken,headers:{'If-Match':`"ou-${unit.body.id}-${unit.body.revision}"`},body:{userId:employee.body.id}})).status,201);
+  const granted=await request(base,'/api/identity/company-roles/'+role.body.role.id+'/grants',{method:'POST',token:managerToken,headers:{'If-Match':`"company-role-${role.body.role.id}-${role.body.role.revision}"`},body:{targetType:'user',targetId:canonicalSubjects.get('alice'),scopeType:'ou',ouId:unit.body.id,durationSeconds:3600,reason:'Explicit assignment of the Engineering scope to the actual employee',confirm:true}});assert.equal(granted.status,201,JSON.stringify(granted.body));
+  const access=await request(base,'/api/identity/access',{token:delegateToken});assert.equal(access.status,200,JSON.stringify(access.body));assert.ok(access.body.permissions.includes('users.read'));assert.ok(!access.body.permissions.includes('company.roles.manage'));assert.ok(!payload(delegateToken).roles.includes('admin'));
+  const users=await request(base,'/api/users',{token:delegateToken});assert.equal(users.status,200,JSON.stringify(users.body));assert.equal(users.body.total,1);assert.equal(users.body.users[0].id,employee.body.id);
+  assert.equal((await request(base,'/api/users/'+canonicalSubjects.get('operator'),{token:delegateToken})).status,404);
+  const changed=await request(base,'/api/users/'+employee.body.id,{method:'PUT',token:delegateToken,headers:{'If-Match':`"user-${employee.body.id}-${employee.body.revision}"`},body:{title:'Actually delegated scoped profile update'}});assert.equal(changed.status,200,JSON.stringify(changed.body));
+  const detail=await request(base,'/api/identity/company-roles/'+role.body.role.id,{token:managerToken});assert.equal(detail.status,200,JSON.stringify(detail.body));assert.equal(detail.body.grants[0].id,granted.body.grant.id);
+  const history=await request(base,'/api/identity/company-roles/'+role.body.role.id+'/history',{token:managerToken});assert.equal(history.status,200,JSON.stringify(history.body));assert.ok(history.body.events.some(event=>event.action==='grant-create'));
+  assert.equal((await request(base,'/api/identity/company-roles/grants/'+granted.body.grant.id+'/revoke',{method:'POST',token:managerToken,headers:{'If-Match':`"company-grant-${granted.body.grant.id}-${granted.body.grant.revision}"`},body:{reason:'Withdraw the actual custom directory source immediately',confirm:true}})).status,200);
+  assert.equal((await request(base,'/api/users',{token:delegateToken})).status,403);
+  const protectedGroup=await request(base,'/api/identity/company-roles/groups',{method:'POST',token:managerToken,body:{name:'Actual protected scoped role group',description:'Original role-assignable group',reason:'Create the protected original role membership source',confirm:true}});assert.equal(protectedGroup.status,201,JSON.stringify(protectedGroup.body));
+  const gid=protectedGroup.body.group.id;const member=await request(base,'/api/groups/'+gid+'/members',{method:'POST',token:managerToken,headers:{'If-Match':`"group-${gid}-${protectedGroup.body.group.revision}"`},body:{userId:canonicalSubjects.get('alice')}});assert.equal(member.status,200,JSON.stringify(member.body));
+  const inherited=await request(base,'/api/identity/company-roles/'+role.body.role.id+'/grants',{method:'POST',token:managerToken,headers:{'If-Match':`"company-role-${role.body.role.id}-${role.body.role.revision}"`},body:{targetType:'group',targetId:gid,scopeType:'ou',ouId:unit.body.id,durationSeconds:3600,reason:'Delegate the actual scoped actions through an original static role group',confirm:true}});assert.equal(inherited.status,201,JSON.stringify(inherited.body));
+  assert.equal((await request(base,'/api/users',{token:delegateToken})).body.total,1);
+  assert.equal((await request(base,'/api/groups/'+gid+'/members/'+canonicalSubjects.get('alice'),{method:'DELETE',token:managerToken,headers:{'If-Match':`"group-${gid}-${member.body.revision}"`}})).status,200);
+  assert.equal((await request(base,'/api/users',{token:delegateToken})).status,403);
+
  });
 });

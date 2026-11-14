@@ -46,6 +46,9 @@ const ROLE_PERMISSIONS = {
 };
 const ALL_PERMISSIONS = [...new Set([...Object.values(ROLE_PERMISSIONS).flat(), 'users.delete', 'identities.links.manage', 'organization.read', 'organization.manage', 'organization.delegations.manage'])];
 const ROUTES = [
+  ['GET', /^\/identity\/company-roles(?:\/[a-f0-9-]{36}(?:\/history)?)?\/?$/, ['company.roles.read']],
+  ['POST', /^\/identity\/company-roles(?:\/groups|\/[a-f0-9-]{36}\/grants|\/grants\/[a-f0-9-]{36}\/revoke)?\/?$/, ['company.roles.manage']],
+  ['PUT', /^\/identity\/company-roles\/[a-f0-9-]{36}\/?$/, ['company.roles.manage']],
   ['GET', /^\/groups\/[a-f0-9-]{36}\/rule(?:\/(?:preview|history))?\/?$/, []],
   ['PUT', /^\/groups\/[a-f0-9-]{36}\/rule\/?$/, []],
   ['POST', /^\/groups\/[a-f0-9-]{36}\/rule\/sync\/?$/, []],
@@ -155,6 +158,7 @@ function requireIdentityAccess(req, res, next) {
   const route = ROUTES.find(([method, pattern]) => req.method === method && pattern.test(req.path));
   if (!route) return res.status(404).json({ error: 'Not found' });
   req.identityPermissions = [...new Set([...getIdentityPermissions(req.user), ...(req.organizationPermissions || []).filter(permission => ['organization.read', 'organization.manage', 'organization.delegations.manage'].includes(permission)),
+    ...(req.companyRolePermissions || []).filter(permission=>['company.roles.read','company.roles.manage'].includes(permission)),
     ...(req.companyRegistrationPermissions || []).filter(permission => permission === 'company.registrations.review'),
     ...(req.companyDirectoryPermissions || []).filter(permission => COMPANY_DIRECTORY_PERMISSIONS.includes(permission))])];
   const required = [...route[2]];

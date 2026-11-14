@@ -10,6 +10,7 @@ const {DirectoryReader}=require('./DirectoryReader');
 const {GroupMembershipReviews}=require('./GroupMembershipReviews');
 const {mayUseDirectory,requireDirectoryPermissions}=require('./DirectoryAuthority');
 
+const CompanyRoleAuthority = require('./CompanyRoleAuthority');
 function reject(status,message){throw Object.assign(new Error(message),{status});}
 function identifier(value){if(!validUuid(value))reject(400,'Canonical group or member UUID required');return value.toLowerCase();}
 function groupEtag(group){return `"group-${group.id}-${group.revision}"`;}
@@ -40,6 +41,7 @@ class GroupMutator{
   return this.database.transaction(async client=>{
    const current=(await client.query('SELECT id,version,generation FROM identity_tenants WHERE id=$1 AND enabled FOR SHARE',[tenant.id])).rows[0];
    if(!current||!sameTenantContext(tenant,{id:current.id,version:String(current.version),generation:String(current.generation)}))reject(401,'Tenant authority changed');
+   await CompanyRoleAuthority.lock(client,tenant.id);
    const users=[...new Set([user.identity_authorization.userId.toLowerCase(),...(memberId?[memberId]:[])])].sort();
    const locked=(await client.query("SELECT id FROM users WHERE id=ANY($1::uuid[]) AND identity_tenant_id('user',id)=$2 ORDER BY id FOR UPDATE",[users,tenant.id])).rows;
    if(!locked.some(row=>row.id===user.identity_authorization.userId.toLowerCase()))reject(401,'Original group operator unavailable');
@@ -47,7 +49,9 @@ class GroupMutator{
    if(!(await client.query("SELECT id FROM groups WHERE id=$1 AND identity_tenant_id('group',id)=$2 FOR UPDATE",[groupId,tenant.id])).rows.length)reject(404,'Group or member not found');
    const source=await new AuthorizationState({transaction:callback=>callback(client)}).state(user.iss,user.sub);
    if(!source.active||!sameContext(source.context,user.identity_authorization)||!sameTenantContext(source.tenant,tenant)||!acceptsRoleAuthentication(source.authentication,user))reject(401,'Original group operator authority changed');
-   await requireDirectoryPermissions(client,user,[permission]);
+   const companyRoles=await requireDirectoryPermissions(client,user,[permission],{kind:'group',id:groupId});
+   const companyGovernance=await CompanyRoleAuthority.governance(client,user,'group',groupId);
+   if(companyGovernance&&action==='member-add'&&memberId===user.identity_authorization.userId.toLowerCase())reject(403,'Independent role group membership operator required');
    await client.query("SET LOCAL statement_timeout = '15s'");
    const before=(await client.query('SELECT identity_directory_group_state(to_jsonb(collection)) AS state FROM groups collection WHERE id=$1',[groupId])).rows[0].state;
    if(groupEtag({id:groupId,revision:before.revision})!==expected)reject(412,'Group changed; reload before retrying');
@@ -62,10 +66,11 @@ class GroupMutator{
    if(policy&&!acceptsRoleAuthentication({required:true,maxAgeSeconds:300},user))reject(428,'Fresh MFA required for governed membership');
    if(!sameTenantContext(tenant,await this.revalidate(authorization,user)))reject(401,'Tenant authority changed');
    const rolesSnapshot=(await client.query('SELECT identity_subject_link_role_state($1) AS state',[user.identity_authorization.userId])).rows[0].state;
-   const validUntil=Math.min(user.exp,source.authentication.required?user.auth_time+source.authentication.maxAgeSeconds:user.exp,policy?user.auth_time+300:user.exp);
+   const validUntil=Math.min(user.exp,source.authentication.required?user.auth_time+source.authentication.maxAgeSeconds:user.exp,policy?user.auth_time+300:user.exp,(companyRoles?user.auth_time+300:user.exp),...(companyRoles?.grants.map(grant=>Number(grant.source.validUntil))||[]),companyGovernance?.validUntil||user.exp);
    if(!Number.isFinite(validUntil)||validUntil*1000<=Date.now())reject(401,'Original group operator assurance expired');
    const member=memberId?{id:action==='member-add'?null:existing.membership_id,userId:memberId,before:existing||null,eligibilityRevision:String((await client.query('SELECT eligibility_revision FROM users WHERE id=$1',[memberId])).rows[0].eligibility_revision)}:null;
-   const proof={operationId,issuer:user.iss,subject:user.sub,context:user.identity_authorization,tenant,rolesSnapshot,validUntil,target:{id:groupId,action,before,beforeMembers,expectedValues:action==='delete'?null:{name:before.name,description:before.description??null,...changes},member,governance:policy?{id:policy.id,version:String(policy.version),windowSeconds:policy.window_seconds}:null}};
+   const proof={operationId,issuer:user.iss,subject:user.sub,context:user.identity_authorization,tenant,rolesSnapshot,validUntil,...(companyRoles?{companyRoles}:{}),...(companyGovernance?{companyGovernance}:{}),target:{id:groupId,action,before,beforeMembers,expectedValues:action==='delete'?null:{name:before.name,description:before.description??null,...changes},member,governance:policy?{id:policy.id,version:String(policy.version),windowSeconds:policy.window_seconds}:null}};
+   if(companyRoles||companyGovernance)await client.query('SELECT identity_company_role_admit_use($1::jsonb)',[JSON.stringify(proof)]);
    await client.query("SELECT set_config('opendirectory.group_mutation',$1,true)",[JSON.stringify(proof)]);
    const bound={isAvailable:()=>true,transaction:callback=>callback(client),query:(...args)=>client.query(...args),write:(sql,values)=>client.query(sql,values)};
    let membershipReview=null;

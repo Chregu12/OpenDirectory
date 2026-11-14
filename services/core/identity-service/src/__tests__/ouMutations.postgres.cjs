@@ -20,7 +20,7 @@ before(async () => {
   } };
   for (const file of fs.readdirSync(migrations).filter(file => file.endsWith('.sql')).sort()) await pool.query(fs.readFileSync(path.join(migrations, file), 'utf8'));
 });
-beforeEach(async () => { beforeCommit = null; await pool.query('TRUNCATE identity_tenants,users,groups,ous CASCADE'); });
+beforeEach(async()=>require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous CASCADE'));
 after(async () => { await pool.end(); await administration.query('DROP SCHEMA ' + schema + ' CASCADE'); await administration.end(); });
 async function actor(role = 'ou-administrator', tenant) {
   tenant ||= await provisionTenant(database, schema, { enabled: true }); const id = randomUUID(); const subject = 'ou-operator-' + id;
@@ -117,10 +117,10 @@ test('migration replay and caller timezones retain exact revisions and immutable
   for (const file of fs.readdirSync(migrations).filter(file => file.endsWith('.sql') && file > '042_directory_ou_mutations.sql').sort()) await pool.query(fs.readFileSync(path.join(migrations, file), 'utf8'));
   for (const sql of ['DELETE FROM identity_directory_ou_events', "UPDATE identity_directory_ou_outbox SET status='pending'"]) await assert.rejects(pool.query(sql), error => error.code === '42501');
 });
-async function observedTreeWait() {
+async function observedDirectoryWriteWait() {
   const until = Date.now() + 2000;
-  while (Date.now() < until) { if ((await pool.query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type='Lock' AND query='SELECT identity_directory_ou_lock($1)') AS waiting")).rows[0].waiting) return; await new Promise(resolve => setTimeout(resolve, 10)); }
-  assert.fail('Expected actual OU advisory-lock wait');
+  while (Date.now() < until) { if ((await pool.query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type='Lock' AND query IN ('SELECT identity_directory_ou_lock($1)','SELECT identity_company_roles_lock($1::uuid)')) AS waiting")).rows[0].waiting) return; await new Promise(resolve => setTimeout(resolve, 10)); }
+  assert.fail('Expected actual tenant or OU advisory-lock wait');
 }
 function holdNextCommit() {
   let readySignal; let release; let held = true; const ready = new Promise(resolve => { readySignal = resolve; }); const gate = new Promise(resolve => { release = resolve; });
@@ -129,17 +129,17 @@ function holdNextCommit() {
 test('actual competing updates wait on the tree boundary and a stale second writer cannot overwrite the first version', { timeout: 15000 }, async () => {
   const fixture = await actor(); const unit = await create(fixture); const gate = holdNextCommit(); const first = update(fixture, unit, { name: 'First exact version' }); await gate.ready;
   const second = assert.rejects(update(fixture, unit, { name: 'Stale second version' }), error => error.status === 412);
-  try { await observedTreeWait(); } finally { gate.release(); } await first; await second; beforeCommit = null; assert.equal((await read(fixture, unit.id)).name, 'First exact version'); assert.equal((await events()).length, 1);
+  try { await observedDirectoryWriteWait(); } finally { gate.release(); } await first; await second; beforeCommit = null; assert.equal((await read(fixture, unit.id)).name, 'First exact version'); assert.equal((await events()).length, 1);
 });
 test('actual opposite subtree moves serialize and cannot jointly commit an otherwise individually plausible cycle', { timeout: 15000 }, async () => {
   const fixture = await actor(); const firstRoot = await create(fixture, 'First'); const secondRoot = await create(fixture, 'Second'); const gate = holdNextCommit(); const first = update(fixture, firstRoot, { parentId: secondRoot.id }); await gate.ready;
   const second = assert.rejects(update(fixture, secondRoot, { parentId: firstRoot.id }), error => error.status === 409);
-  try { await observedTreeWait(); } finally { gate.release(); } await first; await second; beforeCommit = null; assert.equal((await read(fixture, firstRoot.id)).parentId, secondRoot.id); assert.equal((await read(fixture, secondRoot.id)).parentId, undefined); assert.equal((await events()).length, 1);
+  try { await observedDirectoryWriteWait(); } finally { gate.release(); } await first; await second; beforeCommit = null; assert.equal((await read(fixture, firstRoot.id)).parentId, secondRoot.id); assert.equal((await read(fixture, secondRoot.id)).parentId, undefined); assert.equal((await events()).length, 1);
 });
 test('a child creation racing parent deletion commits the child before the waiting deletion rechecks its actual dependencies', { timeout: 15000 }, async () => {
   const fixture = await actor(); const parent = await create(fixture); const gate = holdNextCommit(); const child = create(fixture, 'Concurrent child', parent.id); await gate.ready;
   const deleting = assert.rejects(remove(fixture, parent), error => error.status === 409);
-  try { await observedTreeWait(); } finally { gate.release(); } const created = await child; await deleting; beforeCommit = null; assert.equal((await read(fixture, created.id)).parentId, parent.id); assert.equal((await events()).length, 0);
+  try { await observedDirectoryWriteWait(); } finally { gate.release(); } const created = await child; await deleting; beforeCommit = null; assert.equal((await read(fixture, created.id)).parentId, parent.id); assert.equal((await events()).length, 0);
 });
 test('an actual limited SQL login or SET ROLE cannot launder the private OU mutation receiver', async () => {
   const role = 'ou_limited_' + randomUUID().replaceAll('-', ''); let limited;

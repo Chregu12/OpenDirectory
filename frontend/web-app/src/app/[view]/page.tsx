@@ -66,6 +66,7 @@ import LocationsView from '@/components/views/LocationsView';
 import OrganizationView from '@/components/views/OrganizationView';
 import UserGroupsView from '@/components/views/UserGroupsView';
 import RolesView from '@/components/views/RolesView';
+import CompanyRolesView from '@/components/views/CompanyRolesView';
 import AssignmentView from '@/components/views/AssignmentView';
 import AppsBooksView from '@/components/views/AppsBooksView';
 
@@ -261,6 +262,7 @@ export default function ViewPage() {
         case 'employee-invitations': return <EmployeeInvitationManager />;
         case 'identity':          return <IdentityProviderView />;
         case 'enrollment':        return <EnrollmentHubView />;
+        case 'company-roles':      return <CompanyRolesView />;
         case 'permissions':       return <RolesView />;
         case 'antivirus':         return <AntivirusView />;
         case 'audit':             return <AuditView />;

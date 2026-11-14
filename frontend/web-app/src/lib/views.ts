@@ -26,6 +26,7 @@ export const VIEWS: ViewDefinition[] = [
   { id: 'users', name: 'Mitarbeitende', group: 'Unternehmen & Personen', icon: UserGroupIcon, keywords: ['Benutzer', 'users'], audience: 'permissions', permissions: ['users.read', 'users.create', 'users.sessions.invalidate'] },
   { id: 'employee-invitations', name: 'Einladungen', group: 'Unternehmen & Personen', icon: UserGroupIcon, keywords: ['Mitarbeitereinladungen', 'employee-invitations'], audience: 'owner' },
   { id: 'usergroups', name: 'Gruppen', group: 'Unternehmen & Personen', icon: UserGroupIcon, keywords: ['Gruppen', 'usergroups'], audience: 'permissions', permissions: ['groups.read', 'groups.create'] },
+  { id: 'company-roles', name: 'Firmenrollen', group: 'Administration', icon: KeyIcon, keywords: ['Firmenrollen', 'company-roles', 'Bereiche', 'OU-Rechte'], audience: 'permissions', permissions: ['company.roles.read'] },
   { id: 'permissions', name: 'Rollen & Rechte', group: 'Administration', icon: KeyIcon, keywords: ['Rollen & Rechte', 'permissions'], audience: 'permissions', permissions: ['identities.roles.read'] },
   { id: 'pim', name: 'PIM', group: 'Administration', icon: ShieldCheckIcon, keywords: ['PIM', 'pim'], audience: 'permissions', permissions: ['pim.eligibilities.read', 'pim.requests.read'] },
   { id: 'offboarding-access', name: 'Offboarding: Rollen & PIM', group: 'Unternehmen & Personen', icon: KeyIcon, keywords: ['Austritt: Rollen & PIM', 'offboarding-access'], audience: 'permissions', permissions: ['identities.roles.read', 'pim.eligibilities.read'] },
