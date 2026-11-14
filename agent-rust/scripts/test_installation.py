@@ -6,7 +6,10 @@ parser=argparse.ArgumentParser();parser.add_argument('--binary',required=True,ty
 version=re.search(r'^version = "([0-9]+\.[0-9]+\.[0-9]+)"', (pathlib.Path(__file__).resolve().parents[1]/'Cargo.toml').read_text(), re.M).group(1)
 root=pathlib.Path(os.environ.get('ProgramData','C:/ProgramData'))/'OpenDirectory' if kind=='windows' else pathlib.Path('/Library/Application Support/OpenDirectory' if kind=='macos' else '/etc/opendirectory')
 config=root/'CI config %spaces'/'agent.json';service=pathlib.Path('/Library/LaunchDaemons/com.opendirectory.agent.plist' if kind=='macos' else '/etc/systemd/system/od-agent.service');program=pathlib.Path('/Library/Application Support/OpenDirectory/bin' if kind=='macos' else '/usr/local/lib/opendirectory')
-def run(*command,check=True):return subprocess.run([str(x) for x in command],check=check,capture_output=True,text=True)
+def run(*command,check=True):
+ result=subprocess.run([str(x) for x in command],capture_output=True,text=True)
+ if check and result.returncode:raise RuntimeError('Native test command failed: '+pathlib.Path(str(command[0])).name+'\n'+result.stderr[-4000:])
+ return result
 def admin(*command,check=True):return run(*command,check=check) if kind=='windows' else run('sudo',*command,check=check)
 def powershell(script,check=True):return run('powershell.exe','-NoProfile','-NonInteractive','-Command',script,check=check)
 if kind=='windows' and (pathlib.Path(os.environ['ProgramFiles'])/'OpenDirectory').exists():raise SystemExit('Existing program directory found')
@@ -45,7 +48,7 @@ try:
   admin(binary,'--config-path',config,'install');heartbeat_after(0)
   count=len(received);admin(binary,'--config-path',config,'install');heartbeat_after(count)
   # A customized existing definition needs a separate explicit replacement.
-  if kind=='windows':powershell("$t=Get-ScheduledTask -TaskName OpenDirectoryAgent;Set-ScheduledTask -TaskName OpenDirectoryAgent -Description 'CI customized definition'|Out-Null")
+  if kind=='windows':powershell("$xml=Export-ScheduledTask -TaskName OpenDirectoryAgent;Register-ScheduledTask -TaskName OpenDirectoryAgent -Xml ($xml.Replace('OpenDirectory managed device agent','CI customized definition')) -Force|Out-Null")
   else:admin('sh','-c','printf "\\n# CI customized definition\\n" >> "$1"','sh',service)
   denied=admin(binary,'--config-path',config,'install',check=False);assert denied.returncode!=0
   count=len(received);admin(binary,'--config-path',config,'install','--replace-existing');heartbeat_after(count)

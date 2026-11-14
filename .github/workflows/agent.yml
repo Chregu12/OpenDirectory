@@ -11,7 +11,7 @@ permissions:
   contents: read
 concurrency:
   group: native-agent-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 jobs:
   build:
     name: ${{ matrix.target }}
