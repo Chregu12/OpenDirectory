@@ -286,8 +286,10 @@ before(async () => {
 }, { timeout: 180000 });
 
 after(async () => {
-  if(inventoryFixture)await inventoryFixture.close();
+  process.stdout.write('Stopping browser clients before fixture services\n');
   if (browser) await browser.close(); await stop(nextProcess); await stop(quickProcess); await stop(issuerProcess);
+  process.stdout.write('Browser clients stopped; closing fixture services\n');
+  if(inventoryFixture)await inventoryFixture.close();
   for (const server of [quickReceiver, credentialServer?.authorityProxy, credentialServer, identityServer,policyServer]) {
     if (server?.listening) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   }
@@ -338,8 +340,18 @@ async function openLicenseSettings(page, panel) {
   if (panel) await page.getByRole('button', { name: panel, exact: true }).click();
 }
 
+async function openPimRoles(page) {
+  await page.goto(origin + '/pim');
+  await page.getByRole('button', { name: 'Weitere Rollen und Richtlinien', exact: true }).click();
+  return page.locator('#pim-advanced');
+}
+
 async function login(page, username = 'reader') {
   await page.goto(origin + '/login'); await page.getByRole('button', { name: 'Mit OpenDirectory anmelden' }).click();
+  await finishLogin(page, username);
+}
+
+async function finishLogin(page, username) {
   await page.waitForURL(url => url.origin === issuerBase && url.pathname === '/oauth/authorize');
   await page.locator('input[name=username]').fill(username); await page.locator('input[name=password]').fill('disposable-password');
   const otpCode = await nextOtp(username); if (otpCode) await page.locator('input[name=otpCode]').fill(otpCode);
@@ -725,25 +737,29 @@ test('real MFA enrollment, independent PIM review, factor-backed activation and 
     await owner.screenshot({ path: path.join(os.tmpdir(), 'od-verified-mfa.png'), fullPage: false });
     rememberFactor('mfa-owner', setup.secret, setupCounter); await login(owner, 'mfa-owner');
     const mfaClaims = JSON.parse(Buffer.from((await mediated(owner)).body.access_token.split('.')[1], 'base64url')); assert.deepEqual(mfaClaims.amr, ['pwd', 'otp']); assert.equal(mfaClaims.mfa_authorization.userId, target);
-    await manager.goto(origin + '/pim'); await manager.getByLabel('Verzeichnis-ID', { exact: true }).fill(target); await manager.getByRole('button', { name: 'Berechtigungen laden', exact: true }).click();
+    await openPimRoles(manager); await manager.getByLabel('Verzeichnis-ID', { exact: true }).fill(target); await manager.getByRole('button', { name: 'Berechtigungen laden', exact: true }).click();
     await manager.getByLabel('Berechtigte Rolle', { exact: true }).selectOption('license-manager'); await manager.getByLabel('Verwaltungsbegründung', { exact: true }).fill('Reviewed real browser PIM eligibility');
     const eligibleReceipt = manager.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/identity/pim/eligibilities');
     await manager.getByRole('button', { name: 'Berechtigung prüfen', exact: true }).click(); await manager.getByRole('alertdialog').getByRole('button', { name: 'Bestätigen', exact: true }).click();
     const eligibleResponse = await eligibleReceipt; assert.equal(eligibleResponse.status(), 201); const eligibility = await eligibleResponse.json();
     assert.deepEqual(JSON.parse(Buffer.from((await mediated(owner)).body.access_token.split('.')[1], 'base64url')).roles, ['user']);
-    await owner.goto(origin + '/pim'); await owner.getByLabel('Eigene Berechtigung', { exact: true }).selectOption(eligibility.id); await owner.getByLabel('Aktivierungsbegründung', { exact: true }).fill('Temporary real browser license operation');
+    const ownerRoles = await openPimRoles(owner); await ownerRoles.getByLabel('Eigene Berechtigung', { exact: true }).selectOption(eligibility.id); await ownerRoles.getByLabel('Aktivierungsbegründung', { exact: true }).fill('Temporary real browser license operation');
     const pendingReceipt = owner.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/identity/pim/requests');
     await owner.getByRole('button', { name: 'Aktivierung beantragen', exact: true }).click(); await owner.getByRole('alertdialog').getByRole('button', { name: 'Bestätigen', exact: true }).click();
     const pendingResponse = await pendingReceipt; assert.equal(pendingResponse.status(), 200); const pending = await pendingResponse.json(); assert.equal(pending.status, 'pending');
-    await reviewer.goto(origin + '/pim'); const queue = reviewer.getByRole('listitem', { name: 'Antrag ' + pending.id, exact: true });
+    const reviewerRoles = await openPimRoles(reviewer); const queue = reviewerRoles.getByRole('listitem', { name: 'Antrag ' + pending.id, exact: true });
     await queue.getByRole('button', { name: 'Genehmigen', exact: true }).click(); const approvalReceipt = reviewer.waitForResponse(response => new URL(response.url()).pathname.endsWith('/' + pending.id + '/approve'));
     await reviewer.getByRole('alertdialog').getByRole('button', { name: 'Bestätigen', exact: true }).click(); assert.equal((await approvalReceipt).status(), 200);
     assert.deepEqual(JSON.parse(Buffer.from((await mediated(owner)).body.access_token.split('.')[1], 'base64url')).roles, ['user']);
-    await owner.getByRole('button', { name: 'Neu laden', exact: true }).click(); await owner.getByRole('button', { name: 'Jetzt aktivieren', exact: true }).click();
+    await ownerRoles.getByRole('button', { name: 'Neu laden', exact: true }).click(); await ownerRoles.getByRole('button', { name: 'Jetzt aktivieren', exact: true }).click();
     const activeReceipt = owner.waitForResponse(response => new URL(response.url()).pathname.endsWith('/' + pending.id + '/activate'));
-    await owner.getByRole('alertdialog').getByRole('button', { name: 'Bestätigen', exact: true }).click(); const active = await activeReceipt; assert.equal(active.status(), 200); assert.equal((await active.json()).status, 'active');
-    await owner.waitForURL(origin + '/login'); await login(owner, 'mfa-owner'); assert.deepEqual(JSON.parse(Buffer.from((await mediated(owner)).body.access_token.split('.')[1], 'base64url')).roles, ['license-manager', 'user']);
-    await reviewer.getByRole('button', { name: 'Neu laden', exact: true }).click(); await queue.getByRole('button', { name: 'Aktivierung widerrufen', exact: true }).waitFor(); await queue.scrollIntoViewIfNeeded();
+    await owner.getByRole('alertdialog').getByRole('button', { name: 'Bestätigen', exact: true }).click(); const active = await activeReceipt; assert.equal(active.status(), 200);
+    // Immediate reauthentication can discard Chrome's response body; verify the committed activation.
+    assert.equal((await identityDb.query(`SELECT request.state FROM identity_pim_requests request
+      JOIN identity_role_assignments assignment ON assignment.activation_request_id=request.id
+      WHERE request.id=$1 AND assignment.revoked_at IS NULL AND assignment.expires_at>clock_timestamp()`, [pending.id])).rows[0].state, 'active');
+    await finishLogin(owner, 'mfa-owner'); assert.deepEqual(JSON.parse(Buffer.from((await mediated(owner)).body.access_token.split('.')[1], 'base64url')).roles, ['license-manager', 'user']);
+    await reviewerRoles.getByRole('button', { name: 'Neu laden', exact: true }).click(); await queue.getByRole('button', { name: 'Aktivierung widerrufen', exact: true }).waitFor(); await queue.scrollIntoViewIfNeeded();
     await reviewer.screenshot({ path: path.join(os.tmpdir(), 'od-pim-console.png'), fullPage: false });
     await queue.getByRole('button', { name: 'Aktivierung widerrufen', exact: true }).click(); const revokedReceipt = reviewer.waitForResponse(response => new URL(response.url()).pathname.endsWith('/' + pending.id + '/revoke'));
     await reviewer.getByRole('alertdialog').getByRole('button', { name: 'Bestätigen', exact: true }).click(); assert.equal((await revokedReceipt).status(), 200); assert.equal((await mediated(owner)).status, 401);
@@ -801,9 +817,9 @@ test('a real PIM approver cannot approve their own canonical activation and elig
     const managerSession = await mediated(manager); const reviewerSession = await mediated(reviewer); const target = actors.get('pim-reviewer').userId;
     const eligible = await manager.request.post(origin + '/api/identity/pim/eligibilities', { headers: { Authorization: 'Bearer ' + managerSession.body.access_token }, data: { userId: target, role: 'license-reader', maxDurationSeconds: 3600, validForSeconds: 86400, reason: 'Reviewed independent self-denial fixture' } }); assert.equal(eligible.status(), 201);
     const pending = await reviewer.request.post(origin + '/api/identity/pim/requests', { headers: { Authorization: 'Bearer ' + reviewerSession.body.access_token }, data: { id: randomUUID(), eligibilityId: (await eligible.json()).id, durationSeconds: 3600, reason: 'Must not approve own privileged request' } }); assert.equal(pending.status(), 200); const requestId = (await pending.json()).id;
-    await reviewer.goto(origin + '/pim'); await reviewer.getByText('Keine eigene Genehmigung oder Ablehnung.', { exact: true }).waitFor(); assert.equal(await reviewer.getByRole('button', { name: 'Genehmigen', exact: true }).count(), 0);
+    const reviewerRoles = await openPimRoles(reviewer); await reviewerRoles.getByText('Keine eigene Genehmigung oder Ablehnung.', { exact: true }).waitFor(); assert.equal(await reviewerRoles.getByRole('button', { name: 'Genehmigen', exact: true }).count(), 0);
     assert.equal((await reviewer.request.post(origin + `/api/identity/pim/requests/${requestId}/approve`, { headers: { Authorization: 'Bearer ' + reviewerSession.body.access_token }, data: {} })).status(), 403);
-    await manager.goto(origin + '/pim'); await manager.getByLabel('Verzeichnis-ID', { exact: true }).fill(actors.get('pim-manager').userId); await manager.getByRole('button', { name: 'Berechtigungen laden', exact: true }).click(); await manager.getByText('Keine Selbstverwaltung eigener PIM-Berechtigungen.', { exact: true }).waitFor();
+    await openPimRoles(manager); await manager.getByLabel('Verzeichnis-ID', { exact: true }).fill(actors.get('pim-manager').userId); await manager.getByRole('button', { name: 'Berechtigungen laden', exact: true }).click(); await manager.getByText('Keine Selbstverwaltung eigener PIM-Berechtigungen.', { exact: true }).waitFor();
   } finally { await Promise.all([managerContext.close(), reviewerContext.close()]); }
 });
 
@@ -1128,7 +1144,7 @@ test('the real PIM policy console requires reviewed fresh MFA, removes direct br
     await manager.getByRole('button',{ name:'Neuen Faktor bestätigen',exact:true }).click(); await manager.getByText(/Ersteinrichtung bestätigt/).waitFor();
     assert.equal((await managerContext.cookies()).some(cookie=>cookie.name==='od_session'),false); assert.equal(await manager.getByText(setup.secret,{ exact:true }).count(),0);
     rememberFactor('pim-policy-manager',setup.secret,counter); await login(manager,'pim-policy-manager'); managerToken=(await mediated(manager)).body.access_token;
-    await manager.goto(origin+'/pim'); await manager.getByLabel('Kanonische Rolle für PIM-Richtlinie',{ exact:true }).fill('license-manager');
+    await openPimRoles(manager); await manager.getByLabel('Kanonische Rolle für PIM-Richtlinie',{ exact:true }).fill('license-manager');
     await manager.getByRole('button',{ name:'PIM-Richtlinie laden',exact:true }).click(); await manager.getByText(/license-manager · Version/).waitFor();
     await manager.getByLabel('PIM-Aktivierung verbindlich verlangen',{ exact:true }).check();
     await manager.getByLabel('Maximale PIM-Aktivierungsdauer in Sekunden',{ exact:true }).fill('600');
@@ -1145,7 +1161,7 @@ test('the real PIM policy console requires reviewed fresh MFA, removes direct br
     assert.ok(!current.roles.includes('license-manager'));
     const reader=await readerContext.newPage(); const forbidden=[];
     reader.on('request',request=>{ const pathname=new URL(request.url()).pathname; if(pathname==='/api/users' || pathname.startsWith('/api/identity/search'))forbidden.push(pathname); });
-    await login(reader,'pim-policy-reader'); await reader.goto(origin+'/pim');
+    await login(reader,'pim-policy-reader'); await openPimRoles(reader);
     await reader.getByLabel('Kanonische Rolle für PIM-Richtlinie',{ exact:true }).fill('license-manager'); await reader.getByRole('button',{ name:'PIM-Richtlinie laden',exact:true }).click();
     await reader.getByText(/Nur unabhängig genehmigte PIM-Aktivierung erlaubt/).waitFor();
     assert.equal(await reader.getByRole('button',{ name:'PIM-Richtlinie prüfen',exact:true }).count(),0); assert.equal(forbidden.length,0);
@@ -1402,7 +1418,7 @@ test('real administrative review console independently configures, retains and r
   const poolId=(await policyDb.query("INSERT INTO license_catalog(name,total_seats) VALUES('Browser administrative review pool',3) RETURNING id")).rows[0].id;const base='/api/licenses/delegations/reviews';
   const config=await configContext.newPage();await reviewFirstFactor(config,'authority-review-config');await login(config,'authority-review-config');const owner=await ownerContext.newPage();await reviewFirstFactor(owner,'authority-review-owner');await login(owner,'authority-review-owner');const maker=await makerContext.newPage();await reviewFirstFactor(maker,'authority-review-maker');await login(maker,'authority-review-maker');const voter=await voterContext.newPage();await reviewFirstFactor(voter,'authority-review-voter');await login(voter,'authority-review-voter');
   const configToken=(await mediated(config)).body.access_token;const ownerToken=(await mediated(owner)).body.access_token;const scoped=policyBase+'/api/licenses/scoped/pools/'+poolId;
-  const grant=async()=>{const result=await fetch(policyBase+'/api/licenses/delegations',{method:'POST',headers:{Authorization:'Bearer '+configToken,'Content-Type':'application/json'},body:JSON.stringify({licenseId:poolId,userId:actors.get('authority-review-owner').userId,duty:'allocator',durationSeconds:3600,reason:'Browser actual bounded administrative review target',confirm:true})});assert.equal(result.status,201);return{row:await result.json(),tag:result.headers.get('etag')};};const original=await grant();
+  const grant=async()=>{const result=await fetch(policyBase+'/api/licenses/delegations',{method:'POST',headers:{Authorization:'Bearer '+configToken,'Content-Type':'application/json'},body:JSON.stringify({licenseId:poolId,userId:actors.get('authority-review-owner').userId,duty:'allocator',durationSeconds:3600,reason:'Browser actual bounded administrative review target',confirm:true})});const row=await result.json();assert.equal(result.status,201,JSON.stringify(row));return{row,tag:result.headers.get('etag')};};const original=await grant();
   assert.equal((await fetch(scoped+'/assign',{method:'POST',headers:{Authorization:'Bearer '+ownerToken,'Content-Type':'application/json'},body:JSON.stringify({assigneeType:'user',assigneeId:actors.get('reader').userId,expiresAt:null,reason:'Business license must survive review of administrative rights',confirm:true})})).status,201);
   await maker.goto(origin+'/licenses'); await openLicenseSettings(maker, 'Prüfung delegierter Verwaltungsrechte');const panel=maker.getByRole('region',{name:'Verwaltungsrechte-Prüfung',exact:true});await panel.getByLabel('Prüfregel-Pool-ID',{exact:true}).fill(poolId);await panel.getByRole('button',{name:'Verwaltungs-Prüfregel laden',exact:true}).click();await panel.getByText('Keine aktive Prüfregel für dieses Ziel.',{exact:true}).waitFor();await panel.getByLabel('Prüfzyklus in Minuten',{exact:true}).fill('10');await panel.getByLabel('Antwortfenster in Minuten',{exact:true}).fill('5');await panel.getByLabel('Unabhängige Verwaltungs-Prüfer (UUIDs)',{exact:true}).fill(actors.get('authority-review-voter').userId);await panel.getByRole('button',{name:'Verwaltungs-Prüfregel erstellen prüfen',exact:true}).click();
   const confirm=async(page,control,endpoint,status)=>{await control.getByLabel('Begründung der Verwaltungs-Prüfung',{exact:true}).fill('Independent actual browser administrative recertification');await control.getByLabel('Unabhängigkeit, Zielversion und bindende Verwaltungsfrist geprüft.',{exact:true}).check();const response=page.waitForResponse(value=>new URL(value.url()).pathname===endpoint&&value.request().method()==='POST');await control.getByRole('button',{name:'Verwaltungs-Prüfung verbindlich bestätigen',exact:true}).click();const result=await response;assert.equal(result.status(),status);const row=await result.json();await control.getByRole('status').waitFor();return row;};
@@ -1546,7 +1562,7 @@ test('real company registration UI persists one disabled tenant and candidate th
     await reviewFirstFactor(page, 'company-registration-owner'); await login(page, 'company-registration-owner'); await page.goto(origin + '/organization');
     assert.equal(await page.evaluate(() => localStorage.getItem('od_onboarded')), null);
     await page.getByText('Gespeicherte Version 1', { exact: true }).waitFor(); assert.equal(await page.getByLabel('Firmenname *', { exact: true }).inputValue(), 'Actual Pending Browser Company');
-    const ownerSession = await mediated(page); const ownerAccess = await page.request.get(origin + '/api/identity/access', { headers: { Authorization: 'Bearer ' + ownerSession.body.access_token } }); assert.deepEqual((await ownerAccess.json()).permissions, ['organization.read', 'organization.manage', 'organization.delegations.manage', ...require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS]);
+    const ownerSession = await mediated(page); const ownerAccess = await page.request.get(origin + '/api/identity/access', { headers: { Authorization: 'Bearer ' + ownerSession.body.access_token } }); assert.deepEqual((await ownerAccess.json()).permissions, ['organization.read', 'organization.manage', 'organization.delegations.manage', 'company.roles.read', 'company.roles.manage', ...require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS]);
     assert.equal(require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS.length, 14);
     const ownerPeople = await page.request.get(origin + '/api/users', { headers: { Authorization: 'Bearer ' + ownerSession.body.access_token } }); assert.equal(ownerPeople.status(), 200); assert.deepEqual((await ownerPeople.json()).users.map(account => account.id), [receipt.administratorId]);
     await page.getByLabel('Ort *', { exact: true }).fill('Bern'); await page.getByLabel('Begründung der Änderung', { exact: true }).fill('New company owner updates only the own original profile'); await page.getByRole('button', { name: 'Organisationsprofil speichern', exact: true }).click(); await page.getByText('Organisationsprofil gespeichert. Version 2.', { exact: true }).waitFor();
@@ -1625,10 +1641,10 @@ test('real company registration UI persists one disabled tenant and candidate th
     assert.equal((await identityDb.query('SELECT count(*)::int AS count FROM identity_role_assignments WHERE user_id=$1', [employeeIds[0]])).rows[0].count, 0);
     assert.equal((await identityDb.query('SELECT enabled FROM users WHERE id=$1', [employeeIds[0]])).rows[0].enabled, false);
     await page.screenshot({ path: '/tmp/od-business9-company-unlinked.png', fullPage: true });
-    await page.goto(origin+'/devices');await page.getByRole('heading',{name:'Geräteinventar',exact:true}).waitFor();
+    await page.goto(origin+'/devices');await page.getByRole('heading',{name:'Geräte',exact:true}).waitFor();
     await page.getByRole('button',{name:'Gerät erfassen',exact:true}).click();const inventoryForm=page.getByRole('dialog',{name:'Gerät erfassen',exact:true});
     for(const [label,value] of [['Inventarnummer','BROWSER-LAPTOP-01'],['Seriennummer','BROWSER-SERIAL-01'],['Hersteller','Example Manufacturer'],['Modell','Business Laptop']])await inventoryForm.getByLabel(label,{exact:true}).fill(value);
-    await inventoryForm.getByLabel('Plattform',{exact:true}).selectOption('macos');
+    await inventoryForm.getByRole('combobox',{name:'Plattform',exact:true}).selectOption('macos');
     const registeredInventory=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/devices'&&response.request().method()==='POST',{timeout:10000}).catch(async error=>{throw new Error(`${error.message}\nInventory form: ${await inventoryForm.innerText()}\nPage alerts: ${await page.getByRole('alert').allTextContents()}`);});await inventoryForm.getByRole('button',{name:'Im Inventar speichern',exact:true}).click();const registeredInventoryResponse=await registeredInventory;assert.equal(registeredInventoryResponse.status(),201,await registeredInventoryResponse.text());const inventoryDevice=await registeredInventoryResponse.json();
     await page.getByRole('button',{name:'BROWSER-LAPTOP-01',exact:true}).click();const inventoryDetails=page.getByRole('article',{name:'Gerätedetails',exact:true});await inventoryDetails.waitFor();
     await inventoryDetails.getByLabel('Benutzer auswählen',{exact:true}).selectOption(employeeIds[0]);await inventoryDetails.getByRole('button',{name:'Benutzer zuweisen',exact:true}).click();

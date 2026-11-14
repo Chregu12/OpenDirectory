@@ -40,6 +40,8 @@ const separateTenant=randomUUID();for(const name of ['tenant-session-user','tena
 for(const name of ['mutation-self-reset','mutation-self-disable','mutation-self-delete','mutation-self-withdrawn'])canonicalSubjects.set(name,randomUUID());
 canonicalSubjects.set('company-blueprint-reviewer', randomUUID());
 canonicalSubjects.set('company-assignment-reviewer', randomUUID());
+canonicalSubjects.set('app-group-principal', randomUUID());
+canonicalSubjects.set('custom-device-principal', randomUUID());
 const credentialRoleOverrides = new Map();
 const credentialGroupOverrides = new Map();
 for (const username of ['pim-owner-1', 'pim-owner-2', 'pim-owner-3', 'pim-owner-4', 'pim-owner-5', 'mfa-owner', 'mfa-device-owner']) canonicalSubjects.set(username, randomUUID());
@@ -942,16 +944,17 @@ test('individual application revocation blocks real license writes without disab
   assert.equal((await request(issuerBase,'/oauth/access-state',{ token: pair.access_token })).body.active,false); assert.ok((await issueForApplication(client)).access_token);
 });
 test('group app access follows canonical membership incarnations, not credential group claims, and overlapping direct grants remain usable', async () => {
+  const username = 'app-group-principal';
   const administrator = await issue(); const metadataOperator = await issue('app-operator'); const manager = await issue('app-access-manager');
   const client = await registerApplication(metadataOperator.access_token,{ scopes: ['openid','groups'] },false);
   const group = await groupRequest(identityBase,'/api/groups',{ method: 'POST',token: administrator.access_token,body: { name: 'Application eligibility '+randomUUID() } }); assert.equal(group.status,201);
   const groupId = group.body.id; assert.equal((await applicationGrant(client,manager.access_token,'group',groupId)).status,201);
-  const aliceId = canonicalSubjects.get('alice'); credentialGroupOverrides.set('alice',[groupId]);
+  const aliceId = canonicalSubjects.get(username); credentialGroupOverrides.set(username,[groupId]);
   try {
-    const credentials = { client_id: client.clientId,redirect_uri: client.redirectUris[0],username: 'alice',password: 'disposable-password',scope: 'openid groups',groups: [groupId] };
+    const credentials = { client_id: client.clientId,redirect_uri: client.redirectUris[0],username: username,password: 'disposable-password',scope: 'openid groups',groups: [groupId] };
     assert.equal((await request(issuerBase,'/oauth/authorize/login',{ method: 'POST',body: credentials })).status,403);
     assert.equal((await groupRequest(identityBase,`/api/groups/${groupId}/members`,{ method: 'POST',token: administrator.access_token,body: { userId: aliceId } })).status,200);
-    const pair = await issueForApplication(client,'alice','openid groups');
+    const pair = await issueForApplication(client,username,'openid groups');
     assert.deepEqual(payload(pair.access_token).groups,[groupId]);
     assert.deepEqual(payload(pair.id_token).groups,[groupId]);
     assert.deepEqual((await request(issuerBase,'/oauth/userinfo',{token:pair.access_token})).body.groups,[groupId]);
@@ -961,10 +964,10 @@ test('group app access follows canonical membership incarnations, not credential
     assert.equal((await request(issuerBase,'/oauth/authorize/login',{ method: 'POST',body: credentials })).status,403);
     assert.equal((await groupRequest(identityBase,`/api/groups/${groupId}/members`,{ method: 'POST',token: administrator.access_token,body: { userId: aliceId } })).status,200);
     assert.notEqual((await identityDb.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[groupId,aliceId])).rows[0].membership_id,member);
-    assert.equal((await request(issuerBase,'/oauth/access-state',{ token: pair.access_token })).body.active,false); assert.ok((await issueForApplication(client,'alice','openid groups')).access_token);
+    assert.equal((await request(issuerBase,'/oauth/access-state',{ token: pair.access_token })).body.active,false); assert.ok((await issueForApplication(client,username,'openid groups')).access_token);
     const direct = await applicationGrant(client,manager.access_token,'user',aliceId); assert.equal(direct.status,201);
     await groupRequest(identityBase,`/api/groups/${groupId}/members/${aliceId}`,{ method: 'DELETE',token: administrator.access_token });
-    const directPair=await issueForApplication(client,'alice','openid groups');
+    const directPair=await issueForApplication(client,username,'openid groups');
     assert.deepEqual(payload(directPair.access_token).groups,[]);
     const observed=await groupRequest(identityBase,'/api/groups',{method:'POST',token:administrator.access_token,body:{name:'OIDC observed group '+randomUUID()}});assert.equal(observed.status,201);
     assert.equal((await groupRequest(identityBase,`/api/groups/${observed.body.id}/members`,{method:'POST',token:administrator.access_token,body:{userId:aliceId}})).status,200);
@@ -977,7 +980,7 @@ test('group app access follows canonical membership incarnations, not credential
     assert.equal((await request(issuerBase,'/oauth/userinfo',{token:narrowed.body.access_token})).body.groups,undefined);
     assert.equal((await groupRequest(identityBase,`/api/groups/${observed.body.id}/members/${aliceId}`,{method:'DELETE',token:administrator.access_token})).status,200);
     assert.deepEqual((await info()).body.groups,[]);
-  } finally { credentialGroupOverrides.delete('alice'); }
+  } finally { credentialGroupOverrides.delete(username); }
 });
 test('self-target aliases and current own group membership cannot manufacture an application grant', async () => {
   const administrator = await issue(); const metadataOperator = await issue('app-operator'); const manager = await issue('app-access-manager'); const managerId = canonicalSubjects.get('app-access-manager');
@@ -3375,6 +3378,10 @@ test('production gateway does not treat a real credential-bound pending company 
       assert.deepEqual(await returnState(), fullyOccupied);
       const ownerAssignments = await request(base, poolRoute + '/assignments', { token }); assert.equal(ownerAssignments.status, 200); const ownerAssignment = ownerAssignments.body.assignments.find(assignment => assignment.userId === activated.body.administratorId); assert.ok(ownerAssignment);
       const ownerReleased = await request(base, poolRoute + '/assignments/' + ownerAssignment.id + '/revoke', { method: 'POST', token, headers: { 'If-Match': ownerAssigned.headers.get('etag') }, body: ownerAssignmentInput }); assert.equal(ownerReleased.status, 200, JSON.stringify(ownerReleased.body)); assert.equal(ownerReleased.body.usedSeats, 1);
+      // The next journey checks tenant boundaries, independently of the unchanged MFA cutoff.
+      const [returnOwner, returnAdministrator] = await Promise.all([issue(body.username), issue('production-global-admin')]);
+      token = returnOwner.access_token; administrator = returnAdministrator;
+      assert.deepEqual(payload(token).roles, []); assert.ok(payload(administrator.access_token).roles.includes('admin'));
       const actualReturns = (await policyDb.query(`SELECT assignment.id,catalog.id AS pool_id,catalog.business_revision,catalog.name,catalog.vendor,source.grant_id,assignment.assigned_at
         FROM license_assignments assignment JOIN license_catalog catalog ON catalog.id=assignment.license_id
         JOIN license_assignment_sources source ON source.license_id=assignment.license_id AND source.user_id=assignment.assignee_id AND source.source_type='direct'
@@ -3939,7 +3946,7 @@ test('production gateway does not treat a real credential-bound pending company 
         const changedDetail = await request(base, deviceReturnBase + '/' + pending[2].id, { token }); assert.equal(changedDetail.status, 200); const changedReturn = verifyReturn(changedDetail.body); assert.equal(changedReturn.status, 'assignment_changed'); assert.equal(changedReturn.revision, '1'); assert.equal(changedReturn.closingOperationId, null); assert.equal(changedReturn.currentDeviceRevision, changedAssignment.body.revision);
         const actualReplacement = (await inventoryFixture.db.query('SELECT released_by_command_id,released_at FROM device_inventory_assignments WHERE id=$1', [pending[2].assignmentId])).rows[0]; assert.equal(changedReturn.inventoryOperationId, actualReplacement.released_by_command_id); assert.equal(changedReturn.closedAt, actualReplacement.released_at.toISOString());
         const beforeChangedDecision = await inventoryReturnState(); const changedDecision = await request(base, deviceReturnBase + '/' + pending[2].id + '/decision', { method: 'POST', token, headers: { 'If-Match': returnEtag(changedReturn) }, body: physicalInput }); assert.equal(changedDecision.status, 409, JSON.stringify(changedDecision.body)); assert.deepEqual(await inventoryReturnState(), beforeChangedDecision);
-        const retainedCreation = await request(base, deviceOffboardingRoute, { method: 'POST', token, body: deviceReturnInput }); assert.equal(retainedCreation.status, 200, JSON.stringify(retainedCreation.body)); assert.deepEqual(retainedCreation.body.results, requestRecovery.body.results); assert.deepEqual(await inventoryReturnState(), beforeChangedDecision);
+        const retainedCreation = await request(base, deviceOffboardingRoute, { method: 'POST', token, body: deviceReturnInput, timeout: 60000 }); assert.equal(retainedCreation.status, 200, JSON.stringify(retainedCreation.body)); assert.deepEqual(retainedCreation.body.results, requestRecovery.body.results); assert.deepEqual(await inventoryReturnState(), beforeChangedDecision);
         const generalList = await request(base, deviceReturnBase + '?page=1&limit=25', { token }); assert.equal(generalList.status, 200, JSON.stringify(generalList.body)); assert.deepEqual(Object.keys(generalList.body).sort(), ['schemaVersion', 'actorUserId', 'tenantId', 'requests', 'total', 'page', 'limit'].sort()); assert.equal(generalList.body.total, 3); assert.deepEqual(new Set(generalList.body.requests.map(item => verifyReturn(item).status)), new Set(['cancelled', 'returned', 'assignment_changed']));
         for (const value of generalList.body.requests) {
           const events = await request(base, deviceReturnBase + '/' + value.id + '/history?page=1&limit=25', { token }); assert.equal(events.status, 200); assert.equal(events.body.requestId, value.id); assert.equal(events.body.events.length, value.status === 'assignment_changed' ? 1 : 2);
@@ -4441,13 +4448,14 @@ test('own custom directory roles and OU scopes use actual OAuth, canonical sourc
 });
 
 test('custom company device PIM uses original OAuth and real inventory compliance and gateway authority without global Engineering',async()=>{
+ const username='custom-device-principal';
  const initialManager=await issue('operator'),manager=provenMfa(payload(initialManager.access_token))?initialManager:await configureFactor('operator',initialManager);
- const initialDelegate=await issue('alice'),delegate=provenMfa(payload(initialDelegate.access_token))?initialDelegate:await configureFactor('alice',initialDelegate);
+ const initialDelegate=await issue(username),delegate=provenMfa(payload(initialDelegate.access_token))?initialDelegate:await configureFactor(username,initialDelegate);
  const managerToken=manager.access_token,token=delegate.access_token;assert.ok(!payload(token).roles.includes('admin'));assert.ok(!payload(token).roles.includes('device-enrollment-operator'));
  await withProductionGateway(async base=>{
   const duties=['devices.inventory.read','devices.inventory.create','devices.inventory.assign','devices.compliance.read','devices.compliance.manage'];
   const created=await request(base,'/api/identity/company-roles',{method:'POST',token:managerToken,body:{name:'Actual custom device PIM duty',description:'Own device stock and compliance without platform roles',permissions:duties,maxDurationSeconds:36000,reason:'Separate company device management from global administration',confirm:true}});assert.equal(created.status,201,JSON.stringify(created.body));const role=created.body.role;
-  const eligibleResult=await request(base,'/api/identity/company-roles/'+role.id+'/eligibilities',{method:'POST',token:managerToken,headers:{'If-Match':`"company-role-${role.id}-${role.revision}"`},body:{targetType:'user',targetId:canonicalSubjects.get('alice'),scopeType:'tenant',ouId:null,validForSeconds:86400,reason:'Permit original employee to activate the exact own device duty',confirm:true}});assert.equal(eligibleResult.status,201,JSON.stringify(eligibleResult.body));const eligible=eligibleResult.body.eligibility;
+  const eligibleResult=await request(base,'/api/identity/company-roles/'+role.id+'/eligibilities',{method:'POST',token:managerToken,headers:{'If-Match':`"company-role-${role.id}-${role.revision}"`},body:{targetType:'user',targetId:canonicalSubjects.get(username),scopeType:'tenant',ouId:null,validForSeconds:86400,reason:'Permit original employee to activate the exact own device duty',confirm:true}});assert.equal(eligibleResult.status,201,JSON.stringify(eligibleResult.body));const eligible=eligibleResult.body.eligibility;
   assert.equal((await request(base,'/api/devices/capabilities',{token})).status,403);
   const activated=await request(base,'/api/identity/company-pim/eligibilities/'+eligible.id+'/activate',{method:'POST',token,headers:{'If-Match':`"company-eligibility-${eligible.id}-${eligible.revision}"`},body:{durationSeconds:36000,reason:'Activate original custom device duties for this maintenance period',confirm:true}});assert.equal(activated.status,201,JSON.stringify(activated.body));
   const metadata=await request(base,'/api/identity/access',{token});assert.equal(metadata.status,200,JSON.stringify(metadata.body));assert.ok(duties.every(permission=>metadata.body.permissions.includes(permission)));assert.ok(!metadata.body.permissions.includes('users.read'));

@@ -110,6 +110,28 @@ Coordinated multi-connection races inside the individual tests remain enabled.
 The integration job installs Device dependencies separately because its real
 Identity/Device company-role checks run in a different runner from Service Tests.
 
+The confidential-browser runner uses `--test-name-pattern` for every group,
+including a negative lookahead plus a positive name prefix for the default group.
+Node 20 does not support `--test-skip-pattern`; a negative-only pattern also
+matches its root test and incorrectly includes every child. The regression check
+executes small real Node tests for each filter, verifies supported syntax,
+nonempty groups and exactly one match for every literal integration case.
+Browser governance, Owner blueprint editing and Owner assignments have separate
+fresh service groups to stay within real rate limits. Native company-registration,
+blueprint and later device/PIM duty journeys use separate fixtures so deliberate authority changes cannot leak into
+unrelated checks. The clock-warp license-window case also owns a separate process.
+Application-group and custom device-PIM checks own separate canonical subjects.
+
+PIM browser checks open the current “Weitere Rollen und Richtlinien” panel and
+complete the actual OAuth reauthentication after activation. The activation
+check reads its committed request and live role assignment because immediate
+navigation can discard Chrome's response-body handle.
+Company onboarding expects the current own-company role permissions and device
+form. Native multi-device return recovery uses the same 60-second HTTP budget
+as initial submission and recovery; the original 300-second MFA cutoff is unchanged.
+Browser teardown stops the clients and their frontend processes before closing
+SQL fixture services, so outstanding browser activity cannot stall cleanup.
+
 Migration replay tests must run the complete ordered migration set, as service
 startup does. A hand-maintained subset can overwrite a function without updating
 later pinned manifests and correctly makes current authorization unavailable.
